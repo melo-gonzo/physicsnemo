@@ -44,6 +44,7 @@ dataset_drop_transforms:
   - SubsampleMesh                     # aerozoo_uvolume*: the per-boundary 50,000-face cap
   - ComputeSDFFromBoundary            # sdf_wall / sdf_slip: GeoTransolver's inputs, not ISLA's
   - HarmonizeBoundaryFields           # the one-hot role labels and zero-filled fields: ISLA reads each condition's own
+  - MergeBoundaries                   # aerozoo_puvolume*: GeoTransolver's face tokens, made from the harmonized fields
 input_type: mesh
 output_type: mesh
 

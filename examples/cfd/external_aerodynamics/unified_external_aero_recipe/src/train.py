@@ -34,7 +34,6 @@ Usage::
 """
 
 import os
-from pathlib import Path
 import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager, nullcontext
@@ -44,9 +43,10 @@ import hydra
 import torch
 import torch.distributed as dist
 from datasets import build_dataloaders
+from infer import build_metric_calculator
 from jaxtyping import Float
 from loss import LossCalculator
-from metrics import MetricCalculator, resolve_metrics
+from metrics import MetricCalculator
 from omegaconf import DictConfig, OmegaConf
 from output_normalize import IOType, normalize_output_to_tensordict, require_output_type
 from tabulate import tabulate
@@ -267,8 +267,15 @@ def forward_pass(
     target_measure_f32 = None if target_measure is None else target_measure.float()
 
     loss, loss_td = loss_calculator(pred_f32, target_f32, target_measure_f32)
+    ### The scorer's label leaves (score_space=label_reference), never a model input.
+    score_globals = batch.get("score_globals")
     with torch.no_grad():
-        metric_td = metric_calculator(pred_f32, target_f32, target_measure_f32)
+        metric_td = metric_calculator(
+            pred_f32,
+            target_f32,
+            target_measure_f32,
+            **({} if score_globals is None else {"score_globals": score_globals}),
+        )
     ### Detach (don't sync) the per-field TDs so the caller controls when
     ### a D2H copy happens; running ``.item()`` here would serialise the
     ### forward kernels against the host. ``TensorDict.detach()`` walks
@@ -983,18 +990,29 @@ def main(cfg: DictConfig) -> None:
     ### `targets:` block by `build_dataloaders`.  The metrics list is
     ### now recipe-side: train.yaml's `cfg.metrics` is the canonical
     ### source. Falls back to the recipe's default set when unset.
-    metrics_list = resolve_metrics(cfg)
-
+    ### With score_space=label_reference the calculator adds the label-era-space metrics.
     field_weights = resolve_dict(cfg, "training.field_weights")
 
-    metric_calculator = MetricCalculator(
-        target_config=target_config,
-        metrics=metrics_list,
+    metric_calculator = build_metric_calculator(
+        cfg, target_config, normalizer, dataset_info
+    )
+    loss_type = cfg.training.get("loss_type", "huber")
+    ### case_relative_l2 measures each case's error against its targets in the dataset's units: it reads
+    ### the standardization's mean / std (a field without stats has offset 0).
+    target_offsets = (
+        {
+            name: torch.as_tensor(s["mean"]) / torch.as_tensor(s["std"])
+            for name, s in normalizer.stats.items()
+            if name in target_config
+        }
+        if loss_type == "case_relative_l2" and normalizer is not None
+        else None
     )
     loss_calculator = LossCalculator(
         target_config=target_config,
-        loss_type=cfg.training.get("loss_type", "huber"),
+        loss_type=loss_type,
         field_weights=field_weights,
+        target_offsets=target_offsets,
     )
     output_type = require_output_type(cfg)
     logger.info(f"Loss: {loss_calculator}")

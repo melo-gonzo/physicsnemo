@@ -1,0 +1,170 @@
+# Statistics filled by aerozoo_pstats.py fill from pstats_reynolds.train.json: split part reynolds.train, 2119 cases, 42,380,000 interior points, 325,513,270 expected boundary tokens (log10 nu mean -4.162, std 1.405).
+# AZ-COMPLIANT v2 (2026-10-19): AeroZoo with the PDE data only, in physical units, the same for every model.
+# Under the rulings of 2026-10-15 (a model reads only the boundary meshes with their condition types, the
+# prescribed values and the kinematic viscosity; density only to convert pressure and shear; every other
+# global_data leaf is a label) and 2026-10-19 (no model is given a per-sample reference length: "If a model
+# wants normalized coordinates, it needs to bring it to the table"), this is aerozoo_uvolume.yaml with every
+# label read and every per-case derived scale removed:
+#   removed: the reference.* renames (U_inf, L_ref), ComputeLogReynolds, both NonDimensionalizeByMetadata,
+#            CenterMesh (the coordinates stay raw, in metres), ComputeFreestreamDirection, the inlet reductions
+#            BoundaryFieldToGlobal / SplitGlobalVector / global_vector (derived by the recipe), and sdf_slip
+#            (its fill for a case without slip walls is the bounding-box diagonal, a per-case length);
+#   kept:    the uniform 50,000-face draw per boundary, the one boundary grammar (HarmonizeBoundaryFields),
+#            the prescribed values renamed bc_* in SI units (m/s, Pa, m^2/s^2, 1/s), the signed distance and
+#            normal to no_slip in metres (both baselines' published body-SDF input) and the reorientation;
+#   added:   nu_std = (log10 nu - a) / b with per-dataset constants (StandardizeGlobalLeaf), the baselines'
+#            global input; the boundary faces as one token set (MergeBoundaries), GeoTransolver's geometry.
+# Every constant below is fitted once per split on its training side; nothing is computed per case. The
+# targets are physical (m/s, Pa, m^2/s, m^2/s^2, 1/s) with one scale-only standardization per dataset, the
+# same for every model (means 0). Release layout, reader and splits: aerozoo_volume.yaml and aerozoo_uvolume.yaml.
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+train_datadir: ${dataset_paths.aerozoo}
+manifest: ${dataset_paths.aerozoo_manifest}
+
+# Scoring only, never an input (score_space=label_reference in infer.py and the trainer's metrics): each
+# prediction is de-standardized to SI units and mapped into the label-era training space of `dataset`, the
+# aerozoo_uvolume* file of the same split, with that file's nondimensionalization (by the labels named in
+# `globals`, under the names it reads them by) and its standardization, so v2 scores and label-era scores are
+# the same quantity.
+label_reference:
+  dataset: aerozoo_uvolume_reynolds
+  globals:
+    U_inf: reference.velocity
+    rho_inf: physics.density
+    L_ref: reference.length
+    p_inf: 0.0
+
+pipeline:
+  reader:
+    _target_: ${dp:DomainMeshReader}
+    path: ${train_datadir}
+    pattern: "shard-*/case-*/domain.pdmsh"
+    subsample_n_points: ${sampling_resolution}   # interior queries (the recipe default 200,000; inference passes the same)
+    boundary_subsample: cells
+    drop_interior_cells: true
+    drop_in_file_boundaries: false
+  transforms:
+    # A uniform random 50,000 faces per boundary, with the Horvitz-Thompson measure N/k (aerozoo_uvolume.yaml).
+    - _target_: ${dp:SubsampleMesh}
+      n_cells: 50000
+    # One boundary grammar for the four roles: a one-hot role label and a zero-filled copy of every prescribed
+    # field a boundary lacks (ISLA declares each condition's own fields and drops this step and the merge).
+    - _target_: ${dp:HarmonizeBoundaryFields}
+      one_hot:
+        inlet: bc_inlet
+        outlet: bc_outlet
+        no_slip: bc_no_slip
+        slip: bc_slip
+      fields:                                   # {cell_data field: rank}
+        prescribed.dirichlet.velocity: 1
+        prescribed.reverse_flow.velocity: 1
+        prescribed.dirichlet.gauge_pressure: 0
+        prescribed.dirichlet.turbulent_kinetic_energy: 0
+        prescribed.dirichlet.specific_dissipation_rate: 0
+        prescribed.dirichlet.intermittency: 0
+        prescribed.dirichlet.momentum_thickness_reynolds_number: 0
+        prescribed.reverse_flow.turbulent_kinetic_energy: 0
+        prescribed.reverse_flow.specific_dissipation_rate: 0
+        prescribed.reverse_flow.intermittency: 0
+        prescribed.reverse_flow.momentum_thickness_reynolds_number: 0
+    # The prescribed values under their recipe names, in SI units.
+    - _target_: ${dp:RenameMeshFields}
+      cell_data:
+        prescribed.dirichlet.velocity: bc_velocity
+        prescribed.reverse_flow.velocity: bc_velocity_reverse
+        prescribed.dirichlet.gauge_pressure: bc_pressure
+        prescribed.dirichlet.turbulent_kinetic_energy: bc_tke
+        prescribed.dirichlet.specific_dissipation_rate: bc_omega
+        prescribed.dirichlet.intermittency: bc_intermittency
+        prescribed.dirichlet.momentum_thickness_reynolds_number: bc_retheta
+        prescribed.reverse_flow.turbulent_kinetic_energy: bc_tke_reverse
+        prescribed.reverse_flow.specific_dissipation_rate: bc_omega_reverse
+        prescribed.reverse_flow.intermittency: bc_intermittency_reverse
+        prescribed.reverse_flow.momentum_thickness_reynolds_number: bc_retheta_reverse
+    # The signed distance and its gradient to the no_slip body in metres, the baselines' published body-SDF
+    # input (pseudo-normal sign, no winding-number pass; computed on the stored orientation, before the flip).
+    - _target_: ${dp:ComputeSDFFromBoundary}
+      boundary_name: no_slip
+      sdf_field: sdf_wall
+      normals_field: sdf_wall_normals
+      use_winding_number: false
+    # log10 of the kinematic viscosity, standardized by per-dataset constants (the mean and std of log10 nu
+    # over the training cases): one fixed map, the baselines' global input.
+    - _target_: ${dp:StandardizeGlobalLeaf}
+      field: physics.kinematic_viscosity
+      output_field: nu_std
+      log10: true
+      mean: -4.16159
+      std: 1.40493
+    # Normals into the fluid (aerozoo_volume.yaml (g')).
+    - _target_: ${dp:FlipBoundaryOrientation}
+      boundaries: [inlet, outlet, no_slip, slip]
+    - _target_: ${dp:RenameMeshFields}
+      point_data:
+        solution.velocity: velocity
+        solution.gauge_pressure: pressure
+        solution.turbulent_kinematic_viscosity: nut
+        solution.turbulent_kinetic_energy: tke
+        solution.specific_dissipation_rate: omega
+    - _target_: ${dp:DropMeshFields}
+      point_data: [solution.intermittency, solution.momentum_thickness_reynolds_number]
+    # Physical targets, one standardization per dataset, scale only: mean 0 and the RMS about 0 of a seeded
+    # 20,000-point interior sample per training case as the std (velocity: the isotropic one), the same for
+    # every model. Not the pooled mean (supervisor, 2026-10-19): the targets span decades across cases, and on
+    # full.train the pooled pressure mean is 201 Pa against a std of 1,129 Pa, so a case whose RMS pressure is
+    # ~0.03 Pa would read -0.18 plus a signal of ~3e-5, below bf16's step near 0.18 (~7e-4, the baselines'
+    # head under autocast) and at ~5e-4 relative in float32; nut, tke and omega have mean / std 0.02-0.13.
+    # Scale only, every value keeps its own floating-point relative precision.
+    - _target_: ${dp:NormalizeMeshFields}
+      association: point_data
+      fields:
+        velocity: {type: vector, mean: [0, 0, 0], std: 12.33}
+        pressure: {type: scalar, mean: 0, std: 1442.51}
+        nut: {type: scalar, mean: 0, std: 0.754302}
+        tke: {type: scalar, mean: 0, std: 24.3639}
+        omega: {type: scalar, mean: 0, std: 346555}
+    - _target_: ${dp:ComposeQuadratureMeasure}
+    # Last: every boundary face as one token set (boundaries.merged), each with its condition type (one-hot)
+    # and its prescribed values: GeoTransolver's geometry. The values are standardized here only, by
+    # per-dataset constants (pooled over the training cases' expected tokens; vectors mean 0, isotropic std
+    # about 0); the four source boundaries keep their SI values. The face positions stay raw, like the queries.
+    - _target_: ${dp:MergeBoundaries}
+      boundaries: [inlet, outlet, no_slip, slip]
+      output: merged
+      fields: [bc_inlet, bc_outlet, bc_no_slip, bc_slip, bc_velocity, bc_velocity_reverse, bc_pressure, bc_tke,
+               bc_omega, bc_intermittency, bc_retheta, bc_tke_reverse, bc_omega_reverse, bc_intermittency_reverse,
+               bc_retheta_reverse]
+      standardize:
+        bc_velocity: {type: vector, mean: [0, 0, 0], std: 4.40685}
+        bc_velocity_reverse: {type: vector, mean: [0, 0, 0], std: 4.74776}
+        bc_pressure: {type: scalar, mean: 0, std: 1}
+        bc_tke: {type: scalar, mean: 0.140841, std: 1.12365}
+        bc_omega: {type: scalar, mean: 30.8478, std: 405.94}
+        bc_intermittency: {type: scalar, mean: 0.221645, std: 0.415354}
+        bc_retheta: {type: scalar, mean: 76.3317, std: 188.12}
+        bc_tke_reverse: {type: scalar, mean: 0.168596, std: 1.19293}
+        bc_omega_reverse: {type: scalar, mean: 37.2288, std: 435.937}
+        bc_intermittency_reverse: {type: scalar, mean: 0.274767, std: 0.446397}
+        bc_retheta_reverse: {type: scalar, mean: 93.9238, std: 204.116}
+
+targets:
+  velocity: vector
+  pressure: scalar
+  nut: scalar
+  tke: scalar
+  omega: scalar

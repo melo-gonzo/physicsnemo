@@ -87,7 +87,12 @@ import torch.distributed as dist
 from datasets import build_dataloaders, find_normalizer, load_dataset_config
 from forces import ForceAccumulator, ForceContext
 from metrics import MetricCalculator, resolve_metrics
-from nondim import NonDimensionalizeByMetadata, NondimFieldType, freestream_scales
+from nondim import (
+    NonDimensionalizeByMetadata,
+    NondimFieldType,
+    _nondim_field,
+    freestream_scales,
+)
 from omegaconf import DictConfig, OmegaConf
 from output_normalize import (
     IOType,
@@ -226,6 +231,156 @@ def redimensionalize(
             L_ref=global_data["L_ref"].float() if "L_ref" in global_data else None,
         )
     return out
+
+
+### ---------------------------------------------------------------------------
+### Scoring in the label-era space (score_space: label_reference)
+### ---------------------------------------------------------------------------
+
+LABEL_REFERENCE_PREFIX = "label_reference"
+
+
+class LabelReferenceMap:
+    r"""Map standardized predictions of a physical-target dataset into a label-era training space.
+
+    AeroZoo v2 (2026-10-19): the v2 files' targets are physical with one constant standardization, the
+    label-era files' targets were nondimensionalized per case by the labels and then standardized. For
+    scoring only, a field is mapped ``y -> (nondim(N^{-1}(y)) - mean_l) / (std_l + eps)``: ``N^{-1}`` the
+    live ``normalizer``'s inverse (constants), ``nondim`` the label-era file's
+    ``NonDimensionalizeByMetadata`` rule for the field with that case's label scales (``score_globals``, under
+    the names :func:`nondim.freestream_scales` reads), and ``mean_l`` / ``std_l`` / ``eps`` the label-era
+    file's ``NormalizeMeshFields`` (``eps`` its default 1e-8). Computed in float64, returned in float32, so a
+    v2 target maps onto the label-era file's target to float32 roundoff and v2 and label-era scores are the
+    same quantity.
+    """
+
+    def __init__(self, normalizer: Any | None, label_yaml: DictConfig) -> None:
+        self.normalizer = normalizer
+        self.field_types = build_redim_field_types(label_yaml)
+        stats = None
+        for t in OmegaConf.to_container(label_yaml.pipeline.transforms, resolve=False):
+            if (
+                "NormalizeMeshFields" in str(t.get("_target_", ""))
+                and t.get("association", "point_data") == "point_data"
+            ):
+                stats, eps = t["fields"], float(t.get("eps", 1.0e-8))
+        if stats is None:
+            raise ValueError(
+                "the label-era dataset declares no point_data NormalizeMeshFields"
+            )
+        self.stats = {
+            name: (
+                torch.as_tensor(s["mean"], dtype=torch.float32).double(),
+                float(torch.tensor(float(s["std"]), dtype=torch.float32)) + eps,
+            )
+            for name, s in stats.items()
+        }
+
+    @classmethod
+    def from_block(cls, block: dict, normalizer: Any | None) -> "LabelReferenceMap":
+        """From a dataset's ``label_reference`` block: ``dataset`` names the label-era file."""
+        recipe_root = Path(__file__).resolve().parent.parent
+        return cls(
+            normalizer,
+            load_dataset_config(recipe_root / "datasets" / f"{block['dataset']}.yaml"),
+        )
+
+    def __call__(self, td: TensorDict, score_globals: TensorDict) -> TensorDict:
+        ### float64 from here: de-standardizing in float32 would cancel on a case far below the mean
+        phys = (
+            td.double()
+            if self.normalizer is None
+            else self.normalizer.inverse_td(td.double())
+        )
+        q_inf, p_inf, U_inf_mag, rho_inf, T_inf = (
+            None if v is None else v.double()
+            for v in freestream_scales(score_globals.double())
+        )
+        L_ref = score_globals["L_ref"].double() if "L_ref" in score_globals else None
+
+        def _map(name: Any, val: torch.Tensor) -> torch.Tensor:
+            key = name if isinstance(name, str) else ".".join(name)
+            if key not in self.field_types or key not in self.stats:
+                raise KeyError(
+                    f"{key!r} has no label-era nondimensionalization and standardization"
+                )
+            nd = _nondim_field(
+                val.double(),
+                self.field_types[key],
+                q_inf,
+                p_inf,
+                U_inf_mag,
+                rho_inf=rho_inf,
+                T_inf=T_inf,
+                L_ref=L_ref,
+            )
+            mean, std = self.stats[key]
+            return ((nd - mean.to(nd.device)) / std).float()
+
+        return phys.named_apply(_map, nested_keys=True)  # ty: ignore[invalid-return-type]
+
+
+class LabelReferenceMetricCalculator(MetricCalculator):
+    """The training-space metrics plus the same metrics in the label-era space, keyed ``label_reference/...``.
+
+    Called with the batch's ``score_globals`` (the collate's label leaves, never a model input); the mapped
+    metrics are the scored ones, on the validation side the checkpoint-selection ones.
+    """
+
+    def __init__(self, *args, label_map: LabelReferenceMap, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.label_map = label_map
+        self.label_metrics = MetricCalculator(
+            self.target_config,
+            n_spatial_dims=self.n_spatial_dims,
+            metrics=self.metric_names,
+            prefix=LABEL_REFERENCE_PREFIX,
+        )
+
+    def expected_keys(self) -> list[str]:
+        return [*super().expected_keys(), *self.label_metrics.expected_keys()]
+
+    def __call__(
+        self,
+        pred: TensorDict,
+        target: TensorDict,
+        target_measure: torch.Tensor | None = None,
+        score_globals: TensorDict | None = None,
+    ) -> TensorDict:
+        if score_globals is None:
+            raise ValueError(
+                "score_space=label_reference needs the batch's score_globals; the collate "
+                "was built without the dataset's label_reference block"
+            )
+        out = super().__call__(pred, target, target_measure)
+        with torch.no_grad():
+            mapped = self.label_metrics(
+                self.label_map(pred, score_globals),
+                self.label_map(target, score_globals),
+                target_measure,
+            )
+        out.update(mapped)
+        return out
+
+
+def build_metric_calculator(
+    cfg: DictConfig,
+    target_config: dict[str, FieldType],
+    normalizer: Any | None,
+    dataset_info: dict[str, Any],
+    **kwargs: Any,
+) -> MetricCalculator:
+    """The metric calculator of ``cfg.score_space``: training space, or that plus the label-era space."""
+    metrics = resolve_metrics(cfg)
+    block = dataset_info.get("label_reference")
+    if block is None:
+        return MetricCalculator(target_config=target_config, metrics=metrics, **kwargs)
+    return LabelReferenceMetricCalculator(
+        target_config=target_config,
+        metrics=metrics,
+        label_map=LabelReferenceMap.from_block(block, normalizer),
+        **kwargs,
+    )
 
 
 def _norm_stats_match(a: dict[str, dict], b: dict[str, dict]) -> bool:
@@ -610,9 +765,11 @@ def main(cfg: DictConfig) -> None:
     dataset: Any = val_loader.dataset
     sampler: Any = val_loader.sampler
     n_spatial_dims = _spatial_dims_of_first_sample(dataset, sampler)
-    metric_calculator = MetricCalculator(
-        target_config=target_config,
-        metrics=resolve_metrics(cfg),
+    metric_calculator = build_metric_calculator(
+        cfg,
+        target_config,
+        normalizer,
+        dataset_info,
         **({} if n_spatial_dims is None else {"n_spatial_dims": n_spatial_dims}),
     )
 
@@ -626,6 +783,7 @@ def main(cfg: DictConfig) -> None:
                 "checkpoint": ckpt_path,
                 "epoch": loaded_epoch,
                 "redimensionalize": redimensionalize_on,
+                "score_space": str(cfg.get("score_space", "training")),
                 "num_parameters": num_params,
             }
         )
@@ -664,10 +822,12 @@ def main(cfg: DictConfig) -> None:
         ### Metrics in training space (matches the validation numbers); pull the
         ### whole TensorDict host-side once so each .item() is a free CPU index.
         target_measure = batch.get("target_measure")
+        score_globals = batch.get("score_globals")
         metric_td = metric_calculator(
             pred_td.float(),
             batch["targets"].float(),
             None if target_measure is None else target_measure.float(),
+            **({} if score_globals is None else {"score_globals": score_globals}),
         )
         sample_metrics = {key: value.item() for key, value in metric_td.cpu().items()}
         for k, v in sample_metrics.items():

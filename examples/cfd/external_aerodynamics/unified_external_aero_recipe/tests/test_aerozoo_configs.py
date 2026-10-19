@@ -15,9 +15,12 @@
 # limitations under the License.
 
 """AeroZoo v1.2 (2026-10-09): datasets/aerozoo_volume.yaml run end to end by the real reader on a
-synthetic release-shaped case (four boundaries, one case without slip faces), and the two model configs
-(isla_volume_aerozoo, geotransolver_volume_aerozoo) composed, driven through collate -> forward -> loss on
-the pipeline's output, and pinned to their protocol values."""
+synthetic release-shaped case (four boundaries, one case without slip faces), and the ISLA config composed,
+driven through collate -> forward -> loss on the pipeline's output, and pinned to its protocol values.
+
+AeroZoo v2 (2026-10-19): the physical-input files datasets/aerozoo_puvolume*.yaml, the GeoTransolver
+(Option B) and Transolver configs on them, the label check (every label perturbed or deleted leaves every
+model input bitwise equal) and the label-reference score map (test D: exact against the label-era file)."""
 
 import sys
 from pathlib import Path
@@ -39,7 +42,13 @@ from datasets import (  # noqa: E402
     load_dataset_config,
 )
 from forward_kwargs import extract_target_measure  # noqa: E402
-from infer import build_redim_field_types, redimensionalize  # noqa: E402
+from infer import (  # noqa: E402
+    LABEL_REFERENCE_PREFIX,
+    LabelReferenceMap,
+    LabelReferenceMetricCalculator,
+    build_redim_field_types,
+    redimensionalize,
+)
 from loss import LossCalculator  # noqa: E402
 from metrics import MetricCalculator  # noqa: E402
 from nondim import NonDimensionalizeByMetadata  # noqa: E402
@@ -169,6 +178,24 @@ STATS = {
     "omega": {"mean": 10.0, "std": 20.0},
 }
 INLET_MEAN, INLET_STD = [1.0e-3, 5.0, 1.0, 300.0], [1.0e-3, 2.0, 1.0, 100.0]
+
+### AeroZoo v2 (2026-10-19): the physical-input files, the split part aerozoo_pstats.py filled each from, and the
+### label-era file of the same split whose space the scorer maps into.
+V2_FILES = {
+    f"aerozoo_puvolume{suffix}": (split, TARGETS, f"aerozoo_uvolume{suffix}")
+    for suffix, split in (
+        ("", "full"),
+        ("_nonbox", "family_non_box"),
+        ("_reynolds", "reynolds"),
+        ("_blobs", "bank_blobs"),
+        ("_bank_zero_to_cad", "bank_zero_to_cad"),
+        ("_profile_crossflow", "profile_crossflow"),
+        ("_profile_dual_inlet", "profile_dual_inlet"),
+    )
+}
+### Every global_data group the AeroZoo release labels (the 2026-10-15 ruling: a model reads the boundary meshes
+### with their condition types, the prescribed values and nu; rho only to convert pressure and shear).
+LABEL_GROUPS = ("reference", "identity", "diagnostics", "solution_definition")
 
 
 def _box(lo, hi) -> Mesh:
@@ -403,7 +430,7 @@ def _out_dim(targets: dict[str, str]) -> int:
 
 
 def _compose(model, *extra, dataset: str = DATASET):
-    out_dim = _out_dim(DATASET_FILES[dataset][1])
+    out_dim = _out_dim((DATASET_FILES.get(dataset) or V2_FILES[dataset])[1])
     with initialize_config_dir(
         config_dir=str(_RECIPE_ROOT / "conf"), version_base=None
     ):
@@ -823,62 +850,6 @@ def test_isla_config_declares_each_condition_s_fields_and_runs(isla_pipeline_out
         assert all(torch.isfinite(v).all() for v in phys.values())
 
 
-@pytest.mark.parametrize("dataset", sorted(ISLA_VP_OVERRIDES))
-def test_geotransolver_config_reads_the_sdf_and_global_vector_and_runs(
-    request, dataset
-):
-    pipeline_output = _outputs(request, dataset)
-    targets = DATASET_FILES[dataset][1]
-    cfg = _compose("geotransolver_volume_aerozoo", dataset=dataset)
-    assert cfg.model.out_dim == (4 if dataset.endswith("_vp") else 7)
-    assert cfg.input_type == "tensors" and cfg.output_type == "tensors"
-    assert cfg.training.optimizer.lr == pytest.approx(
-        1.0e-3
-    )  # the CHAR campaign's GeoTransolver rate
-    assert cfg.model.functional_dim == 8 and cfg.model.global_dim == 8
-    assert (
-        cfg.model.n_hidden == 256
-        and cfg.model.n_layers == 12
-        and cfg.model.slice_num == 256
-    )
-    assert cfg.forward_kwargs.global_embedding == "global_data.global_vector"
-    ### The boundaries stay in the reader: the SDF transforms need them.
-    ds = OmegaConf.load(_RECIPE_ROOT / "datasets" / f"{dataset}.yaml")
-    assert (
-        _apply_dataset_reader_overrides(ds, cfg).pipeline.reader.drop_in_file_boundaries
-        is False
-    )
-    small = OmegaConf.merge(
-        cfg.model,
-        {
-            "n_layers": 2,
-            "n_hidden": 32,
-            "slice_num": 16,
-            "n_head": 2,
-            "include_local_features": False,
-        },
-    )
-    model = hydra.utils.instantiate(small, _convert_="partial")
-    spec = OmegaConf.to_container(cfg.forward_kwargs, resolve=True)
-    batch = build_collate_fn("tensors", spec, targets)(
-        [(pipeline_output["no_slip_walls"], {})]
-    )
-    fk = batch["forward_kwargs"]
-    assert fk["local_embedding"].shape == (1, SAMPLING, cfg.model.functional_dim)
-    assert fk["global_embedding"].shape == (1, 1, cfg.model.global_dim)
-    with torch.no_grad():
-        out = model(**fk)
-    assert out.shape[-1] == cfg.model.out_dim
-    pred = normalize_output_to_tensordict(out, targets, "tensors")
-    assert set(pred.keys()) == set(batch["targets"].keys()) == set(targets)
-    for name in targets:
-        assert pred[name].shape == batch["targets"][name].shape, name
-    total, _ = LossCalculator(targets, loss_type="mse")(pred, batch["targets"])
-    assert torch.isfinite(total)
-    metrics = MetricCalculator(targets, metrics=["l2"])(pred, batch["targets"])
-    assert {k.split("_")[0] for k in metrics.keys()} == set(targets)
-
-
 @pytest.mark.parametrize("dataset", sorted(DATASET_FILES))
 def test_isla_reads_every_boundary_whole_and_geotransolver_keeps_its_draw(dataset):
     """ISLA draws its boundary tokens inside the model, so its config lifts the reader's
@@ -918,3 +889,348 @@ def test_the_pipeline_reverses_the_four_boundaries(pipeline_output):
             out, src = pipeline_output[case].boundaries[name], stored.boundaries[name]
             assert out.n_cells == src.n_cells
             torch.testing.assert_close(out.cell_normals, -src.cell_normals)
+
+
+### ---------------------------------------------------------------------------
+### AeroZoo v2: physical inputs (datasets/aerozoo_puvolume*.yaml)
+### ---------------------------------------------------------------------------
+
+
+def _chain(dataset: str, model_cfg=None) -> list:
+    """The dataset file's transforms (with ``model_cfg``'s drops), instantiated; the reader's draw is left out."""
+    ds = OmegaConf.merge(
+        load_dataset_config(_RECIPE_ROOT / "datasets" / f"{dataset}.yaml"),
+        {
+            "dataset_paths": {"aerozoo": "/unused", "aerozoo_manifest": "/unused"},
+            "sampling_resolution": SAMPLING,
+        },
+    )
+    if model_cfg is not None:
+        ds = _apply_dataset_transform_drops(ds, model_cfg)
+    return [hydra.utils.instantiate(t, _convert_="all") for t in ds.pipeline.transforms]
+
+
+def _run(chain: list, domain: DomainMesh, seed: int = 0) -> DomainMesh:
+    torch.manual_seed(seed)
+    for t in chain:
+        domain = t.apply_to_domain(domain)
+    return domain
+
+
+def _labelled_case(with_slip: bool) -> DomainMesh:
+    """The synthetic case with every kind of AeroZoo label: reference, identity, diagnostics,
+    solution_definition, the closure id and the body ids."""
+    d = make_aerozoo_case(with_slip, seed=1)
+    gd = d.global_data.clone()
+    gd["identity", "family_id"] = torch.tensor(4)
+    gd["identity", "geometry_scale"] = torch.tensor(1.7)
+    gd["solution_definition", "residual_target"] = torch.tensor(1e-5)
+    return DomainMesh(interior=d.interior, boundaries=d.boundaries, global_data=gd)
+
+
+def _relabel(d: DomainMesh, delete: bool) -> DomainMesh:
+    """Every label leaf perturbed (x 7.3 plus noise; integers + 3; body ids reversed + 1) or deleted."""
+    g = torch.Generator().manual_seed(3)
+    gd = d.global_data.clone()
+    keys = [
+        k if isinstance(k, tuple) else (k,)
+        for k in gd.keys(include_nested=True, leaves_only=True)
+    ]
+    for k in keys:
+        if k[0] in LABEL_GROUPS or k == ("physics", "closure_model_id"):
+            if delete:
+                del gd[k]
+            elif gd[k].is_floating_point():
+                gd[k] = gd[k] * 7.3 + torch.randn(gd[k].shape, generator=g)
+            else:
+                gd[k] = gd[k] + 3
+    if delete:
+        for group in LABEL_GROUPS:
+            if group in gd.keys():
+                del gd[group]
+    boundaries = {}
+    for name in d.boundary_names:
+        b = d.boundaries[name]
+        cd = b.cell_data.clone()
+        if ("annotation", "body_id") in cd.keys(include_nested=True):
+            if delete:
+                del cd["annotation"]
+            else:
+                cd["annotation", "body_id"] = cd["annotation", "body_id"].flip(0) + 1
+        boundaries[name] = b.with_data(cell_data=cd)
+    return DomainMesh(interior=d.interior, boundaries=boundaries, global_data=gd)
+
+
+def _is_label(key: str) -> bool:
+    return (
+        (key.split("/")[-1].split(".")[0] in LABEL_GROUPS and key.startswith("global/"))
+        or key in ("global/physics.closure_model_id",)
+        or "annotation" in key
+    )
+
+
+def _leaves(d: DomainMesh) -> dict[str, torch.Tensor]:
+    """Every tensor a model could be handed, keyed by its place; the label leaves are skipped."""
+    out = {"interior/points": d.interior.points}
+
+    def add(prefix, td):
+        for k in td.keys(include_nested=True, leaves_only=True):
+            k = k if isinstance(k, tuple) else (k,)
+            out[prefix + ".".join(k)] = td[k]
+
+    add("interior/point_data/", d.interior.point_data)
+    for name in d.boundary_names:
+        b = d.boundaries[name]
+        out[f"{name}/points"], out[f"{name}/cells"] = b.points, b.cells
+        add(f"{name}/cell_data/", b.cell_data)
+    add("global/", d.global_data)
+    return {k: v for k, v in out.items() if not _is_label(k)}
+
+
+def _flat(value, prefix="") -> dict[str, torch.Tensor]:
+    """The tensors of a collated batch, keyed by their path."""
+    if isinstance(value, torch.Tensor):
+        return {prefix: value}
+    if isinstance(value, dict):
+        return {
+            k2: v2
+            for k, v in value.items()
+            for k2, v2 in _flat(v, f"{prefix}/{k}").items()
+        }
+    if hasattr(value, "keys"):  # TensorDict
+        return {
+            f"{prefix}/{k}": value[k]
+            for k in value.keys(include_nested=True, leaves_only=True)
+        }
+    raise TypeError(type(value))
+
+
+@pytest.mark.parametrize("dataset", sorted(V2_FILES))
+def test_v2_dataset_files_read_no_label_and_derive_no_case_scale(dataset):
+    """Every v2 file is the template's chain with its split's statistics: no transform reads a label or a
+    reference scale, nothing is nondimensionalized or centred, and the constants are the split's (targets
+    scale-only, mean 0); the label_reference block names the label-era file of the same split."""
+    split, targets, twin = V2_FILES[dataset]
+    path = _RECIPE_ROOT / "datasets" / f"{dataset}.yaml"
+    assert path.read_text().startswith(
+        f"# Statistics filled by aerozoo_pstats.py fill from pstats_{split}.train.json: split part {split}.train, "
+    )
+    ds = OmegaConf.load(path)
+    chain = OmegaConf.to_container(ds.pipeline.transforms, resolve=False)
+    names = [t["_target_"].split(":")[-1].rstrip("}") for t in chain]
+    assert names == [
+        "SubsampleMesh",
+        "HarmonizeBoundaryFields",
+        "RenameMeshFields",
+        "ComputeSDFFromBoundary",
+        "StandardizeGlobalLeaf",
+        "FlipBoundaryOrientation",
+        "RenameMeshFields",
+        "DropMeshFields",
+        "NormalizeMeshFields",
+        "ComposeQuadratureMeasure",
+        "MergeBoundaries",
+    ]
+    text = OmegaConf.to_yaml(ds.pipeline)
+    for label in (
+        *LABEL_GROUPS,
+        "closure_model_id",
+        "body_id",
+        "U_inf",
+        "L_ref",
+        "sdf_slip",
+    ):
+        assert label not in text, label
+    assert (
+        chain[4]["field"] == "physics.kinematic_viscosity" and chain[4]["log10"] is True
+    )
+    for stats in chain[8]["fields"].values():
+        assert stats["mean"] in (0, [0, 0, 0])
+    assert OmegaConf.to_container(ds.targets) == targets
+    assert ds.label_reference.dataset == twin
+    twin_text = (_RECIPE_ROOT / "datasets" / f"{twin}.yaml").read_text()
+    assert f"split part {split}.train" in twin_text.splitlines()[0]
+    for t in chain:
+        hydra.utils.instantiate(t, _convert_="all")
+
+
+@pytest.mark.parametrize("with_slip", [True, False])
+def test_v2_pipeline_is_physical_and_merges_the_faces(with_slip):
+    """SI values throughout: raw coordinates, the prescribed values in m/s and the case's own units on the
+    four boundaries, nu_std from per-dataset constants; the merged boundary is every face in the listed
+    order with its one-hot condition and standardized values, and no label."""
+    case = _labelled_case(with_slip)
+    chain = _chain("aerozoo_puvolume")
+    d = _run(chain, case)
+    torch.testing.assert_close(d.interior.points, case.interior.points)
+    inlet = d.boundaries["inlet"]
+    torch.testing.assert_close(
+        inlet.cell_data["bc_velocity"],
+        torch.tensor([U_INF, 0.0, 0.0]).expand(inlet.n_cells, 3),
+    )
+    torch.testing.assert_close(
+        inlet.cell_data["bc_omega"], torch.full((inlet.n_cells,), 50.0)
+    )
+    std_leaf = next(t for t in chain if type(t).__name__ == "StandardizeGlobalLeaf")
+    torch.testing.assert_close(
+        d.global_data["nu_std"],
+        (torch.log10(torch.tensor(NU)) - std_leaf.mean) / std_leaf.std,
+    )
+    merged = d.boundaries["merged"]
+    names = ["inlet", "outlet", "no_slip", "slip"]
+    assert merged.n_cells == sum(d.boundaries[n].n_cells for n in names)
+    torch.testing.assert_close(
+        merged.cell_centroids,
+        torch.cat([d.boundaries[n].cell_centroids for n in names]),
+    )
+    merge = chain[-1]
+    v_std = float(merge.normalize.stats["bc_velocity"]["std"])
+    torch.testing.assert_close(
+        merged.cell_data["bc_velocity"][: inlet.n_cells],
+        inlet.cell_data["bc_velocity"] / (v_std + 1e-8),
+    )
+    assert torch.equal(
+        merged.cell_data["bc_inlet"],
+        torch.cat([d.boundaries[n].cell_data["bc_inlet"] for n in names]),
+    )
+    assert (
+        "annotation" not in merged.cell_data.keys()
+        and "solution" not in merged.cell_data.keys()
+    )
+
+
+def test_v2_geotransolver_option_b_and_transolver_configs_run():
+    """GeoTransolver reads every boundary face as a token [xyz, one-hot (4), the prescribed values (15)] with
+    the ball query off, the query point with its no_slip SDF and normal, and nu_std; Transolver the query
+    point with the no_slip SDF and normal, and nu_std broadcast. Both set the per-case relative loss."""
+    targets = TARGETS
+    d = _run(_chain("aerozoo_puvolume"), _labelled_case(False))
+    n_faces = d.boundaries["merged"].n_cells
+    for model, shapes in (
+        (
+            "geotransolver_volume_aerozoo",
+            {
+                "geometry": (1, n_faces, 22),
+                "local_embedding": (1, N_INTERIOR, 7),
+                "global_embedding": (1, 1, 1),
+            },
+        ),
+        (
+            "transolver_volume_aerozoo",
+            {"embedding": (1, N_INTERIOR, 7), "fx": (1, N_INTERIOR, 1)},
+        ),
+    ):
+        cfg = _compose(model, dataset="aerozoo_puvolume")
+        assert cfg.training.loss_type == "case_relative_l2"
+        assert cfg.input_type == "tensors" and cfg.model.out_dim == 7
+        if model.startswith("geo"):
+            assert cfg.model.include_local_features is False
+            assert (
+                cfg.model.geometry_dim,
+                cfg.model.functional_dim,
+                cfg.model.global_dim,
+            ) == (22, 7, 1)
+            assert cfg.training.optimizer.lr == pytest.approx(1.0e-3)
+        spec = OmegaConf.to_container(cfg.forward_kwargs, resolve=True)
+        batch = build_collate_fn("tensors", spec, targets)([(d, {})])
+        fk = batch["forward_kwargs"]
+        assert {k: tuple(v.shape) for k, v in fk.items()} == shapes
+        small = OmegaConf.merge(
+            cfg.model, {"n_layers": 2, "n_hidden": 32, "slice_num": 16, "n_head": 2}
+        )
+        net = hydra.utils.instantiate(small, _convert_="partial")
+        with torch.no_grad():
+            out = net(**fk)
+        pred = normalize_output_to_tensordict(out, targets, "tensors")
+        total, _ = LossCalculator(targets, loss_type=cfg.training.loss_type)(
+            pred, batch["targets"]
+        )
+        assert torch.isfinite(total)
+
+
+@pytest.mark.parametrize("with_slip", [True, False])
+def test_v2_every_model_input_is_blind_to_every_label(with_slip):
+    """v2/check_v2.py B1 and B2 on the synthetic case: with every label perturbed, and with every label
+    deleted, the pipeline runs and every non-label leaf it hands over (the baselines' view and ISLA's, which
+    drops the draw, the SDF, the harmonized fields and the merge) is bitwise equal, and so is every tensor of
+    the GeoTransolver and Transolver batches."""
+    case = _labelled_case(with_slip)
+    isla_cfg = _compose("isla_volume_aerozoo", dataset="aerozoo_puvolume")
+    views = {
+        "baselines": _chain("aerozoo_puvolume"),
+        "isla": _chain("aerozoo_puvolume", isla_cfg),
+    }
+    assert not any(type(t).__name__ == "MergeBoundaries" for t in views["isla"])
+    specs = {
+        m: OmegaConf.to_container(
+            _compose(m, dataset="aerozoo_puvolume").forward_kwargs, resolve=True
+        )
+        for m in ("geotransolver_volume_aerozoo", "transolver_volume_aerozoo")
+    }
+    for delete in (False, True):
+        other = _relabel(case, delete)
+        for name, chain in views.items():
+            a, b = _leaves(_run(chain, case)), _leaves(_run(chain, other))
+            assert a.keys() == b.keys(), (name, delete, a.keys() ^ b.keys())
+            differ = [
+                k for k in a if a[k].shape != b[k].shape or not torch.equal(a[k], b[k])
+            ]
+            assert not differ, (name, delete, differ)
+        for model, spec in specs.items():
+            a, b = (
+                _flat(
+                    build_collate_fn("tensors", spec, TARGETS)(
+                        [(_run(views["baselines"], x), {})]
+                    )
+                )
+                for x in (case, other)
+            )
+            assert a.keys() == b.keys()
+            assert all(torch.equal(a[k], b[k]) for k in a), (model, delete)
+        ### the perturbation reached the labels
+        if not delete:
+            assert not torch.equal(
+                other.global_data["reference", "velocity"],
+                case.global_data["reference", "velocity"],
+            )
+
+
+@pytest.mark.parametrize("with_slip", [True, False])
+def test_v2_label_reference_map_is_exact(with_slip):
+    """Test D: the v2 targets, de-standardized to SI units and mapped with the case's labels into the
+    label-era space of aerozoo_uvolume.yaml, are that file's targets for the same case to float32 roundoff;
+    the label-reference metrics of a prediction are the plain metrics in that space."""
+    case = _labelled_case(with_slip)
+    v2_chain, old_chain = _chain("aerozoo_puvolume"), _chain("aerozoo_uvolume")
+    d_v2, d_old = _run(v2_chain, case), _run(old_chain, case)
+    block = OmegaConf.to_container(
+        load_dataset_config(
+            _RECIPE_ROOT / "datasets" / "aerozoo_puvolume.yaml"
+        ).label_reference
+    )
+    normalizer = next(t for t in v2_chain if type(t).__name__ == "NormalizeMeshFields")
+    spec = {"embedding": "interior.points"}
+    batch = build_collate_fn("tensors", spec, TARGETS, score_globals=block["globals"])(
+        [(d_v2, {})]
+    )
+    expected = build_collate_fn("tensors", spec, TARGETS)([(d_old, {})])["targets"]
+    assert set(batch["score_globals"].keys()) == {"U_inf", "rho_inf", "L_ref", "p_inf"}
+    label_map = LabelReferenceMap.from_block(block, normalizer)
+    mapped = label_map(batch["targets"], batch["score_globals"])
+    for name in TARGETS:
+        scale = expected[name].abs().max()
+        torch.testing.assert_close(
+            mapped[name], expected[name], rtol=0, atol=2e-6 * float(scale)
+        )
+    ### the metric calculator of score_space=label_reference
+    calc = LabelReferenceMetricCalculator(TARGETS, metrics=["l2"], label_map=label_map)
+    pred = batch["targets"].apply(lambda x: x * 1.1 + 0.01)
+    out = calc(pred, batch["targets"], score_globals=batch["score_globals"])
+    assert set(out.keys()) == set(calc.expected_keys())
+    plain = MetricCalculator(TARGETS, metrics=["l2"])(
+        label_map(pred, batch["score_globals"]), mapped
+    )
+    for k in plain.keys():
+        torch.testing.assert_close(out[f"{LABEL_REFERENCE_PREFIX}/{k}"], plain[k])
+    with pytest.raises(ValueError, match="score_globals"):
+        calc(pred, batch["targets"])
