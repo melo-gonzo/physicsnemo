@@ -777,7 +777,7 @@ def test_isla_config_declares_each_condition_s_fields_and_runs(isla_pipeline_out
         "inlet_retheta_std": {"rank": 0},
     }
     assert set(OmegaConf.to_container(m.output_schema)) == set(targets)
-    assert m.get("query_schema") is None and m.interior is True
+    assert m.interior is True
     model = hydra.utils.instantiate(m)
     spec = OmegaConf.to_container(cfg.forward_kwargs, resolve=True)
     collate = build_collate_fn("mesh", spec, targets)

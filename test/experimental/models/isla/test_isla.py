@@ -207,45 +207,6 @@ def test_geo_pool_then_project_is_exact():
     assert torch.allclose(old, new, atol=1e-12, rtol=0.0)
 
 
-def test_query_scalars_contracts():
-    """Per-prediction-point rank-0 inputs (e.g. a stored signed distance) in the
-    prediction Mesh's point_data: exact rotation/translation covariance is untouched
-    (scalars are invariants), the channel changes the output and receives
-    gradients, geometric-scale equivariance holds (rank-0 query inputs are lengths
-    and are divided by the frame's length unit), and misuse raises."""
-    torch.manual_seed(0)
-    m = _isla(hidden=32, n_layers=2, n_slices=8, interior=True, query_schema={"sdf": {"rank": 0}}).double()
-    pts, nrm, w, _ = cloud(40)
-    mesh = soup(pts, nrm, w)
-    drive = torch.tensor([1.0, 0.3, 0.0], dtype=D)
-    q = torch.randn(12, 3, dtype=D)
-    sdf = torch.randn(12, dtype=D) * 0.3
-    out = m(boundary_meshes={"wall": mesh}, prediction_points=points_mesh(q, {"sdf": sdf}), global_data={"g": drive})
-    assert out.point_data["p"].shape == (12,) and out.point_data["v"].shape == (12, 3)
-    assert torch.equal(out.points, q)
-    ### scalar channel is live
-    out2 = _run(m, mesh, drive, points_mesh(q, {"sdf": sdf * 2}))
-    assert not same(out, out2, atol=1e-8)
-    ### rotation + translation covariance (scalars ride along unchanged)
-    R = _rotation()
-    t = torch.tensor([0.4, -1.1, 2.0], dtype=D)
-    rot = _run(m, transform(mesh, R, t), drive @ R.T, points_mesh(q @ R.T + t, {"sdf": sdf}))
-    _assert_rotated(rot, out, R)
-    ### geometric-scale equivariance: lengths scale, so must the scalar
-    s = 3.7
-    sc = _run(m, transform(mesh, scale=s), drive, points_mesh(q * s, {"sdf": sdf * s}))
-    assert same(sc, out, atol=1e-10)
-    ### gradients reach the query-input embedding
-    sum(o.square().sum() for o in outputs(out).values()).backward()
-    assert all(p.grad is not None and p.grad.abs().sum() > 0 for p in m.qt.seed.parameters())
-    with pytest.raises(ValueError, match="missing the declared fields \\['sdf'\\]"):
-        m(boundary_meshes={"wall": mesh}, prediction_points=points_mesh(q), global_data={"g": drive})
-    with pytest.raises(ValueError, match="pass prediction_points as a Mesh"):
-        m(boundary_meshes={"wall": mesh}, prediction_points=q, global_data={"g": drive})
-    with pytest.raises(ValueError, match="interior=True"):
-        m(boundary_meshes={"wall": mesh}, global_data={"g": drive})
-
-
 def test_interior_task_contracts():
     """The interior task (prediction points as interacting tokens): exactly
     rotation/translation-covariant, finite, and -- by design -- NOT query-set
@@ -320,8 +281,7 @@ def test_query_independent_interior_contracts():
         _isla(hidden=32, n_layers=1, n_slices=8, query_independent=True)
 
 
-@pytest.mark.parametrize("extra", [{}, {"query_schema": {"sdf": {"rank": 0}}}])
-def test_query_mass_refinement_invariance(extra):
+def test_query_mass_refinement_invariance():
     """Splitting every boundary cell into two coincident half-measure copies leaves
     the discrete boundary measure unchanged (positions, normals, total area, every
     integral). The prediction-point tokens' weight is a fraction of the total
@@ -330,11 +290,11 @@ def test_query_mass_refinement_invariance(extra):
     pts, nrm, w, drv = cloud(60, seed=42)
     mesh = soup(pts, nrm, w)
     q = pts[:17] * 1.3
-    qm = points_mesh(q, {"sdf": q.norm(dim=-1)} if extra else None)
+    qm = points_mesh(q)
     torch.manual_seed(0)
-    m = _isla(hidden=32, n_layers=2, n_slices=8, interior=True, **extra).double().eval()
+    m = _isla(hidden=32, n_layers=2, n_slices=8, interior=True).double().eval()
     s = 3.7
-    qm_s = points_mesh(q * s, {"sdf": q.norm(dim=-1) * s} if extra else None)
+    qm_s = points_mesh(q * s)
     a = _run(m, mesh, drv, qm)
     b = _run(m, refine(mesh), drv, qm)
     c = _run(m, transform(mesh, scale=s), drv, qm_s)
@@ -488,6 +448,7 @@ def test_constructor_and_forward_are_keyword_only():
         "fast_point_softmax",
         "query_mass",
         "query_scalar_scale",
+        "query_schema",
         "local_rho",
         "query_tokens",
         "support_tokens",
@@ -508,21 +469,20 @@ def test_unknown_constructor_argument_raises_type_error(name):
 
 
 def test_interior_flag_structures_the_forward():
-    """A surface model refuses prediction points and a query_schema; an interior
-    model requires prediction points; a bare tensor is accepted only when the
-    query_schema declares no fields."""
+    """A surface model refuses prediction points; an interior model requires
+    them, as a point-cloud Mesh or a bare tensor."""
     pts, nrm, w, drv = cloud(20, dtype=torch.float32)
     mesh = soup(pts, nrm, w)
     surface = _isla(hidden=32, n_layers=1, n_slices=8)
     with pytest.raises(ValueError, match="interior=False"):
         surface(boundary_meshes={"wall": mesh}, prediction_points=pts[:3], global_data={"g": drv})
-    with pytest.raises(ValueError, match="declare them with interior=True"):
-        _isla(hidden=32, n_layers=1, n_slices=8, query_schema={"sdf": {"rank": 0}})
     interior = _isla(hidden=32, n_layers=1, n_slices=8, interior=True)
     with pytest.raises(ValueError, match="pass prediction_points"):
         interior(boundary_meshes={"wall": mesh}, global_data={"g": drv})
     out = interior(boundary_meshes={"wall": mesh}, prediction_points=points_mesh(pts[:3] * 2), global_data={"g": drv})
     assert out.point_data["p"].shape == (3,)
+    bare = interior(boundary_meshes={"wall": mesh}, prediction_points=pts[:3] * 2, global_data={"g": drv})
+    assert torch.equal(bare.point_data["p"], out.point_data["p"])
     with pytest.raises(ValueError, match="tensor of shape \\(N, 3\\)"):
         interior(boundary_meshes={"wall": mesh}, prediction_points=pts[:3, :2], global_data={"g": drv})
 

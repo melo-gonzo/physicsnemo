@@ -145,7 +145,7 @@ def test_isla_constructor_attributes(config):
         assert m.geo_kernel == "auto"
         assert m.interior is False and m.qt is None
         assert m.n_global_vectors == 1 and m.n_global_scalars == 0
-        assert m.boundary_schemas == {"wall": {}} and m.query_schema == {}
+        assert m.boundary_schemas == {"wall": {}}
     else:
         m = ISLA(
             output_schema={
@@ -158,7 +158,6 @@ def test_isla_constructor_attributes(config):
             },
             global_schema={"g1": {"rank": 1}, "g2": {"rank": 1}, "re": {"rank": 0}},
             boundary_schemas={"wall": {"trace": {"rank": 0}, "traction": {"rank": 1}}, "outlet": {}},
-            query_schema={"sdf": {"rank": 0}},
             interior=True,
             hidden=64,
             n_layers=3,
@@ -172,7 +171,6 @@ def test_isla_constructor_attributes(config):
         assert list(m.boundary_schemas) == ["outlet", "wall"]  # canonical order
         assert list(m.boundary_schemas["wall"]) == ["trace", "traction"]
         assert list(m.boundary_conditions) == ["outlet", "wall"]
-        assert list(m.query_schema) == ["sdf"]
         assert m.interior is True and m.qt is not None
     assert isinstance(m, Module)
 

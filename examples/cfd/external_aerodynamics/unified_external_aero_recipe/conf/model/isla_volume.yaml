@@ -77,7 +77,7 @@ compile_options:
 forward_kwargs:
   boundary_meshes:
     vehicle: boundaries.vehicle       # Mesh[2, 3]: the full-resolution vehicle surface, normals into the fluid
-  prediction_points: interior         # the interior point-cloud Mesh (its point_data carries any query_schema fields)
+  prediction_points: interior         # the interior point-cloud Mesh (its points)
   global_data: global_data            # the case's TensorDict; the model selects its declared leaves
 
 model:

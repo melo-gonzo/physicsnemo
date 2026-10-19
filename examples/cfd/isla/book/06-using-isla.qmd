@@ -384,13 +384,13 @@ def decl(d):
 def kS(d):
     d = d or {}
     return f"{sum(v['rank'] == 1 for v in d.values())} / {sum(v['rank'] == 0 for v in d.values())}"
-o = "| configuration | task | dim | outputs (rank) | global directions $K$ / scalars $S$ | boundary inputs | query inputs | compile |\n|---|---|--:|---|--:|--:|---|---|\n"
+o = "| configuration | task | dim | outputs (rank) | global directions $K$ / scalars $S$ | boundary inputs | compile |\n|---|---|--:|---|--:|--:|---|\n"
 for n, c in ISLA_CFGS.items():
     m = c["model"]
     task = ("interior, read-only" if m.get("query_independent") else "interior") if m.get("interior") else "surface"
     comp = "whole model" if c.get("compile") else ("per block" if m.get("compile_blocks") else "none")
     o += (f"| `{n}` | {task} | {m.get('dim', DEFAULTS['dim'])} | {decl(m.get('output_schema'))} | {kS(m.get('global_schema'))} "
-          f"| {sum(len(s or {}) for s in (m.get('boundary_schemas') or {}).values())} | {decl(m.get('query_schema'))} | {comp} |\n")
+          f"| {sum(len(s or {}) for s in (m.get('boundary_schemas') or {}).values())} | {comp} |\n")
 print(o)
 print(": The recipe's ISLA model configurations (`conf/model/isla_*.yaml`, a parent's `defaults` merged in), read as the page "
       "renders. Every one is the reference configuration at the same learning rate. How to read this: \"boundary inputs\" counts "

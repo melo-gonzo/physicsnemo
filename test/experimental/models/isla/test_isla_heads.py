@@ -240,8 +240,8 @@ def test_rank_two_output_in_the_interior_task():
     mesh, drv = _boundary(200)
     q_pts, _, _, _ = cloud(50, seed=1)
     outputs_ = {"p": {"rank": 0}, "v": {"rank": 1}, "sig": {"rank": 2, "symmetric": True}, "t": {"rank": 2}}
-    m = _model(1, output_schema=outputs_, interior=True, query_schema={"sdf": {"rank": 0}})
-    q = points_mesh(q_pts, {"sdf": torch.rand(50, dtype=D)})
+    m = _model(1, output_schema=outputs_, interior=True)
+    q = points_mesh(q_pts)
     base = _forward(m, mesh, drv, 1, q=q)
     assert base["sig"].shape == (50, 3, 3)
     for improper in (False, True):

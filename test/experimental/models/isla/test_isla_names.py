@@ -16,12 +16,12 @@
 
 """Nested field names.
 
-A field in ``output_schema``, a schema of ``boundary_schemas``, ``query_schema`` or ``global_schema``
+A field in ``output_schema``, a schema of ``boundary_schemas`` or ``global_schema``
 is declared in the shared rank-spec grammar (:mod:`physicsnemo.mesh.fields`): a
 dotted flat name (``"surface.pressure"``) and a nested group (``{"surface":
 {"pressure": {"rank": 0}}}``) declare the same field. The output Mesh's ``point_data`` nests
-the outputs the same way, and the inputs are read from ``cell_data``,
-``point_data`` and ``global_data`` by the nested key.
+the outputs the same way, and the inputs are read from ``cell_data`` and
+``global_data`` by the nested key.
 """
 
 import pytest
@@ -140,11 +140,9 @@ def test_mixed_flat_and_nested_names_and_the_interior_task():
         global_schema={"freestream": {"rank": 1}},
         boundary_schemas={"wall": {}},
         interior=True,
-        query_schema={"geometry.sdf": {"rank": 0}, "geometry.grad": {"rank": 1}},
     )
-    qi = {"geometry": {"sdf": torch.rand(12, dtype=D), "grad": torch.randn(12, 3, dtype=D)}}
     with torch.no_grad():
-        out = m(boundary_meshes={"wall": soup(pts, nrm, w)}, prediction_points=points_mesh(q, qi), global_data={"freestream": drv})
+        out = m(boundary_meshes={"wall": soup(pts, nrm, w)}, prediction_points=points_mesh(q), global_data={"freestream": drv})
     assert out.point_data["pressure"].shape == (12,) and out.point_data["flow", "velocity"].shape == (12, 3)
 
 

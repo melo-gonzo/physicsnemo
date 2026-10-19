@@ -887,14 +887,9 @@ def _model_block(name):
             blk = {**base, **blk}
     return cfg, blk
 interior_cfgs = sorted(p.stem for p in CONF.glob("isla_*.yaml") if _model_block(p.stem)[1].get("interior"))
-with_sdf = [n for n in interior_cfgs if _model_block(n)[1].get("query_schema")]
-without = [n for n in interior_cfgs if n not in with_sdf]
 fmt = lambda xs: ", ".join(f"`{x}`" for x in xs)
-print(f"A dataset that stores a full-mesh signed-distance field and its gradient may pass them as ordinary `query_schema` "
-      f"fields (`sdf`, rank 0, and `sdf_normals`, rank 1), and the model's own geometry is computed regardless. Of the recipe's "
-      f"interior ISLA configurations, "
-      + (f"{fmt(with_sdf)} declare them and {fmt(without)} do not" if with_sdf else f"none declares them ({fmt(without)})")
-      + " (read from `conf/model/` as the page renders).")
+print(f"The prediction points' only input is their positions: a stored signed-distance field is not read. The recipe's "
+      f"interior ISLA configurations are {fmt(interior_cfgs)} (read from `conf/model/` as the page renders).")
 ```
 
 ::: {.callout-note collapse="true" title="The wall geometry in the code"}
@@ -1558,7 +1553,6 @@ not an argument is described in the stages above.
 WHAT = {
     "output_schema": ("5", "the output fields by name and rank spec (`{pressure: {rank: 0}, wss: {rank: 1}, stress: {rank: 2, symmetric: true}}`; `parity: odd` for a pseudotensor); each costs the coefficients of @tbl-arch-coeffs and is returned as a leaf of the output Mesh's `point_data` under its name. A dotted name (`surface.pressure`) is a nested leaf, in the output and in every input mapping"),
     "boundary_schemas": ("2, 3d", "per-cell fields of rank 0 to 2, read from every boundary mesh's `cell_data`: their invariants join the seed (prediction-point tokens carry zeros), and rank-1 and rank-2 fields add their contractions with $\\hat\\rho_{is}$ to the relational invariants"),
-    "query_schema": ("interior", "per-prediction-point fields of rank 0 to 2, read from the prediction Mesh's `point_data` and carried by the prediction-point tokens through their own embedding after the built-in wall distance; rank-0 fields are lengths, divided by $L$ and paired with a signed log; requires `interior=True`"),
     "global_schema": ("1, 2, 3d, 5", "per-case fields of rank 0 or 1, read from `global_data` by name: each rank-1 field is a global direction $\\hat g_k$ (one seed cosine, one relational cosine, two basis vectors); each rank-0 field widens the seed"),
     "interior": ("modes", "the task: `False` predicts at the boundary cells and takes no prediction points; `True` predicts at the prediction points, which join the slice layers as tokens with the built-in wall geometry (@sec-arch-modes)"),
     "query_independent": ("modes, after each layer", "interior task only: `True` is ISLA-DTT, with read-only prediction points (no routing mass) that read the boundary cells through the forest at $\\theta = 1$ after every slice layer (@sec-arch-passive-decoder); rank-2 per-token inputs are refused with it"),

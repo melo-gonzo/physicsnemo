@@ -223,9 +223,8 @@ class _RoutingLogits(nn.Module):
 class _QueryTokens(nn.Module):
     """The query tokens' own parameters (the interior mode): their input layer
     ``seed``, which maps their seed (the K terms n_q.g_k, the global scalars, the
-    built-in signed distance to the boundary surface as ``[d/L, sign(d) log(|d|/L +
-    eps)]`` and the invariants of the fields declared in ``query_schema``) to the
-    token width, followed, as a boundary condition's input layer is, by the model's
+    built-in signed distance to the boundary surface as ``[s, asinh(s / 1e-6)]``,
+    ``s = d / L``) to the token width, followed, as a boundary condition's input layer is, by the model's
     shared GELU and linear layer; and the log of the learned fraction of the total
     boundary measure that is their routing weight (``routing_mass=False``, passive
     tokens: none, ``logw`` is ``None``)."""

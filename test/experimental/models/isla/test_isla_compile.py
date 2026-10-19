@@ -21,7 +21,7 @@ outputs and gradients, and a case with other boundary and query counts must reus
 the graph rather than recompile. The surface task has one boundary mesh; the
 interior task has two boundary meshes and prediction points, so its token axis is
 a sum of three independent counts. The inputs task is an interior task with a
-rank-2 boundary input and rank-0 and rank-1 query inputs. ISLA-DTT
+rank-2 boundary input and a rank-0 one. ISLA-DTT
 (``query_independent``) is not here: its boundary read sizes its pairs from the data
 and compiles per block (``compile_blocks``) instead.
 """
@@ -69,7 +69,6 @@ def _model(task: str) -> ISLA:
         kw = {
             "boundary_schemas": SCHEMAS["inputs"],
             "global_schema": {"g": {"rank": 1}},
-            "query_schema": {"sdf": {"rank": 0}, "m": {"rank": 1}},
             "interior": True,
         }
     return ISLA(
@@ -94,9 +93,8 @@ def _case(task: str, sizes: dict, nq: int, device, seed: int) -> dict:
         case["global_data"]["re"] = torch.tensor(0.3, device=device)
         case["prediction_points"] = (2 * torch.randn(nq, 3, generator=g)).to(device)
     elif task == "inputs":
-        x = 2 * torch.randn(nq, 3, generator=g)
-        fields = {"sdf": torch.randn(nq, generator=g), "m": torch.randn(nq, 3, generator=g)}
-        case["prediction_points"] = points_mesh(x, fields).to(device)
+        ### a point-cloud Mesh (its points alone are read), not a bare tensor
+        case["prediction_points"] = points_mesh(2 * torch.randn(nq, 3, generator=g)).to(device)
     return case
 
 

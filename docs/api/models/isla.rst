@@ -22,7 +22,7 @@ releases.
 Rank specs
 ----------
 
-``output_schema``, each schema of ``boundary_schemas``, ``query_schema`` and ``global_schema`` map a
+``output_schema``, each schema of ``boundary_schemas`` and ``global_schema`` map a
 field name to a field declaration in the grammar shared by every mesh model
 (:meth:`physicsnemo.mesh.fields.FieldSchema.parse`): a
 :class:`~physicsnemo.mesh.fields.RankSpec` or a mapping of values ``{"rank": r,
@@ -70,8 +70,8 @@ case per call, no batch axis. The boundary is a mapping of
 :class:`~physicsnemo.mesh.Mesh` objects keyed by declared boundary-condition
 name (each a ``Mesh[dim - 1, dim]`` whose cells have normals); the per-case data is
 a ``TensorDict`` or mapping; for an interior task (``interior=True``) the
-prediction points are a point-cloud ``Mesh`` (or a bare ``(N, dim)`` tensor
-when ``query_schema`` declares no fields). The result is a point-cloud ``Mesh``
+prediction points are a point-cloud ``Mesh``, of which only the points are
+read, or a bare ``(N, dim)`` tensor. The result is a point-cloud ``Mesh``
 whose ``point_data`` holds the declared outputs (on a surface task at the
 given conditions' cells, the conditions in sorted name order). Every constructor argument
 and every ``forward`` input is keyword-only. The reference configuration on a
@@ -117,9 +117,7 @@ one compiled graph) and every measure-weighted read is an unbiased quadrature
 of the full surface. In training the draw's start comes from the global torch
 RNG (``torch.manual_seed`` reproduces it); in evaluation (``model.eval()``) it
 is fixed, so inference is deterministic. A surface task reads every cell it is
-given and samples none. A dataset's stored signed distance enters, if wanted,
-as an ordinary
-``query_schema`` field. With
+given and samples none. With
 ``query_independent=True`` (ISLA-DTT) the prediction points are passive
 readers of the slices and of the boundary cells, so each prediction depends
 on its own point and the boundary alone and any request can be answered in

@@ -413,7 +413,6 @@ def tree_pair_invariants(
     query_r: torch.Tensor,
     query_n: torch.Tensor,
     query_wall: torch.Tensor,
-    query_vecs: torch.Tensor | None,
     src_r: torch.Tensor,
     src_n: torch.Tensor,
     src_vecs: torch.Tensor | None,
@@ -424,13 +423,11 @@ def tree_pair_invariants(
     the sources either cells or virtual cells.
 
     ``query_r``, ``query_n`` ``(Q, d)``, ``query_wall`` ``(Q,)`` the point's built-in
-    wall distance :math:`|d_q|` (frame units), ``query_vecs`` ``(Q, P_q, d)`` or
-    ``None``; ``src_r``, ``src_n`` ``(S, d)``, ``src_vecs`` ``(S, P_b, d)`` or ``None``;
+    wall distance :math:`|d_q|` (frame units); ``src_r``, ``src_n`` ``(S, d)``, ``src_vecs`` ``(S, P_b, d)`` or ``None``;
     ``g_unit`` ``(K, d)``. With :math:`\rho = (x_q - y_j) / L`, :math:`r = |\rho|` and
     :math:`\hat\rho = \rho / r` the invariants are :math:`[r, \log r, \log(r / |d_q|),
     \hat\rho\cdot n_j, \hat\rho\cdot n_q, n_q\cdot n_j, \hat\rho\cdot g_k, n_j\cdot g_k,
-    \hat\rho\cdot v, n_j\cdot v, \hat\rho\cdot u, n_q\cdot u]` (``v`` the point's
-    rank-1 inputs, ``u`` the source's): lengths in units of :math:`L` or of the point's
+    \hat\rho\cdot u, n_q\cdot u]` (``u`` the source's rank-1 inputs): lengths in units of :math:`L` or of the point's
     own wall distance, and cosines, so no length scale is chosen. The only constant is
     ``eps``, a floor on the lengths inside the logarithms and the normalization (a
     numerical guard: :math:`r \ge |d_q| > 0` for every point off the boundary and every
@@ -452,20 +449,16 @@ def tree_pair_invariants(
             (n_q * n_j).sum(-1),
         ]
         cols = [torch.stack(feats, -1), rho @ g_unit.t(), n_j @ g_unit.t()]
-        if query_vecs is not None and query_vecs.shape[1]:
-            v = query_vecs[qi]
-            cols += [(rho[:, None] * v).sum(-1), (n_j[:, None] * v).sum(-1)]
         if src_vecs is not None and src_vecs.shape[1]:
             u = src_vecs[si]
             cols += [(rho[:, None] * u).sum(-1), (n_q[:, None] * u).sum(-1)]
         return torch.cat(cols, -1)
 
 
-def kernel_geo_width(n_global_vectors: int, n_query_vecs: int, n_boundary_vecs: int) -> int:
+def kernel_geo_width(n_global_vectors: int, n_boundary_vecs: int) -> int:
     """Width of :func:`tree_pair_invariants`: r, log r, log(r / |d_q|), rho.n_j, rho.n_q,
-    n_q.n_j, then rho.g_k and n_j.g_k (2K), rho.v and n_j.v per query vector (2P_q),
-    rho.u and n_q.u per boundary vector (2P_b)."""
-    return 6 + 2 * int(n_global_vectors) + 2 * int(n_query_vecs) + 2 * int(n_boundary_vecs)
+    n_q.n_j, then rho.g_k and n_j.g_k (2K), rho.u and n_q.u per boundary vector (2P_b)."""
+    return 6 + 2 * int(n_global_vectors) + 2 * int(n_boundary_vecs)
 
 
 class _KernelBasis(nn.Module):
@@ -514,7 +507,6 @@ def tree_read_pairs(
     query_r: torch.Tensor,
     query_n: torch.Tensor,
     query_wall: torch.Tensor,
-    query_vecs: torch.Tensor | None,
     boundary_r: torch.Tensor,
     boundary_n: torch.Tensor,
     boundary_vecs: torch.Tensor | None,
@@ -526,8 +518,8 @@ def tree_read_pairs(
     r"""Build the tree read's pairs for a batch of cases.
 
     ``query_r``, ``query_n`` ``(B, Q, d)`` (frame units; the point's built-in
-    direction), ``query_wall`` ``(B, Q)`` the point's built-in wall distance,
-    ``query_vecs`` ``(B, Q, P_q, d)`` or ``None``; ``boundary_r``, ``boundary_n``
+    direction), ``query_wall`` ``(B, Q)`` the point's built-in wall distance;
+    ``boundary_r``, ``boundary_n``
     ``(B, N, d)``, ``boundary_vecs`` ``(B, N, P_b, d)`` or ``None``; ``log_frac``
     ``(B, N)`` the cells' log measure fractions; ``g_unit`` ``(B, K, d)``.
 
@@ -573,7 +565,6 @@ def tree_read_pairs(
             "query_r": query_r[i],
             "query_n": query_n[i],
             "query_wall": query_wall[i],
-            "query_vecs": None if query_vecs is None else query_vecs[i],
             "src_r": src_r,
             "src_n": src_n,
             "src_vecs": src_vecs,

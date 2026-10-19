@@ -205,12 +205,11 @@ def test_isla_surface_composes_and_runs():
 
 
 def test_isla_volume_composes_and_runs():
-    """Interior task: the interior Mesh is the prediction-point cloud; no query inputs
-    are declared, so the stored sdf / sdf_normals are not read."""
+    """Interior task: the interior Mesh is the prediction-point cloud, whose points
+    alone the model reads (not the stored sdf / sdf_normals)."""
     cfg = _compose("isla_volume", "drivaer_ml_volume_reference", *SMALL)
     assert cfg.model.interior is True
     assert cfg.forward_kwargs.prediction_points == "interior"
-    assert cfg.model.get("query_schema") is None
     assert OmegaConf.to_container(cfg.model.output_schema) == {
         "velocity": {"rank": 1},
         "pressure": {"rank": 0},
@@ -231,14 +230,13 @@ def test_isla_volume_composes_and_runs():
     "model",
     ["isla_volume", "isla_volume_aerozoo", "isla_volume_airfrans", "isla_tensile2d", "isla_lug"],
 )
-def test_the_interior_configs_read_no_stored_wall_geometry(model):
-    """One input contract: an interior ISLA computes its prediction points' wall
-    distance and direction itself, exactly, from the boundary meshes, so its
-    reference configs declare no query inputs and the dataset's stored sdf and
-    sdf_normals (the baselines' inputs) are not read."""
+def test_the_interior_configs_build_their_model(model):
+    """One input contract: an interior ISLA reads its prediction points' positions
+    alone and computes their wall distance and direction itself from the boundary
+    meshes (the dataset's stored sdf and sdf_normals are the baselines' inputs);
+    every interior config builds its model."""
     cfg = _compose(model, "drivaer_ml_volume_reference", *SMALL)
-    assert cfg.model.interior is True
-    assert cfg.model.get("query_schema") is None
+    assert hydra.utils.instantiate(cfg.model).interior is True
 
 
 def test_isla_volume_composes_with_the_corrected_measure_dataset():
