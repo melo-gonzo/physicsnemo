@@ -350,10 +350,10 @@ relations to the anchors.
 #|   clustered there, so a model whose coordinates are centered on it would
 #|   see the whole body displaced. The measure-weighted centroid (blue) and
 #|   the length unit $L$ (printed) are integrals and agree between the
-#|   samplings to quadrature error. How to read this: ISLA's slice layers use
-#|   no center, only the length unit (ISLA-DTT's forest frame aside,
-#|   @sec-arch-modes); the centroid is drawn to show that an
-#|   integral is stable where a point statistic is not.
+#|   samplings to quadrature error. How to read this: ISLA's learned maps use
+#|   no center, only the length unit (ISLA-DTT's tree uses a centroid only to
+#|   group cells for speed, @sec-arch-modes); the centroid is drawn to show
+#|   that an integral is stable where a point statistic is not.
 #| code-fold: true
 fig, ax = plt.subplots(figsize=(8.0, 3.6))
 clean_axes(ax); ax.set_xlim(-2.4, 2.4); ax.set_ylim(-1.1, 1.2)
@@ -1295,13 +1295,13 @@ statistic is worse still, since it moves with the mesher
 (@fig-isla-frame). The relative construction presumes none of this:
 positions enter only as differences against anchors that are themselves
 quadrature means, and the one mean position in the model sits inside the
-scalar $L$. One component is the exception, and it is an implementation
-device rather than an input: ISLA-DTT builds its Barnes–Hut forest in a
-frame the boundary carries (its measure-weighted centroid and principal
-axes, signed by the third moments), so that every pose of a case gets the
-same clusters; where that frame ties, on a body with equal principal
-variances or a symmetric axis, the far-field approximation can differ
-between poses (@sec-arch-modes). The two properties the relative
+scalar $L$. ISLA-DTT's Barnes–Hut forest is built in a frame the boundary
+carries (its measure-weighted centroid and principal axes, signed by the
+third moments), but only to group cells for speed; no learned map reads
+it. Every pose of a case gets the same clusters. Where that frame ties, on
+a body with equal principal variances or a symmetric axis, a rotation
+regroups clusters and moves the read only by the tree's error, which
+vanishes as $\theta \to 0$ (@sec-arch-modes). The two properties the relative
 construction buys, pose and discretization, are the subject of
 @sec-invariances.
 
