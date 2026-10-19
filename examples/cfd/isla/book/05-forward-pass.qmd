@@ -869,8 +869,8 @@ rebuilt from the gathered token, so they are differentiable in the positions.
 
 The nearest *token* is not the nearest point of the *surface*: on a
 DrivAerML car the tokens are 200,000 of up to 17 million cells, so near the
-wall $\delta_q$ and $\hat\nu_q$ are off by up to about one token spacing and
-change with the draw. @fig-isla-interior draws the geometry, and
+wall $\delta_q$ overestimates the distance by up to half a token spacing,
+$\hat\nu_q$ tilts with it, and both change with the draw. @fig-isla-interior draws the geometry, and
 @sec-nearest-token measures its draw dependence on a trained model. An exact
 full-resolution form of this stage is an open question (@sec-open-questions).
 
@@ -1114,7 +1114,7 @@ print(f"On one GB300 at 200,000 boundary cells and 200,000 prediction points (wi
       f"{num(floor_[2]):g} GiB for the read-only model without the boundary read, {num(forest_[0]) / num(floor_[0]):.1f} times "
       f"the step (research/dtt/REPORT.md, \"Verification and cost of the forest\"). In training on AeroZoo (four GB300 ranks, "
       f"bfloat16, 200,000 prediction points per case; the median over training runs of each run's median step), ISLA-DTT steps in "
-      f"{s_d:.2f} s with at most {m_d:.0f} GB on its busiest rank against ISLA's {s_i:.2f} s and {m_i:.0f} GB, "
+      f"{s_d:.2f} s with at most {m_d:.0f} GiB reserved on its busiest rank against ISLA's {s_i:.2f} s and {m_i:.0f} GiB, "
       f"{s_d / s_i:.1f} times the step, at {p_d / 1e6:.1f} million parameters against {p_i / 1e6:.1f} million "
       f"(results/campaigns_2026-10-09/aerozoo/aerozoo_reduction.json, `cost`).")
 ```
@@ -1428,7 +1428,8 @@ pass).
 #|   boundary. How to read this: the backward phase includes the wait for the
 #|   gradient all-reduce, which is time the GPUs spend waiting for the
 #|   slowest of them; the data phase is the main thread preparing the next
-#|   case, measured here at the start of the step. Data:
+#|   case, measured with that preparation at the start of the step, where
+#|   the recipe runs it during the reverse pass (see the text). Data:
 #|   results/perf_2026-10-18/step_breakdown.json.
 #| code-fold: true
 PB = json.load(open(RES / "perf_2026-10-18" / "step_breakdown.json"))
@@ -1511,21 +1512,24 @@ print(f"**The step is bound by the GPU, and what is left is waiting.** ISLA's wa
       f"take {dd['isla_bwd_nccl_kernel_ms'][0]} to {dd['isla_bwd_nccl_kernel_ms'][1]} ms of the reverse pass while moving the gradients "
       f"takes {dd['pure_transfer_ms']} ms: that time is waiting for the slowest rank, not bandwidth. The second is data preparation: "
       f"the main thread moves the next case to the GPU and runs its transforms ({HT['isla']['data_consume']:.0f} ms) in many small "
-      f"kernels, and when it does so at the start of a step, the GPU has just drained and sits idle. The recipe therefore loads "
-      f"the next batch right after the reverse pass is launched, while the GPU is still running it (`_run_epoch` in `src/train.py`), "
-      f"with the same samples in the same order; that makes ISLA's step {sav[0]:.1f} to {sav[1]:.1f}% shorter on AeroZoo "
+      f"kernels. Prepared at the start of a step, as in @fig-arch-step-breakdown, it runs while the GPU has just drained and sits "
+      f"idle. The recipe loads the next batch right after the reverse pass is launched, while the GPU is still running it "
+      f"(`_run_epoch` in `src/train.py`), with the same samples in the same order; against preparation at the start of the step, "
+      f"that makes ISLA's step {sav[0]:.1f} to {sav[1]:.1f}% shorter on AeroZoo "
       f"({pa['isla_aba_269723']['base']} against {pa['isla_aba_269723']['fix']} ms, and {pa['isla_abab_270549']['base']} against "
-      f"{np.mean(pa['isla_abab_270549']['fix']):.0f}, in two comparisons on one node). Neither the DDP "
-      f"options (static graph, gradient bucket views, bucket size) nor a newer PyTorch (2.14.1, a 2.16 nightly) shortens the step. "
-      f"Peak memory is {mem['isla']['allocated']} GiB allocated per GPU.")
+      f"{np.mean(pa['isla_abab_270549']['fix']):.0f}, in two comparisons on one node). "
+      f"Peak memory is {mem['isla']['allocated']} GiB allocated per GPU ({mem['isla']['reserved']} GiB reserved by PyTorch's caching allocator).")
 print()
 print(f"**ISLA-DTT's forward waits on the host.** Its step takes {HT['isla_dtt']['step']:,.0f} ms with the GPU busy about "
-      f"{100 * gb('isla_dtt'):.0f}% of it, at {mem['isla_dtt']['allocated']} GiB. The Barnes–Hut forest is built from the data in each "
+      f"{100 * gb('isla_dtt'):.0f}% of it, at {mem['isla_dtt']['allocated']} GiB allocated ({mem['isla_dtt']['reserved']} reserved). The Barnes–Hut forest is built from the data in each "
       f"forward ({FMd['tree_forest_build']:.0f} ms, of {FMd['tree_total']:.0f} ms for the whole tree stage), and its sizes are known "
       f"only on the host, so the forward synchronizes host and GPU {sy['fwd']} times per step and launches "
       f"{PB['kernel_launches_per_step']['isla_dtt']['fwd']:,} kernels against ISLA's {PB['kernel_launches_per_step']['isla']['fwd']:,}. "
       f"The slice blocks cost what they cost in ISLA ({FMd['blocks']:.0f} ms); the twelve tree reads add {FMd['tree_reads']:.0f}. "
       f"Its reverse pass is host-bound as well, which is why loading the next batch during it does not shorten its step. "
+      "These are means over the warm steps of one profiled run of each model on one split; the training-run step times of "
+      "@sec-arch-tree-read are medians over the logged steps of the training runs on all four splits, and their memory is "
+      "the reserved peak. "
       "Data: results/perf_2026-10-18/step_breakdown.json.")
 ```
 
