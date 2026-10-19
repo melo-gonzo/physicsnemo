@@ -264,6 +264,7 @@ print(f"Three readings. **First, of the three aerodynamic Surface standings in t
 ```{python}
 #| label: out-fig-shift-suv-prediction
 #| output: asis
+#| column: page
 import json as _json
 _R = _json.load(open(RENDER_DIR / "render_cloud_shift_suv.json"))
 rendering_figure("fig-shift-suv-prediction", [("figures/renderings/shift_suv_cp.png", "Pressure coefficient")],

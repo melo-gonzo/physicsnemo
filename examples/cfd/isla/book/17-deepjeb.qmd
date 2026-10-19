@@ -143,6 +143,7 @@ print(ST.table("tbl-deepjeb-protocols", f"DeepJEB++, 12,451 training brackets, 4
 ```{python}
 #| label: out-fig-deepjeb-prediction
 #| output: asis
+#| column: page
 import json as _json
 _R = _json.load(open(RENDER_DIR / "render_cloud_deepjebpp.json"))
 rendering_figure("fig-deepjeb-prediction", [("figures/renderings/deepjebpp_von_mises.png", "von Mises stress"), ("figures/renderings/deepjebpp_displacement.png", "Displacement magnitude")],

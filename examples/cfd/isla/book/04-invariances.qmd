@@ -432,6 +432,7 @@ mechanism, and the factors it gives are not a standing.
 ```{python}
 #| label: out-fig-pose-rendering
 #| output: asis
+#| column: page
 import json as _json
 _C = _json.load(open(RENDER_DIR / "render_car.json")); _P = _C["pose"]
 _ang = _P["rotation_angle_deg"]; _t = np.linalg.norm(_P["ISLA"]["pose_t"])   # the translation is in meters

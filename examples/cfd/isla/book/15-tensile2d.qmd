@@ -301,6 +301,7 @@ print(ST.table("tbl-tensile2d-protocols", f"PLAID Tensile2d, 400 training specim
 ```{python}
 #| label: out-fig-tensile2d-prediction
 #| output: asis
+#| column: page
 import json as _json
 _R = _json.load(open(RENDER_DIR / "render_2d_tensile2d.json"))["tensile2d"]
 rendering_figure("fig-tensile2d-prediction", [("figures/renderings/tensile2d_stress.png", "von Mises stress of the in-plane components")],

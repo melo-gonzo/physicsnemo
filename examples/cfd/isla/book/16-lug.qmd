@@ -186,6 +186,7 @@ print(ST.table("tbl-lug-protocols", f"The GINOT bracket lug, 2,400 training lugs
 ```{python}
 #| label: out-fig-lug-prediction
 #| output: asis
+#| column: page
 import json as _json
 _R = _json.load(open(RENDER_DIR / "render_2d_lug.json"))["lug"]
 rendering_figure("fig-lug-prediction", [("figures/renderings/lug_von_mises.png", "von Mises stress, top face")],

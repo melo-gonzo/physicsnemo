@@ -483,6 +483,7 @@ The level native standing is a statement about these three configurations under 
 ```{python}
 #| label: out-fig-drivaerml-prediction
 #| output: asis
+#| column: page
 import json as _json
 _R = _json.load(open(RENDER_DIR / "render_car.json"))
 rendering_figure("fig-drivaerml-prediction", [("figures/renderings/drivaerml_surface_cp.png", "Pressure coefficient"), ("figures/renderings/drivaerml_surface_cf.png", "Wall shear")],
@@ -546,6 +547,7 @@ print(f"**The lead is largest on velocity**, where GeoTransolver's error is {S.f
 ```{python}
 #| label: out-fig-drivaerml-volume-prediction
 #| output: asis
+#| column: page
 import json as _json
 _R = _json.load(open(RENDER_DIR / "render_2d_drivaerml_volume.json"))["drivaerml_volume"]
 rendering_figure("fig-drivaerml-volume-prediction", [("figures/renderings/drivaerml_volume_pressure.png", "Pressure"), ("figures/renderings/drivaerml_volume_velocity.png", "Velocity magnitude")],

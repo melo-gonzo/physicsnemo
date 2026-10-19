@@ -280,6 +280,7 @@ print(f"**Under rotation and translation ISLA's error is its native error, and t
 ```{python}
 #| label: out-fig-airfrans-prediction
 #| output: asis
+#| column: page
 RD = J("renderings_2026-10-18/arrays/render_2d_airfrans.json")["airfrans"]
 PE = RD["per_sample_rel_l2"]
 
