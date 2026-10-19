@@ -272,7 +272,7 @@ if FAIR:
 print(f"**Under rotation and translation ISLA's error is its native error, and the baselines' errors pass the score of predicting zero.** "
       f"ISLA's largest shift on any field is {max(abs(St.shift('ISLA', f, 'posed') - 1) for f, _ in FIELDS) * 100:.2f}% of its native error. "
       f"GeoTransolver's and Transolver's posed errors are {S.fmt_ratio(min(b_shift))} to {S.fmt_ratio(max(b_shift))} times their own native "
-      f"errors, every one of the six at or above {min(b_posed_err):.2f}, worse than predicting zero everywhere. They read laboratory "
+      f"errors, every one of the six at or above {min(b_posed_err):.2f}, worse than predicting zero everywhere. They read raw "
       "coordinates and never trained on a rotated airfoil, so a rotated airfoil is outside their training distribution even though the "
       "inlet velocity rotates with it.")
 ```
@@ -418,8 +418,8 @@ print(f"**On the airfoil, read-only prediction points with a global read of the 
       f"pressure and velocity: ISLA-DTT ÷ ISLA is {' / '.join(f'{v:.2f}' for v in dtt)} on pressure / velocity / eddy viscosity "
       "within one instrument.** In ISLA the prediction points are *interacting*: they carry routing mass, write into the slices and so "
       "influence one another. In ISLA-DTT they are *read-only*: they read the boundary's slices at every layer, never write, and also read "
-      "every boundary segment through a learned kernel evaluated with a Barnes–Hut cluster forest at opening angle θ = 1, built in a "
-      "canonical frame that the boundary carries (@sec-arch-passive-decoder, @sec-arch-tree-read). A prediction then depends on its own point "
+      "every boundary segment through a learned kernel evaluated with a Barnes–Hut cluster forest at opening angle θ = 1, built, to group "
+      "segments for speed, in a canonical frame that the boundary carries (@sec-arch-passive-decoder, @sec-arch-tree-read). A prediction then depends on its own point "
       "and the boundary alone. @tbl-airfrans-read-only separates the two changes. Read-only points without any boundary read are "
       + ", ".join(f"{ro_word(K_NOR, j)} on {names3[j]}" for j in range(3))
       + f" by the seed rule ({' / '.join(f'{v:.2f}' for v in nor)}), where on the DrivAerML Volume task they trail it "
@@ -444,7 +444,7 @@ print(": Read-only prediction points on the AirfRANS interior task: relative L2 
       "read; the dense read evaluates the global read pair by pair. Instrument: ISLA at 384 wide, 256 slices, 5e-4, raw slice reads "
       "(@sec-study-configurations); interior points read as contiguous blocks of the stored rows. How to read this: ÷ ISLA below one means more "
       "accurate than the interacting row; the rows are a within-instrument control, not the standing (@tbl-airfrans-protocols); rotated and "
-      "translated, ISLA-DTT keeps its native error, up to ties of the forest's canonical frame. Data: research/dtt/REPORT.md (the AirfRANS "
+      "translated, ISLA-DTT keeps its native error. Data: research/dtt/REPORT.md (the AirfRANS "
       "read-only control and the pose-free parity table). {#tbl-airfrans-read-only}")
 ```
 

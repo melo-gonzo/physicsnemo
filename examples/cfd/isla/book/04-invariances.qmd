@@ -1,7 +1,7 @@
 # The two invariances ISLA is built for {#sec-invariances}
 
 **ISLA is built around two facts that every boundary-driven PDE respects: the answer does not depend on where the body
-sits in the laboratory, and it does not depend on how the boundary was meshed.** The first fact gives an exact contract,
+sits or how it is turned, and it does not depend on how the boundary was meshed.** The first fact gives an exact contract,
 rigid-motion equivariance, which ISLA holds to roundoff. The second gives a convergence property, discretization
 consistency, which ISLA holds in the fine-mesh limit and which decides whether a change to the architecture is adopted. This chapter states both as exact tests on the code. It then says what each one buys, draws the sampling
 laws through which the second is measured, and reads both off the standing of the three reference configurations on every
@@ -69,8 +69,9 @@ apply.
 : The contract tests and what each verifies. The transformations act on the boundary cells (positions, normals, measure
 weights), on the global directions and, for the interior task, on the prediction points together. How to read this: a
 tolerance is an absolute bound on the output difference in float64, except the two-dimensional test, which runs in float32
-at a relative tolerance of $10^{-4}$; a contract that holds here holds for every set of weights, trained or not. ISLA-DTT's forest read keeps the rotation and translation rows at its finite opening angle up to
-ties of the canonical frame the forest is built in (@sec-arch-tree-read). The test functions are listed below. Source:
+at a relative tolerance of $10^{-4}$; a contract that holds here holds for every set of weights, trained or not. ISLA-DTT's forest read keeps the rotation and translation rows at its working opening angle; where the
+frame the forest is built in ties, a rigid motion regroups clusters and moves the read only by the tree's error, which
+vanishes as $\theta \to 0$ (@sec-arch-tree-read). The test functions are listed below. Source:
 `test/experimental/models/isla/`.
 {#tbl-contracts tbl-colwidths="[36,50,14]"}
 
@@ -125,7 +126,7 @@ sections are about them.
 **Rotate and translate the body together with the far-field direction, and the field must rotate and translate with it:
 scalars unchanged at the moved points, vectors rotated.** A steady problem with a uniform far field has no preferred origin
 and no preferred axes. The geometry's relation to the global directions is all the equations see. A surrogate that reads
-coordinates in a laboratory frame has to learn that the frame is arbitrary, from whatever poses its training set happens
+raw coordinates has to learn that the dataset's axes are arbitrary, from whatever poses its training set happens
 to contain, and a dataset in which every car points along $+x$ cannot teach it that. ISLA never reads a coordinate
 (@tbl-contracts), so the property costs it no data.
 
@@ -147,14 +148,15 @@ estimator's small tilt errors as inputs it never saw. The frame fails in two set
   three axes from the shape, and fails wherever two of its principal moments tie;
 - an assembly of parts in mixed orientations, where no single frame canonicalizes every part.
 
-ISLA needs neither a frame estimate nor a global direction, with one exception: ISLA-DTT builds the cluster forest of its
-boundary read in a canonical frame of the boundary (measure-weighted centroid, principal axes signed by their third
-moments; @sec-arch-tree-read), so its pose invariance at the class's opening angle holds up to ties of that frame. In these
+ISLA needs neither a frame estimate nor a global direction. ISLA-DTT builds the cluster forest of its boundary read in a
+canonical frame of the boundary (measure-weighted centroid, principal axes signed by their third moments;
+@sec-arch-tree-read) only to group cells for speed, so a tie of that frame moves its read by the tree's error, not by the
+$O(1)$ jump of a network fed canonical coordinates. In these
 settings the contract separates a working surrogate from one whose error a random orientation multiplies by the factors
 of @fig-contract-shifts.
 
 **The contract has a clause for outputs that are components in a frame.** A stress component $\sigma_{12}$ or a
-displacement along a laboratory axis is not a property of the body alone: it belongs to the body and the frame together.
+displacement along one of the dataset's axes is not a property of the body alone: it belongs to the body and those axes together.
 ISLA predicts the tensor itself and reads the component off it (@sec-isla-heads); the dataset's axes are not among its
 inputs (@sec-pose-inputs). The clause binds on PLAID Tensile2d, whose targets are stress components (@sec-tensile2d).
 
@@ -686,7 +688,7 @@ print(f"Transolver's two DrivAerML seeds read {S.fmt_ratio(min(tseeds))} and {S.
       f"cells, still move by {S.fmt_ratio(mw['GeoTransolver'][0])} and {S.fmt_ratio(mw['Transolver'][0])} under the bias, and "
       f"centered on the Horvitz–Thompson estimate of the centroid, by {S.fmt_ratio(mw['GeoTransolver'][1])} and "
       f"{S.fmt_ratio(mw['Transolver'][1])} (DrivAerML Surface task, 48 validation cars, 10,000 cells, two seeds; "
-      "results/mwaw_2026-09-11.json). ISLA's slice layers use no center (ISLA-DTT's forest frame aside, @sec-arch-modes): positions enter as differences to anchors, which are "
+      "results/mwaw_2026-09-11.json). ISLA's learned maps use no center (ISLA-DTT's forest uses one only to group cells for speed, @sec-arch-modes): positions enter as differences to anchors, which are "
       "measure-weighted means and move only by their quadrature error. That error is the residual in the ISLA rows, and it "
       "falls as the count grows, as the variance of @eq-ht requires.")
 ```

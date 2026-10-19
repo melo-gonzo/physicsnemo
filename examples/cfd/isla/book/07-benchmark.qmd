@@ -569,7 +569,7 @@ in @sec-limits.
 - **Boundary conditions are per-cell fields.** Each labeled region is a 0/1 indicator on the boundary cells (`bc_fixed`,
   `bc_loaded`, …), and each prescribed value is a field on the cells it applies to and zero elsewhere (`bc_pressure`,
   `bc_load`, …). A prescribed vector enters ISLA as a rank-1 boundary field; one stored component by component is stacked
-  into one vector first, because laboratory components fed as scalars leak the frame. Where a dataset configuration gives
+  into one vector first, because components fed as separate scalars would make the model depend on the dataset's axes. Where a dataset configuration gives
   GeoTransolver and Transolver boundary labels, it writes them as nodal indicators on the interior points
   (@tbl-model-inputs).
 - **Global vectors must be data of the problem.** For external aerodynamics `ComputeFreestreamDirection` writes `U_inf_dir`
