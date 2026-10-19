@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from render_lib import palette  # noqa: E402
 
 WALL_SDF = 2e-4  # [chord] points this close to the airfoil count as wall points for the hole mask
-MODELS = [("isla", "ISLA"), ("gt", "GeoTransolver 256"), ("t", "Transolver 512 x 16")]
+MODELS = [("isla", "ISLA"), ("gt", "GeoTransolver"), ("t", "Transolver")]  # sizes: README run map
 
 
 def load(dump, tag):

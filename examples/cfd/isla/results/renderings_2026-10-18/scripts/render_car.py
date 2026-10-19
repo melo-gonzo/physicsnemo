@@ -4,7 +4,8 @@ validation car, and the posed protocol mapped back to the body frame.
 Geometry: the case's own STL (drivaer_<run>_single_solid.stl.pmsh, 753k triangles for run 171), rendered off-screen with
 VTK (pyvista, CPU llvmpipe). Fields: each model's predictions live on the cells it was scored on (the scorer's draw of
 200,000 cells; Transolver's 100,000); each STL triangle shows the value of the nearest scored cell centroid of that model
-(the dataset pipeline centres the car, so centroids are shifted back by global.center). Truth panel: the truth on ISLA's
+(the dataset pipeline centres the car in metres, then NonDimensionalizeByMetadata divides the coordinates by L_ref = 5 m;
+infer.py writes those centred, non-dimensional points, so x = L_ref x* + global.center). Truth panel: the truth on ISLA's
 200,000 scored cells. Error panels: prediction minus truth evaluated at each model's own scored cells, then mapped the
 same way. c_p = (p - p_inf) / q_inf and c_f = |tau_w| / q_inf with q_inf = rho_inf |U_inf|^2 / 2 from the case's
 global data. Camera "left side" is orthographic, looking along +y.
@@ -32,7 +33,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import render_lib as R  # noqa: E402
 from render_lib import palette  # noqa: E402
 
-MODELS = [("isla", "ISLA"), ("gt", "GeoTransolver 256"), ("t", "Transolver 512 x 16")]
+MODELS = [("isla", "ISLA"), ("gt", "GeoTransolver"), ("t", "Transolver")]  # sizes: README run map
 
 
 def load(dump, tag, proto="native"):
@@ -53,6 +54,11 @@ def load_stl(path):
     return m.points.numpy().astype(np.float64), m.cells.numpy().astype(np.int64)
 
 
+def to_body(points, d):
+    """Scored points (centred, divided by L_ref) back to the STL's body frame in metres."""
+    return np.asarray(points, np.float64) * float(d["global.L_ref"]) + np.asarray(d["global.center"], np.float64)
+
+
 def coeffs(d, w):
     U = np.asarray(d["global.U_inf"], np.float64)
     q = 0.5 * float(d["global.rho_inf"]) * float(U @ U)
@@ -68,32 +74,6 @@ VIEWS = {
 }
 
 
-def grid_figure(rows, row_labels, col_titles, cbars, out_png, suptitle, panel_w=4.6):
-    """rows: list of lists of images (None = empty); cbars: per row (cmap, clim, label)."""
-    h, w = rows[0][0].shape[:2] if rows[0][0] is not None else rows[0][1].shape[:2]
-    ncol = max(len(r) for r in rows)
-    fig = plt.figure(figsize=(panel_w * ncol + 1.2, panel_w * h / w * len(rows) + 0.9 + 0.35 * len(rows)))
-    gs = fig.add_gridspec(len(rows), ncol + 1, width_ratios=[1] * ncol + [0.045], wspace=0.03, hspace=0.25)
-    for i, row in enumerate(rows):
-        for j, im in enumerate(row):
-            ax = fig.add_subplot(gs[i, j])
-            ax.axis("off")
-            if im is not None:
-                ax.imshow(im, interpolation="lanczos")
-                ax.set_title(col_titles[i][j], fontsize=10)
-        cax = fig.add_subplot(gs[i, ncol])
-        cmap, clim, label = cbars[i]
-        sm = matplotlib.cm.ScalarMappable(norm=matplotlib.colors.Normalize(*clim), cmap=cmap)
-        cb = fig.colorbar(sm, cax=cax)
-        cb.set_label(label, fontsize=9.5)
-        cb.ax.tick_params(labelsize=8.5)
-        pos = cax.get_position()
-        cax.set_position([pos.x0, pos.y0 + 0.15 * pos.height, pos.width, 0.7 * pos.height])
-    fig.suptitle(suptitle, fontsize=10.5, y=0.995)
-    fig.savefig(out_png, dpi=200, facecolor="white", bbox_inches="tight", pad_inches=0.05)
-    plt.close(fig)
-
-
 def main():
     dump, stl, out_png, out_arr = sys.argv[1:5]
     do_pose = len(sys.argv) > 5 and sys.argv[5] == "pose"
@@ -105,8 +85,8 @@ def main():
     D = {k: load(dump, f"dr_{k}") for k, _ in MODELS}
     ref = D["isla"][0]
     sid = D["isla"][2]
-    rec = {"sample_id": sid, "stl": stl, "n_stl_triangles": int(len(F)), "per_sample_rel_l2": {}, "nn_distance_m": {}}
-    pts = {k: D[k][0]["points"].astype(np.float64) + D[k][0]["global.center"].astype(np.float64) for k, _ in MODELS}
+    rec = {"sample_id": sid, "source": R.provenance([(f"dr_{k}", p) for k, _ in MODELS for p in ("native", "posed")]), "stl": stl, "n_stl_triangles": int(len(F)), "per_sample_rel_l2": {}, "nn_distance_m": {}}
+    pts = {k: to_body(D[k][0]["points"], D[k][0]) for k, _ in MODELS}
     for k, _ in MODELS:
         _, dist = R.nn_map(pts[k], np.zeros(len(pts[k])), cent)
         rec["nn_distance_m"][k] = {"median": float(np.median(dist)), "p99": float(np.percentile(dist, 99))}
@@ -139,29 +119,34 @@ def main():
         ims += [R.render(poly, side, scalars=p, cmap=palette.SEQUENTIAL, clim=clim, size=size) for p in preds]
         eims = [R.render(poly, side, scalars=e, cmap=palette.DIVERGING, clim=(-ev, ev), size=size) for e in errs]
         allc = R.common_crop(ims + eims)
-        ims, eims = allc[:4], allc[4:]
-        grid_figure([ims[:2], ims[2:], [None, eims[0]], eims[1:]],
-                    None, [["truth (solver)", titles[0]], titles[1:], ["", etitles[0]], etitles[1:]],
-                    [(palette.SEQUENTIAL, clim, lab)] * 2 + [(palette.DIVERGING, (-ev, ev), "prediction $-$ truth [–]")] * 2,
-                    f"{out_png}/drivaerml_surface_{field}.png",
-                    f"DrivAerML Surface, validation car {sid.split('_')[0]} (run 171): the case of median ISLA pressure error "
-                    f"among the 48 validation cars; left side, orthographic", panel_w=5.0)
+        R.four_up(allc[:4], allc[4:], ["truth (solver)"] + titles, etitles, (palette.SEQUENTIAL, clim, lab),
+                  (palette.DIVERGING, (-ev, ev), "prediction $-$ truth [–]"), f"{out_png}/drivaerml_surface_{field}.png",
+                  f"DrivAerML Surface, validation car {sid.split('_')[0]} (run 171): the case of median ISLA pressure error "
+                  f"among the 48 validation cars; left side, orthographic", panel_w=4.6)
     for k, _ in MODELS:
         arrays[f"xyz_{k}"] = pts[k].astype(np.float32)
     if do_pose:
         rec["pose"] = pose(dump, D, pts, poly, cent, side, size, out_png, arrays, sid)
+    rec["gt_points_same_as_isla"] = bool(np.array_equal(arrays["xyz_gt"], arrays["xyz_isla"]))
+    if rec["gt_points_same_as_isla"]:  # the same 200,000 scored cells: store the points and the truth once
+        for key in ("xyz_gt", "cp_true_at_gt", "cf_true_at_gt"):
+            del arrays[key]
     np.savez_compressed(f"{out_arr}/drivaerml_surface_{sid.split('_')[0]}.npz", **arrays)
     json.dump(rec, open(f"{out_arr}/render_car.json", "w"), indent=1)
     print(json.dumps(rec, indent=1)[:3000])
 
 
 def pose(dump, D, pts, poly, cent, side, size, out_png, arrays, sid):
+    """pose_cp.png: rows = models; columns = native prediction, posed prediction mapped back to the body frame, posed minus
+    native (one diverging scale over the two baselines, so ISLA's near-zero difference shows as blank). pose_geometry.png:
+    the body-frame car (grey, translucent) and the posed car x' = R x + t (FixedRandomPose rotates about the origin of
+    the raw frame, then translates) coloured by ISLA's posed prediction in the posed frame."""
     out = {}
-    diffs, ims_posed, titles = [], [], []
+    nat, back, diffs = [], [], []
     for k, name in MODELS:
         P, mP, _ = load(dump, f"dr_{k}", "posed")
         Rm = P["pose_R"].astype(np.float64)
-        x_body = P["points"].astype(np.float64) @ Rm + D[k][0]["global.center"].astype(np.float64)  # R^T x' (row vectors)
+        x_body = to_body(P["points"].astype(np.float64) @ Rm, D[k][0])  # R^T x' (row vectors), then the native un-centring
         same = len(P["points"]) == len(D[k][0]["points"])
         d_nn = R.nn_map(x_body, np.zeros(len(x_body)), pts[k])[1]
         cp_posed, _ = coeffs(P, "pred")
@@ -174,23 +159,70 @@ def pose(dump, D, pts, poly, cent, side, size, out_png, arrays, sid):
                      "map_back_nn_distance_m_median": float(np.median(d_nn)), "map_back_nn_distance_m_max": float(d_nn.max()),
                      "same_count": bool(same), "pose_R": Rm.tolist(), "pose_t": np.asarray(P.get("pose_t", [])).tolist()}
         arrays[f"cp_posed_mapped_back_{k}"] = cp_posed_on_native.astype(np.float16)
+        nat.append(R.nn_map(pts[k], cp_nat["cp"], cent)[0])
+        back.append(R.nn_map(x_body, cp_posed["cp"], cent)[0])
         diffs.append(R.nn_map(pts[k], diff, cent)[0])
-        ims_posed.append(R.nn_map(x_body, cp_posed["cp"], cent)[0])
-        titles.append(name)
+        if k == "isla":
+            isla_posed = (P, Rm, cp_posed["cp"])
     true_c, _ = coeffs(D["isla"][0], "true")
     clim = tuple(np.percentile(true_c["cp"], [0.5, 99.5]))
     ev = float(np.percentile(np.abs(np.concatenate(diffs[1:])), 99))
-    top = [R.render(poly, side, scalars=v, cmap=palette.SEQUENTIAL, clim=clim, size=size) for v in ims_posed]
-    bot = [R.render(poly, side, scalars=v, cmap=palette.DIVERGING, clim=(-ev, ev), size=size) for v in diffs]
-    allc = R.common_crop(top + bot)
-    top, bot = allc[:3], allc[3:]
-    t1 = [f"{n}: posed, mapped back (rel. L2 {out[n]['rel_l2_posed']:.4f})" for n in titles]
-    t2 = [f"{n}: posed $-$ native (rms {out[n]['posed_minus_native_rms_cp']:.1e})" for n in titles]
-    grid_figure([top, bot], None, [t1, t2],
-                [(palette.SEQUENTIAL, clim, "pressure coefficient $c_p$ [–]"), (palette.DIVERGING, (-ev, ev), "posed $-$ native $c_p$ [–]")],
-                f"{out_png}/drivaerml_surface_pose.png",
-                f"DrivAerML Surface, car {sid.split('_')[0]}: each model's prediction on the rotated and translated car "
-                f"(scorer's posed protocol), mapped back to the body frame; bottom row shares one scale", panel_w=4.6)
+    ims = [[R.render(poly, side, scalars=v, cmap=palette.SEQUENTIAL, clim=clim, size=size) for v in (a, b)] for a, b in zip(nat, back)]
+    ims = [r + [R.render(poly, side, scalars=v, cmap=palette.DIVERGING, clim=(-ev, ev), size=size)] for r, v in zip(ims, diffs)]
+    flat = R.common_crop([im for r in ims for im in r])
+    ims = [flat[3 * i:3 * i + 3] for i in range(3)]
+    h, w = ims[0][0].shape[:2]
+    pw = 4.6
+    fig = plt.figure(figsize=(3 * pw + 0.6, 3 * pw * h / w + 1.9))
+    gs = fig.add_gridspec(4, 3, height_ratios=[1, 1, 1, 0.07], wspace=0.03, hspace=0.32)
+    for i, (k, name) in enumerate(MODELS):
+        o = out[name]
+        tt = [f"{name}: native (rel. L2 {o['rel_l2_native']:.4f})",
+              f"{name}: posed, mapped back (rel. L2 {o['rel_l2_posed']:.4f})",
+              f"{name}: posed $-$ native (rms {o['posed_minus_native_rms_cp']:.1e})"]
+        for j in range(3):
+            ax = fig.add_subplot(gs[i, j])
+            ax.axis("off")
+            ax.imshow(ims[i][j], interpolation="lanczos")
+            ax.set_title(tt[j], fontsize=9.5)
+    for cols, cmap, lim, lab in (((0, 2), palette.SEQUENTIAL, clim, "pressure coefficient $c_p$ [–]"),
+                                 ((2, 3), palette.DIVERGING, (-ev, ev), "posed $-$ native $c_p$ [–]")):
+        cax = fig.add_subplot(gs[3, cols[0]:cols[1]])
+        pos = cax.get_position()
+        cax.set_position([pos.x0 + 0.15 * pos.width, pos.y0, 0.7 * pos.width, pos.height])
+        cb = fig.colorbar(matplotlib.cm.ScalarMappable(norm=matplotlib.colors.Normalize(*lim), cmap=cmap), cax=cax, orientation="horizontal")
+        cb.set_label(lab, fontsize=9.5)
+        cb.ax.tick_params(labelsize=8.5)
+    fig.suptitle(f"DrivAerML Surface, car {sid.split('_')[0]}: each model's prediction on the rotated and translated car "
+                 f"(scorer's posed protocol), mapped back to the body frame", fontsize=10.5, y=0.995)
+    fig.savefig(f"{out_png}/pose_cp.png", dpi=200, facecolor="white", bbox_inches="tight", pad_inches=0.05)
+    plt.close(fig)
+    # the posed car itself
+    P, Rm, cp_posed = isla_posed
+    t = np.asarray(P["pose_t"], np.float64)
+    Vb = np.asarray(poly.points)
+    posed_poly = poly.copy()
+    posed_poly.points = Vb @ Rm.T + t
+    x_posed = np.asarray(P["points"], np.float64) * float(P["global.L_ref"]) + np.asarray(P["global.center"], np.float64)
+    v, d = R.nn_map(x_posed, cp_posed, cent @ Rm.T + t)
+    out["posed_frame_nn_distance_m_median"] = float(np.median(d))
+    allp = np.vstack([Vb, np.asarray(posed_poly.points)])
+    c = 0.5 * (allp.min(0) + allp.max(0))
+    view = dict(position=(c[0] - 11.5, c[1] - 14.0, c[2] + 6.5), focal=tuple(c), up=(0, 0, 1), parallel=False, angle=30.0)
+    ghost = lambda p: p.add_mesh(poly, color="#c3c2b7", opacity=0.35, ambient=0.3, diffuse=0.7)  # noqa: E731
+    im = R.common_crop([R.render(posed_poly, view, scalars=v, cmap=palette.SEQUENTIAL, clim=clim, size=(1800, 1400), extra=ghost)])[0]
+    fig, ax = plt.subplots(figsize=(7.2, 7.2 * im.shape[0] / im.shape[1] + 0.6))
+    ax.imshow(im, interpolation="lanczos")
+    ax.axis("off")
+    ang = float(np.degrees(np.arccos(np.clip((np.trace(Rm) - 1) / 2, -1, 1))))
+    ax.set_title(f"body frame (grey) and the posed car $x' = Rx + t$ (rotation {ang:.0f}°, |t| = {np.linalg.norm(t):.2f} m),\n"
+                 f"coloured by ISLA's posed $c_p$ prediction", fontsize=9.5)
+    cb = fig.colorbar(matplotlib.cm.ScalarMappable(norm=matplotlib.colors.Normalize(*clim), cmap=palette.SEQUENTIAL), ax=ax,
+                      shrink=0.7, pad=0.01)
+    cb.set_label("pressure coefficient $c_p$ [–]", fontsize=9.5)
+    fig.savefig(f"{out_png}/pose_geometry.png", dpi=200, facecolor="white", bbox_inches="tight", pad_inches=0.05)
+    plt.close(fig)
+    out["rotation_angle_deg"] = ang
     return out
 
 

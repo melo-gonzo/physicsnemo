@@ -22,6 +22,29 @@ Per-sample relative L2 on AirfRANS 00215 (from `arrays/render_2d_airfrans.json`)
 
 | `routing/<run>_s<sample>.{npz,json}` | trained routing of the A2 reference ISLA checkpoints (final epoch 500) on the median case: per layer dominant slice, its weight, slice masses q and qw, anchors and anchor normals; for layers 0, 5, 11 the 8 largest-territory slices' soft assignment and routing density (schema of results/probes/slices_2026-09-22); json: per-layer n_eff, entropies, anchor spread. Runs: a2r_dr_isla_seed42 (DrivAerML 00079, all 200,000 tokens stored), afu_a2s_isla_seed42 (AirfRANS 00215), a2r_lug_isla_seed42 (lug 00633), a2r_t2dz_isla_seed42 (Tensile2d 00238) | `scripts/slices_probe_a2.py` via `scripts/routing.sbatch`, LHR job **275271** |
 
+## Renderings of the median cases (2026-10-19)
+
+All rendered locally on the CPU (`CUDA_VISIBLE_DEVICES= nice -n 19`, VTK 9.7.1 / pyvista 0.49 off-screen on llvmpipe,
+matplotlib) from the dumps of LHR jobs 271987 and 275252 (local copy `fig/dump/`); each json beside the arrays records
+the case, the scorer's per-sample relative L2 of every rendered field (metrics.jsonl of the same run, normalized space,
+as in results/char) and, under `source`, the fig_rows.tsv row, run id and LHR dump job of every panel. Panels are labelled
+by architecture (ISLA = A2 reference 512 x 12, GeoTransolver = 256, Transolver = 512 x 16; run map below). Fields:
+viridis, 0.5-99.5th percentile of the truth; errors: the book's DIVERGING map, symmetric, 99th percentile of the errors.
+Why the first car run was blank: on this machine's software OpenGL, VTK draws a mesh coloured by CELL data as white
+when lighting is on (a plain-colour or point-data mesh draws correctly); `render_lib.render` now converts cell values to
+point data (mean of the adjacent cells) and also resets the clipping range. The car points were also misplaced by 1 m:
+infer.py writes the centred points divided by L_ref = 5 m, so the body frame is x = 5 x* + center (`render_car.to_body`).
+
+| file | what | command |
+|---|---|---|
+| `book/figures/renderings/drivaerml_surface_cp.png`, `drivaerml_surface_cf.png`; `arrays/drivaerml_surface_00079.npz`, `arrays/render_car.json` | DrivAerML Surface car 00079 (run 171), left side, orthographic, on the case's STL (753,238 triangles; each triangle takes the nearest scored cell of that model, median distance 5.7 mm, ISLA and GeoTransolver on the same 200,000 cells, Transolver on its 100,000): c_p and \|tau_w\|/q_inf, truth / three models / errors | `python scripts/render_car.py fig/dump fig/geom/drivaer_171_single_solid.stl.pmsh <png> <arrays> pose` |
+| `book/figures/renderings/pose_cp.png`, `pose_geometry.png` (numbers in `render_car.json` `pose`) | the scorer's posed protocol (FixedRandomPose: rotation 169.5°, \|t\| = 1.55 m) on the same car: per model, native c_p, posed c_p mapped back to the body frame (x = L_ref R^T x* + c; the posed and native draws are the same cells, map-back distance <= 6e-7 m), posed minus native; and the posed car itself coloured by ISLA's posed prediction | same command |
+
+DrivAerML Surface 00079, per-sample relative L2 (`arrays/render_car.json`): pressure ISLA 0.0415, GeoTransolver 0.0424,
+Transolver 0.0406; wall shear ISLA 0.0612, GeoTransolver 0.0667, Transolver 0.0668. Posed protocol, pressure: ISLA
+0.0415 (posed minus native rms c_p 7.2e-4, 0.16 % of the native c_p norm), GeoTransolver 0.885 (rms 0.38), Transolver
+0.778 (rms 0.35).
+
 ## Case selection
 
 The representative case of each dataset is the case of median per-case ISLA error (seed 42, final checkpoint, native
@@ -40,10 +63,7 @@ infer.py command (snapshot, recipe, venv, cells) for that run.
 
 ## Pending at hand-off (see the lane report)
 
-- DrivAerML Surface native + posed predictions are dumped (LHR job 275252 rows 0-5, `$F/dump/dr_*`); the renderer
-  `scripts/render_car.py` (side view of c_p and c_f, and the pose figure) ran once locally at hand-off and every VTK
-  panel came out blank (white), so `common_crop` found nothing; likely cause: the camera's clipping range is not reset
-  after `camera_position` is set in `render_lib.render` (add `p.reset_camera_clipping_range()`). Not yet fixed.
+- DrivAerML Surface rendered 2026-10-19 (above).
 - All 24 rows of `scripts/fig_rows.tsv` are dumped (LHR jobs 271987 and 275252): `$F/dump/<tag>/<protocol>/*.npz` with
   the scorer's metrics.jsonl beside each, copied to the local scratch `fig/dump/`; only AirfRANS is packed and rendered.
 - Not started: HiLift (dataset not on LHR; A2 lanes at epoch 285/500 on JHB), AeroZoo mid-span planes, hero view.
