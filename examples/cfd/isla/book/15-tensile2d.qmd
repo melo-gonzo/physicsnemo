@@ -303,7 +303,7 @@ print(ST.table("tbl-tensile2d-protocols", f"PLAID Tensile2d, 400 training specim
 #| output: asis
 import json as _json
 _R = _json.load(open(RENDER_DIR / "render_2d_tensile2d.json"))["tensile2d"]
-rendering_figure("fig-tensile2d-prediction", [("figures/renderings/tensile2d_stress.png", "Stress")],
+rendering_figure("fig-tensile2d-prediction", [("figures/renderings/tensile2d_stress.png", "von Mises stress of the in-plane components")],
     f"The three reference configurations on one PLAID Tensile2d validation specimen, {_R['sample_id'].split('_')[0]}. Relative L2 on this case: {case_errors(_R['per_sample_rel_l2'])}. " + "Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one "
       "symmetric scale. How to read this: one case, chosen as the case of median ISLA error (seed 42 of each reference configuration), "
       "not a standing; the standing is the table above. "

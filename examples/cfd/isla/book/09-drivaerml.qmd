@@ -486,7 +486,7 @@ The level native standing is a statement about these three configurations under 
 import json as _json
 _R = _json.load(open(RENDER_DIR / "render_car.json"))
 rendering_figure("fig-drivaerml-prediction", [("figures/renderings/drivaerml_surface_cp.png", "Pressure coefficient"), ("figures/renderings/drivaerml_surface_cf.png", "Wall shear")],
-    f"The three reference configurations on one validation car of the DrivAerML Surface task, {_R['sample_id'].split('_')[0]}, left side. Relative L2 on this case: {case_errors(_R['per_sample_rel_l2'])}. " + "Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one "
+    f"The three reference configurations on one validation car of the DrivAerML Surface task, {_R['sample_id'].split('_')[0]}, left side; Transolver is scored and drawn on its own 100,000 cells, the other two on 200,000. Relative L2 on this case: {case_errors(_R['per_sample_rel_l2'])}. " + "Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one "
       "symmetric scale. How to read this: one case, chosen as the case of median ISLA error (seed 42 of each reference configuration), "
       "not a standing; the standing is the table above. "
     + "Data: results/renderings_2026-10-18/arrays/render_car.json.", nrow=2)

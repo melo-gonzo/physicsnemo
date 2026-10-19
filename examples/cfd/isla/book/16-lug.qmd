@@ -192,7 +192,7 @@ rendering_figure("fig-lug-prediction", [("figures/renderings/lug_von_mises.png",
     f"The three reference configurations on one GINOT bracket lug from the test set, {_R['sample_id'].split('_')[0]}, its top face. Relative L2 on this case: {case_errors(_R['per_sample_rel_l2'])}. " + "Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one "
       "symmetric scale. How to read this: one case, chosen as the case of median ISLA error (seed 42 of each reference configuration), "
       "not a standing; the standing is the table above. "
-    + "The baselines read no boundary-condition labels (@tbl-model-inputs). Data: results/renderings_2026-10-18/arrays/render_2d_lug.json.", nrow=None)
+    + "The baselines read no boundary-condition labels, while ISLA reads which faces are clamped, which is the hole, which half of it is loaded and the pressure on it (@tbl-model-inputs). Data: results/renderings_2026-10-18/arrays/render_2d_lug.json.", nrow=None)
 ```
 
 ```{python}

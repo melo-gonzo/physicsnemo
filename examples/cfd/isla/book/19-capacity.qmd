@@ -864,11 +864,16 @@ FITS = {a: fit(a) for a, *_ in RS_ARMS}
 ```{python}
 #| label: para-cost-lede
 #| output: asis
-lin = max(max(f["rt"], f["rm"]) for f in FITS.values())
-print("**From 100,000 tokens per case up, the time and memory of a training step grow linearly in the number of tokens for every "
-      f"reference configuration: a straight line fits every measured point within {100 * lin:.0f}%.** A *token* is one sampled cell the model "
+SURF = [a for a, *_ in RS_ARMS if "surface" in a]
+lin_t = max(FITS[a]["rt"] for a in SURF); lin_m = max(FITS[a]["rm"] for a in FITS)
+vt = [r["step_ms_median"] for r in ok("isla_volume_512x12")]
+print("**From 100,000 tokens per case up, the memory of a training step grows linearly in the number of tokens for every reference "
+      f"configuration, within {100 * lin_m:.1f}% of a straight line, and so does the step time on the surface task, within "
+      f"{100 * lin_t:.0f}%.** On the volume task ISLA's step grows faster than the token count: {vt[1] / vt[0]:.2f} times over the doubling "
+      f"from 100,000 to 200,000 and {vt[2] / vt[1]:.2f} times over the next. A *token* is one sampled cell the model "
       "processes in a step. Slice attention costs $\mathcal{O}(N M)$ in the $N$ tokens and $M$ slices, never $\mathcal{O}(N^2)$ "
-      "(@sec-isla-slices), so the linear growth is what the construction predicts. Below that the step has a fixed part that does not "
+      "(@sec-isla-slices), so linear growth is what the construction predicts; what makes ISLA's volume step grow faster is not "
+      "measured. Below 100,000 tokens the step has a fixed part that does not "
       "depend on how much data each kernel handles: the time to launch its kernels and run its small operations. The memory reported is "
       "the allocator peak of @sec-review-frontier, the largest total size of live tensors during the step. @fig-cost-sweep sweeps the "
       "token count on one GPU for each reference configuration on the DrivAerML tasks.")
@@ -883,12 +888,13 @@ print("**From 100,000 tokens per case up, the time and memory of a training step
 #|   configuration specifies; median of 25 timed steps after 8 warm-up steps. Solid: the
 #|   DrivAerML Surface task, 25,000 to 800,000 surface cells. Dashed, open markers: the
 #|   DrivAerML Volume task, where a token count of $N$ means $N$ boundary cells and $N$
-#|   prediction points. A count with no marker ran out of the GPU's memory. How to read this:
+#|   prediction points, measured from 100,000; on either task, a count above
+#|   the last marker ran out of the GPU's memory. How to read this:
 #|   all axes are logarithmic and the lines join measurements, not fits; a slope of one decade
 #|   per decade is linear cost. The panel ranks per-step cost on one GPU; it does not give the
 #|   wall-clock time of a training run, which @tbl-ref-cost gives. Data:
 #|   results/renderings_2026-10-18/cost_sweep_ref_a2_gb300_bf16.json.
-#| fig-alt: "Two stacked log-log panels against tokens per case from 25,000 to 800,000: step time and peak memory of ISLA, GeoTransolver and Transolver on the surface task and of ISLA and ISLA-DTT on the volume task, each rising close to linearly above 100,000 tokens."
+#| fig-alt: "Two stacked log-log panels against tokens per case from 25,000 to 800,000: step time and peak memory of ISLA, GeoTransolver and Transolver on the surface task and of ISLA and ISLA-DTT on the volume task; memory rises linearly, and step time rises linearly on the surface task and faster than linearly for ISLA on the volume task."
 fig, (ax0, ax1) = plt.subplots(2, 1, figsize=(8.0, 7.0), sharex=True, gridspec_kw=dict(hspace=0.08))
 for arm, key, lab, ov in RS_ARMS:
     rows = ok(arm); xs = [r["tokens"] for r in rows]
@@ -922,7 +928,8 @@ for arm, key, lab, _ in RS_ARMS:
 print(out)
 print(": The per-token cost of each reference configuration: the slope of a straight line fitted to step time and to allocator peak over "
       "the measured counts from 100,000 tokens up, and the largest relative deviation of a measured point from that line. On the Volume task "
-      "a token count is boundary cells plus as many prediction points. *Instrument:* as @fig-cost-sweep. How to read this: the slopes rank "
+      "a token count is boundary cells plus as many prediction points; ISLA-DTT's line passes through its only two counts that fit on one "
+      "GPU, so its residual is zero by construction. *Instrument:* as @fig-cost-sweep. How to read this: the slopes rank "
       "what a token costs each configuration on one GPU, not what a training run costs. "
       "Data: results/renderings_2026-10-18/cost_sweep_ref_a2_gb300_bf16.json.")
 ```
@@ -943,7 +950,8 @@ print(f"Three readings follow. At {i25['tokens']:,} tokens ISLA's step ({i25['st
       f"{t2['step_ms_median']:.0f} ms. On the Volume task the prediction points double the token count and add the nearest-token geometry: "
       f"ISLA's step at 200,000 boundary cells and 200,000 prediction points is {v2['step_ms_median']:.0f} ms at {v2['peak_allocated_gib']:.0f} GiB, "
       f"and ISLA-DTT's {d2['step_ms_median']:,.0f} ms at {d2['peak_allocated_gib']:.0f} GiB, {d2['step_ms_median'] / v2['step_ms_median']:.1f} times "
-      "ISLA's: its Barnes–Hut forest is built from each case on the host (@sec-arch-cost), and it runs out of one GPU's memory at "
+      "ISLA's: its Barnes–Hut forest is built from each case on the host and it is compiled per block rather than whole (@sec-arch-cost), "
+      "and it runs out of one GPU's memory at "
       f"{min(oom('isla_dtt_volume_512x12')):,}.")
 ```
 

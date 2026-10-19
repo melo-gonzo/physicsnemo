@@ -140,7 +140,7 @@ def pose(dump, D, pts, poly, cent, side, size, out_png, arrays, sid):
     """pose_cp.png: rows = models; columns = native prediction, posed prediction mapped back to the body frame, posed minus
     native (one diverging scale over the two baselines, so ISLA's near-zero difference shows as blank). pose_geometry.png:
     the body-frame car (grey, translucent) and the posed car x' = R x + t (FixedRandomPose rotates about the origin of
-    the raw frame, then translates) coloured by ISLA's posed prediction in the posed frame."""
+    the raw frame, then translates) colored by ISLA's posed prediction in the posed frame."""
     out = {}
     nat, back, diffs = [], [], []
     for k, name in MODELS:
@@ -215,8 +215,8 @@ def pose(dump, D, pts, poly, cent, side, size, out_png, arrays, sid):
     ax.imshow(im, interpolation="lanczos")
     ax.axis("off")
     ang = float(np.degrees(np.arccos(np.clip((np.trace(Rm) - 1) / 2, -1, 1))))
-    ax.set_title(f"body frame (grey) and the posed car $x' = Rx + t$ (rotation {ang:.0f}°, |t| = {np.linalg.norm(t):.2f} m),\n"
-                 f"coloured by ISLA's posed $c_p$ prediction", fontsize=9.5)
+    ax.set_title(f"body frame (gray) and the posed car $x' = Rx + t$ (rotation {ang:.0f}°, |t| = {np.linalg.norm(t):.2f} m),\n"
+                 f"colored by ISLA's posed $c_p$ prediction", fontsize=9.5)
     cb = fig.colorbar(matplotlib.cm.ScalarMappable(norm=matplotlib.colors.Normalize(*clim), cmap=palette.SEQUENTIAL), ax=ax,
                       shrink=0.7, pad=0.01)
     cb.set_label("pressure coefficient $c_p$ [–]", fontsize=9.5)

@@ -979,6 +979,7 @@ def undecided(d, li, thr=0.5):
     return 100.0 * float((d["pi_max"][li].astype(float) < thr).mean())
 above = lambda d, li: int((d["q"][li] > 1.0 / M_SL).sum())
 pmax = lambda d, li: float(d["pi_max"][li].astype(float).mean())
+_af_pk = int(np.argmin([n_eff(AF["q"][l]) for l in range(12)]))
 print(
     f"**What the pictures show.** In the first layer the car model routes with an effective number of {NE_DR[0]:.0f} of its "
     f"{M_SL} slices, and a token's largest read-back weight is {100 * pmax(DR, 0):.1f}% on average: every token spreads its weight "
@@ -988,10 +989,11 @@ print(
     f"effective number rises again, to {NE_DR[11]:.0f} in the last layer. The assignment stays soft throughout: in the sixth layer "
     f"{undecided(DR, 5):.0f}% of the car's tokens give no single slice more than half their weight, and in the last layer "
     f"{undecided(DR, 11):.0f}%. Anchors sit inside the body, not on it, as the weighted mean of a patch that wraps a wheel, or a pair "
-    f"of wheels, must. On the airfoil and the lug the first layer is the concentrated one instead (@fig-routing-other-tasks): "
-    f"effective numbers of {n_eff(AF['q'][0]):.0f} and {n_eff(LG['q'][0]):.0f}, rising to {n_eff(AF['q'][11]):.0f} and "
-    f"{n_eff(LG['q'][11]):.0f} in the last layer. The last layers spread the mass on every task; where the routing is most "
-    f"concentrated differs from task to task, and why is not measured. This is one case of one seed on each task; it shows the "
+    f"of wheels, must. The airfoil, like the car, concentrates most in layer {_af_pk + 1} (effective number "
+    f"{n_eff(AF['q'][_af_pk]):.0f}, against {n_eff(AF['q'][0]):.0f} in the first layer); on the lug the first layer is the "
+    f"concentrated one ({n_eff(LG['q'][0]):.0f}) (@fig-routing-other-tasks). In the last layer the effective numbers are "
+    f"{n_eff(AF['q'][11]):.0f} on the airfoil and {n_eff(LG['q'][11]):.0f} on the lug: the last layers spread the mass on every "
+    f"task, and why the routing concentrates where it does is not measured. This is one case of one seed on each task; it shows the "
     f"granularity of the learned partition, not its accuracy.\n"
 )
 ```
