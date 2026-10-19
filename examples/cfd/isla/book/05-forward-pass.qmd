@@ -1531,7 +1531,9 @@ print(f"**ISLA-DTT's forward waits on the host.** Its step takes {HT['isla_dtt']
 
 <!-- SLOT: single-input exact-geometry design: its step from results/perf_2026-10-18/step_breakdown.json "single_input_isla" -->
 
-<!-- SLOT: per-token step time and memory at the reference configurations (fig-arch-token-sweep) -->
+**How the step scales with the case.** On one GPU, from 100,000 tokens per case up, ISLA's training step and its
+memory grow linearly in the number of tokens, as slice attention's $\mathcal{O}(NM)$ cost predicts; @fig-cost-sweep
+measures it for every reference configuration, and @tbl-cost-slopes gives what a token costs each of them.
 
 ## The switches {#sec-arch-switches}
 
