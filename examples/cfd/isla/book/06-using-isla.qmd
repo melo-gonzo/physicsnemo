@@ -87,7 +87,8 @@ sizes = {(c["model"]["hidden"], c["model"]["n_layers"], c["model"]["n_slices"]) 
 assert len(set(lrs.values())) == 1 and sizes == {(DEFAULTS["hidden"], DEFAULTS["n_layers"], DEFAULTS["n_slices"])}
 print(f"The reference configuration is width `hidden={DEFAULTS['hidden']}`, `n_layers={DEFAULTS['n_layers']}` slice "
       f"layers and `n_slices={DEFAULTS['n_slices']}` slices, trained at learning rate {sci(next(iter(lrs.values())))} on "
-      f"{TRAIN['sampling_resolution']:,} sampled cells per case for {TRAIN['training']['num_epochs']} epochs. Every one of "
+      f"{TRAIN['sampling_resolution']:,} sampled cells per case for {TRAIN['training']['num_epochs']} epochs (DeepJEB++ "
+      "trains 40 and AeroZoo 250, @sec-fair-comparison). Every one of "
       f"the recipe's {len(ISLA_CFGS)} ISLA model configurations (`conf/model/isla_*.yaml`) sets these sizes and this rate, "
       "so the commands below need no model overrides (read from the configuration files and the constructor's signature "
       "as the page renders).")
@@ -129,8 +130,9 @@ datasets is in @sec-interior-read-only and @sec-airfrans-read-only.
 **ISLA takes the boundary as named meshes, the prediction points as a
 point cloud, and the problem's data as named fields of declared rank; it
 returns a point cloud with the outputs in its point data. The two inputs
-that are easy to get wrong are the measures, which must sum to the
-boundary's measure, and the global directions, which must be directions.**
+that are easy to get wrong are the measures, which must be proportional to
+the measure each cell represents, with one constant across every boundary
+mesh, and the global directions, which must be directions.**
 The forward call is keyword-only and takes three arguments:
 
 - `boundary_meshes`: a mapping from a name (one entry per boundary
@@ -227,12 +229,23 @@ the prediction points. Its `point_data` holds one leaf per declared output
 at its natural shape, and its `global_data` is the selected `global_data`
 passed through. Four of the inputs need a word.
 
-**The measures must sum to the boundary's measure.** When the recipe keeps
-$n$ of $N$ cells, each kept cell carries the Horvitz–Thompson weight, its
-area times $N/n$, in the mesh's `_effective_measure` cell field. That
-weight is an importance weight: the measure-weighted sums the routing takes
-are then unbiased estimates of integrals over the whole surface, not over
-the retained fraction of it (@sec-isla-quadrature). A boundary passed
+**The measures must be proportional to what each cell represents.** A
+common factor is invisible. The routing reads $\log w$ through a softmax,
+which a common shift does not move; the routing mass of the $Q$ interior
+prediction points, $\omega + \log \sum_i w_i - \log Q$ with a learned
+$\omega$ (@sec-arch-modes), shifts by the same constant; and scaling every
+measure by 5 leaves every output unchanged
+(@tbl-using-contracts). What the model reads is each cell's share of the
+boundary, so one constant must hold across all the boundary meshes of a
+case. When the recipe keeps $n$ of $N$ cells, each kept cell carries the
+Horvitz–Thompson weight, its area divided by its probability of being kept
+($N/n$ times its area under a uniform draw), in the mesh's
+`_effective_measure` cell field. That weight is an importance weight: the
+measure-weighted sums the routing takes are then unbiased estimates of
+integrals over the whole surface, not over the retained fraction of it
+(@sec-isla-quadrature). Under a uniform draw at one rate the factor $N/n$
+is common to every cell; it matters where the probability of being kept
+differs between cells or between meshes. A boundary passed
 whole, like the airfoil above, needs no such field. Measures carry their
 represented dimension and scale geometrically: on a planar problem the
 measure is the segment length.
@@ -684,8 +697,8 @@ print(f": Contract residuals of the example's untrained surface model in float64
 
 On a trained checkpoint and your own data, run the same comparisons in
 float32. A residual far above float32 roundoff points at the inputs:
-cells with inconsistent orientation, effective measures that do not sum to
-the boundary's measure, or positions that were centered or scaled by a
+cells with inconsistent orientation, effective measures that change with
+the pose (a rigid motion leaves each cell's measure unchanged), or positions that were centered or scaled by a
 sample-dependent quantity before the model saw them. The model normalizes
 the normals and the global directions itself, so their magnitudes cannot
 cause a residual. For an interior model, transform the prediction points
