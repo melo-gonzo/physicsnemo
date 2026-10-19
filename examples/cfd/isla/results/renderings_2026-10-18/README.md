@@ -20,6 +20,8 @@ Per-sample relative L2 on AirfRANS 00215 (from `arrays/render_2d_airfrans.json`)
 100,000 interior points in a single-sample run; ISLA's pressure error of this case in the scored record is 0.01543
 (the draw differs from the record's), and all three models in the dump see identical points.
 
+| `routing/<run>_s<sample>.{npz,json}` | trained routing of the A2 reference ISLA checkpoints (final epoch 500) on the median case: per layer dominant slice, its weight, slice masses q and qw, anchors and anchor normals; for layers 0, 5, 11 the 8 largest-territory slices' soft assignment and routing density (schema of results/probes/slices_2026-09-22); json: per-layer n_eff, entropies, anchor spread. Runs: a2r_dr_isla_seed42 (DrivAerML 00079, all 200,000 tokens stored), afu_a2s_isla_seed42 (AirfRANS 00215), a2r_lug_isla_seed42 (lug 00633), a2r_t2dz_isla_seed42 (Tensile2d 00238) | `scripts/slices_probe_a2.py` via `scripts/routing.sbatch`, LHR job **275271** |
+
 ## Case selection
 
 The representative case of each dataset is the case of median per-case ISLA error (seed 42, final checkpoint, native
@@ -42,7 +44,6 @@ infer.py command (snapshot, recipe, venv, cells) for that run.
   `scripts/render_car.py` (side view of c_p and c_f, and the pose figure) ran once locally at hand-off and every VTK
   panel came out blank (white), so `common_crop` found nothing; likely cause: the camera's clipping range is not reset
   after `camera_position` is set in `render_lib.render` (add `p.reset_camera_clipping_range()`). Not yet fixed.
-- LHR job 275252 (rows 10-23: DeepJEB++, lug, Tensile2d, SHIFT-SUV, DrivAerML Volume baselines and ISLA volume) and
-  275271 (A2 routing probe, `scripts/slices_probe_a2.py`, DrivAerML/AirfRANS/lug/Tensile2d) were queued or running;
-  outputs land in `$F/dump/<tag>/native/*.npz` and `$F/routing/`.
+- All 24 rows of `scripts/fig_rows.tsv` are dumped (LHR jobs 271987 and 275252): `$F/dump/<tag>/<protocol>/*.npz` with
+  the scorer's metrics.jsonl beside each, copied to the local scratch `fig/dump/`; only AirfRANS is packed and rendered.
 - Not started: HiLift (dataset not on LHR; A2 lanes at epoch 285/500 on JHB), AeroZoo mid-span planes, hero view.
