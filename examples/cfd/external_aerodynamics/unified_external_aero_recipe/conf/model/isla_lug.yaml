@@ -38,7 +38,10 @@ compile_options:
 
 forward_kwargs:
   boundary_meshes:
-    surface: boundaries.surface   # Mesh[2, 3]: outward-wound triangles; centroids, normals and areas are read from it
+    surface: boundaries.surface   # Mesh[2, 3]: centroids, normals and areas are read from it. The stored triangles are wound
+                                  # outward (out of the solid, where the queries live), so pair this config with a dataset
+                                  # config that reverses them (FlipBoundaryOrientation, boundaries: [surface]): the built-in
+                                  # signed distance is then positive inside, as for the fluids
   prediction_points: interior     # the lug's mesh nodes as a point cloud; point_data carries the query_schema fields
   global_data: global_data        # the case's TensorDict; the model selects its declared leaves
 

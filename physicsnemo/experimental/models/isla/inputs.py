@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 import torch
 from tensordict import PackLayout, TensorDict
 
+from physicsnemo.experimental.models.isla.geometry import soft_log_length
 from physicsnemo.mesh.fields import FieldSchema, FieldSchemaLike, RankSpec
 
 
@@ -125,7 +126,8 @@ class _InputSet:
     inputs and ``Q`` rank-2 inputs (``Q_s`` of them symmetric):
 
     * seed features (into the token's embedding): the rank-0 fields
-      (``x 2`` when ``scaled_scalars``: ``[s, sign(s) log(|s| + eps)]``), then
+      (``x 2`` when ``scaled_scalars``: ``[s, asinh(s / 1e-6)]``, see
+      :func:`~physicsnemo.experimental.models.isla.geometry.soft_log_length`), then
       per rank-1 input its ``F`` frame cosines and its norm and the
       ``P(P-1)/2`` pairwise dot products of the rank-1 inputs, then per rank-2
       input the ``F(F+1)/2`` (symmetric) or ``F**2`` frame contractions
@@ -187,7 +189,7 @@ class _InputSet:
     def __bool__(self) -> bool:
         return bool(self.specs)
 
-    def features(self, fields: TensorDict, frame, *, gauge=None, eps=0.0):
+    def features(self, fields: TensorDict, frame, *, gauge=None):
         """Invariants of one token class.
 
         ``fields`` holds the declared fields over the ``(B, N)`` tokens; ``frame``
@@ -200,17 +202,17 @@ class _InputSet:
         ### input precision even under autocast (the embedding that consumes the
         ### seed is autocast on its own).
         with torch.autocast(frame.device.type, enabled=False):
-            return self._features(fields.to(frame.dtype), frame, gauge, eps)
+            return self._features(fields.to(frame.dtype), frame, gauge)
 
-    def _features(self, fields, frame, gauge, eps):
+    def _features(self, fields, frame, gauge):
         b, n, _, d = frame.shape
         seed, vecs, tens = [], [], []
         if self.n_scalar:
             s = _pack(fields, self.scalar_layout)  # (B, N, S)
             if self.scaled_scalars:
                 s = s / gauge
-                ### [s, sign(s) log(|s| + eps)] per field, the fields in schema order.
-                s = torch.stack([s, torch.sign(s) * torch.log(s.abs() + eps)], -1).flatten(2)
+                ### [s, asinh(s / 1e-6)] per field, the fields in schema order.
+                s = torch.stack([s, soft_log_length(s)], -1).flatten(2)
             seed.append(s)
         if self.rank1:
             v = _pack(fields, self.vector_layout).unflatten(-1, (-1, d))  # (B, N, P, d)

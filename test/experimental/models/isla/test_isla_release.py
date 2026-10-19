@@ -286,14 +286,15 @@ def test_isla_reference_checkpoint_matches_golden(device):
     _assert_dict_close(out, ref, atol=tol, rtol=tol)
 
 
-@pytest.mark.parametrize("version", ["0.1.0", "0.2.0", "0.3.0", "0.4.0"])
+@pytest.mark.parametrize("version", ["0.1.0", "0.2.0", "0.3.0", "0.4.0", "0.5.0"])
 def test_isla_older_checkpoints_load_with_a_warning(tmp_path, version):
     """A 0.1.0 checkpoint (``outputs``, ``global_inputs``, ...) loads through the
     backward-compatibility mapper, which renames the field declarations to
-    ``output_schema``, ``global_schema`` and so on; a 0.2.0, 0.3.0 or 0.4.0 checkpoint
+    ``output_schema``, ``global_schema`` and so on; a 0.2.0 to 0.5.0 checkpoint
     loads as it is. 0.1.0 and 0.2.0 warn that their slice blocks were trained on the raw
-    reads, and all four that an interior model's prediction points were trained on
-    the nearest boundary token's geometry. The fixture
+    reads, 0.1.0 to 0.4.0 that an interior model's prediction points were trained on
+    the nearest boundary token's geometry, and all five that the prediction points'
+    length channels were a signed logarithm, discontinuous at the surface. The fixture
     is the committed reference checkpoint rewritten to that version's declarations
     and file version, so the mapper is exercised against the current architecture's
     weights."""
@@ -316,11 +317,12 @@ def test_isla_older_checkpoints_load_with_a_warning(tmp_path, version):
                 data = json.dumps(meta).encode()
             zout.writestr(item, data)
     raw = ".*raw residual stream" if version in ("0.1.0", "0.2.0") else ""
-    with pytest.warns(UserWarning, match=f"{version} ISLA checkpoint{raw}.*nearest boundary token"):
+    nearest = ".*nearest boundary token" if version != "0.5.0" else ""
+    with pytest.warns(UserWarning, match=f"{version} ISLA checkpoint{raw}{nearest}.*sign\\(s\\) log"):
         model = Module.from_checkpoint(str(old))
     assert list(model.output_schema) == ["p", "v"] and list(model.global_schema) == ["g"]
     assert model.boundary_schema == {} and model.query_schema == {}
-    assert ISLA.__model_checkpoint_version__ == "0.5.0"
+    assert ISLA.__model_checkpoint_version__ == "0.6.0"
 
 
 def _rewrite_checkpoint(src, dst, version: str, extra_args: dict) -> None:

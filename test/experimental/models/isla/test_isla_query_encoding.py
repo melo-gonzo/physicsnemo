@@ -31,6 +31,10 @@ import pytest
 import torch
 
 from physicsnemo.experimental.models import ISLA
+from physicsnemo.experimental.models.isla.geometry import (
+    LENGTH_SOFTENING,
+    soft_log_length,
+)
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.primitives.curves import circle_2d
 from physicsnemo.mesh.primitives.surfaces import sphere_icosahedral
@@ -163,10 +167,17 @@ def feature_jumps(dim: int, n_motions: int = 4):
     return out
 
 
-@pytest.mark.parametrize("dim", [2, 3])
-def test_query_encoding_jumps(dim):
-    """Report the measured jumps (``pytest -s``)."""
-    out = feature_jumps(dim)
+#: Bounds on the measured changes. The current encoding (asinh(s / 1e-6), sign(d) u)
+#: gives at most about 0.45 for the on-surface and 1e-6 L points under a motion or a
+#: scaling (rounding of d, times the slope 1 / 1e-6) and 1.5 across the surface at
+#: +-1e-6 L (2 s / 1e-6); the signed logarithm sign(s) log(|s| + 1e-12) it replaced
+#: gave 37-46 and 28.5, and the direction from the surface flipped (change 2).
+FEATURE_JUMP_ON = 1.0
+FEATURE_JUMP_ACROSS = 2.0
+DIRECTION_JUMP = 1e-4
+
+
+def _report(dim, out):
     print(f"\n[dim={dim}] feature / direction jump (max abs)")
     for kind in ("pose", "scale"):
         for n, (a, b) in out[kind].items():
@@ -174,3 +185,40 @@ def test_query_encoding_jumps(dim):
     for delta, (a, b) in out["across"].items():
         print(f"  across +-{delta:7s} feature {a:10.4g}  direction {b:8.4g}")
     print(f"  on-surface feature range {out['on_surface_feature_range']}")
+
+
+@pytest.mark.parametrize("dim", [2, 3])
+def test_query_encoding_is_continuous_at_the_surface(dim):
+    """On-surface points (vertices, and cell centroids whose distance is a rounding
+    error of either sign) and points 1e-6 L off the surface keep their features and
+    their direction under rigid motions (proper and improper) and uniform scalings;
+    across the surface the features change by at most their slope times the step
+    and the direction not at all. The measured numbers print with ``pytest -s``."""
+    out = feature_jumps(dim)
+    _report(dim, out)
+    for kind in ("pose", "scale"):
+        for n in ("vertex", "centroid", "+1e-06", "-1e-06"):
+            feature, direction = out[kind][n]
+            assert feature <= FEATURE_JUMP_ON, (kind, n, feature)
+            assert direction <= DIRECTION_JUMP, (kind, n, direction)
+        for n, (_, direction) in out[kind].items():
+            assert direction <= DIRECTION_JUMP, (kind, n, direction)
+    assert out["across"]["1e-06"][0] <= FEATURE_JUMP_ACROSS, out["across"]
+    for delta, (_, direction) in out["across"].items():
+        assert direction <= DIRECTION_JUMP, (delta, direction)
+    lo, hi = out["on_surface_feature_range"]
+    assert -FEATURE_JUMP_ON <= lo <= hi <= FEATURE_JUMP_ON
+
+
+def test_soft_log_length():
+    """asinh(s / 1e-6): odd, zero at zero, slope at most 1 / 1e-6, and the signed
+    logarithm log(2 |s| / 1e-6) away from zero."""
+    s = torch.cat([torch.logspace(-12, 2, 57, dtype=D), torch.zeros(1, dtype=D)])
+    phi = soft_log_length(s)
+    assert torch.equal(soft_log_length(-s), -phi)
+    assert soft_log_length(torch.zeros(1, dtype=D)).item() == 0.0
+    assert (phi <= s / LENGTH_SOFTENING + 1e-12).all()
+    far = s > 1e-3
+    torch.testing.assert_close(
+        phi[far], torch.log(2 * s[far] / LENGTH_SOFTENING), rtol=1e-6, atol=1e-6
+    )

@@ -85,8 +85,11 @@ a prescribed boundary vector is a rank-1 boundary input
 and called with ``prediction_points=``. Its ``boundary_meshes`` are the
 boundaries at full resolution, the only boundary input: each prediction
 point's signed distance to that surface (positive on the side the cells'
-normals point to) and the direction from it are computed inside the model
-from the exact closest point on its cells and are never an input, and the
+normals point to) and the gradient of that distance are computed inside the
+model from the exact closest point on its cells and are never an input; the
+distance enters through its ratio to the frame's length and the ratio's
+``asinh(s / 1e-6)``, so the encoding is continuous through the surface (a point
+on it gets the code of its neighbours on either side). The
 boundary tokens are drawn from the same cells inside the forward pass. The
 budget is ``boundary_tokens`` per case (default 200,000), shared over the
 named boundaries by water filling (a boundary with fewer cells than its share

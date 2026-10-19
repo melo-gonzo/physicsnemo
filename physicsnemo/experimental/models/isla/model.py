@@ -154,9 +154,14 @@ surface's cells (point to face, never point to centroid) gives the distance
 feature, so positive on the side the cells' normals point to, and the
 direction :math:`u_q`: the cell's normal, oriented toward the query, when
 :math:`p_q` is interior to a cell, else :math:`(x_q - p_q) / |x_q - p_q|`
-(:func:`exact_boundary_geometry`). :math:`d_q / L` with its signed logarithm
-enters the token's embedding as a built-in rank-0 channel ahead of the fields
-declared in ``query_schema``. :math:`(d_q, u_q)` are functions of the surface
+(:func:`exact_boundary_geometry`). The token reads :math:`s_q = d_q / L` and
+:math:`\operatorname{asinh}(s_q / 10^{-6})` (:func:`soft_log_length`; logarithmic
+away from the wall, linear through it) as built-in rank-0 channels ahead of the
+fields declared in ``query_schema``, and :math:`\operatorname{sign}(d_q)\, u_q`
+(with :math:`\operatorname{sign}(0) = +1`, the gradient of the signed distance) as
+its direction. Both are continuous through the surface: a point on it, whose
+distance is zero or a rounding error of either sign, gets the code of the points
+just off it on either side. :math:`(d_q, u_q)` are functions of the surface
 and its orientation alone: the same for every draw of the boundary tokens,
 invariant to splitting a cell and converging as :math:`O(h^2)` under refinement
 of the surface, like a stored signed-distance field computed from the same
@@ -261,6 +266,7 @@ from physicsnemo.experimental.models.isla.blocks import (
 from physicsnemo.experimental.models.isla.geometry import (
     exact_boundary_geometry,
     rms_pairwise_distance,
+    soft_log_length,
 )
 from physicsnemo.experimental.models.isla.heads import (
     _assemble_output,
@@ -411,7 +417,7 @@ class ISLA(Module):
             prediction-point tokens through their own embedding, with the
             same invariants as boundary inputs. Rank-0 entries are lengths in
             the frame's unit: each is divided by the length unit and enters
-            as ``[s, sign(s) log(|s| + eps)]``; rank-1 and rank-2 entries are
+            as ``[s, asinh(s / 1e-6)]`` (:func:`soft_log_length`); rank-1 and rank-2 entries are
             never scaled.
         global_schema: Per-case fields, a rank spec per name with rank 0
             (appended to every token's seed) or rank 1 (a global direction,
@@ -511,8 +517,11 @@ class ISLA(Module):
     ### configuration it still builds); 0.5.0 gave the prediction points the exact
     ### geometry of the boundary surface in place of the nearest boundary token's
     ### and drew the interior task's boundary tokens inside the model from the
-    ### full-resolution surface (boundary_tokens; same parameters, new forward).
-    __model_checkpoint_version__ = "0.5.0"
+    ### full-resolution surface (boundary_tokens; same parameters, new forward);
+    ### 0.6.0 made the prediction points' geometry encoding continuous through the
+    ### surface (asinh(s / 1e-6) for the signed logarithm of every length channel,
+    ### sign(d) u for the direction; same parameters, new forward).
+    __model_checkpoint_version__ = "0.6.0"
     _RAW_READS = (
         " Its slice blocks were trained to pool and broadcast the raw residual stream; "
         "this version reads the normalized state there, so its outputs differ from "
@@ -531,6 +540,13 @@ class ISLA(Module):
         "it (boundary_tokens), so its interior outputs differ from the ones it was "
         "trained to give."
     )
+    _SIGNED_LOG = (
+        " Its prediction points' length channels (the distance to the boundary and any "
+        "rank-0 query_schema field) were encoded as sign(s) log(|s| + 1e-12) and their "
+        "direction pointed from the surface to the point; this version encodes them as "
+        "asinh(s / 1e-6) and sign(d) times that direction, continuous through the "
+        "surface, so its interior outputs differ from the ones it was trained to give."
+    )
     __supported_model_checkpoint_version__ = {
         "0.1.0": (
             "Loading a 0.1.0 ISLA checkpoint: renaming its field declarations "
@@ -539,10 +555,12 @@ class ISLA(Module):
             + _RAW_READS
             + _REMOVED
             + _NEAREST_GEOMETRY
+            + _SIGNED_LOG
         ),
-        "0.2.0": "Loading a 0.2.0 ISLA checkpoint." + _RAW_READS + _REMOVED + _NEAREST_GEOMETRY,
-        "0.3.0": "Loading a 0.3.0 ISLA checkpoint." + _REMOVED + _NEAREST_GEOMETRY,
-        "0.4.0": "Loading a 0.4.0 ISLA checkpoint." + _NEAREST_GEOMETRY,
+        "0.2.0": "Loading a 0.2.0 ISLA checkpoint." + _RAW_READS + _REMOVED + _NEAREST_GEOMETRY + _SIGNED_LOG,
+        "0.3.0": "Loading a 0.3.0 ISLA checkpoint." + _REMOVED + _NEAREST_GEOMETRY + _SIGNED_LOG,
+        "0.4.0": "Loading a 0.4.0 ISLA checkpoint." + _NEAREST_GEOMETRY + _SIGNED_LOG,
+        "0.5.0": "Loading a 0.5.0 ISLA checkpoint." + _SIGNED_LOG,
     }
     _RENAMED_ARGS = {
         "outputs": "output_schema",
@@ -1452,18 +1470,21 @@ class ISLA(Module):
             query_points = query["points"]
             nq = query_points.shape[1]
             ### The query's geometry from the boundary surface: the signed distance
-            ### to it (the built-in channel) and the direction from it (the token's
-            ### "normal" in every invariant), from the exact closest point.
+            ### to it (the built-in channels s and asinh(s / 1e-6)) and the gradient
+            ### of the signed distance, sign(d) u with sign(0) = +1 (the token's
+            ### "normal" in every invariant), from the exact closest point. Both are
+            ### continuous through the surface, so a point on it (d zero or a rounding
+            ### error of either sign) gets the code of its neighbours on either side.
             with torch.autocast(points.device.type, enabled=False):
-                dist, q_nhat = query["wall_distance"], query["wall_direction"].to(points.dtype)
-                s = (dist.to(points.dtype) / gauge.squeeze(-1))[..., None]  # (B, Q, 1), in frame units
-                builtin = torch.cat([s, torch.sign(s) * torch.log(s.abs() + EPS)], -1)
+                dist = query["wall_distance"].to(points.dtype)
+                u = query["wall_direction"].to(points.dtype)
+                q_nhat = torch.where((dist >= 0)[..., None], u, -u)
+                s = (dist / gauge.squeeze(-1))[..., None]  # (B, Q, 1), in frame units
+                builtin = torch.cat([s, soft_log_length(s)], -1)
             q_g = g_unit[:, None].expand(b, nq, K, dim)
             if self.qin:
                 q_frame = torch.cat([q_nhat[:, :, None], q_g], dim=2)
-                q_feat, q_vecs, q_tens = self.qin.features(
-                    query["fields"], q_frame, gauge=gauge, eps=EPS
-                )
+                q_feat, q_vecs, q_tens = self.qin.features(query["fields"], q_frame, gauge=gauge)
                 q_feat = torch.cat([builtin, q_feat], -1)
             else:
                 q_feat, q_vecs, q_tens = builtin, None, None
