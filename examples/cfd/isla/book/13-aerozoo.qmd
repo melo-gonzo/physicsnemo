@@ -1,6 +1,6 @@
 # AeroZoo {#sec-aerozoo}
 
-*Before this chapter:* the interior task, in which a model reads the boundary and predicts the field at points in the flow (@sec-interior-task); how ISLA turns boundary conditions into per-cell inputs (@sec-isla-inputs); the scoring protocol and the seed rule (@sec-protocol).
+*Before this chapter:* the interior task, in which a model reads the boundary and predicts the field at points in the flow (@sec-interior-task); how ISLA turns boundary conditions into per-cell inputs (@sec-isla-inputs); the scoring protocol (@sec-protocol) and the seed rule (@sec-fair-comparison).
 
 ```{python}
 #| label: setup-aerozoo
@@ -343,7 +343,7 @@ print(f"- **GeoTransolver-volume**, the GeoTransolver of the interior tasks with
       f"width 256, local width 32, learning rate 1e-3, {params['GeoTransolver']:.1f}M parameters; called GeoTransolver below.")
 print()
 print("Transolver is not trained on AeroZoo. **Cost.** On four GB300 ranks in bfloat16, the median step of the final epoch and the peak "
-      "device memory any rank reports: " + "; ".join(f"{a} {mean(c['step_seconds_median'] for c in v):.2f} s and {max(c['mem_gb_max'] for c in v):.0f} GB"
+      "device memory any rank reports: " + "; ".join(f"{a} {mean(c['step_seconds_median'] for c in v):.2f} s and {max(c['mem_gb_max'] for c in v):.0f} GiB"
                                                       for a, v in cost.items())
       + ". Instrument (step time and memory): 250-epoch training runs of these configurations on shared nodes, ISLA and ISLA-DTT with "
       "the raw slice reads (@sec-study-configurations); the normalized slice reads change no parameter and no tensor shape. Data: "
@@ -473,7 +473,7 @@ plt.show()
 
 : Validation loss of ISLA's reference configuration on the AeroZoo `full` split with the normalized slice reads and with the raw-read variant: the trainer's own validation every ten epochs, bfloat16, the Huber loss (quadratic for small residuals, linear for large ones) summed over the five standardized targets, at the training draw; learning rate 3.75e-4, uniform boundary draws, two seeds each. How to read this: a ratio to the running minimum of one means the loss never rose above its best; the raw-read runs reach their minimum in the first 30 epochs and their loss is above twice that minimum from epoch 60; at epoch 249 the normalized-read runs read 0.0222 and 0.0223; validation loss is not the test-side metric of the standing. Data: the training records of the four runs, as recorded in the lab notebook (@sec-notebook). {#tbl-aerozoo-training}
 
-## The standing {#sec-interior-aerozoo}
+## The registered questions {#sec-interior-aerozoo}
 
 ```{python}
 #| label: para-aerozoo-standing
@@ -524,11 +524,26 @@ if HAVE:
     print()
     print(QUESTIONS)
 else:
-    print("**The held-out splits decide two questions about ISLA on this dataset; both are open (@sec-open-questions).** The standing of "
+    PR = RZ["predictions"]; P2F = PR["P2"]["per_field"]
+    def by(v):
+        n = [FIELDS[f] for f, d in P2F.items() if d["verdict"] == v]
+        return n[0] if len(n) == 1 else ", ".join(n[:-1]) + " and " + n[-1]
+    print("**The held-out splits decide two questions about ISLA on this dataset; for the reference configuration both are open "
+          "(@sec-open-questions).** The standing of "
           "the reference configurations on AeroZoo is the test-side scoring of their final checkpoints on `full` and on the six splits of "
           "@tbl-aerozoo-splits, under the protocol of @sec-aerozoo-measured, read by the seed rule.")
     print()
     print(QUESTIONS)
+    print("Scored on ISLA and ISLA-DTT checkpoints with the raw slice reads, the variant whose ISLA training loses its validation minimum "
+          "(@tbl-aerozoo-training), the "
+          f"registered predictions read: on `full`, GeoTransolver ÷ ISLA is {PR['P1']['velocity_ratio']:.2f} on velocity and "
+          f"{PR['P1']['pressure_ratio']:.2f} on pressure, against a bar of at least 1.2 on velocity and at most 0.9 on pressure "
+          f"({PR['P1']['verdict']}); on the enclosure split ISLA's penalty is {P2F['velocity_l2']['isla_penalty']:.2f} on velocity "
+          f"against GeoTransolver's {P2F['velocity_l2']['gt_penalty']:.2f}, and the bar is {PR['P2']['verdict']}: falsified on "
+          f"{by('falsified')}, supported on {by('supported')}, between its two thresholds on {by('between')}; and ISLA-DTT ÷ ISLA "
+          f"on `full` runs from {min(PR['P4']['ratios'].values()):.2f} to {max(PR['P4']['ratios'].values()):.2f} across the fields, "
+          f"outside the 5% bar ({PR['P4']['verdict']}). What the reference configuration, with the normalized slice reads, scores "
+          "against the same bars is the open question.")
 ```
 
 <!-- RENDERING SLOT: fig-aerozoo-prediction: truth / ISLA / GeoTransolver / Transolver and errors on one held-out case -->

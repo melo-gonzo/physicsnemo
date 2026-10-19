@@ -7,7 +7,7 @@ translated).
 **ISLA is measured against two public slice-attention transformers, GeoTransolver and Transolver, on eight datasets and
 nine tasks. The protocol fixes everything except the architecture, and every number in the book is scored by it.** The
 baselines are the public model classes, run unmodified from the PhysicsNeMo recipe. Each architecture is scored at one
-reference configuration, chosen by one rule. This chapter says what each baseline computes and what it is given, states
+reference configuration, chosen once on two selection datasets (@sec-selection). This chapter says what each baseline computes and what it is given, states
 the rules of the comparison and how the reference configurations were chosen, shows every dataset on one page, and defines
 how a checkpoint is scored. It closes by defining the tag that marks a study run on another configuration of ISLA.
 
@@ -356,20 +356,28 @@ def cheaper_ties(a):
     r0 = JS[a][REF[a]]
     return [(k, r) for k, r in JS[a].items() if k != REF[a] and mj(r) <= mj(r0) * 1.03 and r[2] < r0[2]]
 pct = lambda x: f"{100 * (x - 1):.1f}%"
-def tie_text(a):
-    r0 = JS[a][REF[a]]
-    parts = [f"{nm(k)} ({r[2]:.0f} GiB) trails the best by {pct(max(r[:2]))} on "
-             f"{'the cars' if r[0] > r[1] else 'the wings'}" for k, r in sorted(cheaper_ties(a), key=lambda kr: kr[1][2])]
-    return (f"For {a} the joint score's 3% tie band also holds cheaper candidates: " + "; ".join(parts)
-            + f"; {nm(REF[a])} ({r0[2]:.0f} GiB) trails by at most {pct(max(r0[:2]))}.")
 gt = JS["GeoTransolver"][REF["GeoTransolver"]]
-print("The decision used a joint score: a candidate's error divided by the best candidate's error on each dataset, "
-      "averaged over the two. Each reference configuration has the smallest joint score of its architecture, and it is "
-      "also the candidate that trails the best by the least on its worse dataset. The tie clause was not carried over to "
-      "the joint score. " + " ".join(tie_text(a) for a in ("ISLA", "Transolver") if cheaper_ties(a))
-      + f" No GeoTransolver candidate is within 3% of the best on both datasets; width 256 is the best on the wings and "
-      f"trails by {pct(gt[0])} on the cars. On the wings GeoTransolver and Transolver read the freestream in inch/s "
-      "(@tbl-model-inputs), so their ranking there is the ranking under that input. @tbl-selection lists every candidate.")
+def best_on(ds, a):
+    c = D[ds][a]["candidates"]; return min(c, key=lambda k: c[k]["pressure_l2"])
+err = lambda ds, a, k: D[ds][a]["candidates"][k]["pressure_l2"]
+def car_best_text(a):
+    k = best_on("drivaer_surface", a)
+    return (f"{a}'s {nm(k)} scores {err('drivaer_surface', a, k):.4f} on the cars against {err('drivaer_surface', a, REF[a]):.4f} "
+            f"for the reference {nm(REF[a])}, and {err('hilift_210', a, k):.4f} on the wings against {err('hilift_210', a, REF[a]):.4f}")
+cheapest = [(a, min(cheaper_ties(a), key=lambda kr: kr[1][2])) for a in S.ARCHS if cheaper_ties(a)]
+cheap_txt = [f"{nm(k)} ({r[2]:.0f} GiB) for {a}" for a, (k, r) in cheapest]
+assert all(best_on("drivaer_surface", a) != REF[a] for a in S.ARCHS)
+print("The registered rule named no reference configuration, so the picks were made after the scores were read, by a joint "
+      "score: a candidate's error divided by the best candidate's error on each dataset, averaged over the two. Each reference "
+      "configuration has the smallest joint score of its architecture, and it is also the candidate that trails the best by the "
+      "least on its worse dataset. "
+      + ("No tie band was applied to the joint score; had the rule's 3% band been applied to it, with the tie going to the lower "
+         "training peak memory, the cheaper " + " and ".join(cheap_txt) + " would have been taken. ")
+      + "The joint score did not take the candidate most accurate on the DrivAerML Surface task for any architecture, under the "
+      "same budget: " + "; ".join(car_best_text(a) for a in S.ARCHS) + ". "
+      f"No GeoTransolver candidate is within 3% of the best on both datasets; width 256 is the best on the wings and trails by "
+      f"{pct(gt[0])} on the cars. On the wings GeoTransolver and Transolver read the freestream in inch/s (@tbl-model-inputs), "
+      "so the wing scores that decided their picks are scores under that input. @tbl-selection lists every candidate.")
 ```
 
 ```{python}
@@ -442,8 +450,8 @@ print(": The datasets of the book. $K$: global unit directions; $S$: global scal
 #|   Mises stress at the nodes, projected along the thickness. DeepJEB++: the von Mises stress on one bracket's surface. How
 #|   to read this: colors are reference CFD and FEM fields, not predictions; each panel has its own color scale and its own
 #|   length scale, and surfaces are drawn from a random subset of their cells, so dot density follows the mesh, not the
-#|   field. The SHIFT-SUV panel is a fastback; every model trains and is scored on the estate family (@sec-shift-suv). Data:
-#|   results/problem_figures_2026-09-22/*.npz (DeepJEB++: results/sample_figures_2026-10-02/deepjeb.npz).
+#|   field. The SHIFT-SUV panel is an estate, the family on which every model trains and is scored (@sec-shift-suv). Data:
+#|   results/problem_figures_2026-09-22/*.npz (SHIFT-SUV and DeepJEB++: results/sample_figures_2026-10-02/shift_suv.npz, deepjeb.npz).
 #| code-fold: true
 #| fig-height: 11
 def proj2(p, drop):
@@ -466,8 +474,9 @@ H_, Hm = load_problem("hilift"); xy, dep = proj2(H_["surf_points"], 2)
 sc = depth_scatter(axs[1], xy, dep, H_["surf_cp"], s=0.6, cmap=DIVERGING, norm=TwoSlopeNorm(vcenter=0.0, vmin=-4.0, vmax=1.0)); map_axes(axs[1])
 title(axs[1], "HiLiftAeroML", f"{Hm['case']}, $C_p$, top view"); cbar(sc, axs[1], "$C_p$ [–]")
 # SHIFT-SUV
-U_, Um = load_problem("shift_suv"); xy, dep = proj2(U_["surf_points"], 1)
-sc = depth_scatter(axs[2], xy, -dep, U_["surf_cp"], s=0.6, cmap=DIVERGING, norm=cpn); map_axes(axs[2])
+U_, Um_ = load_samples("shift_suv"); iu = next(i for i, c in enumerate(Um_["cases"]) if c["family"] == "estate"); Um = Um_["cases"][iu]
+xy, dep = proj2(part(U_["surf_points"], U_["surf_offsets"], iu), 1)
+sc = depth_scatter(axs[2], xy, -dep, part(U_["surf_cp"], U_["surf_offsets"], iu), s=1.2, cmap=DIVERGING, norm=cpn); map_axes(axs[2])
 title(axs[2], "SHIFT-SUV", f"{Um['family']} {Um['case']}, $C_p$"); cbar(sc, axs[2], "$C_p$ [–]")
 # AirfRANS
 A_, Am = load_problem("airfrans"); ip = A_["int_points"]

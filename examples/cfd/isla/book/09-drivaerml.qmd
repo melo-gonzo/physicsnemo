@@ -76,7 +76,7 @@ def brief(st, f, p="native"):
     if len(set(v.values())) == 1:
         return f"{v['GeoTransolver']} both on {st.fields[f]} ({r['GeoTransolver']}, {r['Transolver']})"
     return f"{v['GeoTransolver']} GeoTransolver ({r['GeoTransolver']}) and {v['Transolver']} Transolver ({r['Transolver']}) on {st.fields[f]}"
-print(f"The three architectures are {S.CONFIG['ISLA']}, {S.CONFIG['GeoTransolver']} and {S.CONFIG['Transolver']}, each at its reference configuration (@sec-protocol). "
+print(f"The three architectures are {S.CONFIG['ISLA']}, {S.CONFIG['GeoTransolver']} and {S.CONFIG['Transolver']}, each at its reference configuration (@sec-selection). "
       "In one paragraph, with the ratios baseline ÷ ISLA in parentheses, GeoTransolver first: on the Surface task, on the native mesh, "
       f"ISLA {brief(SURF, 'pressure_l2')} and {brief(SURF, 'wss_l2')}, and only ISLA keeps its error when the surface is sampled as a "
       f"uniform point cloud or the car is rotated and translated. On the Volume task ISLA {brief(VOL, 'pressure_l2')}, "
@@ -310,7 +310,7 @@ print(f"**The Surface task predicts the pressure and the wall-shear vector at th
       "constant freestream vector (@tbl-model-inputs). No model trains with rotation or translation augmentation.")
 ```
 
-The three architectures run at their reference configurations, the one configuration of each architecture that the book scores on every dataset (@sec-protocol):
+The three architectures run at their reference configurations, the one configuration of each architecture that the book scores on every dataset (@sec-selection, @tbl-architectures):
 
 - **ISLA**: width 512, 12 layers, 512 slices, learning rate 3.75e-4, trained at 200,000 cells per case;
 - **GeoTransolver**: width 256, learning rate 1e-3, trained at 200,000 cells, with its ball-query local features off on the Surface task (@sec-baselines);
@@ -412,7 +412,7 @@ plt.show()
 
 #### ISLA's interior prediction points {#sec-interior-query-tokens}
 
-**ISLA admits the interior points into its encoder as tokens, so the twelve slice layers run over the surface and the air together.** Each interior point is seeded the way a boundary token is, from the relational invariants of its position against the slice anchors (@sec-isla-relational) and the global direction, plus a learned type embedding. It has no normal of its own, so the unit direction $\hat\nu_q$ from its nearest boundary token plays that part in every invariant, and its distance $d_q$ to that token, signed by the token's normal, enters as the channels $[d_q / L,\ \mathrm{sign}(d_q) \log(|d_q| / L + \epsilon)]$ in the length unit $L$, with $\epsilon = 10^{-12}$ guarding the logarithm at the wall. Both are computed inside the model by an exact nearest-neighbor search over the boundary sample; the dataset's stored distance field is not an input. The interior points take part in the measure-weighted routing with a learned total weight, a fraction of the whole boundary's measure split equally over them, so their share of each slice does not depend on how many are requested. Every input is a function of relative geometry, so the rigid-motion contract holds exactly (@sec-isla-contracts). One property is given up: an interior point's prediction depends on the other interior points of the request, because they write into the same slices. ISLA-DTT keeps query independence instead (@sec-arch-modes); @sec-interior-read-only measures what that costs.
+**ISLA admits the interior points into its encoder as tokens, so the twelve slice layers run over the surface and the air together.** Each interior point is seeded the way a boundary token is, from the relational invariants of its position against the slice anchors (@sec-isla-relational) and the global direction, plus a learned type embedding. It has no normal of its own, so the unit direction $\hat\nu_q$ from its nearest boundary token plays that part in every invariant, and its distance $d_q$ to that token, signed by the token's normal, enters as the channels $[d_q / L,\ \mathrm{sign}(d_q) \log(|d_q| / L + \epsilon)]$ in the length unit $L$, with $\epsilon = 10^{-12}$ guarding the logarithm at the wall. Both are computed inside the model by an exact nearest-neighbor search over the boundary sample; the dataset's stored distance field is not an input. The interior points take part in the measure-weighted routing with a learned total weight, a multiple of the whole boundary's measure split equally over them (@sec-interior-companion measures it), so their share of each slice does not depend on how many are requested. Every input is a function of relative geometry, so the rigid-motion contract holds exactly (@sec-isla-contracts). One property is given up: an interior point's prediction depends on the other interior points of the request, because they write into the same slices. ISLA-DTT keeps query independence instead (@sec-arch-modes); @sec-interior-read-only measures what that costs.
 
 #### Why the Volume task is harder {#sec-interior-harder}
 
@@ -479,6 +479,18 @@ print(f"Three readings. **First, on the native mesh the three are level within s
 ```
 
 The level native standing is a statement about these three configurations under one memory budget, not about matched capacity: GeoTransolver reaches ISLA's native error with `{python} f"{SURF_COST['GeoTransolver']['n_parameters'] / SURF_COST['ISLA']['n_parameters'] * 100:.0f}%"` of its parameters (@tbl-drivaerml-configs). What separates the three on this dataset is not the native number but what happens to it when the car is presented in any other way.
+
+```{python}
+#| label: para-surface-selection
+#| output: asis
+SELC = J("char/ref80_select_2026-10-03.json")["datasets"]
+sel = lambda ds, k: SELC[ds]["GeoTransolver"]["candidates"][k]["pressure_l2"]
+print("The verdict is that of GeoTransolver's reference configuration, which is not its most accurate candidate on this task: under "
+      f"the same budget its h1024_c100k candidate (width 1,024, trained at 100,000 cells) scored {sel('drivaer_surface', 'gt_h1024_c100k'):.4f} "
+      f"on surface pressure against the reference width 256's {sel('drivaer_surface', 'gt_h256'):.4f}, and was not taken because it "
+      f"scored {sel('hilift_210', 'gt_h1024_c100k'):.4f} against {sel('hilift_210', 'gt_h256'):.4f} on the 210 HiLiftAeroML wings, where "
+      "the baselines read the freestream in inch/s (@sec-selection).")
+```
 
 ```{python}
 #| label: out-fig-drivaerml-prediction
@@ -738,7 +750,7 @@ Without the boundary read, read-only points trail ISLA by 14% on pressure, 31% o
 
 #### What the boundary read supplies {#sec-interior-read-only-mechanism}
 
-**Velocity improves with how much of the boundary a point reads, eddy viscosity with the first few hundred cells, and pressure with no read at all.** @tbl-interior-read-ladder replaces the forest by an exact read of $K$ boundary cells, taken at an even stride along a Morton space-filling curve with their measure fractions renormalized, a diagnostic form of the read and not an option of the class.
+**Velocity improves with how much of the boundary a point reads, eddy viscosity with the first few hundred cells, and pressure with no read at all.** @tbl-interior-read-ladder replaces the forest by an exact read of a fixed number of boundary cells per point, taken at an even stride along a Morton space-filling curve with their measure fractions renormalized, a diagnostic form of the read and not an option of the class.
 
 | boundary cells read per point | p | v | nut | v ÷ no read |
 |---|---|---|---|---|
@@ -760,20 +772,28 @@ Velocity does not move at 256 cells, falls 5% at 1,024 and 15% with every cell. 
 #| label: make-tbl-interior-query-population
 #| output: asis
 QP = J("char/qpop_2026-10-06.json"); QR = QP["mean_ratio_to_native_h"]; QM = QP["query_routing_mass_fraction_of_boundary"]
+# ISLA-DTT's request probe on its own checkpoints, as research/dtt/REPORT.md records it after "Pose-free parity on the car"
+import re as _re
+_rep = (Path("..") / "research" / "dtt" / "REPORT.md").read_text()
+_rep = " ".join(_rep[_rep.index("### Pose-free parity on the car"):].split("\n### ")[0].split())
+DTT_Q = {"ratio": float(_re.search(r"error ratios ([0-9.]+) on every field", _rep).group(1)),
+         "departure": _re.search(r"largest departure ([0-9.e-]+)\)", _rep).group(1),
+         "change": _re.search(r"largest prediction change on the shared points ([0-9.e-]+)", _rep).group(1).rstrip(".")}
 rows = [("half", "the 100,000 alone"), ("box", "native + 200,000 far-field companions"), ("wall", "native + 200,000 wall-heavy companions")]
 fr = lambda r: f"{r:.2f}" if r < 2 else f"{r:.0f}" if r >= 10 else f"{r:.1f}"
 print("| request around the same 100,000 scored points | ISLA: error ÷ native request, p / v / nut | ISLA-DTT: error ÷ native request |")
 print("|---|---|---|")
 for k, lab in rows:
-    print(f"| {lab} | {' / '.join(fr(QR[k][f]) for f in VOL_F)} | 1.0000 / 1.0000 / 1.0000 |")
+    print(f"| {lab} | {' / '.join(fr(QR[k][f]) for f in VOL_F)} | {' / '.join([format(DTT_Q['ratio'], '.4f')] * len(VOL_F))} |")
 print()
 print(": Dependence on the request on the DrivAerML Volume task: the error on fixed scored points under each request divided by the same "
       "points' error in the native request of 200,000, pressure / velocity / eddy viscosity (p / v / nut), 48 validation cars, float32, "
-      "seed means. Every ISLA-DTT ratio is 1.000000 on both seeds under all three requests (largest departure 8e-6), and the largest "
-      "change of any ISLA-DTT prediction on the shared points is 4.7e-5 relative L2, float32 roundoff. How to read this: a ratio of one "
+      f"seed means. Every ISLA-DTT ratio is {DTT_Q['ratio']:.6f} on both seeds under all three requests (largest departure "
+      f"{DTT_Q['departure']}), and the largest change of any ISLA-DTT prediction on the shared points is {DTT_Q['change']} relative L2, float32 roundoff. How to read this: a ratio of one "
       "means the other points of the request do not matter; it says nothing about accuracy, which is @tbl-interior-read-only. Instrument: "
       "ISLA at 512 wide, 512 slices, 3.75e-4, raw slice reads (@sec-study-configurations). Data: results/char/qpop_2026-10-06.json "
-      "(ISLA); ISLA-DTT scored with the same request generator on its two checkpoints of @tbl-interior-read-only. "
+      "(ISLA); ISLA-DTT scored with the same request generator on its two checkpoints of @tbl-interior-read-only, "
+      "research/dtt/REPORT.md, the request probe after \"Pose-free parity on the car\". "
       "{#tbl-interior-query-population}")
 ```
 
