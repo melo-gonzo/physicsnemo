@@ -554,8 +554,8 @@ print(f": The AeroZoo interior task at {SPLITS['full']['n_train']:,} training ca
 ```{python}
 #| label: para-aerozoo-reading
 #| output: asis
-V = json.load(open(RES / "char" / "drivaerml_volume.json")); VA = {arm.split()[0]: d for arm, d in V["arms"].items()}
-A = json.load(open(RES / "char" / "airfrans.json")); AA = {arm.split()[0]: d for arm, d in A["arms"].items()}
+V = json.load(open(RES / "char" / "drivaerml_volume_a2.json")); VA = {arm.split()[0]: d for arm, d in V["arms"].items()}
+A = json.load(open(RES / "char" / "airfrans_uniform.json")); AA = {arm.split()[0]: d for arm, d in A["arms"].items()}
 vrat = lambda f: VA["GeoTransolver"]["native"][f]["mean"] / VA["ISLA"]["native"][f]["mean"]
 arat = lambda f: AA["GeoTransolver"]["native"][f]["mean"] / AA["ISLA"]["native"][f]["mean"]
 g = lambda f: rat("GeoTransolver", "full", SIDE, f)["mean_ratio"]
@@ -563,13 +563,15 @@ paired = lambda f: rat("GeoTransolver", "full", SIDE, f)["per_seed_ratio"]
 bar_v = g("velocity_l2") >= 1.2; bar_p = g("pressure_l2") <= 0.9
 fals = g("velocity_l2") < 1.1 or g("pressure_l2") > 1.0
 pattern = ("holds" if bar_v and bar_p else "fails" if fals else "holds in part")
-print(f"Three readings. First, the pattern of the two existing interior datasets, a velocity lead for ISLA and a pressure lead for GeoTransolver "
-      f"(GeoTransolver ÷ ISLA {vrat('velocity_l2'):.2f} and {vrat('pressure_l2'):.2f} on the DrivAerML Volume task, {fmt_ratio(arat('velocity_l2'))} and "
-      f"{arat('pressure_l2'):.2f} on AirfRANS, whose interior was read as one contiguous window of the stored points; @tbl-drivaerml-volume-protocols, "
-      f"@tbl-airfrans-protocols, @sec-interior-airfrans), {pattern} here: velocity "
+p_where = ("matches both" if vrat("pressure_l2") < 1 and arat("pressure_l2") < 1 else "matches AirfRANS only" if arat("pressure_l2") < 1
+           else "matches the cars only" if vrat("pressure_l2") < 1 else "matches neither")
+print(f"Three readings. First, the pattern the bar encodes, a velocity lead for ISLA and a pressure lead for GeoTransolver, {pattern} here: velocity "
       f"{fmt_ratio(g('velocity_l2'))} (paired by seed {', '.join(f'{v:.2f}' for v in paired('velocity_l2').values())}) and pressure "
       f"{g('pressure_l2'):.2f} ({', '.join(f'{v:.2f}' for v in paired('pressure_l2').values())}), against the bar written before the lanes ran of at "
-      f"least 1.2 on velocity and at most 0.9 on pressure. Second, the three turbulence fields, which no earlier dataset of the book predicts "
+      f"least 1.2 on velocity and at most 0.9 on pressure. On the two existing interior datasets GeoTransolver ÷ ISLA reads "
+      f"{vrat('velocity_l2'):.2f} and {vrat('pressure_l2'):.2f} (velocity and pressure) on the DrivAerML Volume task and {fmt_ratio(arat('velocity_l2'))} and "
+      f"{arat('pressure_l2'):.2f} on AirfRANS, whose interior is drawn uniformly from the stored points (@tbl-drivaerml-volume-protocols, "
+      f"@tbl-airfrans-protocols, @sec-interior-airfrans), so the velocity clause matches both and the pressure clause {p_where}. Second, the three turbulence fields, which no earlier dataset of the book predicts "
       f"together: eddy viscosity {fmt_ratio(g('nut_l2'))}, turbulent kinetic energy {fmt_ratio(g('tke_l2'))} and the specific dissipation rate "
       f"{fmt_ratio(g('omega_l2'))}; the dissipation rate is standardized over a range of four decades (its training-side standard deviation is "
       f"fifteen times its mean), so its relative L2 is dominated by the near-wall cells where $\\omega$ is largest and both models' absolute "

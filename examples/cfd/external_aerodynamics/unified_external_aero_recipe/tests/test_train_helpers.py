@@ -447,6 +447,43 @@ def test_non_finite_gradients_skip_the_update(monkeypatch, loss_scale, updates):
     assert torch.equal(model.weight, before) != updates
 
 
+def test_train_loads_the_next_batch_after_backward(monkeypatch):
+    """Train mode fetches batch i + 1 after step i's backward and before its
+    optimizer step; every batch reaches the forward once, in loader order."""
+    events = []
+    model = torch.nn.Linear(1, 1, bias=False)
+
+    class Loader:
+        def __len__(self):
+            return 3
+
+        def __iter__(self):
+            for k in range(3):
+                events.append(f"load {k}")
+                yield {"k": k}
+
+    def forward(batch, *args, **kwargs):
+        events.append(f"forward {batch['k']}")
+        loss = model.weight.sum()
+        loss.register_hook(lambda g: events.append("backward"))
+        values = TensorDict({"loss/test": loss.detach()})
+        return loss, values, values.clone()
+
+    step = torch.optim.SGD.step
+    monkeypatch.setattr(train, "forward_pass", forward)
+    monkeypatch.setattr(
+        torch.optim.SGD,
+        "step",
+        lambda self, *a, **k: (events.append("step"), step(self, *a, **k))[1],
+    )
+    _run_test_epoch(Loader(), model, mode="train", dist_manager=_single_rank())
+    assert events == [
+        "load 0", "forward 0", "backward", "load 1", "step",
+        "forward 1", "backward", "load 2", "step",
+        "forward 2", "backward", "step",
+    ]  # fmt: skip
+
+
 class _TwoStepLoader:
     """Yield one healthy batch, then optionally fail on a chosen rank."""
 

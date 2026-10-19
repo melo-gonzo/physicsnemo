@@ -329,7 +329,7 @@ protocol_table("airfrans_uniform.json", "tbl-airfrans-protocols", "The AirfRANS 
 ```{python}
 #| label: para-airfrans-reading
 #| output: asis
-V, VAR = char_arms("drivaerml_volume.json")
+V, VAR = char_arms("drivaerml_volume_a2.json")
 vrat = lambda arch, f: VAR[arch]["native"][f]["mean"] / VAR["ISLA"]["native"][f]["mean"]
 isla_posed = max(abs(shift("ISLA", f, "posed") - 1) for f, _ in FIELDS)
 b_posed = [rat(a, f, "posed") for a in BASELINES for f, _ in FIELDS]

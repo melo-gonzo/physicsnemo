@@ -1,9 +1,9 @@
 # PLAID Tensile2d {#sec-tensile2d}
 
-**Tensile2d is the first solid in the book and the dataset on which the component clause of the output contract binds: its targets are the components of a stress tensor, which ISLA predicts as a tensor and the recipe reads off. At 400 training specimens GeoTransolver and Transolver lead ISLA on stress, displacement and plastic strain on the native mesh; rotated and translated in the plane, ISLA's error shifts by a few percent while the baselines' rise to the mean-field level.** The chapter follows the shared layout: the problem and its diversity, what is measured, the three architectures under their reference configurations on the native mesh and rotated and translated, the controls that belong to this dataset, and what the dataset does not say. The pose contract is exercised here in its tensor form (@sec-pose, @sec-isla-heads); the boundary sampling law cannot be separated on this dataset, because the polyline's segments are nearly equal in length, while thinning the polyline multiplies ISLA's stress and displacement errors (@sec-tensile2d-boundary-law). Protocol: @sec-protocol; every ratio is baseline ÷ ISLA, above one favoring ISLA.
+**Tensile2d is the first solid in the book and the dataset on which the component clause of the output contract binds: its targets are the components of a stress tensor, which ISLA predicts as a tensor and the recipe reads off. At 400 training specimens GeoTransolver leads ISLA on stress and displacement on the native mesh and is level with it on plastic strain, and Transolver leads on displacement and plastic strain and is level on stress; rotated and translated in the plane, ISLA's stress and displacement errors shift by 6 to 12 percent while the baselines' rise to the mean-field level.** The chapter follows the shared layout: the problem and its diversity, what is measured, the three architectures under their reference configurations on the native mesh and rotated and translated, the controls that belong to this dataset, and what the dataset does not say. The pose contract is exercised here in its tensor form (@sec-pose, @sec-isla-heads); the boundary sampling law cannot be separated on this dataset, because the polyline's segments are nearly equal in length, while thinning the polyline multiplies ISLA's stress and displacement errors (@sec-tensile2d-boundary-law). Protocol: @sec-protocol; every ratio is baseline ÷ ISLA, above one favoring ISLA.
 
 ::: {.callout-warning title="Trained with the raw slice reads"}
-The trained checkpoints behind this chapter's numbers and pictures use the raw slice reads, in which the slice sublayer pools and broadcasts the raw token state rather than its LayerNorm, not the normalized reads of ISLA's reference configuration (@sec-isla-layer).
+ISLA's standing (@tbl-tensile2d-protocols) comes from checkpoints trained with the normalized slice reads of ISLA's reference configuration (@sec-isla-layer). The boundary draw at a reduced budget (@tbl-tensile2d-area2), ISLA's parameter count and its training cost come from lanes trained with the raw slice reads, in which the slice sublayer pools and broadcasts the raw token state rather than its LayerNorm.
 :::
 
 ```{python}
@@ -103,7 +103,7 @@ def fmt_ratio(r):
     """A ratio as the book writes it: two decimals near one, one decimal to ten, none above."""
     return f"{r:.0f}x" if r >= 10 else f"{r:.1f}x" if r >= 2 else f"{r:.2f}"
 seeds_of = lambda cell: list(cell["per_seed"].values())
-CH, AR = char_arms("tensile2d.json")
+CH, AR = char_arms("tensile2d_a2.json")
 BASELINES = ("GeoTransolver", "Transolver")
 T2D_FIELDS = list(CH["fields"].items())
 rat = lambda arch, f, pk="native": AR[arch][pk][f]["mean"] / AR["ISLA"][pk][f]["mean"]
@@ -305,7 +305,13 @@ input scalars but no output fields; the converter writes them under
   scored on `val_100`.
 - **Pitfalls.** `q` is heavy-tailed under z-scoring (the per-case maximum
   ranges over four decades in `train_400`), so its ratios are orderings
-  under that standardization and not physical percentages. A stress
+  under that standardization and not physical percentages. Most specimens
+  never yield: on 69 of the 100 specimens of `val_100` `q` is identically
+  zero, which the standardization maps to the constant −0.0211
+  ($-1.73\times10^{-7} / 8.18\times10^{-6}$), so on those specimens the
+  relative error of `q` is the model's absolute error divided by 0.0211,
+  the size of a constant offset rather than an error in a plastic field,
+  and they dominate the mean over the specimens. A stress
   component is a view of a tensor, not a channel: a scalar head is
   invariant under rotation and cannot follow a component that rotates, so
   the head must produce the tensor (@sec-isla-heads). The leaderboard's
@@ -356,14 +362,19 @@ print("**Cost.** Training on this task, one epoch at the reference configuration
 #| label: tensile2d-lede
 #| output: asis
 sd = [rat(a, f) for a in BASELINES for f in ("stress_l2", "displacement_l2")]
+mixed = [f"{a}'s {lab}" for a in BASELINES for f, lab in (("stress_l2", "stress"), ("displacement_l2", "displacement")) if standing(a, f) != "trails"]
+seed_txt = ("every baseline seed below every ISLA seed" if not mixed else
+            f"every baseline seed below every ISLA seed except on {' and '.join(mixed)}, where the seeds interleave")
+posed_isla_seeds = [p / n for f in ("stress_l2", "displacement_l2") for p, n in zip(seeds_of(AR["ISLA"]["posed"][f]), seeds_of(AR["ISLA"]["native"][f]))]
 q = {a: rat(a, "q_l2") for a in BASELINES}
 posed_isla = {f: shift("ISLA", f, "posed") for f, _ in T2D_FIELDS}
 posed_b = [AR[a]["posed"][f]["mean"] for a in BASELINES for f, _ in T2D_FIELDS]
 print(f"**On PLAID Tensile2d at 400 training specimens GeoTransolver width 256 and Transolver width 512 with 16 layers lead ISLA on the "
-      f"stress tensor and the displacement on the native mesh, baseline ÷ ISLA {min(sd):.2f} to {max(sd):.2f}, every baseline seed below every "
-      f"ISLA seed; on the plastic strain ISLA {standing('GeoTransolver', 'q_l2')} GeoTransolver ({q['GeoTransolver']:.2f}) and "
-      f"{standing('Transolver', 'q_l2')} Transolver ({q['Transolver']:.2f}). Rotated and translated in the plane, ISLA's errors are within "
-      f"{100 * max(abs(v - 1) for v in posed_isla.values()):.1f}% of its native values, while the baselines' rise to {min(posed_b):.1f} to "
+      f"stress tensor and the displacement on the native mesh by their seed means, baseline ÷ ISLA {min(sd):.2f} to {max(sd):.2f}, {seed_txt}; "
+      f"on the plastic strain ISLA {standing('GeoTransolver', 'q_l2')} GeoTransolver ({q['GeoTransolver']:.2f}) and "
+      f"{standing('Transolver', 'q_l2')} Transolver ({q['Transolver']:.2f}). Rotated and translated in the plane, ISLA's stress and displacement "
+      f"errors are {min(posed_isla_seeds):.2f} to {max(posed_isla_seeds):.2f} of its native values per seed and its plastic-strain error "
+      f"{posed_isla['q_l2']:.3f}, while the baselines' rise to {min(posed_b):.1f} to "
       f"{max(posed_b):.1f}, the mean-field level and above.** Tensile2d (@sec-data-tensile2d) is two-dimensional elasto-viscoplastic tension: per case the "
       "notch geometry, a load $P$ on the top edge and five constitutive scalars vary, and the targets are the in-plane stress tensor, "
       "the displacement and the cumulated plastic strain. @tbl-tensile2d-protocols is the standing; every number below is read from it.")
@@ -372,7 +383,7 @@ print(f"**On PLAID Tensile2d at 400 training specimens GeoTransolver width 256 a
 ```{python}
 #| label: tbl-tensile2d-protocols
 #| output: asis
-protocol_table("tensile2d.json", "tbl-tensile2d-protocols", "PLAID Tensile2d at 400 training specimens")
+protocol_table("tensile2d_a2.json", "tbl-tensile2d-protocols", "PLAID Tensile2d at 400 training specimens")
 ```
 
 ```{python}
@@ -385,21 +396,22 @@ gt_native = " / ".join(f"{rat('GeoTransolver', f):.2f}" for f, _ in T2D_FIELDS)
 t_native = " / ".join(f"{rat('Transolver', f):.2f}" for f, _ in T2D_FIELDS)
 field_labels = " / ".join(lab for _, lab in T2D_FIELDS)
 print(f"Two readings. First, the native column: GeoTransolver ÷ ISLA {gt_native} and Transolver ÷ ISLA {t_native} ({field_labels}). "
-      "Both baselines lead on the two load-bearing fields, stress and displacement, on a problem whose boundary is a few hundred segments "
-      "and whose parameters enter as six global scalars, and at a fraction of ISLA's parameters; this is the clearest standing against ISLA "
-      "in the book and the one that most needs a located mechanism (@sec-limits-datasets). The plastic strain is a near-zero field whose "
+      "Both baselines lead on the two load-bearing fields, stress and displacement, by their seed means, on a problem whose boundary is a "
+      "few hundred segments and whose parameters enter as six global scalars, and at a fraction of ISLA's parameters; this is the standing "
+      "against ISLA in the book that most needs a located mechanism (@sec-limits-datasets). The plastic strain is a near-zero field whose "
       f"relative error is set by the few yielded nodes, and there ISLA {standing('GeoTransolver', 'q_l2')} GeoTransolver "
       f"(seeds {' and '.join(f'{v:.3f}' for v in seeds_of(AR['GeoTransolver']['native']['q_l2']))} against ISLA's "
-      f"{' and '.join(f'{v:.3f}' for v in seeds_of(AR['ISLA']['native']['q_l2']))}) and {standing('Transolver', 'q_l2')} Transolver. "
-      "Second, the rotated and "
+      f"{' and '.join(f'{v:.3f}' for v in seeds_of(AR['ISLA']['native']['q_l2']))}) and {standing('Transolver', 'q_l2')} Transolver; "
+      "most of that mean comes from the specimens that never yield, whose relative error measures a constant offset (@sec-data-tensile2d), "
+      "so the plastic-strain column is an ordering on that metric and not a reading of the plastic field. Second, the rotated and "
       f"translated column: ISLA's stress error is {posed_isla['stress_l2']:.3f} of its native value (per seed "
       f"{' and '.join(f'{v:.3f}' for v in per_seed_shift)}), its displacement error {posed_isla['displacement_l2']:.3f} and its plastic-strain "
-      f"error {posed_isla['q_l2']:.3f}: the contract holds to within {100 * max(abs(v - 1) for v in posed_isla.values()):.1f}% on this "
+      f"error {posed_isla['q_l2']:.3f}: the contract is off by up to {100 * max(abs(v - 1) for v in posed_isla.values()):.1f}% on this "
       "structured mesh, where the DrivAerML and AirfRANS interior tasks read 1.000 (@tbl-drivaerml-volume-protocols, "
-      "@tbl-airfrans-protocols). The shift is not exactly zero because each query reads its nearest boundary sample, which is a "
-      "discontinuous function of position: on a structured finite-element mesh many nodes are equidistant from two boundary segments to "
-      "within roundoff, a generic rotation changes which one is nearest, and at the specimen's corners the two candidates carry different "
-      "normals; the same construction is measured in detail on the lug (@sec-interior-lug, @sec-limits-ties), and the size of the shift is "
+      "@tbl-airfrans-protocols). The shift is not zero because each query reads its nearest boundary sample, which is a "
+      "discontinuous function of position: on this mesh 2.2% of the nodes have two boundary samples equally near to within roundoff, mostly "
+      "at the junction of two collinear segments, where a generic rotation changes which one is nearest and the direction feature to it "
+      "flips sign; the same construction is measured in detail on the lug (@sec-interior-lug, @sec-limits-ties), and the size of the shift is "
       "a property of the trained model. The baselines' stress and displacement errors rise to "
       f"{fmt_ratio(min(b_posed_over_native))} to {fmt_ratio(max(b_posed_over_native))} their native values: a model that reads laboratory "
       "coordinates and trained without augmentation has no answer for a rotated specimen, and a scalar head for each stress component "
@@ -445,10 +457,10 @@ sd_r = [v for f in ("stress_l2", "displacement_l2") for v in x_of(f, "r")]
 print(f"**Thinning the Tensile2d boundary multiplies ISLA's errors and the law of the draw does not, because on this polyline the two laws "
       f"are nearly the same draw: with every condition-labelled segment kept and about 100 of the others drawn, ISLA's stress and "
       f"displacement errors are {min(sd_c):.0f} to {max(sd_c):.0f} times native, and drawing the others in proportion to length instead of "
-      f"uniformly changes them by a factor of {min(sd_r):.2f} to {max(sd_r):.2f}.** The ISLA checkpoints of @tbl-tensile2d-protocols were "
-      f"scored on the {N_VAL} validation specimens with the polyline replaced by all 201 of its condition-labelled segments "
+      f"uniformly changes them by a factor of {min(sd_r):.2f} to {max(sd_r):.2f}.** Two ISLA checkpoints of width 512 with 512 slices, trained "
+      f"with the raw slice reads, were scored on the {N_VAL} validation specimens with the polyline replaced by all 201 of its condition-labelled segments "
       "and an expected 100 of the other 241 to 295, drawn three ways; the nodes, the targets and the global scalars are the same in every "
-      "draw (@tbl-tensile2d-area2). The segments are nearly equal in length (@sec-nb-char-area2-verdict), so the length-proportional and "
+      "draw (@tbl-tensile2d-area2). The segments are nearly equal in length, so the length-proportional and "
       "uniform draws keep almost the same segments, and the law is not separable here. GeoTransolver and Transolver were not scored, "
       "because they read no boundary sample; the reading is ISLA's alone.")
 ```
@@ -456,7 +468,7 @@ print(f"**Thinning the Tensile2d boundary multiplies ISLA's errors and the law o
 ```{python}
 #| label: tbl-tensile2d-area2
 #| output: asis
-area2_table("tensile2d", T2D_FIELDS, "tbl-tensile2d-area2", f"PLAID Tensile2d, ISLA width 512 with 512 slices, {N_VAL} validation specimens, "
+area2_table("tensile2d", T2D_FIELDS, "tbl-tensile2d-area2", f"PLAID Tensile2d, ISLA width 512 with 512 slices trained with the raw slice reads, {N_VAL} validation specimens, "
             "the boundary polyline drawn as its 201 condition-labelled segments plus an expected 100 of the others; the nodes are the same "
             "in every draw.")
 ```
@@ -475,4 +487,4 @@ print(f"The plastic strain is the one field whose area ÷ uniform leaves 1.05 ({
 
 ## What this dataset does not say {#sec-tensile2d-limits}
 
-**Tensile2d measures the general interface on a planar solid with six global scalars and a tensor target, and the pose contract in its tensor form; it does not measure the boundary sampling law, and its geometry family is one tension specimen.** The two laws are nearly the same draw on this polyline and only ISLA reads it, so the one discretization reading here is ISLA's count effect (@sec-tensile2d-boundary-law), and independence of the sampling law stays with the surface datasets (@sec-invariances); the notch moves and widens but the outline stays a tension specimen, so a lead or a deficit here says nothing about a change of geometry class. The baselines' lead on stress and displacement is the open standing on the solids and the one that most needs a located mechanism (@sec-limits-datasets); the three configurations are the reference configurations as shipped, with the parameter counts of @sec-tensile2d-measured, and are not matched in step time or memory. ISLA's residual shift under a generic in-plane pose is within 2 percent on every field and seed here (seed means 0.997 to 1.010; single cases up to 64 percent) and has the nearest-sample mechanism measured on the lug, not on this dataset.
+**Tensile2d measures the general interface on a planar solid with six global scalars and a tensor target, and the pose contract in its tensor form; it does not measure the boundary sampling law, and its geometry family is one tension specimen.** The two laws are nearly the same draw on this polyline and only ISLA reads it, so the one discretization reading here is ISLA's count effect (@sec-tensile2d-boundary-law), and independence of the sampling law stays with the surface datasets (@sec-invariances); the notch moves and widens but the outline stays a tension specimen, so a lead or a deficit here says nothing about a change of geometry class. The baselines' lead on stress and displacement is the open standing on the solids and the one that most needs a located mechanism (@sec-limits-datasets); the three configurations are the reference configurations as shipped, with the parameter counts of @sec-tensile2d-measured, and are not matched in step time or memory. ISLA's residual shift under a generic in-plane pose is `{python} f"{min(posed_isla_seeds):.2f}"` to `{python} f"{max(posed_isla_seeds):.2f}"` of native on stress and displacement per seed, and is read as the nearest-sample tie mechanism measured on the lug. The plastic-strain readings are dominated by specimens that never yield, so they rank the architectures on a constant-offset metric and say little about the plastic field.
