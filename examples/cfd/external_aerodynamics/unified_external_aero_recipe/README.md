@@ -295,7 +295,7 @@ Available models and datasets:
 
 | Group | Files |
 |---|---|
-| `model/` (`conf/model/*.yaml`) | `geotransolver_{surface,volume,volume_highlift}`, `transolver_{surface,volume}`, `flare_{surface,volume}`, `globe_{surface,volume}`, `isla_{surface,volume,volume_sdf}`, `domino_{surface,volume}` |
+| `model/` (`conf/model/*.yaml`) | `geotransolver_{surface,volume,volume_highlift}`, `transolver_{surface,volume}`, `flare_{surface,volume}`, `globe_{surface,volume}`, `isla_{surface,volume}`, `domino_{surface,volume}` |
 | `dataset/` (`datasets/*.yaml`) | `drivaer_ml_{surface,volume,volume_reference}`, `highlift_{surface,volume}`, `shift_suv_{estate,fastback}_surface` |
 
 Pick one of each on the CLI:
@@ -436,9 +436,8 @@ for the reader's cap, `dataset_drop_transforms` for the uniform twins'
 `SubsampleMesh` and the SDF passes only GeoTransolver reads; a model config's
 `dataset_drop_transforms` removes every dataset transform of a named class).
 On AirfRANS, Tensile2d and the lug the boundary is below the budget and every
-cell is a token. `isla_volume_sdf.yaml` declares the dataset's stored
-`sdf` (rank 0) and `sdf_normals` (rank 1) as `query_schema` fields, read from
-`interior.point_data`, for the internal-versus-stored geometry measurement.
+cell is a token. No ISLA config reads a dataset's stored `sdf` or
+`sdf_normals`: those are the baselines' inputs.
 
 **Boundary orientation.** The datasets store their boundaries with different
 windings: DrivAerML's vehicle is wound into the body, AeroZoo's four

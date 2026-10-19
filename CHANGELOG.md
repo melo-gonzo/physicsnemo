@@ -73,7 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `forward` are keyword-only. An exact fused Triton kernel for the per-layer
   geometry region is selected automatically on CUDA. The unified
   external-aerodynamics recipe gains ISLA model configs (`isla_surface`,
-  `isla_volume`, `isla_volume_sdf`).
+  `isla_volume`).
 - Mesh readers load saved meshes with `tensordict` memory maps opened
   read-only (`physicsnemo.datapipes.readers.mesh.read_only_memory_maps`), so
   page faults on a networked file system no longer take write extent locks

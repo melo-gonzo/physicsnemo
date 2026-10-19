@@ -892,8 +892,9 @@ without = [n for n in interior_cfgs if n not in with_sdf]
 fmt = lambda xs: ", ".join(f"`{x}`" for x in xs)
 print(f"A dataset that stores a full-mesh signed-distance field and its gradient may pass them as ordinary `query_schema` "
       f"fields (`sdf`, rank 0, and `sdf_normals`, rank 1), and the model's own geometry is computed regardless. Of the recipe's "
-      f"interior ISLA configurations, {fmt(with_sdf)} declare them and {fmt(without)} do not (read from "
-      f"`conf/model/` as the page renders).")
+      f"interior ISLA configurations, "
+      + (f"{fmt(with_sdf)} declare them and {fmt(without)} do not" if with_sdf else f"none declares them ({fmt(without)})")
+      + " (read from `conf/model/` as the page renders).")
 ```
 
 ::: {.callout-note collapse="true" title="The wall geometry in the code"}
