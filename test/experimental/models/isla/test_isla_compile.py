@@ -31,6 +31,7 @@ import copy
 import pytest
 import torch
 from tensordict import TensorDict
+from torch._inductor.utils import fresh_cache
 
 from physicsnemo.experimental.models import ISLA
 from test.experimental.models.isla._meshes import cloud, outputs, points_mesh, soup
@@ -179,20 +180,16 @@ def test_whole_model_does_not_guard_on_the_key_order_of_its_inputs():
             compiled(**case)
 
 
-def test_the_in_model_boundary_draw_compiles_once_across_the_budget():
-    """An interior model whose boundary_tokens (60) lies between the cases' cell
-    counts (64, 111 and 50 cells over two conditions): the compiled model, in
-    evaluation (the fixed start), gives the eager outputs with one graph, whether
-    the cells are sampled down to the budget or all kept. In training (a start from
-    the global RNG inside the graph) it compiles once more and then reuses that
-    graph.
+#: Cases on both sides of the interior budget of :func:`_budget_model` (60 tokens):
+#: 64, 111 and 50 boundary cells over two conditions.
+BUDGET_SIZES = [({"inlet": 23, "wall": 41}, 57), ({"inlet": 31, "wall": 80}, 45), ({"inlet": 20, "wall": 30}, 40)]
 
-    The token count is ``Min(budget, cells)``. Inductor's FX-graph cache, replaying
-    a cached graph whose guards hold that ``Min`` (here the CPU code generator's
-    accumulator test, token count at most 4,096), splits it into a guard on one side
-    of the budget, so the test compiles without that cache."""
-    torch._dynamo.reset()
-    model = ISLA(
+
+def _budget_model() -> ISLA:
+    """An interior model whose boundary_tokens (60) lies between the cell counts
+    of BUDGET_SIZES, in evaluation (the draw's fixed start)."""
+    torch.manual_seed(0)
+    return ISLA(
         output_schema=PV,
         boundary_schemas=SCHEMAS["interior"],
         global_schema={"g": {"rank": 1}, "re": {"rank": 0}},
@@ -202,21 +199,46 @@ def test_the_in_model_boundary_draw_compiles_once_across_the_budget():
         n_layers=2,
         n_slices=8,
     ).eval()
+
+
+def test_the_in_model_boundary_draw_compiles_once_across_the_budget():
+    """The compiled model, in evaluation (the fixed start), gives the eager outputs
+    with one graph, whether the cells are sampled down to the budget or all kept.
+    In training (a start from the global RNG inside the graph) it compiles once
+    more and then reuses that graph."""
+    torch._dynamo.reset()
+    model = _budget_model()
     eager = copy.deepcopy(model)  # never called under compile: no shared module state
     compiled = torch.compile(model, fullgraph=True, dynamic=True)
-    sizes = [({"inlet": 23, "wall": 41}, 57), ({"inlet": 31, "wall": 80}, 45), ({"inlet": 20, "wall": 30}, 40)]
-    no_cache = torch._inductor.config.patch(fx_graph_cache=False)
-    for i, (s, nq) in enumerate(sizes):
+    for i, (s, nq) in enumerate(BUDGET_SIZES):
         case = _case("interior", s, nq, "cpu", seed=i)
-        with torch.no_grad(), no_cache, torch._dynamo.config.patch(error_on_recompile=i > 0):
+        with torch.no_grad(), torch._dynamo.config.patch(error_on_recompile=i > 0):
             out = outputs(compiled(**case))
         with torch.no_grad():
             ref = outputs(eager(**case))
         for k in ref:
             _assert_close(out[k], ref[k], "cpu")
     model.train()
-    for i, (s, nq) in enumerate(sizes):
+    for i, (s, nq) in enumerate(BUDGET_SIZES):
         case = _case("interior", s, nq, "cpu", seed=i)
-        with no_cache, torch._dynamo.config.patch(error_on_recompile=i > 0):
+        with torch._dynamo.config.patch(error_on_recompile=i > 0):
             out = outputs(compiled(**case))
         assert all(torch.isfinite(v).all() for v in out.values())
+
+
+def test_a_warm_compile_cache_reuses_the_graph_across_the_budget():
+    """A second run on the first run's Inductor cache (a cache hit on its first
+    case) compiles no second graph for the cases on the other side of the budget.
+
+    Inductor's FX-graph cache replays a cached graph's shape guards on the new
+    run's symbolic sizes, evaluating them as Python code in which a ``Min`` of
+    the sizes is the builtin ``min``: its comparison fixed the token count's
+    ``Min(cells, budget)`` to one side of the budget (a recompile on the other)."""
+    with fresh_cache():
+        for sizes in (BUDGET_SIZES[:1], BUDGET_SIZES):  # cold, then warm
+            torch._dynamo.reset()
+            compiled = torch.compile(_budget_model(), fullgraph=True, dynamic=True)
+            for i, (s, nq) in enumerate(sizes):
+                case = _case("interior", s, nq, "cpu", seed=i)
+                with torch.no_grad(), torch._dynamo.config.patch(error_on_recompile=i > 0):
+                    compiled(**case)

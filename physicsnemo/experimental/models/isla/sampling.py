@@ -135,7 +135,11 @@ def sample_boundary_cells(
         pi = torch.cat(pis)
         order = torch.cat(orders)
         total = sum(m.shape[0] for m in measures)
-        k = torch.sym_min(total, budget)
+        ### k = min(total, budget) in integer division: 1 // (total // budget + 1)
+        ### is 1 when every cell is kept, else 0. A symbolic Min would be fixed to
+        ### one side of the budget when Inductor's FX-graph cache replays the guards
+        ### that hold it (evaluated with the builtin min), a recompile on the other.
+        k = budget + (total - budget) * (1 // (total // budget + 1))
         line = pi[order].cumsum(0)
         hits = start + torch.arange(k, device=pi.device, dtype=pi.dtype)
         position = torch.searchsorted(line, hits, right=True).clamp_max(total - 1)
