@@ -254,6 +254,20 @@ def test_isla_volume_sdf_declares_the_stored_sdf_as_query_inputs():
         )
 
 
+@pytest.mark.parametrize(
+    "model",
+    ["isla_volume", "isla_volume_aerozoo", "isla_volume_airfrans", "isla_tensile2d", "isla_lug"],
+)
+def test_the_interior_configs_read_no_stored_wall_geometry(model):
+    """One input contract: an interior ISLA computes its prediction points' wall
+    distance and direction itself, exactly, from the boundary meshes, so its
+    reference configs declare no query inputs and the dataset's stored sdf and
+    sdf_normals (the baselines' inputs) are not read."""
+    cfg = _compose(model, "drivaer_ml_volume_reference", *SMALL)
+    assert cfg.model.interior is True
+    assert cfg.model.get("query_schema") is None
+
+
 def test_isla_volume_composes_with_the_corrected_measure_dataset():
     """The volume pipeline materializes the boundary measure ISLA reads from cell_data."""
     ds = OmegaConf.load(_RECIPE_ROOT / "datasets" / "drivaer_ml_volume_reference.yaml")

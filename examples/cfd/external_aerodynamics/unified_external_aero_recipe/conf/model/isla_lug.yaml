@@ -20,8 +20,9 @@
 # dataset labels by condition (bc_fixed, bc_hole, bc_loaded); SplitBoundaryByLabels (dataset_append_transforms below, for this
 # model only) splits it into four named boundary conditions (boundary_schemas): the clamped face, the loaded half of the hole
 # with its applied pressure, the rest of the hole and the free surface, together the same cells. The four design parameters
-# enter as named rank-0 global inputs (the dataset's SplitGlobalVector standardizes `params` and splits it), and the stored
-# signed distance and its gradient as per-query inputs (query_schema), the same wall geometry the tensor-input baselines read. The lug has no global direction, so the fused
+# enter as named rank-0 global inputs (the dataset's SplitGlobalVector standardizes `params` and splits it). No query_schema:
+# each node's distance and direction to the surface are computed inside the model, exactly, from the boundary meshes, so the
+# dataset's stored sdf and sdf_normals (the baselines' inputs) are not read. The lug has no global direction, so the fused
 # geometry kernel (which needs one) does not apply and the model runs the eager region.
 input_type: mesh
 output_type: mesh
@@ -51,7 +52,7 @@ forward_kwargs:
     hole: boundaries.hole
     loaded: boundaries.loaded
     free: boundaries.free
-  prediction_points: interior     # the lug's mesh nodes as a point cloud; point_data carries the query_schema fields
+  prediction_points: interior     # the lug's mesh nodes as a point cloud
   global_data: global_data        # the case's TensorDict; the model selects its declared leaves
 
 model:
@@ -64,9 +65,6 @@ model:
     loaded:                       # the pressure-loaded half of the hole
       bc_pressure: {rank: 0}      # the applied pressure (scaled to O(1) by the dataset config)
     free: {}                      # the traction-free rest of the surface
-  query_schema:
-    sdf: {rank: 0}                # the stored signed distance (a length, scaled by the frame's length unit inside the model)
-    sdf_normals: {rank: 1}        # the stored SDF gradient
   global_schema:                  # the standardized design parameters, one rank-0 field each (SplitGlobalVector)
     hole_radius_std: {rank: 0}
     length_std: {rank: 0}

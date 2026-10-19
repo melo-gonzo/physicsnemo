@@ -16,12 +16,12 @@
 # limitations under the License.
 
 # ISLA, interior task, on AirfRANS (airfrans_volume_2d): the reference configuration of isla_volume.yaml in two
-# dimensions, with the airfoil boundary, the inlet direction and speed as global inputs and the stored signed
-# distance and its gradient as per-query inputs.
+# dimensions, with the airfoil boundary and the inlet direction and speed as global inputs.
 
-# The mesh contract is that of isla_volume.yaml; unlike it, this config also
-# reads the dataset's stored sdf and sdf_normals as query inputs. The AirfRANS
-# files read the airfoil whole (843 to 1,217 segments, normals pointing into the
+# The mesh contract is that of isla_volume.yaml: no query_schema, so the dataset's
+# stored sdf and sdf_normals (the baselines' inputs) are not read; each prediction
+# point's distance and direction to the airfoil are computed inside the model,
+# exactly, from the boundary mesh. The AirfRANS files read the airfoil whole (843 to 1,217 segments, normals pointing into the
 # fluid), which is the surface of the prediction points' exact geometry; it is
 # below the 200,000-token budget, so every segment is a boundary token with its
 # own length.
@@ -46,7 +46,7 @@ compile_options:
 forward_kwargs:
   boundary_meshes:
     airfoil: boundaries.airfoil       # Mesh[1, 2] after RestrictToPlane: line cells with in-plane normals and segment lengths
-  prediction_points: interior         # the interior point-cloud Mesh (its point_data carries any query_schema fields)
+  prediction_points: interior         # the interior point-cloud Mesh
   global_data: global_data            # the case's TensorDict; the model selects its declared leaves
 
 model:
@@ -60,9 +60,6 @@ model:
   global_schema:
     U_inf_dir: {rank: 1}         # the unit inlet direction, read from global_data.U_inf_dir
     U_inf_mag: {rank: 0}         # the inlet speed, a rank-0 global input (the Reynolds number varies across cases)
-  query_schema:
-    sdf: {rank: 0}               # the stored signed distance to the airfoil (a length, scaled by the frame's length unit inside the model)
-    sdf_normals: {rank: 1}       # the stored SDF gradient, in the plane after RestrictToPlane
   dim: 2                         # the problem is planar: pair with datasets/airfrans_volume_2d.yaml (RestrictToPlane first in its pipeline)
   interior: true                 # predict at prediction_points, which join the encoder as tokens
   boundary_tokens: 200000        # boundary tokens drawn per case inside the model (equal to the class default; the airfoil is kept whole)
