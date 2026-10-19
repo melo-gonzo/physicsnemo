@@ -71,7 +71,7 @@ def protocol_dots(st, fields, protos=None):
 word = {"leads": "ISLA leads {b}", "trails": "{b} leads ISLA", "is level with": "ISLA is level with {b}",
         "is not compared with": "ISLA is not compared with {b}"}
 print(f"The three architectures are {S.CONFIG['ISLA']}, {S.CONFIG['GeoTransolver']} and {S.CONFIG['Transolver']}, each at its reference "
-      "configuration (@sec-protocol). In one paragraph: within the estate family, on the native mesh, "
+      "configuration (@sec-selection). In one paragraph: within the estate family, on the native mesh, "
       + "; ".join(f"on {SUV.fields[f]} " + " and ".join(word[SUV.verdict(b, f)].format(b=b) for b in S.BASELINES) for f in SUV_F)
       + ", by the seed rule; on a uniform point cloud and with every body rotated and translated, only ISLA keeps its error.")
 ```
