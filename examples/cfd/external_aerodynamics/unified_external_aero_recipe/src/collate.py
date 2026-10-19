@@ -28,10 +28,6 @@ two required keys and one optional key:
 - ``"target_measure"`` : optional effective quadrature measure aligned with
                           the target points. Present only when the dataset
                           transform supplied it.
-- ``"score_globals"``  : optional `TensorDict` of label leaves for scoring
-                          only (``score_space: label_reference``), never a
-                          model input. Present only when ``score_globals`` is
-                          given.
 
 Two `input_type`s are supported:
 
@@ -67,8 +63,6 @@ from jaxtyping import Float
 from output_normalize import IOType
 from tensordict import TensorDict
 from utils import FieldType
-
-from physicsnemo.datapipes.keys import as_nested_key
 
 ### ---------------------------------------------------------------------------
 ### Batch-dim helpers
@@ -122,7 +116,6 @@ def build_collate_fn(
     input_type: IOType,
     forward_kwargs_spec: dict[str, Any],
     target_config: dict[str, FieldType],
-    score_globals: dict[str, str | float] | None = None,
 ) -> Callable[[list[tuple[Any, Any]]], dict[str, Any]]:
     """Build a collate function for a given model contract.
 
@@ -136,9 +129,6 @@ def build_collate_fn(
         target_config: ``{name: scalar|vector}`` mapping. Only the keys
             are used here -- types are validated downstream by the loss
             and metric calculators.
-        score_globals: ``{name: global_data leaf path | number}``; when
-            given, ``batch["score_globals"]`` holds those leaves (float32,
-            no batch dim) for the scorer, beside the forward kwargs.
 
     Returns:
         A collate function suitable for ``DataLoader(collate_fn=...)``.
@@ -186,15 +176,6 @@ def build_collate_fn(
         batch = {"forward_kwargs": forward_kwargs, "targets": targets}
         if target_measure is not None:
             batch["target_measure"] = target_measure
-        if score_globals is not None:
-            batch["score_globals"] = TensorDict(
-                {
-                    name: torch.tensor(float(path))
-                    if isinstance(path, (int, float))
-                    else domain.global_data[as_nested_key(path)].float()
-                    for name, path in score_globals.items()
-                }
-            )
         return batch
 
     return collate_fn

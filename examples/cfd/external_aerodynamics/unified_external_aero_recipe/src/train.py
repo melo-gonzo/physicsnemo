@@ -43,10 +43,9 @@ import hydra
 import torch
 import torch.distributed as dist
 from datasets import build_dataloaders
-from infer import build_metric_calculator
 from jaxtyping import Float
 from loss import LossCalculator
-from metrics import MetricCalculator
+from metrics import MetricCalculator, resolve_metrics
 from omegaconf import DictConfig, OmegaConf
 from output_normalize import IOType, normalize_output_to_tensordict, require_output_type
 from tabulate import tabulate
@@ -267,15 +266,8 @@ def forward_pass(
     target_measure_f32 = None if target_measure is None else target_measure.float()
 
     loss, loss_td = loss_calculator(pred_f32, target_f32, target_measure_f32)
-    ### The scorer's label leaves (score_space=label_reference), never a model input.
-    score_globals = batch.get("score_globals")
     with torch.no_grad():
-        metric_td = metric_calculator(
-            pred_f32,
-            target_f32,
-            target_measure_f32,
-            **({} if score_globals is None else {"score_globals": score_globals}),
-        )
+        metric_td = metric_calculator(pred_f32, target_f32, target_measure_f32)
     ### Detach (don't sync) the per-field TDs so the caller controls when
     ### a D2H copy happens; running ``.item()`` here would serialise the
     ### forward kernels against the host. ``TensorDict.detach()`` walks
@@ -990,11 +982,13 @@ def main(cfg: DictConfig) -> None:
     ### `targets:` block by `build_dataloaders`.  The metrics list is
     ### now recipe-side: train.yaml's `cfg.metrics` is the canonical
     ### source. Falls back to the recipe's default set when unset.
-    ### With score_space=label_reference the calculator adds the label-era-space metrics.
+    metrics_list = resolve_metrics(cfg)
+
     field_weights = resolve_dict(cfg, "training.field_weights")
 
-    metric_calculator = build_metric_calculator(
-        cfg, target_config, normalizer, dataset_info
+    metric_calculator = MetricCalculator(
+        target_config=target_config,
+        metrics=metrics_list,
     )
     loss_type = cfg.training.get("loss_type", "huber")
     ### case_relative_l2 measures each case's error against its targets in the dataset's units: it reads

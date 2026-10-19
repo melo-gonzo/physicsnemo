@@ -35,7 +35,7 @@ to how many channels each field contributes.
 ``"case_relative_l2"`` is the per-case relative L2 of each field over the
 case's own targets in the dataset's units (:func:`_case_relative_l2`): with
 one constant standardization of physical targets, whose magnitudes span
-decades across cases, every case then weighs alike (AeroZoo v2, 2026-10-19).
+decades across cases, every case then weighs alike (AeroZoo, 2026-10-19).
 """
 
 from __future__ import annotations

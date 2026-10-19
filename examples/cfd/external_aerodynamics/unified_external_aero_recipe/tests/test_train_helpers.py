@@ -420,7 +420,7 @@ def _run_test_epoch(
 def test_float32_matmuls_stay_full_precision():
     """``precision=float32`` runs without autocast, and nothing the trainer or the baselines import turns
     TF32 on for matmuls (PyTorch's default: ``allow_tf32`` False, precision ``highest``), so an fp32 arm of a
-    bf16-vs-fp32 comparison is true fp32 (AZ-V2-RECIPE review, 2026-10-19)."""
+    bf16-vs-fp32 comparison is true fp32 (2026-10-19)."""
     import physicsnemo.models.geotransolver  # noqa: F401
     import physicsnemo.models.transolver  # noqa: F401
 

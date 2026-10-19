@@ -18,8 +18,8 @@
 # ---------------------------------------------------------------------------
 # GeoTransolver template -- VOLUME recipe for AeroZoo v1.2, physical inputs.
 # ---------------------------------------------------------------------------
-# AZ-COMPLIANT v2 (2026-10-19), Option B: on datasets/aerozoo_puvolume*.yaml
-# (the PDE data only, in SI units, no per-case scale) GeoTransolver sees the
+# On datasets/aerozoo_uvolume*.yaml (the PDE data only, in SI units, no
+# per-case scale; 2026-10-19) GeoTransolver sees the
 # boundary conditions through its documented geometry-features channel:
 # `geometry` is every boundary face of the case's four boundaries
 # (boundaries.merged, MergeBoundaries), each one token carrying its centroid
@@ -38,15 +38,15 @@
 # are the reference configuration's (geotransolver_volume.yaml; the CHAR rate
 # 1e-3). The released model code is unchanged: this is a choice of inputs.
 #
-# The loss is the per-case relative L2 every AeroZoo v2 arm sets
+# The loss is the per-case relative L2 every AeroZoo model sets
 # (loss.py `case_relative_l2`): each case's error per field over its own
 # physical targets' norm, so the cases weigh alike although their physical
 # magnitudes span decades. Velocity weighs 3: case_relative_l2 gives each
 # field one term (the vector's components jointly), so the weight keeps the
-# label era's channel balance, velocity's 3 components against the 4 scalars
-# (ISLA's v2 config uses the same weights). Scored and selected in the
-# label-era space (score_space: label_reference; infer.py), which needs the
-# dataset's label_reference block: these configs run on aerozoo_puvolume*.
+# channel balance of the per-component losses, velocity's 3 components
+# against the 4 scalars (ISLA's AeroZoo config is to use the same weights).
+# The targets are standardized by scale only, so the recipe's relative-L2
+# metric is the physical relative L2 of each field and case.
 dataset_reader_overrides:
   # The boundaries stay: the SDF and the merged face tokens are made from them.
   drop_in_file_boundaries: false
@@ -62,8 +62,6 @@ training:
   loss_type: case_relative_l2
   field_weights:
     velocity: 3
-
-score_space: label_reference
 
 forward_kwargs:
   geometry:

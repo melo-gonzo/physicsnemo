@@ -18,18 +18,17 @@
 # ---------------------------------------------------------------------------
 # Transolver template -- VOLUME recipe for AeroZoo v1.2, physical inputs.
 # ---------------------------------------------------------------------------
-# AZ-COMPLIANT v2 (2026-10-19): transolver_volume.yaml's inputs on
-# datasets/aerozoo_puvolume*.yaml (the PDE data only, in SI units, no per-case
-# scale). The embedding is the query point (m, raw) with its signed distance
+# transolver_volume.yaml's inputs on datasets/aerozoo_uvolume*.yaml (the PDE
+# data only, in SI units, no per-case scale; 2026-10-19). The embedding is the query point (m, raw) with its signed distance
 # and normal to the no_slip body (m), the published body-SDF input; fx is
 # log10 nu standardized by per-dataset constants (nu_std), broadcast to every
 # point, the published channel for global scalars. Transolver has only
 # per-point channels, and AeroZoo has no global freestream (any reduction of
 # the inlet faces would be derived by the recipe), so it does not see the
-# inlet velocity: a documented floor (PREREG_v2 Q2), run on `full` only.
-# The loss, its field weights and the score space are every AeroZoo v2
-# arm's (geotransolver_volume_aerozoo.yaml): case_relative_l2 with velocity
-# weighing 3 (the label era's channel balance), scored in label_reference.
+# inlet velocity: a documented floor, run on `full` only.
+# The loss and its field weights are every AeroZoo model's
+# (geotransolver_volume_aerozoo.yaml): case_relative_l2 with velocity
+# weighing 3 (the per-component losses' channel balance).
 dataset_reader_overrides:
   # The boundaries stay: the SDF to no_slip is computed from them.
   drop_in_file_boundaries: false
@@ -41,8 +40,6 @@ training:
   loss_type: case_relative_l2
   field_weights:
     velocity: 3
-
-score_space: label_reference
 
 forward_kwargs:
   embedding:

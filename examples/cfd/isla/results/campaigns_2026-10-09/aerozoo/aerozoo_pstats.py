@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Statistics for the physical-input AeroZoo files, datasets/aerozoo_puvolume*.yaml (AZ-COMPLIANT v2, 2026-10-19).
+"""Statistics for the AeroZoo dataset files, datasets/aerozoo_uvolume*.yaml (physical inputs, 2026-10-19).
 
 Every statistic is a per-dataset constant fitted on the training side of a split; nothing is per case. Numpy only.
 
@@ -9,30 +9,28 @@ boundary's token count min(F, 50,000) (SubsampleMesh's uniform draw, so the face
 
     python aerozoo_pstats.py boundary <root> <manifest.json> full.train --out b0.jsonl --start 0 --stop 400
 
-``fill`` writes a dataset file from the template (datasets/aerozoo_puvolume.yaml) with one split's statistics and
-its label-era twin (the ``label_reference`` dataset)::
+``fill`` writes a dataset file from the template (datasets/aerozoo_uvolume.yaml) with one split's statistics::
 
-    python aerozoo_pstats.py fill aerozoo_puvolume.yaml pstats_reynolds.train.json aerozoo_uvolume_reynolds \
-        aerozoo_puvolume_reynolds.yaml
+    python aerozoo_pstats.py fill aerozoo_uvolume.yaml pstats_reynolds.train.json aerozoo_uvolume_reynolds.yaml
 
 ``reduce`` pools, for one split part:
 
-* the five targets in SI units, from the label-era per-case sample lines of ``aerozoo_stats.py sample`` (the same
-  seeded 20,000 interior points per case). Those lines hold the sums of x / s and (x / s)^2 with the case's
+* the five targets in SI units, from the per-case sample lines of ``aerozoo_stats.py sample`` (the same seeded
+  20,000 interior points per case; that script nondimensionalized them by each case's reference scales). Those lines hold the sums of x / s and (x / s)^2 with the case's
   nondimensionalization scale s, and its scales, so the physical sums are s * sum and s^2 * sumsq: exact, with no
   re-read. Every target gets mean 0 and its RMS about 0 as the std (velocity: the isotropic one,
   sqrt(mean over components of E[u_c^2])), a scale-only standardization: the physical targets span decades
   across cases, and an offset would put a small case's whole field below the float32 / bf16 step of the offset
-  (supervisor, 2026-10-19). The pooled mean is kept beside it as ``mean_measured``.
+  (2026-10-19). The pooled mean is kept beside it as ``mean_measured``.
 * ``nu_std``'s constants: the mean and std over the cases of log10 nu.
 * the token standardization of the ``bc_*`` columns GeoTransolver reads (MergeBoundaries): pooled over the expected
   tokens of the four boundaries (zero where a boundary does not prescribe the field, as HarmonizeBoundaryFields
-  fills it); scale-only like the targets, for the same reason (supervisor, 2026-10-19: a slow case's inlet k of
+  fills it); scale-only like the targets, for the same reason (2026-10-19: a slow case's inlet k of
   ~1e-4 m^2/s^2 sat 1e-4 above a pooled-mean offset of 0.12, below bf16's step there), so every column has mean 0
   and its RMS about 0 as the std (vectors the isotropic one); an RMS of 0 (the gauge outlet pressure) is written
   as 1.0::
 
-    python aerozoo_pstats.py reduce --manifest manifest.json --split full.train --label-rows stats/full.*.jsonl \
+    python aerozoo_pstats.py reduce --manifest manifest.json --split full.train --target-rows stats/full.*.jsonl \
         --boundary-rows b*.jsonl --out pstats_full.train.json
 """
 
@@ -145,7 +143,7 @@ def _rows(paths, cases: set[str]) -> dict[str, dict]:
 
 
 def _scale(name: str, s: dict) -> float:
-    """The label-era nondimensionalization scale of a target (aerozoo_stats.py nondim): x_nd = x / scale."""
+    """The nondimensionalization scale of a target (aerozoo_stats.py nondim): x_nd = x / scale."""
     U, L = s["U_inf_mag"], s["L_ref"]
     return {
         "velocity": U,
@@ -185,24 +183,24 @@ def _moments(
 
 def cmd_reduce(args) -> None:
     cases = set(json.loads(Path(args.manifest).read_text())[args.split])
-    label = _rows(args.label_rows, cases)
+    targets = _rows(args.target_rows, cases)
     bnd = _rows(args.boundary_rows, cases)
-    missing = (len(cases - set(label)), len(cases - set(bnd)))
+    missing = (len(cases - set(targets)), len(cases - set(bnd)))
     if any(missing):
         raise SystemExit(
-            f"{args.split}: {missing[0]} cases without a label-era sample line, {missing[1]} without a boundary line"
+            f"{args.split}: {missing[0]} cases without a target sample line, {missing[1]} without a boundary line"
         )
     stats = {"split": args.split, "n_cases": len(cases), "targets": {}, "bc": {}}
-    n = sum(r["n"] for r in label.values())
+    n = sum(r["n"] for r in targets.values())
     stats["n_points"] = n
     for name in ("velocity", "pressure", "nut", "tke", "omega"):
         total = sum(
             _scale(name, r["scales"]) * np.asarray(r["sum"][name])
-            for r in label.values()
+            for r in targets.values()
         )
         total_sq = sum(
             _scale(name, r["scales"]) ** 2 * np.asarray(r["sumsq"][name])
-            for r in label.values()
+            for r in targets.values()
         )
         stats["targets"][name] = _moments(name, total, total_sq, n, scale_only=True)
     log_nu = np.log10([r["nu"] for r in bnd.values()])
@@ -239,7 +237,7 @@ def _fmt(x: float) -> str:
 
 
 def cmd_fill(args) -> None:
-    """Write a dataset file from the template with one split's statistics and its label-era twin."""
+    """Write a dataset file from the template with one split's statistics."""
     text = Path(args.template).read_text()
     stats = json.loads(Path(args.stats).read_text())
     value = r"(?:\[[^\]]*\]|[-+0-9.eE]+)"
@@ -263,11 +261,6 @@ def cmd_fill(args) -> None:
     )
     if n != 1:
         raise SystemExit("nu_std: expected one StandardizeGlobalLeaf block")
-    text, n = re.subn(
-        r"(\nlabel_reference:\n\s+dataset: )\S+", rf"\g<1>{args.label_dataset}", text
-    )
-    if n != 1:
-        raise SystemExit("label_reference: expected one dataset line")
     header = (
         f"# Statistics filled by aerozoo_pstats.py fill from {Path(args.stats).name}: split part {stats['split']}, "
         f"{stats['n_cases']} cases, {stats['n_points']:,} interior points, {stats['n_tokens']:,} expected boundary "
@@ -296,17 +289,13 @@ def main(argv=None) -> None:
     r = sub.add_parser("reduce")
     r.add_argument("--manifest", required=True)
     r.add_argument("--split", required=True)
-    r.add_argument("--label-rows", nargs="+", required=True)
+    r.add_argument("--target-rows", nargs="+", required=True)
     r.add_argument("--boundary-rows", nargs="+", required=True)
     r.add_argument("--out", required=True)
     r.set_defaults(func=cmd_reduce)
     f = sub.add_parser("fill")
     f.add_argument("template")
     f.add_argument("stats")
-    f.add_argument(
-        "label_dataset",
-        help="the label-era file of the same split, e.g. aerozoo_uvolume_reynolds",
-    )
     f.add_argument("out")
     f.set_defaults(func=cmd_fill)
     args = parser.parse_args(argv)

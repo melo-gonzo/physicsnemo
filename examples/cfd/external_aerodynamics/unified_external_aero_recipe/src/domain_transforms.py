@@ -37,7 +37,7 @@ Recipe-local datapipe components that the library does not provide.
   :class:`BoundaryFieldToGlobal` and :class:`ConcatGlobalFields`; and
   :class:`SplitBoundaryByLabels`, one boundary per condition for a dataset that
   labels its conditions inside one mesh.
-- Physical-input AeroZoo (v2): :class:`StandardizeGlobalLeaf`, a global PDE
+- Physical-input AeroZoo: :class:`StandardizeGlobalLeaf`, a global PDE
   parameter standardized by per-dataset constants, and :class:`MergeBoundaries`,
   the boundaries' faces as one token set for a tensor-input model.
 
@@ -1913,7 +1913,7 @@ class SplitBoundaryByLabels(MeshTransform):
 
 @register()
 class StandardizeGlobalLeaf(MeshTransform):
-    r"""Standardize one global PDE parameter by per-dataset constants (AeroZoo v2, 2026-10-19).
+    r"""Standardize one global PDE parameter by per-dataset constants (AeroZoo, 2026-10-19).
 
     ``global_data[output_field] = (f(global_data[field]) - mean) / std`` with ``f = log10`` when ``log10`` is
     set and the identity otherwise. ``mean`` and ``std`` are constants of the dataset (fitted on its training
@@ -1974,7 +1974,7 @@ class StandardizeGlobalLeaf(MeshTransform):
 
 @register()
 class MergeBoundaries(MeshTransform):
-    r"""Concatenate named boundaries, with selected ``cell_data`` fields, into one more boundary (AeroZoo v2).
+    r"""Concatenate named boundaries, with selected ``cell_data`` fields, into one more boundary (AeroZoo, 2026-10-19).
 
     ``boundaries[output]`` is the cells of ``boundaries`` in the listed order (points and cells concatenated,
     :meth:`Mesh.merge`) carrying only the ``fields`` of their ``cell_data``, which every listed boundary must

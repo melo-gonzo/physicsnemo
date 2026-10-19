@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -A coreai_modulus_cae
-#SBATCH -J azv2.pstats
+#SBATCH -J az.pstats
 #SBATCH -p cpu
 #SBATCH -q cpu-short
 #SBATCH -t 01:00:00
@@ -8,7 +8,7 @@
 #SBATCH -c 48
 #SBATCH --mem=160G
 #SBATCH -o %x.%j.out
-# AZ-V2-RECIPE (2026-10-19): per-split train-side statistics of datasets/aerozoo_puvolume*.yaml (aerozoo_pstats.py, CPU).
+# AeroZoo (2026-10-19): per-split train-side statistics of datasets/aerozoo_uvolume*.yaml (aerozoo_pstats.py, CPU).
 # Run from a directory holding a copy of aerozoo_pstats.py (LHR kernel/az_compliant/v2/recipe, job 286018). The yaml
 # files were then written with `reduce` (the targets scale-only, 2026-10-19) and `fill` on the copied rows.
 set -u
@@ -27,6 +27,6 @@ done
 wait
 echo "boundary rows: $(cat rows/*.jsonl | wc -l)"
 for split in full family_non_box reynolds bank_blobs bank_zero_to_cad profile_crossflow profile_dual_inlet; do
-  "$PY" -I aerozoo_pstats.py reduce --manifest "$MAN" --split $split.train --label-rows $T/kernel/aerozoo/stats/full.*.jsonl \
+  "$PY" -I aerozoo_pstats.py reduce --manifest "$MAN" --split $split.train --target-rows $T/kernel/aerozoo/stats/full.*.jsonl \
     --boundary-rows rows/*.jsonl --out pstats_$split.train.json
 done

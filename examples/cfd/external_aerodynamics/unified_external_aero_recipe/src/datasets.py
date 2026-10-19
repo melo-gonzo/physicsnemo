@@ -744,9 +744,7 @@ def _build_manifest_val_dataset(
 
 
 def _build_collate(
-    cfg: DictConfig,
-    target_config: dict[str, FieldType],
-    score_globals: dict[str, str | float] | None = None,
+    cfg: DictConfig, target_config: dict[str, FieldType]
 ) -> Callable[[list[tuple[Any, Any]]], dict[str, Any]]:
     """Build the per-sample collate from the model YAML's I/O contract."""
     if not target_config:
@@ -767,7 +765,6 @@ def _build_collate(
         input_type=input_type,
         forward_kwargs_spec=forward_kwargs_spec,
         target_config=target_config,
-        score_globals=score_globals,
     )
 
 
@@ -917,18 +914,6 @@ def build_dataloaders(
     using_manifests = False
     first_targets: dict[str, str] | None = None
     first_metrics: list[str] | None = None
-    ### score_space=label_reference: the primary dataset's label_reference block (AeroZoo v2) names the
-    ### label leaves the collate carries for the scorer and the label-era file whose space it maps into.
-    score_space = str(cfg.get("score_space", "training"))
-    if score_space not in ("training", "label_reference"):
-        raise ValueError(
-            f"score_space must be 'training' or 'label_reference', got {score_space!r}"
-        )
-    if score_space == "label_reference" and extras:
-        raise ValueError(
-            "score_space=label_reference scores one dataset; extra_datasets is set"
-        )
-    label_reference: dict | None = None
 
     for ds_name in dataset_names:
         config_path = recipe_root / "datasets" / f"{ds_name}.yaml"
@@ -953,13 +938,6 @@ def build_dataloaders(
         ds_yaml = _apply_dataset_reader_overrides(ds_yaml, cfg)
         ds_yaml = _apply_dataset_transform_drops(ds_yaml, cfg)
         ds_yaml = _apply_dataset_transform_appends(ds_yaml, cfg)
-        if score_space == "label_reference":
-            block = OmegaConf.select(ds_yaml, "label_reference", default=None)
-            if block is None:
-                raise ValueError(
-                    f"score_space=label_reference: dataset {ds_name!r} declares no label_reference block"
-                )
-            label_reference = OmegaConf.to_container(block, resolve=True)
 
         train_datadir = OmegaConf.select(ds_yaml, "train_datadir", default=None)
         if train_datadir and not Path(str(train_datadir)).exists():
@@ -1113,11 +1091,7 @@ def build_dataloaders(
     OmegaConf.update(cfg, "out_dim", out_dim_total, force_add=True)
 
     normalizer = find_normalizer(train_datasets)
-    collate_fn = _build_collate(
-        cfg,
-        first_targets or {},
-        None if label_reference is None else dict(label_reference["globals"]),
-    )
+    collate_fn = _build_collate(cfg, first_targets or {})
     train_dataset = _combine_datasets(train_datasets)
 
     if using_manifests:
@@ -1173,6 +1147,5 @@ def build_dataloaders(
     ### contract.
     dataset_info = {
         "targets": first_targets or {},
-        "label_reference": label_reference,
     }
     return train_loader, val_loader, normalizer, dataset_info

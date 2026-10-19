@@ -27,12 +27,6 @@ precision: "bfloat16"
 profile: false
 augment: false
 benchmark_io: false
-# The space the metrics are also reported in: `training` (the metrics on the
-# model's own standardized targets, alone) or `label_reference` (a dataset
-# that declares a `label_reference` block, the AeroZoo v2 files: the same
-# metrics after mapping predictions and targets into the label-era training
-# space, keyed label_reference/..., the scored and checkpoint-selection ones).
-score_space: training
 
 # -- Training fundamentals (the constants every loop needs, regardless
 #     of schedule) -----------------------------------------------------------
