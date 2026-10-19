@@ -6,7 +6,7 @@ quadrature (@sec-isla-quadrature). No result of the dataset chapters is assumed.
 
 **Training cells per case stop paying above 100,000, the error falls toward a floor as the model
 and the training set grow, a fitted law says how to split a compute budget between the two, and
-the cost of a training step is linear in the number of tokens.** This chapter answers the three questions an engineer asks before spending a
+the memory of a training step, and its time on the surface task, are linear in the number of tokens.** This chapter answers the three questions an engineer asks before spending a
 GPU budget on a surrogate: how many cells per case, how many parameters against how many training
 cases, and what a step costs. All three are measured on the DrivAerML Surface task, the one
 dataset with a ladder in every direction, and the scaling law is checked on HiLiftAeroML.
@@ -447,8 +447,8 @@ toward a floor at the large ones, on both datasets.
 #|   reads (@sec-study-configurations); GeoTransolver at 256, 512 and 1,024 wide, 3e-3 / 3e-3 /
 #|   1e-3. Black-edged stars: the three reference configurations at the full training set of 435
 #|   cars, a different instrument (results/char/drivaerml_surface_a2.json), offset sideways for
-#|   legibility; the HiLiftAeroML panel carries them only where its standing compares the
-#|   architectures (@sec-oq-unit-direction). How to read this: the
+#|   legibility; the HiLiftAeroML panel carries none while its standing is not compared
+#|   (@sec-oq-unit-direction). How to read this: the
 #|   vertical spread between shades is what parameters buy at one training-set size; the slope is
 #|   what cases buy. Both axes are logarithmic. Data: results/scalelaw_2026-10-08.json.
 #| fig-alt: "Two stacked log-log scatters of pressure error against training cases, DrivAerML above and HiLiftAeroML below; three blue shades for ISLA widths and three red shades for GeoTransolver widths, dotted fitted curves bending toward a floor, and stars for the reference configurations."
@@ -957,7 +957,9 @@ print(f"Three readings follow. At {i25['tokens']:,} tokens ISLA's step ({i25['st
 
 ::: {.callout-tip title="Choosing a token budget"}
 Train at 100,000 to 200,000 cells per case: the error has saturated (@tbl-cells-ladder) and the
-step is in the linear regime, so the token budget sets memory and time in proportion. Below
+step is in the linear regime, so the token budget sets memory in proportion, and time as well on
+the surface task; on the volume task ISLA's step time grows faster than the token count
+(@sec-cost-sweep). Below
 100,000 tokens the fixed part of a step weighs more, so a token costs more, and below 100,000 cells ISLA pays the
 quadrature-noise penalty of @sec-deficit-anatomy; if a small budget is forced, score with the
 stratified sampler (@sec-using-sampler).

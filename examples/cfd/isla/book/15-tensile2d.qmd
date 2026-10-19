@@ -417,10 +417,15 @@ plt.show()
 #| label: para-tensile2d-ties
 #| output: asis
 ch = [r["nearest_changes_under_pose_fraction"] for r in TT.values()]
+rg = f"{T1['float32_rounding_rel_gap_median']:.0e}".replace("e-0", "e-")   # median float32 rounding band of the relative gap
 print(f"**The counts, on the seven specimens the chapter draws.** {100 * min(ch):.1f}% to {100 * max(ch):.1f}% of the nodes change their "
       f"nearest sample under one generic pose. On the validation specimen of @fig-problem-tensile2d that is "
       f"{T1['nearest_changes_under_pose_nodes']} of {T1['n_nodes']:,} nodes, {T1['nearest_changes_on_boundary_nodes']} of them on the polyline, "
-      f"and their direction $\\hat\\nu$ turns by a median of {T1['direction_change_deg_median']:.0f}°. Of its {T1['n_on_boundary']} nodes on the polyline, "
+      f"and their direction $\\hat\\nu$ turns by a median of {T1['direction_change_deg_median']:.0f}°. A node is tied to a relative gap $\\delta$ when "
+      f"its second-nearest sample is at most $1 + \\delta$ times as far as its nearest, $\\delta \\equiv (d_2 - d_1)/d_1$. Float32 rounding of "
+      f"the coordinates can reorder gaps up to about $2^{{-24}}\\lvert x\\rvert / d_1$, a median of {rg} "
+      f"over this specimen's nodes; a gap of 1e-4 sits well above that band, so it counts the nodes that are tied by the mesh's construction "
+      f"and not only those that rounding happens to reorder. Of its {T1['n_on_boundary']} nodes on the polyline, "
       f"{T1['tied_on_boundary_nodes']} are tied to a relative gap of 1e-4, {T1['on_boundary_outside_sign_nodes']} get the outside sign of $d$ on "
       f"the native mesh, and {T1['sign_flips_on_boundary_nodes']} change that sign under the pose; no interior node changes sign. "
       "Data: results/char/solids_ties_2026-10-18.json.")

@@ -260,7 +260,8 @@ LEDGER = [
      "a surrogate that changes its construction per dataset has no claim to generalize across them", "per-dataset widths or rates", "@sec-standing"),
     ("12. The same physical information, float32 scoring (protocol)", "each architecture receives the problem's physical information through the channels it has, listed per dataset, and is scored in float32",
      "compare architectures, not protocols", "bfloat16 scoring, whose offsets fall unevenly across architectures",
-     "@tbl-model-inputs, @sec-protocol" + (f"; where a record breaks the rule ({' and '.join(UNFAIR)}: the baselines read the freestream as a physical vector) no comparison is drawn (@sec-oq-unit-direction)" if UNFAIR else "")),
+     "@tbl-model-inputs, @sec-protocol" + (f"; where a record breaks the rule ({' and '.join(UNFAIR)}: the baselines read the freestream as a physical vector) no comparison is drawn (@sec-oq-unit-direction)" if UNFAIR else "")
+     + "; on the GINOT bracket lug the baselines receive no boundary-condition labels, because the data has no nodal condition tags, and the lug's lead carries that caveat (@sec-lug)"),
     ("13. The baselines unmodified (program)", "GeoTransolver and Transolver run as released; ISLA's features enter them only as labeled ablations",
      "released models are not modified", "back-porting measure weights and origin-free positions into them", "@sec-baselines"),
 ]
