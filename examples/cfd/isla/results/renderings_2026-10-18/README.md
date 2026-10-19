@@ -38,8 +38,10 @@ infer.py command (snapshot, recipe, venv, cells) for that run.
 
 ## Pending at hand-off (see the lane report)
 
-- DrivAerML Surface native + posed predictions are dumped (LHR job 275252 rows 0-5, `$F/dump/dr_*`); the renderings
-  `scripts/render_car.py` (side view of c_p and c_f, and the pose figure) were running locally at hand-off.
+- DrivAerML Surface native + posed predictions are dumped (LHR job 275252 rows 0-5, `$F/dump/dr_*`); the renderer
+  `scripts/render_car.py` (side view of c_p and c_f, and the pose figure) ran once locally at hand-off and every VTK
+  panel came out blank (white), so `common_crop` found nothing; likely cause: the camera's clipping range is not reset
+  after `camera_position` is set in `render_lib.render` (add `p.reset_camera_clipping_range()`). Not yet fixed.
 - LHR job 275252 (rows 10-23: DeepJEB++, lug, Tensile2d, SHIFT-SUV, DrivAerML Volume baselines and ISLA volume) and
   275271 (A2 routing probe, `scripts/slices_probe_a2.py`, DrivAerML/AirfRANS/lug/Tensile2d) were queued or running;
   outputs land in `$F/dump/<tag>/native/*.npz` and `$F/routing/`.
