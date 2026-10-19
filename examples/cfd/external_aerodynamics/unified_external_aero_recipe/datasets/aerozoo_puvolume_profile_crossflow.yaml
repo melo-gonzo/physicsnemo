@@ -141,8 +141,12 @@ pipeline:
     - _target_: ${dp:ComposeQuadratureMeasure}
     # Last: every boundary face as one token set (boundaries.merged), each with its condition type (one-hot)
     # and its prescribed values: GeoTransolver's geometry. The values are standardized here only, by
-    # per-dataset constants (pooled over the training cases' expected tokens; vectors mean 0, isotropic std
-    # about 0); the four source boundaries keep their SI values. The face positions stay raw, like the queries.
+    # per-dataset constants pooled over the training cases' expected tokens, scale only like the targets (mean
+    # 0, the RMS about 0 as the std; vectors the isotropic one; the all-zero gauge outlet pressure 1): with the
+    # pooled means (full.train bc_tke 0.134 m^2/s^2 over a std of 1.10) a slow case's inlet k of ~1e-4 read
+    # -0.1213 against -0.1214 on the zero-filled faces, below bf16's step there (~5e-4), so the model could not
+    # tell it from zero (supervisor, 2026-10-19). The four source boundaries keep their SI values. The face
+    # positions stay raw, like the queries.
     - _target_: ${dp:MergeBoundaries}
       boundaries: [inlet, outlet, no_slip, slip]
       output: merged
@@ -153,14 +157,14 @@ pipeline:
         bc_velocity: {type: vector, mean: [0, 0, 0], std: 4.27628}
         bc_velocity_reverse: {type: vector, mean: [0, 0, 0], std: 4.51579}
         bc_pressure: {type: scalar, mean: 0, std: 1}
-        bc_tke: {type: scalar, mean: 0.132983, std: 1.0835}
-        bc_omega: {type: scalar, mean: 28.5274, std: 378.928}
-        bc_intermittency: {type: scalar, mean: 0.231933, std: 0.422067}
-        bc_retheta: {type: scalar, mean: 80.6396, std: 193.054}
-        bc_tke_reverse: {type: scalar, mean: 0.151549, std: 1.14137}
-        bc_omega_reverse: {type: scalar, mean: 31.847, std: 390.425}
-        bc_intermittency_reverse: {type: scalar, mean: 0.278478, std: 0.44825}
-        bc_retheta_reverse: {type: scalar, mean: 96.7953, std: 207.745}
+        bc_tke: {type: scalar, mean: 0, std: 1.09163}
+        bc_omega: {type: scalar, mean: 0, std: 380}
+        bc_intermittency: {type: scalar, mean: 0, std: 0.481594}
+        bc_retheta: {type: scalar, mean: 0, std: 209.219}
+        bc_tke_reverse: {type: scalar, mean: 0, std: 1.15139}
+        bc_omega_reverse: {type: scalar, mean: 0, std: 391.722}
+        bc_intermittency_reverse: {type: scalar, mean: 0, std: 0.52771}
+        bc_retheta_reverse: {type: scalar, mean: 0, std: 229.189}
 
 targets:
   velocity: vector

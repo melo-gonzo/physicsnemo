@@ -1044,7 +1044,9 @@ def test_v2_dataset_files_read_no_label_and_derive_no_case_scale(dataset):
     assert (
         chain[4]["field"] == "physics.kinematic_viscosity" and chain[4]["log10"] is True
     )
-    for stats in chain[8]["fields"].values():
+    ### scale-only standardization of the targets and of the token values (an offset would put a small
+    ### case below the float32 / bf16 step of the offset)
+    for stats in [*chain[8]["fields"].values(), *chain[-1]["standardize"].values()]:
         assert stats["mean"] in (0, [0, 0, 0])
     assert OmegaConf.to_container(ds.targets) == targets
     assert ds.label_reference.dataset == twin

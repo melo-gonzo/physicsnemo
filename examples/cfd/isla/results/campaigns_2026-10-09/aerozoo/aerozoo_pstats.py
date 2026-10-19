@@ -27,7 +27,10 @@ its label-era twin (the ``label_reference`` dataset)::
 * ``nu_std``'s constants: the mean and std over the cases of log10 nu.
 * the token standardization of the ``bc_*`` columns GeoTransolver reads (MergeBoundaries): pooled over the expected
   tokens of the four boundaries (zero where a boundary does not prescribe the field, as HarmonizeBoundaryFields
-  fills it); vectors mean 0 and the isotropic std about 0; a std of 0 is written as 1.0::
+  fills it); scale-only like the targets, for the same reason (supervisor, 2026-10-19: a slow case's inlet k of
+  ~1e-4 m^2/s^2 sat 1e-4 above a pooled-mean offset of 0.12, below bf16's step there), so every column has mean 0
+  and its RMS about 0 as the std (vectors the isotropic one); an RMS of 0 (the gauge outlet pressure) is written
+  as 1.0::
 
     python aerozoo_pstats.py reduce --manifest manifest.json --split full.train --label-rows stats/full.*.jsonl \
         --boundary-rows b*.jsonl --out pstats_full.train.json
@@ -169,10 +172,11 @@ def _moments(
             "mean_measured": mean.tolist(),
         }
     if scale_only:
+        rms = float(np.sqrt(mean_sq[0]))
         return {
             "type": "scalar",
             "mean": 0.0,
-            "std": float(np.sqrt(mean_sq[0])),
+            "std": rms if rms > 0 else 1.0,
             "mean_measured": float(mean[0]),
         }
     std = float(np.sqrt(max(mean_sq[0] - mean[0] ** 2, 0.0)))
@@ -218,7 +222,7 @@ def cmd_reduce(args) -> None:
                 if name in e["mean"]:
                     total += e["n_tokens"] * np.asarray(e["mean"][name])
                     total_sq += e["n_tokens"] * np.asarray(e["mean_sq"][name])
-        stats["bc"][name] = _moments(name, total, total_sq, n_tok)
+        stats["bc"][name] = _moments(name, total, total_sq, n_tok, scale_only=True)
     Path(args.out).write_text(json.dumps(stats, indent=1) + "\n")
     print(
         json.dumps(
