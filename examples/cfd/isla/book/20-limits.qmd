@@ -324,6 +324,8 @@ q1 = sum(q1_lanes.values())
 q2 = AZ_HELDOUT * SEEDS * (AZ_ISLA_GPUH + AZ_DTT_GPUH)
 # (iii) ISLA against GeoTransolver on the held-out splits (Transolver is not trained on AeroZoo)
 q3 = AZ_HELDOUT * SEEDS * (AZ_ISLA_GPUH + AZ_GT_GPUH)
+# (viii) AeroZoo on its allowed inputs: the three arms on `full` and on every held-out split
+q8 = (1 + AZ_HELDOUT) * SEEDS * (AZ_ISLA_GPUH + AZ_DTT_GPUH + AZ_GT_GPUH)
 # (iv) the flagged standings with unit-direction baselines: both baselines, two seeds; the record of tasks the cost record holds
 UD = {k: SEEDS * sum(lane_gpuh(k, b) for b in S.BASELINES) if k in TASK else None for k in UNFAIR}
 # (v) the scaling ladder at the reference configuration on the DrivAerML Surface task:
@@ -350,6 +352,8 @@ rows = [
     ("Should ISLA-DTT be ISLA's only interior form?", "ISLA-DTT ÷ ISLA on velocity and pressure on each AeroZoo held-out split, at equal size", fmt_h(q2)),
     ("How large is ISLA-DTT's tree error at θ = 1 where its forest's frame ties?", "ISLA-DTT scored rotated and translated, and under boundary redraws, on cases whose boundary has near-equal principal variances", "scoring only"),
     ("Where does ISLA stand against GeoTransolver on AeroZoo's held-out families?", "both reference configurations on each held-out split; each one's held-out penalty", fmt_h(q3)),
+    ("Do AeroZoo's comparisons with GeoTransolver hold when every model reads only the inputs the benchmark allows?",
+     "ISLA, ISLA-DTT and GeoTransolver trained and scored on the allowed inputs only, the freestream computed from the inlet faces, on `full` and each held-out split", fmt_h(q8)),
 ]
 if UNFAIR:
     rows.append((f"How do the reference configurations compare on {names(UNFAIR)} when every model reads the unit direction?",
@@ -457,7 +461,25 @@ print("**The open question is where ISLA stands against GeoTransolver on AeroZoo
         "preregistered bar asks for ISLA's penalty on the held-out enclosure family to be at least 20% smaller than GeoTransolver's (the "
         "reduction's predictions block). "
         "Transolver is not trained on AeroZoo (@sec-aerozoo-measured). What would settle it: both reference configurations on each held-out "
-        f"split, two seeds each. Cost: {fmt_h(q3)} GPU-hours, ISLA at {AZ_ISLA_GPUH:.0f} and GeoTransolver at {AZ_GT_GPUH:.0f} GPU-hours a run.")
+        f"split, two seeds each, on the inputs the benchmark allows (@sec-oq-aerozoo-inputs). Cost: {fmt_h(q3)} GPU-hours, ISLA at {AZ_ISLA_GPUH:.0f} and GeoTransolver at {AZ_GT_GPUH:.0f} GPU-hours a run.")
+```
+
+### AeroZoo on the inputs the benchmark allows {#sec-oq-aerozoo-inputs}
+
+```{python}
+#| label: para-oq-aerozoo-inputs
+#| output: asis
+print("**The open question is whether AeroZoo's comparisons with GeoTransolver hold when every model reads only the inputs the "
+      "benchmark allows.** AeroZoo's rule admits the boundary meshes with their condition types, the prescribed values and the kinematic "
+      "viscosity, and classes the reference scales of `global_data/reference` as labels. Every AeroZoo model of this book reads them: the "
+      "inlet direction and the Reynolds number come from them, and the reference length scales the targets and GeoTransolver's "
+      "coordinates (@sec-aerozoo-allowed). ISLA-DTT ÷ ISLA and each ablation pair compare arms that read the same labels; a comparison "
+      "with GeoTransolver is provisional under that label-input protocol. What would settle it: the same arms, ISLA, ISLA-DTT and "
+      "GeoTransolver at their reference configurations, trained and scored on the allowed inputs only, with the freestream computed "
+      f"from the inlet faces, on `full` and on each of the {AZ_HELDOUT} held-out splits, two seeds each.")
+print()
+print(f"Cost: {1 + AZ_HELDOUT} splits × three arms × two seeds, ISLA at {AZ_ISLA_GPUH:.0f}, ISLA-DTT at {AZ_DTT_GPUH:.0f} and "
+      f"GeoTransolver at {AZ_GT_GPUH:.0f} GPU-hours a run: {fmt_h(q8)} GPU-hours.")
 ```
 
 ```{python}
@@ -587,7 +609,7 @@ print("**Three structural-mechanics problems carry standings beside the aerodyna
       "conditions and loads, not only varying geometry, so that the global-scalar, global-vector and boundary-input channels are "
       "exercised. Whether the interface carries to further steady boundary-driven PDEs, heat conduction or electrostatics for example, "
       "is unmeasured. "
-      + ("AeroZoo, the diversity benchmark within aerodynamics, carries no standing in @sec-standing; its questions are @sec-oq-aerozoo and @sec-oq-dtt." if AZ.artifact is None else ""))
+      + ("AeroZoo, the diversity benchmark within aerodynamics, carries no standing in @sec-standing; its questions are @sec-oq-aerozoo, @sec-oq-aerozoo-inputs and @sec-oq-dtt." if AZ.artifact is None else ""))
 ```
 
 ## Engineering directions {#sec-future}
@@ -621,8 +643,9 @@ print("- **The interior recommendation becomes unconditional** if the exact wall
       "dependence without costing velocity, and the eddy-viscosity deficit against GeoTransolver on the DrivAerML Volume task closes.")
 print("- **The interior model changes form** if ISLA-DTT is inside the band on every AeroZoo held-out split (@sec-oq-dtt): the "
       "recommendation is then a read-only model whose prediction at a point depends on that point and the boundary alone.")
-print("- **ISLA gains a generalization claim** if its held-out penalty on AeroZoo is smaller than GeoTransolver's by the preregistered "
-      "margin (@sec-oq-aerozoo); it loses one if the penalty is larger.")
+print("- **ISLA gains a generalization claim** if its held-out penalty on AeroZoo, measured on the inputs the benchmark allows, is "
+      "smaller than GeoTransolver's by the preregistered margin (@sec-oq-aerozoo, @sec-oq-aerozoo-inputs); it loses one if the penalty "
+      "is larger.")
 print()
 print("If none fires, the recommendation stands as written, with the bounds of this chapter attached.")
 ```

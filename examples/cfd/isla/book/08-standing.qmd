@@ -184,5 +184,8 @@ splits with two seeds each. It does not say that ISLA would lead at equal
 parameter count, nor how the comparison moves with the training set's size
 (@sec-capacity has the scaling evidence, on smaller ISLA configurations).
 It does not cover AeroZoo, the benchmark with held-out families of bodies
-and enclosures, whose standing is an open question of @sec-open-questions.
+and enclosures. Its comparisons with GeoTransolver are measured with inputs
+that AeroZoo's rule classes as labels, so they are provisional
+(@sec-aerozoo-allowed), and its standing is an open question of
+@sec-open-questions.
 Every scope statement is collected in @sec-limits.

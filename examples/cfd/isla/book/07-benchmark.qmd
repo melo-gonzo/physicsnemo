@@ -132,9 +132,10 @@ MI = [
      f"{GV}; `U_inf` in m/s, magnitude 31 to 94, angle −4.9 to 14.9°", "the same per-point fields, with `U_inf` concatenated",
      "the same information at 31 to 94 times the scale, varying in magnitude and direction"),
     ("aerozoo", f"four boundary meshes (body, enclosure, inlet, outlet), each face with its role and prescribed values; {NT}; "
-     "`U_inf_dir`, the standardized log Reynolds number and four inlet-turbulence scalars",
+     "`U_inf_dir` and the standardized log Reynolds number, both from `global_data/reference`, and four inlet-turbulence scalars",
      "per point: coordinates, wall and slip-wall distances and the wall normal; the same eight globals", "not trained on AeroZoo",
-     "less: no inlet or outlet faces and no prescribed per-face values"),
+     "less: no inlet or outlet faces and no prescribed per-face values; both read inputs that AeroZoo's rule classes as labels "
+     "(@sec-aerozoo-allowed)"),
     ("tensile2d", "boundary segments with the loaded, fixed and pinned labels and the applied pressure; nodes as prediction-point tokens "
      "with their nearest-token wall distance and direction, plus `sdf` and `sdf_normals`; "
      "the pressure and five material parameters as six standardized scalars",
@@ -161,7 +162,10 @@ print(": What each model receives, per dataset: the global inputs with their uni
       "the stored signed distance to the full-resolution boundary and its gradient. How to read this: the last column says "
       "whether the baselines receive the same information as ISLA; a row marked *no standing comparison* is one whose "
       "baselines read the freestream as a raw physical vector of varying direction, so its ratios are printed and not "
-      "read as a verdict. The table does not say how much a difference in input costs a model. Source: "
+      "read as a verdict. AeroZoo's own rule admits only the boundary meshes with their condition types, the prescribed values "
+      "and the kinematic viscosity, and classes the reference scales of `global_data/reference` as labels; its row reads them, so "
+      "its numbers are measured under the label-input protocol (@sec-aerozoo-allowed). "
+      "The table does not say how much a difference in input costs a model. Source: "
       "results/drive_audit_2026-10-18/REPORT.md, section 1. {#tbl-model-inputs tbl-colwidths=\"[11,27,25,14,23]\"}")
 ```
 
@@ -244,7 +248,14 @@ difference is read.
 **Inputs.**
 
 1. Every model is given the same physical problem: the same cases, the same targets, the same validation and test cases,
-   drawn with the same random seed. The inputs differ only as @tbl-model-inputs states.
+   drawn with the same random seed. The inputs differ only as @tbl-model-inputs states. Where a dataset's own rule
+   restricts the inputs, it binds as well. AeroZoo's rule admits only the data of the PDE: the boundary meshes with the
+   condition type each names, the values prescribed on them and the kinematic viscosity, with the density only to
+   convert pressure and shear to pascals. Every other global datum is a label, among them the reference length, speed
+   and direction and any Reynolds number built on them. Every AeroZoo model of this book reads the inlet direction and
+   the Reynolds number from those reference scales, so its numbers are measured under the label-input protocol and a
+   comparison with a baseline there is provisional (@sec-aerozoo-allowed). On every other dataset a reference length,
+   where one is used, is one constant for the whole set.
 2. No reference configuration trains with augmentation. The rotation-augmented baselines of @sec-pose-contract are a labeled
    control.
 3. Boundary conditions enter ISLA as per-cell fields on boundary meshes. GeoTransolver and Transolver have no
