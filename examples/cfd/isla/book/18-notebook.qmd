@@ -38299,10 +38299,13 @@ ratios are GeoTransolver 0.61 / 4.23 / 0.77 and Transolver
 0.61 / 3.14 / 0.80 on pressure / velocity / eddy viscosity. The
 registered prediction for GeoTransolver's velocity ratio (1.0 to 2.5)
 failed; Transolver's (1.2 to 4.0) held. Posed, the baselines' errors
-are 1.2 to 1.9, because they are not pose-equivariant. One check is
-open: the baselines run AirfRANS embedded in 3-D, so their velocity
-error includes an out-of-plane component that ISLA's 2-D set does not
-have. Measuring the in-plane error is running (DRIVE-FIX2).
+are 1.2 to 1.9, because they are not pose-equivariant. The baselines
+run AirfRANS embedded in 3-D. Their in-plane velocity error equals the
+scored velocity error to within 4e-6, so the out-of-plane component adds
+nothing and the comparison stands as scored (DRIVE-FIX2,
+scratch/isla-drive-fix2-2026-10-19/partC/REPORT.md). Their `velocity_z_l2`
+is not a relative error, since the true z is float noise, and is not
+reported.
 
 **R2, DrivAerML Surface**, Transolver 512 × 16 with the drive (1, 0, 0)
 in place of the constant (38.9, 0, 0): pressure 0.0423 (0.0423, 0.0423),
@@ -38322,9 +38325,18 @@ against 0.00209 without the labels and 0.00173 for ISLA, a ratio of
 GeoTransolver. The labelled arm is the fair one, because it reads what
 ISLA reads.
 
-**Scored sets.** The Transolver 512 × 16 lanes are scored on 100,000
-cells, while ISLA and GeoTransolver are scored on 200,000. Re-scoring
-Transolver on the 200,000-cell set is running (DRIVE-FIX2).
+**Scored sets.** The Transolver 512 × 16 lanes on DrivAerML Surface and
+HiLift were scored on 100,000 cells, while ISLA and GeoTransolver are
+scored on 200,000. Every other dataset's Transolver lanes were already
+scored on ISLA's set. Re-scored on ISLA's 200,000-cell set, hash-matched
+on all 48 cars, the reference Transolver reads 0.0435 / 0.0696 and the
+unit-drive arm 0.0423 / 0.0678. Native scores move by at most
+0.4 percent, while area scores fall by 12 to 21 percent
+(scratch/isla-drive-fix2-2026-10-19/partB/REPORT.md). On that set the
+R2 ratios are 0.973 and 0.974, inside the band. The registered verdict
+above, read on the 100,000-cell set, stands as written. The reruns go
+ahead either way: the effect sits at the band's edge, and the drive
+rule requires the unit direction regardless.
 
 **Incident.** The completion watch for these lanes never fired: its
 field split compared `trained=4` with `4`. The lanes finished between
