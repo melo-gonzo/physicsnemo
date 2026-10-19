@@ -72,9 +72,7 @@ def cell_measures(mesh: "Mesh") -> torch.Tensor:
     The result has shape ``(n_cells,)``. The fallback does not materialize a
     stored field, so unweighted meshes retain lazy geometric computation.
     """
-    ### get, not `in`: TensorDict membership iterates the keys, so under
-    ### torch.compile it would guard on their order and recompile per order.
-    if mesh.cell_data.get("_measure_weights", None) is not None:
+    if "_measure_weights" in mesh.cell_data:
         raise ValueError(
             "Legacy _measure_weights must be converted to _effective_measure = "
             "cell_areas * weights before use; the new field stores complete measures"

@@ -354,15 +354,6 @@ def _log_count(n: int, like: torch.Tensor) -> float | torch.Tensor:
     return torch.full((), n, dtype=torch.float64, device=like.device).log().to(like.dtype)
 
 
-def _tail(tokens: TensorDict, start) -> TensorDict:
-    """The tokens of a ``(B, N)`` TensorDict from ``start`` on. Each leaf is sliced
-    on its own: indexing the TensorDict (``tokens[:, start:]``) sizes the result
-    through ``slice.indices``, which under torch.compile fixes a symbolic token
-    count to its value (a recompile for every count)."""
-    b, n = tokens.batch_size
-    return tokens.apply(lambda t: t[:, start:], batch_size=[b, n - start])
-
-
 def _refuse_earlier_state_dict(module, state_dict, prefix, local_metadata, *args) -> None:
     """A load_state_dict pre-hook: a state dict of an earlier ISLA is refused with the
     versions named, on every loading path (``Module.load``, ``load_checkpoint``,
@@ -1647,7 +1638,7 @@ class ISLA(Module):
         ### The tokens the head reads: the prediction points in the interior mode,
         ### every token otherwise. The head frame builds its slice anchors from ALL
         ### tokens (r, log_w and h).
-        out = tokens if query is None else _tail(tokens, n_boundary)
+        out = tokens if query is None else tokens[:, n_boundary:]
         coeffs = self._coeff_layout.unpack(self.head(self.norm_out(out["h"])))
         if not self.needs_frame:
             ### Scalar-only outputs are the coefficients themselves; no token basis.
