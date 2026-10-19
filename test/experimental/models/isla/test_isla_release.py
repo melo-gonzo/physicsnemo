@@ -221,9 +221,18 @@ def test_mesh_wrapper_is_exact_over_the_batched_routine(device, config):
     assert torch.equal(via_mesh.points, expected_points) and via_mesh.n_cells == 0
     for k, v in direct.items():
         if config == "dtt" and via_mesh.point_data[k].is_cuda:
-            ### The boundary read's node means are float32 sums by CUDA's index_add, in no
-            ### fixed order, so the two calls agree to float32 roundoff there, not bitwise.
-            torch.testing.assert_close(via_mesh.point_data[k], v[0], rtol=1e-6, atol=1e-8)
+            ### The boundary read's node means are float32 sums by CUDA's index_add, whose
+            ### atomics add in no fixed order, so the two calls agree to float32 roundoff,
+            ### not bitwise (non-bitwise results from atomics are fine within a small
+            ### multiple of float32 eps). The bound is eps times the length of the reordered
+            ### sums (at most the 64 boundary cells summed into one node), relative to each
+            ### element and, for the elements near zero, to the field's RMS: about 1.2e-7
+            ### absolute on p, six times the largest difference seen on a GB300 (2.05e-8).
+            eps, depth = torch.finfo(torch.float32).eps, mesh.n_cells
+            ref = v[0]
+            torch.testing.assert_close(
+                via_mesh.point_data[k], ref, rtol=depth * eps, atol=depth * eps * float(ref.square().mean().sqrt())
+            )
         else:
             assert torch.equal(via_mesh.point_data[k], v[0]), k
     assert torch.equal(via_mesh.global_data["g"], inputs["global_data"]["g"])
@@ -314,6 +323,39 @@ def test_isla_checkpoint_of_an_earlier_version_is_refused(tmp_path, version):
     assert ISLA.__model_checkpoint_version__ == "0.7.0"
     with pytest.raises(IOError, match=re.escape(f"version {version} is not compatible with current version 0.7.0")):
         Module.from_checkpoint(str(old))
+
+
+def test_isla_earlier_state_dict_is_refused_on_every_loading_path(tmp_path):
+    """A checkpoint whose weights have the parameter layout before 0.7.0 (the shared
+    seed embedding ``embed.0``, ``qt.type_offset``, ``qt.embed``), loaded the way the
+    recipe resumes and initializes (``Module.load``, strict), fails with the version
+    named rather than with a list of missing and unexpected keys; so does
+    ``load_state_dict`` itself."""
+    import io
+    import zipfile
+
+    model = _instantiate_model(**CONFIGS["interior"])
+    path = tmp_path / "isla.mdlus"
+    model.save(path)
+    old = {k: v for k, v in model.state_dict().items() if not k.startswith(("boundary_conditions.", "qt.seed."))}
+    old["embed.0.weight"] = torch.zeros(32, 2)
+    old["qt.type_offset"] = torch.zeros(32)
+    old["qt.embed.0.weight"] = torch.zeros(32, 2)
+    buf = io.BytesIO()
+    torch.save(old, buf)
+    stale = tmp_path / "isla_0.6.0_weights.mdlus"
+    with zipfile.ZipFile(path) as zin, zipfile.ZipFile(stale, "w") as zout:
+        for item in zin.infolist():
+            zout.writestr(item, buf.getvalue() if item.filename == "model.pt" else zin.read(item.filename))
+    fresh = ISLA(**CONFIGS["interior"])
+    with pytest.raises(RuntimeError, match="parameter layout of a checkpoint before version 0.7.0"):
+        fresh.load(str(stale), strict=True)
+    with pytest.raises(RuntimeError, match="no upgrade path"):
+        fresh.load_state_dict(old, strict=False)
+    ### a DDP-style prefix is seen through
+    with pytest.raises(RuntimeError, match="before version 0.7.0"):
+        torch.nn.ModuleDict({"module": fresh}).load_state_dict({f"module.{k}": v for k, v in old.items()})
+    fresh.load(str(path))  # the current layout loads
 
 
 def test_isla_unknown_constructor_argument_is_a_type_error():

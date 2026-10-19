@@ -357,6 +357,27 @@ def _tail(tokens: TensorDict, start) -> TensorDict:
     return tokens.apply(lambda t: t[:, start:], batch_size=[b, n - start])
 
 
+def _refuse_earlier_state_dict(module, state_dict, prefix, *args) -> None:
+    """A load_state_dict pre-hook: a state dict with the parameter layout of an ISLA
+    checkpoint before 0.7.0 (the shared seed embedding ``embed.0``, the prediction
+    points' ``qt.type_offset`` and ``qt.embed``) is refused with the versions named, on
+    every loading path (``Module.load``, ``load_checkpoint``, ``load_state_dict``), not
+    only ``Module.from_checkpoint``, which checks the recorded version."""
+    old = sorted(
+        k[len(prefix) :]
+        for k in state_dict
+        if k.startswith(prefix) and k[len(prefix) :].startswith(("embed.0.", "qt.type_offset", "qt.embed."))
+    )
+    if old:
+        raise RuntimeError(
+            f"this ISLA state dict has the parameter layout of a checkpoint before version "
+            f"{module.__model_checkpoint_version__} ({', '.join(old[:3])}, ...): ISLA "
+            f"{module.__model_checkpoint_version__} declares its boundary conditions by name "
+            "(boundary_schemas) and keeps no upgrade path from earlier checkpoints (0.6.0 and "
+            "before); load it with the code that wrote it, or retrain"
+        )
+
+
 class ISLA(Module):
     r"""ISLA (Invariant Slice Attention): invariant backbone, equivariant edges.
 
@@ -826,6 +847,9 @@ class ISLA(Module):
             n_geo = kernel_geo_width(K, self.qin.n_block_vecs, self.n_boundary_vecs)
             self.kernel_basis = _KernelBasis(n_geo)
             self.kernel_reads = nn.ModuleList(_TreeKernelRead(hidden) for _ in range(n_layers))
+        ### A state dict of an earlier version fails with its version named on every
+        ### loading path, not with a list of missing and unexpected keys.
+        self.register_load_state_dict_pre_hook(_refuse_earlier_state_dict)
         ### The trailing widths k of the per-token tensors: every small width (the
         ### input features, frames and vector stacks) and every layer's (see
         ### _hint_token_axis).
