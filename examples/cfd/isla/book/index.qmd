@@ -43,6 +43,8 @@ def shifts(ks, archs, protocol):
     return [S.Standing(k).shift(a, f, protocol) for k in ks for f in S.DATASETS[k].headline for a in archs]
 isla_area = max(abs(x - 1) for x in shifts(SURF, ["ISLA"], "area"))
 base_area = min(shifts(SURF, S.BASELINES, "area"))
+_V = S.Standing("drivaerml_volume")
+vol_area = [_V.err("ISLA", f, "area") / _V.err("ISLA", f, "native") for f in _V.ds.headline]   # the record holds the redraw; the standing reads only native and posed
 isla_posed = max(abs(x - 1) for x in shifts(FLOW, ["ISLA"], "posed"))
 base_posed_flow = (min(shifts(FLOW, S.BASELINES, "posed")), max(shifts(FLOW, S.BASELINES, "posed")))
 base_posed_solid = (min(shifts(SOLID, S.BASELINES, "posed")), max(shifts(SOLID, S.BASELINES, "posed")))
@@ -69,9 +71,12 @@ print(
     f"{base_posed_flow[0]:.0f}-fold to {base_posed_flow[1]:.0f}-fold while ISLA's stays within {100 * isla_posed:.1f}% of its native value. "
     f"On the {len(SOLID)} solid-mechanics tasks the baselines' grow {base_posed_solid[0]:.1f}-fold to {base_posed_solid[1]:.0f}-fold; "
     f"ISLA's is unchanged on DeepJEB++ and moves up to {tie_shift['tensile2d']:.2f}-fold on Tensile2d and {tie_shift['lug']:.1f}-fold "
-    "on the lug, where boundary samples tie for nearest and break the symmetry of its interior geometry (@sec-invariances). "
-    "Redraw the surface as a uniform point cloud, and every baseline error grows at least "
-    f"{base_area:.1f}-fold while ISLA's stays within {100 * isla_area:.1f}%. "
+    "on the lug, where a mesh node is equally near two boundary samples and float32 rounding under the motion decides which one "
+    "it reads (@sec-invariances). "
+    f"Redraw the surface as a uniform point cloud, and on the {len(SURF)} surface tasks every baseline error grows at least "
+    f"{base_area:.1f}-fold while ISLA's stays within {100 * isla_area:.1f}%; on the DrivAerML Volume task the same redraw moves "
+    f"ISLA's own error {min(vol_area):.1f}-fold to {max(vol_area):.1f}-fold, because each interior point's wall distance is "
+    "computed from the boundary samples (@sec-nearest-token). "
     "Where ISLA trails, and where its own error moves, the book shows the mechanism."
 )
 ```

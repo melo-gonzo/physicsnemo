@@ -449,8 +449,8 @@ unit variance across its 512 components, and compares it with one
 **prototype** $p_s$ per slice:
 
 $$
-\lambda_{is} = T\,\frac{\tilde h_i \cdot p_s}{\lVert \tilde h_i \rVert\,\lVert p_s \rVert},
-\qquad T = 10 .
+\lambda_{is} = \tau\,\frac{\tilde h_i \cdot p_s}{\lVert \tilde h_i \rVert\,\lVert p_s \rVert},
+\qquad \tau = 10 .
 $$
 
 Every content score lies in $[-10, 10]$, so the routing softmax can
@@ -467,17 +467,18 @@ layer's routing: a positive feedback loop whose gain rises with width and
 depth. The bound cuts that loop.
 
 The prototypes are not fixed rows of a weight matrix. Each is a learned
-**seed** vector plus a summary of the sample in front of it: the seeds
-attend over the token states with a measure-weighted softmax (a quadrature
-again), the attended value is centered across the slices, and its size is
-held smoothly below a learned fraction $g$ of the seeds' spread,
+**base prototype** $P_s$ plus a summary of the sample in front of it: the
+base prototypes attend over the token states with a measure-weighted
+softmax (a quadrature again), the attended value is centered across the
+slices, and its size is held smoothly below a learned fraction $\kappa$ of
+the base prototypes' spread,
 
 $$
-p_s = \theta_s + \Delta^{c}_s\, \frac{b}{\mathrm{rms}(\Delta^{c}) + b},
-\qquad b = g\, \mathrm{rms}(\theta), \qquad g = 0.1 \text{ at initialization},
+p_s = P_s + \frac{\kappa\,\mathrm{rms}(P)}{\mathrm{rms}(\tilde\Delta) + \kappa\,\mathrm{rms}(P)}\,\tilde\Delta_s,
+\qquad \kappa = 0.1 \text{ at initialization},
 $$
 
-with $\theta_s$ the seeds and $\Delta^{c}$ the centered summary. So the
+with $\tilde\Delta$ the centered summary (the notation of @sec-arch-layer). So the
 slices a layer offers adapt to the case, a car's slices to the car and a
 bracket's to the bracket, while every score keeps its bound. Centering
 removes the part of the summary common to every slice, which carries no
@@ -743,7 +744,7 @@ learning rate, the effect is measured directly (@fig-isla-stream).
 #|   epoch. (b) The mean token norm entering each of the twelve layers, at the
 #|   last probed epoch. How to read this: the vertical axes are logarithmic;
 #|   a straight rising line in (b) is a constant factor per layer, the
-#|   geometric growth of @fig-isla-stream-toy (b). Probed on four fixed
+#|   geometric growth of the top panel of @fig-isla-stream-toy. Probed on four fixed
 #|   validation cases with the same 200,000-cell draws at every checkpoint,
 #|   bfloat16 forward pass as in training; the mean is over every token of
 #|   the four cases. Instrument for the raw-read variant: ISLA at 512 wide,

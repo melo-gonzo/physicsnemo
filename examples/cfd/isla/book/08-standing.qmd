@@ -55,8 +55,8 @@ print(": The standing of the three reference configurations on every dataset wit
 
 ## The two invariances, measured {#sec-standing-invariances}
 
-**Move the geometry or resample its surface, and only ISLA's error stays
-put.** Two scorings of every checkpoint test the two properties ISLA is
+**Move the geometry or resample its surface, and on every flow task only
+ISLA's error stays put.** Two scorings of every checkpoint test the two properties ISLA is
 built for (@sec-invariances). *Rotated and translated* applies a random
 rigid motion to every test case, a different one per case, and asks each
 model for the field on the moved body. *Uniform point cloud* replaces the
@@ -129,8 +129,8 @@ def reading(k):
     s = S.Standing(k)
     if not s.ds.fair_drive:
         return (f"{s.ds.short} is not compared: in its record the baselines read {s.ds.drive_note}"
-                + (f"; on this dataset the unit direction lowers GeoTransolver's own pressure error {UD['GeoTransolver']:.1f}-fold and "
-                   f"Transolver's {UD['Transolver']:.1f}-fold (@sec-de-result)" if k == "hilift" else " (@sec-interior-airfrans)"))
+                + (f"; in a control on this dataset at 10,000 cells (Transolver at learning rate 3e-3), the unit direction lowers "
+                   f"GeoTransolver's own pressure error {UD['GeoTransolver']:.1f}-fold and Transolver's {UD['Transolver']:.1f}-fold (@sec-de-result)" if k == "hilift" else " (@sec-interior-airfrans)"))
     parts = []
     for word, label in (("leads", "ISLA leads"), ("is level with", "is level"), ("trails", "trails")):
         items = [f"{s.fields[f]} against {a} ({S.fmt_ratio(s.ratio(a, f))})" for f in s.ds.headline for a in S.BASELINES
@@ -148,13 +148,17 @@ for title, keys in GROUPS:
 
 ## What the standing compares, and what it does not {#sec-standing-scope}
 
-**Each architecture runs at the configuration that is most accurate for it
-under one memory ceiling, so the comparison is matched in memory, not in
-parameters.** The three reference configurations were selected by one
-rule, the most accurate configuration of each architecture that trains
-under 80 GiB per GPU on two selection datasets (@sec-baselines). Under that
-rule the three spend their memory differently, as @tbl-standing-cost shows:
-at similar memory, ISLA carries several times GeoTransolver's parameters.
+**Each architecture runs at a configuration that trains under one memory
+ceiling, so the comparison is matched in memory, not in parameters.** The
+three reference configurations come from candidates that train under
+80 GiB per GPU on two selection datasets, the DrivAerML Surface task and
+the 210-wing HiLiftAeroML set; the registered selection rule named no
+winner, and each pick has the smallest joint score over the two
+(@sec-selection). The joint score includes the wings, whose baselines read
+the freestream in inch/s, so a baseline's pick is not always its most
+accurate candidate on the car (@sec-selection). The three spend their
+memory differently, as @tbl-standing-cost shows: at similar memory, ISLA
+carries several times GeoTransolver's parameters.
 
 ```{python}
 #| label: tbl-standing-cost
