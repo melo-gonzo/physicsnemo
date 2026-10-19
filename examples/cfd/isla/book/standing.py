@@ -60,6 +60,7 @@ class Dataset:
     reference: bool = True  # False: ISLA's arm is from checkpoints without the normalized slice reads
     fair_drive: bool = True  # False: the baselines in this artifact read the freestream as a physical vector, not a unit direction
     drive_note: str = ""  # what the baselines read instead, for the one sentence the chapters print (results/drive_audit_2026-10-18/)
+    provisional: dict = field(default_factory=dict)  # field -> why its ratios are given without a verdict although the inputs are fair
     notes: dict = field(default_factory=dict)
 
     @property
@@ -72,6 +73,15 @@ class Dataset:
         """The name as it reads after a preposition: 'the DrivAerML Surface task', 'SHIFT-SUV'."""
         return ("the " + self.name) if self.name.endswith("task") else self.name
 
+
+#: Why AirfRANS velocity carries no verdict (the registry's ``provisional`` entry), as the chapters print it.
+VELOCITY_3D = ("GeoTransolver and Transolver predict AirfRANS as a three-dimensional field, so their velocity error includes an "
+               "out-of-plane component, which ISLA's planar prediction does not have")
+
+#: The datasets whose baselines read the freestream as one constant physical vector in m/s, where ISLA reads its unit direction.
+#: On the DrivAerML Surface task the unit direction moves Transolver's error by ``drive_bias()``; when the unit-direction lanes of
+#: these arms are scored (a2r_protocol_artifacts_2026-10-17.py, FAIR_INPUT), this tuple empties and the chapters' clause goes with it.
+CONSTANT_DRIVE = ("drivaerml_surface", "drivaerml_volume", "shift_suv")
 
 DATASETS = {
     d.key: d
@@ -89,11 +99,12 @@ DATASETS = {
                 "case, turning with the angle of attack), where ISLA reads its unit direction"),
         Dataset("shift_suv", "SHIFT-SUV", "shift_suv_surface_a2.json",
                 ("pressure_l2", "wss_l2"), ("native", "area", "posed"), "sec-shift-suv-standing"),
-        # the baselines of this file read global_data.U_inf, the raw inlet velocity (results/drive_audit_2026-10-18/, F1)
+        # the baselines of this file read U_inf_dir and the standardized inlet speed (DRIVE-FIX, campaigns_2026-10-19/drive_fix/);
+        # they run AirfRANS embedded in 3-D, so their velocity_l2 includes a z component that ISLA's 2-D set lacks (AF-PLANAR checks it):
+        # once velocity is scored in the plane (airfrans_a2_2026-10-18.py), deleting the provisional line below draws its verdict
         Dataset("airfrans", "AirfRANS interior task", "airfrans_a2.json",
                 ("pressure_l2", "velocity_l2", "nut_l2"), ("native", "posed"), "sec-interior-airfrans",
-                fair_drive=False, drive_note="the inlet velocity as the physical vector in m/s (31 to 94 m/s, at angles of "
-                "-4.9 to 14.9 degrees), where ISLA reads its unit direction and the speed as a scalar"),
+                provisional={"velocity_l2": VELOCITY_3D}),
         Dataset("aerozoo", "AeroZoo", None, (), ("native",), "sec-interior-aerozoo"),
         Dataset("tensile2d", "PLAID Tensile2d", "tensile2d_a2.json",
                 ("stress_l2", "displacement_l2", "q_l2"), ("native", "posed"), "sec-interior-tensile2d"),
@@ -149,10 +160,14 @@ class Standing:
         """An arm's error under a protocol over its native error."""
         return self.err(arch, f, protocol) / self.err(arch, f, "native")
 
+    def compared(self, arch: str, f: str) -> bool:
+        """Whether a verdict is drawn on this field against this architecture (``fair_drive`` and not ``provisional``)."""
+        return arch == "ISLA" or (self.ds.fair_drive and f not in self.ds.provisional)
+
     def verdict(self, arch: str, f: str, protocol: str = "native") -> str:
         """ISLA against one baseline by the seed rule: 'leads', 'trails' or 'is level with'; 'is not compared with'
-        where the baselines' inputs differ from the protocol (``fair_drive`` False)."""
-        if not self.ds.fair_drive and arch != "ISLA":
+        where the baselines' inputs differ from the protocol (``fair_drive`` False) or the field is ``provisional``."""
+        if not self.compared(arch, f):
             return "is not compared with"
         b, i = self.seeds(arch, f, protocol), self.seeds("ISLA", f, protocol)
         if abs(self.ratio(arch, f, protocol) - 1) < TIE_BAND:
@@ -162,6 +177,23 @@ class Standing:
         if max(b) < min(i):
             return "trails"
         return "is level with"
+
+    def near_drive(self, arch: str, f: str, protocol: str = "native") -> bool:
+        """Whether the verdict lies within ``drive_bias()`` of the tie band on a dataset whose baselines read a constant physical
+        freestream vector (``CONSTANT_DRIVE``), so that the input's scale could move it."""
+        return (self.ds.key in CONSTANT_DRIVE and arch != "ISLA" and self.compared(arch, f)
+                and abs(self.ratio(arch, f, protocol) - 1) < TIE_BAND + drive_bias())
+
+    def drive_sentence(self, fields=None, protocol: str = "native") -> str:
+        """One sentence naming the verdicts that ``near_drive`` flags on ``fields``, with ``drive_clause()``; empty if none."""
+        near = {f: [b for b in BASELINES if self.has(b) and self.near_drive(b, f, protocol)] for f in (fields or self.ds.headline)}
+        near = {f: bs for f, bs in near.items() if bs}
+        if not near:
+            return ""
+        what = " and on ".join(f"{self.fields[f]} against " + ("both baselines" if len(bs) == len(BASELINES) else bs[0])
+                            for f, bs in near.items())
+        many = len(near) > 1 or any(len(bs) > 1 for bs in near.values())
+        return f"The verdict{'s' if many else ''} on {what} lie{'' if many else 's'} {drive_clause()}. "
 
     def table(self, label: str, setting: str, protocols=None, fields=None) -> str:
         """The headline table: one row per architecture, one column group per protocol, ratio rows.
@@ -180,7 +212,8 @@ class Standing:
         for arch in BASELINES:
             if self.has(arch) and self.ds.fair_drive:
                 out.append(f"| {arch} ÷ ISLA | "
-                           + " | ".join(" / ".join(fmt_ratio(self.ratio(arch, f, p)) for f in fields) for p in protocols) + " |")
+                           + " | ".join(" / ".join(fmt_ratio(self.ratio(arch, f, p)) + ("§" if f in self.ds.provisional else "")
+                                                   for f in fields) for p in protocols) + " |")
         cap = (f": {setting}: the architectures at their reference configurations, {flab}, "
                f"relative L2 error (@sec-metrics), seed means over two seeds, float32; "
                + "each column scores the same checkpoint of each seed on the test cases as presented: "
@@ -189,6 +222,8 @@ class Standing:
                + ("a ratio row is baseline ÷ ISLA, so a value above one favors ISLA. " if self.ds.fair_drive else
                   f"no ratio is drawn, because in this record the baselines read {self.ds.drive_note}, so each architecture's "
                   "protocol columns are read against its own native column only. ")
+               + "".join(f"§ {self.fields[f]} is given without a verdict: {why}. " for f, why in self.ds.provisional.items()
+                         if f in fields and self.ds.fair_drive)
                + f"Data: {self.source}. {{#{label}}}")
         return "\n".join(out) + "\n\n" + cap + "\n"
 
@@ -201,6 +236,28 @@ def fmt_ratio(r: float) -> str:
 def fmt_pct(r: float) -> str:
     """A ratio near one as a percentage difference: 1.07 -> '7%'."""
     return f"{abs(r - 1) * 100:.0f}%"
+
+
+def unit_drive_control():
+    """{field: error with the unit direction ÷ error with the constant physical vector}: Transolver at its reference configuration
+    on the DrivAerML Surface task, the same lanes retrained reading U_inf_dir (DRIVE-FIX, r80ud_dr_t), seed means."""
+    rec = json.load(open(RES / "campaigns_2026-10-19" / "drive_fix" / "drivefix_scores_2026-10-19.json"))
+    ref = Standing("drivaerml_surface")
+    run = "evals_r80ud/r80ud_dr_t_h512_l16_c100k_seed{}/native"
+    raw = ref.raw.get("raw_drive_transolver")  # the physical-vector arm, once a unit-direction arm replaces it (FAIR_INPUT)
+    base = (lambda f: raw["native"][f]["mean"]) if raw else (lambda f: ref.err("Transolver", f))
+    return {f: sum(rec[run.format(s)]["metrics"][f] for s in (42, 43)) / 2 / base(f) for f in ref.ds.headline}
+
+
+def drive_bias() -> float:
+    """The largest change of Transolver's error that the unit direction makes on the DrivAerML Surface task, as a fraction."""
+    return max(abs(r - 1) for r in unit_drive_control().values())
+
+
+def drive_clause() -> str:
+    """The one clause a verdict near level carries on a ``CONSTANT_DRIVE`` dataset."""
+    return (f"within {fmt_pct(1 + drive_bias())} of the level band, which is how far reading the unit direction rather than the "
+            "constant freestream vector moves Transolver's error on the DrivAerML Surface task (@sec-unit-direction-rule)")
 
 
 def available():
@@ -236,17 +293,18 @@ def plot_native(ax, rows=None, note_flag="†"):
     labels = []
     for yy, (k, f, lab) in zip(y, rows):
         s = Standing(k)
-        flag = ("" if s.ds.reference else f" {note_flag}") + ("" if s.ds.fair_drive else " ‡")
+        flag = (("" if s.ds.reference else f" {note_flag}") + ("" if s.ds.fair_drive else " ‡")
+                + (" §" if s.ds.fair_drive and f in s.ds.provisional else ""))
         labels.append(lab + flag)
         for arch, key, dy in (("GeoTransolver", "gt", 0.16), ("Transolver", "t", -0.16)):
             if not s.has(arch):
                 continue
             st = STYLE[key]
             lo, hi = _seed_range(s, arch, f)
-            if s.ds.fair_drive:
+            if s.compared(arch, f):
                 ax.plot([lo, hi], [yy + dy] * 2, color=st["color"], lw=4, alpha=0.3, solid_capstyle="butt")
                 ax.plot(s.ratio(arch, f), yy + dy, marker=st["marker"], color=st["color"], ms=6.5, mec="white", mew=0.6, ls="none")
-            else:  # baselines fed the physical freestream vector: hollow marks, no seed bar
+            else:  # baselines fed the physical freestream vector, or a provisional field: hollow marks, no seed bar
                 ax.plot(s.ratio(arch, f), yy + dy, marker=st["marker"], color="white", ms=6.5, mec=st["color"], mew=1.3, ls="none")
     ax.axvline(1.0, color=INK2, lw=1.0)
     ax.axvspan(1.0 - TIE_BAND, 1.0 + TIE_BAND, color=GRID, alpha=0.8, lw=0)

@@ -38,7 +38,9 @@ for k, f, lab in ROWS:
     for a in S.BASELINES:
         v = s.verdict(a, f)
         word = {"leads": "ISLA leads", "trails": "ISLA trails", "is level with": "level", "is not compared with": "not compared‡"}[v]
-        cells.append(("not compared‡" if v == "is not compared with" else f"{S.fmt_ratio(s.ratio(a, f))} ({word})") if s.has(a) else "—")
+        if s.ds.fair_drive and f in s.ds.provisional:
+            word = "no verdict§"
+        cells.append(("not compared‡" if word == "not compared‡" else f"{S.fmt_ratio(s.ratio(a, f))} ({word})") if s.has(a) else "—")
     name = s.ds.name + ("†" if not s.ds.reference else "")
     out.append(f"| {name} | {s.fields[f]} | {s.err('ISLA', f):.4f} | {cells[0]} | {cells[1]} | {s.shift('ISLA', f, 'posed'):.3f} | @{s.ds.section} |")
 print("\n".join(out) + "\n")
@@ -49,7 +51,9 @@ print(": The standing of the three reference configurations on every dataset wit
       "seed of the other and the seed means at least 3% apart. How to read this: a ratio above one favors ISLA; rows are "
       "different problems and are not comparable with one another; † marks a row whose ISLA checkpoints are of the raw-read "
       "variant rather than the reference configuration (@sec-isla-normalized-reads); ‡ marks a row whose baselines read the "
-      "freestream as a physical vector rather than a unit direction, so no comparison is drawn from it (@sec-de-result, @sec-interior-airfrans). "
+      "freestream as a physical vector rather than a unit direction, so no comparison is drawn from it (@sec-de-result); § marks "
+      "a ratio given without a verdict, because the architectures' errors on that field are not measured alike "
+      "(@sec-interior-airfrans). "
       "Data: results/char/ (the artifact of each row is named in its chapter).")
 ```
 
@@ -130,19 +134,20 @@ def reading(k):
     if not s.ds.fair_drive:
         return (f"{s.ds.short} is not compared: in its record the baselines read {s.ds.drive_note}"
                 + (f"; in a control on this dataset at 10,000 cells (Transolver at learning rate 3e-3), the unit direction lowers "
-                   f"GeoTransolver's own pressure error {UD['GeoTransolver']:.1f}-fold and Transolver's {UD['Transolver']:.1f}-fold (@sec-de-result)" if k == "hilift" else " (@sec-interior-airfrans)"))
+                   f"GeoTransolver's own pressure error {UD['GeoTransolver']:.1f}-fold and Transolver's {UD['Transolver']:.1f}-fold (@sec-de-result)" if k == "hilift" else f" (@{s.ds.section})"))
     parts = []
     for word, label in (("leads", "ISLA leads"), ("is level with", "is level"), ("trails", "trails")):
         items = [f"{s.fields[f]} against {a} ({S.fmt_ratio(s.ratio(a, f))})" for f in s.ds.headline for a in S.BASELINES
                  if s.has(a) and s.verdict(a, f) == word]
         if items:
             parts.append(f"{label} on " + ", ".join(items))
-    return f"On {s.ds.in_sentence} ISLA " + "; ".join(p.replace("ISLA leads", "leads") for p in parts) + f" (@{s.ds.section})"
+    held = "".join(f"; its {s.fields[f]} ratios are given without a verdict, because {why}" for f, why in s.ds.provisional.items())
+    return f"On {s.ds.in_sentence} ISLA " + "; ".join(p.replace("ISLA leads", "leads") for p in parts) + held + f" (@{s.ds.section})"
 for title, keys in GROUPS:
     txt = ". ".join(reading(k) for k in keys if k in S.available())
     if title == "Solid mechanics":
-        txt += (". On the lug, the baselines read no boundary-condition labels, while ISLA reads which faces are clamped, which "
-                "is the hole, which half of it is loaded and the pressure on it (@sec-interior-lug)")
+        txt += (". On the lug, ISLA reads which faces are clamped, which is the hole, which half of it is loaded and the pressure "
+                "on it; GeoTransolver reads the same four labels on the surface triangles, and Transolver reads none (@sec-interior-lug)")
     print(f"**{title}.** {txt}.\n")
 ```
 
@@ -184,5 +189,8 @@ splits with two seeds each. It does not say that ISLA would lead at equal
 parameter count, nor how the comparison moves with the training set's size
 (@sec-capacity has the scaling evidence, on smaller ISLA configurations).
 It does not cover AeroZoo, the benchmark with held-out families of bodies
-and enclosures, whose standing is an open question of @sec-open-questions.
+and enclosures. Its comparisons with GeoTransolver are measured with inputs
+that AeroZoo's rule classes as labels, so they are provisional
+(@sec-aerozoo-allowed), and its standing is an open question of
+@sec-open-questions.
 Every scope statement is collected in @sec-limits.

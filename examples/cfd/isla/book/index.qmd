@@ -35,6 +35,7 @@ def verdicts():
 V = verdicts()
 n_pairs = sum(len(v) for k, v in V.items() if k != "is not compared with")
 UNFAIR = [S.DATASETS[k].short for k in S.available() if not S.DATASETS[k].fair_drive]
+HELD = [(S.DATASETS[k].short, S.Standing(k).fields[f]) for k, f, _ in ROWS if S.DATASETS[k].fair_drive and f in S.DATASETS[k].provisional]
 SURF = [k for k in S.available() if "area" in S.DATASETS[k].protocols]
 FLOW = [k for k in S.available() if k not in ("tensile2d", "lug", "deepjeb")]
 SOLID = [k for k in S.available() if k in ("tensile2d", "lug", "deepjeb")]
@@ -62,10 +63,14 @@ print(
     "against Transolver and its geometry-aware successor GeoTransolver, two published slice-attention surrogates, each at its own "
     "reference configuration and scored the same way. "
     f"Over the {n_pairs} comparisons of @fig-standing (each headline field of each dataset against each baseline"
-    + (f"; {' and '.join(UNFAIR)} are not counted, because in their records the baselines read the freestream as a raw "
-       "physical vector" if UNFAIR else "")
+    + (f"; {' and '.join(UNFAIR)} {'is' if len(UNFAIR) == 1 else 'are'} not counted, because in "
+       f"{'its record' if len(UNFAIR) == 1 else 'their records'} the baselines read the freestream as a raw physical vector"
+       if UNFAIR else "")
+    + "".join(f", nor {d} {fl}, which the baselines predict with an out-of-plane component ISLA's planar prediction does not have"
+              for d, fl in HELD)
     + f"), ISLA leads in {len(V['leads'])}"
-    + (f" ({n_lug} of them on the lug, where only ISLA is given the boundary-condition labels)" if (n_lug := sum(k == "lug" for k, _, _ in V["leads"])) else "")
+    + (f" ({n_lug} of them on the lug against Transolver, which reads no boundary-condition labels there)"
+       if (n_lug := sum(k == "lug" and a == "Transolver" for k, _, a in V["leads"])) else "")
     + f", is level in {len(V['is level with'])} and trails in {len(V['trails'])}. "
     f"Rotate and translate the test geometry, and on the {len(FLOW)} flow tasks every baseline error grows "
     f"{base_posed_flow[0]:.0f}-fold to {base_posed_flow[1]:.0f}-fold while ISLA's stays within {100 * isla_posed:.1f}% of its native value. "
@@ -134,7 +139,10 @@ plt.show()
 #|   its reference configuration; a row marked ‡ has its baselines drawn
 #|   hollow and is not compared, because in that record they read the
 #|   freestream as a raw physical vector rather than a unit direction
-#|   (@sec-hilift, @sec-airfrans). Data: results/char/; every number is in
+#|   (@sec-hilift); a row marked § has its baselines drawn hollow and
+#|   carries no verdict, because their error on that field includes an
+#|   out-of-plane component that ISLA's planar prediction does not have
+#|   (@sec-airfrans). Data: results/char/; every number is in
 #|   @tbl-thesis.
 #| fig-height: 6.6
 #| code-fold: true

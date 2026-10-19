@@ -48,10 +48,10 @@
   "GeoTransolver 256": {
    "native": {
     "von_mises_l2": {
-     "mean": 0.00209203839302063,
+     "mean": 0.0022388116518656416,
      "per_seed": {
-      "42": 0.0022914167245229084,
-      "43": 0.0018926600615183512
+      "42": 0.0021777751048405966,
+      "43": 0.002299848198890686
      },
      "n_cases": 600,
      "n_seeds": 2
@@ -59,10 +59,10 @@
    },
    "area": {
     "von_mises_l2": {
-     "mean": 0.00209203839302063,
+     "mean": 0.0022388116518656416,
      "per_seed": {
-      "42": 0.0022914167245229084,
-      "43": 0.0018926600615183512
+      "42": 0.0021777751048405966,
+      "43": 0.002299848198890686
      },
      "n_cases": 600,
      "n_seeds": 2
@@ -70,10 +70,10 @@
    },
    "posed": {
     "von_mises_l2": {
-     "mean": 0.939171651204427,
+     "mean": 0.9534230041503906,
      "per_seed": {
-      "42": 0.9179189046223958,
-      "43": 0.9604243977864584
+      "42": 0.9370986938476562,
+      "43": 0.969747314453125
      },
      "n_cases": 600,
      "n_seeds": 2
@@ -152,5 +152,44 @@
     "n_seeds": 2
    }
   }
+ },
+ "unlabelled_geotransolver": {
+  "label": "GeoTransolver 256, the CHAR record's arm",
+  "native": {
+   "von_mises_l2": {
+    "mean": 0.00209203839302063,
+    "per_seed": {
+     "42": 0.0022914167245229084,
+     "43": 0.0018926600615183512
+    },
+    "n_cases": 600,
+    "n_seeds": 2
+   }
+  },
+  "area": {
+   "von_mises_l2": {
+    "mean": 0.00209203839302063,
+    "per_seed": {
+     "42": 0.0022914167245229084,
+     "43": 0.0018926600615183512
+    },
+    "n_cases": 600,
+    "n_seeds": 2
+   }
+  },
+  "posed": {
+   "von_mises_l2": {
+    "mean": 0.939171651204427,
+    "per_seed": {
+     "42": 0.9179189046223958,
+     "43": 0.9604243977864584
+    },
+    "n_cases": 600,
+    "n_seeds": 2
+   }
+  }
+ },
+ "fair_input": {
+  "GeoTransolver 256": "retrained reading the surface triangles with their normals and the four boundary-condition labels as its geometry context (lugbc_gt); scores: campaigns_2026-10-19/drive_fix/drivefix_scores_2026-10-19.json; the replaced arm is kept under unlabelled_geotransolver"
  }
 }
