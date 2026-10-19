@@ -480,7 +480,17 @@ print(f"Three readings. **First, on the native mesh the three are level within s
 
 The level native standing is a statement about these three configurations under one memory budget, not about matched capacity: GeoTransolver reaches ISLA's native error with `{python} f"{SURF_COST['GeoTransolver']['n_parameters'] / SURF_COST['ISLA']['n_parameters'] * 100:.0f}%"` of its parameters (@tbl-drivaerml-configs). What separates the three on this dataset is not the native number but what happens to it when the car is presented in any other way.
 
-<!-- RENDERING SLOT: fig-drivaerml-prediction: truth / ISLA / GeoTransolver / Transolver and errors on one held-out case -->
+```{python}
+#| label: out-fig-drivaerml-prediction
+#| output: asis
+import json as _json
+_R = _json.load(open(RENDER_DIR / "render_car.json"))
+rendering_figure("fig-drivaerml-prediction", [("figures/renderings/drivaerml_surface_cp.png", "Pressure coefficient"), ("figures/renderings/drivaerml_surface_cf.png", "Wall shear")],
+    f"The three reference configurations on one validation car of the DrivAerML Surface task, {_R['sample_id'].split('_')[0]}, left side. Relative L2 on this case: {case_errors(_R['per_sample_rel_l2'])}. " + "Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one "
+      "symmetric scale. How to read this: one case, chosen as the case of median ISLA error (seed 42 of each reference configuration), "
+      "not a standing; the standing is the table above. "
+    + "Data: results/renderings_2026-10-18/arrays/render_car.json.", nrow=2)
+```
 
 ### The Volume task {#sec-interior-results}
 
@@ -531,6 +541,18 @@ print(f"**The lead is largest on velocity**, where GeoTransolver's error is {S.f
       f"{min(b_posed):.2f} to {max(b_posed):.2f}. The parameter counts differ by up to "
       f"{max(VOL_COST[a]['n_parameters'] for a in S.ARCHS) / min(VOL_COST[a]['n_parameters'] for a in S.ARCHS):.1f} times and the inputs "
       "differ by construction (@sec-interior-task), so the ratios are standings of the configurations as shipped.")
+```
+
+```{python}
+#| label: out-fig-drivaerml-volume-prediction
+#| output: asis
+import json as _json
+_R = _json.load(open(RENDER_DIR / "render_2d_drivaerml_volume.json"))["drivaerml_volume"]
+rendering_figure("fig-drivaerml-volume-prediction", [("figures/renderings/drivaerml_volume_pressure.png", "Pressure"), ("figures/renderings/drivaerml_volume_velocity.png", "Velocity magnitude")],
+    f"The three reference configurations on one validation car of the DrivAerML Volume task, {_R['sample_id'].split('_')[0]}: the {_R['n_points_in_slab_window']:,} scored prediction points within {100 * _R['slab_half_width_m']:.0f} cm of the symmetry plane, side view. Relative L2 on this case: {case_errors(_R['per_sample_rel_l2'])}. " + "Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one "
+      "symmetric scale. How to read this: one case, chosen as the case of median ISLA error (seed 42 of each reference configuration), "
+      "not a standing; the standing is the table above. "
+    + "Data: results/renderings_2026-10-18/arrays/render_2d_drivaerml_volume.json.", nrow=2)
 ```
 
 ## Studies on this dataset {#sec-drivaerml-ladders}

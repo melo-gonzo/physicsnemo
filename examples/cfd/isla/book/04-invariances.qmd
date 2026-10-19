@@ -429,7 +429,23 @@ from data and pays for it in accuracy. @tbl-pose-200k sets every training and va
 in its own random pose. The comparison was run on a smaller ISLA than the reference configuration, so it is read as a
 mechanism, and the factors it gives are not a standing.
 
-<!-- RENDERING SLOT: fig-pose-rendering: one DrivAerML car rotated and translated, the three models' predictions mapped back to the body frame -->
+```{python}
+#| label: out-fig-pose-rendering
+#| output: asis
+import json as _json
+_C = _json.load(open(RENDER_DIR / "render_car.json")); _P = _C["pose"]
+_ang = _P["rotation_angle_deg"]; _t = np.linalg.norm(_P["ISLA"]["pose_t"])   # the translation is in meters
+rendering_figure("fig-pose-rendering", [("figures/renderings/pose_geometry.png", "The car in its native pose and in the scored pose"),
+                                        ("figures/renderings/pose_cp.png", "Each model's prediction, native and posed")],
+    f"The posed protocol on one DrivAerML Surface validation car ({_C['sample_id'].split('_')[0]}), rotated by {_ang:.0f}° about one "
+    f"axis and translated by {_t:.2f} m. Top: the car in the dataset's frame (gray) and in the scored pose, colored by ISLA's posed "
+    "prediction. Bottom: each reference configuration's pressure coefficient on the native car (left), its prediction on the posed "
+    "car mapped back to the body frame (middle) and the difference (right). Native and posed relative L2: "
+    + ", ".join(f"{a} {_P[a]['rel_l2_native']:.4f} and {_P[a]['rel_l2_posed']:.4f}" for a in ("ISLA", "GeoTransolver", "Transolver"))
+    + f"; the root-mean-square difference between ISLA's two predictions is {_P['ISLA']['posed_minus_native_rms_cp']:.5f} in $C_p$. "
+    "How to read this: a model that is covariant draws the same middle panel as its left one; one case, seed 42. "
+    "Data: results/renderings_2026-10-18/arrays/render_car.json.", nrow=2)
+```
 
 ```{python}
 #| label: cell-tbl-pose-200k

@@ -140,7 +140,17 @@ print(f"**On DeepJEB++ at 12,451 training brackets and 40 epochs, scored on the 
 print(ST.table("tbl-deepjeb-protocols", f"DeepJEB++, 12,451 training brackets, 40 epochs, {N_TEST:,} test files"))
 ```
 
-<!-- RENDERING SLOT: fig-deepjeb-prediction: truth / ISLA / GeoTransolver / Transolver and errors on one held-out case -->
+```{python}
+#| label: out-fig-deepjeb-prediction
+#| output: asis
+import json as _json
+_R = _json.load(open(RENDER_DIR / "render_cloud_deepjebpp.json"))
+rendering_figure("fig-deepjeb-prediction", [("figures/renderings/deepjebpp_von_mises.png", "von Mises stress"), ("figures/renderings/deepjebpp_displacement.png", "Displacement magnitude")],
+    f"The three reference configurations on one DeepJEB++ test bracket under its horizontal load case, {_R['sample_id'].split('_')[0]}. Relative L2 on this case: {case_errors(_R['per_sample_rel_l2'])}. " + "Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one "
+      "symmetric scale. How to read this: one case, chosen as the case of median ISLA error (seed 42 of each reference configuration), "
+      "not a standing; the standing is the table above. "
+    + "Data: results/renderings_2026-10-18/arrays/render_cloud_deepjebpp.json.", nrow=2)
+```
 
 ```{python}
 #| label: para-deepjeb-reading

@@ -29,6 +29,7 @@ import matplotlib as mpl
 import matplotlib.patheffects as _pe
 import matplotlib.pyplot as plt
 import numpy as np
+from pathlib import Path as _Path
 from matplotlib.colors import LinearSegmentedColormap
 
 # --- Architecture hues -------------------------------------------------------
@@ -288,5 +289,27 @@ def bc_legend(ax, kinds, loc="lower right", extra=()):
     handles = [Line2D([], [], color=BC[k], lw=4, label=BC_LABEL[k]) for k in kinds] + list(extra)
     ax.legend(handles=handles, loc=loc, fontsize=8, frameon=True, facecolor="white", edgecolor=BASELINE)
 
+
+
+RENDER_DIR = _Path(__file__).resolve().parent / ".." / "results" / "renderings_2026-10-18" / "arrays"
+FIELD_WORDS = {"pressure": "pressure", "pressure_l2": "pressure", "velocity": "velocity", "velocity_l2": "velocity",
+               "wss_l2": "wall shear", "nut_l2": "eddy viscosity", "von_mises_l2": "von Mises stress",
+               "displacement_l2": "displacement", "stress_l2": "stress", "q_l2": "plastic strain"}
+
+
+def case_errors(per_sample: dict, fields=None) -> str:
+    """'pressure ISLA 0.0415, GeoTransolver 0.0424, Transolver 0.0406; ...' from a rendering json's per-sample relative L2."""
+    fields = fields or list(per_sample)
+    return "; ".join(FIELD_WORDS.get(f, f) + " " + ", ".join(f"{a} {v:.3g}" for a, v in per_sample[f].items()) for f in fields)
+
+
+def rendering_figure(label: str, images, caption: str, nrow=None) -> None:
+    """Print a Quarto figure of one or more static renderings (``images``: (path, subcaption) pairs) with a computed caption."""
+    attrs = f"#{label}" + (f" layout-nrow={nrow}" if nrow else "")
+    print(f"::: {{{attrs}}}\n")
+    for path, sub in images:
+        print(f"![{sub}]({path})\n")
+    print(caption + "\n")
+    print(":::")
 
 __all__ = [n for n in dir() if not n.startswith("_") and n not in ("annotations", "mpl", "np", "plt")] + ["mpl", "np", "plt"]

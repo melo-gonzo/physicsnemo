@@ -261,7 +261,17 @@ print(f"Three readings. **First, of the three aerodynamic Surface standings in t
       f"{posed_floor:.2f}, near or above the score of predicting zero. Transolver's native lead is a lead on one mesh family in one pose.")
 ```
 
-<!-- RENDERING SLOT: fig-shift-suv-prediction: truth / ISLA / GeoTransolver / Transolver and errors on one held-out case -->
+```{python}
+#| label: out-fig-shift-suv-prediction
+#| output: asis
+import json as _json
+_R = _json.load(open(RENDER_DIR / "render_cloud_shift_suv.json"))
+rendering_figure("fig-shift-suv-prediction", [("figures/renderings/shift_suv_cp.png", "Pressure coefficient")],
+    f"The three reference configurations on one SHIFT-SUV case, {_R['sample_id'].split('_')[0]}, left side. Relative L2 on this case: {case_errors(_R['per_sample_rel_l2'])}. " + "Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one "
+      "symmetric scale. How to read this: one case, chosen as the case of median ISLA error (seed 42 of each reference configuration), "
+      "not a standing; the standing is the table above. "
+    + "Data: results/renderings_2026-10-18/arrays/render_cloud_shift_suv.json.", nrow=None)
+```
 
 ## What this dataset does not say {#sec-shift-suv-limits}
 
