@@ -1039,8 +1039,8 @@ pair by pair it costs $Q \times N$ pairs per layer: $4 \times 10^{10}$ for
 **The read runs through a Barnes–Hut forest at the opening angle $\theta =
 1$: a point reads nearby cells one by one and each distant cluster of
 similarly oriented cells as one virtual cell, which keeps the prediction
-exactly query-independent and pose-invariant up to ties of the canonical
-frame the forest is built in.** ISLA-DTT is ISLA with read-only prediction points, the global
+exactly query-independent and pose-invariant; the frame the forest is
+built in only groups cells for speed.** ISLA-DTT is ISLA with read-only prediction points, the global
 read after every layer and the forest at $\theta = 1$, all set by
 `query_independent=True`. The forest is built once per case, without
 gradient (`BoundaryForest`):
@@ -1050,8 +1050,10 @@ gradient (`BoundaryForest`):
    measure-weighted position covariance, each signed so that the third
    moment of the positions along it is positive (`canonical_frame`). The
    forest is built in these coordinates, so it moves with the body. This is
-   the canonicalization of @sec-landscape-symmetry, and it is the one place
-   in the class where a center and axes are estimated.
+   the one place in the class where a center and axes are estimated, and
+   they decide only which cells share a cluster. No learned map reads them,
+   so a tie of the frame does not make the prediction jump by $O(1)$, as it
+   does for a network fed canonical coordinates (@sec-landscape-symmetry).
 2. The cells are split by the sign octant of their normal in that frame,
    and one cluster tree is built per octant
    (`physicsnemo.mesh.spatial.ClusterTree`, which bisects the boxes of a
@@ -1087,10 +1089,11 @@ $\theta$ a point's list depends on the forest and the point alone, so the
 prediction is query-independent. And a rotation, reflection or translation
 of the case gives the same forest and the same lists
 (`test_forest_and_every_list_are_the_same_in_every_pose_at_finite_theta`),
-up to ties of that frame: two equal principal variances, or an axis without
-a third moment, whose sign then follows whichever of the dataset's axes it
-overlaps most. Where the frame ties, a rigid motion can change the forest, and
-ISLA-DTT's pose invariance at $\theta = 1$ holds only approximately. $\theta$ is a constant of the class (`TREE_READ_THETA`), not
+so ISLA-DTT is pose-invariant. The frame can tie: two equal principal
+variances, or an axis without a third moment, whose sign then follows
+whichever of the dataset's axes it overlaps most. There a rigid motion can regroup the
+clusters, and the read moves only at the size of the tree's error, which
+vanishes as $\theta \to 0$. $\theta$ is a constant of the class (`TREE_READ_THETA`), not
 an argument: ISLA-DTT trains and is scored at $\theta = 1$, so its kernel,
 keys and values are learned as the forest groups the cells.
 
@@ -1136,10 +1139,10 @@ listing("tree_read.py", "BoundaryForest.point_pairs")
 **The contracts of @sec-isla-contracts are absences, and two of them can be
 read off the stages directly.**
 
-- **No coordinate reaches a learned map, and no center is estimated, except
-  for ISLA-DTT's forest.** The forest is built in a canonical frame of the
-  boundary (@sec-arch-tree-read), which decides only which cells are grouped,
-  not what a learned map reads. Otherwise $r_i$ enters only as $r_i - z_s$ (step d), $r_i - \sum_s \pi^f_{is} z^f_s$
+- **No coordinate reaches a learned map, and no center enters one.**
+  ISLA-DTT's forest is built in a canonical frame of the boundary
+  (@sec-arch-tree-read), which decides only which cells are grouped for
+  speed, not what a learned map reads. $r_i$ enters only as $r_i - z_s$ (step d), $r_i - \sum_s \pi^f_{is} z^f_s$
   (stage 4), $x_q - x_{i^*}$ (the wall geometry) and $r_q - r_j$ (the
   boundary read). Every learned input is a norm, a dot product, a log of one
   of those, or a supplied scalar. The one mean position computed, inside

@@ -726,10 +726,14 @@ along a Morton space-filling curve. A pair of boxes counts as far when the
 sum of their diagonals is below $\theta$ times their gap
 ($\theta$ is `{python} GLOBE_DEFAULTS["theta"]` by default),
 nearer faces are summed one by one, and the cost falls to $O(N \log N)$.
-@fig-isla-dtt draws this access pattern on the airfoil. The boxes are
-aligned with the dataset's axes, not with the body. At a finite $\theta$ a rotation
-therefore regroups the clusters, and the kernel's exact equivariance holds
-only to the accuracy of the monopole; at $\theta = 0$ the sum is exact.
+@fig-isla-dtt draws this access pattern on the airfoil. GLOBE is
+rotation-equivariant and query-independent: its kernel is
+exactly equivariant, and its prediction at a target is a sum over the
+boundary that involves no other target. The tree is an approximation that
+vanishes as $\theta \to 0$. Its boxes are aligned with the dataset's axes, not with the body,
+and its dual traversal also groups the requested points, so at the working
+angle a rotation or a different request regroups clusters and moves a
+prediction only at the accuracy of the monopole.
 
 ISLA draws on the best parts of GLOBE and of Transolver. From GLOBE it
 takes the boundary as the input, the rigid-motion symmetry built into the
@@ -743,9 +747,10 @@ pattern: after every layer each point reads every boundary cell through a
 learned kernel of the pair's relative geometry, walking a forest of
 GLOBE's cluster trees, near cells one by one and distant clusters as monopoles
 (@sec-arch-tree-read). That read is a softmax over the cells with a
-log-measure bias, a normalized quadrature, and its forest is built in a
-frame the boundary carries, so a rotation does not regroup it, up to ties
-of that frame.
+log-measure bias, a normalized quadrature. Its forest is built in a frame
+the boundary carries, so a rotation does not regroup it; where that frame
+ties, a regrouping moves the read only by the tree's error, which
+vanishes with $\theta$ as GLOBE's does.
 
 ### DeepONet: a branch and a trunk {#sec-landscape-deeponet}
 
@@ -983,9 +988,9 @@ measures how well the two baselines of this book do.
 | equivariant latent tokens (AB-GATr) | point sets in geometric algebra | yes | not by construction | yes | yes, at 2 to 11 times AB-UPT's training time |
 | slice attention (Transolver, Transolver++, Transolver-3) | point set, raw coordinates | no | no: Transolver counts each token once | as tokens of the input set | yes, linear in $N$ |
 | GeoTransolver | point set, raw coordinates, ball-query geometry encoding, global context | no | no: counts each token once | as tokens, with the signed distance | yes, linear in $N$ |
-| boundary-integral kernels (GLOBE) | boundary faces by boundary-condition type (centroid, normal, area, data), no connectivity; reference lengths | yes, rotations, translations and reflections in the kernel; at a finite opening angle a rotation regroups its tree, whose boxes are aligned with the dataset's axes | yes: each face's kernel times its area | yes, at arbitrary points; its dual-tree traversal builds a tree over the prediction points, so at a finite opening angle a point's far-field list can depend on the other points requested | $N \log N$ with a Barnes–Hut tree in its PhysicsNeMo code; published dense, $N^2$, on two-dimensional airfoils |
+| boundary-integral kernels (GLOBE) | boundary faces by boundary-condition type, each type with its own field schema and its own kernels (centroid, normal, area, data), no connectivity; reference lengths | yes, rotations, translations and reflections in the kernel, exact as the tree's opening angle $\theta \to 0$ | yes: each face's kernel times its area | yes, at arbitrary points, each independent of the others, exact as $\theta \to 0$ | $N \log N$ with a Barnes–Hut tree in its PhysicsNeMo code; published dense, $N^2$, on two-dimensional airfoils |
 | physics-informed networks (PINN) | coordinates of one instance | no | not applicable | yes | one instance per training |
-| **ISLA** | boundary cells with their measure; invariants against slice anchors | **yes**, rotations, translations and reflections (@sec-isla-contracts); ISLA-DTT's tree read up to ties of its canonical frame (@sec-arch-tree-read) | **yes**: a log-measure bias in the routing | **yes**, as interacting or read-only prediction points | **yes**, linear in $N$; 200,000 cells per case in this book |
+| **ISLA** | boundary cells with their measure, and one schema of per-cell fields shared by every condition (the recipes pass condition tags and prescribed values through it); invariants against slice anchors | **yes**, rotations, translations and reflections (@sec-isla-contracts), ISLA-DTT included: where its tree's frame ties, the read moves only by the tree's error, which vanishes as $\theta \to 0$ (@sec-arch-tree-read) | **yes**: a log-measure bias in the routing | **yes**, as interacting or read-only prediction points | **yes**, linear in $N$; 200,000 cells per case in this book |
 
 : The families of neural PDE surrogates against the five properties that
 matter for steady boundary-driven problems, each as constructed in the

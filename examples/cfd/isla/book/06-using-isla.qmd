@@ -141,8 +141,13 @@ The forward call is keyword-only and takes three arguments:
   centroid is the position, the cell normal the outward normal, and the
   cell's effective measure (`cell_data["_effective_measure"]` when present,
   else the geometric measure) the measure weight. The meshes are
-  concatenated in sorted key order. Every `boundary_schema` field is read
-  from each mesh's `cell_data` by name.
+  concatenated in sorted key order into one token set with one input
+  embedding; the names set only that order. One `boundary_schema` applies
+  to every mesh, and each of its fields is read from each mesh's
+  `cell_data` by name, so every mesh carries every declared field. A
+  condition's identity reaches the model only as such a field: the AeroZoo
+  recipe writes one-hot role tags (`bc_inlet`, `bc_outlet`, `bc_no_slip`,
+  `bc_slip`) and the prescribed values, zero where a role prescribes none.
 - `prediction_points`: for the interior task, a point-cloud `Mesh` whose
   `points` are the prediction points and whose `point_data` carries the
   `query_schema` fields, or a bare `(Q, dim)` tensor when none are
@@ -321,7 +326,9 @@ The architecture knows only that it was given named fields of declared
 rank. A buoyant flow passes gravity as its one direction. A magnetized flow
 passes two. Steady conduction with pinned temperatures passes no direction
 and supplies the pinned values as a rank-0 boundary input
-(`boundary_schema: {trace: {rank: 0}}`) on the mesh of the pinned boundary.
+(`boundary_schema: {trace: {rank: 0}}`), which every boundary mesh
+carries: the pinned value on the pinned boundary, zero elsewhere, with a
+condition tag to tell the two apart.
 An elasticity problem passes its prescribed displacement and traction as
 rank-1 boundary inputs and predicts the stress as one symmetric rank-2
 output (`stress: {rank: 2, symmetric: true}`), from which the recipe reads

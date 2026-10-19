@@ -188,9 +188,9 @@ is an open question (@sec-open-questions).
 
 ### An origin-free frame with an integral length unit {#sec-vs-novel-frame}
 
-*What ISLA does.* No center is ever named, except by ISLA-DTT's cluster
-forest, which is built in a canonical frame of the boundary
-(@sec-arch-tree-read). Positions enter only as differences from the slices'
+*What ISLA does.* No center reaches a learned map; ISLA-DTT's cluster
+forest uses a canonical frame of the boundary only to group cells for
+speed (@sec-arch-tree-read). Positions enter only as differences from the slices'
 own anchors, and the one length unit is the
 measure-weighted RMS pairwise distance of the boundary sample, a two-point
 integral that converges under refinement (@sec-isla-frame).
@@ -385,8 +385,10 @@ solution as a learned kernel from the boundary to the target: DeepGreen
 and BI-GreenNet learn Green's functions (Gin et al., 2021; Lin et al.,
 2022), BENO embeds boundary geometry and data in a Green's-function-motivated
 operator (Wang et al., 2024), and GLOBE evaluates such kernels from
-boundary faces to targets (Sharpe, 2025); its PhysicsNeMo code does so
-with the cluster tree that ISLA-DTT's forest is built from. The Barnes–Hut tree evaluates an
+boundary faces to targets, each target independently of the others
+(Sharpe, 2025); its PhysicsNeMo code does so with the cluster tree that
+ISLA-DTT's forest is built from, an approximation that vanishes as the
+opening angle $\theta \to 0$. The Barnes–Hut tree evaluates an
 $N$-body sum in $O(N \log N)$ (Barnes and Hut, 1986), and Erwin builds a
 hierarchical transformer on a ball tree (Zhdanov et al., 2025).
 
@@ -401,8 +403,8 @@ interacting form (@sec-drivaerml, @sec-airfrans); its step cost is in
 
 *Caveat.* Which interior form is the better default is an open question
 (@sec-open-questions); the read costs time and memory over the interacting
-form. The forest is built in a canonical frame of the boundary, so
-ISLA-DTT's pose invariance holds up to ties of that frame.
+form. Where the canonical frame the forest is built in ties, a rotation
+regroups clusters and moves the read only by the tree's error.
 
 ### The general boundary interface {#sec-vs-novel-interface}
 
