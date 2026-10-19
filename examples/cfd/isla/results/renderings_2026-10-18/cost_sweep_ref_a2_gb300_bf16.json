@@ -1,0 +1,1383 @@
+{
+ "protocol": "COST reduction (FIG lane, 2026-10-18): merge the five per-arm bench_step.py outputs of LHR job 271948 (cost.sbatch,\none GB300 node, each arm on its own GPU, the four GPU streams concurrent) into ../cost_sweep_ref_a2_gb300_bf16.json.\n\nPer arm and token count: median, p10 and p90 of 25 timed training steps (forward + loss + backward + optimizer step,\nbf16 autocast, after 8 untimed warm-up steps that include compilation), the peak allocated memory over the timed steps,\nthe resident bytes (parameters + optimizer state + the batch) before them, and the model's input shapes. \"tokens\" is the\nDrivAerML sampling_resolution: surface cells of the vehicle (ISLA: boundary_meshes.vehicle.cells; GeoTransolver and\nTransolver: geometry / embedding points); for the volume arms, N boundary cells plus N prediction points.\nThe learning rate does not enter the step time; the baseline arms composed the recipe default (3e-3) where their lanes ran\n1e-3 (lane table), which changes no shape or operation.\nSource files: scratch/isla-book-overhaul-2026-10-18/fig/cost/<arm>.json (copies of LHR\n$T/book_figs_2026-10-18/cost/<arm>.json).\nusage: python cost_reduce.py\n",
+ "job": "LHR 271948",
+ "arms": {
+  "isla_surface_512x12": {
+   "name": "ISLA",
+   "task": "DrivAerML Surface",
+   "code": "code_a2r (7e167820a, A2 reads)",
+   "recipe": "recipe_a2r",
+   "model_yaml": "isla_surface",
+   "dataset_yaml": "drivaer_ml_surface",
+   "extra": [
+    "model.hidden=512",
+    "model.n_slices=512",
+    "model.compile_blocks=true"
+   ],
+   "n_params": 68813415,
+   "compile": {
+    "how": "utils.compile_model",
+    "compile": true,
+    "options": {
+     "fullgraph": true,
+     "dynamic": true,
+     "mode": "max-autotune-no-cudagraphs"
+    }
+   },
+   "precision": "bfloat16",
+   "warmup_steps": 8,
+   "timed_steps": 25,
+   "gpu_env": {
+    "gpu": "NVIDIA GB300",
+    "nvidia_smi": "NVIDIA GB300, 580.178.04, 284208 MiB, 2070 MHz",
+    "torch": "2.12.0+cu130",
+    "cuda": "13.0",
+    "python": "3.13.16",
+    "hostname": "nvl72d017-T10",
+    "total_memory": 297020817408,
+    "sm_count": 152,
+    "capability": "10.3",
+    "tf32_matmul": false,
+    "pythonpath": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_a2r:/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/recipe_a2r/src",
+    "slurm_job": "271948"
+   },
+   "runs": [
+    {
+     "tokens": 25000,
+     "status": "ok",
+     "input_shapes": {
+      "boundary_meshes.vehicle": [
+       74692,
+       3
+      ],
+      "boundary_meshes.vehicle.cells": [
+       25000,
+       3
+      ]
+     },
+     "step_ms_median": 78.60554195940495,
+     "step_ms_p10": 76.01570896804333,
+     "step_ms_p90": 83.31467700190842,
+     "peak_allocated_gib": 9.675230503082275,
+     "peak_allocated_bytes": 10388699648,
+     "resident_bytes": 963480064,
+     "warmup_s": 438.7548638160806,
+     "step_ms": [
+      77.74765091016889,
+      77.8334429487586,
+      78.6757180467248,
+      78.603909118101,
+      78.3269489184022,
+      77.60156993754208,
+      78.5020210314542,
+      78.87107878923416,
+      78.0930919572711,
+      79.39795986749232,
+      78.4862448927015,
+      79.7133210580796,
+      84.03231203556061,
+      84.49522498995066,
+      81.86676795594394,
+      78.60554195940495,
+      83.14923592843115,
+      81.94753690622747,
+      83.31467700190842,
+      82.32888206839561,
+      76.01570896804333,
+      73.46952403895557,
+      73.43851705081761,
+      77.38659298047423,
+      79.02835891582072
+     ]
+    },
+    {
+     "tokens": 50000,
+     "status": "ok",
+     "input_shapes": {
+      "boundary_meshes.vehicle": [
+       148793,
+       3
+      ],
+      "boundary_meshes.vehicle.cells": [
+       50000,
+       3
+      ]
+     },
+     "step_ms_median": 96.6421770863235,
+     "step_ms_p10": 96.17324778810143,
+     "step_ms_p90": 99.39764183945954,
+     "peak_allocated_gib": 18.31193256378174,
+     "peak_allocated_bytes": 19662287872,
+     "resident_bytes": 1033478144,
+     "warmup_s": 2.786794582847506,
+     "step_ms": [
+      96.87174716964364,
+      96.63424105383456,
+      96.48844902403653,
+      96.39804903417826,
+      96.34236805140972,
+      96.35593695566058,
+      96.52800112962723,
+      96.90035413950682,
+      96.17324778810143,
+      96.6771540697664,
+      96.4680970646441,
+      96.05587203986943,
+      96.06073494069278,
+      96.49932896718383,
+      99.0315938834101,
+      99.39764183945954,
+      99.71050801686943,
+      99.77236413396895,
+      99.14026595652103,
+      97.76538098230958,
+      97.2437800373882,
+      96.6421770863235,
+      96.80291404947639,
+      96.7858899384737,
+      96.56787407584488
+     ]
+    },
+    {
+     "tokens": 100000,
+     "status": "ok",
+     "input_shapes": {
+      "boundary_meshes.vehicle": [
+       295273,
+       3
+      ],
+      "boundary_meshes.vehicle.cells": [
+       100000,
+       3
+      ]
+     },
+     "step_ms_median": 158.4188628476113,
+     "step_ms_p10": 157.7575809787959,
+     "step_ms_p90": 161.371192894876,
+     "peak_allocated_gib": 35.52284908294678,
+     "peak_allocated_bytes": 38142368768,
+     "resident_bytes": 1106345984,
+     "warmup_s": 1.5145356310531497,
+     "step_ms": [
+      161.371192894876,
+      159.4613951165229,
+      158.73265615664423,
+      158.77460804767907,
+      158.32667099311948,
+      158.71652821078897,
+      158.74759992584586,
+      157.84666896797717,
+      157.95070095919073,
+      157.42817195132375,
+      157.7575809787959,
+      157.98964607529342,
+      157.9520448576659,
+      157.88551699370146,
+      157.8457730356604,
+      158.39153504930437,
+      158.57211197726429,
+      161.92345088347793,
+      161.8726660963148,
+      159.09224096685648,
+      158.4188628476113,
+      159.2885940335691,
+      158.67963200435042,
+      158.41166279278696,
+      157.51418797299266
+     ]
+    },
+    {
+     "tokens": 200000,
+     "status": "ok",
+     "input_shapes": {
+      "boundary_meshes.vehicle": [
+       582040,
+       3
+      ],
+      "boundary_meshes.vehicle.cells": [
+       200000,
+       3
+      ]
+     },
+     "step_ms_median": 277.92966016568244,
+     "step_ms_p10": 277.091930154711,
+     "step_ms_p90": 283.28500618226826,
+     "peak_allocated_gib": 69.88208055496216,
+     "peak_allocated_bytes": 75035312640,
+     "resident_bytes": 1184895488,
+     "warmup_s": 2.6324433798436075,
+     "step_ms": [
+      277.091930154711,
+      277.7197400573641,
+      277.67766010947526,
+      277.5700429920107,
+      281.15635900758207,
+      283.4205909166485,
+      279.7663388773799,
+      277.91330800391734,
+      277.8592931572348,
+      277.92966016568244,
+      278.6063989624381,
+      277.755260001868,
+      277.4369870312512,
+      277.96028507873416,
+      278.0790370889008,
+      281.5460879355669,
+      281.99351392686367,
+      284.1394410934299,
+      283.28500618226826,
+      278.1112289521843,
+      274.50004895217717,
+      275.9446620475501,
+      277.215993963182,
+      277.5240920018405,
+      278.1167970970273
+     ]
+    },
+    {
+     "tokens": 400000,
+     "status": "ok",
+     "input_shapes": {
+      "boundary_meshes.vehicle": [
+       1129268,
+       3
+      ],
+      "boundary_meshes.vehicle.cells": [
+       400000,
+       3
+      ]
+     },
+     "step_ms_median": 525.3809799905866,
+     "step_ms_p10": 522.9659317992628,
+     "step_ms_p90": 527.9696278739721,
+     "peak_allocated_gib": 138.4752402305603,
+     "peak_allocated_bytes": 148686657024,
+     "resident_bytes": 1207460352,
+     "warmup_s": 4.854034641990438,
+     "step_ms": [
+      529.8139550723135,
+      527.1194169763476,
+      524.1401758976281,
+      525.9452690370381,
+      524.3866411037743,
+      524.8524020425975,
+      526.3042140286416,
+      525.2082429360598,
+      522.1702479757369,
+      522.9812590405345,
+      522.9659317992628,
+      526.9920248538256,
+      527.9696278739721,
+      526.2370470445603,
+      525.3809799905866,
+      523.7176781520247,
+      523.724301951006,
+      526.0942298918962,
+      527.8391640167683,
+      525.8330451324582,
+      521.6358150355518,
+      523.7723989412189,
+      524.4614558760077,
+      528.9720317814499,
+      526.5959280077368
+     ]
+    },
+    {
+     "tokens": 800000,
+     "status": "oom",
+     "input_shapes": {
+      "boundary_meshes.vehicle": [
+       2125651,
+       3
+      ],
+      "boundary_meshes.vehicle.cells": [
+       800000,
+       3
+      ]
+     },
+     "error": "orch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://docs.pytorch.org/docs/stable/notes/cuda.html#optimizing-memory-usage-with-pytorch-cuda-alloc-conf)"
+    }
+   ]
+  },
+  "geotransolver_surface_256": {
+   "name": "GeoTransolver 256",
+   "task": "DrivAerML Surface",
+   "code": "code_v20 (7ef7c34fa)",
+   "recipe": "recipe_v8 (343b284eb)",
+   "model_yaml": "geotransolver_surface",
+   "dataset_yaml": "drivaer_ml_surface",
+   "extra": [],
+   "n_params": 9046016,
+   "compile": {
+    "how": "torch.compile(model)",
+    "compile": true,
+    "options": {}
+   },
+   "precision": "bfloat16",
+   "warmup_steps": 8,
+   "timed_steps": 25,
+   "gpu_env": {
+    "gpu": "NVIDIA GB300",
+    "nvidia_smi": "NVIDIA GB300, 580.178.04, 284208 MiB, 2070 MHz",
+    "torch": "2.12.0+cu130",
+    "cuda": "13.0",
+    "python": "3.13.16",
+    "hostname": "nvl72d017-T10",
+    "total_memory": 297020817408,
+    "sm_count": 152,
+    "capability": "10.3",
+    "tf32_matmul": false,
+    "pythonpath": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_v20:/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/recipe_v8/src",
+    "slurm_job": "271948"
+   },
+   "runs": [
+    {
+     "tokens": 25000,
+     "status": "ok",
+     "input_shapes": {
+      "geometry": [
+       1,
+       25000,
+       3
+      ],
+      "local_embedding": [
+       1,
+       25000,
+       6
+      ],
+      "local_positions": [
+       1,
+       25000,
+       3
+      ],
+      "global_embedding": [
+       1,
+       1,
+       3
+      ]
+     },
+     "step_ms_median": 75.86773997172713,
+     "step_ms_p10": 71.64596696384251,
+     "step_ms_p90": 80.82974096760154,
+     "peak_allocated_gib": 6.354194641113281,
+     "peak_allocated_bytes": 6822764544,
+     "resident_bytes": 244555776,
+     "warmup_s": 82.14036952401511,
+     "step_ms": [
+      76.97616005316377,
+      76.80041599087417,
+      76.89731102436781,
+      76.723902951926,
+      75.47503500245512,
+      77.52121798694134,
+      71.6037261299789,
+      72.82782602123916,
+      73.48978100344539,
+      75.86773997172713,
+      78.31894909031689,
+      81.47636684589088,
+      81.9740651641041,
+      80.82974096760154,
+      79.93066590279341,
+      77.54502608440816,
+      73.60350782983005,
+      72.18731311149895,
+      72.94549001380801,
+      72.1034079324454,
+      71.64596696384251,
+      71.5482379309833,
+      72.72376213222742,
+      72.28539208881557,
+      78.23181198909879
+     ]
+    },
+    {
+     "tokens": 50000,
+     "status": "ok",
+     "input_shapes": {
+      "geometry": [
+       1,
+       50000,
+       3
+      ],
+      "local_embedding": [
+       1,
+       50000,
+       6
+      ],
+      "local_positions": [
+       1,
+       50000,
+       3
+      ],
+      "global_embedding": [
+       1,
+       1,
+       3
+      ]
+     },
+     "step_ms_median": 74.47394309565425,
+     "step_ms_p10": 73.09653097763658,
+     "step_ms_p90": 77.72893109358847,
+     "peak_allocated_gib": 12.545762062072754,
+     "peak_allocated_bytes": 13470909440,
+     "resident_bytes": 313064960,
+     "warmup_s": 37.8860746989958,
+     "step_ms": [
+      77.75565097108483,
+      75.54818806238472,
+      74.60655202157795,
+      74.53503180295229,
+      73.60203703865409,
+      75.89897187426686,
+      75.56300307624042,
+      74.46904690004885,
+      74.01016703806818,
+      74.13967000320554,
+      74.06981498934329,
+      73.6153800971806,
+      74.5895931031555,
+      74.47394309565425,
+      74.21429501846433,
+      77.72893109358847,
+      78.99187901057303,
+      76.84777490794659,
+      77.22083199769258,
+      74.98140190728009,
+      72.8842739481479,
+      73.09653097763658,
+      72.89310614578426,
+      74.0944230929017,
+      73.65006906911731
+     ]
+    },
+    {
+     "tokens": 100000,
+     "status": "ok",
+     "input_shapes": {
+      "geometry": [
+       1,
+       100000,
+       3
+      ],
+      "local_embedding": [
+       1,
+       100000,
+       6
+      ],
+      "local_positions": [
+       1,
+       100000,
+       3
+      ],
+      "global_embedding": [
+       1,
+       1,
+       3
+      ]
+     },
+     "step_ms_median": 99.42791401408613,
+     "step_ms_p10": 97.70800499245524,
+     "step_ms_p90": 101.63838579319417,
+     "peak_allocated_gib": 24.866431713104248,
+     "peak_allocated_bytes": 26700127744,
+     "resident_bytes": 382974464,
+     "warmup_s": 0.9921162920072675,
+     "step_ms": [
+      99.45044293999672,
+      100.75889504514635,
+      102.12235618382692,
+      99.8488119803369,
+      101.63838579319417,
+      100.56923096999526,
+      100.20436509512365,
+      99.47617119178176,
+      95.4281899612397,
+      96.07622306793928,
+      98.16189506091177,
+      98.51645608432591,
+      98.65421615540981,
+      97.70800499245524,
+      100.00180499628186,
+      102.19838796183467,
+      101.08276782557368,
+      99.98145280405879,
+      98.83399214595556,
+      98.16490299999714,
+      97.90311008691788,
+      98.64506404846907,
+      99.041961831972,
+      99.42791401408613,
+      98.80100097507238
+     ]
+    },
+    {
+     "tokens": 200000,
+     "status": "ok",
+     "input_shapes": {
+      "geometry": [
+       1,
+       200000,
+       3
+      ],
+      "local_embedding": [
+       1,
+       200000,
+       6
+      ],
+      "local_positions": [
+       1,
+       200000,
+       3
+      ],
+      "global_embedding": [
+       1,
+       1,
+       3
+      ]
+     },
+     "step_ms_median": 162.62774099595845,
+     "step_ms_p10": 157.9074370674789,
+     "step_ms_p90": 163.7169609311968,
+     "peak_allocated_gib": 49.445247650146484,
+     "peak_allocated_bytes": 53091430400,
+     "resident_bytes": 455683072,
+     "warmup_s": 1.5934078921563923,
+     "step_ms": [
+      162.45785215869546,
+      163.6816649697721,
+      162.3496599495411,
+      163.19814301095903,
+      163.7169609311968,
+      163.25494297780097,
+      162.86249295808375,
+      162.5994520727545,
+      163.81948883645236,
+      164.0800980385393,
+      163.47068804316223,
+      163.08550303801894,
+      162.62774099595845,
+      163.17951888777316,
+      163.46137505024672,
+      163.5014081839472,
+      162.13359590619802,
+      160.04850016906857,
+      159.93643598631024,
+      159.11950613372028,
+      157.9074370674789,
+      157.7075331006199,
+      157.75978798046708,
+      158.02401397377253,
+      157.92487794533372
+     ]
+    },
+    {
+     "tokens": 400000,
+     "status": "ok",
+     "input_shapes": {
+      "geometry": [
+       1,
+       400000,
+       3
+      ],
+      "local_embedding": [
+       1,
+       400000,
+       6
+      ],
+      "local_positions": [
+       1,
+       400000,
+       3
+      ],
+      "global_embedding": [
+       1,
+       1,
+       3
+      ]
+     },
+     "step_ms_median": 280.54381301626563,
+     "step_ms_p10": 279.4974099379033,
+     "step_ms_p90": 285.51499685272574,
+     "peak_allocated_gib": 98.4778790473938,
+     "peak_allocated_bytes": 105739817472,
+     "resident_bytes": 466882048,
+     "warmup_s": 2.8803511809092015,
+     "step_ms": [
+      280.3116519935429,
+      279.96201906353235,
+      279.57769809290767,
+      279.4974099379033,
+      279.6373460441828,
+      278.96054391749203,
+      280.3318449296057,
+      279.555233893916,
+      279.4970260001719,
+      279.62793805636466,
+      279.7789468895644,
+      281.97453799657524,
+      285.03659600391984,
+      286.42879286780953,
+      286.1084081232548,
+      285.51499685272574,
+      284.05886515975,
+      283.2637270912528,
+      281.2033349182457,
+      280.6888378690928,
+      280.6293808389455,
+      279.85993889160454,
+      283.2995031494647,
+      281.6926490049809,
+      280.54381301626563
+     ]
+    },
+    {
+     "tokens": 800000,
+     "status": "ok",
+     "input_shapes": {
+      "geometry": [
+       1,
+       800000,
+       3
+      ],
+      "local_embedding": [
+       1,
+       800000,
+       6
+      ],
+      "local_positions": [
+       1,
+       800000,
+       3
+      ],
+      "global_embedding": [
+       1,
+       1,
+       3
+      ]
+     },
+     "step_ms_median": 526.494967052713,
+     "step_ms_p10": 524.4766569230705,
+     "step_ms_p90": 529.0341440122575,
+     "peak_allocated_gib": 196.54316568374634,
+     "peak_allocated_bytes": 211036617216,
+     "resident_bytes": 489282048,
+     "warmup_s": 5.36421259585768,
+     "step_ms": [
+      525.9581010323018,
+      527.1337539888918,
+      529.4415690004826,
+      527.9792610090226,
+      527.0509370602667,
+      526.494967052713,
+      527.9122840147465,
+      529.0341440122575,
+      529.3595849070698,
+      528.9390720427036,
+      526.0331421159208,
+      525.8234448265284,
+      524.7321769129485,
+      525.7764370180666,
+      527.3489549290389,
+      526.6779121011496,
+      525.4841158166528,
+      525.0418740324676,
+      523.289100965485,
+      527.4900430813432,
+      527.26642601192,
+      524.4930079206824,
+      524.2871518712491,
+      524.4766569230705,
+      525.3688199445605
+     ]
+    }
+   ]
+  },
+  "transolver_surface_512x16": {
+   "name": "Transolver 512 x 16",
+   "task": "DrivAerML Surface",
+   "code": "code_v20 (7ef7c34fa)",
+   "recipe": "recipe_v8 (343b284eb)",
+   "model_yaml": "transolver_surface",
+   "dataset_yaml": "drivaer_ml_surface",
+   "extra": [
+    "model.n_hidden=512",
+    "model.n_layers=16"
+   ],
+   "n_params": 47236740,
+   "compile": {
+    "how": "torch.compile(model)",
+    "compile": true,
+    "options": {}
+   },
+   "precision": "bfloat16",
+   "warmup_steps": 8,
+   "timed_steps": 25,
+   "gpu_env": {
+    "gpu": "NVIDIA GB300",
+    "nvidia_smi": "NVIDIA GB300, 580.178.04, 284208 MiB, 2070 MHz",
+    "torch": "2.12.0+cu130",
+    "cuda": "13.0",
+    "python": "3.13.16",
+    "hostname": "nvl72d017-T10",
+    "total_memory": 297020817408,
+    "sm_count": 152,
+    "capability": "10.3",
+    "tf32_matmul": false,
+    "pythonpath": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_v20:/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/recipe_v8/src",
+    "slurm_job": "271948"
+   },
+   "runs": [
+    {
+     "tokens": 25000,
+     "status": "ok",
+     "input_shapes": {
+      "embedding": [
+       1,
+       25000,
+       6
+      ],
+      "fx": [
+       1,
+       25000,
+       3
+      ]
+     },
+     "step_ms_median": 85.78978991135955,
+     "step_ms_p10": 76.06242899782956,
+     "step_ms_p90": 88.57795898802578,
+     "peak_allocated_gib": 11.237149715423584,
+     "peak_allocated_bytes": 12065797632,
+     "resident_bytes": 702706688,
+     "warmup_s": 79.65259103989229,
+     "step_ms": [
+      87.3164830263704,
+      86.8732810486108,
+      86.6503999568522,
+      81.86487993225455,
+      78.86583101935685,
+      84.48850479908288,
+      90.3795319609344,
+      88.57795898802578,
+      88.26736593618989,
+      87.83693192526698,
+      88.9340559951961,
+      86.78723289631307,
+      85.84860502742231,
+      85.78978991135955,
+      88.19501288235188,
+      86.01225400343537,
+      68.40963591821492,
+      71.47457404062152,
+      76.06242899782956,
+      76.9186238758266,
+      76.82527881115675,
+      77.78374687768519,
+      80.35242697224021,
+      78.90362292528152,
+      77.0322559401393
+     ]
+    },
+    {
+     "tokens": 50000,
+     "status": "ok",
+     "input_shapes": {
+      "embedding": [
+       1,
+       50000,
+       6
+      ],
+      "fx": [
+       1,
+       50000,
+       3
+      ]
+     },
+     "step_ms_median": 105.89843313209713,
+     "step_ms_p10": 89.36983300372958,
+     "step_ms_p90": 110.80791987478733,
+     "peak_allocated_gib": 21.789443492889404,
+     "peak_allocated_bytes": 23396236800,
+     "resident_bytes": 770915840,
+     "warmup_s": 41.06045191409066,
+     "step_ms": [
+      106.28988896496594,
+      109.07767503522336,
+      102.61630918830633,
+      95.9404471796006,
+      97.21565106883645,
+      94.60898698307574,
+      90.25143599137664,
+      85.79948614351451,
+      89.36983300372958,
+      87.197634158656,
+      89.8836909327656,
+      92.65576396137476,
+      97.01513801701367,
+      106.93747620098293,
+      103.24037494137883,
+      105.89843313209713,
+      106.36576195247471,
+      107.38454898819327,
+      111.62584298290312,
+      109.83383795246482,
+      108.08618296869099,
+      109.49246096424758,
+      110.80791987478733,
+      114.43110089749098,
+      109.50724384747446
+     ]
+    },
+    {
+     "tokens": 100000,
+     "status": "ok",
+     "input_shapes": {
+      "embedding": [
+       1,
+       100000,
+       6
+      ],
+      "fx": [
+       1,
+       100000,
+       3
+      ]
+     },
+     "step_ms_median": 131.35352497920394,
+     "step_ms_p10": 126.90787902101874,
+     "step_ms_p90": 136.15734898485243,
+     "peak_allocated_gib": 42.99064922332764,
+     "peak_allocated_bytes": 46160858112,
+     "resident_bytes": 840225280,
+     "warmup_s": 1.323461074847728,
+     "step_ms": [
+      136.18845283053815,
+      136.2447738647461,
+      135.04563318565488,
+      134.95744112879038,
+      134.6551680471748,
+      127.91050504893064,
+      130.63169899396598,
+      129.9631199799478,
+      126.90787902101874,
+      132.13903084397316,
+      136.15734898485243,
+      134.53881605528295,
+      134.09449392929673,
+      126.43542792648077,
+      130.1725290250033,
+      133.29330692067742,
+      133.81698890589178,
+      133.5087961051613,
+      131.35352497920394,
+      129.69489581882954,
+      125.52915303967893,
+      130.2979059983045,
+      129.2843979317695,
+      129.88865585066378,
+      129.61614318192005
+     ]
+    },
+    {
+     "tokens": 200000,
+     "status": "ok",
+     "input_shapes": {
+      "embedding": [
+       1,
+       200000,
+       6
+      ],
+      "fx": [
+       1,
+       200000,
+       3
+      ]
+     },
+     "step_ms_median": 229.2450510431081,
+     "step_ms_p10": 225.06769304163754,
+     "step_ms_p90": 236.78117198869586,
+     "peak_allocated_gib": 85.33052968978882,
+     "peak_allocated_bytes": 91622958592,
+     "resident_bytes": 911733760,
+     "warmup_s": 2.256455634953454,
+     "step_ms": [
+      229.58322800695896,
+      226.45128099247813,
+      232.2711090091616,
+      237.46827780269086,
+      236.78117198869586,
+      227.93771792203188,
+      225.9345429483801,
+      237.08427604287863,
+      231.3336981460452,
+      226.63736180402339,
+      221.08908696100116,
+      225.34436592832208,
+      227.84479008987546,
+      229.258042993024,
+      223.73431199230254,
+      226.07396799139678,
+      228.76392910256982,
+      230.10166105814278,
+      228.321144124493,
+      233.4144718479365,
+      231.52371519245207,
+      233.52797701954842,
+      234.65613997541368,
+      225.06769304163754,
+      229.2450510431081
+     ]
+    },
+    {
+     "tokens": 400000,
+     "status": "ok",
+     "input_shapes": {
+      "embedding": [
+       1,
+       400000,
+       6
+      ],
+      "fx": [
+       1,
+       400000,
+       3
+      ]
+     },
+     "step_ms_median": 407.8770999331027,
+     "step_ms_p10": 405.1917800679803,
+     "step_ms_p90": 413.49679906852543,
+     "peak_allocated_gib": 169.88529062271118,
+     "peak_allocated_bytes": 182412941824,
+     "resident_bytes": 920532992,
+     "warmup_s": 4.206655401038006,
+     "step_ms": [
+      408.13361294567585,
+      407.4322679080069,
+      407.8770999331027,
+      404.45590601302683,
+      413.49679906852543,
+      407.7271488495171,
+      408.60107098706067,
+      407.722924137488,
+      404.7579870093614,
+      406.5289681311697,
+      409.0457768179476,
+      405.1917800679803,
+      411.7843459825963,
+      427.87012713961303,
+      417.180588003248,
+      405.3390440531075,
+      408.60398299992085,
+      409.04801711440086,
+      411.13452007994056,
+      407.0306660141796,
+      406.1262470204383,
+      405.6070449296385,
+      407.1288099512458,
+      409.30766612291336,
+      407.9276928678155
+     ]
+    },
+    {
+     "tokens": 800000,
+     "status": "oom",
+     "input_shapes": {
+      "embedding": [
+       1,
+       800000,
+       6
+      ],
+      "fx": [
+       1,
+       800000,
+       3
+      ]
+     },
+     "error": "orch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://docs.pytorch.org/docs/stable/notes/cuda.html#optimizing-memory-usage-with-pytorch-cuda-alloc-conf)"
+    }
+   ]
+  },
+  "isla_volume_512x12": {
+   "name": "ISLA",
+   "task": "DrivAerML Volume",
+   "code": "code_a2r (7e167820a, A2 reads)",
+   "recipe": "recipe_a2r",
+   "model_yaml": "isla_volume",
+   "dataset_yaml": "drivaer_ml_volume_reference",
+   "extra": [
+    "model.hidden=512",
+    "model.n_slices=512",
+    "model.compile_blocks=true"
+   ],
+   "n_params": 69078633,
+   "compile": {
+    "how": "utils.compile_model",
+    "compile": true,
+    "options": {
+     "fullgraph": true,
+     "dynamic": true,
+     "mode": "max-autotune-no-cudagraphs"
+    }
+   },
+   "precision": "bfloat16",
+   "warmup_steps": 8,
+   "timed_steps": 25,
+   "gpu_env": {
+    "gpu": "NVIDIA GB300",
+    "nvidia_smi": "NVIDIA GB300, 580.178.04, 284208 MiB, 2070 MHz",
+    "torch": "2.12.0+cu130",
+    "cuda": "13.0",
+    "python": "3.13.16",
+    "hostname": "nvl72d017-T10",
+    "total_memory": 297020817408,
+    "sm_count": 152,
+    "capability": "10.3",
+    "tf32_matmul": false,
+    "pythonpath": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_a2r:/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/recipe_a2r/src",
+    "slurm_job": "271948"
+   },
+   "runs": [
+    {
+     "tokens": 100000,
+     "status": "ok",
+     "input_shapes": {
+      "boundary_meshes.vehicle": [
+       295357,
+       3
+      ],
+      "boundary_meshes.vehicle.cells": [
+       100000,
+       3
+      ],
+      "prediction_points": [
+       100000,
+       3
+      ]
+     },
+     "step_ms_median": 222.50922000966966,
+     "step_ms_p10": 219.75253918208182,
+     "step_ms_p90": 224.53063516877592,
+     "peak_allocated_gib": 63.11331558227539,
+     "peak_allocated_bytes": 67767406592,
+     "resident_bytes": 980523008,
+     "warmup_s": 787.8857201570645,
+     "step_ms": [
+      222.14045096188784,
+      220.89753486216068,
+      222.50922000966966,
+      222.77635685168207,
+      219.75253918208182,
+      219.53324298374355,
+      222.35427517443895,
+      220.40079697035253,
+      223.94858486950397,
+      225.24574189446867,
+      222.79606899246573,
+      222.3039069212973,
+      224.53063516877592,
+      223.6251919530332,
+      219.66543490998447,
+      222.71315706893802,
+      223.872008966282,
+      224.00196106173098,
+      219.9985880870372,
+      220.79158201813698,
+      223.35376706905663,
+      221.36150486767292,
+      225.93633481301367,
+      221.55948891304433,
+      223.92090503126383
+     ]
+    },
+    {
+     "tokens": 200000,
+     "status": "ok",
+     "input_shapes": {
+      "boundary_meshes.vehicle": [
+       581743,
+       3
+      ],
+      "boundary_meshes.vehicle.cells": [
+       200000,
+       3
+      ],
+      "prediction_points": [
+       200000,
+       3
+      ]
+     },
+     "step_ms_median": 452.22835312597454,
+     "step_ms_p10": 450.67871594801545,
+     "step_ms_p90": 454.2069179005921,
+     "peak_allocated_gib": 125.29108381271362,
+     "peak_allocated_bytes": 134530276864,
+     "resident_bytes": 1075815424,
+     "warmup_s": 4.351708395872265,
+     "step_ms": [
+      452.11305608972907,
+      451.4391019474715,
+      454.4659280218184,
+      453.53632513433695,
+      452.0013111177832,
+      452.1608641371131,
+      452.22835312597454,
+      454.26493510603905,
+      451.39900501817465,
+      452.94224307872355,
+      450.43641002848744,
+      452.77725090272725,
+      451.53913414105773,
+      453.549477038905,
+      454.2069179005921,
+      450.67871594801545,
+      452.9720339924097,
+      450.94969193451107,
+      453.4298279322684,
+      452.0217920653522,
+      453.28829111531377,
+      450.3595461137593,
+      453.2209311146289,
+      450.886236038059,
+      453.2912999857217
+     ]
+    },
+    {
+     "tokens": 400000,
+     "status": "ok",
+     "input_shapes": {
+      "boundary_meshes.vehicle": [
+       1128854,
+       3
+      ],
+      "boundary_meshes.vehicle.cells": [
+       400000,
+       3
+      ],
+      "prediction_points": [
+       400000,
+       3
+      ]
+     },
+     "step_ms_median": 1033.2776131108403,
+     "step_ms_p10": 1032.1470818016678,
+     "step_ms_p90": 1034.5924338325858,
+     "peak_allocated_gib": 249.56236267089844,
+     "peak_allocated_bytes": 267965546496,
+     "resident_bytes": 1175885824,
+     "warmup_s": 9.61748322402127,
+     "step_ms": [
+      1033.5595980286598,
+      1032.8859000001103,
+      1031.2709191348404,
+      1033.3355008624494,
+      1034.5924338325858,
+      1032.436201814562,
+      1032.9407160170376,
+      1036.3955760840327,
+      1033.073740079999,
+      1033.042412949726,
+      1033.3587010391057,
+      1032.1470818016678,
+      1032.7781231608242,
+      1033.1123650539666,
+      1032.3878179769963,
+      1033.386061899364,
+      1033.3983171731234,
+      1033.97799981758,
+      1034.3242399394512,
+      1032.464810879901,
+      1033.3475330844522,
+      1034.7967541310936,
+      1033.2776131108403,
+      1031.7288080696017,
+      1033.2999490201473
+     ]
+    }
+   ]
+  },
+  "isla_dtt_volume_512x12": {
+   "name": "ISLA-DTT",
+   "task": "DrivAerML Volume",
+   "code": "code_a2r (7e167820a, A2 reads)",
+   "recipe": "recipe_a2r",
+   "model_yaml": "isla_volume",
+   "dataset_yaml": "drivaer_ml_volume_reference",
+   "extra": [
+    "model.hidden=512",
+    "model.n_slices=512",
+    "compile=false",
+    "model.compile_blocks=true",
+    "++model.query_independent=true",
+    "++model.kernel_read=mean",
+    "++model.kernel_read_radius=null",
+    "++model.kernel_read_theta=1.0"
+   ],
+   "n_params": 70290936,
+   "compile": {
+    "how": "utils.compile_model",
+    "compile": false,
+    "options": {
+     "fullgraph": true,
+     "dynamic": true,
+     "mode": "max-autotune-no-cudagraphs"
+    }
+   },
+   "precision": "bfloat16",
+   "warmup_steps": 8,
+   "timed_steps": 25,
+   "gpu_env": {
+    "gpu": "NVIDIA GB300",
+    "nvidia_smi": "NVIDIA GB300, 580.178.04, 284208 MiB, 2070 MHz",
+    "torch": "2.12.0+cu130",
+    "cuda": "13.0",
+    "python": "3.13.16",
+    "hostname": "nvl72d017-T10",
+    "total_memory": 297020817408,
+    "sm_count": 152,
+    "capability": "10.3",
+    "tf32_matmul": false,
+    "pythonpath": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_a2r:/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/recipe_a2r/src",
+    "slurm_job": "271948"
+   },
+   "runs": [
+    {
+     "tokens": 100000,
+     "status": "ok",
+     "input_shapes": {
+      "boundary_meshes.vehicle": [
+       295357,
+       3
+      ],
+      "boundary_meshes.vehicle.cells": [
+       100000,
+       3
+      ],
+      "prediction_points": [
+       100000,
+       3
+      ]
+     },
+     "step_ms_median": 890.9623231738806,
+     "step_ms_p10": 882.4310309719294,
+     "step_ms_p90": 904.6807058621198,
+     "peak_allocated_gib": 90.37057113647461,
+     "peak_allocated_bytes": 97034661888,
+     "resident_bytes": 995095552,
+     "warmup_s": 50.61330858594738,
+     "step_ms": [
+      873.9857240580022,
+      896.0368998814374,
+      904.6807058621198,
+      902.9750351328403,
+      889.4835030660033,
+      892.5242489203811,
+      889.829648192972,
+      897.3381530959159,
+      883.4826189558953,
+      882.4310309719294,
+      890.9623231738806,
+      890.3696180786937,
+      904.8932499717921,
+      901.3995109125972,
+      890.1488170959055,
+      889.2665100283921,
+      890.0238890200853,
+      916.8327131774276,
+      897.2768730018288,
+      876.3078427873552,
+      897.1408091019839,
+      888.5452270042151,
+      892.3135611694306,
+      892.7418331149966,
+      889.4908239599317
+     ]
+    },
+    {
+     "tokens": 200000,
+     "status": "ok",
+     "input_shapes": {
+      "boundary_meshes.vehicle": [
+       581743,
+       3
+      ],
+      "boundary_meshes.vehicle.cells": [
+       200000,
+       3
+      ],
+      "prediction_points": [
+       200000,
+       3
+      ]
+     },
+     "step_ms_median": 1684.7730570007116,
+     "step_ms_p10": 1672.8540919721127,
+     "step_ms_p90": 1690.5985088087618,
+     "peak_allocated_gib": 184.29330110549927,
+     "peak_allocated_bytes": 197883425280,
+     "resident_bytes": 2118390784,
+     "warmup_s": 26.412041521864012,
+     "step_ms": [
+      1686.73177016899,
+      1680.277488892898,
+      1664.8294490296394,
+      1685.441087000072,
+      1690.9581229556352,
+      1672.8540919721127,
+      1680.7735189795494,
+      1684.181730961427,
+      1686.3854681141675,
+      1684.7738889046013,
+      1685.0863681174815,
+      1684.7730570007116,
+      1677.0111329387873,
+      1689.1617770306766,
+      1678.6853349767625,
+      1677.4458189029247,
+      1686.9708739686757,
+      1678.9656209293753,
+      1674.0168400574476,
+      1685.153695056215,
+      1690.5985088087618,
+      1659.9357058294117,
+      1693.633952876553,
+      1678.071769187227,
+      1685.558269964531
+     ]
+    },
+    {
+     "tokens": 400000,
+     "status": "oom",
+     "input_shapes": {
+      "boundary_meshes.vehicle": [
+       1128854,
+       3
+      ],
+      "boundary_meshes.vehicle.cells": [
+       400000,
+       3
+      ],
+      "prediction_points": [
+       400000,
+       3
+      ]
+     },
+     "error": "orch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://docs.pytorch.org/docs/stable/notes/cuda.html#optimizing-memory-usage-with-pytorch-cuda-alloc-conf)"
+    }
+   ]
+  }
+ },
+ "env": {
+  "gpu": "NVIDIA GB300",
+  "nvidia_smi": "NVIDIA GB300, 580.178.04, 284208 MiB, 2070 MHz",
+  "torch": "2.12.0+cu130",
+  "cuda": "13.0",
+  "python": "3.13.16",
+  "hostname": "nvl72d017-T10",
+  "total_memory": 297020817408,
+  "sm_count": 152,
+  "capability": "10.3",
+  "tf32_matmul": false,
+  "pythonpath": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_a2r:/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/recipe_a2r/src",
+  "slurm_job": "271948"
+ }
+}

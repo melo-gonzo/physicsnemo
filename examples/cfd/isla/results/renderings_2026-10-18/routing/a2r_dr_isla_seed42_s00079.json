@@ -1,0 +1,167 @@
+{
+  "run": "a2r_dr_isla_seed42",
+  "epoch": 500,
+  "model_yaml": "isla_surface",
+  "dataset_yaml": "drivaer_ml_surface",
+  "overrides": [
+    "model=isla_surface",
+    "dataset=drivaer_ml_surface",
+    "run_id=a2r_dr_isla_seed42",
+    "infer_split=val",
+    "sampling_resolution=200000",
+    "precision=float32",
+    "checkpoint_dir=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/book_figs_2026-10-18/runs",
+    "output_dir=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/book_figs_2026-10-18/routing/_scratch",
+    "model.hidden=512",
+    "model.n_slices=512",
+    "model.compile_blocks=true",
+    "model.compile_blocks=false"
+  ],
+  "sampling_resolution": 200000,
+  "precision": "float32",
+  "sample_index": 79,
+  "sample_id": "00079_run_171_domain_run_171",
+  "geo_kernel": "fused",
+  "n_tokens": 200000,
+  "n_boundary": 200000,
+  "n_active": 200000,
+  "n_stored": 200000,
+  "n_layers": 12,
+  "n_slices": 512,
+  "gauge": 0.4066196084022522,
+  "layers": [
+    {
+      "n_eff": 474.80615234375,
+      "n_eff_w": 474.6445617675781,
+      "H_slices": 0.9746509790420532,
+      "H_points": 0.8940175771713257,
+      "anchor_spread": 0.27794700860977173,
+      "pi_max_mean": 0.008007836528122425
+    },
+    {
+      "n_eff": 122.59556579589844,
+      "n_eff_w": 132.61651611328125,
+      "H_slices": 0.6634417176246643,
+      "H_points": 0.8413649797439575,
+      "anchor_spread": 0.6387342810630798,
+      "pi_max_mean": 0.039833586663007736
+    },
+    {
+      "n_eff": 37.633506774902344,
+      "n_eff_w": 50.369693756103516,
+      "H_slices": 0.44607630372047424,
+      "H_points": 0.8238695859909058,
+      "anchor_spread": 0.40165138244628906,
+      "pi_max_mean": 0.1195342168211937
+    },
+    {
+      "n_eff": 57.54742431640625,
+      "n_eff_w": 96.4263916015625,
+      "H_slices": 0.4472537040710449,
+      "H_points": 0.8312656879425049,
+      "anchor_spread": 0.4487798810005188,
+      "pi_max_mean": 0.17188690602779388
+    },
+    {
+      "n_eff": 163.77000427246094,
+      "n_eff_w": 185.48480224609375,
+      "H_slices": 0.5913897752761841,
+      "H_points": 0.8029381036758423,
+      "anchor_spread": 0.5368255972862244,
+      "pi_max_mean": 0.18559527397155762
+    },
+    {
+      "n_eff": 97.86785888671875,
+      "n_eff_w": 148.17562866210938,
+      "H_slices": 0.4698871076107025,
+      "H_points": 0.8130345344543457,
+      "anchor_spread": 0.40215805172920227,
+      "pi_max_mean": 0.34085357189178467
+    },
+    {
+      "n_eff": 154.2091827392578,
+      "n_eff_w": 247.67311096191406,
+      "H_slices": 0.5585898160934448,
+      "H_points": 0.8268121480941772,
+      "anchor_spread": 0.3576759397983551,
+      "pi_max_mean": 0.3085918128490448
+    },
+    {
+      "n_eff": 267.8199462890625,
+      "n_eff_w": 317.9312438964844,
+      "H_slices": 0.7051385641098022,
+      "H_points": 0.7984826564788818,
+      "anchor_spread": 0.4066140651702881,
+      "pi_max_mean": 0.21684816479682922
+    },
+    {
+      "n_eff": 245.28982543945312,
+      "n_eff_w": 324.243896484375,
+      "H_slices": 0.6234229803085327,
+      "H_points": 0.7937519550323486,
+      "anchor_spread": 0.5148197412490845,
+      "pi_max_mean": 0.308626264333725
+    },
+    {
+      "n_eff": 334.41754150390625,
+      "n_eff_w": 368.2348937988281,
+      "H_slices": 0.718291163444519,
+      "H_points": 0.798867404460907,
+      "anchor_spread": 0.4245799779891968,
+      "pi_max_mean": 0.2457713484764099
+    },
+    {
+      "n_eff": 430.0655517578125,
+      "n_eff_w": 443.0046691894531,
+      "H_slices": 0.8138471841812134,
+      "H_points": 0.7803559899330139,
+      "anchor_spread": 0.5182395577430725,
+      "pi_max_mean": 0.15021465718746185
+    },
+    {
+      "n_eff": 419.1364440917969,
+      "n_eff_w": 454.0537109375,
+      "H_slices": 0.8274768590927124,
+      "H_points": 0.8217657208442688,
+      "anchor_spread": 0.28955206274986267,
+      "pi_max_mean": 0.14254207909107208
+    }
+  ],
+  "top_layers": [
+    0,
+    5,
+    11
+  ],
+  "top_slices": [
+    [
+      415,
+      133,
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    [
+      330,
+      255,
+      390,
+      206,
+      186,
+      70,
+      320,
+      277
+    ],
+    [
+      206,
+      323,
+      317,
+      497,
+      128,
+      411,
+      314,
+      254
+    ]
+  ]
+}
