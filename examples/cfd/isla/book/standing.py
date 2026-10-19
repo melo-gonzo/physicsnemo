@@ -244,7 +244,9 @@ def unit_drive_control():
     rec = json.load(open(RES / "campaigns_2026-10-19" / "drive_fix" / "drivefix_scores_2026-10-19.json"))
     ref = Standing("drivaerml_surface")
     run = "evals_r80ud/r80ud_dr_t_h512_l16_c100k_seed{}/native"
-    return {f: sum(rec[run.format(s)]["metrics"][f] for s in (42, 43)) / 2 / ref.err("Transolver", f) for f in ref.ds.headline}
+    raw = ref.raw.get("raw_drive_transolver")  # the physical-vector arm, once a unit-direction arm replaces it (FAIR_INPUT)
+    base = (lambda f: raw["native"][f]["mean"]) if raw else (lambda f: ref.err("Transolver", f))
+    return {f: sum(rec[run.format(s)]["metrics"][f] for s in (42, 43)) / 2 / base(f) for f in ref.ds.headline}
 
 
 def drive_bias() -> float:
