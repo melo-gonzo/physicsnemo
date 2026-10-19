@@ -1,6 +1,6 @@
 # AirfRANS {#sec-airfrans}
 
-*Before this chapter:* the interior task, in which a model reads the boundary and predicts the field at points in the flow (@sec-interior-task); the scoring protocol and the seed rule (@sec-protocol); the rigid-motion contract (@sec-invariances).
+*Before this chapter:* the interior task, in which a model reads the boundary and predicts the field at points in the flow (@sec-interior-task); the scoring protocol (@sec-protocol) and the seed rule (@sec-fair-comparison); the rigid-motion contract (@sec-invariances).
 
 ```{python}
 #| label: setup-airfrans
@@ -180,7 +180,7 @@ print(f"**The interior task on the `full` split: 800 training airfoils, {N_TEST}
       f"{['no', 'one', 'two', 'three'][N_SEEDS]} seeds, float32 scoring.** The {CELLS:,} points are about half of each case's stored interior points, drawn uniformly at random "
       "in training and in scoring. The metric is the per-case relative L2 per field averaged over the test cases (@sec-metrics). Eddy viscosity "
       "is standardized before scoring, so its ratios order the models but are not physical percentages. The three architectures run at their "
-      "reference configurations, the same on every dataset of the book (@sec-protocol):")
+      "reference configurations, the same on every dataset of the book (@sec-selection, @tbl-architectures):")
 print()
 print(f"- **ISLA**: width 512, 12 layers, 512 slices, learning rate 3.75e-4, {PARAMS['ISLA'] / 1e6:.1f}M parameters; the slice sublayer reads "
       "the normalized token state (@sec-isla-layer).")
@@ -319,8 +319,8 @@ print(f"**On AirfRANS no error floor is in reach at 800 airfoils: ISLA's error f
       f"{min(gt_loc):.2f} to {max(gt_loc):.2f} from 100 airfoils up, and its 50-airfoil error sits above its own trend, so no fit is accepted for it; "
       "it reads the inlet velocity as the physical vector, so its curve is drawn for reference and the two are not compared. One consequence "
       "follows for the compute-allocation rule of @sec-compute-allocation, which splits a fixed training budget between more cases and more "
-      "parameters by the measured exponents: with no floor and an exponent below one, more training cases stay the better purchase for ISLA "
-      "across the whole range measured here.")
+      "parameters by comparing the data exponent with the parameter exponent. This ladder trains one width and so measures only the data "
+      "exponent; what it gives that rule is that no floor limits what more training cases buy ISLA across the range measured here.")
 ```
 
 ```{python}
@@ -424,9 +424,10 @@ print(f"**On the airfoil, read-only prediction points with a global read of the 
       + ", ".join(f"{ro_word(K_NOR, j)} on {names3[j]}" for j in range(3))
       + f" by the seed rule ({' / '.join(f'{v:.2f}' for v in nor)}), where on the DrivAerML Volume task they trail it "
       f"(@sec-interior-read-only). The global read removes a further {min(gain[:2]) * 100:.0f}% to {max(gain[:2]) * 100:.0f}% of their "
-      f"pressure and velocity error and {gain[2] * 100:.0f}% on eddy viscosity, and the forest keeps that gain: ISLA-DTT ÷ the dense pairwise "
-      f"read is {' / '.join(f'{v:.2f}' for v in dtt_dense)}, and on eddy viscosity the forest's value lies inside the dense read's own seed "
-      f"range ({min(RO_SEEDS(K_DENSE, 2)):.4f} to {max(RO_SEEDS(K_DENSE, 2)):.4f}).")
+      f"pressure and velocity error and {gain[2] * 100:.0f}% on eddy viscosity. The forest keeps the gain on pressure and velocity: "
+      f"ISLA-DTT ÷ the dense pairwise read is {dtt_dense[0]:.2f} / {dtt_dense[1]:.2f} there. On eddy viscosity it keeps less of it: "
+      f"ISLA-DTT ÷ the dense read is {dtt_dense[2]:.2f}, and the forest's {RO[K_DTT][2][2]:.4f} lies at the upper end of the dense read's seed range ({min(RO_SEEDS(K_DENSE, 2)):.4f} to "
+      f"{max(RO_SEEDS(K_DENSE, 2)):.4f}), near the {RO[K_NOR][2][2]:.4f} of read-only points without a read.")
 ```
 
 ```{python}
@@ -506,7 +507,7 @@ print(f"**ISLA's interior error depends on which airfoil segments it is given: w
       f"{max(pv):.1f} times those of a uniform draw of the same count.** What changes with the draw is the one discretization-dependent input "
       "of the interior task. Each prediction point takes a distance and a direction from its nearest boundary token (@tbl-airfrans-inputs), and that direction "
       "serves as the point's normal in every relational invariant (@sec-isla-relational). A nearest-token distance overestimates the true wall "
-      "distance by up to about the local token spacing, and the spacing is set by the draw. @fig-airfrans-draw-spacing shows what the two "
+      "distance by up to half the local token spacing, and the spacing is set by the draw. @fig-airfrans-draw-spacing shows what the two "
       "draws do to the spacing on a real AirfRANS airfoil. A variant that takes the distance and direction from the full-resolution airfoil "
       "instead reverses the law effect on the same draws: for it the length-proportional draw is the better one (@sec-airfrans-limits).")
 ```
@@ -524,7 +525,7 @@ print(f"**ISLA's interior error depends on which airfoil segments it is given: w
 #|   strips the short ones, so its spacing is the same everywhere. Both draws
 #|   divide each kept segment's length by its inclusion probability, so every
 #|   boundary integral stays unbiased. How to read this: a prediction point's
-#|   nearest-token distance errs by up to about the spacing, so near the
+#|   nearest-token distance errs by up to half the spacing, so near the
 #|   leading edge the length-proportional draw hands each point a much coarser
 #|   geometry; the figure shows the inputs, not a trained model's errors.
 #|   Data: results/problem_figures_2026-09-22/airfrans.npz (the airfoil of
@@ -620,7 +621,7 @@ print("**The AirfRANS standing is one two-dimensional dataset: "
 print()
 if not FAIR:
     print(f"- **No native comparison with the baselines.** {DRIVE} A GeoTransolver and Transolver pair trained with the unit inlet direction "
-          "and the speed as a standardized scalar, scored by the same protocol beside ISLA's checkpoints, is the comparison "
+          "and the inlet speed as a scalar in m/s, the form ISLA reads it in, scored by the same protocol beside ISLA's checkpoints, is the comparison "
           "(@sec-open-questions); no ratio of @tbl-airfrans-protocols is read as a verdict.")
 print("- **Not resource-matched.** The three configurations differ in parameters and memory (@sec-airfrans-measured) and do not receive the "
       "same inputs (@tbl-airfrans-inputs), so any ratio is a record of the configurations as each is scored on every dataset.")
@@ -635,6 +636,6 @@ print(f"- **The exact form of the interior geometry is an open design question**
       f"length ÷ uniform ratio is {gx['pressure_l2']:.2f} on pressure and {gx['velocity_l2']:.2f} on velocity (seed means), and its uniform ÷ "
       f"native count effect is {min(gc):.1f} to {max(gc):.1f} on those fields (results/char/airfrans_area2_a2.json). What would settle the "
       "question is a full-resolution form that holds its native accuracy and removes the count effect as well as the law effect.")
-print("- **Extrapolation is measured on one dataset, on a smaller instrument.** The three-dimensional twin on the wings is unmeasured "
-      "(@sec-limits-regime), and the mechanism behind the smaller growth factors is not measured.")
+print("- **Extrapolation is measured on a smaller instrument.** The three-dimensional twin on the wings is unmeasured "
+      "at the reference configuration (@sec-de-limits, @sec-limits-regime).")
 ```
