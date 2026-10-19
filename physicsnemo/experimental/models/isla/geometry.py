@@ -35,6 +35,38 @@ from physicsnemo.nn.functional.geometry.sdf import _closest_point_weights
 ### block (a loop over query chunks would specialize the dynamic query count).
 _TORCH_SEARCH_CHUNK = 4096
 
+#: The softening of the logarithmic length channels (:func:`soft_log_length`), in
+#: the frame's length unit.
+LENGTH_SOFTENING = 1e-6
+
+
+def soft_log_length(s: torch.Tensor, eps: float = LENGTH_SOFTENING) -> torch.Tensor:
+    r"""The logarithmic channel of a signed length ``s`` in the frame's length unit:
+    :math:`\operatorname{asinh}(s / \varepsilon)`.
+
+    It is :math:`\operatorname{sign}(s) \log(2 \lvert s \rvert / \varepsilon)` up to
+    :math:`O((\varepsilon / s)^2)` when :math:`\lvert s \rvert \gg \varepsilon`, so
+    it resolves the distances to a wall over many decades, as a logarithm does, and
+    it is linear, :math:`s / \varepsilon`, near zero: odd, smooth and continuous
+    through :math:`s = 0`, with slope at most :math:`1 / \varepsilon` (Lupton, Gunn
+    and Szalay 1999, "asinh magnitudes", soften a logarithm the same way at the
+    noise level of what it measures). A signed logarithm
+    :math:`\operatorname{sign}(s) \log(\lvert s \rvert + \epsilon)` instead jumps
+    by :math:`2 \lvert \log \epsilon \rvert` at :math:`s = 0`, so a point on a wall,
+    whose distance is zero or a rounding error of either sign, gets a code that
+    rounding or a rigid motion can change by tens.
+
+    The softening :math:`\varepsilon = 10^{-6}` (in the frame's length unit, so
+    the channel is invariant to a uniform scaling of the geometry) is a numerical
+    resolution, not a model parameter. It sits about 16 times above the float32
+    resolution of a distance relative to the frame's length (a few units of
+    :math:`2^{-24}`), so rounding moves the channel by at most about 0.1, and below
+    the finest wall spacing of the reference datasets (AirfRANS's first nodes off
+    the airfoil, about :math:`5 \times 10^{-6}` of the frame's length), so the
+    near-wall layers keep their logarithmic resolution.
+    """
+    return torch.asinh(s / eps)
+
 
 def rms_pairwise_distance(
     points: torch.Tensor, measure_weights: torch.Tensor | None, eps: float = 1e-8

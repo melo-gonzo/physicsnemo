@@ -47,10 +47,10 @@ compile_options:
   mode: max-autotune-no-cudagraphs
 
 forward_kwargs:
-  boundary_meshes:                # Mesh[2, 3] each: outward-wound triangles of the lug's surface, split by condition
-    fixed: boundaries.fixed
-    hole: boundaries.hole
-    loaded: boundaries.loaded
+  boundary_meshes:                # Mesh[2, 3] each: the lug's surface triangles, split by condition. The stored triangles are
+    fixed: boundaries.fixed       # wound outward (out of the solid, where the queries live), so pair this config with a dataset
+    hole: boundaries.hole         # config that reverses them (FlipBoundaryOrientation, boundaries: [surface], before the split):
+    loaded: boundaries.loaded     # the built-in signed distance is then positive inside, as for the fluids
     free: boundaries.free
   prediction_points: interior     # the lug's mesh nodes as a point cloud
   global_data: global_data        # the case's TensorDict; the model selects its declared leaves

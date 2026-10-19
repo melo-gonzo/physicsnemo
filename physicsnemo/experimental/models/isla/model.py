@@ -167,9 +167,14 @@ surface's cells (point to face, never point to centroid) gives the distance
 feature, so positive on the side the cells' normals point to, and the
 direction :math:`u_q`: the cell's normal, oriented toward the query, when
 :math:`p_q` is interior to a cell, else :math:`(x_q - p_q) / |x_q - p_q|`
-(:func:`exact_boundary_geometry`). :math:`d_q / L` with its signed logarithm
-enters the token's embedding as a built-in rank-0 channel ahead of the fields
-declared in ``query_schema``. :math:`(d_q, u_q)` are functions of the surface
+(:func:`exact_boundary_geometry`). The token reads :math:`s_q = d_q / L` and
+:math:`\operatorname{asinh}(s_q / 10^{-6})` (:func:`soft_log_length`; logarithmic
+away from the wall, linear through it) as built-in rank-0 channels ahead of the
+fields declared in ``query_schema``, and :math:`\operatorname{sign}(d_q)\, u_q`
+(with :math:`\operatorname{sign}(0) = +1`, the gradient of the signed distance) as
+its direction. Both are continuous through the surface: a point on it, whose
+distance is zero or a rounding error of either sign, gets the code of the points
+just off it on either side. :math:`(d_q, u_q)` are functions of the surface
 and its orientation alone: the same for every draw of the boundary tokens,
 invariant to splitting a cell and converging as :math:`O(h^2)` under refinement
 of the surface, like a stored signed-distance field computed from the same
@@ -276,6 +281,7 @@ from physicsnemo.experimental.models.isla.blocks import (
 from physicsnemo.experimental.models.isla.geometry import (
     exact_boundary_geometry,
     rms_pairwise_distance,
+    soft_log_length,
 )
 from physicsnemo.experimental.models.isla.heads import (
     _assemble_output,
@@ -357,12 +363,17 @@ def _tail(tokens: TensorDict, start) -> TensorDict:
     return tokens.apply(lambda t: t[:, start:], batch_size=[b, n - start])
 
 
-def _refuse_earlier_state_dict(module, state_dict, prefix, *args) -> None:
-    """A load_state_dict pre-hook: a state dict with the parameter layout of an ISLA
-    checkpoint before 0.7.0 (the shared seed embedding ``embed.0``, the prediction
-    points' ``qt.type_offset`` and ``qt.embed``) is refused with the versions named, on
-    every loading path (``Module.load``, ``load_checkpoint``, ``load_state_dict``), not
-    only ``Module.from_checkpoint``, which checks the recorded version."""
+def _refuse_earlier_state_dict(module, state_dict, prefix, local_metadata, *args) -> None:
+    """A load_state_dict pre-hook: a state dict of an earlier ISLA is refused with the
+    versions named, on every loading path (``Module.load``, ``load_checkpoint``,
+    ``load_state_dict``), not only ``Module.from_checkpoint``, which checks the
+    recorded version. Two marks tell an earlier state dict: the parameter layout
+    before 0.7.0 (the shared seed embedding ``embed.0``, the prediction points'
+    ``qt.type_offset`` and ``qt.embed``), and, for 0.7.0, whose layout is the
+    current one, the state-dict version torch records for every module
+    (``ISLA._version``, 1 before 0.8.0). A state dict rebuilt without torch's
+    metadata (a dict comprehension over it) carries no version and is read by its
+    layout alone."""
     old = sorted(
         k[len(prefix) :]
         for k in state_dict
@@ -371,10 +382,20 @@ def _refuse_earlier_state_dict(module, state_dict, prefix, *args) -> None:
     if old:
         raise RuntimeError(
             f"this ISLA state dict has the parameter layout of a checkpoint before version "
-            f"{module.__model_checkpoint_version__} ({', '.join(old[:3])}, ...): ISLA "
-            f"{module.__model_checkpoint_version__} declares its boundary conditions by name "
-            "(boundary_schemas) and keeps no upgrade path from earlier checkpoints (0.6.0 and "
-            "before); load it with the code that wrote it, or retrain"
+            f"0.7.0 ({', '.join(old[:3])}, ...): ISLA {module.__model_checkpoint_version__} "
+            "declares its boundary conditions by name (boundary_schemas) and keeps no upgrade "
+            "path from earlier checkpoints (0.6.0 and before); load it with the code that "
+            "wrote it, or retrain"
+        )
+    version = local_metadata.get("version")
+    if version is not None and version != type(module)._version:
+        raise RuntimeError(
+            f"this ISLA state dict was written before version {module.__model_checkpoint_version__} "
+            f"(state-dict version {version}, now {type(module)._version}): its weights have the "
+            "current layout but were trained on the prediction points' earlier geometry "
+            "encoding (sign(s) log(|s| + 1e-12) and the direction from the surface, in "
+            "place of asinh(s / 1e-6) and sign(d) times it), and ISLA keeps no upgrade path; "
+            "load it with the code that wrote it, or retrain"
         )
 
 
@@ -555,8 +576,17 @@ class ISLA(Module):
 
     ### 0.7.0: boundary conditions by name (boundary_schemas, one input layer and
     ### vector and tensor maps per condition), the prediction points' own input layer.
-    ### No earlier checkpoint loads: ISLA is unreleased and keeps no upgrade paths.
-    __model_checkpoint_version__ = "0.7.0"
+    ### 0.8.0: the prediction points' geometry encoding is continuous through the
+    ### surface (the built-in distance channel asinh(s / 1e-6) in place of
+    ### sign(s) log(|s| + 1e-12), the direction sign(d) u; same parameters, new
+    ### forward). No earlier checkpoint loads: ISLA is unreleased and keeps no
+    ### upgrade paths.
+    __model_checkpoint_version__ = "0.8.0"
+    #: torch's state-dict version of the module (``nn.Module._version``, recorded in
+    #: every state dict's metadata): 1 before 0.8.0, so a state dict of 0.7.0, whose
+    #: parameter layout is the current one, is told apart and refused on load
+    #: (:func:`_refuse_earlier_state_dict`).
+    _version = 8
 
     def __init__(
         self,
@@ -1547,12 +1577,17 @@ class ISLA(Module):
             query_points = query["points"]
             nq = query_points.shape[1]
             ### The query's geometry from the boundary surface: the signed distance
-            ### to it (the built-in channel) and the direction from it (the token's
-            ### "normal" in every invariant), from the exact closest point.
+            ### to it (the built-in channels s and asinh(s / 1e-6)) and the gradient
+            ### of the signed distance, sign(d) u with sign(0) = +1 (the token's
+            ### "normal" in every invariant), from the exact closest point. Both are
+            ### continuous through the surface, so a point on it (d zero or a rounding
+            ### error of either sign) gets the code of its neighbours on either side.
             with torch.autocast(points.device.type, enabled=False):
-                dist, q_nhat = query["wall_distance"], query["wall_direction"].to(points.dtype)
-                s = (dist.to(points.dtype) / gauge.squeeze(-1))[..., None]  # (B, Q, 1), in frame units
-                builtin = torch.cat([s, torch.sign(s) * torch.log(s.abs() + EPS)], -1)
+                dist = query["wall_distance"].to(points.dtype)
+                u = query["wall_direction"].to(points.dtype)
+                q_nhat = torch.where((dist >= 0)[..., None], u, -u)
+                s = (dist / gauge.squeeze(-1))[..., None]  # (B, Q, 1), in frame units
+                builtin = torch.cat([s, soft_log_length(s)], -1)
             q_g = g_unit[:, None].expand(b, nq, K, dim)
             q_seed = [self._dots(q_nhat, q_g)]
             if g_scalars is not None:
