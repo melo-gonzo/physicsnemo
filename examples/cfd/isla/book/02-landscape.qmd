@@ -727,7 +727,7 @@ sum of their diagonals is below $\theta$ times their gap
 ($\theta$ is `{python} GLOBE_DEFAULTS["theta"]` by default),
 nearer faces are summed one by one, and the cost falls to $O(N \log N)$.
 @fig-isla-dtt draws this access pattern on the airfoil. GLOBE is
-therefore rotation-equivariant and query-independent: its kernel is
+rotation-equivariant and query-independent: its kernel is
 exactly equivariant, and its prediction at a target is a sum over the
 boundary that involves no other target. The tree is an approximation that
 vanishes as $\theta \to 0$. Its boxes are aligned with the laboratory axes
@@ -750,7 +750,7 @@ GLOBE's cluster trees, near cells one by one and distant clusters as monopoles
 log-measure bias, a normalized quadrature. Its forest is built in a frame
 the boundary carries, so a rotation does not regroup it; where that frame
 ties, a regrouping moves the read only by the tree's error, which
-vanishes as $\theta \to 0$.
+vanishes with $\theta$ as GLOBE's does.
 
 ### DeepONet: a branch and a trunk {#sec-landscape-deeponet}
 
