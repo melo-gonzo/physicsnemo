@@ -17,6 +17,12 @@ WORD = {"von_mises_l2": "von Mises stress", "displacement_l2": "displacement"}
 N_TEST = ST.cell("ISLA", FIELDS[0])["n_cases"]
 SEP = all(max(ST.seeds("ISLA", f)) < min(ST.seeds(a, f)) for a in S.BASELINES for f in FIELDS)
 COST = json.load(open(RES / "char" / "char_lanes_cost_2026-10-04.json"))["cost"]["DeepJEB++"]
+# Split counts: 15,360 brackets on the dataset card; the clean splits of the manifest written by
+# results/campaigns_2026-09-22/datasets/deepjebpp_clean_splits.py (train_clean, test_clean brackets).
+N_BRACKETS, N_TRAIN_CLEAN, N_TEST_CLEAN = 15_360, 12_451, 1_385
+assert N_TEST == 4 * N_TEST_CLEAN
+N_REMOVED = N_BRACKETS - N_TRAIN_CLEAN - N_TEST_CLEAN
+REMOVED = f"{N_REMOVED:,} of the {N_BRACKETS:,} brackets ({N_REMOVED / N_BRACKETS:.1%})"
 ```
 
 **On DeepJEB++, generated jet-engine brackets under four load cases, ISLA leads GeoTransolver and Transolver on von Mises stress and on displacement, with every ISLA seed below every baseline seed.** Their errors are `{python} f"{min(ST.ratio(a, f) for a in S.BASELINES for f in FIELDS):.2f}"` to `{python} f"{max(ST.ratio(a, f) for a in S.BASELINES for f in FIELDS):.2f}"` times ISLA's. This is the most varied geometry in the book, and the one dataset where the global vector is a load direction rather than a free stream. Rotated and translated, ISLA reproduces its native numbers, while the baselines lose the field.
@@ -33,8 +39,8 @@ The one-hot is there because a direction does not say what kind of load it carri
 Js_, Jsm = load_samples("deepjeb")
 cs = Jsm["cases"]; mr = Jsm["test_mass_range_g"]; lc = Jsm["load_cases"]
 print(f"**Shape, load direction and load kind all change from file to file.** @fig-deepjeb-samples shows six clean test brackets at the 0, 20, "
-      f"40, 60, 80 and 100% quantiles of bracket mass (the {Jsm['n_test_brackets']:,} clean test brackets weigh {mr[0]:.0f} to {mr[1]:.0f} g; "
-      f"the six shown {cs[0]['mass_g']:.0f} to {cs[-1]['mass_g']:.0f} g), each under one of the four load cases: vertical, horizontal and "
+      f"40, 60, 80 and 100% quantiles of bracket mass (the {Jsm['n_test_brackets']:,} clean test brackets weigh {mr[0]:.0f} to {mr[1]:.0f} g), "
+      f"each under one of the four load cases: vertical, horizontal and "
       f"diagonal forces of {lc['ver']['magnitude'] / 1e3:.1f}, {lc['hor']['magnitude'] / 1e3:.1f} and {lc['dia']['magnitude'] / 1e3:.1f} kN, "
       f"and a torsion of {lc['tor']['magnitude'] / 1e3:.0f} N·m about $z$. The clamped bolt holes and the loaded lug bore keep their roles.")
 ```
@@ -84,7 +90,7 @@ fig.legend(handles=[Line2D([], [], color=BC["value"], marker="o", ls="none", ms=
 plt.show()
 ```
 
-**Diversity.** The geometry is the most varied in the book. The brackets are generated shapes spanning a design space, not morphs of one body; each appears under four loads whose direction is a global input of the problem; and the loading changes kind between force and torque. The price is label quality: a census of the stress fields found unphysical maxima, above 10,000 MPa against a yield stress of 903 MPa, on 4.25% of the brackets (results/campaigns_2026-09-22/datasets/deepjebpp_clean_splits.py), and the clean split used here removes those without making the remaining fields smooth.
+**Diversity.** The geometry is the most varied in the book. The brackets are generated shapes spanning a design space, not morphs of one body; each appears under four loads whose direction is a global input of the problem; and the loading changes kind between force and torque. The price is label quality: a census of the stress fields found unphysical maxima, above 10,000 MPa against a yield stress of 903 MPa, on `{python} REMOVED`, counted from the clean splits of the dataset manifest (results/campaigns_2026-09-22/datasets/deepjebpp_clean_splits.py). The clean split used here removes those brackets without making the remaining fields smooth.
 
 ### Files, conversion and normalization {#sec-data-deepjeb}
 
@@ -93,7 +99,7 @@ plt.show()
 - **Conversion** (`deepjebpp_convert.py`). One file per bracket and load: the surface triangles wound outward, their areas, the `bc_fixed` and `bc_loaded` labels, the traction `bc_load` (for a force $F\,\hat d / A_{\text{loaded}}$; for the torsion the rigid-twist traction about the lug axis), cell-mean targets, and global data with `load_dir` (the force direction or the moment axis), the `load_type` one-hot [force, torque], the magnitude and the bracket's mass and volume.
 - **What each model receives.** A surface task in the DrivAerML layout (`deepjebpp_surface.yaml`), with coordinates scaled from mm to 0.1 m so that a bracket spans about one unit. ISLA (`isla_surface_deepjebpp.yaml`) takes `load_dir` as the one global vector ($K = 1$), the one-hot as two global scalars, the two labels as boundary scalars and the traction as a boundary vector, which it reads through invariants against each cell's normal and $\hat g_1$ (@sec-isla-inputs). It predicts the von Mises stress as a scalar and the displacement as a vector. GeoTransolver and Transolver read each cell's coordinates, normal, labels and traction as laboratory-frame features, and the load direction and the one-hot as global features.
 - **Splits.** Grouped by SimJEB seed pair, because the brackets of one pair are a smooth family and must not straddle a split: a seed-0 draw of 10% of the pairs is the test set and the rest train. The authors' pair-grouped and random splits are kept under `official_*`.
-- **Pitfalls.** The label census removed 4.25% of the brackets for unphysical stress maxima; every number in this chapter is on the clean split. Published stress errors for Transolver, GNOT (the General Neural Operator Transformer) and GI-FNO (a geometry-informed Fourier neural operator) are 30 to 37% (`results/book_audit_2026-09-22/datasets_scout.md`), comparable in kind but not in split.
+- **Pitfalls.** The label census removed `{python} REMOVED` for unphysical stress maxima, a bracket going with all four of its load cases; every number in this chapter is on the clean split. Published stress errors for Transolver, GNOT (the General Neural Operator Transformer) and GI-FNO (a geometry-informed Fourier neural operator) are 30 to 37% (`results/book_audit_2026-09-22/datasets_scout.md`), comparable in kind but not in split.
 
 ## What is measured {#sec-deepjeb-measured}
 
