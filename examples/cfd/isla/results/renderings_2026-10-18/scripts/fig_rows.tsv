@@ -1,0 +1,25 @@
+idx	tag	run_id	ckpt_root	protocol	dataset	model	extra	code	recipe	cells	samples
+0	dr_isla	a2r_dr_isla_seed42	F	native	drivaer_ml_surface	isla_surface	model.hidden=512 model.n_slices=512 model.compile_blocks=true	code_a2r	recipe_a2r	200000	00079
+1	dr_isla	a2r_dr_isla_seed42	F	posed	drivaer_ml_surface	isla_surface	model.hidden=512 model.n_slices=512 model.compile_blocks=true	code_a2r	recipe_a2r	200000	00079
+2	dr_gt	r80_dr_gt_h256_seed42	F	native	drivaer_ml_surface	geotransolver_surface	-	code_v20	recipe_v8	200000	00079
+3	dr_gt	r80_dr_gt_h256_seed42	F	posed	drivaer_ml_surface	geotransolver_surface	-	code_v20	recipe_v8	200000	00079
+4	dr_t	r80_dr_t_h512_l16_c100k_seed42	F	native	drivaer_ml_surface	transolver_surface	model.n_hidden=512 model.n_layers=16	code_v20	recipe_v8	100000	00079
+5	dr_t	r80_dr_t_h512_l16_c100k_seed42	F	posed	drivaer_ml_surface	transolver_surface	model.n_hidden=512 model.n_layers=16	code_v20	recipe_v8	100000	00079
+6	af_isla	afu_a2s_isla_seed42	R	native	airfrans_uvolume_2d	isla_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10 model.hidden=512 model.n_slices=512 model.compile_blocks=true	code_a2s	recipe_v11	100000	00215
+7	af_gt	afu_r_gt_seed42	R	native	airfrans_uvolume	geotransolver_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10	code_v20	recipe_v8	100000	00215
+8	af_t	afu_r_t_seed42	R	native	airfrans_uvolume	transolver_volume	train_split=full_train val_split=full_test +training.val_interval=10 model.n_hidden=512 model.n_layers=16	code_v20	recipe_v8	100000	00215
+9	jeb_isla	jbn2_isla_seed42	R	native	deepjebpp_surface	isla_surface_deepjebpp	train_split=train_clean val_split=test_clean +training.val_interval=2 model.hidden=512 model.n_slices=512	code_v20a2	recipe_v8	200000	60073
+10	jeb_gt	cl_r_jeb_gt_seed42	F	native	deepjebpp_surface	geotransolver_surface_deepjebpp	train_split=train_clean val_split=test_clean +training.val_interval=2	code_v20	recipe_v8	200000	60073
+11	jeb_t	cl_r_jeb_t_seed42	F	native	deepjebpp_surface	transolver_surface_deepjebpp	train_split=train_clean val_split=test_clean +training.val_interval=2 model.n_hidden=512 model.n_layers=16	code_v20	recipe_v8	200000	60073
+12	lug_isla	a2r_lug_isla_seed42	R	native	ginot_lug_volume	isla_lug	train_split=train val_split=test +training.val_interval=10 model.hidden=512 model.n_slices=512 model.compile_blocks=true	code_a2r	recipe_a2r	200000	00633
+13	lug_gt	cl_r_lug_gt_seed42	F	native	ginot_lug_volume	geotransolver_lug	train_split=train val_split=test +training.val_interval=10 model.n_hidden=256	code_v20	recipe_v8	200000	00633
+14	lug_t	cl_r_lug_t_seed42	F	native	ginot_lug_volume	transolver_lug	train_split=train val_split=test +training.val_interval=10 model.n_hidden=512 model.n_layers=16	code_v20	recipe_v8	200000	00633
+15	t2d_isla	a2r_t2dz_isla_seed42	R	native	plaid_tensile2d_2d	isla_tensile2d	train_split=train_400 val_split=val_100 +training.val_interval=10 model.hidden=512 model.n_slices=512 model.compile_blocks=true	code_a2r	recipe_a2r	200000	00238
+16	t2d_gt	cl_r_t2dz_gt_seed42	F	native	plaid_tensile2d	geotransolver_tensile2d	train_split=train_400 val_split=val_100 +training.val_interval=10 model.n_hidden=256	code_v20	recipe_v8	200000	00238
+17	t2d_t	cl_r_t2dz_t_seed42	F	native	plaid_tensile2d	transolver_tensile2d	train_split=train_400 val_split=val_100 +training.val_interval=10 model.n_hidden=512 model.n_layers=16	code_v20	recipe_v8	200000	00238
+18	suv_isla	a2r_suv_isla_seed42	R	native	shift_suv_surface	isla_surface	model.hidden=512 model.n_slices=512 model.compile_blocks=true dataloader.prefetch_factor=12	code_a2r	recipe_a2r	200000	00184
+19	suv_gt	cl_r_suv_gt_seed42	F	native	shift_suv_surface	geotransolver_surface	-	code_v20	recipe_v8	200000	00184
+20	suv_t	cl_r_suv_t_seed42	F	native	shift_suv_surface	transolver_surface	model.n_hidden=512 model.n_layers=16	code_v20	recipe_v8	200000	00184
+21	vol_isla	a2r_vol_isla_seed42	F	native	drivaer_ml_volume_reference	isla_volume	model.hidden=512 model.n_slices=512 model.compile_blocks=true	code_a2r	recipe_a2r	200000	00033
+22	vol_gt	cl_r_vol_gt_seed42	F	native	drivaer_ml_volume_reference	geotransolver_volume	-	code_v20	recipe_v8	200000	00033
+23	vol_t	cl_r_vol_t_seed42	F	native	drivaer_ml_volume_reference	transolver_volume	model.n_hidden=512 model.n_layers=16	code_v20	recipe_v8	200000	00033

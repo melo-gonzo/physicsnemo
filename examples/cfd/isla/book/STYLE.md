@@ -1,166 +1,187 @@
 # Book style guide
 
-The book is an instructive guide to the ISLA program in the manner of a
-Drela user guide (TASOPT, XFOIL): it teaches the reader what the method is,
-why each part is there, how to use it, and what the evidence says, with a
-clean throughline and optional depth folded away. It is written for an
-*uninitiated expert*: fluent in PDE numerics and machine learning, new to
-this program. This file fixes the conventions every chapter follows.
-`CLAIMS.md` remains the source of truth for numbers; this file governs
-presentation.
+The book teaches ISLA the way a good monograph teaches a numerical method: what problem it
+solves, how each part works and why it is there, how to run it, and what the measurements say
+for it and against it. It is a guide, not a results log. This file fixes the conventions every
+chapter follows. Re-read it before editing a chapter.
+
+## The reader
+
+A bright PhD student at a top university with deep applied mathematics and physics: PDEs and
+their numerics, functional analysis, tensor calculus, quadrature, and optimization theory
+(convexity, preconditioning, steepest descent in a chosen norm, KKT). Moderate machine
+learning: knows gradient descent, MLPs and what a loss curve is; does **not** necessarily
+know transformer internals (attention, softmax, LayerNorm, residual streams, pre-LN blocks),
+optimizers beyond Adam, mixed precision, or what makes a GPU kernel fast or slow.
+
+So:
+
+- Never explain a PDE concept, a norm, a quadrature rule or a gradient. Do explain, once and at
+  first use, every piece of ML machinery: attention, softmax, LayerNorm, residual stream, MLP
+  block, token, embedding, bf16, Muon, torch.compile, kernel fusion, activation recompute.
+- Explain ML machinery through the reader's own mathematics: attention is a data-dependent
+  kernel integral operator (a Nadaraya–Watson smoother); slice attention is a low-rank
+  factorization through a learned soft partition (a restriction and a prolongation, as in
+  algebraic multigrid); a measure-weighted softmax is a quadrature; Horvitz–Thompson weights
+  are importance weights; a residual network is a product of near-identity maps; Muon is
+  steepest descent in the spectral norm; the equivariant head is tensor calculus.
+- Respect their intelligence: precise statements, real equations where they carry the idea,
+  and honest scope. Do not hype and do not hedge.
 
 ## The arc
 
 | Part | Chapters | The reader leaves knowing |
 |---|---|---|
-| Front matter | `index.qmd` | the thesis in one paragraph, ONE thesis table with dataset and task named per row, how to read the book |
-| I The problem and the two invariances | `01-problem.qmd`, `02-isla.qmd`, `03-invariances.qmd`, `04-architecture.qmd` | the general operator interface and the metric, and that the surface task and the interior task are one problem with the prediction points placed differently; why each part of ISLA is there, one idea at a time, ending with the trained routing pictures; the two invariances (equivariance and pose; discretization) as contracts and instruments, followed by every pose and discretization measurement of the book (the one home for those tables, cited by the dataset chapters in one sentence each); exactly what the forward pass computes, stage by stage, each stage with its code listing extracted from the class (the source of truth for the architecture and its switches) |
-| II Protocol and use | `05-protocol.qmd`, `06-using-isla.qmd` | the baselines and what each sees, the fair-comparison rules (cells, epochs, rates, unit directions, seeds, sealed splits, boundary conditions as boundary meshes, the stored signed distance to both architectures, no augmentation on any reference lane), the dataset roster and the file conventions and split rule common to every dataset; the one configuration, the inputs, the recipe, the inference sampler, checkpoints, and the book's one cost-per-step table |
-| III Evidence, by dataset | `07-drivaerml.qmd`, `08-hilift.qmd`, `09-airfrans.qmd`, `10-shift-suv.qmd`, `11-tensile2d.qmd`, `12-lug.qmd`, `13-deepjeb.qmd`, `15-capacity-scaling-cost.qmd` | one chapter per dataset, every one in the same order: (a) the problem on sample cases (geometry, boundary conditions with their types and values, the global variables, the fields) and the diversity of the set; (b) what is measured (task, protocol, splits, cells); (c) the headline table of the three architectures under their reference configurations on the native mesh, with the uniform-point-cloud and rotated-and-translated columns read from the characterization artifact when it exists; (d) the ladders and controls that belong to that dataset; (e) one "what this dataset does not say" paragraph. Then the one chapter organized by question: capacity, scaling laws and cost |
-| IV Limits and status | `16-limits.qmd`, `14-program-status.qmd` | every scope statement in one place, including what the book does not claim; what is running (the one chapter with dates) |
-| Appendices | `17-design-decisions.qmd`, `19-literature.qmd`, `18-notebook.qmd` | the names and colors, the design-decision ledger, the pose-prior diagnostic and the ablations that are not in the model; which of ISLA's ideas are new against the literature, with a bibliography; the dated record |
+| Front | `index.qmd` | the thesis in one paragraph; ISLA in one picture; the standing in one figure; the key of names and colors; three reading paths |
+| I The problem and the landscape | `01-problem`, `02-landscape` | the boundary-to-field operator and how a surrogate is scored, on an airfoil with an exact solution; how neural PDE surrogates work (attention as an integral operator, slice attention, neural operators, graph and point networks, equivariant networks) and the two gaps ISLA fills |
+| II How ISLA works | `03-isla`, `04-invariances`, `05-forward-pass` | each idea of ISLA with a picture on the airfoil; the two contracts (rigid motion; remeshing) as exact tests and as measurements on every dataset; the forward pass stage by stage with code, shapes, parameters and where the time and memory go on a GPU (the source of truth for the architecture) |
+| III Using ISLA | `06-using-isla`, `07-benchmark` | the configuration, the input contract, commands, sampler, checkpoints and cost; the baselines, the fairness rules, the datasets and how every number is scored |
+| IV Evidence | `08-standing`, `09`…`17` (one per dataset), `19-capacity` | the standing on one page, then each dataset in the same order (a)–(e) below, then capacity, scaling and cost |
+| V Limits and status | `20-limits`, `14-program-status` | what each claim does not say and what would settle each open question; the live ledger (the one chapter with dates) |
+| Appendices | `21-design`, `22-literature`, `18-notebook` | names, symbols, colors and the design decisions with their principle; what is new against the literature, with a bibliography; the dated lab notebook |
 
-File numbers follow chapter order except where a file is owned by another
-process and keeps its name (`14-program-status.qmd`, `18-notebook.qmd`);
-`_quarto.yml` is the order of record. Fixed-mesh datasets, on which the
-geometry never varies, are unrealistic for engineering and are not
-mentioned in the documentation chapters.
+`_quarto.yml` is the order of record. `14-program-status.qmd` and `18-notebook.qmd` belong
+to the program coordinator; chapter work never edits them.
 
-Chapters state current knowledge. History (what was believed before, what
-was retracted) lives in the notebook and the status chapter only.
+Every dataset chapter follows the same order: (a) the problem on sample cases (geometry,
+boundary conditions with their types, global inputs, fields) and what varies across the set;
+(b) what is measured (task, splits, cells, fields); (c) the standing of the three reference
+configurations, with a picture of the predictions on one held-out case; (d) the studies that
+belong to this dataset; (e) one "What this dataset does not say" section.
 
 ## Teaching pattern for every section
 
-1. **Lead with the message** in one bold sentence a reader can quote.
-2. **Words, then picture, then symbols.** Describe the mechanism physically,
-   point to a figure, then write the equation. Never open with an equation.
-3. **Concrete before abstract.** Use the running example (the Joukowski
-   airfoil of Part I, `palette.joukowski()`) or one car/wing before the
-   general statement.
-4. **Define at first use, once per chapter.** A term is defined the first
-   time a chapter uses it, even if an earlier chapter defined it.
-5. **One idea per figure; a "How to read this" clause in every caption**
-   stating what the figure does *not* show.
-6. **Optional depth goes in a dropdown**, never inline:
-   ```
-   ::: {.callout-note collapse="true" title="Why the softmax runs over points, not slices"}
-   …
-   :::
-   ```
-   Use `callout-note` for derivations and detail, `callout-tip` for practical
-   advice in Part III, `callout-warning` for a misreading to avoid. The
-   throughline must read completely with every dropdown closed.
-7. **Numbers live in tables or on their own line**, computed from the
-   artifact (`#| output: asis`), with the artifact path in the caption.
-   Prose carries magnitudes only when they change what the reader does.
-8. **Every cross-architecture claim carries its scope** (dataset, rung,
-   instrument) in the same sentence, and every ratio is *baseline ÷ ISLA*.
+1. **Lead with the message** in one bold sentence a reader can quote. One per section, not per
+   paragraph.
+2. **Words, then picture, then symbols.** Describe the mechanism physically, point to a figure,
+   then write the equation, sandwiched between a symbol table or a sentence tying symbols to code
+   and a sentence on what it means. Never open a section with an equation.
+3. **Concrete before abstract.** The running examples are the Joukowski airfoil
+   (`palette.joukowski()`, every concept figure) and one DrivAerML car (every rendering of the
+   real thing).
+4. **Define at first use, once per chapter**, even if an earlier chapter defined it. Each chapter
+   opens with a *Before this chapter:* line naming what it assumes.
+5. **One idea per figure; every caption ends with a "How to read this" clause** that says what
+   the figure does *not* show.
+6. **Optional depth goes in a collapsed callout**:
+   `::: {.callout-note collapse="true" title="Optional: …"}`. `callout-tip` for practical
+   advice, `callout-warning` for a misreading to avoid. The throughline must read completely
+   with every callout closed, and no callout holds something the throughline needs.
+7. **Numbers live in tables or on their own line**, computed from the artifact as the page
+   renders (`#| output: asis`), the artifact path in the caption. Prose carries a magnitude
+   only when it changes what the reader concludes, and then computed inline, never typed.
+8. **Every cross-architecture claim carries its scope** (dataset and task, size, protocol) in
+   the same sentence. Every ratio is *baseline ÷ ISLA*.
+9. **Small delights are part of the job**: a margin note that answers the question the reader
+   is about to ask, a worked number, an analogy that lands, a figure that rewards a second look.
+   Not jokes, not decoration.
 
-## Nomenclature (canonical names; use these and no synonyms)
+## Prose
+
+Follow the writing skill (`~/.pi/agent/skills/writing/SKILL.md`, the Declaw job) and run its
+scanner on every chapter you write. In particular: short declarative sentences; concrete nouns;
+no throat-clearing ("It is worth noting", "Importantly"); no "not just X, but Y"; no decorative
+triplets; no "robust", "seamless", "leverage", "crucial", "delve"; no rhetorical questions as
+section openers; no em-dash chains. Prefer the active voice with a named actor ("the routing
+softmax normalizes over points"). Use American spelling.
+
+## Nomenclature (use these and no synonyms)
 
 | Say | Never say | Meaning |
 |---|---|---|
-| ISLA; the reference configuration (width 512, 12 layers, 512 slices, cosine routing, the centered sample-conditioned prototypes, the RMS length unit, the fused geometry kernel, learning rate 3.75e-4, 200,000 training cells; selected by REF-80, 2026-10-04) | MT2, MT, MeshTransformer2, "the mesh transformer"; "linear routing", "192 wide" or "384 wide" as if they described ISLA; "R1" in prose (a notebook and ledger label); "the reference" without naming the architecture | the definitive model as shipped: one origin-free frame, `scale_mode="rms_distance"`, the class defaults for everything but width and slice count (`hidden=512`, `n_slices=512`); the configuration is defined once in 05 with its selection rule (the most accurate under 80 GiB per GPU on DrivAerML Surface and the 210-wing rung, two seeds, ties within 3% to the cheaper) and stated for the user in 06, and never used as a name. Since 2026-09-20 the class has no frame variants |
-| the baseline reference configurations: GeoTransolver width 256 (local width 32), learning rate 1e-3, 200,000 cells; Transolver width 512 with 16 layers at 100,000 cells, learning rate 1e-3 | "GeoTransolver at its recipe width", "the parameter match", "GeoTransolver-512" as a current arm | the two baselines' most accurate configurations under the same 80 GiB rule on the same two datasets; every current standing is these three configurations, and the chapters name them as written here |
-| the earlier ISLA reference (384 wide, 12 layers, 256 slices, 5e-4); or in captions "ISLA at 384 wide, 12 layers, 256 slices, 5e-4" | "the reference configuration" for a 384-wide lane; an unlabeled 384-wide number | the configuration the ladders, the capacity and scaling studies, the trained-routing and slice-territory figures and the pose and sampling probes were run with; every row, caption and figure that holds one carries this label and is read for slopes, mechanisms and contracts, never as the standing of the reference configurations |
-| the earlier protocol (192 wide, 1e-3) | "the old ISLA"; an unlabeled 192-wide number in a standing | the 192-wide, linear-routed lanes at 1e-3 that a reference-configuration re-run has not yet replaced; every table row or caption that still holds one carries this label (05 explains it once) |
-| the 24-layer depth variant | "R2" in prose; "the deeper reference" | 384 wide, 24 layers, 5e-4; a lane of the depth ladder (15) and the cost sweep (06), within 1.5% of the 12-layer 384-wide lane on the cars and the 35-wing rung at twice the cost |
-| the relative frame | "the reference frame", "the frame-free frame" ("reference frame" reads as a coordinate frame to a PDE reader) | ISLA's construction of position: no origin, positions enter only as point-to-anchor differences. The only frame the class has (the `frame_mode` flag was removed 2026-09-20) |
-| the legacy centered variant (removed) | "the constant-gauge variant" in a main result; "prior reference"; "centered ISLA" | the centered frame with a constant length unit the program used before the relative frame; cut from every main figure and table on 2026-09-18 and removed from the class on 2026-09-20 (@sec-nb-frame-cleanup); appears only in collapsed diagnostic notes, labeled "removed variant" |
-| form; one-car floor | | a structural choice of the architecture (as opposed to capacity or inputs); the converged error on a single training car (a capacity measure) |
-| the sample-frame probe | "the probe instrument" alone | the 10,000-cell uniform and 10:1-biased DrivAerML evaluation draws, each model's frame taken from the drawn sample |
-| $M$ slices, $S$ global scalars | $S$ for the slice count | symbol discipline: $M$ slices ($M = 512$ in the reference configuration and the class default, 256 the ladders' count); $S$ is reserved for global scalars |
-| the similarity-gauge variant (removed) | "the similarity gauge" in a main result; "gauge ISLA" | the centered frame with a measure-weighted centroid and RMS radius; cut from every main figure and table on 2026-09-18 after SG-REF (within noise of ISLA, @sec-nb-sgref-verdict) and removed from the class on 2026-09-20; appears only in collapsed diagnostic notes, labeled; its result is phrased as "the price of not being told the body's center: at most about 2%, inside seed noise", never as recovering a deficit |
-| the weights-off ablation | "uniform ISLA" | a removed diagnostic (uniform token measures); quoted only from the notebook, never adopted |
-| the raw-coordinate diagnostic | | a removed diagnostic that fed absolute coordinates; breaks the contracts by design |
-| GeoTransolver, Transolver, GeoTransolver-volume | "GeoTransolver, released"; "the released baselines"; "the baselines" without naming them; "GT"/"T" outside code | the definitive public models, never modified; no qualifier |
-| GeoTransolver + ISLA's <feature> (ablation) | "research variant", "GeoTransolver, measure-weighted pooling" | a baseline with one or more of ISLA's features added to isolate an effect (e.g. "GeoTransolver + ISLA's measure-weighted pooling + HT-centered datapipe (ablation)"); never a variant of the public model |
-| unit-direction protocol | "udrv" | every model receives the freestream as a unit vector |
-| global vector inputs, global scalar inputs | "drive", "freestream feature" | the problem's global conditions; $K$ vectors, $S$ scalars |
-| boundary cell / point / token | | one sampled surface element and its token |
-| measure weight $w_i$ | "area", "quadrature weight" alone | the surface area a sampled cell stands for |
-| slice, anchor | "cluster", "centroid" for slices | a soft group of tokens; its measure-weighted mean position and normal |
-| relational invariants | "geo features" | the scalars describing a token relative to an anchor |
+| ISLA | MT2, MeshTransformer2, "the mesh transformer", "our model" | `physicsnemo.experimental.models.ISLA` as it is: the class defaults |
+| the reference configuration (of an architecture) | "the reference" alone; "R1"; "the final configs" | the one configuration each architecture is scored at: ISLA width 512, 12 layers, 512 slices, learning rate 3.75e-4, 200,000 training cells; GeoTransolver width 256 (local width 32), learning rate 1e-3, 200,000 cells; Transolver width 512, 16 layers, learning rate 1e-3, 100,000 cells. Selected once by the rule in 07 (the most accurate under 80 GiB per GPU on two datasets, ties within 3% to the cheaper) |
+| the normalized slice reads; "the slice sublayer reads the normalized state" | "A2", "H-RESID", "the fix" | the slice sublayer's routing, pooling and broadcast read `norm_assign(h)`; the raw stream enters only the residual identity and the MLP's LayerNorm. Part of ISLA, not an option |
+| the raw-read variant (ablation) | "old ISLA", "pre-A2" | ISLA with the pooling and broadcast reading the raw stream; appears only as an ablation that explains the normalized reads (03), and in the one-sentence note on any standing whose ISLA checkpoints are of this variant (`standing.DATASETS[...].reference is False`) |
+| ISLA-DTT | "DTT ISLA", "the tree model", "read-only ISLA" without naming it | `query_independent=True`: prediction points are passive readers of the slices and read every boundary cell through a Barnes–Hut forest; interior tasks only |
+| interacting prediction points / read-only prediction points | "queries" without the adjective when it matters | ISLA's interior tokens carry routing mass and write into the slices / ISLA-DTT's carry none |
+| GeoTransolver, Transolver, GeoTransolver-volume | "GT", "T", "the released baselines", "the baselines" without naming them | the public models, never modified |
+| GeoTransolver + ISLA's <feature> (ablation) | "research variant" | a baseline with one of ISLA's features added to isolate an effect |
+| the study configuration tag: "Instrument: ISLA at <width> wide, <slices> slices, <rate>, raw slice reads" (in the caption) | an unlabeled smaller-ISLA number | a study run on a smaller ISLA than the reference configuration (scaling ladders, sampling probes); defined once in 07 (`#sec-study-configurations`); read for slopes and mechanisms, never as a standing |
+| a standing that is not compared (‡) | "ISLA leads on HiLiftAeroML / AirfRANS" | a standing artifact whose baselines read the freestream as a raw physical vector rather than a unit direction (`standing.DATASETS[k].fair_drive` False; what they read is `drive_note`, from results/drive_audit_2026-10-18/); its numbers are given, no verdict is drawn and no sentence rests a claim on its ratios; it is left out of every count |
+| the $n$-case rung (of a data-efficiency ladder) | "rung" undefined | a training-set size of a data-efficiency ladder, defined in 07 |
+| "Instrument: ISLA at <w> wide, <M> slices, <rate>, linear routing, raw slice reads" | | the tag variant for study lanes that used the removed unbounded routing score (07, `sec-study-configurations`) |
+| slice, anchor | "cluster", "centroid" | a soft group of tokens; its measure-weighted mean position $z_s$ and mean normal $m_s$ |
 | routing / read-back | | softmax over points into slices / softmax over slices back to points |
-| length unit $L$ | "gauge" in prose; "the total measure" in the present tense | the measure-weighted RMS pairwise distance of the sample (the only length unit in the code). "The total-measure unit" names a removed earlier option (the square root of the total measure); lanes trained before 2026-09-18 carry it and are labeled so where quoted |
-| the DrivAerML Surface task, the DrivAerML Volume task; HiLiftAeroML (the $n$-wing rung); the AirfRANS interior task | "DrivAerML" alone in a sentence that compares architectures | dataset AND task on every cross-architecture sentence; "HiLift" allowed after first use in a chapter |
-| the $n$-case rung | | a training-set size on the data-efficiency ladder |
-| area-weighted relative L2, float32 instrument | "rel-L2" in prose | the metric and its reporting precision |
-| the deficit anatomy | | the decomposition of the in-distribution gap into named parts |
-| the reporting protocol (200,000 cells per case) | "the 200k runs" in prose; an unlabeled 10,000-cell number | every reported standing is scored at 200,000 sampled cells per case in float32, two seeds, 500 epochs; the reference configurations train at their own cell counts (ISLA and GeoTransolver 200,000, Transolver 100,000) and rates (ISLA 3.75e-4 by the width rule, the baselines 1e-3); the ladders' lanes carry their own rates per row (GeoTransolver-256 at the better of 1e-3 and 3e-3). Adopted 2026-09-18 |
-| the exploration budget (10,000 cells per case) | "the reference resolution"; "the protocol" for a 10,000-cell number | the count the program explored at before 2026-09-18; every 10,000-cell figure, table and number carries this label |
-| on the DrivAerML Surface task the three reference configurations tie within seed noise on the native mesh (GeoTransolver width 256 ÷ ISLA 1.02, Transolver width 512 with 16 layers ÷ ISLA 0.98 on pressure) and ISLA alone holds on the uniform point cloud and under rotation and translation | "ISLA leads on the cars"; "parity with the parameter match"; "ISLA leads GeoTransolver" without naming the configuration; a lead read off a 0.3 to 1% gap | results/char/drivaerml_surface_a2.json; the ladders (384-wide ISLA against the 256-wide baselines, GeoTransolver at its better rate) are read for slopes and the 54-to-109-car crossover, never as the standing |
-| on the 210-wing HiLiftAeroML rung ISLA leads both reference baselines on the native mesh (GeoTransolver width 256 ÷ ISLA 1.28, Transolver width 512 with 16 layers ÷ ISLA 1.07) | "the wing deficit" as a current standing; "both baselines lead on the wings" without naming the configurations | results/char/hilift_surface.json; the ladders against the parameter-matched GeoTransolver-512 (above the 80 GiB line) show the baseline ahead at 35, 210 and 510 wings and are labeled as such (08) |
-| the ladder deficit against GeoTransolver-512 at the 35-wing rung is not count noise, width (to 384), depth or rate | "the wing gap is a budget artifact"; "the wing deficit" without naming GeoTransolver-512 and the rung | the controls table of 08, every row labeled with the configuration it holds (384 wide, 5e-4; GeoTransolver-512, 3e-3); results/ref_surface_2026-09-23.json, results/p200k_fleet_reduction_2026-09-19.json |
+| relational invariants | "geo features" | the scalars describing a token relative to an anchor |
+| length unit $L$ | "gauge" in prose | the measure-weighted RMS pairwise distance of the boundary sample |
+| measure weight $w_i$ | "area" alone, "quadrature weight" alone | the measure (area, length) a sampled cell stands for, Horvitz–Thompson-corrected under a non-uniform draw |
+| global vector inputs, global scalar inputs | "drive", "freestream feature" | the problem's global conditions; $K$ unit directions $\hat g_k$, $S$ scalars $\sigma$ |
+| the DrivAerML Surface task, the DrivAerML Volume task; HiLiftAeroML (the $n$-wing rung); the AirfRANS interior task; SHIFT-SUV; AeroZoo; PLAID Tensile2d; the GINOT bracket lug; DeepJEB++ | "DrivAerML" alone in a cross-architecture sentence | dataset and task on every cross-architecture sentence; short names after first use in a chapter |
+| native mesh / uniform point cloud / rotated and translated (posed) | "area protocol", "ca2" | the three scorings of one checkpoint in every standing artifact |
+| the scoring protocol | "the 200k runs" | 200,000 sampled cells per case, float32, final checkpoints, two seeds (42, 43), per-case area-weighted relative L2 averaged over cases |
+| area-weighted relative L2 | "rel-L2" in prose | the metric (01) |
+| level / leads / trails | "ties" for a separated pair, "beats", "wins", "crushes" | the seed rule: a lead needs every seed of one arm below every seed of the other and a seed-mean gap of at least 3%; else level (`standing.Standing.verdict`) |
+| precise failure terms: "the validation loss rises 3x and does not recover", "routes every token to one slice" | "collapsed", "blew up", "diverged" without the measurement | |
 
-Symbols: $x_i, n_i, w_i$ inputs; $\hat g_k$ global unit vectors; $\sigma$
-global scalars; $L$ length scale; $r_i = x_i / L$; $h_i$ token state;
-$a_{is}$ routing weight; $z_s, m_s$ anchors; $\xi_{is}$ relational
-invariants; $Z_s$ slice state; $\pi_{is}$ read-back weight; $\hat u_i$
-radial basis vector. Definitions use $\equiv$.
+Symbols: $x_i, n_i, w_i$ inputs; $\hat g_k$ global unit vectors; $\sigma$ global scalars; $L$
+length unit; $r_i \equiv x_i / L$; $h_i$ token state; $\tilde h_i \equiv \mathrm{LN}(h_i)$;
+$a_{is}$ routing weight; $z_s, m_s$ anchors; $\xi_{is}$ relational invariants; $Z_s$ slice
+state; $\pi_{is}$ read-back weight; $\hat u_i$ radial basis vector; $M$ slices ($M = 512$);
+$N$ boundary tokens; $Q$ prediction points; $d$ spatial dimension. Definitions use $\equiv$.
+$S$ is reserved for global scalars, never the slice count.
 
 ## Color and mark semantics (from `palette.py`)
 
-| Concept | Color | Marker / line | Notes |
-|---|---|---|---|
-| ISLA reference | `BLUE` | filled square, solid | |
-| ISLA variants | `BLUE_LIGHT` | open diamond dashed (similarity-gauge variant) and open square dotted (legacy centered variant); both keys are used only inside collapsed diagnostic notes, never in a main figure | same hue, lighter |
-| ISLA-DTT (the tree-accelerated query-independent read; `isla_dtt`) | `BLUE_LIGHT` | open square, dash-dot | the one ISLA variant that appears in a main table or figure, always labeled ISLA-DTT |
-| ISLA ablations | `BLUE_PALE`, hatched | | never adopted |
-| GeoTransolver | `RED` | filled circle, solid | also GeoTransolver-volume |
-| Transolver | `AMBER` | filled triangle, dashed | |
-| baseline research variants | `RED_LIGHT` / `AMBER_LIGHT` | open marker, dotted | |
-| slices, anchors | `VIOLET` | | concept figures only |
-| queries, interior points | `AQUA` | | concept figures only |
-| contract satisfied | `GREEN` | | |
-| context (grids, reference lines, non-data) | grays | | never encodes a data distinction |
-| signed fields | `DIVERGING` (blue–paper–red) | | unsigned fields: viridis |
-| boundary-condition types (the dataset problem figures only) | `BC["value"]` plum (a value prescribed: Dirichlet, fixed, clamped), `BC["flux"]` burnt orange (a flux prescribed: Neumann, traction, applied pressure), `BC["robin"]` teal, `BC["free"]` gray | thick boundary stroke, direct label | global vectors (far-field direction, laboratory frame) are black arrows |
-| dominant slice of a token (trained-routing figures) | `slice_colors(M)`: a shuffled 20-hue qualitative map | anchors: black-edged stars | labels only; two slices may share a hue; never an architecture hue's role |
+| Concept | Color | Marker / line |
+|---|---|---|
+| ISLA | `BLUE` | filled square, solid |
+| ISLA-DTT | `BLUE_LIGHT` | open square, dash-dot |
+| ISLA ablations (raw-read variant, weights off) | `BLUE_PALE`, hatched | open square, dotted |
+| GeoTransolver (and -volume) | `RED` | filled circle, solid |
+| Transolver | `AMBER` | filled triangle, dashed |
+| slices, anchors | `VIOLET` (concept figures); `slice_colors(M)` labels in trained-routing figures, anchors as black-edged stars | |
+| prediction points, interior | `AQUA` | |
+| contract satisfied | `GREEN` | |
+| context (grids, reference lines) | grays | never encodes a data distinction |
+| signed fields, errors | `DIVERGING` (blue–paper–red) | |
+| unsigned fields | viridis | |
+| boundary-condition kinds | `BC["value"]`, `BC["flux"]`, `BC["robin"]`, `BC["free"]` | thick boundary stroke, direct label |
 
-In Mermaid diagrams: data boxes `fill:#f4f3ee,stroke:#898781`; fixed
-geometric maps `fill:#ffffff,stroke:#2a78d6,stroke-dasharray:4 3`; learned
-maps `fill:#e6f0fb,stroke:#2a78d6`; contracts `stroke:#008300`.
+Use `STYLE[key]`, `series_kwargs(key)`, `bar_kwargs(key)` for every data series. Prefer direct
+labels (`label_line`) to legends. Mermaid: data boxes `fill:#f4f3ee,stroke:#898781`; fixed
+geometric maps `fill:#ffffff,stroke:#2a78d6,stroke-dasharray:4 3`; learned maps
+`fill:#e6f0fb,stroke:#2a78d6`; contracts `stroke:#008300`.
 
-Use `STYLE[key]` / `series_kwargs(key)` / `bar_kwargs(key)` for every data
-series so labels and colors never drift. Prefer direct labels (`label_line`)
-to legends; when a legend is needed, its text is the canonical name.
+## Shared code
+
+- `palette.py`: colors, `STYLE`, house rcParams, plotting helpers, the running airfoil, and
+  the dataset figure loaders (`load_problem`, `load_samples`, `part`, `bc_segments`,
+  `field_scatter`, `small_colorbar`, `bc_legend`).
+- `standing.py`: the one reader of the standing artifacts. `standing.DATASETS` names the
+  artifact per dataset; `Standing(key)` gives `err`, `seeds`, `ratio`, `shift`, `verdict`,
+  `table`. No chapter opens a `results/char/` standing file itself, and no chapter pastes
+  helpers that these modules hold.
 
 ## Figures and tables
 
 - Every axis: quantity and unit in brackets, `[–]` for dimensionless.
-- Bars start at zero; log axes only where the range spans a decade, with
-  1–2–5 ticks written out.
+- Bars start at zero; log axes only where the range spans a decade, with 1–2–5 ticks written out.
 - Multi-panel figures stack vertically and share the x-axis; no dual axes.
 - Seeds are dots on bars or bands on lines; the seed mean is the mark.
+- Renderings of fields (`figures/renderings/`): one named camera per dataset, a shared color
+  scale across truth and models, the diverging map for errors, the colorbar labeled with the
+  quantity and unit, the case id and each model's error on that case in the caption.
 - Table captions name the artifact; the `{#tbl-…}` label is on the caption line.
-- A "How to read this" clause appears in every results figure caption.
 
 ## What the chapters do not do
 
-- **Cut, never retract.** A claim now known wrong does not appear at all:
-  not as "we previously believed", "retired", "reframed" or "superseded". A
-  reader must never watch the book argue with itself. History is the
-  notebook's job.
-- **No dates, no chronology, no project slang.** No "as of 2026-09-05", no
-  "wave", "round", "campaign", "addendum", "critic review", "before/after
-  the fix". No node codes (A35b, W2-C, EQ-PRICE) or version tags in prose;
-  say what the experiment measures ("the single-factor ablation at 35
-  training cases"). Exceptions: the status chapter's tech tree and ledger,
-  and the notebook.
-- **No run identifiers** (`rf_dr_mt2_meas_seed42`) in prose; they appear
-  in code cells and in captions' artifact paths only.
-- **No numbers from memory.** Every number is computed from a file in
-  `results/` (or `research/`) or quoted from `CLAIMS.md` with its source.
-  Define the quantity before the number: what is measured, on which split,
-  under what protocol, and which way a ratio points.
-- **Resource-matched comparisons only.** A cross-architecture comparison
-  states parameters, tokens per case and memory of both sides, or says in
-  the same sentence where they differ and whether the difference could buy
-  accuracy.
-- **No jitter or dodge on categorical axes**; seeds and architectures are
-  distinguished by marker, fill or line style.
-- **No hedged verdicts** and no result made to look better than it is. If a
-  comparison is unfair, fix it or drop it; do not caption around it.
-- **Scope and limits sit beside the claim**, not only in the limits chapter.
-- **Chapter rewrites do not edit `18-notebook.qmd` or `results/`.**
+- **State what is; cut, never retract.** No "before/now/previously/will/no longer/retired/
+  superseded/reframed". A claim now known wrong does not appear at all. History lives in the
+  notebook and the ledger only, and chapters do not cite notebook entries (`@sec-nb-…`).
+- **No dates, no status, no project slang.** No "as of", "wave", "round", "campaign", "rerun",
+  "pending", "running"; no node codes (A35b, REF-80, H-RESID) or version tags in prose. Say what
+  the experiment measures. A pending decision is written as an open question in 20 (with what
+  would settle it), never as status. Exceptions: 14 and 18.
+- **No run identifiers** in prose; they appear in code cells and in caption artifact paths only.
+- **No numbers from memory.** Every number is computed from a file in `results/` (or
+  `research/`). Define the quantity before the number: what is measured, on which split, under
+  what protocol, which way a ratio points.
+- **Registered verdicts as registered.** Where a pre-registered test decided something, report
+  its outcome as it was registered; do not re-word a failed bar as a pass.
+- **Resource-matched comparisons only.** A cross-architecture comparison states parameters,
+  tokens per case and memory of both sides, or says where they differ.
+- **No hedged verdicts** and no result made to look better than it is. Scope and limits sit
+  beside the claim, not only in 20.
+- **Chapter work never edits `18-notebook.qmd`, `14-program-status.qmd` or `results/` files
+  that already exist.** New result files (a reduction, a rendering) are added with their script.

@@ -1,0 +1,169 @@
+{
+  "run": "afu_a2s_isla_seed42",
+  "epoch": 500,
+  "model_yaml": "isla_volume_airfrans",
+  "dataset_yaml": "airfrans_uvolume_2d",
+  "overrides": [
+    "model=isla_volume_airfrans",
+    "dataset=airfrans_uvolume_2d",
+    "run_id=afu_a2s_isla_seed42",
+    "infer_split=val",
+    "sampling_resolution=100000",
+    "precision=float32",
+    "checkpoint_dir=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/runs",
+    "output_dir=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/book_figs_2026-10-18/routing/_scratch",
+    "train_split=full_train",
+    "val_split=full_test",
+    "model.hidden=512",
+    "model.n_slices=512",
+    "model.compile_blocks=true",
+    "model.compile_blocks=false"
+  ],
+  "sampling_resolution": 100000,
+  "precision": "float32",
+  "sample_index": 215,
+  "sample_id": "00215_airFoil2D_SST_44.638_-2.059_2.312_4.328_1.0_17.415_airFoil2D_SST_44.638_-2.059_2.312_4.328_1.0_17.415",
+  "geo_kernel": "eager",
+  "n_tokens": 101046,
+  "n_boundary": 1046,
+  "n_active": 101046,
+  "n_stored": 60000,
+  "n_layers": 12,
+  "n_slices": 512,
+  "gauge": 0.4287949204444885,
+  "layers": [
+    {
+      "n_eff": 46.20656967163086,
+      "n_eff_w": 47.94145584106445,
+      "H_slices": 0.611438512802124,
+      "H_points": 0.8751417994499207,
+      "anchor_spread": 0.033117055892944336,
+      "pi_max_mean": 0.04628875106573105
+    },
+    {
+      "n_eff": 18.738195419311523,
+      "n_eff_w": 18.86760902404785,
+      "H_slices": 0.4685726761817932,
+      "H_points": 0.864757776260376,
+      "anchor_spread": 0.08718279749155045,
+      "pi_max_mean": 0.10243159532546997
+    },
+    {
+      "n_eff": 14.558222770690918,
+      "n_eff_w": 14.104705810546875,
+      "H_slices": 0.4252151846885681,
+      "H_points": 0.7922003269195557,
+      "anchor_spread": 0.03312317281961441,
+      "pi_max_mean": 0.13537853956222534
+    },
+    {
+      "n_eff": 104.77432250976562,
+      "n_eff_w": 107.08787536621094,
+      "H_slices": 0.6976391077041626,
+      "H_points": 0.7667621970176697,
+      "anchor_spread": 0.12340804934501648,
+      "pi_max_mean": 0.08558694273233414
+    },
+    {
+      "n_eff": 62.08108139038086,
+      "n_eff_w": 62.92169189453125,
+      "H_slices": 0.6122822761535645,
+      "H_points": 0.7936478853225708,
+      "anchor_spread": 0.0825052261352539,
+      "pi_max_mean": 0.0775817260146141
+    },
+    {
+      "n_eff": 102.79073333740234,
+      "n_eff_w": 115.54930114746094,
+      "H_slices": 0.6756135821342468,
+      "H_points": 0.8558090329170227,
+      "anchor_spread": 0.2565017342567444,
+      "pi_max_mean": 0.05084089934825897
+    },
+    {
+      "n_eff": 166.7600860595703,
+      "n_eff_w": 204.2212371826172,
+      "H_slices": 0.7705770134925842,
+      "H_points": 0.7815908789634705,
+      "anchor_spread": 0.18190574645996094,
+      "pi_max_mean": 0.11513663083314896
+    },
+    {
+      "n_eff": 218.26516723632812,
+      "n_eff_w": 237.97091674804688,
+      "H_slices": 0.7683244347572327,
+      "H_points": 0.8000156879425049,
+      "anchor_spread": 0.27422332763671875,
+      "pi_max_mean": 0.06264596432447433
+    },
+    {
+      "n_eff": 227.2830352783203,
+      "n_eff_w": 321.2427978515625,
+      "H_slices": 0.7391480207443237,
+      "H_points": 0.8006197214126587,
+      "anchor_spread": 0.3620501458644867,
+      "pi_max_mean": 0.09047236293554306
+    },
+    {
+      "n_eff": 233.56875610351562,
+      "n_eff_w": 242.84585571289062,
+      "H_slices": 0.7610494494438171,
+      "H_points": 0.8476423025131226,
+      "anchor_spread": 0.36997461318969727,
+      "pi_max_mean": 0.10211388021707535
+    },
+    {
+      "n_eff": 156.3662872314453,
+      "n_eff_w": 269.22454833984375,
+      "H_slices": 0.7248353362083435,
+      "H_points": 0.8344159126281738,
+      "anchor_spread": 0.23942270874977112,
+      "pi_max_mean": 0.12990280985832214
+    },
+    {
+      "n_eff": 131.46395874023438,
+      "n_eff_w": 278.7959899902344,
+      "H_slices": 0.6594836711883545,
+      "H_points": 0.8590703010559082,
+      "anchor_spread": 0.2202524095773697,
+      "pi_max_mean": 0.18459300696849823
+    }
+  ],
+  "top_layers": [
+    0,
+    5,
+    11
+  ],
+  "top_slices": [
+    [
+      70,
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6
+    ],
+    [
+      75,
+      348,
+      134,
+      316,
+      3,
+      107,
+      499,
+      117
+    ],
+    [
+      258,
+      444,
+      306,
+      394,
+      499,
+      295,
+      119,
+      384
+    ]
+  ]
+}

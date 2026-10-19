@@ -1,0 +1,186 @@
+{
+ "sample_id": "00079_run_171_domain_run_171",
+ "source": {
+  "dr_isla/native": {
+   "row": 0,
+   "run_id": "a2r_dr_isla_seed42",
+   "dataset": "drivaer_ml_surface",
+   "model": "isla_surface",
+   "cells": 200000,
+   "lhr_dump_job": 275252,
+   "dump": "$T/book_figs_2026-10-18/dump/dr_isla/native/ (copy: fig/dump/dr_isla/native/)"
+  },
+  "dr_isla/posed": {
+   "row": 1,
+   "run_id": "a2r_dr_isla_seed42",
+   "dataset": "drivaer_ml_surface",
+   "model": "isla_surface",
+   "cells": 200000,
+   "lhr_dump_job": 275252,
+   "dump": "$T/book_figs_2026-10-18/dump/dr_isla/posed/ (copy: fig/dump/dr_isla/posed/)"
+  },
+  "dr_gt/native": {
+   "row": 2,
+   "run_id": "r80_dr_gt_h256_seed42",
+   "dataset": "drivaer_ml_surface",
+   "model": "geotransolver_surface",
+   "cells": 200000,
+   "lhr_dump_job": 275252,
+   "dump": "$T/book_figs_2026-10-18/dump/dr_gt/native/ (copy: fig/dump/dr_gt/native/)"
+  },
+  "dr_gt/posed": {
+   "row": 3,
+   "run_id": "r80_dr_gt_h256_seed42",
+   "dataset": "drivaer_ml_surface",
+   "model": "geotransolver_surface",
+   "cells": 200000,
+   "lhr_dump_job": 275252,
+   "dump": "$T/book_figs_2026-10-18/dump/dr_gt/posed/ (copy: fig/dump/dr_gt/posed/)"
+  },
+  "dr_t/native": {
+   "row": 4,
+   "run_id": "r80_dr_t_h512_l16_c100k_seed42",
+   "dataset": "drivaer_ml_surface",
+   "model": "transolver_surface",
+   "cells": 100000,
+   "lhr_dump_job": 275252,
+   "dump": "$T/book_figs_2026-10-18/dump/dr_t/native/ (copy: fig/dump/dr_t/native/)"
+  },
+  "dr_t/posed": {
+   "row": 5,
+   "run_id": "r80_dr_t_h512_l16_c100k_seed42",
+   "dataset": "drivaer_ml_surface",
+   "model": "transolver_surface",
+   "cells": 100000,
+   "lhr_dump_job": 275252,
+   "dump": "$T/book_figs_2026-10-18/dump/dr_t/posed/ (copy: fig/dump/dr_t/posed/)"
+  }
+ },
+ "stl": "/home/psharpe/gh/physicsnemo/scratch/isla-book-overhaul-2026-10-18/fig/geom/drivaer_171_single_solid.stl.pmsh",
+ "n_stl_triangles": 753238,
+ "per_sample_rel_l2": {
+  "pressure_l2": {
+   "ISLA": 0.0414714589715004,
+   "GeoTransolver": 0.04243546724319458,
+   "Transolver": 0.040589962154626846
+  },
+  "wss_l2": {
+   "ISLA": 0.06115880608558655,
+   "GeoTransolver": 0.06674902141094208,
+   "Transolver": 0.06675092875957489
+  }
+ },
+ "nn_distance_m": {
+  "isla": {
+   "median": 0.005650318484980997,
+   "p99": 0.031457011724339554
+  },
+  "gt": {
+   "median": 0.005650318484980997,
+   "p99": 0.031457011724339554
+  },
+  "t": {
+   "median": 0.007842557284268189,
+   "p99": 0.04337830121149887
+  }
+ },
+ "q_inf": 756.1771581264038,
+ "pose": {
+  "ISLA": {
+   "rel_l2_native": 0.0414714589715004,
+   "rel_l2_posed": 0.0414714515209198,
+   "posed_minus_native_rms_cp": 0.0007226077723316848,
+   "posed_minus_native_rel": 0.0016121803782880306,
+   "map_back_nn_distance_m_median": 1.4602088513083092e-07,
+   "map_back_nn_distance_m_max": 5.737210148980402e-07,
+   "same_count": true,
+   "pose_R": [
+    [
+     -0.9304803013801575,
+     -0.28866779804229736,
+     0.22555990517139435
+    ],
+    [
+     -0.34258925914764404,
+     0.9037511348724365,
+     -0.2566445469856262
+    ],
+    [
+     -0.12976500391960144,
+     -0.3160771131515503,
+     -0.9398171901702881
+    ]
+   ],
+   "pose_t": [
+    0.3792286813259125,
+    0.9082536101341248,
+    -1.1941614151000977
+   ]
+  },
+  "GeoTransolver": {
+   "rel_l2_native": 0.04243546724319458,
+   "rel_l2_posed": 0.8851945400238037,
+   "posed_minus_native_rms_cp": 0.38191261887550354,
+   "posed_minus_native_rel": 0.8456908464431763,
+   "map_back_nn_distance_m_median": 1.4602088513083092e-07,
+   "map_back_nn_distance_m_max": 5.737210148980402e-07,
+   "same_count": true,
+   "pose_R": [
+    [
+     -0.9304803013801575,
+     -0.28866779804229736,
+     0.22555990517139435
+    ],
+    [
+     -0.34258925914764404,
+     0.9037511348724365,
+     -0.2566445469856262
+    ],
+    [
+     -0.12976500391960144,
+     -0.3160771131515503,
+     -0.9398171901702881
+    ]
+   ],
+   "pose_t": [
+    0.3792286813259125,
+    0.9082536101341248,
+    -1.1941614151000977
+   ]
+  },
+  "Transolver": {
+   "rel_l2_native": 0.040589962154626846,
+   "rel_l2_posed": 0.77847820520401,
+   "posed_minus_native_rms_cp": 0.3532745838165283,
+   "posed_minus_native_rel": 0.7817263007164001,
+   "map_back_nn_distance_m_median": 1.3415097470613416e-07,
+   "map_back_nn_distance_m_max": 5.797105967081951e-07,
+   "same_count": true,
+   "pose_R": [
+    [
+     -0.9304803013801575,
+     -0.28866779804229736,
+     0.22555990517139435
+    ],
+    [
+     -0.34258925914764404,
+     0.9037511348724365,
+     -0.2566445469856262
+    ],
+    [
+     -0.12976500391960144,
+     -0.3160771131515503,
+     -0.9398171901702881
+    ]
+   ],
+   "pose_t": [
+    0.37931549549102783,
+    0.9084614515304565,
+    -1.1944347620010376
+   ]
+  },
+  "posed_frame_nn_distance_m_median": 0.005650331922203859,
+  "rotation_angle_deg": 169.5057459795202
+ },
+ "gt_points_same_as_isla": true
+}

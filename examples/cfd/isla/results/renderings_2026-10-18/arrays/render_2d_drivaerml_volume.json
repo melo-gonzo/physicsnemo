@@ -1,0 +1,66 @@
+{
+ "drivaerml_volume": {
+  "sample_id": "00033_run_129_domain_run_129",
+  "source": {
+   "vol_isla/native": {
+    "row": 21,
+    "run_id": "a2r_vol_isla_seed42",
+    "dataset": "drivaer_ml_volume_reference",
+    "model": "isla_volume",
+    "cells": 200000,
+    "lhr_dump_job": 275252,
+    "dump": "$T/book_figs_2026-10-18/dump/vol_isla/native/ (copy: fig/dump/vol_isla/native/)"
+   },
+   "vol_gt/native": {
+    "row": 22,
+    "run_id": "cl_r_vol_gt_seed42",
+    "dataset": "drivaer_ml_volume_reference",
+    "model": "geotransolver_volume",
+    "cells": 200000,
+    "lhr_dump_job": 275252,
+    "dump": "$T/book_figs_2026-10-18/dump/vol_gt/native/ (copy: fig/dump/vol_gt/native/)"
+   },
+   "vol_t/native": {
+    "row": 23,
+    "run_id": "cl_r_vol_t_seed42",
+    "dataset": "drivaer_ml_volume_reference",
+    "model": "transolver_volume",
+    "cells": 200000,
+    "lhr_dump_job": 275252,
+    "dump": "$T/book_figs_2026-10-18/dump/vol_t/native/ (copy: fig/dump/vol_t/native/)"
+   }
+  },
+  "n_points_scored": 200000,
+  "slab_half_width_m": 0.15,
+  "n_points_in_slab_window": 11053,
+  "q_inf": 756.1771581264038,
+  "U_inf": 38.888999938964844,
+  "stl": "/home/psharpe/gh/physicsnemo/scratch/isla-book-overhaul-2026-10-18/fig/geom/drivaer_129_single_solid.stl.pmsh",
+  "solved_centre_m": [
+   1.988152934252499,
+   0.0010766412596406136,
+   0.15124110010138442
+  ],
+  "stl_fit_abs_sdf_residual_m": {
+   "median": 1.2761104405311448e-06,
+   "p99": 0.00012515948811456573
+  },
+  "per_sample_rel_l2": {
+   "pressure_l2": {
+    "ISLA": 0.04009092226624489,
+    "GeoTransolver": 0.05089534819126129,
+    "Transolver": 0.05422472581267357
+   },
+   "velocity_l2": {
+    "ISLA": 0.06962818652391434,
+    "GeoTransolver": 0.10170991718769073,
+    "Transolver": 0.12258148938417435
+   },
+   "nut_l2": {
+    "ISLA": 0.06660289317369461,
+    "GeoTransolver": 0.06335615366697311,
+    "Transolver": 0.06368851661682129
+   }
+  }
+ }
+}

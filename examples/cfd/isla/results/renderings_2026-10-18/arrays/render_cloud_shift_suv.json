@@ -1,0 +1,72 @@
+{
+ "sample_id": "00184_run_00187_domain",
+ "source": {
+  "suv_isla/native": {
+   "row": 18,
+   "run_id": "a2r_suv_isla_seed42",
+   "dataset": "shift_suv_surface",
+   "model": "isla_surface",
+   "cells": 200000,
+   "lhr_dump_job": 271987,
+   "dump": "$T/book_figs_2026-10-18/dump/suv_isla/native/ (copy: fig/dump/suv_isla/native/)"
+  },
+  "suv_gt/native": {
+   "row": 19,
+   "run_id": "cl_r_suv_gt_seed42",
+   "dataset": "shift_suv_surface",
+   "model": "geotransolver_surface",
+   "cells": 200000,
+   "lhr_dump_job": 275252,
+   "dump": "$T/book_figs_2026-10-18/dump/suv_gt/native/ (copy: fig/dump/suv_gt/native/)"
+  },
+  "suv_t/native": {
+   "row": 20,
+   "run_id": "cl_r_suv_t_seed42",
+   "dataset": "shift_suv_surface",
+   "model": "transolver_surface",
+   "cells": 200000,
+   "lhr_dump_job": 275252,
+   "dump": "$T/book_figs_2026-10-18/dump/suv_t/native/ (copy: fig/dump/suv_t/native/)"
+  }
+ },
+ "n_points_scored": 200000,
+ "q_inf": 551.2500107288361,
+ "per_sample_rel_l2": {
+  "pressure_l2": {
+   "ISLA": 0.041200559586286545,
+   "GeoTransolver": 0.040804460644721985,
+   "Transolver": 0.037626467645168304
+  },
+  "wss_l2": {
+   "ISLA": 0.05679937079548836,
+   "GeoTransolver": 0.061972104012966156,
+   "Transolver": 0.060166843235492706
+  }
+ },
+ "views": {
+  "cp_left_side": {
+   "clim": [
+    -1.6121616196632385,
+    1.0149660110473633
+   ],
+   "err_clim": 0.10752565413713455
+  }
+ },
+ "mesh": {
+  "stl": "/home/psharpe/gh/physicsnemo/scratch/isla-book-overhaul-2026-10-18/fig/geom/shift_suv_00187_merged_surfaces.stl.pmsh",
+  "n_triangles": 5010474,
+  "solved_offset_m": [
+   1.2602304220199585,
+   -0.0016275048255920172,
+   0.5834249866505463
+  ],
+  "scored_point_to_stl_centroid_m": {
+   "median": 8.886203487468824e-08,
+   "max": 6.358680610866027e-07
+  },
+  "triangle_to_nearest_scored_point_m": {
+   "median": 0.003490248916905921,
+   "p99": 0.029763722421563256
+  }
+ }
+}

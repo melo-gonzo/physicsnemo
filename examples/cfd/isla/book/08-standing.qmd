@@ -1,0 +1,188 @@
+# The standing at a glance {#sec-standing}
+
+*Before this chapter:* @sec-baselines (the baselines, the reference
+configurations and the scoring protocol) and @sec-metrics (the error
+metric). The chapters after this one give each row its context.
+
+```{python}
+#| label: para-standing-lede
+#| output: asis
+import sys; sys.path.insert(0, ".")
+import standing as S
+print(f"**On the {sum(S.DATASETS[k].fair_drive for k in S.available())} tasks it is compared on ({len(S.available())} with a standing), ISLA at its reference configuration leads on some fields, is "
+      "level on others and trails on a few, and on every flow task it is the only one of the three architectures whose error "
+      "does not change when the test geometry is moved or resampled.** This chapter is the evidence of Part IV on one page: one "
+      "table with every headline number, one figure for each of the two invariances, and a reading of where ISLA leads and "
+      "trails. Each dataset chapter then opens up its rows.")
+```
+
+```{python}
+#| label: setup-standing
+#| include: false
+import sys; sys.path.insert(0, ".")
+from palette import *
+import standing as S
+ROWS = S.headline_rows()
+```
+
+## Every headline number {#sec-standing-table}
+
+```{python}
+#| label: tbl-thesis
+#| output: asis
+out = ["| dataset and task | field | ISLA error | GeoTransolver ÷ ISLA | Transolver ÷ ISLA | ISLA rotated and translated ÷ native | chapter |",
+       "|---|---|---:|---:|---:|---:|---|"]
+for k, f, lab in ROWS:
+    s = S.Standing(k)
+    cells = []
+    for a in S.BASELINES:
+        v = s.verdict(a, f)
+        word = {"leads": "ISLA leads", "trails": "ISLA trails", "is level with": "level", "is not compared with": "not compared‡"}[v]
+        cells.append(("not compared‡" if v == "is not compared with" else f"{S.fmt_ratio(s.ratio(a, f))} ({word})") if s.has(a) else "—")
+    name = s.ds.name + ("†" if not s.ds.reference else "")
+    out.append(f"| {name} | {s.fields[f]} | {s.err('ISLA', f):.4f} | {cells[0]} | {cells[1]} | {s.shift('ISLA', f, 'posed'):.3f} | @{s.ds.section} |")
+print("\n".join(out) + "\n")
+print(": The standing of the three reference configurations on every dataset with a standing artifact: ISLA's "
+      "relative L2 error (@sec-metrics) on the native mesh, each baseline's error divided by ISLA's, and ISLA's own error when every test case "
+      "is rotated and translated, over its native error. Seed means over two seeds, float32, the validation or test split of "
+      "each dataset (@sec-splits). The words apply the book's seed rule: a lead needs every seed of one architecture below every "
+      "seed of the other and the seed means at least 3% apart. How to read this: a ratio above one favors ISLA; rows are "
+      "different problems and are not comparable with one another; † marks a row whose ISLA checkpoints are of the raw-read "
+      "variant rather than the reference configuration (@sec-isla-normalized-reads); ‡ marks a row whose baselines read the "
+      "freestream as a physical vector rather than a unit direction, so no comparison is drawn from it (@sec-de-result, @sec-interior-airfrans). "
+      "Data: results/char/ (the artifact of each row is named in its chapter).")
+```
+
+## The two invariances, measured {#sec-standing-invariances}
+
+**Move the geometry, and on every flow task only ISLA's error stays put;
+redraw a surface task's surface, and again only ISLA's stays put.** Two scorings of every checkpoint test the two properties ISLA is
+built for (@sec-invariances). *Rotated and translated* applies a random
+rigid motion to every test case, a different one per case, and asks each
+model for the field on the moved body. *Uniform point cloud* replaces the
+native surface mesh by points drawn uniformly by area, at the same count,
+with exact quadrature weights; it changes the scored set itself on the
+three surface tasks whose meshes exceed the cell budget (DrivAerML
+Surface, HiLiftAeroML, SHIFT-SUV), and nowhere else. @fig-standing-shifts
+shows both, each as an architecture's error under the scoring over its own
+native error.
+
+```{python}
+#| label: fig-standing-shifts
+#| fig-cap: >
+#|   Each architecture's own error under a changed presentation of the same
+#|   test cases, over its native error, on a log scale. Top: every case
+#|   rotated and translated, on every dataset. Bottom: the surface redrawn as
+#|   a uniform point cloud, on the three surface tasks where that changes the
+#|   scored set. ISLA blue squares, GeoTransolver red circles, Transolver
+#|   amber triangles; the vertical line is no change. How to read this: these
+#|   are changes of each model's own error, not comparisons between models;
+#|   a baseline mark at 20 means its error is twenty times its native error.
+#|   ISLA's two marks away from one, on the lug and Tensile2d, come from
+#|   boundary samples that tie for nearest on those meshes (@sec-invariances).
+#|   Data: results/char/.
+#| fig-height: 6.4
+#| code-fold: true
+fig, axes = plt.subplots(2, 1, figsize=(8, 6.2), gridspec_kw=dict(hspace=0.35, height_ratios=[2.6, 1.0]))
+for ax, protocol, lim in ((axes[0], "posed", (0.8, 900)), (axes[1], "area", (0.8, 20))):
+    S.plot_shifts(ax, protocol)
+    ax.set_xlim(*lim)
+    ticks = [t for t in (1, 2, 5, 10, 20, 50, 100, 200, 500) if lim[0] <= t <= lim[1]]
+    ax.set_xticks(ticks); ax.set_xticklabels([str(t) for t in ticks]); ax.minorticks_off()
+axes[0].set_xlabel("rotated and translated ÷ native, own error [–]")
+axes[1].set_xlabel("uniform point cloud ÷ native, own error [–]")
+label_line(axes[0], 1.12, 7.3, "ISLA", BLUE, fontsize=8.5)
+label_line(axes[0], 60, 7.3, "GeoTransolver", RED, fontsize=8.5, ha="center")
+label_line(axes[0], 60, 6.55, "Transolver", AMBER, fontsize=8.5, ha="center")
+plt.show()
+```
+
+```{python}
+#| label: para-standing-invariances
+#| output: asis
+FLOW = [k for k in S.available() if k not in ("tensile2d", "lug", "deepjeb")]
+SURF = [k for k in S.available() if "area" in S.DATASETS[k].protocols]
+sh = lambda ks, archs, p: [S.Standing(k).shift(a, f, p) for k in ks for f in S.DATASETS[k].headline for a in archs]
+ip = max(abs(x - 1) for x in sh(FLOW, ["ISLA"], "posed"))
+bp = sh(FLOW, S.BASELINES, "posed")
+ia = max(abs(x - 1) for x in sh(SURF, ["ISLA"], "area"))
+ba = sh(SURF, S.BASELINES, "area")
+print(f"Over every headline field of the {len(FLOW)} flow tasks, the rigid motion leaves ISLA's error within {100 * ip:.1f}% of its native value and "
+      f"multiplies the baselines' by {min(bp):.0f} to {max(bp):.0f}: rotated, a model that reads coordinates is asked about a "
+      "pose it has never seen, and it answers with something worse than the mean field. On the three surface tasks, every field, the uniform "
+      f"point cloud moves ISLA's error by at most {100 * ia:.1f}% and multiplies the baselines' by {min(ba):.1f} to {max(ba):.1f}: "
+      "a model that averages over points rather than over area answers a different question when the points move.")
+```
+
+## Where ISLA leads, where it is level, where it trails {#sec-standing-reading}
+
+```{python}
+#| label: para-standing-groups
+#| output: asis
+GROUPS = (("External aerodynamics, surface fields", ("drivaerml_surface", "shift_suv", "hilift")),
+          ("Flow fields in the volume", ("drivaerml_volume", "airfrans")),
+          ("Solid mechanics", ("lug", "deepjeb", "tensile2d")))
+_ud = __import__("json").load(open(S.RES / "udrvl_210_reduction_2026-09-10.json"))["arms_fp32"]
+UD = {"GeoTransolver": _ud["gt_physical_lr1e3"]["pressure_l2"] / _ud["gt_unit_lr1e3"]["pressure_l2"],
+      "Transolver": _ud["transolver_physical_lr3e3"]["pressure_l2"] / _ud["transolver_unit_lr3e3"]["pressure_l2"]}
+def reading(k):
+    s = S.Standing(k)
+    if not s.ds.fair_drive:
+        return (f"{s.ds.short} is not compared: in its record the baselines read {s.ds.drive_note}"
+                + (f"; in a control on this dataset at 10,000 cells (Transolver at learning rate 3e-3), the unit direction lowers "
+                   f"GeoTransolver's own pressure error {UD['GeoTransolver']:.1f}-fold and Transolver's {UD['Transolver']:.1f}-fold (@sec-de-result)" if k == "hilift" else " (@sec-interior-airfrans)"))
+    parts = []
+    for word, label in (("leads", "ISLA leads"), ("is level with", "is level"), ("trails", "trails")):
+        items = [f"{s.fields[f]} against {a} ({S.fmt_ratio(s.ratio(a, f))})" for f in s.ds.headline for a in S.BASELINES
+                 if s.has(a) and s.verdict(a, f) == word]
+        if items:
+            parts.append(f"{label} on " + ", ".join(items))
+    return f"On {s.ds.in_sentence} ISLA " + "; ".join(p.replace("ISLA leads", "leads") for p in parts) + f" (@{s.ds.section})"
+for title, keys in GROUPS:
+    txt = ". ".join(reading(k) for k in keys if k in S.available())
+    if title == "Solid mechanics":
+        txt += (". On the lug, the baselines read no boundary-condition labels, while ISLA reads which faces are clamped, which "
+                "is the hole, which half of it is loaded and the pressure on it (@sec-interior-lug)")
+    print(f"**{title}.** {txt}.\n")
+```
+
+## What the standing compares, and what it does not {#sec-standing-scope}
+
+**Each architecture runs at a configuration that trains under one memory
+ceiling, so the comparison is matched in memory, not in parameters.** The
+three reference configurations come from candidates that train under
+80 GiB per GPU on two selection datasets, the DrivAerML Surface task and
+the 210-wing HiLiftAeroML set; the registered selection rule named no
+single configuration for both datasets, and each pick has the smallest joint score over the two
+(@sec-selection). No architecture's pick, ISLA's included, is its most
+accurate candidate on the car, and for the baselines the wing scores that
+decided it are scores under the freestream in inch/s (@sec-selection). The three spend their
+memory differently, as @tbl-standing-cost shows: at similar memory, ISLA
+carries several times GeoTransolver's parameters.
+
+```{python}
+#| label: tbl-standing-cost
+#| output: asis
+out = ["| dataset and task | | ISLA | GeoTransolver | Transolver |", "|---|---|---:|---:|---:|"]
+for k in S.available():
+    c = {a: S.cost(k, a) for a in S.ARCHS}
+    if not all(c.values()):
+        continue
+    out.append(f"| {S.DATASETS[k].name} | parameters [millions] | " + " | ".join(f"{c[a]['n_parameters'] / 1e6:.1f}" for a in S.ARCHS) + " |")
+    out.append(f"| | training peak memory [GiB per GPU] | " + " | ".join(f"{c[a]['peak_gib']:.0f}" for a in S.ARCHS) + " |")
+print("\n".join(out) + "\n")
+print(": The resources of the three reference configurations on each task: trainable parameters and the training peak device "
+      "memory per GPU (maximum over four GB300 GPUs, bfloat16 autocast). How to read this: the three are matched by the memory "
+      "ceiling of the selection rule, not by parameter count; ISLA carries several times GeoTransolver's parameters at similar "
+      "memory. Instrument: one-epoch runs of the reference configurations with the raw slice reads, which have the same "
+      "parameters and the same tensors as ISLA; the time per epoch of each is in its dataset chapter. "
+      f"Data: results/char/{S.COST_FILE}.")
+```
+
+The standing is a statement about these three configurations on these
+splits with two seeds each. It does not say that ISLA would lead at equal
+parameter count, nor how the comparison moves with the training set's size
+(@sec-capacity has the scaling evidence, on smaller ISLA configurations).
+It does not cover AeroZoo, the benchmark with held-out families of bodies
+and enclosures, whose standing is an open question of @sec-open-questions.
+Every scope statement is collected in @sec-limits.

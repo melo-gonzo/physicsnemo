@@ -1,0 +1,51 @@
+{
+ "airfrans": {
+  "sample_id": "00215_airFoil2D_SST_44.638_-2.059_2.312_4.328_1.0_17.415_airFoil2D_SST_44.638_-2.059_2.312_4.328_1.0_17.415",
+  "source": {
+   "af_isla/native": {
+    "row": 6,
+    "run_id": "afu_a2s_isla_seed42",
+    "dataset": "airfrans_uvolume_2d",
+    "model": "isla_volume_airfrans",
+    "cells": 100000,
+    "lhr_dump_job": 271987,
+    "dump": "$T/book_figs_2026-10-18/dump/af_isla/native/ (copy: fig/dump/af_isla/native/)"
+   },
+   "af_gt/native": {
+    "row": 7,
+    "run_id": "afu_r_gt_seed42",
+    "dataset": "airfrans_uvolume",
+    "model": "geotransolver_volume_airfrans",
+    "cells": 100000,
+    "lhr_dump_job": 271987,
+    "dump": "$T/book_figs_2026-10-18/dump/af_gt/native/ (copy: fig/dump/af_gt/native/)"
+   },
+   "af_t/native": {
+    "row": 8,
+    "run_id": "afu_r_t_seed42",
+    "dataset": "airfrans_uvolume",
+    "model": "transolver_volume",
+    "cells": 100000,
+    "lhr_dump_job": 271987,
+    "dump": "$T/book_figs_2026-10-18/dump/af_t/native/ (copy: fig/dump/af_t/native/)"
+   }
+  },
+  "q_inf": 996.2755437958986,
+  "U_inf": 44.63800048828125,
+  "aoa_deg": -2.059000015258789,
+  "Re": 2861410.25,
+  "n_points_scored": 100000,
+  "per_sample_rel_l2": {
+   "pressure": {
+    "ISLA": 0.01564185507595539,
+    "GeoTransolver": 0.011826267465949059,
+    "Transolver": 0.011288568377494812
+   },
+   "velocity": {
+    "ISLA": 0.007373136002570391,
+    "GeoTransolver": 0.022602573037147522,
+    "Transolver": 0.046666525304317474
+   }
+  }
+ }
+}

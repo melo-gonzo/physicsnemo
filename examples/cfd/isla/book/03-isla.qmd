@@ -1,0 +1,1324 @@
+# ISLA, one idea at a time {#sec-isla}
+
+*Before this chapter:* @sec-problem (the boundary-to-field operator and the
+running airfoil) and @sec-landscape (attention as a kernel integral
+operator, slice attention, the transformer block). Nothing about ISLA is
+assumed.
+
+**ISLA is a slice-attention transformer that never sees a coordinate.**
+Every learned operation inside it acts on scalars that do not change when
+the body is rotated, translated or uniformly rescaled. Every sum it takes
+over the boundary is a quadrature rule, so its answer converges to one field
+as the mesh is refined, wherever the mesher put its cells. Vectors and
+tensors are rebuilt at the very end, from directions that rotate with the
+body. That is the whole design. This chapter builds it up in seven ideas,
+each with a picture on the two-dimensional airfoil of @sec-problem.
+@fig-isla-overview is the map.
+
+The chapter carries no accuracy numbers. What the design buys and costs in
+measured error is the business of Part IV; the two properties it is built
+for are tested in @sec-invariances; the exact computation, with every tensor
+shape and code identifier, is @sec-architecture. Collapsed notes hold
+derivations and code correspondences, and the text reads completely with all
+of them closed.
+
+```{python}
+#| label: setup-isla
+#| include: false
+import sys; sys.path.insert(0, ".")
+from palette import *
+from matplotlib.collections import LineCollection
+from matplotlib.colors import Normalize
+
+# The running example at three resolutions, and an uneven "mesher": fine at the leading edge, coarse elsewhere.
+Ju = joukowski(n_cells=40)
+u_ = np.linspace(0, 1, 2001)
+density = 1.0 + 14.0 * np.exp(-((u_ - 0.5) / 0.05) ** 2) + 2.0 * np.exp(-(u_ / 0.04) ** 2) + 2.0 * np.exp(-((u_ - 1.0) / 0.04) ** 2)
+cdf = np.concatenate([[0], np.cumsum(density[:-1] * np.diff(u_))]); cdf /= cdf[-1]
+Jm = joukowski(n_cells=40, frac=np.interp(np.linspace(0, 1, 41), cdf, u_))
+JJ = joukowski(n_cells=80)
+
+# Six hand-made soft slices on the 80-cell airfoil: logits that prefer a stretch of arclength.
+s_arc = np.concatenate([[0], np.cumsum(JJ["w"])]); s_mid = (s_arc[:-1] + s_arc[1:]) / 2; total = s_arc[-1]
+N_SL = 6
+centers = (np.arange(N_SL) + 0.5) / N_SL * total
+dd = np.abs(s_mid[:, None] - centers[None, :]); dd = np.minimum(dd, total - dd)
+width6 = np.array([0.06, 0.06, 0.06, 0.13, 0.06, 0.06])[None, :]     # the slice at the leading edge wraps it
+logits6 = -(dd / (width6 * total)) ** 2
+a6 = np.exp(logits6 + np.log(JJ["w"])[:, None]); a6 /= a6.sum(axis=0, keepdims=True)   # softmax over points, measure bias
+z6 = (a6[:, :, None] * JJ["mid"][:, None, :]).sum(axis=0)                                # anchor positions
+m6 = (a6[:, :, None] * JJ["nrm"][:, None, :]).sum(axis=0); m6 /= np.linalg.norm(m6, axis=1, keepdims=True)
+SIX = plt.get_cmap("Dark2")(np.linspace(0, 1, 8))[[0, 1, 2, 3, 5, 6]]
+
+def arrow(ax, p, v, c, lw=1.8, z=5):
+    return ax.annotate("", xy=p + v, xytext=p, arrowprops=dict(arrowstyle="-|>", color=c, lw=lw), zorder=z)
+
+def airfoil(ax, J, color=BASELINE, lw=1.2):
+    ax.plot(J["xy"][:, 0], J["xy"][:, 1], color=color, lw=lw, zorder=1)
+```
+
+```{python}
+#| label: fig-isla-overview
+#| fig-cap: >
+#|   ISLA in four pictures, on the running airfoil. (a) What goes in: each
+#|   boundary cell becomes a token with a position, a unit normal (gray
+#|   arrow) and a measure weight (the cell's length, drawn as the stroke
+#|   width); the far-field direction $\hat g_1$ is the one global input.
+#|   (b) A slice layer groups the tokens softly into slices (colors) and
+#|   gives each slice an anchor (star) with its own mean normal (arrow).
+#|   (c) A token learns where it is only from a few scalars against each
+#|   anchor: distances and cosines, never coordinates. (d) What comes out:
+#|   a vector field (here a made-up surface traction) assembled from
+#|   directions the token owns, with learned scalar coefficients, so the
+#|   prediction on the rotated airfoil (right) is the rotated prediction. How
+#|   to read this: every panel is a schematic with hand-made weights; no
+#|   trained model is drawn. Ideas 1 to 7 below take the panels one at a time.
+#| code-fold: true
+fig, axes = plt.subplots(2, 2, figsize=(9.0, 5.2), gridspec_kw=dict(hspace=0.08, wspace=0.05))
+for ax in axes.flat:
+    clean_axes(ax); ax.set_xlim(-2.45, 2.45); ax.set_ylim(-1.35, 1.35)
+# (a) tokens
+ax = axes[0, 0]
+segs = np.stack([Jm["xy"][:-1], Jm["xy"][1:]], axis=1)
+ax.add_collection(LineCollection(segs, colors=[BASELINE], linewidths=1.0 + 5 * Jm["w"] / Jm["w"].max(), capstyle="butt", zorder=1))
+ax.quiver(Jm["mid"][:, 0], Jm["mid"][:, 1], Jm["nrm"][:, 0], Jm["nrm"][:, 1], color=MUTED, scale=16, width=0.004, zorder=3)
+ax.plot(Jm["mid"][:, 0], Jm["mid"][:, 1], "o", ms=2.6, color=INK, zorder=4)
+arrow(ax, np.array([-2.25, 0.95]), 0.7 * Jm["g_hat"], INK, 2.0)
+ax.text(-2.3, 1.2, r"$\hat g_1$", fontsize=11, color=INK)
+ax.set_title("(a) tokens: position, normal, measure", fontsize=9.5)
+# (b) slices and anchors
+ax = axes[0, 1]
+segs = np.stack([JJ["xy"][:-1], JJ["xy"][1:]], axis=1)
+ax.add_collection(LineCollection(segs, colors=[SIX[k] for k in a6.argmax(axis=1)], linewidths=6, capstyle="butt", zorder=2))
+for k in range(N_SL):
+    ax.plot(*z6[k], marker="*", ms=14, color=SIX[k], mec=INK, mew=0.6, zorder=5)
+    arrow(ax, z6[k], 0.38 * m6[k], SIX[k], 1.6)
+ax.set_title("(b) soft slices and their anchors", fontsize=9.5)
+# (c) invariants of one token against the anchors
+ax = axes[1, 0]
+airfoil(ax, JJ)
+i0 = 22; xi = JJ["mid"][i0]
+for k in range(N_SL):
+    ax.plot([xi[0], z6[k, 0]], [xi[1], z6[k, 1]], color=SIX[k], lw=1.0, alpha=0.8, zorder=2)
+    ax.plot(*z6[k], marker="*", ms=11, color=SIX[k], mec=INK, mew=0.5, zorder=5)
+ax.plot(*xi, "o", ms=7, color=INK, zorder=6); arrow(ax, xi, 0.45 * JJ["nrm"][i0], INK)
+ax.text(0.0, -1.22, r"only $|r_i - z_s|$ and cosines, per anchor", ha="center", fontsize=8.5, color=INK2)
+ax.set_title("(c) position as relations to the anchors", fontsize=9.5)
+# (d) an output vector field assembled from body-fixed directions, and the same on the rotated airfoil
+ax = axes[1, 1]
+tang = np.stack([-JJ["nrm"][:, 1], JJ["nrm"][:, 0]], axis=1)
+coef_t = 0.35 * np.sin(np.linspace(0, 2 * np.pi, len(JJ["w"]), endpoint=False)) + 0.15   # invariant coefficients
+coef_n = 0.25 * (JJ["cp_s"] - JJ["cp_s"].mean())
+vec = coef_t[:, None] * tang + coef_n[:, None] * JJ["nrm"]
+th = np.deg2rad(35); Rm = np.array([[np.cos(th), -np.sin(th)], [np.sin(th), np.cos(th)]])
+for P, V, col, lw in ((JJ["mid"] * 0.5 + [-1.2, 0.1], vec * 0.5, BLUE, 1.0), (JJ["mid"] @ Rm.T * 0.5 + [1.2, 0.1], vec @ Rm.T * 0.5, BLUE, 0.9)):
+    ax.plot(*np.r_[P, P[:1]].T, color=BASELINE, lw=1.0, zorder=1)
+    ax.quiver(P[::3, 0], P[::3, 1], V[::3, 0], V[::3, 1], color=col, scale=2.2, width=0.006, zorder=3)
+ax.annotate("", xy=(0.55, 0.75), xytext=(-0.55, 0.75), arrowprops=dict(arrowstyle="-|>", color=MUTED, lw=1.2, connectionstyle="arc3,rad=-0.3"))
+ax.text(0.0, 1.05, "rotate by 35°", ha="center", fontsize=8.5, color=INK2)
+ax.text(0.0, -1.22, "same coefficients, rotated basis", ha="center", fontsize=8.5, color=INK2)
+ax.set_title("(d) outputs from an equivariant basis", fontsize=9.5)
+plt.show()
+```
+
+## From Transolver to ISLA: what changes {#sec-isla-position}
+
+**ISLA keeps the slice attention of the Transolver family and changes
+what the network is allowed to see.** @sec-landscape introduced slice
+attention: every token is routed softly into a few hundred slices, the
+slices exchange information, and the result is read back to the tokens. It
+is the cheapest form of global attention that still learns its own
+partition of the domain. Transolver and GeoTransolver feed it
+raw coordinates in the dataset's frame and the global conditions as raw
+feature columns, so both learn the physics of pose from data, and both
+average over whatever points the mesher produced. @tbl-isla-vs-transolver
+puts the three side by side.
+
+| | Transolver | GeoTransolver | ISLA |
+|---|---|---|---|
+| what a learned layer reads about position | coordinates $x_i$ in the dataset frame | coordinates, plus multi-scale neighborhood features and a global geometry context | distances and cosines to slice anchors; no coordinate ever |
+| a slice average | over points (count-weighted) | over points | over measure (a quadrature) |
+| a vector or tensor output | its components in the dataset frame | its components in the dataset frame | invariant coefficients times body-fixed basis vectors |
+| a rigid motion of the input | must be learned (or augmented) | must be learned | changes nothing: exact by construction |
+| a change of mesh at fixed geometry | changes the averages | changes the averages | changes the averages by quadrature error only |
+
+: The three architectures of this book on the five things that distinguish
+them. How to read this: the table compares what each architecture is built
+to do, not how accurate it is; the accuracy comparison is Part IV.
+{#tbl-isla-vs-transolver}
+
+The change is paid once, at the network's edges: invariant scalars on the
+way in, an equivariant basis on the way out. Inside, a slice layer is the
+same kind of object as Transolver's, with two additions this chapter
+explains: the routing weights carry the surface measure, and every token
+knows where it is only relative to the slice anchors. The opposite design,
+which enforces symmetry inside every layer with typed scalar and vector
+channels (the tensor-field networks of @sec-landscape), pays the price at
+every layer instead of once.
+
+## What goes in and what comes out {#sec-isla-inputs}
+
+**ISLA maps a sampled boundary and the problem's global conditions to
+fields at prediction points.** Per case, the inputs are:
+
+- $N$ sampled boundary cells, each a **token** with a position
+  $x_i \in \mathbb{R}^d$ (its centroid), a unit normal $\hat n_i$ and a
+  **measure weight** $w_i > 0$, the area (in two dimensions, the length) the
+  cell stands for, so that $\sum_i w_i f(x_i) \approx \int f\,dA$. Under the
+  scoring protocol of @sec-protocol, $N = 200{,}000$ per case.
+- **Global vector inputs** $g_1, \dots, g_K$: directions that belong to the
+  problem rather than to any cell. External aerodynamics has $K = 1$, the
+  far-field flow direction; a buoyant flow would add gravity, a magnetized
+  one the applied field; steady conduction with prescribed temperatures has
+  $K = 0$. Each enters as a unit direction $\hat g_k$. A magnitude that
+  matters is a global scalar.
+- **Global scalar inputs** $\sigma \in \mathbb{R}^S$: parameters of the PDE
+  such as a Reynolds number or an inlet speed.
+- Optionally, per-cell **boundary data** (a condition tag, a prescribed
+  traction, a Dirichlet value) and per-point **query data** (a material
+  label), as named fields of declared tensor rank.
+- For an interior task, the **prediction points** $x_q$ and nothing else
+  about them. The wall distance and direction a prediction point needs are
+  functions of the boundary and the point, so ISLA computes them itself
+  (idea 7).
+
+The outputs are named fields of declared rank at the prediction points:
+scalars (pressure, von Mises stress), vectors (wall shear stress,
+velocity), and tensors up to rank 4 (a stress tensor). On a surface task
+the prediction points *are* the boundary cells. @fig-isla-inputs shows
+everything one token carries.
+
+```{python}
+#| label: fig-isla-inputs
+#| fig-cap: >
+#|   What one token carries, on the running airfoil with an uneven mesh
+#|   (fine at the leading edge, coarse elsewhere). Each boundary cell (black
+#|   dot at its midpoint) has a position, a unit outward normal (gray arrow)
+#|   and a measure weight, drawn as the thickness of the segment. The one
+#|   global input is the far-field direction (black arrow). How to read this:
+#|   nothing else enters the model; in particular no coordinate of any point
+#|   is ever given to a learned layer.
+#| code-fold: true
+fig, ax = plt.subplots(figsize=(8.0, 3.6))
+clean_axes(ax); ax.set_xlim(-2.5, 2.6); ax.set_ylim(-1.3, 1.5)
+segs = np.stack([Jm["xy"][:-1], Jm["xy"][1:]], axis=1)
+ax.add_collection(LineCollection(segs, colors=[BASELINE], linewidths=2 + 14 * Jm["w"] / Jm["w"].max(), capstyle="butt", zorder=1))
+ax.plot(Jm["xy"][:, 0], Jm["xy"][:, 1], color=INK, lw=0.8, zorder=2)
+ax.quiver(Jm["mid"][:, 0], Jm["mid"][:, 1], Jm["nrm"][:, 0], Jm["nrm"][:, 1], color=MUTED, scale=12, width=0.0035, headwidth=4, zorder=3)
+ax.plot(Jm["mid"][:, 0], Jm["mid"][:, 1], "o", ms=3.2, color=INK, zorder=4)
+ax.annotate(r"token $i$: position $x_i$, normal $\hat n_i$, measure $w_i$", xy=Jm["mid"][8], xytext=(0.2, -1.15),
+            fontsize=9.5, color=INK, arrowprops=dict(arrowstyle="-", color=INK2, lw=0.8))
+arrow(ax, np.array([-1.9, 1.05]), 0.8 * Jm["g_hat"], INK, 2.0)
+ax.text(-2.4, 1.3, r"global direction $\hat g_1$ (far-field flow)", fontsize=9.5, color=INK)
+ax.text(1.05, 0.95, "thick segment: large measure weight\n(a coarse cell); thin: a fine cell", fontsize=8.5, color=INK2)
+plt.show()
+```
+
+::: {.callout-note collapse="true" title="Optional: the call signature"}
+Every constructor argument and every `forward` input is keyword-only. Each
+field other than the geometry is named and carries a declared rank in the
+grammar every mesh model of the library shares
+(`physicsnemo.mesh.fields.FieldSchema`): `{"rank": r, "symmetric": bool,
+"parity": "even" | "odd"}`. The constructor takes `output_schema`,
+`boundary_schema`, `query_schema` and `global_schema`. `forward` takes
+`boundary_meshes`, a mapping from a name to a codimension-one `Mesh` whose
+cells are the tokens (centroid, normal, measure) with the boundary fields in
+its `cell_data`; `global_data`, with a rank-1 field as a `(d,)` vector and a
+rank-0 field as a scalar; and, for an interior task, `prediction_points`, a
+point cloud with the query fields in its `point_data`. It returns a
+point-cloud `Mesh` whose `point_data` holds the outputs, shaped `(N,)`,
+`(N, d)`, `(N, d, d)` by rank. A dotted name (`surface.pressure`) is a
+nested group. @sec-using-inputs is the operating manual for all of this.
+:::
+
+## Idea 1: every sum over the boundary is a quadrature rule {#sec-isla-quadrature}
+
+**A mesh is a discretization of a surface, not the surface itself, so any
+quantity the model forms by summing over cells must be an integral estimate
+that does not care how the cells were laid down.** A plain mean over points
+depends on the mesher: refine the leading edge and the mean of anything is
+pulled toward the leading edge. A measure-weighted mean,
+$\sum_i w_i f_i / \sum_i w_i$, estimates $\int f\,dA / \int dA$, and every
+consistent mesh gives the same number up to quadrature error.
+@fig-isla-quadrature shows the difference: two meshers, one shape, two plain
+means, one weighted mean.
+
+```{python}
+#| label: fig-isla-quadrature
+#| fig-cap: >
+#|   Two samplings of one airfoil, and the mean pressure coefficient each
+#|   gives. Left: equal-arclength cells. Right: the same shape with cells
+#|   clustered at the leading edge, as a mesher resolving the suction peak
+#|   would. Color is the potential-flow surface pressure coefficient. The
+#|   plain mean over points (gray) moves between the two samplings because
+#|   the second has more points where the pressure is low; the
+#|   measure-weighted mean (blue) is a quadrature of the same integral and
+#|   moves only by the quadrature error. How to read this: every slice sum
+#|   inside ISLA is of the blue kind. It does not show a trained model.
+#| code-fold: true
+fig, axes = plt.subplots(1, 2, figsize=(9.4, 3.9))
+norm = mpl.colors.TwoSlopeNorm(vcenter=0.0, vmin=-1.6, vmax=1.0)
+for ax, J, title in zip(axes, (Ju, Jm), ("equal-arclength sampling", "leading-edge-clustered sampling")):
+    clean_axes(ax); ax.set_xlim(-2.4, 2.4); ax.set_ylim(-1.35, 1.3)
+    segs = np.stack([J["xy"][:-1], J["xy"][1:]], axis=1)
+    ax.add_collection(LineCollection(segs, colors=DIVERGING(norm(np.clip(J["cp_s"], -1.6, 1))), linewidths=6, capstyle="butt", zorder=2))
+    ax.plot(J["mid"][:, 0], J["mid"][:, 1], "o", ms=2.6, color=INK, zorder=3)
+    plain = J["cp_s"].mean(); weighted = np.sum(J["w"] * J["cp_s"]) / J["w"].sum()
+    ax.set_title(f"{title}: {len(J['w'])} cells")
+    ax.text(0.0, -1.0, f"plain mean of $C_p$ over points: {plain:+.3f}", ha="center", fontsize=9.5, color=INK2)
+    ax.text(0.0, -1.22, f"measure-weighted mean: {weighted:+.3f}", ha="center", fontsize=9.5, color=BLUE, fontweight="bold")
+sm = plt.cm.ScalarMappable(norm=norm, cmap=DIVERGING); sm.set_array([])
+cb = fig.colorbar(sm, ax=axes, fraction=0.025, pad=0.02); cb.set_label("surface pressure coefficient $C_p$ [–]", color=INK2)
+plt.show()
+```
+
+In ISLA the measure enters every attention softmax over tokens as a
+log-space bias, $\ell_i \equiv \log w_i$:
+
+$$
+\frac{\exp(\lambda_{is} + \ell_i)}{\sum_j \exp(\lambda_{js} + \ell_j)}
+= \frac{w_i\, e^{\lambda_{is}}}{\sum_j w_j\, e^{\lambda_{js}}} .
+$$
+
+Here $\lambda_{is}$ is the learned score of token $i$ for slice $s$ (idea
+3). The weight a slice gives a token is its area times a learned,
+content-dependent factor, so every slice aggregate is a weighted quadrature
+of the blue kind. When cells are drawn at random with unequal
+probabilities, the data pipeline divides each area by its inclusion
+probability (the Horvitz–Thompson weight, which a statistician would call
+an importance weight), and the estimate stays unbiased. The measure is a
+correctness requirement, not a knob: without it a slice averages over
+whichever points the mesher placed, and a different mesher changes the
+answer. @sec-principle states this as the acceptance criterion it is, and
+@sec-sampling-laws draws the sampling laws the book uses.
+
+## Idea 2: position without a frame {#sec-isla-frame}
+
+**A model that is handed coordinates in some frame must learn that the
+frame is arbitrary. ISLA is never handed coordinates.** It needs two things
+in their place: a unit of length, and a way to say where a token is.
+
+The unit of length is how far apart the boundary's points typically are.
+Take every pair of points, weight the pair by the measure the two points
+stand for, and average their squared separation; the square root is $L$.
+With normalized weights $\tilde w_i \equiv w_i / \sum_j w_j$,
+
+$$
+L^2 \equiv \sum_{i,j} \tilde w_i \tilde w_j\, \lvert x_i - x_j\rvert^2
+      = 2 \sum_i \tilde w_i\, \lvert x_i - \bar x\rvert^2 ,
+\qquad r_i \equiv x_i / L ,
+$$
+
+where the second form, the variance identity, is what the code evaluates in
+$O(N)$ (`rms_pairwise_distance` in `geometry.py`). $L$ is a property of the
+boundary, not of the mesher, because the weights are areas. It needs no
+center, because only differences of positions enter; the weighted mean
+$\bar x$ appears inside this one scalar and nowhere else. It does not change
+when every weight is multiplied by a constant. And it stays finite under
+refinement of any boundary with a finite second moment, including a fractal
+one whose total length diverges, which is why the unit is an RMS distance
+and not, say, the square root of the total area. A uniform rescale of the
+body is invisible to everything downstream of $r_i$.
+
+Where a token is, ISLA states only *relative to other things*. The scaled
+positions $r_i$ are used solely in differences $r_i - z_s$ against slice
+anchors (idea 3), so a common shift of every point cancels exactly and
+translation invariance needs no centering. The only data a token starts
+with, its **seed**, is the orientation of its normal against each global
+direction, together with the global scalars:
+
+$$
+s_i \equiv \big[\,\hat n_i\!\cdot\!\hat g_1,\ \dots,\ \hat n_i\!\cdot\!\hat g_K,\ \sigma\,\big],
+\qquad h_i^{(0)} = \mathrm{MLP}_{\mathrm{embed}}(s_i) \in \mathbb{R}^{512} .
+$$
+
+On the airfoil the seed says "how much this cell faces the oncoming flow".
+The embedding MLP lifts that to the token's 512-dimensional state $h_i$,
+the vector the rest of the network refines. With $K = 0$ and $S = 0$ the
+seed is a constant, and every distinction between tokens comes from their
+relations to the anchors.
+
+```{python}
+#| label: fig-isla-frame
+#| fig-cap: >
+#|   Why the frame must not be a point statistic. The two samplings of
+#|   @fig-isla-quadrature overlaid. The plain mean of the sampled positions
+#|   (open gray markers) moves toward the leading edge when the sampling is
+#|   clustered there, so a model whose coordinates are centered on it would
+#|   see the whole body displaced. The measure-weighted centroid (blue) and
+#|   the length unit $L$ (printed) are integrals and agree between the
+#|   samplings to quadrature error. How to read this: ISLA's slice layers use
+#|   no center, only the length unit (ISLA-DTT's forest frame aside,
+#|   @sec-arch-modes); the centroid is drawn to show that an
+#|   integral is stable where a point statistic is not.
+#| code-fold: true
+fig, ax = plt.subplots(figsize=(8.0, 3.6))
+clean_axes(ax); ax.set_xlim(-2.4, 2.4); ax.set_ylim(-1.1, 1.2)
+ax.plot(Ju["xy"][:, 0], Ju["xy"][:, 1], color=INK, lw=1.0)
+cent = {}
+for J, mk, lab in ((Ju, "o", "equal-arclength"), (Jm, "s", "clustered")):
+    ax.plot(J["mid"][:, 0], J["mid"][:, 1], mk, ms=3.0, color=INK2 if mk == "o" else MUTED, alpha=0.8, label=f"{lab} sample points")
+    cent[lab] = (J["mid"].mean(axis=0), (J["w"][:, None] * J["mid"]).sum(axis=0) / J["w"].sum())
+    ax.plot(*cent[lab][0], mk, ms=11, mfc="white", mec=INK2, mew=2.0, zorder=5)
+    ax.plot(*cent[lab][1], mk, ms=11, mfc=BLUE, mec=BLUE, mew=2.0, zorder=6)
+ax.annotate("plain mean of the clustered sample:\npulled toward the leading edge", xy=cent["clustered"][0], xytext=(-1.6, -0.75),
+            fontsize=8.5, color=INK2, ha="center", arrowprops=dict(arrowstyle="-", color=INK2, lw=0.8))
+ax.annotate("measure-weighted centroids of both samplings\n(the equal-arclength plain mean coincides with them)", xy=cent["clustered"][1],
+            xytext=(0.9, 0.75), fontsize=8.5, color=BLUE, ha="center", arrowprops=dict(arrowstyle="-", color=BLUE, lw=0.8))
+def rms_pairwise(J):
+    wt = J["w"] / J["w"].sum(); c = (wt[:, None] * J["mid"]).sum(axis=0)
+    return np.sqrt(2.0 * np.sum(wt * np.sum((J["mid"] - c) ** 2, axis=1)))
+ax.text(-2.3, -1.02, f"length unit $L$: {rms_pairwise(Ju):.3f} (equal-arclength), {rms_pairwise(Jm):.3f} (clustered)", fontsize=9, color=INK2)
+ax.legend(loc="upper left", fontsize=8.5)
+plt.show()
+```
+
+::: {.callout-note collapse="true" title="Optional: why the magnitude of a global vector is discarded"}
+No fixed power of a far-field speed is a physical law of the output: a
+pressure coefficient is homogeneous of degree zero in it, a dimensional
+pressure of degree two, a skin-friction coefficient depends on it through
+the Reynolds number. A model that read $g_k$ with its magnitude would have
+to learn which power applies. ISLA reads the direction $\hat g_k$ and takes
+any magnitude that matters as a global scalar, where the network learns its
+role. In code: `gauge` is $L$, `r` is $r_i$, `n_hat` and `g_hat` are the
+unit normal and directions, `log_w` is $\ell_i$, and `_seed_invariants` in
+`model.py` builds the seed.
+:::
+
+## Idea 3: slices and their anchors {#sec-isla-slices}
+
+**Slice attention routes every token softly into a few hundred slices, and
+ISLA gives each slice a place: an anchor with a position and a facing
+direction.** In each layer, a learned score $\lambda_{is}$ for every token
+and slice and the measure bias of idea 1 give the routing weights, a
+softmax over tokens:
+
+$$
+a_{is} = \frac{\exp(\lambda_{is} + \ell_i)}{\sum_j \exp(\lambda_{js} + \ell_j)},
+\qquad \sum_i a_{is} = 1 .
+$$
+
+Each slice's weights sum to one over the tokens, so $\sum_i a_{is} f_i$ is a
+quadrature average of $f$ over the slice's territory. In the language of
+@sec-landscape, the $N \times M$ matrix $a$ is a learned *restriction* from
+the fine level (tokens) to a coarse level of $M = 512$ slices. From the same
+weights each slice forms two vectors,
+
+$$
+z_s \equiv \sum_i a_{is}\, r_i, \qquad
+m_s \equiv \frac{\sum_i a_{is}\, \hat n_i}{\big\lvert \sum_i a_{is}\, \hat n_i \big\rvert},
+$$
+
+its mean position and its mean normal: the slice's **anchor**. Both are
+weighted sums of vectors that rotate with the body, with weights that do
+not, so the anchors rotate with the body. They give each layer 512
+data-adaptive reference points with orientations. @fig-isla-slices draws
+six of them on the airfoil.
+
+```{python}
+#| label: fig-isla-slices
+#| fig-cap: >
+#|   Soft slices and their anchors, illustrated with six slices on the
+#|   airfoil. Each cell is colored by the slice that gives it the most
+#|   weight; the routing is a hand-made function of position along the
+#|   surface, standing in for the learned scores. Stars are the anchors, the
+#|   measure-weighted mean position of each slice, with the slice's mean
+#|   normal as an arrow. How to read this: an anchor need not lie on the
+#|   surface, and the assignment is soft (every cell has some weight in every
+#|   slice); a layer of ISLA has 512 slices and learns its scores from the
+#|   token states. The slice colors are labels only.
+#| code-fold: true
+fig, ax = plt.subplots(figsize=(8.0, 3.8))
+clean_axes(ax); ax.set_xlim(-2.5, 2.5); ax.set_ylim(-1.3, 1.4)
+segs = np.stack([JJ["xy"][:-1], JJ["xy"][1:]], axis=1)
+ax.add_collection(LineCollection(segs, colors=[SIX[k] for k in a6.argmax(axis=1)], linewidths=6, capstyle="butt", zorder=2))
+for k in range(N_SL):
+    ax.plot(*z6[k], marker="*", ms=16, color=SIX[k], mec=INK, mew=0.6, zorder=5)
+    arrow(ax, z6[k], 0.45 * m6[k], SIX[k])
+ax.text(0.0, -1.2, r"star: anchor position $z_s = \sum_i a_{is} r_i$;  arrow: anchor normal $m_s$", ha="center", fontsize=9.5, color=INK2)
+plt.show()
+```
+
+### The routing score: a bounded cosine against sample-conditioned prototypes {#sec-isla-routing-forms}
+
+**ISLA scores a token against a slice by a bounded cosine, so the routing
+cannot sharpen without limit as its weights grow.** The score
+reads the normalized token state $\tilde h_i \equiv \mathrm{LN}(h_i)$,
+where LayerNorm (@sec-landscape) removes a vector's mean and scales it to
+unit variance across its 512 components, and compares it with one
+**prototype** $p_s$ per slice:
+
+$$
+\lambda_{is} = \tau\,\frac{\tilde h_i \cdot p_s}{\lVert \tilde h_i \rVert\,\lVert p_s \rVert},
+\qquad \tau = 10 .
+$$
+
+Every content score lies in $[-10, 10]$, so the routing softmax can
+sharpen only so far: within one slice, the weights of two tokens differ by
+at most a factor $e^{20}$ beyond the ratio of their measures, however the
+token states and prototypes grow. (The geometric refinement of idea 4 adds a
+linear function of six geometric scalars on top; it sharpens the routing
+only through its six learned weights.) An unbounded score, an affine map
+$W\tilde h_i + b$, has no such ceiling. Under a step-size
+schedule fit for a wide, deep network its weights grow, each slice's
+softmax sharpens toward one token and each token's toward one slice, and a
+sharper routing concentrates the slice states, which sharpens the next
+layer's routing: a positive feedback loop whose gain rises with width and
+depth. The bound cuts that loop.
+
+The prototypes are not fixed rows of a weight matrix. Each is a learned
+**base prototype** $P_s$ plus a summary of the sample in front of it: the
+base prototypes attend over the token states with a measure-weighted
+softmax (a quadrature again), the attended value is centered across the
+slices, and its size is held smoothly below a learned fraction $\kappa$ of
+the base prototypes' spread,
+
+$$
+p_s = P_s + \frac{\kappa\,\mathrm{rms}(P)}{\mathrm{rms}(\tilde\Delta) + \kappa\,\mathrm{rms}(P)}\,\tilde\Delta_s,
+\qquad \kappa = 0.1 \text{ at initialization},
+$$
+
+with $\tilde\Delta$ the centered summary (the notation of @sec-arch-layer). So the
+slices a layer offers adapt to the case, a car's slices to the car and a
+bracket's to the bracket, while every score keeps its bound. Centering
+removes the part of the summary common to every slice, which carries no
+routing information under a cosine and, if it dominated, would pull every
+prototype toward one direction.
+
+::: {.callout-note collapse="true" title="Optional: why the routing softmax runs over tokens and the read-back over slices"}
+Routing normalizes over tokens so that a slice is an *average*, with the
+measure bias making it a quadrature average. Reading back (idea 5)
+normalizes over slices, with no measure bias, because there a token is
+choosing *where to read*, not how much it weighs. Adding a constant to
+every $\ell_i$ cancels in the routing ratio and leaves $L$ unchanged, since
+the weights are normalized before they enter it; so ISLA is invariant to a
+rescale of the weights alone as well as to a joint geometric rescale.
+:::
+
+## Idea 4: relational invariants {#sec-isla-relational}
+
+**Everything a token learns about its position, it learns from a handful of
+scalars per anchor.** For each token–anchor pair, with
+$\rho_{is} \equiv r_i - z_s$ the separation and $\hat\rho_{is}$ its
+direction, the layer forms
+
+$$
+\xi_{is} \equiv \big[\,
+\lvert\rho_{is}\rvert,\ \log\lvert\rho_{is}\rvert,\
+\hat\rho_{is}\!\cdot\!\hat g_1,\ \dots,\ \hat\rho_{is}\!\cdot\!\hat g_K,\
+\hat\rho_{is}\!\cdot\!\hat n_i,\
+\hat\rho_{is}\!\cdot\! m_s,\ \hat n_i\!\cdot\! m_s
+\,\big],
+$$
+
+$5 + K$ numbers, six with one global direction. They say how far the anchor
+is on two scales, whether it lies along or against the flow, whether it
+lies in front of the token's face or behind it, whether the token lies in
+front of the anchor's face, and whether the two faces agree. Each is a norm
+or a dot product of vectors that rotate together, so each is unchanged by
+any rotation, reflection or translation. @fig-isla-relational draws them for
+one token and one anchor.
+
+```{python}
+#| label: fig-isla-relational
+#| fig-cap: >
+#|   The relational invariants of one token against one anchor. The token
+#|   (black dot) has normal $\hat n_i$; the anchor (star) has position $z_s$
+#|   and normal $m_s$; the separation $\rho_{is}$ runs from anchor to token.
+#|   The six scalars are the length of $\rho$, its logarithm, and four
+#|   cosines, printed for this pair. How to read this: every one of these
+#|   numbers is the same after any rotation or translation of the page; no
+#|   coordinate axis appears in any of them.
+#| code-fold: true
+fig, ax = plt.subplots(figsize=(8.0, 4.2))
+clean_axes(ax); ax.set_xlim(-2.5, 2.5); ax.set_ylim(-1.5, 1.5)
+airfoil(ax, JJ)
+i, k = 22, 4
+xi, ni = JJ["mid"][i], JJ["nrm"][i]; zs, ms = z6[k], m6[k]
+rho = xi - zs; rho_hat = rho / np.linalg.norm(rho); g = JJ["g_hat"]
+ax.plot(*xi, "o", ms=8, color=INK, zorder=6)
+ax.plot(*zs, marker="*", ms=18, color=VIOLET, mec=INK, mew=0.6, zorder=6)
+arrow(ax, zs, rho, INK2, 1.6); arrow(ax, xi, 0.5 * ni, INK); arrow(ax, zs, 0.5 * ms, VIOLET)
+arrow(ax, np.array([-2.3, 1.05]), 0.6 * g, INK, 2.0)
+ax.text(-2.3, 1.25, r"$\hat g_1$ (global direction)", fontsize=10, color=INK)
+ax.text(*(xi + 0.62 * ni + [0.12, 0.0]), r"$\hat n_i$", fontsize=11, color=INK, ha="left", va="center", path_effects=halo())
+ax.text(*(zs + 0.6 * ms + [0.0, -0.08]), r"$m_s$", fontsize=11, color=VIOLET, ha="center", va="top")
+ax.text(*(zs + 0.5 * rho + [0.15, 0.0]), r"$\rho_{is} = r_i - z_s$", fontsize=11, color=INK2, ha="left", va="center", path_effects=halo())
+ax.text(*(xi + [-0.12, 0.08]), "token $i$", fontsize=10, color=INK, ha="right", va="bottom", path_effects=halo())
+ax.text(*(zs + [0.12, -0.08]), "anchor $s$", fontsize=10, color=VIOLET, ha="left", va="top", path_effects=halo())
+vals = [(r"$|\rho_{is}|$", f"{np.linalg.norm(rho):.2f}"), (r"$\log|\rho_{is}|$", f"{np.log(np.linalg.norm(rho)):+.2f}"),
+        (r"$\hat\rho_{is}\cdot\hat g_1$", f"{rho_hat @ g:+.2f}"), (r"$\hat\rho_{is}\cdot \hat n_i$", f"{rho_hat @ ni:+.2f}"),
+        (r"$\hat\rho_{is}\cdot m_s$", f"{rho_hat @ ms:+.2f}"), (r"$\hat n_i\cdot m_s$", f"{ni @ ms:+.2f}")]
+ax.text(1.35, 1.4, r"$\xi_{is}$, the six relational invariants", fontsize=9.5, color=INK, fontweight="bold")
+for j, (lab, v) in enumerate(vals):
+    ax.text(1.4, 1.15 - 0.27 * j, lab, fontsize=10, color=INK, va="center"); ax.text(2.45, 1.15 - 0.27 * j, v, fontsize=10, color=INK2, ha="right", va="center")
+plt.show()
+```
+
+The invariants do two jobs in a layer. A learned linear map of $\xi_{is}$
+to one scalar **refines the routing**,
+$\lambda'_{is} = \lambda_{is} + w_g \cdot \xi_{is} + b_g$, so that a slice
+can prefer tokens that are near its anchor, downstream of it, or facing it;
+the routing weights $a'_{is}$ are recomputed with the refined scores. And
+the invariants are **pooled back** to the token (idea 5), so it learns
+where it sits relative to the slices it belongs to. Extra per-cell vector
+inputs join the list the same way the normal does: a prescribed traction
+$v_i$ contributes $v_i \cdot \hat\rho_{is}$, a prescribed stress $T_i$
+contributes $\hat\rho_{is}^{\mathsf T} T_i \hat\rho_{is}$
+(@sec-isla-inputs-rank).
+
+::: {.callout-note collapse="true" title="Optional: what the first moments cannot see"}
+The anchors are first moments of each slice's territory. Two non-congruent
+arrangements of tokens with the same weighted means and mean normals in
+every slice are indistinguishable to a layer. Twelve layers with different
+routings make such a collision unlikely on real geometry, and no measured
+deficit in this book has been traced to one, but the representation is not
+complete in the sense of an invariant theory; it is a practical, cheap set
+of invariants.
+:::
+
+## Idea 5: the slice layer, assembled {#sec-isla-layer}
+
+**A slice layer sends information up from tokens to slices, transforms it
+there, and sends it back down together with the geometry.** With the
+refined routing weights, the slice state is the quadrature mean of the
+normalized token states, passed through a per-slice MLP (the slices'
+private computation):
+
+$$
+Z_s = \sum_i a'_{is}\, \tilde h_i, \qquad Z_s \leftarrow Z_s + \mathrm{MLP}_{\mathrm{slice}}(\mathrm{LN}(Z_s)).
+$$
+
+Reading back, the *prolongation* of @sec-landscape, uses a softmax over
+slices for each token, with no measure bias, and pools both the slice
+states and the relational invariants:
+
+$$
+\pi_{is} = \frac{\exp(\lambda'_{is})}{\sum_t \exp(\lambda'_{it})}, \qquad
+b_i = \sum_s \pi_{is}\, Z_s, \qquad
+\gamma_i = W_f \Big(\sum_s \pi_{is}\, \xi_{is}\Big) + b_f .
+$$
+
+The token's state is then updated twice, each time by adding to it:
+
+$$
+h_i \leftarrow h_i + W_b\,[\,\tilde h_i;\ b_i;\ \gamma_i\,], \qquad
+h_i \leftarrow h_i + \mathrm{MLP}(\mathrm{LN}(h_i)) .
+$$
+
+The token ends the layer knowing which slices it belongs to, what those
+slices contain, and where it sits relative to their anchors. Twelve such
+layers make the encoder. @fig-isla-layer-flow draws one layer as a flow.
+
+```{mermaid}
+%%| label: fig-isla-layer-flow
+%%| fig-cap: >
+%%|   One slice layer as a flow. Gray boxes are data, blue boxes learned maps,
+%%|   dashed boxes fixed geometric maps. The raw state $h$ enters only the two
+%%|   residual additions and the token MLP's LayerNorm; every read of the slice
+%%|   sublayer is of the normalized state $\tilde h$. How to read this: arrows
+%%|   carry tensors of shape (tokens, width) or (slices, width), not
+%%|   coordinates; the exact shapes and code are in @sec-arch-layer.
+flowchart TD
+  h["token state h"]:::data --> ln["LayerNorm: LN(h)"]:::learned
+  ln --> score["scores λ: cosine vs prototypes"]:::learned
+  ln -. "LN(h)" .-> pool
+  ln -. "LN(h)" .-> add1
+  score --> route["routing a: softmax over tokens, + log w"]:::fixed
+  route --> anchors["anchors z, m"]:::fixed
+  anchors --> inv["invariants ξ"]:::fixed
+  inv --> refine["refined routing a′, read-back π"]:::learned
+  refine --> pool["slice states Z = Σ a′ LN(h), then the slice MLP"]:::learned
+  pool --> back["read back b = Σ π Z, γ = W Σ π ξ"]:::learned
+  back --> add1(("h + W [LN(h); b; γ]")):::data
+  h -. residual .-> add1
+  add1 --> mlp["h + MLP(LN(h))"]:::learned
+  classDef data fill:#f4f3ee,stroke:#898781;
+  classDef learned fill:#e6f0fb,stroke:#2a78d6;
+  classDef fixed fill:#ffffff,stroke:#2a78d6,stroke-dasharray:4 3;
+```
+
+The projection $W_f$ of the pooled invariants is applied *after* pooling,
+which is exact because the projection is affine and $\pi_{is}$ sums to one
+over slices; it saves storing a (tokens × slices × width) tensor, the
+largest object the layer would otherwise hold (@sec-arch-layer).
+
+### Why the slice sublayer reads the normalized state {#sec-isla-normalized-reads}
+
+**Every read of the slice sublayer is of $\tilde h_i$, never of $h_i$
+itself, so each layer adds a bounded update to the token state instead of
+multiplying it.** This is the one place where the architecture is shaped by
+how it trains, and the reason is worth a careful look, because it is
+dynamics an optimization theorist will recognize.
+
+The token state $h_i$ is a *residual stream*: each layer adds its update
+to it, $h^{(k+1)} = h^{(k)} + F_k(h^{(k)})$, so the network is a
+composition of near-identity maps and its end-to-end Jacobian is the
+product $\prod_k (I + \partial F_k / \partial h)$. Whether that product
+stays tame depends on how the update depends on the stream's size. Suppose
+the broadcast read the raw state, $F_k(h) = W_b\,[\,h;\ b;\ \gamma\,]$.
+Then the update contains the term $W_h h$, linear in $h$, and the layer map
+is $h \mapsto (I + W_h)\,h + \dots$: the stream is multiplied by $I + W_h$
+at every layer. Twelve layers with a gain of 1.5 each amplify the stream
+130-fold per forward pass. Training makes it worse, because nothing pulls
+$\lVert I + W_h \rVert$ back toward one. ISLA trains its matrices with
+Muon, which is steepest descent in the spectral norm: every step moves each
+weight matrix by a fixed spectral-norm step, the orthogonalized direction
+of the momentum, regardless of the gradient's magnitude (@sec-using-lr).
+Steps that keep a fixed size let the layer gains drift upward over tens of
+thousands of steps, and the stream's norm grows geometrically in the
+product of those gains.
+
+A geometrically growing stream does damage a long way before it overflows.
+The network trains in bfloat16, a 16-bit format with an 8-bit mantissa: an
+update smaller than about $2^{-8}$ of the number it is added to is rounded
+away. When the stream has grown by orders of magnitude, the deep layers'
+updates fall below that threshold and those layers stop contributing,
+silently. With the normalized read, $F_k$ depends on $h$ only through
+$\tilde h = \mathrm{LN}(h)$, which has unit RMS whatever $\lVert h \rVert$
+is, so $\lVert F_k(h) \rVert$ is bounded independently of the stream's size
+and the stream grows at most additively, by a bounded amount per layer.
+@fig-isla-stream-toy shows both behaviors on a toy stack with random
+weights.
+
+```{python}
+#| label: fig-isla-stream-toy
+#| fig-cap: >
+#|   Why a raw read compounds and a normalized read does not. Top: a
+#|   12-layer stack whose every layer amplifies a unit-size stream by a factor
+#|   $g$. If the update reads the raw state, each layer multiplies the stream
+#|   by $g$ whatever its size, and 12 layers give $g^{12}$ (gray, dashed). If
+#|   it reads the normalized state, the update has the same size as at unit
+#|   state, $g - 1$, however large the stream already is, and 12 layers add at
+#|   most $12(g - 1)$ (blue, solid). Bottom: what bfloat16 arithmetic does to an update $\delta$ of
+#|   relative size $\lVert\delta\rVert/\lVert h\rVert$ added to a random
+#|   state $h$: the fraction of the update's components that change the sum.
+#|   How to read this: the top panel is arithmetic and the bottom one is
+#|   computed here from random numbers; neither is a measurement of ISLA. The
+#|   measurements on trained models are in @tbl-aerozoo-training and
+#|   @sec-surface-deepjeb.
+#| fig-height: 6.2
+#| code-fold: true
+import torch
+from matplotlib.ticker import FuncFormatter
+depth = 12
+fig, axes = plt.subplots(2, 1, figsize=(8, 6.0), gridspec_kw=dict(hspace=0.45))
+ax = axes[0]
+g = np.linspace(1.0, 1.6, 121)
+ax.plot(g, g ** depth, ls="--", color=MUTED, lw=2.0)
+ax.plot(g, 1 + depth * (g - 1), ls="-", color=BLUE, lw=2.2)
+ax.text(1.42, 1.42 ** depth * 1.6, r"raw read: $\|h^{(12)}\| = g^{12}$", color=INK2, fontsize=9.5, ha="right", path_effects=halo())
+ax.text(1.45, 2.4, r"normalized read: at most $1 + 12\,(g - 1)$", color=BLUE, fontsize=9.5, ha="center", path_effects=halo())
+ax.set_yscale("log"); ax.set_xlim(1.0, 1.6)
+ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:g}")); ax.yaxis.set_minor_formatter(FuncFormatter(lambda v, _: ""))
+ax.set_xlabel("per-layer amplification of a unit stream, $g$ [–]"); ax.set_ylabel("stream size after\n12 layers [–]")
+ax = axes[1]
+rel = np.logspace(-4.5, -0.5, 60)
+hb = torch.randn(200_000, dtype=torch.float32)
+surv = []
+for r in rel:
+    d = torch.randn_like(hb) * float(r)
+    kept = ((hb.bfloat16() + d.bfloat16()).float() - hb.bfloat16().float()) != 0
+    surv.append(kept.float().mean().item())
+ax.semilogx(rel, surv, color=INK, lw=2.0)
+ax.axvline(2.0 ** -8, color=BASELINE, ls="--", lw=1.2)
+ax.text(2.0 ** -8 * 1.15, 0.12, "$2^{-8}$, the unit roundoff of bfloat16", fontsize=8.5, color=INK2)
+ax.set_xlabel(r"relative update size $\|\delta\| / \|h\|$ [–]"); ax.set_ylabel("share of the update's\ncomponents kept [–]")
+ax.set_ylim(-0.02, 1.02)
+plt.show()
+```
+
+The normalized read is the full meaning of "pre-LN" for a sublayer whose
+inputs are read in several places: routing, pooling and broadcast all read
+$\tilde h$, and the raw $h$ enters the layer only through the residual
+identity and the token MLP's own LayerNorm. On ISLA trained at its single
+learning rate, the effect is measured directly (@fig-isla-stream).
+
+```{python}
+#| label: fig-isla-stream
+#| fig-cap: >
+#|   The residual stream of ISLA and of the raw-read variant during training
+#|   on AeroZoo (`full` split, learning rate 3.75e-4, two seeds each, solid
+#|   and dashed). (a) The
+#|   mean token norm $\lvert h\rvert$ after the last slice layer, against
+#|   epoch. (b) The mean token norm entering each of the twelve layers, at the
+#|   last probed epoch. How to read this: the vertical axes are logarithmic;
+#|   a straight rising line in (b) is a constant factor per layer, the
+#|   geometric growth of the top panel of @fig-isla-stream-toy. Probed on four fixed
+#|   validation cases with the same 200,000-cell draws at every checkpoint,
+#|   bfloat16 forward pass as in training; the mean is over every token of
+#|   the four cases. Instrument for the raw-read variant: ISLA at 512 wide,
+#|   12 layers, raw slice reads (@sec-study-configurations). Data:
+#|   results/renderings_2026-10-18/stream_norms.json.
+#| code-fold: true
+import json as _json
+from pathlib import Path as _P
+SN = _json.load(open(_P("..") / "results" / "renderings_2026-10-18" / "stream_norms.json"))["runs"]
+RUNS = [("azu_full_islabn2_seed42", "ISLA", BLUE, "-"), ("azu_full_islabn2_seed43", None, BLUE, "--"),
+        ("azu_full_isla_seed42", "raw-read variant", MUTED, "-"), ("azu_full_isla_seed43", None, MUTED, "--")]
+fig, axes = plt.subplots(1, 2, figsize=(8, 3.4), gridspec_kw=dict(wspace=0.32, width_ratios=[1.35, 1.0]))
+ax = axes[0]
+for k, lab, col, ls in RUNS:
+    e = SN[k]["epochs"]
+    ax.plot([x["epoch"] for x in e], [x["stream_out"] for x in e], ls, color=col,
+            lw=1.6, marker="o", ms=2.8, label=lab)
+ax.set_yscale("log"); ax.set_xlabel("epoch"); ax.set_ylabel(r"mean $|h|$ after the last layer")
+ax.set_title("(a) over training", fontsize=9.5, loc="left")
+ax.legend(fontsize=8.5, frameon=False, loc="center right")
+for sp in ("top", "right"): ax.spines[sp].set_visible(False)
+ax = axes[1]
+for k, lab, col, ls in RUNS:
+    last = SN[k]["epochs"][-1]
+    ax.plot(np.arange(1, 13), last["norm_in"], ls, color=col, lw=1.6, marker="o", ms=2.8,
+            label=f"epoch {last['epoch']}" if ls == "-" else None)
+ax.set_yscale("log"); ax.set_xlabel("layer"); ax.set_ylabel(r"mean $|h|$ entering the layer")
+ax.set_xticks([1, 4, 8, 12]); ax.set_title("(b) through the depth, last probe", fontsize=9.5, loc="left")
+for sp in ("top", "right"): ax.spines[sp].set_visible(False)
+plt.show()
+```
+
+```{python}
+#| label: para-isla-stream
+#| output: asis
+_g = lambda k, ep: next(x["stream_out"] for x in SN[k]["epochs"] if x["epoch"] == ep)
+_raw = [SN[k]["epochs"] for k in ("azu_full_isla_seed42", "azu_full_isla_seed43")]
+_isl = [SN[k]["epochs"] for k in ("azu_full_islabn2_seed42", "azu_full_islabn2_seed43")]
+rmax = max(x["stream_out"] for e in _raw for x in e)
+imax = max(x["stream_out"] for e in _isl for x in e)
+r1 = min(e[0]["stream_out"] for e in _raw)
+fac = lambda e: e[-1]["norm_in"][-1] / e[-1]["norm_in"][0]
+def sci(x):
+    ex = int(np.floor(np.log10(x)))
+    return f"${x / 10 ** ex:.1f} \\times 10^{{{ex}}}$"
+print(f"The raw-read variant's stream starts near {r1:,.0f} and reaches {sci(rmax)} in mean token norm; ISLA's stays below "
+      f"{imax:,.0f} through epoch {SN['azu_full_islabn2_seed42']['epochs'][-1]['epoch']}. Through the depth, the raw-read "
+      f"stream grows by a factor of {sci(min(fac(e) for e in _raw))} to {sci(max(fac(e) for e in _raw))} from the first layer to the "
+      f"last, ISLA's by {min(fac(e) for e in _isl):.1f} to {max(fac(e) for e in _isl):.1f}. The loss follows: on AeroZoo the "
+      "raw-read variant's validation loss is above twice its minimum from epoch 60 on (@tbl-aerozoo-training), and on DeepJEB++ it "
+      "rises and never recovers (@sec-surface-deepjeb). ISLA's reference configuration, with the normalized reads, keeps its "
+      "minimum on both.")
+```
+
+### What the trained routing looks like {#sec-arch-routing-trained}
+
+**On a trained model a slice is a soft region of the body: on the car a
+few early layers cut the surface into patches such as the wheels, the last
+layers spread the mass over most of the slices, and every token's weight is
+shared among many of them.** Every routing picture so far drew
+hand-made weights. This section reads the real ones out of trained
+checkpoints. The instrument records the refined routing scores of every
+layer on one validation case. From them, each token's **soft assignment**
+is its read-back weight vector $\pi_{is}$; its **dominant slice** is
+$\arg\max_s \pi_{is}$; a slice's **mass** is
+$q_s \equiv \frac{1}{N}\sum_i \pi_{is}$; and the **effective number of
+slices** is $M_{\mathrm{eff}} \equiv \exp(-\sum_s q_s \log q_s)$, which
+equals the slice count when every slice carries the same mass and 1 when
+one slice carries all of it.
+
+```{python}
+#| label: setup-routing-trained
+#| include: false
+import json
+from pathlib import Path
+RES = Path("..") / "results"
+SL = RES / "renderings_2026-10-18" / "routing"
+PF = RES / "problem_figures_2026-09-22"
+M_SL = 512
+
+def load_slices(run, n_draw=60000):
+    """One routing probe; the per-token arrays are thinned to a fixed subset of n_draw tokens for drawing."""
+    z = np.load(SL / f"{run}.npz"); meta = json.load(open(SL / f"{run}.json"))
+    d = {k: z[k] for k in z.files}
+    if len(d["keep"]) > n_draw:
+        sub = np.sort(np.random.default_rng(0).choice(len(d["keep"]), n_draw, replace=False))
+        d["keep"] = d["keep"][sub]
+        for k in ("dominant", "pi_max"):
+            d[k] = d[k][:, sub]
+        for k in ("top_pi", "top_a_density"):
+            d[k] = d[k][:, sub]
+    return d, meta
+
+def n_eff(q):
+    return float(np.exp(-(q * np.log(q + 1e-30)).sum()))
+
+SLICE_COLS = slice_colors(M_SL)
+
+def partition_colors(dom, conf, floor=0.25):
+    """Dominant-slice color, faded toward paper where the token is undecided (its largest pi_is is small)."""
+    c = SLICE_COLS[dom].copy(); a = np.clip(conf / max(np.quantile(conf, 0.95), 1e-6), floor, 1.0)
+    paper = np.array([0.96, 0.96, 0.95, 1.0])
+    return a[:, None] * c + (1 - a[:, None]) * paper
+
+def draw_anchors(ax, d, li, scale=1.0, dims=(0, 1), s=50):
+    q = d["q"][li]; active = np.flatnonzero(q > 1.0 / M_SL); A = d["anchors"][li][active] * scale
+    ax.scatter(A[:, dims[0]], A[:, dims[1]], marker="*", s=s, c=SLICE_COLS[active], edgecolors=INK, linewidths=0.45, zorder=5)
+    return len(active)
+
+DR, DRm = load_slices("a2r_dr_isla_seed42_s00079")
+AF, AFm = load_slices("afu_a2s_isla_seed42_s00215")
+LG, LGm = load_slices("a2r_lug_isla_seed42_s00633")
+L_REF_DR = json.load(open(PF / "drivaer.json"))["L_ref"]        # the recipe divides DrivAerML positions by L_ref = 5 m
+NE_DR = [n_eff(DR["q"][li]) for li in range(12)]
+L_PEAK = int(np.argmin(NE_DR))       # the layer whose routing is most concentrated
+```
+
+```{python}
+#| label: fig-routing-partition-drivaer
+#| fig-cap: >
+#|   How a trained ISLA partitions a car, DrivAerML Surface task. Side view
+#|   of the 200,000 boundary tokens of one validation car (a 60,000-token
+#|   subset drawn), each colored by its dominant slice at the first layer,
+#|   at the layer whose routing is most concentrated and at the last layer,
+#|   faded toward the paper where its largest soft assignment is small
+#|   relative to that layer's. Stars are the anchors of the slices whose mass exceeds the uniform
+#|   share. How to read this: slice colors are labels and repeat (twenty
+#|   hues), so two distant patches of one hue are usually different slices;
+#|   what the picture shows is the granularity and placement of the
+#|   partition, not the identity of any slice. The tokens carry no
+#|   coordinates; the patches come from the token states and the relational
+#|   invariants alone. ISLA's reference configuration, seed 42, final
+#|   checkpoint; the validation car of median ISLA pressure error. Data:
+#|   results/renderings_2026-10-18/routing/a2r_dr_isla_seed42_s00079.npz.
+#| code-fold: true
+P = DR["points"][DR["keep"]] * L_REF_DR
+layers = [0, L_PEAK, 11]
+fig, axes = plt.subplots(3, 1, figsize=(8, 7.0), sharex=True, gridspec_kw=dict(hspace=0.25))
+for ax, li in zip(axes, layers):
+    depth_scatter(ax, P[:, [0, 2]], P[:, 1], partition_colors(DR["dominant"][li].astype(int), DR["pi_max"][li].astype(float)), s=2.0)
+    map_axes(ax)
+    n_act = draw_anchors(ax, DR, li, scale=L_REF_DR, dims=(0, 2))
+    ax.set_title(f"layer {li + 1} of 12: effective number of slices {n_eff(DR['q'][li]):.0f}; {n_act} slices above the uniform mass", fontsize=9.5)
+    ax.set_ylabel("z [m]")
+axes[-1].set_xlabel("x [m]  (far-field flow along $+x$)")
+plt.show()
+```
+
+```{python}
+#| label: fig-routing-weights-drivaer
+#| fig-cap: >
+#|   Three individual slices of the sixth layer on the same car: each token's
+#|   soft assignment $\pi_{is}$ to the slice, as heat, for the three slices
+#|   that dominate the most tokens, seen from the side (left) and from below
+#|   (right). The star is the slice's anchor. How to read this: a slice is a
+#|   soft region, brightest at its core and fading over its neighbors; the
+#|   anchor is the region's weighted mean position and sits inside the body
+#|   when the region wraps around it, here between a pair of wheels. The
+#|   three largest territories of this layer are wheels. Each panel's color scale runs to
+#|   the slice's own 99.9th percentile; $q_s$ is the slice's mass.
+#|   ISLA's reference configuration, as @fig-routing-partition-drivaer. Data:
+#|   results/renderings_2026-10-18/routing/a2r_dr_isla_seed42_s00079.npz.
+#| code-fold: true
+li_pos = 1; L6 = int(DR["top_layers"][li_pos]); ts = DR["top_slices"][li_pos][:3]
+fig, axes = plt.subplots(3, 2, figsize=(8, 5.8), gridspec_kw=dict(hspace=0.6, wspace=0.08, width_ratios=[1, 1]))
+for j, (ax_side, ax_below) in enumerate(axes):
+    pi = DR["top_pi"][li_pos][:, j].astype(float); vmax = max(0.2, float(np.quantile(pi, 0.999)))
+    sc = depth_scatter(ax_side, P[:, [0, 2]], P[:, 1], pi, s=1.6, cmap=SEQUENTIAL, vmin=0, vmax=vmax)
+    depth_scatter(ax_below, P[:, [0, 1]], -P[:, 2], pi, s=1.6, cmap=SEQUENTIAL, vmin=0, vmax=vmax)
+    a = DR["anchors"][L6][ts[j]] * L_REF_DR
+    ax_side.plot(a[0], a[2], marker="*", ms=12, color=WHITE, mec=INK, mew=0.8, zorder=5)
+    ax_below.plot(a[0], a[1], marker="*", ms=12, color=WHITE, mec=INK, mew=0.8, zorder=5)
+    for ax in (ax_side, ax_below):
+        map_axes(ax)
+    n_dom = int((DR["dominant"][L6] == ts[j]).sum())
+    ax_side.set_title(f"slice {int(ts[j])}: $q_s$ = {DR['q'][L6][ts[j]]:.3f}, dominant for {n_dom:,} of {len(P):,}", fontsize=8.2)
+    ax_below.set_title("the same slice from below", fontsize=8.2, loc="right")
+    ax_side.set_ylabel("z [m]"); ax_below.set_ylabel("y [m]"); ax_below.yaxis.set_label_position("right"); ax_below.yaxis.tick_right()
+    cb = fig.colorbar(sc, ax=[ax_side, ax_below], fraction=0.015, pad=0.08); cb.outline.set_visible(False); cb.ax.tick_params(labelsize=7.5)
+    cb.set_label(r"$\pi_{is}$ [–]", fontsize=8)
+for ax in axes[-1]:
+    ax.set_xlabel("x [m]")
+plt.show()
+```
+
+```{python}
+#| label: fig-routing-other-tasks
+#| fig-cap: >
+#|   The partition on two other tasks, first, sixth and last layer, dominant
+#|   slice per token faded where undecided, anchors as stars. Top: AirfRANS
+#|   interior task, one test airfoil, its boundary cells and a subset of the
+#|   interior prediction points, in a window around the airfoil. Bottom: GINOT
+#|   lug, one test bracket, surface triangles and interior nodes projected
+#|   along the hole's axis. Airfoil: first layer, the layer of most
+#|   concentrated routing and last layer; lug: first, sixth and last layer.
+#|   How to read this: on the airfoil the first layers give almost every
+#|   point the same dominant slice and set the wake apart, and the last layer
+#|   divides the domain into regions ahead of, around and behind the airfoil,
+#|   with anchors along the chord line and the wake; on the lug the first
+#|   layer splits the arm from the head that holds the hole, and in the deep
+#|   layers the anchors line up along the bracket's mid-line and gather
+#|   around the hole. ISLA's reference configuration on
+#|   each task, seed 42, final checkpoint, the test case of median ISLA
+#|   error. Data: results/renderings_2026-10-18/routing/afu_a2s_isla_seed42_s00215.npz,
+#|   a2r_lug_isla_seed42_s00633.npz.
+#| code-fold: true
+fig, axes = plt.subplots(2, 3, figsize=(8, 5.0), gridspec_kw=dict(hspace=0.45, wspace=0.1))
+nb_a = int(AF["n_boundary"]); PA = AF["points"][AF["keep"]]; isb = AF["keep"] < nb_a
+for ax, li in zip(axes[0], [0, int(np.argmin([n_eff(AF["q"][l]) for l in range(12)])), 11]):
+    c = partition_colors(AF["dominant"][li].astype(int), AF["pi_max"][li].astype(float))
+    ax.scatter(PA[~isb, 0], PA[~isb, 1], c=c[~isb], s=2.5, lw=0, rasterized=True)
+    ax.scatter(PA[isb, 0], PA[isb, 1], c=c[isb], s=6, lw=0, rasterized=True)
+    draw_anchors(ax, AF, li, s=35)
+    map_axes(ax); ax.set_xlim(-0.6, 1.6); ax.set_ylim(-0.8, 0.8)
+    ax.set_title(f"AirfRANS, layer {li + 1}: $M_\\mathrm{{eff}}$ = {n_eff(AF['q'][li]):.0f}", fontsize=9.3); ax.set_xlabel("x / chord [–]")
+axes[0, 0].set_ylabel("y / chord [–]")
+PL = LG["points"] * 1000.0
+for ax, li in zip(axes[1], [0, 5, 11]):
+    c = partition_colors(LG["dominant"][li].astype(int), LG["pi_max"][li].astype(float))
+    depth_scatter(ax, PL[:, [0, 1]], PL[:, 2], c, s=3.0)
+    draw_anchors(ax, LG, li, scale=1000.0, s=35)
+    map_axes(ax); ax.set_title(f"lug, layer {li + 1}: $M_\\mathrm{{eff}}$ = {n_eff(LG['q'][li]):.0f}", fontsize=9.3); ax.set_xlabel("x [mm]")
+axes[1, 0].set_ylabel("y [mm]")
+for ax in axes[0, 1:].tolist() + axes[1, 1:].tolist():
+    ax.set_yticklabels([])
+plt.show()
+```
+
+```{python}
+#| label: routing-trained-numbers
+#| output: asis
+def undecided(d, li, thr=0.5):
+    return 100.0 * float((d["pi_max"][li].astype(float) < thr).mean())
+above = lambda d, li: int((d["q"][li] > 1.0 / M_SL).sum())
+pmax = lambda d, li: float(d["pi_max"][li].astype(float).mean())
+_af_pk = int(np.argmin([n_eff(AF["q"][l]) for l in range(12)]))
+print(
+    f"**What the pictures show.** In the first layer the car model routes with an effective number of {NE_DR[0]:.0f} of its "
+    f"{M_SL} slices, and a token's largest read-back weight is {100 * pmax(DR, 0):.1f}% on average: every token spreads its weight "
+    f"almost evenly, and the dominant-slice map only separates the front of the car from the rear. Routing concentrates in the "
+    f"next layers, most in layer {L_PEAK + 1}, with an effective number of {NE_DR[L_PEAK]:.0f} and {above(DR, L_PEAK)} slices above "
+    f"the uniform mass, where the dominant slices are patches: the wheels, the hood, sections of the roof, the underbody. From there the "
+    f"effective number rises again, to {NE_DR[11]:.0f} in the last layer. The assignment stays soft throughout: in the sixth layer "
+    f"{undecided(DR, 5):.0f}% of the car's tokens give no single slice more than half their weight, and in the last layer "
+    f"{undecided(DR, 11):.0f}%. Anchors sit inside the body, not on it, as the weighted mean of a patch that wraps a wheel, or a pair "
+    f"of wheels, must. The airfoil, like the car, concentrates most in layer {_af_pk + 1} (effective number "
+    f"{n_eff(AF['q'][_af_pk]):.0f}, against {n_eff(AF['q'][0]):.0f} in the first layer); on the lug the first layer is the "
+    f"concentrated one ({n_eff(LG['q'][0]):.0f}) (@fig-routing-other-tasks). In the last layer the effective numbers are "
+    f"{n_eff(AF['q'][11]):.0f} on the airfoil and {n_eff(LG['q'][11]):.0f} on the lug: the last layers spread the mass on every "
+    f"task, and why the routing concentrates where it does is not measured. This is one case of one seed on each task; it shows the "
+    f"granularity of the learned partition, not its accuracy.\n"
+)
+```
+
+## Idea 6: fields of any rank from an equivariant basis {#sec-isla-heads}
+
+**The network's state is made of invariants, so an output of tensor rank
+$r$ is assembled from tensor products of $r$ vectors that rotate with the
+body, with invariant coefficients.** One linear head on the normalized
+final state produces every output's coefficients, and an output of rank $r$
+is their contraction with products of $r$ vectors from the token's
+**basis**:
+
+$$
+c_i = W_o\, \mathrm{LN}(h_i), \qquad
+T_i = \sum_{j_1 \dots j_r} c_{i\,j_1 \dots j_r}\,
+t_{i j_1} \otimes \dots \otimes t_{i j_r} \;+\; \text{isotropic terms},
+$$
+
+$$
+\{t_{ij}\} = \big\{\hat g_1, \dots, \hat g_K,\ \hat n_i,\ \hat u_i,\
+e_\theta(\hat u_i, \hat n_i),\ e_\theta(\hat u_i, \hat g_1), \dots, e_\theta(\hat u_i, \hat g_K)\big\} .
+$$
+
+Rank 0 is the coefficient itself (pressure). Rank 1 is a combination of the
+$m = 2K + 3$ basis vectors: five coefficients for wall shear stress with one
+global direction. A symmetric rank 2 output is a combination of the
+$m(m+1)/2$ symmetrized outer products plus the identity: sixteen
+coefficients for a stress tensor with one global direction. Three of the
+basis vectors are directions the token already has: the global directions,
+its normal, and $\hat u_i$, the **radial** direction from the token's own
+soft anchor (a separate routing assigns the token to slices, and
+$u_i = r_i - \sum_s \beta_{is} z_s$ is a difference of positions, so no
+center appears). The complements $e_\theta(\hat u, \hat a)$, the part of
+$-\hat a$ orthogonal to $\hat u$, keep the expansion well conditioned where
+the three primary directions are nearly coplanar; they are left
+unnormalized, so they vanish smoothly where $\hat u \parallel \hat a$, and
+no direction field on a sphere ever has to be combed. Every basis vector is
+a true vector, so every product is a true tensor and the output transforms
+as $R^{\otimes r}$ under rotations *and* reflections. @fig-isla-basis
+draws the basis at one token.
+
+```{python}
+#| label: fig-isla-basis
+#| fig-cap: >
+#|   The vector head's basis at one token, in the plane of the airfoil. A
+#|   predicted vector, such as the wall shear stress, is a combination with
+#|   learned invariant coefficients of directions the token owns: the global
+#|   direction $\hat g_1$, its normal $\hat n_i$, the radial direction
+#|   $\hat u_i$ from its soft anchor (star), and the complement $e_\theta$.
+#|   How to read this: rotate the page and every basis vector rotates with
+#|   it while the coefficients, being invariants, do not; that is the whole
+#|   of the covariance proof. It does not show a trained head.
+#| code-fold: true
+fig, ax = plt.subplots(figsize=(8.0, 3.8))
+clean_axes(ax); ax.set_xlim(-2.5, 2.5); ax.set_ylim(-1.3, 1.5)
+airfoil(ax, JJ)
+i = 18; xi, ni = JJ["mid"][i], JJ["nrm"][i]; g = JJ["g_hat"]
+beta = np.exp(-((s_mid[i] - centers) / (0.35 * total)) ** 2); beta /= beta.sum()
+anchor = (beta[:, None] * z6).sum(axis=0); u = xi - anchor; u_hat = u / np.linalg.norm(u)
+e_th = -(ni - (ni @ u_hat) * u_hat); e_th_hat = e_th / np.linalg.norm(e_th)
+ax.plot(*anchor, marker="*", ms=16, color=VIOLET, mec=INK, mew=0.6, zorder=6)
+ax.plot(*xi, "o", ms=8, color=INK, zorder=6)
+arrow(ax, anchor, u, INK2, 1.2)
+for v, c, lab in ((g, INK, r"$\hat g_1$"), (ni, BLUE, r"$\hat n_i$"), (u_hat, VIOLET, r"$\hat u_i$"), (e_th_hat, AQUA, r"$e_\theta(\hat u_i,\hat n_i)$")):
+    arrow(ax, xi, 0.6 * v, c, 2.0); ax.text(*(xi + 0.75 * v), lab, fontsize=11, color=c, ha="center", va="center", path_effects=halo())
+ax.annotate("token's soft anchor", xy=anchor, xytext=(anchor[0] - 0.9, -0.75), fontsize=9, color=VIOLET, ha="center",
+            arrowprops=dict(arrowstyle="-", color=VIOLET, lw=0.7), path_effects=halo())
+ax.annotate(r"$u_i = r_i - \sum_s \beta_{is} z_s$", xy=anchor + 0.5 * u, xytext=(anchor[0] + 1.3, -0.75), fontsize=9.5, color=INK2,
+            ha="center", arrowprops=dict(arrowstyle="-", color=INK2, lw=0.7), path_effects=halo())
+ax.text(0.2, -1.15, r"$v_i = \sum_j c_{ij}\, t_{ij}$: invariant coefficients $c_{ij}$ times body-fixed directions $t_{ij}$", ha="center", fontsize=9.5, color=INK2)
+plt.show()
+```
+
+**A tensor component is only ever a view of a tensor.** A scalar head can
+represent only invariants of the input vector set, and a stress component
+$\sigma_{xy} = e_x^{\mathsf T} \sigma\, e_y$ is not an invariant of that set:
+it needs the laboratory axes $e_x, e_y$. ISLA therefore predicts the tensor
+itself, declared with its rank (`stress: {rank: 2, symmetric: true}`), and
+the components are read off it afterwards. No laboratory frame enters
+anywhere. Passing the dataset's axes as extra global directions would also
+keep the algebra covariant if the axes rotated with every case; held fixed,
+as a dataset stores them, they are not a datum of the PDE but the pose of
+the training set, and a model that needs them has been told it
+(@sec-pose-inputs).
+
+::: {.callout-note collapse="true" title="Optional: reflections and pseudotensors"}
+Every invariant in the network is a norm or a dot product of true vectors,
+so every scalar output is unchanged by a mirror as well as a rotation, and
+every even-parity output is a true tensor. A quantity that flips sign under
+a mirror (a vorticity, a torque) is a pseudotensor and is declared with
+`parity: odd`. Its basis is the set of products with exactly one
+*pseudovector* factor: in three dimensions the cross products of the primary
+directions $\hat g_k, \hat n_i, \hat u_i$, $\binom{K+2}{2}$ of them (three
+with one global direction); in two dimensions their perpendiculars. Such an
+output transforms as $\det(R)\, R^{\otimes r}$, the pseudotensor law. The
+parity is a declaration, so a true vector never pays for a pseudovector's
+basis. The library's tests hold the covariance to $10^{-12}$ in float64 for
+random rotations and mirrors at every rank and parity the class admits.
+:::
+
+### Inputs of any rank enter through invariants {#sec-isla-inputs-rank}
+
+**The same rule runs backwards at the input: a boundary field of rank 1 or
+2 reaches the network only through its invariants against directions the
+token already has.** A per-cell vector $v_i$ (a prescribed traction)
+contributes to the seed its cosines with the token's frame,
+$v_i \cdot \hat n_i$ and $v_i \cdot \hat g_k$, its norm, and its dot products
+with the token's other vector inputs; inside every layer it contributes
+$v_i \cdot \hat\rho_{is}$ beside $\hat n_i \cdot \hat\rho_{is}$. A per-cell
+rank-2 field $T_i$ (a prescribed stress) contributes the bilinear forms
+$a^{\mathsf T} T_i b$ over $a, b \in \{\hat n_i, \hat g_k\}$, its trace and
+its Frobenius norm to the seed, and $\hat\rho^{\mathsf T} T_i \hat\rho$,
+$\hat\rho \cdot T_i \hat n_i$, $\hat\rho \cdot T_i \hat g_k$ inside every
+layer. Only true vectors appear on the input side, so every input invariant
+is unchanged by a mirror, and pseudotensor inputs are refused. A dataset
+that stores a vector component by component stacks the components into one
+rank-1 field before ISLA sees it; feeding laboratory components as scalars
+would leak the frame.
+
+## Idea 7: predicting inside the domain {#sec-isla-interior}
+
+**On an interior task the prediction points join the boundary cells as
+tokens, and each one is told only how far it is from the wall and in which
+direction.** A surface task predicts at the cells it was given. An interior
+task (a velocity field around a car, a stress field in a bracket) predicts
+at points $x_q$ off the boundary, and a point has no normal and no area. ISLA
+gives each prediction point the two geometric facts a PDE solver would use
+there, computed inside the model from the boundary tokens: the **signed
+distance** to the wall and the **direction** to it. For each $x_q$, an
+exact search finds the nearest boundary token $y_{i^*}$, and
+
+$$
+d_q = \pm\, \lvert x_q - y_{i^*} \rvert, \qquad \hat\nu_q = \frac{x_q - y_{i^*}}{\lvert x_q - y_{i^*} \rvert},
+$$
+
+signed by that token's normal. The direction $\hat\nu_q$ plays the role of
+the normal in every invariant (the seed's $\hat\nu_q \cdot \hat g_k$, the
+layers' $\hat\rho_{qs} \cdot \hat\nu_q$), and the distance enters the
+point's embedding as $d_q/L$ and its signed logarithm, so that the boundary
+layer, where $d_q/L$ is tiny, is resolved on a log scale.
+@fig-isla-interior draws both on the airfoil.
+
+```{python}
+#| label: fig-isla-interior
+#| fig-cap: >
+#|   The geometry a prediction point receives, on the running airfoil with
+#|   40 boundary cells. Top: points of a grid around the airfoil, colored by
+#|   their distance to the nearest boundary token in units of the length
+#|   unit $L$ (positive outside the body, where every point here lies); thin
+#|   aqua lines join a few points to that token. Bottom: the error of that
+#|   distance against the exact distance to the curve, near the leading
+#|   edge, in the same units. How to read this: far from the wall the
+#|   nearest-token distance is the exact one; within about one cell length
+#|   of the wall it overestimates by up to half a cell, in a sawtooth that
+#|   follows the sample. A finer or different boundary sample changes that
+#|   error, which is why this is the one input of ISLA that depends on the
+#|   discretization. It does not show a trained model.
+#| fig-height: 6.8
+#| code-fold: true
+from matplotlib.path import Path as MPath
+J = joukowski(n_cells=40); L_ = rms_pairwise(J)
+Jf = joukowski(n_cells=8000)                                   # the curve, finely, for the exact distance
+body = MPath(J["xy"])
+gx, gy = np.meshgrid(np.linspace(-2.6, 2.7, 140), np.linspace(-1.3, 1.3, 70))
+Xq = np.stack([gx.ravel(), gy.ravel()], 1)
+Xq = Xq[~MPath(Jf["xy"]).contains_points(Xq)]
+def nearest(X, P):
+    d2 = ((X[:, None, :] - P[None]) ** 2).sum(-1); k = d2.argmin(1)
+    return np.sqrt(d2[np.arange(len(X)), k]), k
+d_tok, k_tok = nearest(Xq, J["mid"]); d_ex, _ = nearest(Xq, Jf["mid"])
+fig, axes = plt.subplots(2, 1, figsize=(8, 7.4), gridspec_kw=dict(hspace=0.25, height_ratios=[1.0, 1.25]))
+ax = axes[0]; clean_axes(ax); ax.set_xlim(-2.6, 2.75); ax.set_ylim(-1.3, 1.3)
+sc = ax.scatter(Xq[:, 0], Xq[:, 1], c=d_tok / L_, s=4, cmap=SEQUENTIAL, norm=mpl.colors.LogNorm(vmin=0.01, vmax=1.0), zorder=2, rasterized=True)
+for q in np.random.default_rng(3).choice(len(Xq), 14, replace=False):
+    ax.plot([Xq[q, 0], J["mid"][k_tok[q], 0]], [Xq[q, 1], J["mid"][k_tok[q], 1]], color=AQUA, lw=1.0, zorder=3)
+    ax.plot(*Xq[q], "o", ms=3.5, color=AQUA, zorder=4)
+airfoil(ax, J, color=INK, lw=1.2); ax.plot(J["mid"][:, 0], J["mid"][:, 1], "o", ms=2.5, color=INK, zorder=4)
+cb = fig.colorbar(sc, ax=ax, fraction=0.03, pad=0.01); cb.outline.set_visible(False); cb.set_label("$d_q / L$ [–]")
+ax.set_title("distance to the nearest boundary token", fontsize=9.5)
+ax = axes[1]; clean_axes(ax); ax.set_xlim(-2.25, -0.85); ax.set_ylim(-0.32, 0.42)
+gx2, gy2 = np.meshgrid(np.linspace(-2.25, -0.85, 300), np.linspace(-0.32, 0.42, 170))
+X2 = np.stack([gx2.ravel(), gy2.ravel()], 1); X2 = X2[~MPath(Jf["xy"]).contains_points(X2)]
+e = (nearest(X2, J["mid"])[0] - nearest(X2, Jf["mid"])[0]) / L_
+sc2 = ax.scatter(X2[:, 0], X2[:, 1], c=e, s=3, cmap=SEQUENTIAL, vmin=0, vmax=np.quantile(e, 0.995), zorder=2, rasterized=True)
+airfoil(ax, J, color=INK, lw=1.2); ax.plot(J["mid"][:, 0], J["mid"][:, 1], "o", ms=4, color=INK, zorder=4)
+cb = fig.colorbar(sc2, ax=ax, fraction=0.03, pad=0.01); cb.outline.set_visible(False); cb.set_label("overestimate / $L$ [–]")
+ax.set_title("its error against the exact distance, near the leading edge", fontsize=9.5)
+plt.show()
+```
+
+The nearest-token geometry is exact in the sense of the code (a brute-force
+search, no approximation), but it is a function of the boundary *sample*:
+near the wall it overestimates the true distance, by up to half the gap
+between neighboring samples on a curve and up to the radius of the largest
+gap between samples on a surface, and a different draw of boundary cells moves it. It is the one
+input of ISLA that depends on the discretization; @sec-invariances measures
+what that costs, and @sec-open-questions states what would replace it.
+
+**Prediction points come in two kinds.** In ISLA's default interior form
+the prediction points are **interacting** tokens: they carry routing mass,
+a learned fraction of the total boundary measure split equally among them,
+so they help form the slices and their anchors, and the prediction at one
+point depends on which other points are in the request. That dependence is
+the price of letting the interior shape the latent partition. ISLA-DTT
+(`query_independent=True`) makes the points **read-only**: they carry no
+routing mass, so at every layer they read the slices the boundary formed
+and never write into them, and after every layer each point also reads
+every boundary cell directly, through a learned kernel of the pair's
+relative geometry and an attention over the cells' states, weighted by each
+cell's share of the boundary measure. A Barnes–Hut tree makes that read
+affordable: nearby cells are read one by one and a distant cluster of
+cells as one virtual cell (its measure-weighted mean position, normal,
+key and value), exactly as an N-body code treats a far cluster by its
+monopole. The prediction at a point is then a function of that point and
+the boundary alone: any request can be split into pieces with the same
+answer. @fig-isla-dtt shows one point's read on the airfoil.
+
+```{python}
+#| label: fig-isla-dtt
+#| fig-cap: >
+#|   Two kinds of prediction point, on the airfoil. Left: an interacting
+#|   point (ISLA's default, aqua) adds its weight to the slices (solid
+#|   arrows into the anchors) and reads them back (dashed arrows), so the
+#|   interior helps shape the partition. Right: a read-only point of ISLA-DTT
+#|   reads the boundary through a tree over 160 cells: the cells near it one
+#|   by one (black segments) and each distant cluster as one virtual cell
+#|   (violet diamonds at the cluster's measure-weighted centroid, area
+#|   proportional to the cluster's measure), a cluster being admitted when
+#|   its size is below $\theta = 1$ times its distance to the point. How to
+#|   read this: a schematic of the access pattern with a simple bisection
+#|   tree; the model's forest also separates cells whose normals point in
+#|   different octants, which this picture omits.
+#| code-fold: true
+J = joukowski(n_cells=160)
+P_ = J["mid"]; Wc = J["w"]
+def build(idx):
+    node = dict(idx=idx, c=(Wc[idx, None] * P_[idx]).sum(0) / Wc[idx].sum())
+    lo, hi = P_[idx].min(0), P_[idx].max(0); node["diag"] = float(np.linalg.norm(hi - lo))
+    if len(idx) > 4:
+        ax_ = int(np.argmax(hi - lo)); o = idx[np.argsort(P_[idx, ax_])]; h_ = len(o) // 2
+        node["kids"] = [build(o[:h_]), build(o[h_:])]
+    return node
+root = build(np.arange(len(P_)))
+k0 = 118; xq = P_[k0] + 0.06 * J["nrm"][k0]
+near, far = [], []
+def walk(nd):
+    if nd["diag"] < 1.0 * np.linalg.norm(xq - nd["c"]):
+        far.append(nd); return
+    if "kids" in nd:
+        for k_ in nd["kids"]: walk(k_)
+    else:
+        near.extend(nd["idx"].tolist())
+walk(root)
+fig, axes = plt.subplots(1, 2, figsize=(9.4, 3.6), gridspec_kw=dict(wspace=0.04))
+ax = axes[0]; clean_axes(ax); ax.set_xlim(-2.4, 2.4); ax.set_ylim(-1.3, 1.3)
+airfoil(ax, J, color=INK2)
+for k in range(N_SL):
+    ax.plot(*z6[k], marker="*", ms=12, color=VIOLET, mec=INK, mew=0.5, zorder=5)
+q = np.array([0.9, 0.85]); ax.plot(*q, "o", ms=8, color=AQUA, zorder=6)
+for k in (1, 3, 5):
+    d_ = z6[k] - q; nrm_ = np.array([-d_[1], d_[0]]) / np.linalg.norm(d_) * 0.05
+    ax.annotate("", xy=z6[k] + nrm_, xytext=q + nrm_, arrowprops=dict(arrowstyle="-|>", color=AQUA, lw=1.3), zorder=4)
+    ax.annotate("", xy=q - nrm_, xytext=z6[k] - nrm_, arrowprops=dict(arrowstyle="-|>", color=AQUA, lw=1.0, ls="--"), zorder=4)
+ax.text(0.95, 1.0, "writes and reads", fontsize=9, color=AQUA, path_effects=halo())
+ax.set_title("interacting point: writes into the slices", fontsize=9.5)
+ax = axes[1]; clean_axes(ax); ax.set_xlim(-2.4, 2.4); ax.set_ylim(-1.0, 1.0)
+segs = np.stack([J["xy"][:-1], J["xy"][1:]], axis=1)
+ax.add_collection(LineCollection(segs, colors=["#d9d4f2"], linewidths=3, zorder=1))
+ax.add_collection(LineCollection(segs[near], colors=[INK], linewidths=3.5, zorder=2))
+for nd in far:
+    ax.plot([xq[0], nd["c"][0]], [xq[1], nd["c"][1]], color=VIOLET, lw=0.6, alpha=0.5, zorder=2)
+    ax.plot(*nd["c"], "D", ms=3 + 12 * np.sqrt(Wc[nd["idx"]].sum() / Wc.sum()), color=VIOLET, mec=WHITE, mew=0.6, zorder=4)
+ax.plot(*xq, "o", ms=8, color=AQUA, zorder=6)
+ax.text(0.0, -0.92, f"{len(near)} cells read one by one, {len(far)} clusters as one virtual cell each, of {len(P_)}",
+        ha="center", fontsize=8.8, color=INK2)
+ax.set_title("read-only point: near cells exactly, far clusters by monopole", fontsize=9.5)
+plt.show()
+```
+
+Which interior form a task should use is one of the questions the
+AeroZoo benchmark decides (@sec-open-questions). On the datasets of this
+book, the interior standings are ISLA's interacting form, and ISLA-DTT
+appears where its own measurement exists.
+
+## Why ISLA has no center {#sec-isla-variants}
+
+**ISLA states position only relative to its own anchors because a PDE does
+not know what "the body" is.** The area-weighted centroid of a surface is
+not a point the physics distinguishes. For an open or truncated boundary, a
+multi-body scene, or a boundary with structure at every scale, the centroid
+is an artifact of where the domain was cut, and a frame built on it would
+carry that artifact into every invariant. A center taken from a sample
+statistic is worse still, since it moves with the mesher
+(@fig-isla-frame). The relative construction presumes none of this:
+positions enter only as differences against anchors that are themselves
+quadrature means, and the one mean position in the model sits inside the
+scalar $L$. One component is the exception, and it is an implementation
+device rather than an input: ISLA-DTT builds its Barnes–Hut forest in a
+frame the boundary carries (its measure-weighted centroid and principal
+axes, signed by the third moments), so that every pose of a case gets the
+same clusters; where that frame ties, on a body with equal principal
+variances or a symmetric axis, the far-field approximation can differ
+between poses (@sec-arch-modes). The two properties the relative
+construction buys, pose and discretization, are the subject of
+@sec-invariances.
+
+## The forward pass on one page {#sec-isla-forward}
+
+**Every symbol of the seven ideas has one identifier in the code, and
+@sec-architecture is the dictionary.** @tbl-isla-ideas maps the ideas onto
+the stages of that chapter.
+
+| idea | what it is | stage of @sec-architecture | code |
+|---|---|---|---|
+| 1 quadrature | the measure as a log-bias in every softmax over tokens | 3, 4 | `log_w` |
+| 2 position without a frame | the length unit $L$; the seed | 1, 2 | `rms_pairwise_distance`, `_seed_invariants` |
+| 3 slices and anchors | bounded cosine routing against prototypes; $z_s$, $m_s$ | 3 | `_RoutingLogits`, `_SliceBlock` |
+| 4 relational invariants | $\xi_{is}$; the routing refinement | 3 | `_relational_invariants`, `geo_kernel.py` |
+| 5 the slice layer | pooling, slice MLP, read-back, normalized reads | 3 | `_SliceBlock.forward` |
+| 6 the equivariant basis | coefficients times body-fixed directions | 4, 5 | `heads.py`, `frame_assign` |
+| 7 the interior | nearest-token geometry; interacting or read-only points | 1, 3 | `nearest_boundary_geometry`, `_QueryTokens`, `tree_read.py` |
+
+: The seven ideas of this chapter, the stage of the forward pass that holds
+each, and the code that implements it. How to read this: the stage numbers
+refer to @fig-isla-pass; the code identifiers are in
+`physicsnemo/experimental/models/isla/`. {#tbl-isla-ideas}
