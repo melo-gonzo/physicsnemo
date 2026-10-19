@@ -38341,3 +38341,51 @@ rule requires the unit direction regardless.
 **Incident.** The completion watch for these lanes never fired: its
 field split compared `trained=4` with `4`. The lanes finished between
 18:50 on 10-18 and 02:00 on 10-19, and were scored at 11:43 EDT on 10-19.
+
+## 2026-10-19 — Continuous query-geometry encoding adopted: on exact geometry, asinh distances and a sign-carrying direction lower ISLA's error on every decision field {#sec-nb-geo-cont-verdict}
+
+**Question** (E2 of the architecture agenda, pre-registered 2026-10-18 in
+scratch/isla-geo-cont-2026-10-18/PREREG.md). On exact geometry, ISLA's
+query features read the scaled distance s = d / L in two channels,
+`[s, sign(s) · log(|s| + 1e-12)]`, which jump across the surface and at
+s = 0. Does a continuous encoding do better: `[s, asinh(s / 1e-6)]`, with
+the direction channel ν = sign(d) · u (sign(0) = +1)? The arms are
+CONTROL, the exact-geometry code as it stands, and CONT. Each runs two
+seeds on Tensile2d, the lug and AirfRANS, from one snapshot pair.
+
+**Rule.** Adopt if the geometric mean of CONT ÷ CONTROL over the four
+low-noise fields is at most 1.01 and none reaches 1.10. The four fields
+are Tensile2d displacement and AirfRANS velocity, pressure and eddy
+viscosity. Noisy fields (Tensile2d stress and plastic strain, lug von
+Mises) are flagged when both CONT seeds fall outside CONTROL's range.
+
+| Field | CONTROL | CONT | CONT ÷ CONTROL |
+|---|---|---|---|
+| Tensile2d displacement | 0.0067 (0.0072, 0.0062) | 0.0064 (0.0066, 0.0062) | 0.956 |
+| AirfRANS velocity | 0.00928 (0.00989, 0.00867) | 0.00864 (0.00850, 0.00877) | 0.931 |
+| AirfRANS pressure | 0.01698 (0.01671, 0.01726) | 0.01574 (0.01584, 0.01565) | 0.927 |
+| AirfRANS eddy viscosity | 0.02164 (0.02271, 0.02056) | 0.02056 (0.02036, 0.02076) | 0.950 |
+
+**Verdict: adopt.** The geometric mean is 0.941 and the largest ratio is
+0.956. Of the noisy fields, Tensile2d stress (0.999) and plastic strain
+(1.019) are not flagged. Lug von Mises is flagged on native: CONT 0.00174
+against CONTROL 0.00155, a ratio of 1.13, with both CONT seeds above
+both CONTROL seeds. With two seeds per arm, that ordering arises by
+chance in one case of six. Posed it reads 1.09 and is not flagged.
+Posed ÷ native is 1.0000 on Tensile2d and AirfRANS for both arms. On the
+lug it is 1.08 to 1.11 for CONTROL and 1.05 to 1.06 for CONT.
+
+**Beside the rule: exact geometry against nearest-token geometry.** CONTROL
+is the exact-geometry code. On AirfRANS it scores 0.98 / 0.94 / 0.97 of the A2 reference's
+nearest-token error on velocity / pressure / eddy viscosity, and CONT
+scores 0.91 / 0.87 / 0.92. On the lug, CONTROL scores 0.90 of A2's
+native error, and its posed ÷ native falls from 4.14 / 2.87 under
+nearest-token geometry to 1.08 to 1.11. The ties between nearest tokens
+caused most of the lug's pose sensitivity. What remains matches the
+direction ties on the part's medial surface
+(scratch/isla-geo-cont-2026-10-18/DESIGN_NOTE_medial_ties.md).
+
+**Next.** CONT joins ISLA's new reference: exact geometry plus boundary
+conditions by name (psharpe/isla-bc-names). It lands there with a new
+checkpoint version, because its features change while the weight layout
+stays the same.
