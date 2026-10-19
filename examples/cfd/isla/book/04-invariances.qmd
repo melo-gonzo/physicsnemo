@@ -458,7 +458,7 @@ rendering_figure("fig-pose-rendering", [("figures/renderings/pose_geometry.png",
 POSE = J("p200k_pose_r1_2026-09-23.json"); PA, PV, PN = POSE["arms"], POSE["verdict"], POSE["native_frame_reference"]
 import torch
 from physicsnemo.experimental.models import ISLA
-NP_POSE = sum(p.numel() for p in ISLA(output_schema={"pressure": {"rank": 0}, "wss": {"rank": 1}}, global_schema={"U_inf_dir": {"rank": 1}},
+NP_POSE = sum(p.numel() for p in ISLA(output_schema={"pressure": {"rank": 0}, "wss": {"rank": 1}}, boundary_schemas={"vehicle": {}}, global_schema={"U_inf_dir": {"rank": 1}},
                                       hidden=384, n_layers=12, n_slices=256).parameters())
 FRP = J("char/ref80_frontier_2026-10-02.json")["candidates"]
 pseeds = lambda arm: " / ".join(f"{v['pressure_l2']:.4f}" for v in PA[arm]["per_seed"].values())

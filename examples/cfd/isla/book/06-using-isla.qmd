@@ -73,6 +73,7 @@ direction is
 from physicsnemo.experimental.models import ISLA
 model = ISLA(
     output_schema={"pressure": {"rank": 0}, "wss": {"rank": 1}},
+    boundary_schemas={"vehicle": {}},
     global_schema={"U_inf_dir": {"rank": 1}},
 )
 ```
@@ -185,13 +186,13 @@ if ((airfoil.cell_centroids - verts.mean(0)) * airfoil.cell_normals).sum(-1).mea
 freestream = torch.tensor([1.0, 0.1], dtype=torch.float64)  # a rank-1 global input
 
 torch.manual_seed(0)
-surface = ISLA(output_schema={"cp": {"rank": 0}, "tau": {"rank": 1}},
+surface = ISLA(output_schema={"cp": {"rank": 0}, "tau": {"rank": 1}}, boundary_schemas={"airfoil": {}},
                global_schema={"freestream": {"rank": 1}},
                hidden=32, n_layers=2, n_slices=8, dim=2).double().eval()
 with torch.no_grad():
     out = surface(boundary_meshes={"airfoil": airfoil}, global_data={"freestream": freestream})
 
-interior = ISLA(output_schema={"p": {"rank": 0}, "u": {"rank": 1}},
+interior = ISLA(output_schema={"p": {"rank": 0}, "u": {"rank": 1}}, boundary_schemas={"airfoil": {}},
                 global_schema={"freestream": {"rank": 1}}, interior=True,
                 hidden=32, n_layers=2, n_slices=8, dim=2).double().eval()
 xs = torch.linspace(-1.5, 2.5, 40, dtype=torch.float64)
@@ -389,7 +390,7 @@ for n, c in ISLA_CFGS.items():
     task = ("interior, read-only" if m.get("query_independent") else "interior") if m.get("interior") else "surface"
     comp = "whole model" if c.get("compile") else ("per block" if m.get("compile_blocks") else "none")
     o += (f"| `{n}` | {task} | {m.get('dim', DEFAULTS['dim'])} | {decl(m.get('output_schema'))} | {kS(m.get('global_schema'))} "
-          f"| {len(m.get('boundary_schema') or {})} | {decl(m.get('query_schema'))} | {comp} |\n")
+          f"| {sum(len(s or {}) for s in (m.get('boundary_schemas') or {}).values())} | {decl(m.get('query_schema'))} | {comp} |\n")
 print(o)
 print(": The recipe's ISLA model configurations (`conf/model/isla_*.yaml`, a parent's `defaults` merged in), read as the page "
       "renders. Every one is the reference configuration at the same learning rate. How to read this: \"boundary inputs\" counts "
@@ -422,7 +423,7 @@ print(f"Every ISLA configuration pins this rate. The recipe-wide default (`conf/
 #| label: para-using-optimizer
 #| output: asis
 torch.manual_seed(0)
-REF = ISLA(output_schema={"pressure": {"rank": 0}, "wss": {"rank": 1}}, global_schema={"U_inf_dir": {"rank": 1}})
+REF = ISLA(output_schema={"pressure": {"rank": 0}, "wss": {"rank": 1}}, boundary_schemas={"vehicle": {}}, global_schema={"U_inf_dir": {"rank": 1}})
 two = [p for p in REF.parameters() if p.ndim == 2]; rest = [p for p in REF.parameters() if p.ndim != 2]
 n2, nr = sum(p.numel() for p in two), sum(p.numel() for p in rest)
 print(f"The recipe builds the optimizer from the parameters' shapes (`build_muon_optimizer` in `src/utils.py`): every 2-D "
@@ -535,17 +536,11 @@ with zipfile.ZipFile(path) as z:
 #| label: para-using-checkpoint
 #| output: asis
 same = all(torch.equal(again.point_data[k], out.point_data[k]) for k in ("cp", "tau"))
-older = sorted(ISLA.__supported_model_checkpoint_version__)
 print(f"The archive holds {', '.join(f'`{n}`' for n in sorted(zipfile.ZipFile(path).namelist()))}; its metadata records "
       f"checkpoint version {meta['mdlus_file_version']}, the class's `__model_checkpoint_version__`, and `args.json` records "
       f"every constructor argument ({', '.join(f'`{k}`' for k in args)}). The loaded model's outputs are "
-      f"{'bitwise equal to' if same else 'different from'} the saved model's. A checkpoint of version "
-      f"{', '.join(older[:-1])} or {older[-1]} loads with a message: the field declarations of {older[0]} are renamed to the four "
-      "schemas; constructor arguments outside the class's set are dropped where the checkpoint held the one value the class builds, "
-      "and refused by name otherwise; and a checkpoint of "
-      f"{' or '.join(v for v in older if 'raw residual stream' in ISLA.__supported_model_checkpoint_version__[v])} "
-      "is the raw-read variant, so the message warns that its outputs differ from the ones it was trained to give "
-      "(`__supported_model_checkpoint_version__`). The `geo_kernel` attribute is not stored: a loaded model starts at "
+      f"{'bitwise equal to' if same else 'different from'} the saved model's. A checkpoint of any other version is refused "
+      "(ISLA keeps no upgrade path). The `geo_kernel` attribute is not stored: a loaded model starts at "
       "`\"auto\"`.")
 ```
 

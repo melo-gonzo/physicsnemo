@@ -731,7 +731,7 @@ print(f"Keep every redrawn token and compute only the built-in geometry from the
 #| include: false
 from physicsnemo.experimental.models.isla import ISLA as _ISLA
 _kw = dict(output_schema={"pressure": {"rank": 0}, "velocity": {"rank": 1}, "nut": {"rank": 0}},
-           global_schema={"U_inf_dir": {"rank": 1}}, interior=True)
+           boundary_schemas={"vehicle": {}}, global_schema={"U_inf_dir": {"rank": 1}}, interior=True)
 _n = lambda m: sum(p.numel() for p in m.parameters())
 N_ISLA, N_DTT = _n(_ISLA(**_kw)), _n(_ISLA(**_kw, query_independent=True))
 ```
