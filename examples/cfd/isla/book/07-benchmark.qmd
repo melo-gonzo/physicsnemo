@@ -377,7 +377,8 @@ print("The registered rule named no reference configuration, so the picks were m
       "same budget: " + "; ".join(car_best_text(a) for a in S.ARCHS) + ". "
       f"No GeoTransolver candidate is within 3% of the best on both datasets; width 256 is the best on the wings and trails by "
       f"{pct(gt[0])} on the cars. On the wings GeoTransolver and Transolver read the freestream in inch/s (@tbl-model-inputs), "
-      "so the wing scores that decided their picks are scores under that input. @tbl-selection lists every candidate.")
+      "so the wing scores that decided their picks are scores under that input; a reselection with the unit direction on the wings "
+      "is an open question (@sec-oq-reference-selection). @tbl-selection lists every candidate.")
 ```
 
 ```{python}

@@ -479,7 +479,7 @@ if UNFAIR:
              f"{len(a2_effect)} standings where both ISLA variants are scored, the normalized reads change ISLA's first headline error by a "
              f"factor of {min(v for _, v in a2_effect):.2f} to {max(v for _, v in a2_effect):.2f} (normalized ÷ raw)") + ". What would settle it: GeoTransolver and "
           "Transolver at their reference configurations reading the unit direction" + ("" if "airfrans" not in UNFAIR else
-          " (and on AirfRANS the speed as a standardized scalar)") + ("" if HL_REF else ", with the reference ISLA on HiLiftAeroML")
+          " (and on AirfRANS the speed in m/s as a scalar, the form ISLA reads it in)") + ("" if HL_REF else ", with the reference ISLA on HiLiftAeroML")
           + ", two seeds each, scored under each dataset's protocols. Cost: "
           + "; ".join(f"{nm(k)} {fmt_h(v)} GPU-hours" if v is not None else f"{nm(k)} not priced (the wing rung is not in the cost record)"
                       for k, v in UD.items()) + ".")
