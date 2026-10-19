@@ -2018,6 +2018,13 @@ class MergeBoundaries(MeshTransform):
             else None
         )
 
+    def to(self, device: torch.device | str) -> "MergeBoundaries":
+        """Move the transform and its nested standardization (which the base ``to`` does not reach) to *device*."""
+        super().to(device)
+        if self.normalize is not None:
+            self.normalize.to(device)
+        return self
+
     def __call__(self, mesh: Mesh) -> Mesh:
         return mesh
 

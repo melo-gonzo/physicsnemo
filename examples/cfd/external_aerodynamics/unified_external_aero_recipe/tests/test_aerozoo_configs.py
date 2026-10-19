@@ -1101,6 +1101,34 @@ def test_v2_pipeline_is_physical_and_merges_the_faces(with_slip):
     )
 
 
+def test_v2_transforms_move_every_tensor_they_hold():
+    """MeshDataset moves each transform with ``t.to(device)``: every tensor a v2 transform holds, its nested
+    standardization included, follows (on GPU the merged boundary's standardization stayed on the CPU, LHR
+    job 287322). Device-agnostic: the meta device."""
+
+    def tensors(obj, seen=()):
+        if isinstance(obj, torch.Tensor):
+            yield obj
+        elif isinstance(obj, dict):
+            for v in obj.values():
+                yield from tensors(v, seen)
+        elif isinstance(obj, (list, tuple)):
+            for v in obj:
+                yield from tensors(v, seen)
+        elif hasattr(obj, "__dict__") and id(obj) not in seen:
+            for v in vars(obj).values():
+                yield from tensors(v, (*seen, id(obj)))
+
+    chain = _chain("aerozoo_puvolume")
+    merge = next(t for t in chain if type(t).__name__ == "MergeBoundaries")
+    assert merge.normalize is not None and any(True for _ in tensors(merge.normalize))
+    for t in chain:
+        if type(t).__name__ in ("MergeBoundaries", "StandardizeGlobalLeaf"):
+            assert t.to("meta") is t
+            held = list(tensors(t))
+            assert all(x.device.type == "meta" for x in held), type(t).__name__
+
+
 def test_v2_geotransolver_option_b_and_transolver_configs_run():
     """GeoTransolver reads every boundary face as a token [xyz, one-hot (4), the prescribed values (15)] with
     the ball query off, the query point with its no_slip SDF and normal, and nu_std; Transolver the query
