@@ -678,7 +678,7 @@ print(f"Under the area-proportional boundary draw ISLA's interior error is {' / 
       "whose own redraw factor, in the table's second row, is larger than the reference configuration's.")
 ```
 
-The mechanism is the one of @fig-isla-interior. Far from the wall the nearest-token distance is the exact distance; within about one token spacing of the wall it overestimates it by up to half the local spacing, in a sawtooth that follows the sample, and its direction leans toward the nearest token. Redrawing the boundary moves the sawtooth. On the car most interior points lie near the wall, because the volume mesh, and so the sample of it, is refined there.
+The mechanism is the one of @fig-isla-interior. Far from the wall the nearest-token distance is the exact distance; within about one token spacing of the wall it overestimates it by up to the radius of the largest gap between tokens, in a sawtooth that follows the sample, and its direction leans toward the nearest token. Redrawing the boundary moves the sawtooth. On the car most interior points lie near the wall, because the volume mesh, and so the sample of it, is refined there.
 
 ```{python}
 #| label: make-tbl-vol-geo

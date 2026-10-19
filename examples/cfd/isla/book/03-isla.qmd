@@ -1188,8 +1188,9 @@ plt.show()
 
 The nearest-token geometry is exact in the sense of the code (a brute-force
 search, no approximation), but it is a function of the boundary *sample*:
-near the wall it overestimates the true distance by up to about half a
-sample spacing, and a different draw of boundary cells moves it. It is the one
+near the wall it overestimates the true distance, by up to half the gap
+between neighboring samples on a curve and up to the radius of the largest
+gap between samples on a surface, and a different draw of boundary cells moves it. It is the one
 input of ISLA that depends on the discretization; @sec-invariances measures
 what that costs, and @sec-open-questions states what would replace it.
 
