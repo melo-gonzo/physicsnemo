@@ -506,8 +506,9 @@ two perturbations.
 
 **On an interior task, each prediction point is given its signed distance to the wall and the direction to it, measured to
 the nearest sampled boundary token. A different boundary draw gives a different nearest token, so the input moves even
-though the surface has not.** @fig-nearest-token shows it on the airfoil. The sampled distance overestimates the true one by
-up to half a sample spacing, and the overestimate depends on where the law put its samples. A model trained under the native
+though the surface has not.** @fig-nearest-token shows it on the airfoil. There the sampled distance overestimates the true
+one by up to half the gap between neighboring kept cells (on a surface in three dimensions, by up to the radius of the
+largest gap between tokens), and the overestimate depends on where the law put its samples. A model trained under the native
 law learns to read the native law's distances. Under the area law, which thins the samples where the mesher refined and
 adds them where it did not, its near-wall points read distances from a distribution it has not seen.
 
@@ -520,7 +521,7 @@ adds them where it did not, its near-wall points read distances from a distribut
 #|   hundredth of a chord off the wall, each joined to its nearest kept cell under each draw. Bottom: for prediction points
 #|   at that distance all around the airfoil, the distance to the nearest kept cell divided by the exact distance to the
 #|   surface, under each draw. How to read this: 1 is the exact wall distance; the sampled distance is always larger, by up
-#|   to half a sample spacing, and the two draws give different values at the same point, so a model calibrated on one law's
+#|   to half the gap between neighboring kept cells, and the two draws give different values at the same point, so a model calibrated on one law's
 #|   distances reads another law's as new inputs. The section, its mesh and the draws are an illustration; no model is
 #|   involved, and the thin trailing-edge region (the outer 10% of arclength at each end) is left out.
 #| code-fold: true

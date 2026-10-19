@@ -90,7 +90,7 @@ fig.legend(handles=[Line2D([], [], color=BC["value"], marker="o", ls="none", ms=
 plt.show()
 ```
 
-**Diversity.** The geometry is the most varied in the book. The brackets are generated shapes spanning a design space, not morphs of one body; each appears under four loads whose direction is a global input of the problem; and the loading changes kind between force and torque. The price is label quality: a census of the stress fields found unphysical maxima, above 10,000 MPa against a yield stress of 903 MPa, on `{python} REMOVED`, counted from the clean splits of the dataset manifest (results/campaigns_2026-09-22/datasets/deepjebpp_clean_splits.py). The clean split used here removes those brackets without making the remaining fields smooth.
+**Diversity.** The geometry is the most varied in the book. The brackets are generated shapes spanning a design space, not morphs of one body; each appears under four loads whose direction is a global input of the problem; and the loading changes kind between force and torque. The price is label quality: a census of the stress fields found unphysical maxima, above 10,000 MPa against a yield stress of 903 MPa, on `{python} REMOVED`, counted from the clean splits of the dataset manifest, which results/campaigns_2026-09-22/datasets/deepjebpp_clean_splits.py writes (its docstring's 4.25% is a different count; the lab notebook records the 1,524). The clean split used here removes those brackets without making the remaining fields smooth.
 
 ### Files, conversion and normalization {#sec-data-deepjeb}
 

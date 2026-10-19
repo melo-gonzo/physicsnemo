@@ -869,7 +869,7 @@ rebuilt from the gathered token, so they are differentiable in the positions.
 
 The nearest *token* is not the nearest point of the *surface*: on a
 DrivAerML car the tokens are 200,000 of up to 17 million cells, so near the
-wall $\delta_q$ overestimates the distance by up to half a token spacing,
+wall $\delta_q$ overestimates the distance by up to the radius of the largest gap between tokens,
 $\hat\nu_q$ tilts with it, and both change with the draw. @fig-isla-interior draws the geometry, and
 @sec-nearest-token measures its draw dependence on a trained model. An exact
 full-resolution form of this stage is an open question (@sec-open-questions).

@@ -788,8 +788,7 @@ for k, lab in rows:
 print()
 print(": Dependence on the request on the DrivAerML Volume task: the error on fixed scored points under each request divided by the same "
       "points' error in the native request of 200,000, pressure / velocity / eddy viscosity (p / v / nut), 48 validation cars, float32, "
-      f"seed means. Every ISLA-DTT ratio is {DTT_Q['ratio']:.6f} on both seeds under all three requests (largest departure "
-      f"{DTT_Q['departure']}), and the largest change of any ISLA-DTT prediction on the shared points is {DTT_Q['change']} relative L2, float32 roundoff. How to read this: a ratio of one "
+      f"seed means. Every ISLA-DTT ratio is 1 to within {DTT_Q['departure']} on both seeds under all three requests, and the largest change of any ISLA-DTT prediction on the shared points is {DTT_Q['change']} relative L2, float32 roundoff. How to read this: a ratio of one "
       "means the other points of the request do not matter; it says nothing about accuracy, which is @tbl-interior-read-only. Instrument: "
       "ISLA at 512 wide, 512 slices, 3.75e-4, raw slice reads (@sec-study-configurations). Data: results/char/qpop_2026-10-06.json "
       "(ISLA); ISLA-DTT scored with the same request generator on its two checkpoints of @tbl-interior-read-only, "
