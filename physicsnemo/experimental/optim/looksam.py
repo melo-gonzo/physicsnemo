@@ -385,7 +385,7 @@ class LookSAM(Optimizer):
                 [_local(b.params[i].grad) for i in present],
             )
             acc = self._acc(b)
-            dots.append((torch.dot(b.flat_v.to(acc), b.flat_g.to(acc)), b))
+            dots.append((self._dot(b.flat_v, b.flat_g, acc), b))
         coef = self._global_sum(dots) / (s * s * (g_sq + eps))
         for b in buckets:
             b.flat_v.addcmul_(b.flat_g, -coef.to(b.flat_v.device, b.flat_v.dtype))
@@ -478,6 +478,16 @@ class LookSAM(Optimizer):
         return torch.promote_types(b.flat_v.dtype, torch.float32)
 
     @staticmethod
+    def _dot(a: torch.Tensor, b: torch.Tensor, acc: torch.dtype) -> torch.Tensor:
+        """a·b in ``acc``, upcasting low-precision inputs 2**24 elements at a time."""
+        if a.dtype == acc:
+            return torch.dot(a, b)
+        return sum(
+            torch.dot(x.to(acc), y.to(acc))
+            for x, y in zip(a.split(1 << 24), b.split(1 << 24))
+        )
+
+    @staticmethod
     def _global_sum(partials: list[tuple[torch.Tensor, _Bucket]]) -> torch.Tensor:
         """Sum per-bucket local partial sums into one global value.
 
@@ -545,11 +555,10 @@ class LookLayerSAM(LookSAM):
                 mesh, dims = b.key
                 for d in dims:
                     dist.all_reduce(sq, group=mesh.get_group(d))
-            sizes = torch.tensor([v.numel() for v in b.g_views], device=sq.device)
-            step = (rho / (sq.sqrt() + eps)).to(b.flat_g.dtype)
-            step = step.repeat_interleave(sizes, output_size=b.flat_g.numel())
-            step.mul_(b.flat_g)
-            torch._foreach_add_(
-                [_local(p) for p in b.params], self._views(step, b.g_views)
+            scale = (rho / (sq.sqrt() + eps)).to(b.flat_g.dtype)
+            torch._foreach_addcmul_(
+                [_local(p) for p in b.params],
+                b.g_views,
+                [c.expand_as(v) for c, v in zip(scale.unbind(), b.g_views)],
             )
         return torch.ones((), device=g_norm.device, dtype=g_norm.dtype)
