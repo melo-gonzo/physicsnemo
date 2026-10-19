@@ -51,9 +51,7 @@ print(": The standing of the three reference configurations on every dataset wit
       "seed of the other and the seed means at least 3% apart. How to read this: a ratio above one favors ISLA; rows are "
       "different problems and are not comparable with one another; † marks a row whose ISLA checkpoints are of the raw-read "
       "variant rather than the reference configuration (@sec-isla-normalized-reads); ‡ marks a row whose baselines read the "
-      "freestream as a physical vector rather than a unit direction, so no comparison is drawn from it (@sec-de-result); § marks "
-      "a ratio given without a verdict, because the architectures' errors on that field are not measured alike "
-      "(@sec-interior-airfrans). "
+      "freestream as a physical vector rather than a unit direction, so no comparison is drawn from it (@sec-de-result). "
       "Data: results/char/ (the artifact of each row is named in its chapter).")
 ```
 

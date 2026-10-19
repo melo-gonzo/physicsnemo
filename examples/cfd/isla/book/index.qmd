@@ -139,10 +139,7 @@ plt.show()
 #|   its reference configuration; a row marked ‡ has its baselines drawn
 #|   hollow and is not compared, because in that record they read the
 #|   freestream as a raw physical vector rather than a unit direction
-#|   (@sec-hilift); a row marked § has its baselines drawn hollow and
-#|   carries no verdict, because their error on that field includes an
-#|   out-of-plane component that ISLA's planar prediction does not have
-#|   (@sec-airfrans). Data: results/char/; every number is in
+#|   (@sec-hilift). Data: results/char/; every number is in
 #|   @tbl-thesis.
 #| fig-height: 6.6
 #| code-fold: true
