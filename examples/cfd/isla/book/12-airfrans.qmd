@@ -277,7 +277,26 @@ print(f"**Under rotation and translation ISLA's error is its native error, and t
       "inlet velocity rotates with it.")
 ```
 
-<!-- RENDERING SLOT: fig-airfrans-prediction: truth / ISLA / GeoTransolver / Transolver and errors on one held-out case -->
+```{python}
+#| label: out-fig-airfrans-prediction
+#| output: asis
+RD = J("renderings_2026-10-18/arrays/render_2d_airfrans.json")["airfrans"]
+PE = RD["per_sample_rel_l2"]
+err = lambda fld: "; ".join(f"{k.split(' ')[0]} {v:.4f}" for k, v in PE[fld].items())
+print("::: {#fig-airfrans-prediction layout-nrow=2}\n")
+print("![Pressure coefficient](figures/renderings/airfrans_pressure.png)\n")
+print("![Velocity magnitude](figures/renderings/airfrans_velocity.png)\n")
+print(f"The three reference configurations on one AirfRANS test airfoil (Reynolds number {RD['Re'] / 1e6:.2f} million, angle of attack "
+      f"{RD['aoa_deg']:.1f}°), the case of median ISLA pressure error among the {N_TEST} test airfoils, seed 42. Top row of each panel: the "
+      "solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one symmetric scale. "
+      f"Relative L2 on this case: pressure {err('pressure')}; velocity {err('velocity')}. How to read this: one case, not a standing; the "
+      "baselines read the inlet velocity as the physical vector, so the panels show what each trained model does and are not a "
+      "comparison. ISLA's error map is cut into straight-edged patches around the airfoil, the shape of a quantity that is piecewise "
+      "constant over the points that share a nearest boundary token (@sec-isla-interior); the book does not measure that link further. "
+      "The 100,000 points are drawn once for this figure, so ISLA's pressure error differs slightly from the scored record's. Data: "
+      "results/renderings_2026-10-18/arrays/render_2d_airfrans.json and airfrans_00215.npz.\n")
+print(":::")
+```
 
 ## Studies on this dataset {#sec-airfrans-ladders}
 
