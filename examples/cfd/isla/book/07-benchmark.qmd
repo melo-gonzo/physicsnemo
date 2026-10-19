@@ -129,9 +129,10 @@ MI = [
     ("shift_suv", f"{BC}; `U_inf_dir`, constant", f"{GP}; `U_inf` = $(30, 0, 0)$ m/s on every case",
      "the same, with `U_inf` concatenated", "the same: a constant vector"),
     ("airfrans", f"{BC}; {NT}, plus `sdf` and `sdf_normals`; `U_inf_dir` and the raw inlet speed `U_inf_mag` (31 to 94 m/s) as a scalar",
-     f"{GV}; `U_inf` in m/s, magnitude 31 to 94, angle −4.9 to 14.9°", "the same per-point fields, with `U_inf` concatenated",
-     "the same information at 31 to 94 times the scale, varying in magnitude and direction"),
-    ("aerozoo", f"four boundary meshes (body, enclosure, inlet, outlet), each face with its role and prescribed values; {NT}; "
+     f"{GV}; `U_inf_dir` and the inlet speed standardized over the training airfoils, read by the context projector",
+     "the same per-point fields, with the same two globals concatenated",
+     "the same information; the baselines predict a third, out-of-plane velocity component"),
+    ("aerozoo", f"four boundary meshes (`inlet`, `outlet`, `no_slip`, `slip`), each face with its role and prescribed values; {NT}; "
      "`U_inf_dir` and the standardized log Reynolds number, both from `global_data/reference`, and four inlet-turbulence scalars",
      "per point: coordinates, wall and slip-wall distances and the wall normal; the same eight globals", "not trained on AeroZoo",
      "less: no inlet or outlet faces and no prescribed per-face values; both read inputs that AeroZoo's rule classes as labels "
@@ -144,8 +145,10 @@ MI = [
     ("lug", "boundary faces labeled clamped, hole and loaded half of the hole, with the pressure on them; nodes as prediction-point tokens "
      "with their nearest-token wall distance and direction, plus `sdf` and `sdf_normals`; "
      "four standardized scalars (hole radius, length, thickness, pressure)",
-     "per node: coordinates, `sdf`, `sdf_normals`; the same four scalars; no boundary-condition label", "the same",
-     "less as explicit input: the clamp and the load are known to the baselines only through the shape, in its fixed pose"),
+     "per node: coordinates, `sdf`, `sdf_normals`; the same four scalars; as geometry context, the surface triangles with their "
+     "normals and ISLA's four labels", "per node: coordinates, `sdf`, `sdf_normals`; the same four scalars; no boundary-condition label",
+     "the same for GeoTransolver; less as explicit input for Transolver, which knows the clamp and the load only through the shape, "
+     "in its fixed pose"),
     ("deepjeb", "boundary cells with the fixed and loaded labels and the load as a rank-1 field; the load direction; force or "
      "torque as two scalars", "per point: coordinates, normal, the same labels and load; global: the load direction and type",
      "the same", "the same"),
@@ -153,7 +156,8 @@ MI = [
 out = "| dataset | ISLA | GeoTransolver | Transolver | against ISLA's input |\n|---|---|---|---|---|\n"
 for key, i, g, t, info in MI:
     d = S.DATASETS[key]
-    flag = "" if d.fair_drive else ". **No standing comparison is drawn.**"
+    flag = ("" if d.fair_drive else ". **No standing comparison is drawn.**") + "".join(
+        f". **{d.short} {S.Standing(key).fields[f]} is given without a verdict**" for f in d.provisional)
     out += f"| {d.name} | {i} | {g} | {t} | {info}{flag} |\n"
 print(out)
 print(": What each model receives, per dataset: the global inputs with their units and range across cases, the boundary "
@@ -162,28 +166,47 @@ print(": What each model receives, per dataset: the global inputs with their uni
       "the stored signed distance to the full-resolution boundary and its gradient. How to read this: the last column says "
       "whether the baselines receive the same information as ISLA; a row marked *no standing comparison* is one whose "
       "baselines read the freestream as a raw physical vector of varying direction, so its ratios are printed and not "
-      "read as a verdict. AeroZoo's own rule admits only the boundary meshes with their condition types, the prescribed values "
+      "read as a verdict; a field *given without a verdict* is one whose error is not measured alike for the three "
+      "(@sec-interior-airfrans). AeroZoo's own rule admits only the boundary meshes with their condition types, the prescribed values "
       "and the kinematic viscosity, and classes the reference scales of `global_data/reference` as labels; its row reads them, so "
       "its numbers are measured under the label-input protocol (@sec-aerozoo-allowed). "
       "The table does not say how much a difference in input costs a model. Source: "
-      "results/drive_audit_2026-10-18/REPORT.md, section 1. {#tbl-model-inputs tbl-colwidths=\"[11,27,25,14,23]\"}")
+      "results/drive_audit_2026-10-18/REPORT.md, section 1; for the AirfRANS and lug baselines, "
+      "results/campaigns_2026-10-19/drive_fix/PREREG.md. {#tbl-model-inputs tbl-colwidths=\"[11,27,25,14,23]\"}")
 ```
 
 ### Global directions as unit vectors, magnitudes as scalars {#sec-unit-direction-rule}
 
 **A problem's global conditions enter ISLA in one form: directions as unit vectors, magnitudes as scalars. ISLA enforces
-the rule by construction. The baselines read the freestream vector as the dataset stores it.** A direction carries no
+the rule by construction. The baselines read the freestream vector as the dataset stores it, except on AirfRANS, where
+they read its unit direction and the standardized inlet speed.** A direction carries no
 scale. Whatever scale a pipeline attaches to it, the units the solver ran in, is an accident of the dataset, and a model
 would have to learn to ignore it. A magnitude that matters physically, a far-field speed or a Reynolds number, is a scalar
 with its own place in the input. ISLA normalizes every global vector it receives and takes magnitudes only as global
 scalars (@sec-isla-inputs).
 
-GeoTransolver and Transolver consume whatever vector the pipeline hands them, and in the recipe and in every training run
-of the standings that vector is `U_inf`, in solver units (@tbl-model-inputs). On the DrivAerML tasks and on SHIFT-SUV every
-case has the same freestream, so `U_inf` is one constant vector per dataset and holds no case information. On HiLiftAeroML
-it carries the angle of attack, in inches per second, at a magnitude of 2,680. On AirfRANS it carries the angle of attack
-and the inlet speed, in m/s. Its scale matters before training: GeoTransolver's context projector
-applies linear maps and a slice softmax to the raw vector, so its conditioning depends on the magnitude (@tbl-projector).
+GeoTransolver and Transolver consume whatever vector the pipeline hands them. In the recipe, and in the training runs of
+every flow standing except AirfRANS, that vector is `U_inf`, in solver units (@tbl-model-inputs). On HiLiftAeroML it
+carries the angle of attack, in inches per second, at a magnitude of 2,680. On AirfRANS the baselines read `U_inf_dir`
+and the inlet speed standardized over the training airfoils, the information ISLA reads, at a scale of one. The scale
+matters before training: GeoTransolver's context projector applies linear maps and a slice softmax to the raw vector,
+so its conditioning depends on the magnitude (@tbl-projector).
+
+```{python}
+#| label: para-constant-drive
+#| output: asis
+UDC = S.unit_drive_control()
+print("On the DrivAerML tasks and on SHIFT-SUV every case has the same freestream, so `U_inf` is one constant vector per "
+      "dataset and holds no case information. Its scale still reaches the trained model. Transolver at its reference "
+      "configuration on the DrivAerML Surface task, retrained reading `U_inf_dir` in place of `U_inf`, scores "
+      f"{UDC['pressure_l2']:.3f} times its error on pressure and {UDC['wss_l2']:.3f} times it on wall shear, seed means on the "
+      f"same {S.Standing('drivaerml_surface').cell('Transolver', 'pressure_l2')['n_cases']} validation cars. The band of ±3% registered for this control before it ran holds on wall shear and not on "
+      f"pressure. The baselines' ratios on {', '.join(S.DATASETS[k].in_sentence for k in S.CONSTANT_DRIVE[:-1])} and "
+      f"{S.DATASETS[S.CONSTANT_DRIVE[-1]].in_sentence} therefore carry a bias of up to {S.fmt_pct(1 + S.drive_bias())} "
+      "from the scale of the constant vector, and a verdict that close to the level band says so in its chapter. Data: "
+      "results/campaigns_2026-10-19/drive_fix/drivefix_scores_2026-10-19.json (the band: PREREG.md beside it), "
+      "results/char/drivaerml_surface_a2.json.")
+```
 
 ```{python}
 #| label: cell-tbl-projector
@@ -234,8 +257,8 @@ print(f": The input-scale control at 35 HiLiftAeroML training cases (256 wide, 1
 ```
 :::
 
-What the physical vector costs the baselines at the reference configurations on HiLiftAeroML and AirfRANS, where it
-varies per case, is an open question (@sec-open-questions); those two standings are printed without a verdict.
+What the physical vector costs the baselines at the reference configurations on HiLiftAeroML, where it varies per case,
+is an open question (@sec-open-questions); that standing is printed without a verdict.
 
 <!-- SLOT: unit-direction baseline pair (registry swap when scored) -->
 
@@ -260,8 +283,9 @@ difference is read.
    control.
 3. Boundary conditions enter ISLA as per-cell fields on boundary meshes. GeoTransolver and Transolver have no
    boundary-token path; they receive what their recipe configurations give them, which @tbl-model-inputs lists per
-   dataset. On the lug that is no boundary label at all, and the loaded and clamped faces are known to them only through
-   the shape (@sec-data-conventions).
+   dataset. On the lug GeoTransolver reads the surface triangles with ISLA's four boundary-condition labels as its geometry
+   context, and Transolver reads no boundary label: the loaded and clamped faces are known to it only through the shape
+   (@sec-data-conventions).
 
 **Budget.**
 
