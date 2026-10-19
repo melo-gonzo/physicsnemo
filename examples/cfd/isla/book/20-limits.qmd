@@ -253,16 +253,17 @@ print(f"**ISLA's interior prediction on the DrivAerML Volume task depends on the
 #| label: para-limits-ties
 #| output: asis
 LT = json.load(open(RES / "char" / "solids_ties_2026-10-18.json"))["lug"]["lug_0004"]
-tied = LT["tied_fraction"]; moved = LT["nearest_changes_under_pose_fraction"]
+tied = LT["tie_fraction_by_rel_gap"]["1e-07"]; moved = LT["nearest_changes_under_pose_fraction"]
 exact = [k for k in ST if all(abs(ST[k].shift("ISLA", f, "posed") - 1) < 0.02 for f in ST[k].ds.headline)]
 worst = max(abs(ST[k].shift("ISLA", f, "posed") - 1) for k in exact for f in ST[k].ds.headline)
 lug = ST["lug"].shift("ISLA", "von_mises_l2", "posed"); t2 = max(ST["tensile2d"].shift("ISLA", f, "posed") for f in ("stress_l2", "displacement_l2"))
 dl = ST["lug"].err("ISLA", "von_mises_l2", "posed") - ST["lug"].err("ISLA", "von_mises_l2")
 print(f"**Under a rotation and translation ISLA's error stays within {100 * worst:.1f}% of native on {len(exact)} of the {len(ST)} "
       f"standings, and it does not on the two finite-element meshes whose nodes tie for their nearest boundary sample: {lug:.2f} times "
-      f"native on the GINOT bracket lug and up to {t2:.2f} times on PLAID Tensile2d.** Where two boundary tokens are equally near a "
+      f"native on the GINOT bracket lug and up to {t2:.2f} times on PLAID Tensile2d, both in the seed mean.** Where two boundary tokens are equally near a "
       "prediction point, float32 rounding of the moved coordinates picks between them, and the point's direction input can turn by order "
-      f"one; on the lug's structured hexahedral mesh {100 * tied:.0f}% of the nodes tie and one rigid motion moves the nearest sample of "
+      f"one; on one test lug's structured hexahedral mesh {100 * tied:.0f}% of the nodes tie to a relative gap of 1e-7, inside float32 "
+      f"rounding, and one rigid motion moves the nearest sample of "
       f"{100 * moved:.0f}% (@sec-lug-ties), while on Tensile2d only the nodes on the polyline tie (@sec-tensile2d-ties). The lug's factor is "
       f"large because its native error is small: the posed-minus-native difference is {100 * dl:.2f}% of the field. The same nearest-sample "
       "selection is behind the boundary-law dependence of @sec-limits-boundary-law. Data: results/char/solids_ties_2026-10-18.json. "
@@ -353,8 +354,12 @@ rows = [
 if UNFAIR:
     rows.append((f"How do the reference configurations compare on {names(UNFAIR)} when every model reads the unit direction?",
                  "GeoTransolver and Transolver reading the unit direction" + ("" if HL_REF else ", and on HiLiftAeroML the reference ISLA") + ", two seeds each, scored under the dataset's protocols",
-                 "; ".join((f"{nm(k)} {fmt_h(v)}" if v is not None else f"{nm(k)}: not in the cost record") for k, v in UD.items()).replace("the ", "The ", 1)))
+                 (lambda t: t[:1].upper() + t[1:])("; ".join((f"{nm(k)} {fmt_h(v)}" if v is not None else f"{nm(k)}: not in the cost record")
+                                                         for k, v in UD.items()))))
 rows += [
+    ("Do GeoTransolver and Transolver keep their reference configurations when the selection's wings read the unit direction?",
+     "the baselines' candidates retrained on the 210 wings with the unit direction, two seeds each, and the selection rule applied again",
+     "not priced (the wing rung is not in the cost record)"),
     ("Do the scaling law, the cell-count saturation and the capacity floor hold at the reference configuration?", "the case ladder at three sizes around the reference and a cell ladder at 435 cars, on the DrivAerML Surface task", fmt_h(q5)),
     ("What causes ISLA's stress and displacement deficit on Tensile2d?", "ISLA's error per node on the polyline against the interior, beside the baselines'; GeoTransolver + ISLA's measure-weighted pooling", fmt_h(q6)),
     ("Can pose invariance be exact on meshes with tied boundary samples?", "a continuous geometry construction, retrained on the lug and Tensile2d and scored posed", fmt_h(q7)),
@@ -391,8 +396,9 @@ print("**The open question is whether an interior prediction point should take i
       "with exact Horvitz–Thompson weights. The interior ISLA would then take whole boundary meshes as input rather than a sample, a change "
       f"of its input contract. On the AirfRANS interior task, a variant with the exact closest point, trained at the reference configuration, "
       f"has {100 * (1 - ex_p):.0f}% lower pressure error than ISLA on the native mesh. Under a redraw of the airfoil at 400 segments its "
-      f"length ÷ uniform ratio is {min(law_ex):.2f} to {max(law_ex):.2f} on pressure and velocity, against {min(law_isla):.2f} to "
-      f"{max(law_isla):.2f} for ISLA, while thinning the airfoil still multiplies its error by {min(cnt_ex):.0f} to {max(cnt_ex):.0f} "
+      f"length ÷ uniform ratio, its error with the segments kept in proportion to their length over its error with a uniform draw, is "
+      f"{min(law_ex):.2f} to {max(law_ex):.2f} on pressure and velocity, against {min(law_isla):.2f} to {max(law_isla):.2f} for ISLA: the "
+      f"length-proportional draw lowers the variant's error and raises ISLA's, while thinning the airfoil still multiplies its error by {min(cnt_ex):.0f} to {max(cnt_ex):.0f} "
       "(results/char/airfrans_area2_a2.json). What would settle the question: the exact form against the nearest-token form at equal size, "
       "two seeds each, on DrivAerML Volume, AirfRANS and the AeroZoo held-out splits, read on native error and on the boundary-law shift.")
 print()
@@ -479,6 +485,33 @@ if UNFAIR:
                       for k, v in UD.items()) + ".")
     print()
     print("<!-- SLOT: unit-direction baseline pair (registry swap when scored) -->")
+```
+
+### The baselines' reference configurations with unit-direction wings {#sec-oq-reference-selection}
+
+```{python}
+#| label: para-oq-reference-selection
+#| output: asis
+SEL = json.load(open(RES / "char" / "ref80_select_2026-10-03.json"))["datasets"]
+def sel(arch, cand, ds):
+    return SEL[ds][arch]["candidates"][cand]["pressure_l2"]
+GT_REF, GT_BIG = "gt_h256", "gt_h1024_c100k"        # width 256 at 200,000 cells (the reference); width 1,024 at 100,000 cells
+T_REF, T_CAR = "t_h512_l16_c100k", "t_h1024_c100k"  # width 512, 16 layers (the reference); width 1,024; both at 100,000 cells
+assert SEL["drivaer_surface"]["GeoTransolver"]["winner"] == GT_BIG and SEL["hilift_210"]["GeoTransolver"]["winner"] == GT_REF
+assert SEL["drivaer_surface"]["Transolver"]["winner"] == T_CAR and SEL["hilift_210"]["Transolver"]["winner"] == T_REF
+print("**The open question is whether GeoTransolver and Transolver keep their reference configurations when the selection's wings give "
+      "them the unit direction.** The selection scored every candidate on the DrivAerML Surface task and on HiLiftAeroML at 210 training "
+      "wings (@sec-selection), and on the wings the baselines read the freestream in inch/s (@tbl-model-inputs). Under the 80 GiB budget, "
+      f"GeoTransolver at width 1,024 trained on 100,000 cells has a surface pressure error of {sel('GeoTransolver', GT_BIG, 'drivaer_surface'):.4f} "
+      f"on the DrivAerML Surface task against {sel('GeoTransolver', GT_REF, 'drivaer_surface'):.4f} for the reference width 256, and "
+      f"{sel('GeoTransolver', GT_BIG, 'hilift_210'):.3f} against {sel('GeoTransolver', GT_REF, 'hilift_210'):.3f} on the wings, which cost it "
+      "the joint score. Transolver's reference, width 512 with 16 layers, also owes its place to the wings: width 1,024 wins on the cars, "
+      f"{sel('Transolver', T_CAR, 'drivaer_surface'):.4f} against {sel('Transolver', T_REF, 'drivaer_surface'):.4f} and at lower memory, and trails on the wings, "
+      f"{sel('Transolver', T_CAR, 'hilift_210'):.4f} against {sel('Transolver', T_REF, 'hilift_210'):.4f} (@tbl-selection). If the wing "
+      "ranking is an artifact of the raw vector, the baselines' reference configurations, and every standing scored with them, may change. "
+      "What would settle it: the GeoTransolver and Transolver candidates of @tbl-selection retrained on the 210 wings reading the unit "
+      "direction, two seeds each, and the registered rule applied again. Cost: not priced, because the wing rung is not in the cost record. "
+      "Data: results/char/ref80_select_2026-10-03.json.")
 ```
 
 ### The scaling law at the reference configuration {#sec-oq-scaling}
@@ -584,7 +617,7 @@ print("**ISLA is the choice where the deployment mesh or sampling law may differ
       "users through ISLA (@sec-principled-ledger). Three outcomes would change the recommendation.")
 print()
 print("- **The interior recommendation becomes unconditional** if the exact wall geometry (@sec-oq-geometry) removes the boundary-law "
-      "dependence without costing velocity, and the pressure and eddy-viscosity deficits close.")
+      "dependence without costing velocity, and the eddy-viscosity deficit against GeoTransolver on the DrivAerML Volume task closes.")
 print("- **The interior model changes form** if ISLA-DTT is inside the band on every AeroZoo held-out split (@sec-oq-dtt): the "
       "recommendation is then a read-only model whose prediction at a point depends on that point and the boundary alone.")
 print("- **ISLA gains a generalization claim** if its held-out penalty on AeroZoo is smaller than GeoTransolver's by the preregistered "
