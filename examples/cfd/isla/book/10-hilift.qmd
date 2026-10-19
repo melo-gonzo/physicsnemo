@@ -23,7 +23,8 @@ DRIVE_NOTE = ("" if HL.ds.fair_drive else
     "In this standing's record GeoTransolver and Transolver read the freestream as the physical velocity vector in inch/s "
     f"(the recipe's `global_data.U_inf`, {U_MAG:,.0f} in/s on the case of @fig-problem-hilift and turning with the angle of attack), "
     "while ISLA reads its unit direction (@tbl-model-inputs). "
-    "That input difference matters on this dataset: on the 210-wing rung, the same two baselines trained with the unit direction "
+    "That input difference matters on this dataset: in a control on the 210-wing rung at 10,000 cells per case, with Transolver at "
+    "3e-3, GeoTransolver and Transolver trained with the unit direction "
     f"score {UD_GT:.1f} times (GeoTransolver) and {UD_T:.1f} times (Transolver) lower pressure error than with the physical vector "
     "(@tbl-hilift-unit-drive). So this chapter gives the standing's numbers and draws no comparison between ISLA and the baselines from them.")
 
@@ -125,14 +126,14 @@ RATIO = {k: mean(v[3]) / mean(v[2]) for k, v in RUNGS.items()}
 ```{python}
 #| label: para-hilift-lede
 #| output: asis
-print(f"The three architectures are {S.CONFIG['ISLA']}, {S.CONFIG['GeoTransolver']} and {S.CONFIG['Transolver']}, each at its reference configuration (@sec-protocol). "
+print(f"The three architectures are {S.CONFIG['ISLA']}, {S.CONFIG['GeoTransolver']} and {S.CONFIG['Transolver']}, each at its reference configuration (@sec-selection). "
       + (f"In one paragraph: at the 210-wing rung {clause(HL, 'pressure_l2')} on surface pressure and {clause(HL, 'tau_wall_l2')} on wall shear on the native mesh. "
          if HL.ds.fair_drive else
          "In one paragraph: the 210-wing standing's baselines read the freestream as a physical vector rather than a unit direction, so its native "
          "numbers are given but not compared (@sec-de-result). ")
       + "Only ISLA keeps its error on a uniform point cloud of the aircraft and under rotation and translation. On the data-efficiency "
       "ladders, run on a smaller ISLA against unit-direction baselines, GeoTransolver is ahead or level on every rung, its lead largest "
-      "where the training set is small, and what ISLA needs is distinct geometries rather than cases (@sec-hilift-ladders).")
+      "where the training set is small (@sec-hilift-ladders).")
 ```
 
 ## The problem: 180 wings at ten angles {#sec-dataset-hilift}
@@ -304,7 +305,7 @@ print(f"**The Surface task of @sec-surface on the 210-wing rung: 210 training ca
       "architectures run at their reference configurations "
       f"({S.CONFIG['ISLA']} at 3.75e-4 and 200,000 cells; {S.CONFIG['GeoTransolver']} at 1e-3 and 200,000 cells; "
       f"{S.CONFIG['Transolver']} at 1e-3 and 100,000 cells; sizes in @tbl-drivaerml-configs), with no rotation or translation "
-      "augmentation. This rung is one of the two datasets on which the reference configurations were chosen (@sec-resource-matching). Each "
+      "augmentation. This rung is one of the two datasets on which the reference configurations were chosen (@sec-selection). Each "
       "checkpoint is scored three ways, as on DrivAerML (@sec-drivaerml-scorings): on the native mesh, on a uniform point cloud of the "
       "surface, and rotated and translated with $\\hat g_1$ rotated alike.")
 ```
@@ -448,8 +449,8 @@ UDK = (("GeoTransolver, physical vector, 1e-3", "gt_physical_lr1e3"), ("GeoTrans
        ("Transolver, physical vector, 3e-3", "transolver_physical_lr3e3"), ("Transolver, unit direction, 3e-3", "transolver_unit_lr3e3"),
        ("ISLA", "isla"))
 UDP = J("udrvl_210_reduction_2026-09-10.json")["paired_fp32_vs_isla"]
-print("**The unit-direction control: on the 210-wing rung, the same two baselines trained with the unit direction are more accurate "
-      f"than the ISLA of that study** (@tbl-hilift-unit-drive). GeoTransolver ÷ ISLA is {UD_R['GeoTransolver']:.2f} on pressure, lower on "
+print("**The unit-direction control: on the 210-wing rung at 10,000 cells per case, GeoTransolver and Transolver trained with the unit "
+      f"direction are more accurate than the ISLA of that study** (@tbl-hilift-unit-drive). GeoTransolver ÷ ISLA is {UD_R['GeoTransolver']:.2f} on pressure, lower on "
       f"{UDP['gt_unit']['lower_on']} of {UDP['gt_unit']['n']} validation cases, and Transolver ÷ ISLA {UD_R['Transolver']:.2f}, lower on "
       f"{UDP['transolver_unit']['lower_on']} of {UDP['transolver_unit']['n']}. The study ran at a smaller protocol than the standing, so it "
       "is a statement about the input and these configurations, not a standing.")
@@ -481,16 +482,27 @@ The studies below were run on a smaller ISLA than the reference configuration. T
 #| output: asis
 c = {k: RATIO[k] for k in ("35 cases", "210 cases", "510 cases", "1,260 cases")}
 geo_cost = mean(RUNGS["4 geometries"][2]) / mean(RUNGS["35 cases"][2])
+geo_cost_gt = mean(RUNGS["4 geometries"][3]) / mean(RUNGS["35 cases"][3])
+slope = {j: np.log(mean(RUNGS["35 cases"][j]) / mean(RUNGS["1,260 cases"][j])) / np.log(1260 / 35) for j in (2, 3)}   # 2 ISLA, 3 GeoTransolver
+SLF_ = J("scalelaw_2026-10-08.json")["fits"]
+floor_ = {m: SLF_[f"hilift|{m}"]["fit"]["eps_inf"] + SLF_[f"hilift|{m}"]["fit"]["b"] * SL_W[f"hilift|{m}|{w}|n35"]["params"] ** -SLF_[f"hilift|{m}"]["fit"]["beta"]
+          for m, w in (("isla", "w384"), ("gt", "w512"))}   # the fitted floor eps_inf + b P^-beta at the ladder's widths
 GT256_1260 = J("p200k_hl_ladder_2026-09-30.json")["rungs"]["full"]["arms"]["gt_unit"]["pressure_l2_seeds"]   # GeoTransolver-256 at 1e-3, 200,000 cells
 GT256_1260_RATIO = mean(GT256_1260) / mean(RUNGS["1,260 cases"][2])
-print(f"**GeoTransolver is ahead of ISLA or level with it on every rung of the ladders, and what ISLA needs is distinct geometries.** "
+print(f"**GeoTransolver is ahead of ISLA or level with it on every rung of the ladders, its lead largest where the training set is small.** "
       f"On the nested case rungs GeoTransolver width 512 ÷ ISLA runs {' / '.join(f'{v:.2f}' for v in c.values())} at 35 / 210 / 510 / 1,260 "
       "training cases (@fig-hilift-data-efficiency): the gap to that baseline closes as the training set grows. At 1,260 cases "
       f"GeoTransolver's best pair, width 256 at 1e-3 and 200,000 cells, reads {GT256_1260_RATIO:.2f} of ISLA's error, so the gap to "
-      "GeoTransolver as a whole does not close. Both architectures share the data exponent on the wings (@sec-capacity); what differs is the "
-      "level. The cost of "
-      f"few geometries is the larger effect for ISLA: 40 cases on 4 geometries give it {geo_cost:.1f} times the error of 35 cases on 33 "
-      "geometries, although the 4-geometry rung is validated on geometries it never saw and the 35-case rung is not. Where the validation "
+      "GeoTransolver as a whole does not close. The gap closes because ISLA's error falls faster on these rungs: from 35 to 1,260 cases "
+      f"the slope of log error against log cases is {slope[2]:.2f} for ISLA and {slope[3]:.2f} for GeoTransolver. The fitted law of "
+      "@sec-scaling-law, on another instrument, reads that as an effect of the floor, not of the exponent: it gives both architectures "
+      f"the same exponent of the reducible error above the floor ({SLF_['hilift|isla']['fit']['alpha']:.2f} and "
+      f"{SLF_['hilift|gt']['fit']['alpha']:.2f}) and floors of about the same size at these widths ({floor_['isla']:.3f} and "
+      f"{floor_['gt']:.3f}); ISLA's data term is the larger, and as both errors approach the floor the ratio approaches one. "
+      f"Few geometries cost both architectures: 40 cases on 4 geometries give ISLA {geo_cost:.1f} times the error of 35 cases on 33 "
+      f"geometries, and GeoTransolver {geo_cost_gt:.1f} times (width 256 on the first rung, width 512 on the second). The 4-geometry rung "
+      "is validated on geometries it never saw and the 35-case rung is not, so the factor mixes fewer geometries with unseen "
+      "validation geometries. Where the validation "
       f"geometries are held out, GeoTransolver ÷ ISLA is {RATIO['4 geometries']:.2f} at 4 training geometries and "
       f"{RATIO['21 geometries']:.2f} at 21. On the fixed-angle rung, where the far-field direction is constant, it is "
       f"{RATIO['126 geometries at 12°']:.2f}.")
@@ -701,7 +713,7 @@ print("**Across a boundary in the geometry parameters ISLA does not generalize b
 
 ## What this dataset does not say {#sec-de-limits}
 
-**The standing is one rung of one aircraft family in one far-field condition, scored on a validation set; the ladders measure sample complexity on a smaller ISLA.** The reference configurations are each the most accurate of their architecture under one memory budget, not matched in parameters or step time, so a native comparison at 210 wings with unit-direction baselines is a statement about what that budget buys each architecture on this family (@sec-limits).
+**The standing is one rung of one aircraft family in one far-field condition, scored on a validation set; the ladders measure sample complexity on a smaller ISLA.** The reference configurations were chosen under one memory budget, each by the smallest joint score of its architecture on two selection datasets (@sec-selection), and are not matched in parameters or step time, so a native comparison at 210 wings with unit-direction baselines is a statement about what that budget buys each architecture on this family (@sec-limits).
 
 Questions this dataset raises and leaves open:
 
@@ -717,4 +729,4 @@ if not HL.ds.reference:
           "@tbl-hilift-protocols are the raw-read variant; checkpoints of the reference configuration, scored by the same protocol, settle it.")
 ```
 - **How does ISLA's reference configuration extrapolate in flow regime?** The angle-of-attack and stall test sets of @tbl-hilift-splits hold out the high angles and the post-stall flow. No checkpoint of the reference configuration is scored on them; a smaller ISLA and a GeoTransolver reading the physical freestream vector, scored once on them, both lose about a factor of ten from their validation error (the lab notebook, @sec-notebook; results/hilift_sealed_test_2026-09-04.json).
-- **What sets GeoTransolver's lower error on the wings?** Both architectures share the data exponent, no element of the aircraft carries the difference, and GeoTransolver stays ahead or level at every training-set size; what in the two architectures sets the level is open (@sec-open-questions).
+- **What sets GeoTransolver's lower error on the wings?** The fitted law gives both architectures the same exponent for the reducible error (@sec-scaling-law), no element of the aircraft carries the difference, and GeoTransolver stays ahead or level at every training-set size; what in the two architectures sets the level is open (@sec-open-questions).
