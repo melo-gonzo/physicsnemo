@@ -334,9 +334,9 @@ and the mechanism it removes: a sublayer that concatenates the raw state
 into a linear map multiplies the stream by a fixed factor per block, and
 twelve such blocks multiply it geometrically (@sec-isla-normalized-reads).
 
-*Evidence.* The raw-read ablation on AeroZoo, whose validation loss loses
-its minimum within the first 60 epochs while the normalized reads train
-through (@tbl-aerozoo-training); the reference-configuration standings
+*Evidence.* The raw-read ablation on DeepJEB++, whose validation loss
+rises and never recovers while the normalized reads train through
+(@sec-deepjeb-ladders); the reference-configuration standings
 (@sec-standing).
 
 *Caveat.* The normalized read is adopted, not invented. Its accuracy effect is measured
