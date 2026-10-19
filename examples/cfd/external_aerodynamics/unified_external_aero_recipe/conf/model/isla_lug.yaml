@@ -19,9 +19,9 @@
 # three-dimensional solid. The boundary is the lug's watertight surface triangulation (`boundaries.surface`), which the
 # dataset labels by condition (bc_fixed, bc_hole, bc_loaded); SplitBoundaryByLabels (dataset_append_transforms below, for this
 # model only) splits it into four named boundary conditions (boundary_schemas): the clamped face, the loaded half of the hole
-# with its applied pressure, the rest of the hole and the free surface, together the same cells. The four design parameters as named rank-0 global inputs (the dataset's
-# SplitGlobalVector standardizes `params` and splits it), and the stored signed distance and its gradient as per-query inputs
-# (query_schema), the same wall geometry the tensor-input baselines read. The lug has no global direction, so the fused
+# with its applied pressure, the rest of the hole and the free surface, together the same cells. The four design parameters
+# enter as named rank-0 global inputs (the dataset's SplitGlobalVector standardizes `params` and splits it), and the stored
+# signed distance and its gradient as per-query inputs (query_schema), the same wall geometry the tensor-input baselines read. The lug has no global direction, so the fused
 # geometry kernel (which needs one) does not apply and the model runs the eager region.
 input_type: mesh
 output_type: mesh

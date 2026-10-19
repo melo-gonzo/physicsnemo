@@ -1798,7 +1798,11 @@ class SplitBoundaryByLabels(MeshTransform):
     boundary's cell centroids carrying the targets, as ``MeshToDomainMesh`` with
     ``interior_points: cell_centroids`` writes it) the interior points are permuted into the
     order of ISLA's surface predictions: the new boundaries in sorted name order, each its cells
-    in mesh order. The scored points and their targets are the same, in that order.
+    in mesh order. The scored points and their targets are the same, in that order; the interior
+    is checked to be the centroids in cell order, and the reorder to be a permutation. A label is
+    one value per cell, shape ``(N,)``; another shape (a stored ``(N, 1)`` column) is refused.
+    The model config must pass every new boundary under its own name (checked by
+    ``dataset_append_transforms``, ``src/datasets.py``).
 
     Args:
         boundary: the boundary to split.
@@ -1847,7 +1851,14 @@ class SplitBoundaryByLabels(MeshTransform):
         assigned = torch.zeros(mesh.n_cells, dtype=torch.bool, device=mesh.cells.device)
         index = {}
         for name, key in zip(self.labels, keys):
-            hit = (mesh.cell_data[key] != 0) & ~assigned
+            label = mesh.cell_data[key]
+            if tuple(label.shape) != (mesh.n_cells,):
+                raise ValueError(
+                    f"SplitBoundaryByLabels: label {self.labels[name]!r} of {self.boundary!r} has shape "
+                    f"{tuple(label.shape)}; a label is one value per cell, ({mesh.n_cells},) "
+                    "(squeeze a (N, 1) column first)"
+                )
+            hit = (label != 0) & ~assigned
             index[name] = torch.nonzero(hit).flatten()
             assigned |= hit
         if self.rest is not None:
@@ -1869,9 +1880,20 @@ class SplitBoundaryByLabels(MeshTransform):
                     f"centroids of {self.boundary!r} ({mesh.n_cells} cells); it has "
                     f"{interior.n_points} points"
                 )
-            interior = interior.slice_points(
-                torch.cat([index[n] for n in sorted(index)])
-            )
+            if not torch.allclose(interior.points, mesh.cell_centroids):
+                raise ValueError(
+                    f"SplitBoundaryByLabels: reorder_interior needs the interior to be the cell "
+                    f"centroids of {self.boundary!r} in cell order; its points are not"
+                )
+            order = torch.cat([index[n] for n in sorted(index)])
+            ### a bijection of the scored points onto the new boundaries' cells
+            if not torch.equal(
+                order.sort().values, torch.arange(mesh.n_cells, device=order.device)
+            ):
+                raise RuntimeError(
+                    "SplitBoundaryByLabels: the reorder is not a permutation of the cells"
+                )
+            interior = interior.slice_points(order)
         return DomainMesh(
             interior=interior,
             boundaries={**domain.boundaries, **split},

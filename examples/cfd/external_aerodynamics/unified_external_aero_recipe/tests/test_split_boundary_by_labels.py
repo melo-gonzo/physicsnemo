@@ -139,6 +139,53 @@ def test_a_label_no_cell_carries_is_a_boundary_without_cells_and_unlabelled_cell
         SplitBoundaryByLabels("surface", LUG_LABELS, rest="hole")
 
 
+@pytest.mark.parametrize("width", [1, 3])
+def test_a_label_of_the_wrong_shape_is_refused(width):
+    """A label is one value per cell: a stored (N, 1) column (or any trailing axis) is
+    refused with the shape named. (A label of another length cannot sit in the mesh's
+    cell_data, whose batch size is the cell count.)"""
+    surface = _surface()
+    surface.cell_data["bc_hole"] = surface.cell_data["bc_hole"][:, None].expand(
+        -1, width
+    )
+    with pytest.raises(ValueError, match="label 'bc_hole' of 'surface' has shape"):
+        SplitBoundaryByLabels("surface", LUG_LABELS, rest="free").apply_to_domain(
+            _domain(surface)
+        )
+
+
+def test_tensile2d_keeps_the_fixed_edge_at_the_pinned_corner():
+    """Tensile2d's order (loaded, fixed, pinned): of the two cells at the pinned
+    corner node, the bottom edge's stays `fixed` (u2 = 0 along it) and the left
+    side's is `pinned`, so the pinned node stays marked."""
+    t = torch.tensor(
+        [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]], dtype=torch.float64
+    )
+    cells = torch.tensor([[0, 1], [1, 2], [2, 3], [3, 0]])  # bottom, right, top, left
+    outer = Mesh(
+        points=t,
+        cells=cells,
+        cell_data={
+            "bc_loaded": torch.tensor([0.0, 0.0, 1.0, 0.0], dtype=torch.float64),
+            "bc_fixed": torch.tensor([1.0, 0.0, 0.0, 0.0], dtype=torch.float64),
+            "bc_pinned": torch.tensor([1.0, 0.0, 0.0, 1.0], dtype=torch.float64),
+        },
+    )
+    cfg = _compose("isla_tensile2d")
+    (split,) = cfg.dataset_append_transforms
+    assert list(split.labels) == ["loaded", "fixed", "pinned"]
+    domain = DomainMesh(
+        interior=Mesh(points=0.5 * torch.ones(3, 2, dtype=torch.float64)),
+        boundaries={"outer": outer},
+        global_data={},
+    )
+    out = hydra.utils.instantiate(split).apply_to_domain(domain)
+    assert out.boundaries["fixed"].cells.tolist() == [[0, 1]]
+    assert out.boundaries["pinned"].cells.tolist() == [[3, 0]]
+    assert out.boundaries["loaded"].cells.tolist() == [[2, 3]]
+    assert out.boundaries["free"].cells.tolist() == [[1, 2]]
+
+
 def test_reorder_interior_puts_the_scored_points_in_the_order_of_the_predictions():
     """A surface task: the interior is the source boundary's cell centroids with the
     targets; after the split it is the new boundaries' cells in sorted name order, each
@@ -161,6 +208,46 @@ def test_reorder_interior_puts_the_scored_points_in_the_order_of_the_predictions
     )
     with pytest.raises(ValueError, match="cell centroids"):
         split.apply_to_domain(_domain(surface))
+    ### the right count of points that are not the centroids in cell order
+    shuffled = Mesh(
+        points=surface.cell_centroids.flip(0), point_data={"von_mises": target}
+    )
+    with pytest.raises(ValueError, match="in cell order"):
+        split.apply_to_domain(_domain(surface, shuffled))
+
+
+@pytest.mark.parametrize(
+    "boundary_meshes",
+    [
+        {"fixed": "boundaries.fixed", "free": "boundaries.free"},
+        {
+            "fixed": "boundaries.fixed",
+            "free": "boundaries.free",
+            "loaded": "boundaries.free",
+        },
+        {
+            "fixed": "boundaries.fixed",
+            "free": "boundaries.free",
+            "loaded": "boundaries.loaded",
+            "surface": "boundaries.surface",
+        },
+    ],
+    ids=["missing", "renamed", "extra"],
+)
+def test_forward_kwargs_must_pass_every_split_boundary_under_its_name(boundary_meshes):
+    """ISLA orders its surface predictions by the names it is given and the reorder by
+    the boundary names: a config that does not pass exactly the split's boundaries,
+    each under its own name, is refused when its dataset is built."""
+    cfg = _compose("isla_surface_deepjebpp")
+    ds = OmegaConf.create({"pipeline": {"transforms": []}})
+    _apply_dataset_transform_appends(ds, cfg)
+    OmegaConf.update(
+        cfg, "forward_kwargs.boundary_meshes", boundary_meshes, merge=False
+    )
+    with pytest.raises(
+        ValueError, match="must pass every boundary SplitBoundaryByLabels makes"
+    ):
+        _apply_dataset_transform_appends(ds, cfg)
 
 
 def _compose(model: str, dataset: str = "drivaer_ml_surface", *extra):

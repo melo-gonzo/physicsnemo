@@ -20,8 +20,8 @@
 # which the dataset labels by condition (bc_fixed, bc_loaded); SplitBoundaryByLabels (dataset_append_transforms below, for
 # this model only) splits it into three named boundary conditions (boundary_schemas): the loaded cells with the applied
 # traction vector, the clamped cells and the free surface, and puts the scored cell centroids (the interior point cloud) in
-# the order of ISLA's predictions (the conditions in sorted name order). The load case also enters through the global inputs: the load direction (force direction or moment axis)
-# as the one rank-1 global input, and the load type as two rank-0 global fields (the dataset's SplitGlobalVector splits the
+# the order of ISLA's predictions (the conditions in sorted name order). The load case also enters through the global
+# inputs: the load direction (force direction or moment axis) as the one rank-1 global input, and the load type as two rank-0 global fields (the dataset's SplitGlobalVector splits the
 # stored one-hot `load_type` into `is_force` / `is_torque`). One global direction plus one rank-1 boundary input: the fused
 # geometry kernel applies.
 input_type: mesh

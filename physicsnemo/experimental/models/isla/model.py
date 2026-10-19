@@ -597,6 +597,13 @@ class ISLA(Module):
                 raise ValueError(
                     f"boundary_schemas: a condition name is a non-empty string without '.'; got {name!r}"
                 )
+            ### A name keys the conditions' nn.ModuleDict, so it cannot be one of its
+            ### attributes ("keys", "update", "training", ...).
+            if hasattr(nn.ModuleDict(), name):
+                raise ValueError(
+                    f"boundary_schemas: the condition name {name!r} is an attribute of nn.ModuleDict, "
+                    "which holds the conditions' parameters; choose another name"
+                )
         self.boundary_schemas = {
             name: _declare(
                 f"boundary_schemas[{name!r}]",

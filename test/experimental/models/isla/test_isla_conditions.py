@@ -285,6 +285,18 @@ def test_the_declaration_is_validated(schemas, match):
         _model(schemas=schemas)
 
 
+@pytest.mark.parametrize(
+    "name", ["keys", "type", "update", "training", "items", "forward"]
+)
+def test_a_condition_name_that_is_a_module_dict_attribute_is_refused(name):
+    """The conditions' parameters live in an nn.ModuleDict keyed by name, so a name
+    that is one of its attributes is refused at construction, naming the argument."""
+    with pytest.raises(
+        ValueError, match=f"boundary_schemas: the condition name '{name}'"
+    ):
+        _model(schemas={**SCHEMAS, name: {}})
+
+
 def test_the_declaration_is_canonical_and_per_condition():
     """Names in sorted order whatever the declaration's; each condition's input layer
     reads [1, n.g, its fields' invariants, re]; vector and tensor maps exist only for

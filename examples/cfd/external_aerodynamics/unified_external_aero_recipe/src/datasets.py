@@ -148,10 +148,36 @@ def _apply_dataset_transform_appends(
     extra = OmegaConf.select(recipe_cfg, "dataset_append_transforms", default=None)
     if not extra:
         return dataset_cfg
+    _check_split_boundary_meshes(extra, recipe_cfg)
     transforms = OmegaConf.select(dataset_cfg, "pipeline.transforms", default=None)
     dataset_cfg = dataset_cfg.copy()
     dataset_cfg.pipeline.transforms = [*(transforms or []), *extra]
     return dataset_cfg
+
+
+def _check_split_boundary_meshes(transforms, recipe_cfg: DictConfig) -> None:
+    """Refuse a model config whose ``forward_kwargs.boundary_meshes`` is not exactly the
+    boundaries a ``SplitBoundaryByLabels`` entry makes, each passed under its own name.
+
+    ISLA orders its surface predictions by the names it is given, and the split's
+    ``reorder_interior`` orders the scored points by the boundary names, so the two
+    agree only when every name is its boundary's; a split boundary left out would drop
+    its cells without an error.
+    """
+    meshes = OmegaConf.select(
+        recipe_cfg, "forward_kwargs.boundary_meshes", default=None
+    )
+    given = {str(k): str(v) for k, v in (meshes or {}).items()}
+    for t in transforms:
+        if not str(t.get("_target_", "")).endswith("SplitBoundaryByLabels"):
+            continue
+        names = [*t["labels"]] + ([t["rest"]] if t.get("rest") is not None else [])
+        expected = {str(n): f"boundaries.{n}" for n in names}
+        if given != expected:
+            raise ValueError(
+                "forward_kwargs.boundary_meshes must pass every boundary SplitBoundaryByLabels "
+                f"makes under its own name, {expected}; got {given}"
+            )
 
 
 ### Transform-config kwargs whose values are file paths and should be

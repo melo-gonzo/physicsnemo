@@ -19,21 +19,21 @@
 # dimensions (`dim: 2`; pair with a dataset config that runs RestrictToPlane first, as isla_volume_airfrans.yaml does). The
 # boundary is the specimen's closed outer polyline (`boundaries.outer`, line cells with in-plane normals and segment lengths),
 # which the dataset labels by condition (bc_loaded, bc_fixed, bc_pinned); SplitBoundaryByLabels (dataset_append_transforms
-# below, for this model only) splits it into four named boundary conditions (boundary_schemas): the two cells at the pinned
-# corner, the loaded top edge with its applied pressure, the fixed bottom edge and the free sides. The six input scalars as named rank-0 global inputs (the
-# dataset's SplitGlobalVector standardizes `params` and splits it), and the stored signed distance and its gradient as
-# per-query inputs (query_schema), the same wall geometry the tensor-input baselines read. The targets are the dataset's
+# below, for this model only) splits it into four named boundary conditions (boundary_schemas): the loaded top edge with its
+# applied pressure, the fixed bottom edge, the left side's cell at the pinned corner and the free sides. The six input
+# scalars enter as named rank-0 global inputs (the dataset's SplitGlobalVector standardizes `params` and splits it), and
+# the stored signed distance and its gradient as per-query inputs (query_schema), the same wall geometry the tensor-input baselines read. The targets are the dataset's
 # native fields: four scalars and the in-plane displacement vector. No global direction: the fused kernel does not apply.
 input_type: mesh
 output_type: mesh
 
 # ISLA-only steps after the dataset's own chain (the baselines read the dataset as it is): one boundary per condition, the
-# first label winning where two mark a cell (the bottom edge's cell at the pinned node is a pinned cell), the unlabelled
-# cells the free sides.
+# first label winning where two mark a cell, so the bottom edge's cell at the pinned node stays `fixed` (u2 = 0 along it)
+# and the left side's cell at that node carries `pinned`; the unlabelled cells the free sides.
 dataset_append_transforms:
   - _target_: ${dp:SplitBoundaryByLabels}
     boundary: outer
-    labels: {pinned: bc_pinned, loaded: bc_loaded, fixed: bc_fixed}
+    labels: {loaded: bc_loaded, fixed: bc_fixed, pinned: bc_pinned}
     rest: free
 
 training:
@@ -66,7 +66,7 @@ model:
                                   # symmetric_tensor, components: {sig11: xx, sig22: yy, sig12: xy}}). Replaces the three rank-0 heads,
                                   # which were invariant where the components rotate as a tensor (posed protocol, 2026-10-03).
   boundary_schemas:               # the boundary conditions by name, each with its own per-cell fields
-    pinned: {}                    # the cells touching the pinned bottom-left node (U1 = 0 there)
+    pinned: {}                    # the left side's cell touching the pinned bottom-left node (U1 = 0 there)
     loaded:                       # the top edge
       bc_pressure: {rank: 0}      # the applied pressure P (scaled to O(1) by the dataset config)
     fixed: {}                     # the bottom edge (U2 = 0)
