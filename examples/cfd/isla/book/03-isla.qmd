@@ -347,8 +347,9 @@ relations to the anchors.
 #|   clustered there, so a model whose coordinates are centered on it would
 #|   see the whole body displaced. The measure-weighted centroid (blue) and
 #|   the length unit $L$ (printed) are integrals and agree between the
-#|   samplings to quadrature error. How to read this: ISLA uses no center at
-#|   all, only the length unit; the centroid is drawn to show that an
+#|   samplings to quadrature error. How to read this: ISLA's slice layers use
+#|   no center, only the length unit (ISLA-DTT's forest frame aside,
+#|   @sec-arch-modes); the centroid is drawn to show that an
 #|   integral is stable where a point statistic is not.
 #| code-fold: true
 fig, ax = plt.subplots(figsize=(8.0, 3.6))

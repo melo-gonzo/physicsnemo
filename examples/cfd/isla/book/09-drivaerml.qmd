@@ -675,7 +675,7 @@ print(": The Volume task's sensitivity to the boundary law taken apart at scorin
 natgeo = [VGR["area_natgeo"][f] for f in VOL_F]; frac = [VGF["area_natgeo"][f] for f in VOL_F]
 print(f"Keep every redrawn token and compute only the built-in geometry from the native sample, and the error is "
       f"{' / '.join(f'{v:.3f}' for v in natgeo)} of native; that one channel accounts for {' / '.join(f'{v:.2f}' for v in frac)} of the "
-      "redraw's excess on a log scale (one minus the logarithm of the third row's ratio over that of the second). The input moves a lot in the place the model reads it: under the redraw "
+      "redraw's excess on a log scale (one minus the logarithm of the third row's ratio over that of the second). The input moves strongly in the place the model reads it: under the redraw "
       f"{100 * VGS['frac_nearest_token_changed']:.0f}% of the interior points change nearest token, and near the wall the RMS change of "
       f"the logarithm of the built-in distance is {VGS['rms_log_absdArea_over_absdNat_nearwall_sdf']:.2f}. Nor can the exact field be "
       f"substituted after training: near the wall the sampled distance has a median of {VGS['median_abs_dNat_over_L_nearwall_sdf'] * 1e4:.1f}e-4 $L$ "
@@ -690,7 +690,17 @@ print(f"Keep every redrawn token and compute only the built-in geometry from the
 
 ### Read-only prediction points: ISLA-DTT {#sec-interior-read-only}
 
-**ISLA-DTT makes every interior prediction a function of its point and the boundary alone; on the Volume task its error is about 1.1 times ISLA's on every field, and it loses most of the boundary-law sensitivity.** ISLA-DTT is ISLA with `query_independent=True`: the interior points carry no routing weight, so they read the slices at every layer and write nothing into them, and after every layer each point also reads every boundary cell directly through a learned kernel of relative geometry, evaluated with a Barnes–Hut forest at opening angle $\theta = 1$ (@sec-arch-modes). The forest is built in a canonical frame that the boundary carries (its weighted centroid and principal axes), so ISLA-DTT's pose invariance at finite $\theta$ holds up to ties of that frame. The boundary read adds 1.2 million parameters to ISLA's 69 million. Everything else is held equal in @tbl-interior-read-only, including the middle row, which keeps the read-only points and removes the boundary read.
+```{python}
+#| label: setup-dtt-params
+#| include: false
+from physicsnemo.experimental.models.isla import ISLA as _ISLA
+_kw = dict(output_schema={"pressure": {"rank": 0}, "velocity": {"rank": 1}, "nut": {"rank": 0}},
+           global_schema={"U_inf_dir": {"rank": 1}}, interior=True)
+_n = lambda m: sum(p.numel() for p in m.parameters())
+N_ISLA, N_DTT = _n(_ISLA(**_kw)), _n(_ISLA(**_kw, query_independent=True))
+```
+
+**ISLA-DTT makes every interior prediction a function of its point and the boundary alone; on the Volume task its error is about 1.1 times ISLA's on every field, and it loses most of the boundary-law sensitivity.** ISLA-DTT is ISLA with `query_independent=True`: the interior points carry no routing weight, so they read the slices at every layer and write nothing into them, and after every layer each point also reads every boundary cell directly through a learned kernel of relative geometry, evaluated with a Barnes–Hut forest at opening angle $\theta = 1$ (@sec-arch-modes). The forest is built in a canonical frame that the boundary carries (its weighted centroid and principal axes), so ISLA-DTT's pose invariance at finite $\theta$ holds up to ties of that frame. The boundary read adds `{python} f"{(N_DTT - N_ISLA) / 1e6:.1f}"` million parameters to ISLA's `{python} f"{N_ISLA / 1e6:.0f}"` million (counted from the two models as the page renders). Everything else is held equal in @tbl-interior-read-only, including the middle row, which keeps the read-only points and removes the boundary read.
 
 | configuration | native mesh: p / v / nut | ÷ ISLA | area-proportional boundary sample (÷ own native) | rotated and translated |
 |---|---|---|---|---|
@@ -700,7 +710,7 @@ print(f"Keep every redrawn token and compute only the built-in geometry from the
 
 : ISLA against ISLA-DTT on the DrivAerML Volume task: interior pressure / velocity / eddy viscosity (p / v / nut) relative L2, float32, 48 validation cars, seed means of two seeds (ISLA 0.0387 / 0.0619 / 0.0868 and 0.0400 / 0.0651 / 0.0884; read-only without a read 0.0454 / 0.0847 / 0.1745 and 0.0443 / 0.0822 / 0.1188; ISLA-DTT 0.0446 / 0.0728 / 0.0997 and 0.0439 / 0.0685 / 0.0967, every ISLA-DTT seed above every ISLA seed on every field). The three rows share the configuration, the recipe, 435 training cars and 200,000 boundary cells and interior points per car. How to read this: ÷ ISLA above one means less accurate than ISLA; each row's boundary-law factor is its own. Instrument: ISLA at 512 wide, 512 slices, 3.75e-4, raw slice reads (@sec-study-configurations). Data: results/char/drivaerml_volume.json (ISLA); research/dtt/REPORT.md, the car's read-only setup table (read-only points without a read) and "Pose-free parity on the car" (ISLA-DTT). {#tbl-interior-read-only}
 
-Without the boundary read, read-only points trail ISLA by 14% on pressure, 31% on velocity and 68% on eddy viscosity. The read takes back almost none of the pressure deficit and most of the other two. The pressure that remains is what interacting points supply to one another through the slices, which a query-independent model gives up by construction. The boundary-law factor falls from about seven to two or three, likely because read-only points write no sample-dependent geometry into the slices that every other point reads; no measurement isolates that cause.
+Without the boundary read, read-only points trail ISLA by 14% on pressure, 31% on velocity and 68% on eddy viscosity. The read takes back almost none of the pressure deficit and most of the other two. The pressure that remains is what interacting points supply to one another through the slices, which a query-independent model gives up by construction. The boundary-law factor falls from about seven to between 1.3 and 3, likely because read-only points write no sample-dependent geometry into the slices that every other point reads; no measurement isolates that cause.
 
 #### What the boundary read supplies {#sec-interior-read-only-mechanism}
 

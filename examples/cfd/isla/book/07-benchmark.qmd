@@ -124,22 +124,24 @@ MI = [
      "the same, with `U_inf` concatenated to every point", "the same: a constant vector carries no case information"),
     ("drivaerml_volume", f"{BC}; {NT}; `U_inf_dir`, constant", f"{GV}; `U_inf` = $(38.9, 0, 0)$ m/s on every car (GeoTransolver-volume)",
      "the same per-point fields, with `U_inf` concatenated", "the same globals; the baselines' wall distance is the full-resolution field, ISLA's is from its sampled tokens"),
-    ("hilift", f"{BC}; `U_inf_dir`, angle of attack 4 to 20°", f"{GP}; `U_inf` in inch/s, magnitude 2,680 on every case, turning with the angle of attack",
+    ("hilift", f"{BC}; `U_inf_dir`, angle of attack 4 to 22°", f"{GP}; `U_inf` in inch/s, magnitude 2,680 on every case, turning with the angle of attack",
      "the same, with `U_inf` concatenated", "the same information at 2,680 times the scale"),
     ("shift_suv", f"{BC}; `U_inf_dir`, constant", f"{GP}; `U_inf` = $(30, 0, 0)$ m/s on every case",
      "the same, with `U_inf` concatenated", "the same: a constant vector"),
     ("airfrans", f"{BC}; {NT}, plus `sdf` and `sdf_normals`; `U_inf_dir` and the raw inlet speed `U_inf_mag` (31 to 94 m/s) as a scalar",
      f"{GV}; `U_inf` in m/s, magnitude 31 to 94, angle −4.9 to 14.9°", "the same per-point fields, with `U_inf` concatenated",
-     "the same information at 30 to 94 times the scale, varying in magnitude and direction"),
+     "the same information at 31 to 94 times the scale, varying in magnitude and direction"),
     ("aerozoo", f"four boundary meshes (body, enclosure, inlet, outlet), each face with its role and prescribed values; {NT}; "
      "`U_inf_dir`, the standardized log Reynolds number and four inlet-turbulence scalars",
      "per point: coordinates, wall and slip-wall distances and the wall normal; the same eight globals", "not trained on AeroZoo",
      "less: no inlet or outlet faces and no prescribed per-face values"),
-    ("tensile2d", "boundary segments with the loaded, fixed and pinned labels and the applied pressure; nodes as tokens; "
+    ("tensile2d", "boundary segments with the loaded, fixed and pinned labels and the applied pressure; nodes as prediction-point tokens "
+     "with their nearest-token wall distance and direction, plus `sdf` and `sdf_normals`; "
      "the pressure and five material parameters as six standardized scalars",
      "per node: coordinates, `sdf`, `sdf_normals` and the top, bottom and pinned-corner tags; the same six scalars", "the same",
      "the same"),
-    ("lug", "boundary faces labeled clamped, hole and loaded half of the hole, with the pressure on them; nodes as tokens; "
+    ("lug", "boundary faces labeled clamped, hole and loaded half of the hole, with the pressure on them; nodes as prediction-point tokens "
+     "with their nearest-token wall distance and direction, plus `sdf` and `sdf_normals`; "
      "four standardized scalars (hole radius, length, thickness, pressure)",
      "per node: coordinates, `sdf`, `sdf_normals`; the same four scalars; no boundary-condition label", "the same",
      "less as explicit input: the clamp and the load are known to the baselines only through the shape, in its fixed pose"),

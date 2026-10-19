@@ -468,7 +468,7 @@ $$
 The projection is affine and $\pi_{is}$ sums to one over $s$, so pooling
 first and projecting second equals projecting every pair and pooling:
 $\sum_s \pi_{is}(W_f \xi_{is} + b_f) = W_f \bar\xi_i + b_f$. The order is
-a memory decision, not a modelling one (@sec-arch-cost); the identity holds
+a memory decision, not a modeling one (@sec-arch-cost); the identity holds
 to $10^{-12}$ in float64 (`test_geo_pool_then_project_is_exact`).
 
 **i. Broadcast.** The normalized token state, what it read, and where it
@@ -1529,7 +1529,7 @@ print(f"**ISLA-DTT's forward waits on the host.** Its step takes {HT['isla_dtt']
       "Data: results/perf_2026-10-18/step_breakdown.json.")
 ```
 
-<!-- SLOT: GEO2 (single-input exact-geometry design, if adopted): its step from results/perf_2026-10-18/step_breakdown.json "single_input_isla" (fixed 200,000-token draw removes the rank imbalance; prefetch saves 8%) -->
+<!-- SLOT: single-input exact-geometry design: its step from results/perf_2026-10-18/step_breakdown.json "single_input_isla" -->
 
 <!-- SLOT: per-token step time and memory at the reference configurations (fig-arch-token-sweep) -->
 

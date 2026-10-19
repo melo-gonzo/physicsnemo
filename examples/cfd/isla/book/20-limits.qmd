@@ -42,6 +42,8 @@ def tally():
                 out[s.verdict(b, f)].append((k, f, b))
     return out
 TAL = tally()
+_nl = sum(k == "lug" for k, _, _ in TAL["leads"])
+LUGC = f" ({_nl} of them on the lug, where only ISLA is given the boundary-condition labels)" if _nl else ""
 def r(key, b, f, p="native"):
     return ST[key].ratio(b, f, p)
 PR = json.load(open(RES / "precres_2026-09-18.json"))["reduction"]
@@ -71,7 +73,7 @@ follow give each item its numbers.
 n_all = sum(len(v) for k, v in TAL.items() if k != "is not compared with")
 HL_FAIR = S.DATASETS["hilift"].fair_drive
 print(f"- **Not that ISLA is more accurate in distribution in general.** Across the {len(FAIR)} standings that compare the architectures "
-      f"and their headline fields, ISLA leads a baseline in {len(TAL['leads'])} of {n_all} comparisons, is level in "
+      f"and their headline fields, ISLA leads a baseline in {len(TAL['leads'])} of {n_all} comparisons{LUGC}, is level in "
       f"{len(TAL['is level with'])} and trails in {len(TAL['trails'])}"
       + (f"; {names(UNFAIR)} {'is' if len(UNFAIR) == 1 else 'are'} not counted, because the baselines of {'its record' if len(UNFAIR) == 1 else 'their records'} "
          "read the freestream as a physical vector, not as a unit direction (@sec-oq-unit-direction)" if UNFAIR else "")
@@ -166,7 +168,7 @@ it leads or trails where it trails.**
   weighted quadrature, and a sparse draw of cells with widely varying areas inflates its
   variance (@sec-deficit-anatomy); at the reporting protocol the penalty is gone.
 - **The contracts are exact in float32, not in bfloat16.** On two trained DrivAerML Surface
-  checkpoints of an earlier ISLA, a rotation and translation moves the float32 prediction by at most
+  checkpoints of a study configuration of ISLA, a rotation and translation moves the float32 prediction by at most
   `{python} f"{100 * PR['float32']['scalar_residual']['max_over_cars']:.3f}"`% of the field, and the
   prediction under the bfloat16 autocast the recipe trains with by
   `{python} f"{100 * PR['bfloat16']['scalar_residual']['mean_over_seeds']:.0f}"`% on pressure and
@@ -188,7 +190,7 @@ No checkpoint of a reference configuration is scored on the HiLiftAeroML regime 
 #| output: asis
 HLT = json.load(open(RES / "hilift_sealed_test_2026-09-04.json"))["per_arch_axis"]
 dd = [HLT[k]["d_mean"] for k in ("mt2_aoa", "mt2_stall", "gt_aoa", "gt_stall")]
-print(f"An earlier and smaller ISLA and a GeoTransolver, trained on the attached-flow range and scored at 10,000 cells, reach {min(dd):.0f} to "
+print(f"A smaller study configuration of ISLA and a GeoTransolver, trained on the attached-flow range and scored at 10,000 cells, reach {min(dd):.0f} to "
       f"{max(dd):.0f} times their validation error there; that GeoTransolver read the freestream as a physical vector, so the pair is not "
       "compared, and both lose about an order of magnitude (results/hilift_sealed_test_2026-09-04.json).")
 ```
@@ -543,8 +545,9 @@ print("**The open question is whether ISLA's pose invariance can be exact on mes
 SOL = [k for k in ("tensile2d", "lug", "deepjeb") if k in ST]
 def sline(k):
     s = ST[k]
+    cav = " (the baselines read no boundary-condition labels)" if k == "lug" else ""
     return f"{s.ds.name}: " + ", ".join(f"{field_name(s, f)} ISLA {s.verdict('GeoTransolver', f)} GeoTransolver and {s.verdict('Transolver', f)} Transolver"
-                                        for f in s.ds.headline)
+                                        for f in s.ds.headline) + cav
 print("**Three structural-mechanics problems carry standings beside the aerodynamic ones, and they read in both directions.** "
       + "; ".join(sline(k) for k in SOL) + " (@sec-tensile2d, @sec-lug, @sec-deepjeb). These sets were chosen for varying boundary "
       "conditions and loads, not only varying geometry, so that the global-scalar, global-vector and boundary-input channels are "
@@ -574,7 +577,7 @@ stated remainder.**
 #| output: asis
 print("**ISLA is the choice where the deployment mesh or sampling law may differ from the training one, where geometries arrive in "
       "arbitrary poses, and where a surrogate must be a function of the physics rather than of the dataset's frame; on in-distribution "
-      f"accuracy at matched memory it leads in {len(TAL['leads'])}, is level in {len(TAL['is level with'])} and trails in "
+      f"accuracy at matched memory it leads in {len(TAL['leads'])}{LUGC}, is level in {len(TAL['is level with'])} and trails in "
       f"{len(TAL['trails'])} of the {n_all} comparisons of the standing (@sec-standing).** The recommendation rests on the contracts, which "
       "hold on every standing up to the two limits of this chapter (tied samples, the interior's nearest-token geometry), and not on an "
       "accuracy lead. GeoTransolver and Transolver are released, in use and not modified; measure weighting and origin-free positions reach "

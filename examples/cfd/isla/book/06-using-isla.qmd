@@ -485,7 +485,7 @@ cells, with a single random offset. The Morton order sorts the cells by
 interleaved coordinate bits, a space-filling curve along which consecutive
 cells are spatial neighbors. A systematic sample has the same expectation
 as an independent draw for every cell-weighted integral and a lower
-variance for smooth integrands, the quadrature analogue of stratified
+variance for smooth integrands, the quadrature analog of stratified
 Monte Carlo. The headline comparisons of the book use the independent
 draw; a deployment at a reduced budget should use the stratified draw or
 more cells.

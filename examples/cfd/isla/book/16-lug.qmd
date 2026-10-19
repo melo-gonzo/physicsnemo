@@ -172,7 +172,7 @@ print("\n: The cost of training on the GINOT bracket lug at the three reference 
 ver = {a: ST.verdict(a, F) for a in S.BASELINES}
 both = (f"{ver['GeoTransolver']} {S.CONFIG['GeoTransolver']} and {S.CONFIG['Transolver']}" if ver["GeoTransolver"] == ver["Transolver"]
         else f"{ver['GeoTransolver']} {S.CONFIG['GeoTransolver']} and {ver['Transolver']} {S.CONFIG['Transolver']}")
-print(f"**On the GINOT bracket lug at 2,400 training lugs, scored on the native mesh, ISLA {both} on the von Mises stress.** @tbl-lug-protocols is the standing. *Leads* means that "
+print(f"**On the GINOT bracket lug at 2,400 training lugs, scored on the native mesh, ISLA {both} on the von Mises stress; the baselines read no boundary-condition labels, where ISLA reads which faces are clamped and loaded (@tbl-model-inputs).** @tbl-lug-protocols is the standing. *Leads* means that "
       f"every seed of one architecture sits below every seed of the other and the seed means differ by at least {100 * S.TIE_BAND:.0f}%. "
       "Every ratio is baseline ÷ ISLA, so a value above one favors ISLA.")
 ```
@@ -189,7 +189,7 @@ print(ST.table("tbl-lug-protocols", f"The GINOT bracket lug, 2,400 training lugs
 #| label: para-lug-reading
 #| output: asis
 i_s = ST.seeds("ISLA", F)
-print(f"**Natively the three are close in absolute terms and ISLA is the most accurate.** ISLA's error is {100 * ST.err('ISLA', F):.2f}% of the "
+print(f"**Natively the three are close in absolute terms and ISLA's error is the lowest.** ISLA's error is {100 * ST.err('ISLA', F):.2f}% of the "
       f"field (seeds {' and '.join(f'{100 * x:.2f}%' for x in i_s)}), against {100 * ST.err('GeoTransolver', F):.2f}% for GeoTransolver and "
       f"{100 * ST.err('Transolver', F):.2f}% for Transolver. All three are well below a percent on a problem whose target is a frame-free "
       "scalar and whose parameters enter as four global scalars.")

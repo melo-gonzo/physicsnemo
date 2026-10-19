@@ -9,7 +9,7 @@ metric). The chapters after this one give each row its context.
 #| output: asis
 import sys; sys.path.insert(0, ".")
 import standing as S
-print(f"**On the {len(S.available())} datasets with a standing, ISLA at its reference configuration leads on some fields, is "
+print(f"**On the {sum(S.DATASETS[k].fair_drive for k in S.available())} tasks it is compared on ({len(S.available())} with a standing), ISLA at its reference configuration leads on some fields, is "
       "level on others and trails on a few, and on every flow task it is the only one of the three architectures whose error "
       "does not change when the test geometry is moved or resampled.** This chapter is the evidence of Part IV on one page: one "
       "table with every headline number, one figure for each of the two invariances, and a reading of where ISLA leads and "
@@ -49,7 +49,7 @@ print(": The standing of the three reference configurations on every dataset wit
       "seed of the other and the seed means at least 3% apart. How to read this: a ratio above one favors ISLA; rows are "
       "different problems and are not comparable with one another; † marks a row whose ISLA checkpoints are of the raw-read "
       "variant rather than the reference configuration (@sec-isla-normalized-reads); ‡ marks a row whose baselines read the "
-      "freestream as a physical vector rather than a unit direction, so no comparison is drawn from it (@sec-de-result). "
+      "freestream as a physical vector rather than a unit direction, so no comparison is drawn from it (@sec-de-result, @sec-interior-airfrans). "
       "Data: results/char/ (the artifact of each row is named in its chapter).")
 ```
 
@@ -170,7 +170,7 @@ print("\n".join(out) + "\n")
 print(": The resources of the three reference configurations on each task: trainable parameters and the training peak device "
       "memory per GPU (maximum over four GB300 GPUs, bfloat16 autocast). How to read this: the three are matched by the memory "
       "ceiling of the selection rule, not by parameter count; ISLA carries several times GeoTransolver's parameters at similar "
-      "memory. Instrument: one-epoch lanes of the reference configurations with the raw slice reads, which have the same "
+      "memory. Instrument: one-epoch runs of the reference configurations with the raw slice reads, which have the same "
       "parameters and the same tensors as ISLA; the time per epoch of each is in its dataset chapter. "
       f"Data: results/char/{S.COST_FILE}.")
 ```

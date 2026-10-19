@@ -87,7 +87,9 @@ bent_ds = {}
 for ds, fl, r in bent:
     bent_ds[ds] = max(bent_ds.get(ds, 1.0), r)
 print(f"At the reference configurations on the native mesh, over {len(keys) - len(unfair)} datasets and {n} comparisons "
-      f"(each headline field against each baseline, by the seed rule of @sec-fair-comparison), ISLA leads in {len(lead)}, "
+      f"(each headline field against each baseline, by the seed rule of @sec-fair-comparison), ISLA leads in {len(lead)}"
+      + (f" ({nl} of them on the lug, where only ISLA is given the boundary-condition labels)" if (nl := sum("lug" in c[0] for c in lead)) else "")
+      + f", "
       f"is level in {level} and trails in {len(trail)}. It trails on: {group(trail)}. "
       + (f"{' and '.join(unfair)} are not counted: their baselines read the freestream as a raw physical vector "
          "(@tbl-model-inputs), so no verdict is drawn there. " if unfair else "") +
@@ -469,7 +471,7 @@ on are in @sec-open-questions.
   al., 2025), as a control on the fixed temperature of cosine routing;
 - a measure-weighted local aggregation among interior prediction points,
   after GeoTransolver's ball queries, DoMINO and GAOT (Ranade et al., 2025;
-  Wen et al., 2025), for the interior pressure deficit on AirfRANS;
+  Wen et al., 2025), for the interior eddy-viscosity deficit against GeoTransolver on the DrivAerML Volume task;
 - parity-typed invariants, after GLOBE and GATr, for frame-component
   targets;
 - a measure-weighted training loss, after M³ (Mei et al., 2026), for any

@@ -41,7 +41,6 @@ seeds_txt = lambda xs: ", ".join(f"{v:.4f}" for v in xs)
 FAIR = St.ds.fair_drive   # False: the standing's baselines read the raw inlet velocity, so no ISLA-vs-baseline verdict is drawn
 NOTE = St.ds.drive_note.replace("-4.9", "−4.9")
 DRIVE = ("" if FAIR else f"In this standing's record GeoTransolver and Transolver read {NOTE} (@tbl-model-inputs).")
-ratios_txt = lambda a: " / ".join(S.fmt_ratio(St.ratio(a, f)) for f, _ in FIELDS)
 def table(label, setting):
     """The headline table; where the baselines' inputs differ from the protocol its caption says the ratios are not compared."""
     t = St.table(label, setting)
@@ -199,7 +198,7 @@ print("No model trains with rotation or translation augmentation. **The three do
 | GeoTransolver | none | the inlet velocity $U_\infty \hat g_1$ as the physical vector in m/s, read by the context projector | coordinates; the stored `sdf` and `sdf_normals` |
 | Transolver | none | the same physical vector, concatenated to every point's features | coordinates; the stored `sdf` and `sdf_normals` |
 
-: What each architecture receives on the AirfRANS interior task. How to read this: only ISLA reads the airfoil itself; the stored signed distance is exact (computed by the converter from the full airfoil), while ISLA's built-in nearest-token distance and direction depend on which boundary segments the model is given, the one input of the interior task that changes with the boundary sample (@sec-airfrans-boundary-law); the global column carries the same information for all three, but the baselines receive it as one vector whose magnitude runs from 31 to 94 m/s and whose angle runs from −4.9° to 14.9° across the cases. Data: conf/model/isla_volume_airfrans.yaml, the two baselines' recipe configurations (@sec-baselines) and results/drive_audit_2026-10-18/REPORT.md. {#tbl-airfrans-inputs}
+: What each architecture receives on the AirfRANS interior task. How to read this: only ISLA reads the airfoil itself; the stored signed distance is exact (computed by the converter from the full airfoil), while ISLA's built-in nearest-token distance and direction depend on which boundary segments the model is given, the one input of the interior task that changes with the boundary sample (@sec-airfrans-boundary-law); the global column carries the same information for all three, but the baselines receive it as one vector whose magnitude runs from 31 to 94 m/s and whose angle runs from −4.9° to 14.9° across the cases. Data: conf/model/isla_volume_airfrans.yaml of the recipe, the two baselines' recipe configurations (@sec-baselines) and results/drive_audit_2026-10-18/REPORT.md. {#tbl-airfrans-inputs}
 
 ```{python}
 #| label: para-airfrans-scorings
@@ -231,8 +230,7 @@ else:
     print("**The standing's native numbers are given and not compared, because its baselines read the inlet velocity as a raw physical "
           f"vector.** {DRIVE} On AirfRANS the inlet changes in speed and in angle from case to case, so the vector the baselines read "
           "changes threefold in length as well as turning with the angle of attack, where ISLA's unit direction only turns. "
-          f"@tbl-airfrans-protocols holds the numbers: on pressure / velocity / eddy viscosity GeoTransolver ÷ ISLA is "
-          f"{ratios_txt('GeoTransolver')} and Transolver ÷ ISLA {ratios_txt('Transolver')}. They are a record of these trained models, "
+          "@tbl-airfrans-protocols holds each architecture's errors. They are a record of these trained models, "
           "not a comparison of the architectures: no verdict is drawn from them in this book. The protocol column is read below for each "
           "architecture against its own native error.")
 ```
@@ -249,7 +247,7 @@ print(table("tbl-airfrans-protocols", f"The AirfRANS interior task, `full` split
 #| label: para-airfrans-replication
 #| output: asis
 print("::: {.callout-note collapse=\"true\" title=\"Optional: a second pair of ISLA checkpoints\"}")
-print(f"A second pair of ISLA checkpoints, the same configuration and seeds trained from a second build of the code, scores "
+print(f"A second pair of ISLA checkpoints, an independent second training of the same configuration and seeds, scores "
       + " / ".join(f"{REP['native'][f]['mean']:.4f}" for f, _ in FIELDS) + " on " + " / ".join(l for _, l in FIELDS)
       + ", that is " + " / ".join(f"{rep_ratio[f]:.3f}" for f, _ in FIELDS) + " times the standing's ISLA checkpoints. The replication moves "
       f"pressure and velocity by under {max(abs(rep_ratio[f] - 1) for f in ('pressure_l2', 'velocity_l2')) * 100:.1f}% and eddy viscosity by "
@@ -293,18 +291,16 @@ print(f"**Under rotation and translation ISLA's error is its native error, and t
 AFS = J("airfrans_scale_2026-09-22.json"); AFF = AFS["fits"]; ORD = AFS["bars"]["ordering"]["pressure_l2"]["per_rung"]
 a_p, a_v = AFF["isla|pressure_l2"]["fit"]["alpha"], AFF["isla|velocity_l2"]["fit"]["alpha"]
 gt_loc = [v for k, v in AFF["gt|pressure_l2"]["local_alpha"].items() if int(k.split("-")[0]) >= 100]
-print(f"**On AirfRANS no error floor is in reach at 800 airfoils, and ISLA's pressure error falls faster with training airfoils than "
-      f"GeoTransolver-volume's.** The ladder trains ISLA and GeoTransolver-volume on nested subsets of "
+print(f"**On AirfRANS no error floor is in reach at 800 airfoils: ISLA's error falls as a clean power law in the number of "
+      f"training airfoils.** The ladder trains ISLA and GeoTransolver-volume on nested subsets of "
       f"50, 100, 200, 400 and 800 airfoils, two seeds each "
       f"(@fig-scaling-airfrans). ISLA's error falls as a clean power law $\\varepsilon \\propto n^{{-b}}$ in the number of training airfoils "
       f"$n$, with the data exponent $b$ = {a_p:.2f} on pressure and {a_v:.2f} on velocity. GeoTransolver-volume's local pressure exponent is "
-      f"{min(gt_loc):.2f} to {max(gt_loc):.2f} from 100 airfoils up, and its 50-airfoil error sits above its own trend, so no fit is accepted for it. "
-      f"The gap on pressure, where GeoTransolver-volume is ahead, therefore shrinks, from {100 * (1 - ORD['100']['gt_over_isla']):.0f}% at 100 "
-      f"airfoils to {100 * (1 - ORD['800']['gt_over_isla']):.0f}% at 800. Two consequences follow for the compute-allocation rule of "
-      "@sec-compute-allocation, which splits a fixed training budget between more cases and more parameters by the measured exponents. "
-      "First, the two architectures have different data exponents on the same task, so the rule must be measured for the architecture and "
-      "the dataset where it is used. Second, with no floor and an exponent below one, more training cases stay the better purchase across "
-      "the whole range measured here.")
+      f"{min(gt_loc):.2f} to {max(gt_loc):.2f} from 100 airfoils up, and its 50-airfoil error sits above its own trend, so no fit is accepted for it; "
+      "it reads the inlet velocity as the physical vector, so its curve is drawn for reference and the two are not compared. One consequence "
+      "follows for the compute-allocation rule of @sec-compute-allocation, which splits a fixed training budget between more cases and more "
+      "parameters by the measured exponents: with no floor and an exponent below one, more training cases stay the better purchase for ISLA "
+      "across the whole range measured here.")
 ```
 
 ```{python}
@@ -314,16 +310,16 @@ print(f"**On AirfRANS no error floor is in reach at 800 airfoils, and ISLA's pre
 #|   pressure (left), velocity (middle) and eddy viscosity (right, a
 #|   standardized field), two-seed means with the seeds as short bars, float32
 #|   on the 200 test airfoils, 500 epochs at 100,000 interior points. ISLA in
-#|   blue squares, GeoTransolver-volume (learning rate 1e-3) in red circles.
+#|   blue squares, GeoTransolver-volume (learning rate 1e-3, reading the inlet
+#|   velocity as the physical vector, not compared) in red circles.
 #|   Dotted curves are fits of $\varepsilon = \varepsilon_\infty + a
 #|   n^{-b}$, drawn only where the fit's RMS relative residual is below 3%;
 #|   other series carry their local exponents from 100 airfoils up. Instrument:
 #|   ISLA at 192 wide, 256 slices, 1e-3, raw slice reads
 #|   (@sec-study-configurations); interior points read as contiguous blocks of
-#|   the stored rows. How to read this: parallel point runs mean the same
-#|   exponent (velocity), converging runs mean ISLA converts cases faster
-#|   (pressure); the levels are those of the instrument, not the standing, and
-#|   there is no parameter axis; both axes are logarithmic. Data:
+#|   the stored rows. How to read this: the slope of a run of points is its
+#|   data exponent; the levels are those of the instrument, not the standing,
+#|   and there is no parameter axis; both axes are logarithmic. Data:
 #|   results/airfrans_scale_2026-09-22.json.
 #| fig-alt: "Three log-log panels of interior error against training airfoils from 50 to 800: ISLA in blue squares with dotted fitted lines on pressure and velocity, GeoTransolver-volume in red circles as points only, each series labeled at its right end with its exponent b."
 #| code-fold: true
@@ -437,40 +433,36 @@ print(": Read-only prediction points on the AirfRANS interior task: relative L2 
 #| label: para-airfrans-extrap
 #| output: asis
 AFX = J("airfrans_extrap_2026-09-22.json")["splits"]
-on = lambda sp: AFX[sp]["gt_over_isla_on_split"]["pressure_l2"]["mean"]
-print("**When the inlet condition leaves its training range, ISLA's interior error grows less than GeoTransolver-volume's on pressure and "
-      "eddy viscosity and the same on velocity.** AirfRANS ships two extrapolation splits: `reynolds` trains on 504 airfoils inside a band of "
+print("**Outside the training range ISLA's interior error grows by a factor of "
+      f"{min(AFX[sp]['arms']['isla_cosine_1e-3'][f]['growth_mean'] for sp in ('reynolds', 'aoa') for f, _ in FIELDS):.1f} to "
+      f"{max(AFX[sp]['arms']['isla_cosine_1e-3'][f]['growth_mean'] for sp in ('reynolds', 'aoa') for f, _ in FIELDS):.1f} over its "
+      "own `full`-split error.** AirfRANS ships two extrapolation splits: `reynolds` trains on 504 airfoils inside a band of "
       "Reynolds numbers and tests on 496 outside it, and `aoa` trains on 804 inside a band of angles and tests on 196 outside it. The readout "
       "that separates extrapolation from a smaller training set is the *growth factor*: an architecture's test error on the split divided by "
-      "its own error on the `full` split. The comparison is the ratio of the two growth factors, with thresholds of 1.10 and 0.90 that both seed "
-      f"pairs must clear. On the split itself the pressure ordering of the `full` split inverts: GeoTransolver-volume ÷ ISLA on pressure is "
-      f"{on('reynolds'):.2f} outside the training Reynolds band and {on('aoa'):.2f} outside the training angles (@tbl-interior-airfrans-extrap).")
+      "its own error on the `full` split (@tbl-interior-airfrans-extrap). GeoTransolver-volume's growth factors are given beside ISLA's and "
+      "are not compared with them: it reads the inlet velocity as the physical vector, and its magnitude and angle are exactly what leaves "
+      "the training range on these splits, so a difference in growth would measure the input as much as the architecture "
+      "(@sec-oq-unit-direction).")
 ```
 
 ```{python}
 #| label: out-tbl-interior-airfrans-extrap
 #| output: asis
 names = {"reynolds": "Reynolds number", "aoa": "angle of attack"}
-out = ("| split | field | ISLA error (growth) | GeoTransolver-volume error (growth) | growth ratio, GeoTransolver-volume ÷ ISLA (per seed) "
-       "| GeoTransolver-volume ÷ ISLA on the split | growth reading |\n|---|---|--:|--:|---|--:|---|\n")
+out = ("| split | field | ISLA error (growth) | GeoTransolver-volume error (growth) |\n|---|---|--:|--:|\n")
 for sp in ("reynolds", "aoa"):
     X = AFX[sp]
     for f, lab in FIELDS:
-        gi, gg, g = X["arms"]["isla_cosine_1e-3"][f], X["arms"]["gt_volume_1e-3"][f], X["growth"][f]
-        out += (f"| {names[sp]} | {lab} | {gi['mean']:.4f} ({gi['growth_mean']:.2f}) | {gg['mean']:.4f} ({gg['growth_mean']:.2f}) | "
-                f"{g['g_gt_over_g_isla']:.2f} ({', '.join(f'{v:.2f}' for v in g['paired'])}) | {X['gt_over_isla_on_split'][f]['mean']:.2f} | "
-                f"{X['verdict'][f].split(' (')[0]} |\n")
+        gi, gg = X["arms"]["isla_cosine_1e-3"][f], X["arms"]["gt_volume_1e-3"][f]
+        out += f"| {names[sp]} | {lab} | {gi['mean']:.4f} ({gi['growth_mean']:.2f}) | {gg['mean']:.4f} ({gg['growth_mean']:.2f}) |\n"
 print(out)
 print(": The AirfRANS extrapolation splits: relative L2 on each split's test cases, float32, two seeds, 100,000 interior points, 500 epochs. "
-      "Growth = the split's test error ÷ the same architecture's `full`-split test error; the growth ratio above one means ISLA's error grows "
-      "less; the last ratio is the standing on the split itself (above one favors ISLA). Thresholds of the growth reading: 1.10 and 0.90, with both seed pairs agreeing. "
+      "Growth = the split's test error ÷ the same architecture's `full`-split test error. GeoTransolver-volume reads the inlet velocity as "
+      "the physical vector, so its column is not compared with ISLA's. "
       "Instrument: ISLA at 192 wide, 256 slices, 1e-3, raw slice reads (@sec-study-configurations); interior points read as contiguous blocks "
       "of the stored rows. How to read this: the Reynolds split trains on 504 airfoils against the `full` split's 800, so part of each growth "
-      "factor is data size, which both architectures pay; that is why the ratio of growths is the readout. Data: "
-      "results/airfrans_extrap_2026-09-22.json. {#tbl-interior-airfrans-extrap}")
+      "factor is data size. Data: results/airfrans_extrap_2026-09-22.json. {#tbl-interior-airfrans-extrap}")
 ```
-
-ISLA's design predicts this direction. Its learned maps see invariant scalars, the boundary, the unit inlet direction and the inlet speed, where GeoTransolver-volume reads laboratory coordinates and the raw inlet velocity in every token, so a condition outside the training range moves fewer of ISLA's inputs off their training distribution. The numbers go that way on one two-dimensional dataset, with the input difference of @tbl-airfrans-inputs in place; what inside the two models produces the smaller growth is not measured.
 
 ### The boundary draw at a reduced budget {#sec-airfrans-boundary-law}
 

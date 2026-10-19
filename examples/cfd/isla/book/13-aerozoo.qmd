@@ -483,7 +483,7 @@ QUESTIONS = (
     "held-out split of @tbl-aerozoo-splits, with the seed rule applied per field. The enclosure, crossflow and dual-inlet splits are the ones "
     "built to separate a model that reads boundary faces with their roles from one that reads distances to walls (@tbl-aerozoo-inputs). "
     "The bar set before the runs: on the enclosure split ISLA's penalty is at least 20% smaller than GeoTransolver's; the claim fails if "
-    "it is not smaller at all (the lab notebook, @sec-notebook).\n"
+    "it is not smaller at all (results/campaigns_2026-10-09/aerozoo/aerozoo_reduction.json, its `predictions` block).\n"
     "- **Does ISLA-DTT match ISLA on held-out families?** ISLA-DTT's prediction at a point depends on that point and the boundary alone, so it "
     "can be evaluated in any number of chunks; the question is what that independence costs in accuracy. The readout is ISLA-DTT ÷ ISLA on "
     "velocity and pressure on every held-out split, and in distribution on `full`; the bar set before the runs is ISLA-DTT within 5% of "

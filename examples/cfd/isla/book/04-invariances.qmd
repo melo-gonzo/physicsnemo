@@ -409,10 +409,9 @@ H = ST["hilift"]
 print("**The pose protocol tests the contract.** No reference configuration trains with augmentation, so every model meets the rotated "
       "validation set without having seen a rotated case. GeoTransolver and Transolver read coordinates in the dataset's frame, "
       "so for them a rotated case is an input outside the training distribution, and their posed errors run from "
-      f"{min(bpe):.2f} to {max(bpe):.1f}, the order of the field itself. ISLA has no frame to be out of. Its markers sit at one "
-      "except where its interior geometry ties (@sec-nearest-ties) and on HiLiftAeroML, where its posed error is "
-      f"{S.fmt_ratio(H.shift('ISLA', HEAD['hilift'], 'posed'))} times native; what moves ISLA's error there is an open question "
-      "(@sec-open-questions).")
+      f"{min(bpe):.2f} to {max(bpe):.1f}, the order of the field itself. ISLA has no frame to be out of (the frame in which "
+      "ISLA-DTT builds its forest is computed from the boundary and turns with it, @sec-arch-modes). Its markers sit within 1% of one "
+      "except where its interior geometry ties (@sec-nearest-ties).")
 ```
 
 **The point-cloud protocol tests consistency.** The same checkpoint, trained under the native law, is scored on a sample of
@@ -664,7 +663,7 @@ print(f"Transolver's two DrivAerML seeds read {S.fmt_ratio(min(tseeds))} and {S.
       f"cells, still move by {S.fmt_ratio(mw['GeoTransolver'][0])} and {S.fmt_ratio(mw['Transolver'][0])} under the bias, and "
       f"centered on the Horvitz–Thompson estimate of the centroid, by {S.fmt_ratio(mw['GeoTransolver'][1])} and "
       f"{S.fmt_ratio(mw['Transolver'][1])} (DrivAerML Surface task, 48 validation cars, 10,000 cells, two seeds; "
-      "results/mwaw_2026-09-11.json). ISLA has no center: positions enter as differences to anchors, which are "
+      "results/mwaw_2026-09-11.json). ISLA's slice layers use no center (ISLA-DTT's forest frame aside, @sec-arch-modes): positions enter as differences to anchors, which are "
       "measure-weighted means and move only by their quadrature error. That error is the residual in the ISLA rows, and it "
       "falls as the count grows, as the variance of @eq-ht requires.")
 ```
