@@ -1,0 +1,35 @@
+{
+ "protocol": "A2-RERUN: reduce the a2r scores (scores/<run>/<protocol>/<run>/metrics.jsonl, fetched from LHR $T/evals_a2r; scorer\nkernel/a2r/score.sbatch, a copy of the CHAR-PROTOCOLS scorer) exactly as results/char/protocol_artifacts_2026-10-03.py does\n(infer_summary, else the mean of the per-sample infer_step rows, last row per sample id) and compare with the CHAR record of\nthe dataset (old reference ISLA and the baselines). usage: python char_a2_table.py <stem> <char json> (e.g. a2r_t2dz_isla tensile2d)",
+ "fields": {
+  "von_mises_l2": "von Mises"
+ },
+ "a2": {
+  "native": {
+   "von_mises_l2": {
+    "mean": 0.001725596884886424,
+    "per_seed": {
+     "42": 0.0016015164057413738,
+     "43": 0.001849677364031474
+    }
+   }
+  },
+  "area": {
+   "von_mises_l2": {
+    "mean": 0.001725596884886424,
+    "per_seed": {
+     "42": 0.0016015164057413738,
+     "43": 0.001849677364031474
+    }
+   }
+  },
+  "posed": {
+   "von_mises_l2": {
+    "mean": 0.005973888635635376,
+    "per_seed": {
+     "42": 0.006632994413375854,
+     "43": 0.005314782857894897
+    }
+   }
+  }
+ }
+}

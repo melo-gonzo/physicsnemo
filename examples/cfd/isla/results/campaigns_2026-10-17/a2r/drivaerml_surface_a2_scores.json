@@ -1,0 +1,57 @@
+{
+ "protocol": "A2-RERUN: reduce the a2r scores (scores/<run>/<protocol>/<run>/metrics.jsonl, fetched from LHR $T/evals_a2r; scorer\nkernel/a2r/score.sbatch, a copy of the CHAR-PROTOCOLS scorer) exactly as results/char/protocol_artifacts_2026-10-03.py does\n(infer_summary, else the mean of the per-sample infer_step rows, last row per sample id) and compare with the CHAR record of\nthe dataset (old reference ISLA and the baselines). usage: python char_a2_table.py <stem> <char json> (e.g. a2r_t2dz_isla tensile2d)",
+ "fields": {
+  "pressure_l2": "pressure",
+  "wss_l2": "wall shear"
+ },
+ "a2": {
+  "native": {
+   "pressure_l2": {
+    "mean": 0.04451623062292735,
+    "per_seed": {
+     "42": 0.0435782273610433,
+     "43": 0.0454542338848114
+    }
+   },
+   "wss_l2": {
+    "mean": 0.07003771762053172,
+    "per_seed": {
+     "42": 0.06835220257441203,
+     "43": 0.07172323266665141
+    }
+   }
+  },
+  "area": {
+   "pressure_l2": {
+    "mean": 0.04451373467842738,
+    "per_seed": {
+     "42": 0.04363565146923065,
+     "43": 0.04539181788762411
+    }
+   },
+   "wss_l2": {
+    "mean": 0.07072818527619043,
+    "per_seed": {
+     "42": 0.06921906769275665,
+     "43": 0.07223730285962422
+    }
+   }
+  },
+  "posed": {
+   "pressure_l2": {
+    "mean": 0.04451760649681091,
+    "per_seed": {
+     "42": 0.0435795933008194,
+     "43": 0.04545561969280243
+    }
+   },
+   "wss_l2": {
+    "mean": 0.07003990312417349,
+    "per_seed": {
+     "42": 0.06835448741912842,
+     "43": 0.07172531882921855
+    }
+   }
+  }
+ }
+}

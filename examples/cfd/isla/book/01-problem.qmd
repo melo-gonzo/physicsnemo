@@ -1,14 +1,19 @@
 # The problem and how we measure {#sec-problem}
 
-**Every result in this book is a measurement of one mapping, from a
-discretized boundary and a few global conditions to the steady field that
-boundary induces, under one recipe, with one metric.** This chapter defines
-the mapping and its general interface on an example whose exact solution we
-know. It names the directions in which a learned operator must generalize.
-It defines the metric and the instrument the metric is read on. The
-datasets, their splits and the comparison protocol are in @sec-baselines.
-After this chapter and that one, a reader who knows PDEs and transformers
-but has never seen this program can read any later table.
+*Before this chapter:* nothing beyond steady PDEs, Green's functions and
+quadrature. No machine learning is assumed here; @sec-landscape supplies it.
+
+**Every result in this book is a measurement of one operator: the map from
+a boundary, the data on it and a few global conditions to the steady field
+that boundary induces, on the boundary and in the domain it bounds.** This
+chapter defines that operator and its interface on a problem whose exact
+solution is known, the potential flow around a Joukowski airfoil. It shows
+why the boundary alone determines the field. It says what varies across a
+dataset and what it means for a learned operator to generalize. It defines
+the metric, the area-weighted relative L2 error, and why it is area-weighted.
+It ends with the distinction between a property tested exactly and a
+quantity measured. The datasets, splits and comparison rules are in
+@sec-baselines.
 
 ```{python}
 #| label: setup-problem
@@ -16,70 +21,85 @@ but has never seen this program can read any later table.
 import sys; sys.path.insert(0, ".")
 from palette import *
 from matplotlib.collections import LineCollection
-from matplotlib.colors import Normalize
+from matplotlib.colors import Normalize, LogNorm, TwoSlopeNorm
 import json
 from pathlib import Path
+import standing as S
 RES = Path("..") / "results"
 J = lambda p: json.load(open(RES / p))
+_FP = J("fp32_reeval/fp32_shift_35_2026-09-09.json")
+_fpa = _FP["by_architecture"]
+BF = {"max_mean": max(max(abs(v["min_shift"]), abs(v["max_shift"])) for v in _fpa.values()),
+      "max_case": max(r["fields"]["pressure_l2"]["per_case_max_abs_shift"] for r in _FP["runs"].values()),
+      "n": _FP["n_runs"],
+      "by": ", ".join(f"{100 * abs(_fpa[k]['median_shift']):.2f}% for {n}" for k, n in
+                      (("isla", "ISLA"), ("geotransolver", "GeoTransolver"), ("transolver", "Transolver")))}
 ```
 
-## The boundary-to-field problem {#sec-pde-theory}
+## The boundary-to-field operator {#sec-pde-theory}
 
-**The object to learn is a solution operator, not a time stepper, and its
-interface is the same for every steady boundary-driven problem.** The input
-has three parts.
+**The object to learn is the solution operator of a steady boundary-value
+problem, defined on a space of geometries.** Write $\Gamma$ for a closed
+boundary (a surface in three dimensions, a curve in two), $b$ for the data
+prescribed on it, $\hat g_1, \dots, \hat g_K$ for the problem's global
+directions and $\sigma$ for its global scalars. The operator is
 
-- **Boundary cells.** A closed boundary surface (in two dimensions, a closed
-  curve) given as a mesh of cells, each carrying its position $x_i$, its
-  outward unit normal $n_i$ and its measure $w_i$ (area in three dimensions,
-  length in two). A cell can also carry **per-cell boundary scalars**, the
-  data its boundary condition prescribes (a wall temperature, a prescribed
-  flux). This channel is optional; the aerodynamic datasets leave it empty
-  and the solids and brackets fill it (@sec-datasets).
-- **$K$ global vector inputs.** Directions that belong to the problem rather
-  than to any cell: a gravity or body-force direction, an applied field, the
-  far-field flow direction. Each enters as a unit vector $\hat g_k$. A
-  magnitude that matters is passed as one of the scalars below.
-- **$S$ global scalar inputs.** The parameters of the PDE and of its
-  far-field data: a diffusivity, a Young's modulus, a Reynolds number, a
-  far-field speed.
+$$
+\mathcal G:\ \bigl(\Gamma,\ b|_\Gamma,\ \{\hat g_k\}_{k=1}^{K},\ \sigma\bigr)
+\ \longmapsto\ \bigl(u|_\Gamma,\ u|_\Omega\bigr),
+$$ {#eq-operator}
 
-The output is the steady field this data induces: pressure and wall shear
-on the boundary itself, and pressure, velocity or other fields at arbitrary
-**interior** points. Throughout the book *interior* means the domain the
-boundary bounds. For a body in a stream, that is the fluid outside the
-body. Interior query points carry no data. They are bare coordinates at
-which the field is requested. There is no volume mesh, no initial state,
-and nothing to advance in time.
+where $\Omega$ is the domain $\Gamma$ bounds and $u$ the steady solution.
+The domain of $\mathcal G$ is not a vector space. Two inputs with
+different shapes have different $\Gamma$, with different meshes and
+different numbers of cells, and there is no sum of two cars. Learning
+$\mathcal G$ from examples is therefore harder than learning a map between
+fixed function spaces on one domain, and it is the reason the
+architectures of @sec-landscape take a set of points as input.
 
-**External aerodynamics is the benchmark instance of this interface.** It
-has one closed body in a uniform far field and exactly one global direction
-($K = 1$, the far-field direction). The car and wing datasets have no global
-scalar ($S = 0$), because every case shares one far-field speed. The airfoil
-dataset has one ($S = 1$), because the far-field speed varies from case to
-case. The datasets are introduced in @sec-datasets. Nothing in the
-architectures compared here is specific to that instance. The mechanism
-chapters speak of "along a global direction", and gravity or an applied
-field fits that phrase as well as a stream does.
+The interface every model in the book shares has three parts.
 
-@fig-problem-schematic draws the mapping on the simplest member of the
-class, ideal flow around a lifting Joukowski airfoil. That flow has a
-closed-form solution and is the running example of this book.
+- **Boundary cells.** $\Gamma$ arrives as a mesh of cells. Each cell
+  carries its position $x_i$, its outward unit normal $n_i$ and its
+  measure $w_i$: area in three dimensions, length in two. A cell can also
+  carry the boundary data $b$ its condition prescribes, a wall temperature,
+  a traction or a clamped displacement. Each such field is declared with its
+  rank: scalar, vector or second-order tensor. External-aerodynamics surfaces carry no per-cell data, because the whole
+  surface is one no-slip wall; datasets with several kinds of boundary
+  condition, the structural ones among them, carry it (@sec-baselines).
+- **$K$ global vector inputs.** Directions that belong to the problem and
+  to no cell: the far-field flow direction, a load direction, gravity. Each
+  enters as a unit vector $\hat g_k$. A magnitude that matters enters as
+  one of the scalars below.
+- **$S$ global scalar inputs** $\sigma = (\sigma_1, \dots, \sigma_S)$. The
+  parameters of the PDE and of its far-field data: a Reynolds number, a
+  far-field speed, a Young's modulus.
+
+The output is the field the data induce: pressure and wall shear on the
+boundary itself, and pressure, velocity, stress or other fields at
+arbitrary *interior* points. *Interior* means the domain the boundary
+bounds; for a body in a stream, it is the fluid outside the body. Interior
+prediction points carry no data. They are bare coordinates at which the
+field is requested. There is no volume mesh, no initial state and nothing
+to advance in time. External aerodynamics is the benchmark instance: one
+closed body in a uniform far field, with $K = 1$, the far-field direction.
+@fig-problem-schematic draws the operator on the running example of this
+book.
 
 ```{python}
 #| label: fig-problem-schematic
 #| fig-cap: >
-#|   The mapping this book studies, on the running example (ideal flow
+#|   The operator this book studies, on the running example (ideal flow
 #|   around a lifting Joukowski airfoil at 6° incidence, exact closed form).
-#|   Left, the input: boundary cells with their outward normals (gray) and
-#|   measures, plus the one global vector input this instance has, the unit
-#|   far-field direction. Right, the output: the surface pressure
+#|   Left, the input: 60 boundary cells with their outward normals (gray)
+#|   and measures, plus the one global vector input this instance has, the
+#|   unit far-field direction. Right, the output: the surface pressure
 #|   coefficient along the boundary and the interior pressure field in the
-#|   fluid outside the airfoil, requested at bare query points (black dots).
-#|   How to read this: the figure shows what enters and what is scored; it
-#|   does not show any model's prediction, and the industrial datasets are
-#|   three-dimensional, turbulent and separated, where no closed form exists.
-#| code-fold: true
+#|   fluid outside the airfoil, requested at bare prediction points (black
+#|   dots). How to read this: the figure shows what enters and what is
+#|   scored; it shows no model's prediction, and the industrial datasets
+#|   are three-dimensional, turbulent and separated, where no closed form
+#|   exists.
 Jk = joukowski(alpha_deg=6.0, n_cells=60)
 xy, mid, nrm, cp_s, alpha = Jk["xy"], Jk["mid"], Jk["nrm"], Jk["cp_s"], Jk["alpha"]
 # Interior field on a polar grid in the circle plane, mapped forward.
@@ -102,7 +122,7 @@ axl.text(-2.4, 1.55, r"global vector input: unit far-field direction $\hat g_1$"
 axl.text(0.5, -0.08, "boundary cells: position $x_i$, normal $n_i$, measure $w_i$", color=INK2, fontsize=8.5,
          ha="center", transform=axl.transAxes)
 axl.set_title("input")
-lim = 1.6; norm = Normalize(-lim, 1.0)
+lim = 1.6; norm = TwoSlopeNorm(vcenter=0.0, vmin=-lim, vmax=1.0)
 axr.pcolormesh(z_g.real, z_g.imag, np.clip(cp_g, -lim, 1.0), cmap=DIVERGING, norm=norm, shading="gouraud",
                alpha=0.85, rasterized=True)
 segs = np.stack([xy[:-1], xy[1:]], axis=1)
@@ -112,156 +132,259 @@ rng = np.random.default_rng(3)
 rq = 1.0 + 1.6 * rng.random(70) ** 0.8; tq = 2 * np.pi * rng.random(70)
 zq = c + a * rq * np.exp(1j * tq); zq = zq + 1 / zq
 axr.plot(zq.real, zq.imag, ".", color=INK, ms=4, zorder=5)
-axr.text(0.5, -0.08, "surface field on the boundary;\ninterior field at bare query points", color=INK2,
+axr.text(0.5, -0.08, "surface field on the boundary;\ninterior field at bare prediction points", color=INK2,
          fontsize=8.5, ha="center", va="top", transform=axr.transAxes)
 axr.set_title("output")
 sm = plt.cm.ScalarMappable(cmap=DIVERGING, norm=norm)
 cb = fig.colorbar(sm, ax=axr, fraction=0.035, pad=0.02)
 cb.set_label("pressure coefficient $C_p$ [–]", fontsize=9); cb.ax.tick_params(labelsize=8)
-fig.text(0.49, 0.52, r"$\longmapsto$", fontsize=22, ha="center", va="center", color=INK)
 fig.tight_layout(w_pad=3.0)
+xg = axr.get_position().x0 - 0.045
+fig.text(xg, 0.5, r"$\mathcal{G}$", fontsize=15, ha="center", va="bottom", color=INK)
+fig.text(xg, 0.5, r"$\longmapsto$", fontsize=20, ha="center", va="top", color=INK)
 plt.show()
 ```
 
-**The surface task and the interior task are the same problem with the
-prediction points placed differently.** The boundary-to-field map of
-@fig-problem-schematic takes the boundary and the global conditions and
-returns the field at whatever points are requested. When the requested
-points are the boundary cells themselves, the output is the surface field,
-pressure and wall shear on the body: that is the *surface task*, and it is
-the boundary-to-field problem with the prediction points on the boundary.
-When the requested points lie in the volume the boundary bounds, the
-output is the interior field: that is the *interior task*. One model, one
-forward pass; only the prediction points differ, and a model built for the
-problem must accept either set (@sec-arch-modes). The book names the two
-tasks separately on every dataset that carries both, because they are
-scored on different instruments, not because they are different problems.
+**The surface task and the interior task are one operator with the
+prediction points placed differently.** When the requested points are the
+boundary cells themselves, the output is the surface field: that is the
+*surface task*. When they lie in the domain, the output is the interior
+field: that is the *interior task*. A model built for the operator accepts
+either set in the same forward pass (@sec-arch-modes). The book names the
+two tasks separately on the datasets that carry both because they are
+scored on different point sets, not because they are different problems.
 
-**Why steady, boundary-driven problems.** The admitted class is steady,
-well-posed, free of interior sources, and governed by the same equations
-everywhere in the domain. For such problems the boundary data and the
-global conditions determine the whole field, so a surrogate that consumes
-only the boundary throws nothing away: the boundary *is* the problem. The
-industrial targets are time-averaged turbulent flows around vehicles,
-wings and airfoils. Their governing equations are not given to the model.
-They are not even perfectly knowable, because the turbulence closure is an
-empirical fit. Every claim about an architecture is therefore a measurement
-against CFD labels, never against a closed form.
+### The boundary determines the field {#sec-problem-green}
 
-::: {.callout-note collapse="true" title="What potential theory says a correct boundary-to-field map must respect"}
-For a harmonic field $u$ in a domain $\Omega$ with boundary $\Gamma$,
-Green's third identity represents the interior value as a boundary integral,
+**For a steady, linear, homogeneous problem, the field at any interior
+point is an integral over the boundary of the boundary values against a
+known kernel. Every boundary cell contributes to every point, each in
+proportion to its measure.** This is the intuition behind the whole book,
+and the airfoil makes it exact. The flow outside the airfoil is
+irrotational and incompressible, so its complex velocity
+$W(z) = u_1 - i u_2$ is analytic in the fluid and tends to the far-field
+value $W_\infty$ at infinity. Cauchy's integral formula then expresses
+$W$ anywhere in the fluid through its values on the airfoil alone:
+
+$$
+W(z) = W_\infty - \frac{1}{2\pi i}\oint_\Gamma \frac{W(\zeta) - W_\infty}{\zeta - z}\, d\zeta
+\;\approx\; W_\infty - \frac{1}{2\pi i}\sum_{j=1}^{N} \frac{W_j - W_\infty}{\zeta_j - z}\, \Delta\zeta_j ,
+$$ {#eq-cauchy}
+
+with $\Gamma$ traversed counterclockwise, $\zeta_j$ the midpoint of cell
+$j$, $W_j$ the surface velocity there, and $\Delta\zeta_j$ the cell as a
+complex number: its length $w_j$ times its unit tangent. The right-hand
+side is a quadrature rule over the boundary cells. @fig-problem-cauchy
+evaluates it with the 60 cells of @fig-problem-schematic and compares the
+result with the exact field.
+
+```{python}
+#| label: fig-problem-cauchy
+#| fig-cap: >
+#|   The boundary determines the field. Left: the interior pressure
+#|   coefficient rebuilt from the exact surface velocity at 60 boundary cells
+#|   alone, through the boundary sum of @eq-cauchy (midpoint rule, one term
+#|   per cell, weighted by the cell as a complex length). Right: the absolute
+#|   difference from the exact potential-flow field, on a logarithmic scale.
+#|   How to read this: away from the wall the 60-cell sum reproduces the
+#|   field to better than one part in a thousand; the error rises within
+#|   about one cell length of the wall, where the kernel 1/(ζ − z) is nearly
+#|   singular, and near the sharp trailing edge. The sum is a fixed formula,
+#|   not a learned model.
+#| fig-height: 3.9
+alpha_r = np.deg2rad(6.0); beta = -np.angle(1 - c)
+Gam = 4 * np.pi * a * np.sin(alpha_r + beta)
+def W_of_zeta(zeta):
+    dF = np.exp(-1j * alpha_r) - a**2 * np.exp(1j * alpha_r) / (zeta - c) ** 2 + 1j * Gam / (2 * np.pi * (zeta - c))
+    return dF / (1 - 1 / zeta**2)
+th_te = np.angle(1 - c)
+W_inf = np.exp(-1j * alpha_r)
+def cauchy(n, zq):
+    thv = th_te + 2 * np.pi * np.arange(n + 1) / n
+    zv = c + a * np.exp(1j * thv); zv = zv + 1 / zv
+    zm_c = c + a * np.exp(1j * (th_te + 2 * np.pi * (np.arange(n) + 0.5) / n)); zm = zm_c + 1 / zm_c
+    Wm = W_of_zeta(zm_c); dz = np.diff(zv)
+    out = np.empty(zq.shape, complex); flat = zq.ravel(); o = out.ravel()
+    for k in range(0, flat.size, 4000):
+        blk = flat[k:k + 4000]
+        o[k:k + 4000] = W_inf - np.sum((Wm - W_inf)[:, None] * dz[:, None] / (zm[:, None] - blk[None]), 0) / (2j * np.pi)
+    return out
+W_ex = W_of_zeta(zeta_g)
+cp_rec = 1 - np.abs(cauchy(60, z_g)) ** 2
+cp_ex = 1 - np.abs(W_ex) ** 2
+err = np.abs(cp_rec - cp_ex)
+fig, (axl, axr) = plt.subplots(1, 2, figsize=(9.4, 3.9))
+for ax in (axl, axr):
+    clean_axes(ax); ax.set_xlim(-2.6, 2.6); ax.set_ylim(-1.6, 1.8)
+    ax.plot(xy[:, 0], xy[:, 1], color=INK, lw=1.2, zorder=4)
+pc = axl.pcolormesh(z_g.real, z_g.imag, np.clip(cp_rec, -lim, 1.0), cmap=DIVERGING, norm=norm, shading="gouraud",
+                    rasterized=True)
+cb = fig.colorbar(pc, ax=axl, fraction=0.035, pad=0.02); cb.set_label("rebuilt $C_p$ [–]", fontsize=9)
+cb.ax.tick_params(labelsize=8)
+axl.set_title("field rebuilt from 60 boundary values")
+pe = axr.pcolormesh(z_g.real, z_g.imag, np.clip(err, 1e-6, 1), cmap=SEQUENTIAL, norm=LogNorm(1e-6, 1e-1),
+                    shading="gouraud", rasterized=True)
+cb = fig.colorbar(pe, ax=axr, fraction=0.035, pad=0.02); cb.set_label("|rebuilt − exact| in $C_p$ [–]", fontsize=9)
+cb.ax.tick_params(labelsize=8)
+axr.set_title("its error")
+fig.tight_layout(w_pad=2.0)
+plt.show()
+```
+
+```{python}
+#| label: para-cauchy-convergence
+#| output: asis
+rr = R_ >= 1.25               # points at least a quarter radius off the wall in the circle plane
+lines = []
+for n in (60, 240, 960):
+    e = np.abs((1 - np.abs(cauchy(n, z_g[rr])) ** 2) - cp_ex[rr])
+    m, ex = f"{e.max():.1e}".split("e")
+    lines.append(f"{n:,} cells, ${m} \\times 10^{{{int(ex)}}}$")
+print("Off the wall (circle-plane radius at least 1.25 times the airfoil's circle), the largest pressure-coefficient "
+      "error of the boundary sum falls with the cell count as the midpoint rule predicts, by about 16 for each fourfold refinement: " + "; ".join(lines)
+      + ". Computed from the closed-form solution on this page.")
+```
+
+The general statement is Green's representation. For a harmonic field $u$
+in a domain $\Omega$ with boundary $\Gamma$,
 
 $$
 u(x)=\int_{\Gamma}\Bigl[G(x,y)\,\partial_{n_y}u(y)-u(y)\,\partial_{n_y}G(x,y)\Bigr]\,dS_y ,
 $$ {#eq-green}
 
 with $G$ the free-space fundamental solution, $n_y$ the outward normal at
-the boundary point $y$ and $dS_y$ the boundary measure. The flows of
-interest are separated and turbulent, far from harmonic, so the identity is
-not a model. But it says what any correct map must respect, and three
-consequences shape the architectures compared in this book.
+the boundary point $y$ and $dS_y$ the boundary measure. @eq-cauchy is its
+two-dimensional form for analytic functions. The industrial flows of this
+book are separated, turbulent and far from harmonic, so no such kernel is
+known for them, and the representation is not a model. It is the
+intuition: the boundary data are the whole input. Three consequences shape
+every architecture the book compares.
 
-1. **All-to-all coupling.** The density of the representation depends on
-   the whole domain, not on $x - y$ and $n_y$ alone: every boundary patch
-   influences every interior point, with no cutoff radius that survives a
-   change of geometry.
-2. **Integrals against boundary measure.** Both terms weight each cell by
-   its area, so splitting one cell into two halves leaves the operator
-   unchanged. This is why every dataset hands the model cell areas alongside
-   positions and normals, and why ISLA's sums are quadrature rules
-   (@sec-isla-quadrature).
-3. **Exactly the shared symmetry, no more.** The map's symmetry is the
-   symmetry shared by the equations, their coefficients, the boundary data
-   and the nondimensional parameters. Homogeneity and constant coefficients
-   buy translation invariance only. Anisotropic diffusion is not isotropic,
-   and the screened Laplace equation $\Delta u - \kappa^2 u = 0$ is not scale
-   invariant. Consider incompressible Navier–Stokes at fixed Reynolds number
-   with a free-space far field and one distinguished global direction. That
-   operator commutes with rigid motions and reflections. Once lengths are
-   measured in a unit carried with the geometry, it also commutes with
-   positive scalings. The map can then depend on the geometry only through
-   the joint invariants of $\{x - y,\ n_y,\ \hat g_1\}$, which are
-   magnitudes and pairwise angles. Dimensionless scalars can modulate
-   everything freely, because a scalar breaks no symmetry. A ground plane, a
-   second inlet or a Reynolds number that varies with size removes the
-   corresponding symmetry. Each is therefore a property of a dataset rather
-   than of the equations.
+1. **All-to-all coupling.** The kernel has no cutoff radius. Every
+   boundary cell influences every interior point, and a model that only
+   lets nearby cells talk must recover the global coupling another way
+   (@sec-landscape-cost).
+2. **Integrals against boundary measure.** Each cell enters weighted by
+   its measure, so splitting one cell into two halves leaves the sum
+   unchanged. A model's sums over cells should therefore be quadrature
+   rules. This is why every dataset hands the model cell measures beside
+   positions and normals (@sec-isla-quadrature).
+3. **Exactly the shared symmetry, no more.** The kernel of a homogeneous,
+   isotropic problem depends on the geometry only through relative
+   positions, distances and angles. The operator then commutes with rigid
+   motions of the whole problem: rotate and translate the body, its data
+   and the global directions together, and the field rotates and
+   translates with them. Anisotropy, a ground plane or a second inlet
+   removes the corresponding part of the symmetry, and each is a property
+   of a dataset rather than of the equations (@sec-invariances).
 
-Which of these an architecture enforces by construction and which it learns
-from data is the subject of @sec-isla (ISLA) and @sec-baselines
-(GeoTransolver and Transolver). None of the three requires knowing the PDE.
+::: {.callout-note collapse="true" title="Optional: which symmetry a real dataset has"}
+The symmetry of the operator is the symmetry shared by the equations, their
+coefficients, the boundary data and the nondimensional parameters.
+Homogeneity and constant coefficients buy translation invariance only.
+Anisotropic diffusion is not isotropic, and the screened Laplace equation
+$\Delta u - \kappa^2 u = 0$ is not scale invariant. Incompressible
+Navier–Stokes at fixed Reynolds number with a free-space far field and one
+distinguished global direction commutes with rigid motions and
+reflections, and, once lengths are measured in a unit carried with the
+geometry, with positive scalings. The operator can then depend on the
+geometry only through the joint invariants of $\{x - y,\ n_y,\ \hat g_1\}$:
+magnitudes and pairwise angles. Dimensionless scalars can modulate
+everything freely, because a scalar breaks no symmetry. A Reynolds number
+that varies with the size of the body removes the scaling symmetry. None of
+this requires knowing the PDE, only which data the problem depends on.
 :::
 
-### What varies within a dataset {#sec-parametric}
+**The admitted class is steady, well-posed, free of interior sources and
+governed by the same equations everywhere in the domain.** For such
+problems the boundary data and the global conditions determine the whole
+field, so a surrogate that consumes only the boundary throws nothing away.
+The industrial targets are time-averaged turbulent flows around vehicles,
+wings and airfoils, and elastic and elastoplastic solids under load. Their
+governing equations are not given to the model. For the flows they are not
+even exactly knowable, because the turbulence closure is an empirical fit.
+Every claim about an architecture is therefore a measurement against solver
+labels, never against a closed form.
 
-**A dataset is a family of cases, and what the model must learn is fixed by
+## What varies within a dataset {#sec-parametric}
+
+**A dataset is a family of cases, and what a model must learn is set by
 which parts of the interface vary across the family.** When only the
-geometry varies, the global inputs are constants and the operator is
+geometry varies, the global inputs are constants, and the operator is
 learned as a function of shape alone. When a global direction varies, the
-model must represent how the field depends on it. When a global scalar
+model must represent how the field turns with it. When a global scalar
 varies, it must represent how the field depends on a parameter of the
-physics. The three benchmark datasets (@sec-datasets) span the three cases.
-On DrivAerML only the geometry varies, and every car sits in the same far
-field. On HiLiftAeroML each wing geometry is simulated across a range of
-far-field directions, from attached flow through stall, so $\hat g_1$
-changes from case to case. On AirfRANS the direction and the far-field
-speed both vary, and the speed enters as the one global scalar. Coordinates
-enter only in nondimensional form, scaled by the dataset's reference
-length, so learned weights never see units. No architecture is told how the
-field depends on any global input. Because HiLiftAeroML is a full
-geometry-by-direction grid, its axes of variation can each be held out
-separately (@sec-data-hilift-splits).
+physics. @tbl-parametric lists the datasets of the book by what varies.
+Coordinates enter in nondimensional form, scaled by each dataset's
+reference length, so no learned weight sees units. No architecture is told
+how the field depends on any global input.
 
-### What generalization means here
+| dataset | what varies across cases | global inputs | task |
+|:---|:---|:---|:---|
+| DrivAerML | car geometry only; one far-field condition | $K = 1$, $S = 0$ | surface and interior |
+| HiLiftAeroML | wing geometry and far-field direction | $K = 1$, $S = 0$ | surface |
+| AirfRANS | airfoil geometry, inlet direction and inlet speed | $K = 1$, $S = 1$ | interior |
+| SHIFT-SUV | body geometry, in two rear-end families | $K = 1$, $S = 0$ | surface |
+| PLAID Tensile2d | applied load and material parameters; the shape barely | $K = 0$, $S = 6$ | interior |
+| GINOT bracket lug | lug dimensions and applied pressure | $K = 0$, $S = 4$ | interior |
+| DeepJEB++ | bracket shape, load direction and load kind | $K = 1$, $S = 2$ | surface |
+
+: What varies across the cases of each dataset, and how the global
+conditions enter: $K$ unit directions and $S$ scalars. How to read this:
+the table says which inputs change from case to case, not how strongly the
+fields depend on them; the datasets, their sizes and splits are in
+@sec-baselines. {#tbl-parametric}
+
+## What generalization means here {#sec-problem-generalization}
 
 **A learned operator earns the name only if it behaves like an operator
-away from its training distribution, and "away" has several independent
-directions, each read by its own split or probe.** Six are named, one
-question per split, never two combined into one score:
+away from its training cases, and "away" has several independent
+directions.** Each direction is read by its own split or probe, one
+question per split, never two combined into one score.
 
-- **Data efficiency**: accuracy against the number of training cases on a
-  fixed validation set (@sec-data-efficiency).
-- **Regime extrapolation**: training on one flow regime (attached flow) and
-  testing on another (post-stall), on a sealed test set evaluated once
-  (@sec-limits-regime).
-- **Unseen geometry**: validation geometries that never appear in training
-  at any condition, as distinct from geometries seen at other conditions
-  (@sec-data-hilift-splits).
-- **Cross-family transfer**: zero-shot evaluation on a vehicle family
-  different from the training family. The dataset for it is
-  @sec-shift-suv, and the axis is unmeasured for ISLA
-  (@sec-limits-transfer).
-- **Pose**: the same cases presented in arbitrary rigid poses (@sec-pose).
-  The physics does not depend on where the body sits in the laboratory, so
-  the answer must not either.
-- **Discretization**: the same cases presented under a different sampling
-  draw at inference (@sec-sampling-laws), and, separately, a model trained
-  under a different sampling law and scored on the original draw
-  (@sec-training-law). The physics does not depend on how the surface was
-  sampled, so the answer must not either.
+- **Unseen cases of the same family.** Validation cases drawn from the
+  training distribution but never trained on. This is the in-distribution
+  standing of @sec-standing.
+- **Data efficiency.** Accuracy against the number of training cases on a
+  fixed validation set (@sec-capacity).
+- **Unseen geometry.** Validation geometries that appear in training at no
+  condition, as distinct from geometries seen at other conditions
+  (@sec-hilift).
+- **Regime extrapolation.** Training on one range of a global condition
+  (attached flow, a band of Reynolds numbers) and testing outside it
+  (@sec-airfrans, @sec-limits).
+- **Cross-family transfer.** Training on one family of bodies and testing
+  on another (@sec-shift-suv, @sec-aerozoo).
+- **Pose.** The same cases presented in arbitrary rigid poses. The physics
+  does not depend on where the body sits in the laboratory, so the answer
+  must not either (@sec-pose).
+- **Discretization.** The same cases presented under a different sampling
+  of the boundary at inference, and a model trained under one sampling law
+  and scored under another. The physics does not depend on how the surface
+  was meshed, so the answer must not either (@sec-sampling-laws).
 
 The last two are the invariances ISLA is built for. @sec-invariances
-defines them and their instruments.
+defines them and the instruments that read them.
 
 ## How we measure {#sec-part-eval}
 
-**Every number in the book is one of a small set of quantities defined
-here, each read on a stated instrument:** a relative field error, a
-force-coefficient error, a paired per-case statistic, a seed-disagreement
-statistic, a regime-extrapolation ratio, or an exact contract test.
+**Every number in the book is a relative field error, a ratio of two such
+errors, or the outcome of an exact test, each read on a stated
+instrument.** This section defines the error and the instrument. The last
+subsection says what an exact test is.
 
-### Field error, forces and paired statistics {#sec-metrics}
+### The area-weighted relative L2 error {#sec-metrics}
 
 **The metric is the area-weighted relative L2 error of a field over the
-sampled cells of one case, averaged over the validation cases, and it is
-read in float32.** It scores error *per unit surface area*, so a large,
-smooth cell of an open surface counts for more than the many small cells
-packed into a slot or a corner. A per-point root-mean-square over the same
-samples weights every cell equally and depends on where the mesher put its
-cells. @tbl-metric-illustration shows the difference on the airfoil. One
-prediction error is scored under two samplings of the same surface. It
-gives the same area-weighted number and two different per-point numbers.
+sampled cells of one case, averaged over the validation cases and computed
+in float32.** It scores error per unit of surface area. A large, smooth
+cell on an open surface counts for more than the many small cells a mesher
+packs into a slot or around a leading edge. A per-point root-mean-square
+over the same samples weights every cell equally, so it depends on where
+the mesher put its cells. @tbl-metric-illustration shows the difference on
+the airfoil. One prediction error is scored under two samplings of the same
+surface. It gives one area-weighted number and two different per-point
+numbers.
 
 ```{python}
 #| label: tbl-metric-illustration
@@ -287,12 +410,16 @@ print(": One prediction error, a smooth bump of amplitude 0.35 in the pressure c
       "with 60 cells each. The area-weighted relative L2 agrees between the samplings to quadrature error; "
       "the per-point relative L2 rises when the mesher places more cells where the error is. "
       "How to read this: the metric measures the field, not the mesh. It is a constructed illustration, not "
-      "a measurement of any model. {#tbl-metric-illustration}")
+      "a measurement of any model.")
 ```
 
-For one case with sampled cells $j = 1,\dots,N$, prediction $\hat f_j$,
-label $f_j$ and cell measures $w_j$ normalized to sum to one, the recipe
-computes
+The table is the whole argument. The per-point error is a quadrature of
+the squared error against the mesher's cell density, so it weighs the
+error most wherever the mesher happened to refine, whether or not the
+physics is hardest there. The area-weighted error is
+a quadrature against the surface measure, the same integral for every
+mesh. For one case with sampled cells $j = 1,\dots,N$, prediction
+$\hat f_j$, label $f_j$ and cell measures $w_j$ normalized to sum to one,
 
 $$
 \varepsilon \equiv \frac{\sqrt{\sum_j w_j\,\lVert\hat f_j-f_j\rVert^2}}
@@ -300,116 +427,108 @@ $$
 $$ {#eq-rel-l2}
 
 where $\lVert\cdot\rVert$ is the vector norm for vector fields (velocity,
-wall shear) and the absolute value for scalars. In the interior the weights
-are cell volumes. The fields enter as the training pipeline presents them,
-each shifted and scaled by dataset statistics. The denominator is therefore
-the norm of the standardized label, and absolute values are comparable only
-within one dataset and one pipeline. The quantity that carries across is
-the *ratio* between two models scored on the same cases. **Every
+wall shear), the Frobenius norm for tensors and the absolute value for
+scalars. In the interior the weights are cell volumes. The book's number
+for one model on one dataset is $\varepsilon$ averaged over the validation
+cases.
+
+**Absolute values are comparable only within one dataset; ratios carry
+across.** The fields enter as the training pipeline presents them, each
+shifted and scaled by dataset statistics, so the denominator is the norm
+of the standardized label. The quantity that transfers from one dataset to
+another is the ratio between two models scored on the same cases. **Every
 cross-architecture ratio in the book is the named baseline's error divided
-by ISLA's error on the same cases, so a ratio above one favors ISLA.**
-This convention is stated here once and not restated per table.
+by ISLA's error on the same cases, so a ratio above one favors ISLA.** The
+convention is stated here once. The three architectures are compared at
+their reference configurations: `{python} S.CONFIG["ISLA"]`,
+`{python} S.CONFIG["GeoTransolver"]` and `{python} S.CONFIG["Transolver"]`
+(@sec-baselines).
 
 **The reporting instrument is float32 inference on the final-epoch
-checkpoint.** Training runs in bfloat16 (@sec-protocol). Scoring in
-bfloat16 adds an architecture-dependent offset of several percent to the
-mean error. The offset is larger for GeoTransolver and Transolver than for
-ISLA, so a bfloat16 comparison flatters ISLA. Every bfloat16 number in the
-book is labeled as such (@sec-protocol).
+checkpoint.** Training runs in bfloat16, a 16-bit floating-point format
+with an 8-bit exponent and an 8-bit significand, 7 bits of it stored
+(@sec-protocol). Scoring the same checkpoints in bfloat16 instead of
+float32 moves the mean error by up to
+`{python} f"{BF['max_mean']:.1%}"` and one case's error by up to
+`{python} f"{BF['max_case']:.0%}"`, by amounts that differ between
+architectures (`{python} BF['n']` HiLiftAeroML checkpoints of the three
+architectures, 35 training wings, 180 validation cases; the median shift
+of the mean is `{python} BF['by']`; results/fp32_reeval/fp32_shift_35_2026-09-09.json).
+That would bias every comparison, so the book scores in float32.
 
 **A field error on the sampled cells is not a statement about an
-integrated load.** Every model is scored on the same cells, so the field
-comparison is fair; the integral of a signed field over a sample is not,
-because drag and lift are integrals with heavy cancellation. On the
-DrivAerML Surface task, with ISLA at 384 wide, 12 layers, 256 slices,
-5e-4 and GeoTransolver-512 scored at the reporting protocol:
+integrated load.** Every model is scored on the same cells, so a field
+comparison is fair. A drag or lift coefficient is an integral of a signed
+field with heavy cancellation, and the sample alone already misses it. On
+the DrivAerML Surface task, integrating the solver's own labels:
 
 ```{python}
 #| label: para-force-limit
 #| output: asis
-FR = J("forceref_2026-09-26.json")["summary"]
-sm = lambda m, c, k: FR["models"][m][c]["seed_mean"][k]
-print(f"- the 200,000-cell sample alone misses the full-surface drag by {100 * FR['sampling']['CD']['rel_l1_sampled_vs_full']:.1f}% "
-      f"and the lift by {100 * FR['sampling']['CL']['rel_l1_sampled_vs_full']:.0f}%;\n"
-      f"- against the sampled cells both architectures predict drag to within "
-      f"{100 * max(sm('ISLA', 'CD', 'rel_l1_vs_sampled'), sm('GeoTransolver-512', 'CD', 'rel_l1_vs_sampled')):.1f}%;\n"
-      f"- against the full surface their drag errors are {100 * sm('ISLA', 'CD', 'rel_l1_vs_full'):.2f}% (ISLA) and "
-      f"{100 * sm('GeoTransolver-512', 'CD', 'rel_l1_vs_full'):.2f}% (GeoTransolver-512).\n\n"
-      "A force claim therefore needs the full surface at inference or a stated sampling band. One dataset. "
-      "Data: results/forceref_2026-09-26.json.")
+FRJ = J("forceref_2026-09-26.json"); FR = FRJ["summary"]["sampling"]
+print(f"- the 200,000-cell sample misses the full-surface drag coefficient by "
+      f"{100 * FR['CD']['rel_l1_sampled_vs_full']:.1f}% and the lift coefficient by "
+      f"{100 * FR['CL']['rel_l1_sampled_vs_full']:.0f}% (relative L1 over the {len(FRJ['per_car'])} validation cars), "
+      f"before any model is involved.\n\n"
+      "A force claim therefore needs the full surface at inference, or a stated sampling band. "
+      "Data: results/forceref_2026-09-26.json (the sampling block, solver labels only).")
 ```
 
+::: {.callout-note collapse="true" title="Optional: what a value of the metric means, and the other statistics"}
 ```{python}
 #| label: para-metric-calibration
 #| output: asis
-# parameter-free reference predictors on the 180 shared HiLiftAeroML validation cases; the far-field-relative scale
 ref = J("hilift_reference_predictors_35_2026-09-06.json")["summary"]
-print(f"**What a relative L2 value means, calibrated on HiLiftAeroML.** On the far-field-relative pressure scale "
-      f"($p - p_\\infty$, so the error is normalized by the pressure variation over the surface rather than by its absolute level; "
-      f"geometric mean over the 180 shared validation cases; not the recipe metric), predicting the far-field pressure everywhere "
-      f"scores exactly {ref['const_p_inf_rel_l2_gmean']:.2f} by construction, the dataset-mean pressure {ref['const_dataset_mean_rel_l2_gmean']:.2f}, "
-      f"and each case's own mean pressure {ref['const_case_mean_rel_l2_gmean']:.2f}. A model knows something about a case only when it "
-      f"beats the last of these. The trained architectures on the recipe metric are in @sec-surface. "
-      f"Data: results/hilift_reference_predictors_35_2026-09-06.json (constants only).")
+print(f"**Calibration on HiLiftAeroML.** On the far-field-relative pressure scale "
+      f"($\\lVert\\hat p - p\\rVert / \\lVert p - p_\\infty\\rVert$, geometric mean over the 180 shared "
+      f"validation cases; a scale normalized by the pressure variation over the surface rather than by "
+      f"the standardized label, so not the book's metric), predicting the far-field pressure everywhere "
+      f"scores {ref['const_p_inf_rel_l2_gmean']:.2f} by construction, the dataset-mean pressure "
+      f"{ref['const_dataset_mean_rel_l2_gmean']:.2f}, and each case's own mean pressure "
+      f"{ref['const_case_mean_rel_l2_gmean']:.2f}. A model knows something about a case only when it "
+      f"beats the last of these. Per-case ratios between two models are the same on both scales, because "
+      f"the numerators are the same; case averages are not. "
+      f"Data: results/hilift_reference_predictors_35_2026-09-06.json (constant predictors, no model).")
 ```
 
-::: {.callout-note collapse="true" title="The other quantities: forces, paired statistics, seed disagreement, regime ratio"}
-**Force coefficients.** Inference integrates predicted pressure and wall
-shear into drag and lift coefficients per case (reference area one) and
-integrates the CFD labels on the *same* 200,000 sampled cells to form the
-reference. The reported error is the mean absolute coefficient error over
-the validation cases divided by the mean magnitude of the reference
-coefficient, averaged over seeds. It is an error against the sampled-cell
-label integral, not the full-surface force: the shared quadrature cancels
-the sampling error common to prediction and label.
-
-**Paired per-case statistics.** Because every architecture is scored on the
-same 180 HiLiftAeroML cases (or 48 DrivAerML cars), each case yields one
-paired comparison of the architectures' seed-mean errors. Three statistics
-are reported. The first is the number of cases on which ISLA has the lower
-seed-mean error, with the exact two-sided sign test. The second is the
-stricter count of cases on which ISLA wins on every seed. The third is the
-median and the 10th to 90th percentile of the per-case error ratio.
+**Paired per-case statistics.** Every architecture is scored on the same
+validation cases, so each case yields one paired comparison of two
+architectures' seed-mean errors. A chapter that reports one gives the
+number of cases on which ISLA has the lower error with the exact two-sided
+sign test, the stricter count of cases on which ISLA is lower on every
+seed, or the median and 10th to 90th percentile of the per-case ratio.
 
 **Seed disagreement.** With two independently seeded models of one
-architecture, the per-case relative L2 of one seed's prediction against the
-other's is the cheapest uncertainty estimate available. Its Spearman rank
-correlation with the per-case error against the truth measures whether the
-model knows where it is wrong (@sec-data-efficiency).
+architecture, the per-case relative L2 of one seed's prediction against
+the other's is the cheapest uncertainty estimate available. Its rank
+correlation with the per-case error against the labels says whether the
+model knows where it is wrong.
 
-**Regime-extrapolation ratio.** On the sealed angle-of-attack and stall
-splits the readout is $d \equiv \varepsilon_{\text{test}} /
-\varepsilon_{\text{val}}$, the out-of-regime error divided by the same
-model's in-regime validation error. It is always reported beside the
-absolute test error, because a smaller $d$ can also come from a higher
-in-regime floor (@sec-limits-regime).
-
-**The far-field-relative scale** ($p - p_\infty$) of the calibration
-paragraph above and of the seed-disagreement analysis is $\lVert\hat p -
-p\rVert / \lVert p - p_\infty\rVert$ with the geometric mean over cases.
-Numbers on the two scales are not interchangeable. Per-case ratios between
-two models coincide on both, because the numerators are the same.
-Case-averaged values do not.
+**Regime-extrapolation ratio.** On a split that holds out a range of a
+global condition, the readout is $d \equiv \varepsilon_{\text{test}} /
+\varepsilon_{\text{val}}$, the out-of-range error divided by the same
+model's in-range error. It is always reported beside the absolute test
+error, because a smaller $d$ can also come from a higher in-range error.
 :::
 
 ### Contracts are exact tests, not metrics {#sec-fidelity-columns}
 
 **A structural property an architecture claims is asserted to roundoff in
-float64 as a unit test, never averaged into a score.** A contract is a
+float64 as a unit test, never averaged into a score.** A *contract* is a
 statement such as "a rigidly moved input produces the rigidly moved
-output". It either holds to roundoff on random weights and a random point
-cloud or it is not claimed. It is therefore a property of the code rather
-than of any trained checkpoint. That is what makes it worth more than a
-small measured degradation: it holds for every input, including the ones no
-validation set contains. What the float64 test certifies is the algebraic
-construction. The residual on the trained GPU path is a separate measured
-quantity, small in float32 and several percent in bfloat16
-(@sec-isla-contracts). The contracts ISLA holds, and the tests that
-verify each, are tabulated in @sec-isla-contracts.
+output". It holds to roundoff on random weights and a random point cloud,
+or it is not claimed. It is therefore a property of the code rather than of
+any trained checkpoint, and that is what makes it worth more than a small
+measured degradation: it holds for every input, including the ones no
+validation set contains. The float64 test certifies the algebra of the
+construction. The residual on the trained GPU path, in float32 or
+bfloat16, is a separate measured quantity (@sec-isla-contracts).
 
-A property that is *not* enforced by construction, GeoTransolver's pose
-behavior for instance, is measured as an accuracy degradation under
-transformed inputs and reported as a number (@sec-pose, @sec-pose-contract),
-never as a pass. The same distinction runs through @sec-invariances: of the
-two invariances ISLA is built for, one is a contract and the other an
-acceptance criterion read from a convergence measurement.
+A property that is not enforced by construction, such as the pose
+behavior of GeoTransolver and Transolver, is measured as a change in error
+under transformed inputs and reported as a number (@sec-pose), never as a
+pass. The same distinction runs through @sec-invariances. Of the two
+invariances ISLA is built for, rigid-motion equivariance is a contract,
+tested exactly, and discretization consistency is an acceptance criterion,
+read from a convergence measurement, because a finite sample is only ever
+a quadrature of the integral it stands for.

@@ -1,0 +1,50 @@
+{
+ "lug": {
+  "sample_id": "00633_lug_0633_lug_0633",
+  "source": {
+   "lug_isla/native": {
+    "row": 12,
+    "run_id": "a2r_lug_isla_seed42",
+    "dataset": "ginot_lug_volume",
+    "model": "isla_lug",
+    "cells": 200000,
+    "lhr_dump_job": 271987,
+    "dump": "$T/book_figs_2026-10-18/dump/lug_isla/native/ (copy: fig/dump/lug_isla/native/)"
+   },
+   "lug_gt/native": {
+    "row": 13,
+    "run_id": "cl_r_lug_gt_seed42",
+    "dataset": "ginot_lug_volume",
+    "model": "geotransolver_lug",
+    "cells": 200000,
+    "lhr_dump_job": 275252,
+    "dump": "$T/book_figs_2026-10-18/dump/lug_gt/native/ (copy: fig/dump/lug_gt/native/)"
+   },
+   "lug_t/native": {
+    "row": 14,
+    "run_id": "cl_r_lug_t_seed42",
+    "dataset": "ginot_lug_volume",
+    "model": "transolver_lug",
+    "cells": 200000,
+    "lhr_dump_job": 275252,
+    "dump": "$T/book_figs_2026-10-18/dump/lug_t/native/ (copy: fig/dump/lug_t/native/)"
+   }
+  },
+  "n_points_scored": 12720,
+  "n_points_top_face": 1060,
+  "units": "MPa (von_mises = 150.2 + 92.4 x the dump's normalized value)",
+  "params": {
+   "hole_radius_m": 0.01070511806756258,
+   "length_m": 0.10665353387594223,
+   "thickness_m": 0.02736596018075943,
+   "pressure_mpa": 75.74364471435547
+  },
+  "per_sample_rel_l2": {
+   "von_mises_l2": {
+    "ISLA": 0.0013671362539753318,
+    "GeoTransolver": 0.0017285748617723584,
+    "Transolver": 0.0019168148282915354
+   }
+  }
+ }
+}

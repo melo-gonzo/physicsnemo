@@ -1,0 +1,617 @@
+# ISLA against the literature {#sec-isla-vs-geotransolver}
+
+*Before this appendix:* @sec-landscape, for the families of neural PDE
+surrogates and the terms used here, and @sec-isla, for ISLA's ideas.
+
+**ISLA draws on the best parts of GLOBE and Transolver: from GLOBE the
+boundary as the input, exact symmetry by construction, measure-weighted
+sums and dimensionless geometry; from Transolver slice attention. What is
+new in it is that combination and a short list of specific constructions
+that make it work, each with a closest prior work that does part of it.** This
+appendix states each idea against that prior work: what ISLA does, what the
+prior work does, what is new, the evidence in this book, and the caveat. It
+ends with the contributions that matter most, ideas from the literature
+worth trying, a table of published numbers for orientation, and the
+bibliography of the whole book. Ratios are baseline ÷ ISLA, above one
+favoring ISLA, and the metric is the area-weighted relative L2 in float32
+(@sec-metrics) under the reporting protocol (@sec-protocol).
+
+```{python}
+#| label: setup-literature
+#| include: false
+import sys; sys.path.insert(0, ".")
+import standing as S
+```
+
+## What each is {#sec-vs-what}
+
+**GeoTransolver and ISLA share the slice mechanism and differ in what the
+network may see.** Transolver (Wu et al., 2024; @sec-vs-bibliography)
+routes every point softly into slices with a softmax over slices, forms
+each slice state as a count-weighted mean of its points, attends among the
+slices and reads the result back (@sec-landscape-cost). GeoTransolver
+(Adams et al., 2025) adds a cross-attention in every block to a shared
+embedding of the geometry and the global parameters, built once from
+multi-scale ball queries. Both read point coordinates in a laboratory frame
+and the problem's global vector as a feature, and both learn pose, scale
+and the mesher's habits from data. Their reference configurations in this
+book are GeoTransolver at width 256 and Transolver at width 512 with 16
+layers; what each sees, and the protocol, are in @sec-baselines.
+
+**ISLA** (width 512, 12 layers, 512 slices) combines the slice mechanism
+with the principles of GLOBE (Sharpe, 2025), a boundary-integral surrogate
+whose field is a sum of learned kernels from the boundary faces to the
+target (@sec-landscape-globe): the boundary as the input, the rigid-motion
+symmetry built into the architecture, sums over the boundary weighted by
+the cells' measure, and dimensionless geometry (@sec-isla). No coordinate
+reaches a learned map. Every sum over the boundary is a measure-weighted quadrature
+rule. Position is stated only as invariants of a token against the slices'
+own anchors, in a length unit computed from the sample. Vector and tensor
+outputs are rebuilt at the end from a basis that rotates with the body. The
+slice sublayer reads the normalized state. The forward pass with every
+tensor shape is @sec-architecture, and the contracts it holds to roundoff
+are @sec-isla-contracts.
+
+## The standing in one sentence {#sec-vs-standing}
+
+**In distribution, ISLA leads on some datasets and fields and trails on
+others. Rotated and translated, or resampled, its error barely moves except
+on the two solid meshes whose nearest boundary samples tie, while the
+baselines' errors grow by factors.**
+
+```{python}
+#| label: para-vs-standing
+#| output: asis
+keys = S.available()
+cells = []          # (dataset, field label, baseline, verdict)
+for k in keys:
+    s = S.Standing(k)
+    for f in s.ds.headline:
+        for b in S.BASELINES:
+            if s.has(b):
+                cells.append((s.ds.name, s.fields[f], b, s.verdict(b, f)))
+unfair = [S.DATASETS[k].name for k in keys if not S.DATASETS[k].fair_drive]
+cells = [c for c in cells if c[3] != "is not compared with"]
+n = len(cells)
+lead = [c for c in cells if c[3] == "leads"]
+trail = [c for c in cells if c[3] == "trails"]
+level = len([c for c in cells if c[3] == "is level with"])
+assert len(lead) + len(trail) + level == n
+def group(cs):
+    by = {}
+    for ds, fl, b, _ in cs:
+        by.setdefault(ds, []).append(f"{fl} against {b}")
+    return "; ".join(f"{ds} ({', '.join(v)})" for ds, v in by.items())
+posed_isla, posed_base, bent = [], [], []
+for k in keys:
+    s = S.Standing(k)
+    for f in s.ds.headline:
+        r = s.shift("ISLA", f, "posed")
+        (bent if abs(r - 1) > 0.02 else posed_isla).append((s.ds.name, s.fields[f], r))
+        posed_base += [s.shift(b, f, "posed") for b in S.BASELINES if s.has(b)]
+bent_ds = {}
+for ds, fl, r in bent:
+    bent_ds[ds] = max(bent_ds.get(ds, 1.0), r)
+print(f"At the reference configurations on the native mesh, over {len(keys) - len(unfair)} datasets and {n} comparisons "
+      f"(each headline field against each baseline, by the seed rule of @sec-fair-comparison), ISLA leads in {len(lead)}"
+      + (f" ({nl} of them on the lug, where only ISLA is given the boundary-condition labels)" if (nl := sum("lug" in c[0] for c in lead)) else "")
+      + f", "
+      f"is level in {level} and trails in {len(trail)}. It trails on: {group(trail)}. "
+      + (f"{' and '.join(unfair)} are not counted: their baselines read the freestream as a raw physical vector "
+         "(@tbl-model-inputs), so no verdict is drawn there. " if unfair else "") +
+      f"Rotated and translated, ISLA's error moves by at most "
+      f"{100 * max(abs(r - 1) for *_, r in posed_isla):.1f}% on every headline field except on "
+      + " and ".join(f"{ds} (up to ×{r:.2f})" for ds, r in bent_ds.items())
+      + f", the two solid meshes where tied nearest samples move the prediction (@sec-nearest-ties); "
+      f"the baselines' errors grow by factors of {min(posed_base):.1f} to {max(posed_base):.0f}.")
+notes = [S.DATASETS[k] for k in keys if not S.DATASETS[k].reference]
+if notes:
+    print("\n\n" + " ".join(f"On {d.name}, ISLA's checkpoints are of the raw-read variant: its slice pooling "
+                             f"and broadcast read the raw stream." for d in notes))
+print("\n\nData: " + ", ".join(S.Standing(k).source for k in keys) + ". The standing row by row is @sec-standing.")
+```
+
+## Ideas, one at a time {#sec-vs-novel}
+
+**The ideas below run from new, in the sense a paper needs (no prior work
+found does it, and the book measures what it does), through adoptions
+applied in a new place, to engineering. Each says which it is.** Each is
+stated as what ISLA does, the closest prior work, what is new, the
+evidence, and the caveat. Every source is in @sec-vs-bibliography.
+
+### Measure-weighted slice routing, and discretization consistency as the acceptance criterion {#sec-vs-novel-measure}
+
+*What ISLA does.* The routing softmax over points adds the log cell
+measure as a bias, so every slice state is a quadrature estimate of a
+surface integral and inherits Horvitz–Thompson consistency under any
+sampling law (@sec-isla-quadrature). A change to the architecture is
+adopted only if the prediction converges to one field under refinement and
+to the same field under two sampling laws (@sec-principled-decisions).
+
+*Prior work.* Neural operators are defined by convergence under refinement
+(Kovachki et al., 2023), and the graph kernel network evaluates its kernel
+integral as a quadrature sum (Li et al., 2020). Cao (2021) reads attention
+as a kernel integral; Berner et al. (2026) state the general recipe of
+quadrature weights in the normalization and aggregation of attention, so
+that a layer has one limit under refinement. Inducing points and latent
+tokens decouple the discretization from the processor (Lee and Oh, 2024;
+Wang and Wang, 2024). M³ treats the biased empirical measure of a mesh as
+a training problem and rebalances the supervision (Mei et al., 2026). RIGNO
+and GAOT report robustness to unseen resolutions (Mousavi et al., 2025;
+Wen et al., 2025). GLOBE multiplies each face's kernel by the face's area,
+so its boundary sums are quadratures (Sharpe, 2025). Transolver and
+GeoTransolver weight each point once.
+
+*What is new.* The form: a log-measure bias inside the point softmax of
+slice routing, which turns a soft partition into a set of quadrature rules
+and changes nothing else in the layer. The instruments: a biased inference
+draw with exact inclusion weights and a training-law swap scored on an
+independent draw (@sec-sampling-laws), which make "discretization
+consistent" a measured readout rather than an asymptotic claim. And the
+finding, which follows.
+
+```{python}
+#| label: para-vs-area
+#| output: asis
+rows = []
+SURF = ("drivaerml_surface", "shift_suv")   # the compared surface standings with a uniform point cloud
+for k in SURF:
+    s = S.Standing(k)
+    sh = {a: [s.shift(a, f, "area") for f in s.ds.headline] for a in S.ARCHS}
+    rows.append((s.ds.name, sh))
+lo = min(min(v) for _, sh in rows for a, v in sh.items() if a != "ISLA")
+hi = max(max(v) for _, sh in rows for a, v in sh.items() if a != "ISLA")
+isla = max(abs(x - 1) for _, sh in rows for x in sh["ISLA"])
+print(f"**The finding.** On the two compared surface datasets whose uniform point cloud resamples the scored cells "
+      f"({', '.join(n for n, _ in rows)}), the two released slice transformers' errors on the uniform point cloud "
+      f"are {lo:.1f} to {hi:.1f} times their native-mesh errors on the headline fields, and ISLA's moves by at most "
+      f"{100 * isla:.1f}%. Data: " + ", ".join(S.Standing(k).source for k in SURF) + ".")
+```
+
+No benchmark had exposed this dependence, because every benchmark scores
+on the sampling it trains on.
+
+*Evidence.* The point-cloud column of every surface standing
+(@sec-standing); the sampling-law instruments of @sec-sampling-laws; the
+measure-weights row of the design ledger (@sec-principled-ledger). The
+property is portable: GeoTransolver and Transolver given ISLA's
+measure-weighted pooling and a Horvitz–Thompson-centered datapipe, an
+ablation that leaves the released baselines unmodified, are consistent under
+the biased draw too (@sec-robustness-density).
+
+*Caveat.* Measure-weighted boundary sums are adopted from GLOBE, and
+quadrature-weighted attention from the neural-operator literature; the routing form, the instruments and the
+factors are what is new. The interior task has one discretization-dependent
+input: an interior prediction point takes its wall distance and direction
+from the nearest sampled boundary token, and an exact full-resolution form
+is an open question (@sec-open-questions).
+
+### An origin-free frame with an integral length unit {#sec-vs-novel-frame}
+
+*What ISLA does.* No center is ever named, except by ISLA-DTT's cluster
+forest, which is built in a canonical frame of the boundary
+(@sec-arch-tree-read). Positions enter only as differences from the slices'
+own anchors, and the one length unit is the
+measure-weighted RMS pairwise distance of the boundary sample, a two-point
+integral that converges under refinement (@sec-isla-frame).
+
+*Prior work.* Translation invariance through relative positions is the
+standard construction of equivariant message passing. EGNN builds its
+messages from relative squared distances and updates positions by weighted
+sums of relative vectors (Satorras et al., 2021); MeshGraphNets encode
+relative positions on mesh edges (Pfaff et al., 2021); message-passing PDE
+solvers carry relative positions in their messages (Brandstetter et al.,
+2022). All of them take differences between *neighbors* on a graph. GLOBE
+states every position relative to a boundary face, in units of reference
+lengths it is given (Sharpe, 2025). Frame
+averaging (Puny et al., 2022) and learned canonicalization (Kaba et al.,
+2023) instead fix a frame from the input, which is what a canonical frame
+does for GeoTransolver in @sec-pose.
+
+*What is new.* The reference points are neither neighbors nor a centroid
+but the data-adaptive anchors of a global slice partition, so a transformer
+with no neighborhoods and no positional encoding is exactly
+translation-invariant. The length unit is chosen for its estimator
+properties: measure-weighted, center-free, and invisible to a rescale of the
+weights alone. Neither piece is deep; together they let a slice transformer
+be given no coordinate at all.
+
+*Evidence.* The contracts (@sec-isla-contracts); the pose column of every
+standing (@sec-standing); the length-unit row of the design ledger
+(@sec-principled-ledger).
+
+*Caveat.* A component of the architecture, argued by its contracts; not a
+result on its own.
+
+### A scalar trunk on invariants, and an equivariant output basis {#sec-vs-novel-invariants}
+
+*What ISLA does.* Every learned map sees only norms and dot products of
+the vectors a token has: its separation from an anchor, its normal, the
+anchor's normal, the global directions. Vectors and tensors are rebuilt
+once, at the output, as invariant coefficients times directions that move
+with the body (@sec-isla-relational, @sec-isla-heads).
+
+*Prior work.* "Scalarize, compute on invariants, vectorize in a local
+frame" is the ClofNet construction (Du et al., 2022), and in spirit
+GemNet's distance, angle and dihedral invariants (Gasteiger et al., 2021).
+PaiNN keeps a separate vector stream (Schütt et al., 2021). Vector Neurons
+lift every neuron to a 3-vector (Deng et al., 2021). Tensor field networks,
+SE(3)-Transformers, Equiformer and e3nn carry irreducible representations
+through every layer (Thomas et al., 2018; Fuchs et al., 2020; Liao and
+Smidt, 2023; Geiger and Smidt, 2022). GATr works in the projective geometric
+algebra (Brehmer et al., 2023), and AB-GATr brings it to the anchored
+architecture of AB-UPT (Rygiel et al., 2026). EqGINO makes a geometry-informed
+Fourier operator exactly equivariant to the discrete symmetries of its grid
+(Kim et al., 2026). GLOBE builds a translation-, rotation- and
+parity-equivariant surrogate from Green's-function-like kernels evaluated
+from boundary faces to targets, each on parity-even invariants of the
+face–target pair with vector outputs rebuilt on the pair's true vectors
+(Sharpe, 2025). Most of these pay for
+equivariance inside every layer.
+
+*What is new.* The choice to keep the entire trunk an ordinary scalar
+transformer and pay for equivariance once, at the edges, in an
+industrial-scale slice transformer, and the measurement of what that costs
+against two non-equivariant baselines on `{python} sum(S.DATASETS[k].fair_drive for k in S.available())` datasets (@sec-standing). The
+contrast in the literature is the price of the per-layer route: Rygiel et
+al. (2026) report AB-GATr at 2 to 11 times the training time of AB-UPT. A
+second element is small and sharp. Scalar heads on invariants are
+reflection-invariant, so a target that is one frame component of a tensor
+(a stress $\sigma_{12}$, a laboratory-axis displacement) is representable
+only as a view of a predicted tensor (@sec-isla-heads). A third is a rule:
+every input ISLA takes is a datum of the PDE problem, and a dataset's own
+axes are excluded even where they would buy accuracy (@sec-pose-prior).
+
+*Evidence.* The contracts; the pose columns of @sec-standing; the
+tensor-valued targets of PLAID Tensile2d (@sec-tensile2d); the pose-prior
+diagnostic (@sec-pose-prior).
+
+*Caveat.* Covariance itself is not new; its placement and its measured
+price are. The cost is reported as the in-distribution standing, which
+holds leads and deficits by dataset (@sec-vs-standing), not as an
+across-the-board parity.
+
+### Soft anchors and point-to-anchor invariants as the positional encoding {#sec-vs-novel-anchors}
+
+*What ISLA does.* Each slice forms, from its own routing weights, a mean
+position and a mean normal. Every token's position is then a handful of
+invariant scalars per anchor, which refine the routing and are pooled back
+into the token (@sec-isla-slices, @sec-isla-relational).
+
+*Prior work.* Soft assignment of many inputs to a few latent tokens is
+Transolver's slice (Wu et al., 2024), the Perceiver's latent array (Jaegle
+et al., 2021), the Set Transformer's inducing points (Lee et al., 2019),
+UPT's latent tokens (Alkin et al., 2024) and Slot Attention's slots, whose
+softmax runs over slots so that slots compete for inputs (Locatello et al.,
+2020). In all of these the latent token is a weighted mean of *features*,
+and input positions enter as features too. GeoTransolver cross-attends
+every block to a shared geometry embedding (Adams et al., 2025). Hu et al.
+(2026) argue that the value of physics attention lies in the slice and
+deslice operations rather than in the attention among slices.
+
+*What is new.* Anchors as geometric aggregates, a position and a normal,
+that move with the body, and a token's relation to that constellation as
+its only knowledge of where it is: a data-adaptive, equivariant,
+coordinate-free positional encoding. No prior work found forms slice
+positions and uses them this way. The trained partitions of
+@sec-arch-routing-trained are its picture.
+
+*Evidence.* The trained routing (@sec-arch-routing-trained); the
+relational-invariant ablations of @sec-isla-relational.
+
+*Caveat.* The anchors are formed from the geometry, so where the geometry
+barely varies between cases they barely move, and positional resolution is
+then only as fine as the partition. PLAID Tensile2d, one specimen family whose
+outline stays a tension specimen, is the dataset where that bound would bind, and
+GeoTransolver leads there on stress and displacement (@sec-tensile2d).
+Whether the bound is the cause is not measured.
+
+### Normalized slice reads {#sec-vs-novel-norm}
+
+*What ISLA does.* The slice sublayer's routing, its pooling into slice
+states and its broadcast back to the tokens all read the normalized state
+$\operatorname{LN}(h)$. The raw stream $h$ enters the block only through
+the residual identity and the MLP's LayerNorm. Each block is then a pre-LN
+block in the sense of @sec-landscape-block: its updates have a size set by
+its weights, and the stream grows by addition (@sec-isla-layer).
+
+*Prior work.* The pre-LN block normalizes the input of each sublayer and
+leaves the residual stream unnormalized (Xiong et al., 2020). The sandwich
+and peri-LN blocks also normalize each sublayer's output (Ding et al., 2021;
+Kim et al., 2025). QK-normalization normalizes queries and keys and bounds
+every attention score (Henry et al., 2020; Dehghani et al., 2023). The
+normalized transformer keeps every state on the unit sphere (Loshchilov et
+al., 2024). Transolver's blocks are pre-LN.
+
+*What is new.* Little in the principle, which is the pre-LN discipline. The
+contribution is its application to a sublayer with three reads of the
+state, two of them hidden inside a geometry-weighted pooling and broadcast,
+and the mechanism it removes: a sublayer that concatenates the raw state
+into a linear map multiplies the stream by a fixed factor per block, and
+twelve such blocks multiply it geometrically (@sec-isla-normalized-reads).
+
+*Evidence.* The raw-read ablation on AeroZoo, whose validation loss loses
+its minimum within the first 60 epochs while the normalized reads train
+through (@tbl-aerozoo-training); the reference-configuration standings
+(@sec-standing).
+
+*Caveat.* The normalized read is adopted, not invented. Its accuracy effect is measured
+against the raw-read variant, an ablation, and not against other
+normalization placements.
+
+### Cosine routing {#sec-vs-novel-cosine}
+
+*What ISLA does.* The routing logit is a fixed temperature times the
+cosine between the normalized token state and a prototype per slice,
+synthesized per sample from learned base prototypes. Every content logit
+is therefore bounded, so the content score cannot sharpen the routing
+without limit as the weights grow (@sec-isla-slices).
+
+*Prior work.* Scaled cosine attention in Swin Transformer V2 replaces the
+dot product to stabilize training at scale (Liu et al., 2022);
+QK-normalization bounds scores the same way (Henry et al., 2020).
+Transolver++ addresses the opposite failure of slice weights, their
+becoming uniform so that attention degenerates to average pooling, with a
+per-point adaptive temperature and a Gumbel-softmax (Luo et al., 2025).
+Load-balancing losses in sparse expert routing target the same family of
+failure (Fedus et al., 2022).
+
+*What is new.* Nothing in the mechanism; ISLA applies bounded logits to
+slice routing.
+
+*Evidence.* The routing design row (@sec-principled-ledger) and the
+trained routing (@sec-arch-routing-trained).
+
+*Caveat.* The bound is on the content score; the geometric refinement
+added to it is not bounded, and the bound does not by itself prevent
+routing that is too soft or too concentrated for the task.
+
+### Read-only prediction points with a tree-evaluated boundary read {#sec-vs-novel-tree}
+
+*What ISLA does.* ISLA-DTT (`query_independent=True`) makes interior
+prediction points passive readers: they carry no routing mass, so they
+never write into the slices, and after every block each one also reads
+the whole boundary through a learned kernel of relative geometry and an
+attention over cell states, weighted by cell measure and evaluated with a
+Barnes–Hut forest. A
+prediction is then a function of its point and the boundary alone, and it
+does not change with the other points requested (@sec-arch-modes).
+
+*Prior work.* DeepONet's trunk evaluates each query point independently
+(Lu et al., 2021). Perceiver IO, UPT and AB-UPT decode query points by
+cross-attention to a latent or anchor set (Jaegle et al., 2022; Alkin et
+al., 2024; Alkin et al., 2025). Boundary-integral learners represent the
+solution as a learned kernel from the boundary to the target: DeepGreen
+and BI-GreenNet learn Green's functions (Gin et al., 2021; Lin et al.,
+2022), BENO embeds boundary geometry and data in a Green's-function-motivated
+operator (Wang et al., 2024), and GLOBE evaluates such kernels from
+boundary faces to targets (Sharpe, 2025); its PhysicsNeMo code does so
+with the cluster tree that ISLA-DTT's forest is built from. The Barnes–Hut tree evaluates an
+$N$-body sum in $O(N \log N)$ (Barnes and Hut, 1986), and Erwin builds a
+hierarchical transformer on a ball tree (Zhdanov et al., 2025).
+
+*What is new.* The combination: a learned, measure-weighted boundary
+integral at every depth of a slice transformer, evaluated with a
+Barnes–Hut forest so that every prediction point reads every boundary
+cell, beside read-only access to the slices.
+
+*Evidence.* The interior chapters measure ISLA-DTT against the
+interacting form (@sec-drivaerml, @sec-airfrans); its step cost is in
+@sec-arch-tree-read.
+
+*Caveat.* Which interior form is the better default is an open question
+(@sec-open-questions); the read costs time and memory over the interacting
+form. The forest is built in a canonical frame of the boundary, so
+ISLA-DTT's pose invariance holds up to ties of that frame.
+
+### The general boundary interface {#sec-vs-novel-interface}
+
+*What ISLA does.* One class reads $K$ global unit directions, $S$ global
+scalars, per-cell boundary fields of declared rank (scalar, vector,
+second-order tensor) and interior prediction points, and predicts fields of
+any of those ranks. The same class trains on cars, wings, airfoils, a
+tensile specimen, a lug and a family of brackets (@sec-isla-inputs,
+@sec-arch-modes).
+
+*Prior work.* GNOT's heterogeneous normalized attention takes several
+input functions, geometries and parameters (Hao et al., 2023). BENO embeds
+boundary geometry and inhomogeneous boundary values (Wang et al., 2024).
+GINOT feeds loading conditions beside the surface point cloud and decodes
+queries by attention (Liu et al., 2025). Message-passing PDE solvers put
+boundary conditions and PDE parameters in their messages (Brandstetter et
+al., 2022). Mousavi et al. (2026) extend boundary data into the domain as a
+learned field so that any domain-to-domain operator can consume it.
+
+*What is new.* The typed contract: directions enter as unit vectors and
+magnitudes as scalars for every model, a component target is a view of a
+tensor output, every input is a datum of the PDE problem, and every channel
+keeps the covariance contracts under test.
+
+*Evidence.* The contract tests (@sec-isla-contracts); the structural
+datasets, whose loads and labels enter through this interface alone
+(@sec-tensile2d, @sec-lug, @sec-deepjeb).
+
+*Caveat.* Interface design, not a mechanism.
+
+### The fused geometry kernel {#sec-vs-novel-kernel}
+
+*What ISLA does.* The per-layer geometry region (anchors, relational
+invariants, routing refinement, pooling) runs in one Triton kernel per
+direction that never stores the $N \times M \times (\text{invariants})$
+array and recomputes it in the backward pass (@sec-architecture).
+
+*Prior work.* Transolver-3 tiles the slice computation and reorders its
+matrix products to reach meshes of over 160 million cells (Zhou et al.,
+2026). Transolver++ ships a parallel implementation for million-point
+inputs (Luo et al., 2025). Memory-efficient attention kernels never store
+the score array (Dao et al., 2022). Activation recomputation is standard.
+
+*What is new.* Nothing conceptually; it is what lets ISLA's per-slice
+geometry run at 200,000 cells per case (@sec-architecture).
+
+*Caveat.* Engineering.
+
+## Which contributions matter most {#sec-vs-ranked}
+
+**Ranked by how much is new and how much evidence stands behind it.**
+
+1. **Discretization consistency as a measured property, and the dependence
+   of the released slice transformers on the sampling law**
+   (@sec-vs-novel-measure). The instruments, the factors on two surface
+   datasets, and the one-term mechanism that removes the dependence.
+   Self-contained and reproducible.
+2. **Exact rigid-motion covariance in a slice transformer, paid for at the
+   edges** (@sec-vs-novel-frame, @sec-vs-novel-invariants,
+   @sec-vs-novel-anchors together): the anchor-relative invariant
+   construction, its contracts, and its cost measured as the
+   in-distribution standing on `{python} sum(S.DATASETS[k].fair_drive for k in S.available())` datasets, with the component clause of
+   the scalar heads as a corollary.
+3. **Read-only prediction points with a tree-evaluated boundary read**
+   (@sec-vs-novel-tree): a query-independent interior form whose evidence
+   sits in the interior chapters.
+4. **Normalized slice reads and cosine routing** (@sec-vs-novel-norm,
+   @sec-vs-novel-cosine): adoptions, worth a section on why a slice
+   sublayer must read the normalized state.
+5. **The general interface and the fused kernel** (@sec-vs-novel-interface,
+   @sec-vs-novel-kernel): engineering.
+
+## Ideas from the literature worth trying {#sec-vs-ideas}
+
+**The comparison turns up experiments worth running, each aimed at a named
+weakness.** None of them is run in this book; the open questions they bear
+on are in @sec-open-questions.
+
+- a per-token adaptive routing temperature, after Transolver++ (Luo et
+  al., 2025), as a control on the fixed temperature of cosine routing;
+- a measure-weighted local aggregation among interior prediction points,
+  after GeoTransolver's ball queries, DoMINO and GAOT (Ranade et al., 2025;
+  Wen et al., 2025), for the interior eddy-viscosity deficit against GeoTransolver on the DrivAerML Volume task;
+- reflection-odd invariants (a triple product of a token's normal, a
+  global direction and its separation from an anchor) for frame-component
+  targets, after GATr, whose multivector features are typed by grade
+  (Brehmer et al., 2023); GLOBE, like ISLA's trunk, stays
+  parity-equivariant through parity-even invariants and true vectors
+  alone (Sharpe, 2025);
+- a measure-weighted training loss, after M³ (Mei et al., 2026), for any
+  remaining dependence on the training sampling law;
+- inter-slice attention as a control, after Hu et al. (2026);
+- an externally run benchmark, CarBench on DrivAerNet++ (Elrefaie et al.,
+  2025), for a held-out confirmation outside this book's experiments;
+- the published GINOT numbers on the bracket lug (Liu et al., 2025),
+  re-scored on this book's split, to say whether ISLA's lead there is a lead
+  over the field or only over the two baselines.
+
+Two families are already in the class. Query-independent decoding, the
+AB-UPT, UPT and Perceiver IO route, is ISLA-DTT (@sec-vs-novel-tree).
+Canonicalization, the frame-averaging route, is measured on GeoTransolver
+in @sec-pose and is what the pose contract is compared against.
+
+## Published numbers for orientation {#sec-vs-published}
+
+**Published numbers on DrivAerML exist, and none of them is comparable with
+this book's or with each other's.** @tbl-vs-published gives them as the
+papers report them so a reader can place the magnitudes. Each paper uses
+its own split, its own number of points, its own error norm and its own
+normalization. This book's metric divides by the norm of the standardized
+label (@sec-metrics), which none of them does.
+
+| source | model | error measure | surface pressure | wall shear | volume pressure | volume velocity |
+|:---|:---|:---|---:|---:|---:|---:|
+| Alkin et al. (2025), Table 4 | AB-UPT | relative L2 [%], protocol A | 3.82 | – | – | 5.93 |
+| Alkin et al. (2025), Table 4 | Transolver | relative L2 [%], protocol A | 4.81 | – | – | 6.78 |
+| Alkin et al. (2025), Table 4 | UPT | relative L2 [%], protocol A | 7.44 | – | – | 8.74 |
+| Alkin et al. (2025), Table 4 | GINO | relative L2 [%], protocol A | 13.03 | – | – | 40.58 |
+| Adams et al. (2025), Table 2 | GeoTransolver, 20 layers, 29M parameters | relative L1 [%], protocol B | 2.86 | 4.9 | 3.09 | 4.02 |
+
+: Published DrivAerML errors, copied from the cited tables, for orientation
+only. Protocol A: a random split of 400 training, 34 validation and 50 test
+cases, scored over the full point cloud in passes of 16,000 surface and
+16,000 volume points. Protocol B: 48 test designs. How to read this: the
+two sources use different norms (relative L2 against relative L1), splits
+and point counts, and neither uses this book's standardized-label
+denominator, so no number here may be compared with the other source's
+rows or with any number in this book; the book's own comparisons are in
+@sec-standing. {#tbl-vs-published}
+
+## Bibliography {#sec-vs-bibliography}
+
+Each entry gives the authors, title and identifier of its arXiv record,
+and its venue as the arXiv record, Crossref, OpenAlex or Semantic Scholar
+lists it; work without an arXiv record is cited as Crossref or OpenAlex
+lists it. The year is that of the published version where one is named,
+and of the first arXiv version otherwise. An entry without a venue is an
+arXiv preprint. This list is the bibliography of the whole book.
+
+- Adams, C., Ranade, R., Cherukuri, R., Choudhry, S. (2025). *GeoTransolver: Learning Physics on Irregular Domains Using Multi-scale Geometry Aware Physics Attention Transformer.* arXiv:2512.20399.
+- Alkin, B., Bleeker, M., Kurle, R., Kronlachner, T., Sonnleitner, R., Dorfer, M., Brandstetter, J. (2025). *AB-UPT: Scaling Neural CFD Surrogates for High-Fidelity Automotive Aerodynamics Simulations via Anchored-Branched Universal Physics Transformers.* Transactions on Machine Learning Research (TMLR). arXiv:2502.09692.
+- Alkin, B., Fürst, A., Schmid, S., Gruber, L., Holzleitner, M., Brandstetter, J. (2024). *Universal Physics Transformers: A Framework For Efficiently Scaling Neural Operators.* NeurIPS 2024. arXiv:2402.12365.
+- Ba, J. L., Kiros, J. R., Hinton, G. E. (2016). *Layer Normalization.* arXiv:1607.06450.
+- Barnes, J., Hut, P. (1986). *A hierarchical O(N log N) force-calculation algorithm.* Nature 324, 446–449. doi:10.1038/324446a0.
+- Berner, J., Liu-Schiaffini, M., Kossaifi, J., Duruisseaux, V., Bonev, B., Azizzadenesheli, K., Anandkumar, A. (2026). *Principled Approaches for Extending Neural Architectures to Function Spaces for Operator Learning.* Nature Machine Intelligence 8. arXiv:2506.10973.
+- Brandstetter, J., Worrall, D., Welling, M. (2022). *Message Passing Neural PDE Solvers.* ICLR 2022. arXiv:2202.03376.
+- Brehmer, J., de Haan, P., Behrends, S., Cohen, T. (2023). *Geometric Algebra Transformer.* NeurIPS 2023. arXiv:2305.18415.
+- Cao, S. (2021). *Choose a Transformer: Fourier or Galerkin.* NeurIPS 2021. arXiv:2105.14995.
+- Chen, T., Chen, H. (1995). *Universal approximation to nonlinear operators by neural networks with arbitrary activation functions and its application to dynamical systems.* IEEE Transactions on Neural Networks 6(4), 911–917. doi:10.1109/72.392253.
+- Dao, T., Fu, D. Y., Ermon, S., Rudra, A., Ré, C. (2022). *FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness.* NeurIPS 2022. arXiv:2205.14135.
+- Dehghani, M., Djolonga, J., Mustafa, B., Padlewski, P., Heek, J., Gilmer, J., Steiner, A., et al. (2023). *Scaling Vision Transformers to 22 Billion Parameters.* ICML 2023. arXiv:2302.05442.
+- Deng, C., Litany, O., Duan, Y., Poulenard, A., Tagliasacchi, A., Guibas, L. (2021). *Vector Neurons: A General Framework for SO(3)-Equivariant Networks.* ICCV 2021. arXiv:2104.12229.
+- Ding, M., Yang, Z., Hong, W., Zheng, W., Zhou, C., Yin, D., Lin, J., et al. (2021). *CogView: Mastering Text-to-Image Generation via Transformers.* NeurIPS 2021. arXiv:2105.13290.
+- Du, W., Zhang, H., Du, Y., Meng, Q., Chen, W., Shao, B., Liu, T.-Y. (2022). *SE(3) Equivariant Graph Neural Networks with Complete Local Frames.* ICML 2022. arXiv:2110.14811.
+- Elrefaie, M., Shu, D., Klenk, M., Ahmed, F. (2025). *CarBench: A Comprehensive Benchmark for Neural Surrogates on High-Fidelity 3D Car Aerodynamics.* arXiv:2512.07847.
+- Fedus, W., Zoph, B., Shazeer, N. (2022). *Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity.* Journal of Machine Learning Research 23. arXiv:2101.03961.
+- Fuchs, F. B., Worrall, D. E., Fischer, V., Welling, M. (2020). *SE(3)-Transformers: 3D Roto-Translation Equivariant Attention Networks.* NeurIPS 2020. arXiv:2006.10503.
+- Gasteiger, J., Becker, F., Günnemann, S. (2021). *GemNet: Universal Directional Graph Neural Networks for Molecules.* NeurIPS 2021. arXiv:2106.08903.
+- Geiger, M., Smidt, T. (2022). *e3nn: Euclidean Neural Networks.* arXiv:2207.09453.
+- Gin, C. R., Shea, D. E., Brunton, S. L., Kutz, J. N. (2021). *DeepGreen: Deep Learning of Green's Functions for Nonlinear Boundary Value Problems.* Scientific Reports 11. arXiv:2101.07206.
+- Haber, E., Ruthotto, L. (2017). *Stable Architectures for Deep Neural Networks.* Inverse Problems 34(1). arXiv:1705.03341.
+- Hao, Z., Wang, Z., Su, H., Ying, C., Dong, Y., Liu, S., Cheng, Z., et al. (2023). *GNOT: A General Neural Operator Transformer for Operator Learning.* ICML 2023. arXiv:2302.14376.
+- He, K., Zhang, X., Ren, S., Sun, J. (2016). *Deep Residual Learning for Image Recognition.* IEEE Conference on Computer Vision and Pattern Recognition (CVPR) 2016. arXiv:1512.03385.
+- Hendrycks, D., Gimpel, K. (2016). *Gaussian Error Linear Units (GELUs).* arXiv:1606.08415.
+- Henry, A., Dachapally, P. R., Pawar, S., Chen, Y. (2020). *Query-Key Normalization for Transformers.* Findings of EMNLP 2020. arXiv:2010.04245.
+- Hu, W., Liu, S., Qiao, P., Sun, Z., Dou, Y. (2026). *Transolver is a Linear Transformer: Revisiting Physics-Attention through the Lens of Linear Attention.* AAAI 2026. arXiv:2511.06294.
+- Jaegle, A., Borgeaud, S., Alayrac, J.-B., Doersch, C., Ionescu, C., Ding, D., Koppula, S., et al. (2022). *Perceiver IO: A General Architecture for Structured Inputs & Outputs.* ICLR 2022. arXiv:2107.14795.
+- Jaegle, A., Gimeno, F., Brock, A., Zisserman, A., Vinyals, O., Carreira, J. (2021). *Perceiver: General Perception with Iterative Attention.* ICML 2021. arXiv:2103.03206.
+- Kaba, S.-O., Mondal, A. K., Zhang, Y., Bengio, Y., Ravanbakhsh, S. (2023). *Equivariance with Learned Canonicalization Functions.* ICML 2023. arXiv:2211.06489.
+- Kim, J., Lee, B., Park, C., Oh, Y., Kim, B., Yoo, T., Shin, S., et al. (2025). *Peri-LN: Revisiting Normalization Layer in the Transformer Architecture.* ICML 2025. arXiv:2502.02732.
+- Kim, S., Song, J., Shin, S., Cho, G., Kim, S., Park, C. (2026). *EqGINO: Equivariant Geometry-Informed Fourier Neural Operators for 3D PDEs.* ICML 2026. arXiv:2606.03260.
+- Kovachki, N., Li, Z., Liu, B., Azizzadenesheli, K., Bhattacharya, K., Stuart, A., Anandkumar, A. (2023). *Neural Operator: Learning Maps Between Function Spaces.* Journal of Machine Learning Research 24, article 89. arXiv:2108.08481.
+- Krishnapriyan, A. S., Gholami, A., Zhe, S., Kirby, R. M., Mahoney, M. W. (2021). *Characterizing possible failure modes in physics-informed neural networks.* NeurIPS 2021. arXiv:2109.01050.
+- Lee, J., Lee, Y., Kim, J., Kosiorek, A. R., Choi, S., Teh, Y. W. (2019). *Set Transformer: A Framework for Attention-based Permutation-Invariant Neural Networks.* ICML 2019. arXiv:1810.00825.
+- Lee, S., Oh, T. (2024). *Inducing Point Operator Transformer: A Flexible and Scalable Architecture for Solving PDEs.* AAAI 2024. arXiv:2312.10975.
+- Li, Z., Huang, D. Z., Liu, B., Anandkumar, A. (2023a). *Fourier Neural Operator with Learned Deformations for PDEs on General Geometries.* Journal of Machine Learning Research 24, article 388. arXiv:2207.05209.
+- Li, Z., Kovachki, N. B., Choy, C., Li, B., Kossaifi, J., Otta, S. P., Nabian, M. A., et al. (2023b). *Geometry-Informed Neural Operator for Large-Scale 3D PDEs.* NeurIPS 2023. arXiv:2309.00583.
+- Li, Z., Kovachki, N., Azizzadenesheli, K., Liu, B., Bhattacharya, K., Stuart, A., Anandkumar, A. (2020). *Neural Operator: Graph Kernel Network for Partial Differential Equations.* arXiv:2003.03485.
+- Li, Z., Kovachki, N., Azizzadenesheli, K., Liu, B., Bhattacharya, K., Stuart, A., Anandkumar, A. (2021). *Fourier Neural Operator for Parametric Partial Differential Equations.* ICLR 2021. arXiv:2010.08895.
+- Li, Z., Zheng, H., Kovachki, N., Jin, D., Chen, H., Liu, B., Azizzadenesheli, K., et al. (2024). *Physics-Informed Neural Operator for Learning Partial Differential Equations.* ACM/IMS Journal of Data Science. arXiv:2111.03794.
+- Liao, Y.-L., Smidt, T. (2023). *Equiformer: Equivariant Graph Attention Transformer for 3D Atomistic Graphs.* ICLR 2023. arXiv:2206.11990.
+- Lin, G., Chen, F., Hu, P., Chen, X., Chen, J., Wang, J., Shi, Z. (2022). *BI-GreenNet: Learning Green's functions by boundary integral network.* Communications in Mathematics and Statistics. arXiv:2204.13247.
+- Liu, Q., Zhong, W., Meidani, H., Abueidda, D., Koric, S., Geubelle, P. (2025). *Geometry-Informed Neural Operator Transformer.* Computer Methods in Applied Mechanics and Engineering. arXiv:2504.19452.
+- Liu, Z., Hu, H., Lin, Y., Yao, Z., Xie, Z., Wei, Y., Ning, J., et al. (2022). *Swin Transformer V2: Scaling Up Capacity and Resolution.* CVPR 2022. arXiv:2111.09883.
+- Locatello, F., Weissenborn, D., Unterthiner, T., Mahendran, A., Heigold, G., Uszkoreit, J., Dosovitskiy, A., et al. (2020). *Object-Centric Learning with Slot Attention.* NeurIPS 2020. arXiv:2006.15055.
+- Loshchilov, I., Hsieh, C.-P., Sun, S., Ginsburg, B. (2024). *nGPT: Normalized Transformer with Representation Learning on the Hypersphere.* International Conference on Learning Representations (venue as Semantic Scholar lists it). arXiv:2410.01131.
+- Lu, L., Jin, P., Pang, G., Zhang, Z., Karniadakis, G. E. (2021). *Learning nonlinear operators via DeepONet based on the universal approximation theorem of operators.* Nature Machine Intelligence 3, 218–229. doi:10.1038/s42256-021-00302-5. Preprint arXiv:1910.03193.
+- Luo, H., Wu, H., Zhou, H., Xing, L., Di, Y., Wang, J., Long, M. (2025). *Transolver++: An Accurate Neural Solver for PDEs on Million-Scale Geometries.* ICML 2025. arXiv:2502.02414.
+- Mei, Y., Song, X., Song, X., Takeishi, N. (2026). *M$^3$: Reframing Training Measures for Discretized Physical Simulations.* arXiv:2605.08843.
+- Mousavi, S., Mishra, S., De Lorenzis, L. (2026). *Imposing Boundary Conditions on Neural Operators via Learned Function Extensions.* arXiv:2602.04923.
+- Mousavi, S., Wen, S., Lingsch, L., Herde, M., Raonić, B., Mishra, S. (2025). *RIGNO: A Graph-based framework for robust and accurate operator learning for PDEs on arbitrary domains.* NeurIPS 2025. arXiv:2501.19205.
+- Nadaraya, E. A. (1964). *On estimating regression.* Theory of Probability and Its Applications 9(1), 141–142. doi:10.1137/1109020.
+- Pfaff, T., Fortunato, M., Sanchez-Gonzalez, A., Battaglia, P. W. (2021). *Learning Mesh-Based Simulation with Graph Networks.* ICLR 2021. arXiv:2010.03409.
+- Puny, O., Atzmon, M., Ben-Hamu, H., Misra, I., Grover, A., Smith, E. J., Lipman, Y. (2022). *Frame Averaging for Invariant and Equivariant Network Design.* ICLR 2022. arXiv:2110.03336.
+- Raissi, M., Perdikaris, P., Karniadakis, G. E. (2019). *Physics-informed neural networks: a deep learning framework for solving forward and inverse problems involving nonlinear partial differential equations.* Journal of Computational Physics 378, 686–707. doi:10.1016/j.jcp.2018.10.045.
+- Ranade, R., Nabian, M. A., Tangsali, K., Kamenev, A., Hennigh, O., Cherukuri, R., Choudhry, S. (2025). *DoMINO: A Decomposable Multi-scale Iterative Neural Operator for Modeling Large Scale Engineering Simulations.* arXiv:2501.13350.
+- Rygiel, P., Suk, J., Yeung, K. K., Brune, C., Wolterink, J. M. (2026). *When Does Equivariance Help? Canonical Alignment in Neural Fluid Surrogates.* arXiv:2605.18816.
+- Satorras, V. G., Hoogeboom, E., Welling, M. (2021). *E(n) Equivariant Graph Neural Networks.* ICML 2021. arXiv:2102.09844.
+- Schütt, K. T., Unke, O. T., Gastegger, M. (2021). *Equivariant message passing for the prediction of tensorial properties and molecular spectra.* ICML 2021. arXiv:2102.03150.
+- Sharpe, P. (2025). *GLOBE: Accurate and Generalizable PDE Surrogates using Domain-Inspired Architectures and Equivariances.* arXiv:2511.15856.
+- Thomas, N., Smidt, T., Kearnes, S., Yang, L., Li, L., Kohlhoff, K., Riley, P. (2018). *Tensor field networks: Rotation- and translation-equivariant neural networks for 3D point clouds.* arXiv:1802.08219.
+- Tsai, Y. H., Bai, S., Yamada, M., Morency, L.-P., Salakhutdinov, R. (2019). *Transformer Dissection: A Unified Understanding of Transformer's Attention via the Lens of Kernel.* EMNLP 2019. arXiv:1908.11775.
+- Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, L., et al. (2017). *Attention Is All You Need.* Advances in Neural Information Processing Systems (NeurIPS) 2017. arXiv:1706.03762.
+- Wang, H., Li, J., Dwivedi, A., Hara, K., Wu, T. (2024). *BENO: Boundary-embedded Neural Operators for Elliptic PDEs.* ICLR 2024. arXiv:2401.09323.
+- Wang, S., Teng, Y., Perdikaris, P. (2021). *Understanding and mitigating gradient flow pathologies in physics-informed neural networks.* SIAM Journal on Scientific Computing 43(5), A3055–A3081. doi:10.1137/20M1318043. Preprint arXiv:2001.04536.
+- Wang, T., Wang, C. (2024). *Latent Neural Operator for Solving Forward and Inverse PDE Problems.* NeurIPS 2024. arXiv:2406.03923.
+- Watson, G. S. (1964). *Smooth regression analysis.* Sankhyā, Series A 26, 359–372.
+- Wen, S., Kumbhat, A., Lingsch, L., Mousavi, S., Zhao, Y., Chandrashekar, P., Mishra, S. (2025). *Geometry Aware Operator Transformer as an Efficient and Accurate Neural Surrogate for PDEs on Arbitrary Domains.* NeurIPS 2025. arXiv:2505.18781.
+- Wu, H., Luo, H., Wang, H., Wang, J., Long, M. (2024). *Transolver: A Fast Transformer Solver for PDEs on General Geometries.* ICML 2024. arXiv:2402.02366.
+- Xiong, R., Yang, Y., He, D., Zheng, K., Zheng, S., Xing, C., Zhang, H., et al. (2020). *On Layer Normalization in the Transformer Architecture.* ICML 2020. arXiv:2002.04745.
+- Zhdanov, M., Welling, M., van de Meent, J.-W. (2025). *Erwin: A Tree-based Hierarchical Transformer for Large-scale Physical Systems.* ICML 2025. arXiv:2502.17019.
+- Zhou, H., Wu, H., Shangguan, H., Ma, Y., Weng, H., Wang, J., Long, M. (2026). *Transolver-3: Scaling Up Transformer Solvers to Industrial-Scale Geometries.* arXiv:2602.04940.

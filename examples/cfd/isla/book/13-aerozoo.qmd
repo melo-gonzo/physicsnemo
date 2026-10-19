@@ -1,0 +1,573 @@
+# AeroZoo {#sec-aerozoo}
+
+*Before this chapter:* the interior task, in which a model reads the boundary and predicts the field at points in the flow (@sec-interior-task); how ISLA turns boundary conditions into per-cell inputs (@sec-isla-inputs); the scoring protocol (@sec-protocol) and the seed rule (@sec-fair-comparison).
+
+```{python}
+#| label: setup-aerozoo
+#| include: false
+import json, statistics
+from pathlib import Path
+import sys; sys.path.insert(0, ".")
+from palette import *
+import standing as S
+from matplotlib.colors import TwoSlopeNorm
+from matplotlib.lines import Line2D
+RES = Path("..") / "results"
+AZ = RES / "campaigns_2026-10-09" / "aerozoo"
+# dataset metadata: the per-case labels of the release (bank, enclosure, profile, Reynolds number, stability population) and the split
+# sizes and per-lane cost recorded by the AeroZoo reduction
+LAB = json.load(open(AZ / "case_labels.json")); LAB_META = LAB.pop("_meta")
+RZ = json.load(open(AZ / "aerozoo_reduction.json")); SPLITS = RZ["splits"]
+mean = statistics.mean
+FIELDS = {"velocity_l2": "velocity", "pressure_l2": "pressure", "nut_l2": "eddy viscosity", "tke_l2": "turbulent kinetic energy",
+          "omega_l2": "specific dissipation rate"}
+# the standing slot: S.DATASETS["aerozoo"].artifact names results/char/<file>.json once it exists (schema of the other standing
+# artifacts, the `full` split under "arms" with protocol "native"; held-out splits under "splits": {split: {"arms": {...}}})
+AZD = S.DATASETS["aerozoo"]
+HAVE = bool(AZD.artifact) and (S.CHAR / AZD.artifact).exists()
+St = S.Standing("aerozoo") if HAVE else None
+# ---- AeroZoo figure helpers: the reduced arrays are in the stored (world) frame; ``frame`` (rows: inlet direction, in-plane
+# cross-flow axis, plane normal) about ``body_centroid`` projects them into the mid-span plane ----
+AZ_WALL = {0: ("inlet", "value"), 1: ("outlet", "flux"), 2: ("no-slip wall", "value"), 3: ("slip wall / symmetry plane", "free")}
+AZ_BODY = {0: ("body, no-slip band", "value"), 1: ("body, slip band", "free")}
+AZ_ENCLOSURE = {"external_box": "box", "external_opposed_hemisphere": "spherical cap on a symmetry plane",
+                "external_opposed_sphere": "sphere, inlet and outlet halves", "internal_duct": "duct"}
+AZ_SHORT = {"external_box": "box", "external_opposed_hemisphere": "spherical cap", "external_opposed_sphere": "sphere", "internal_duct": "duct"}
+AZ_PROFILE = {"opposed_hemisphere_symmetry": "", "opposed_hemispheres": ""}   # scenario names that only repeat the enclosure family
+SLIP_FACE = "#d9d8d0"   # the slip band on a solid body rendering
+def in_plane(p, frame, c):
+    """Plane-frame coordinates (x1 along the inlet flow, x2 across it in the plane, d normal to the plane) of world points."""
+    return (np.asarray(p, np.float64) - np.asarray(c, np.float64)) @ np.asarray(frame, np.float64).T
+def sized_scatter(ax, xy, size_m, c, span_m, k=1.5, smin=0.4, smax=80.0, **kw):
+    """Scatter cells as squares whose side follows the cell size, so a slice of a graded mesh reads as a filled field."""
+    pts_per_m = ax.get_position().width * ax.figure.get_figwidth() * 72 / span_m
+    s = np.clip((k * np.asarray(size_m) * pts_per_m) ** 2, smin, smax)
+    return ax.scatter(xy[:, 0], xy[:, 1], c=c, s=s, lw=0, marker="s", rasterized=True, **kw)
+def sci(x, digits=1):
+    """A number as the book prints a power of ten in prose and titles: 1.3e+03 -> 1.3×10³ (mathtext)."""
+    m, e = f"{x:.{digits}e}".split("e")
+    return f"${m} \\times 10^{{{int(e)}}}$"
+def cut(q, size, k=0.75):
+    """Rows of plane-frame points ``q`` whose cell the plane passes through (|d| within k cell sizes)."""
+    return np.abs(q[:, 2]) <= k * np.asarray(size)
+```
+
+```{python}
+#| label: para-aerozoo-lede
+#| output: asis
+n = LAB_META["n_cases"]; banks = [k for k in LAB_META["counts"]["bank"] if k != "None"]
+print(f"**AeroZoo is the book's generalization benchmark: {n:,} RANS solutions around bodies from {len(banks)} geometry banks in four enclosure "
+      "families across five decades of Reynolds number, each posed to the model as the boundary-value problem that produced it, with splits "
+      "that hold a whole family out of training.** It is the one dataset of the book on which the body, the enclosure, the boundary conditions, "
+      "the scale and the Reynolds number all vary at once, and the one whose held-out splits test generalization to a family no training case "
+      "belongs to. The chapter shows the problem and its diversity, what is measured and why each held-out split asks a different question, "
+      "how ISLA's reference configuration trains on it, the standing, and what the dataset does not say.")
+```
+
+## The problem: bodies from seven banks in four enclosures across five Reynolds decades {#sec-dataset-aerozoo}
+
+**Every AeroZoo case is a body in its own enclosure at its own size and Reynolds number, and the model sees only the boundaries and the values prescribed on them.** The release holds time-averaged solutions of the incompressible Reynolds-averaged Navier–Stokes equations with the transition SST closure. The body comes from one of seven geometry banks: procedural blobs, cars, streamlined bodies, airframes, two Blender banks of bluff and streamlined shapes, and a CAD bank. The enclosure is an external box under one of five boundary-condition layouts, a spherical cap standing on a symmetry plane, a sphere split into an inlet half and an outlet half, or an internal duct. The Reynolds number is drawn across five decades, from $10^3$ to $10^8$, and a body's surface is all no-slip or carries slip bands. ISLA receives four boundary meshes, keyed by the kind of condition on each, with the prescribed values on every face, and the global data that close the problem; GeoTransolver reads distances to two of them (@tbl-aerozoo-inputs). The interior is a cloud of 0.6 to 24 million cell centroids (median 5 million) carrying velocity, gauge pressure, eddy viscosity, turbulent kinetic energy and the specific dissipation rate; the model predicts all five. @fig-aerozoo-problem shows one validation case.
+
+```{python}
+#| label: fig-aerozoo-problem
+#| fig-cap: >
+#|   The AeroZoo problem, on one validation case: a procedural car inside a
+#|   spherical cap that stands on a symmetry plane. Top: the boundaries the
+#|   model is handed, each cell drawn where the mid-span plane cuts it and
+#|   colored by the kind of condition it carries: the inlet dome prescribes
+#|   the velocity and the turbulence quantities (value), the outlet dome the
+#|   gauge pressure, zero, with zero normal gradient on the velocity (flux),
+#|   the symmetry plane and the body's slip band carry a slip condition
+#|   (free), and the body's no-slip band carries $u = 0$ (value). The black
+#|   arrow is the inlet direction, the one global vector; the box lists this
+#|   case's global scalars. Middle left: the body alone, its two bands.
+#|   Middle right: the pressure coefficient $C_p = p / q_\mathrm{ref}$ at the
+#|   interior cells the plane cuts, within two reference lengths of the body,
+#|   each cell drawn at its own size with the body's section outlined.
+#|   Bottom: the same $C_p$, on a scale clipped at the 99th percentile of
+#|   $|C_p|$ over the plane, and the speed ratio $|U| / U_\mathrm{ref}$ over
+#|   the whole plane, two of the task's five targets. The plane is built
+#|   from the data (through the body's centroid, containing the inlet
+#|   direction, normal to the body's widest cross-flow axis), so $x_1$ runs
+#|   along the inlet flow and $x_2$ across it; the stored coordinates are a
+#|   random rotation of this view, and the stored inlet direction is printed
+#|   in the box. How to read this: colors are the reference CFD fields, not
+#|   predictions; the body's surface is split into a no-slip and a slip band
+#|   by the generator, so the slip color on the body is a condition, not a
+#|   rendering choice; the body is off the enclosure's axis because bodies
+#|   are placed at random inside their enclosures; what the figure does not
+#|   show is the enclosure's third dimension, the inlet and outlet are domes
+#|   and the symmetry plane a disk. The stored speed falls toward zero within
+#|   about 0.02 m of the symmetry plane, in a layer that thickens downstream
+#|   as along a wall, although the release labels that plane slip; the
+#|   book takes the labels as the release gives them. Data:
+#|   results/problem_figures_2026-09-22/aerozoo.npz.
+#| code-fold: true
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+from matplotlib.colors import to_rgba_array
+A, Am = load_problem("aerozoo")
+F, c0 = A["frame"], A["body_centroid"]
+SL = in_plane(A["slice_points"], F, c0); B = in_plane(A["body_points"], F, c0); W = in_plane(A["band_points"], F, c0)
+L = Am["L_ref"]; bm = cut(B, A["body_size"])
+x1lim = (W[:, 0].min() - 0.03 * L, W[:, 0].max() + 0.03 * L); x2lim = (W[:, 1].min() - 0.03 * L, W[:, 1].max() + 0.03 * L)
+span = x1lim[1] - x1lim[0]; h = x2lim[1] - x2lim[0]
+norm = TwoSlopeNorm(vcenter=0.0, vmin=-1.0, vmax=1.0)
+fig = plt.figure(figsize=(8, 11.0))
+gs = fig.add_gridspec(3, 2, height_ratios=[1.75, 1.15, 1.0], hspace=0.42, wspace=0.12)
+gsb = gs[2, :].subgridspec(1, 2, wspace=0.45)
+# -- top: the boundaries by condition, in the mid-span plane
+ax = fig.add_subplot(gs[0, :])
+for r, (lab, kind) in AZ_WALL.items():
+    m = A["band_role"] == r
+    if m.any():
+        sized_scatter(ax, W[m, :2], A["band_size"][m], BC[kind], span, k=2.4, smin=5.0, zorder=3)
+for r, (lab, kind) in AZ_BODY.items():
+    m = bm & (A["body_role"] == r)
+    sized_scatter(ax, B[m, :2], A["body_size"][m], BC[kind], span, k=2.4, smin=5.0, zorder=4)
+map_axes(ax); ax.set_xlim(*x1lim); ax.set_ylim(*x2lim)
+ax.set_ylabel("$x_2$, across the flow in the plane [m]"); ax.set_xlabel("$x_1$, along the inlet flow from the body centroid [m]")
+ax.set_title("the boundaries, where the mid-span plane cuts them: inlet and outlet domes, symmetry plane, the body's two bands", fontsize=9.5)
+xa, ya = x1lim[0] + 0.14 * span, x2lim[0] + 0.72 * h
+ax.annotate("", xy=(xa + 0.1 * span, ya), xytext=(xa, ya), arrowprops=dict(arrowstyle="-|>", color=INK, lw=2.0), zorder=6)
+ax.text(xa + 0.11 * span, ya, f"inlet flow $\\hat g_1$ (the global vector), $U_\\mathrm{{ref}}$ = {Am['U_ref']:.2f} m/s", ha="left", va="center", fontsize=8.2, color=INK2)
+ax.text(x1lim[0] + 0.11 * span, x2lim[0] + 0.5 * h, "inlet dome: velocity, $k$, $\\omega$,\n$\\gamma$, $Re_\\theta$ prescribed (value)", ha="left", va="center", fontsize=7.8, color=BC["value"], path_effects=halo())
+ax.text(x1lim[1] - 0.17 * span, x2lim[0] + 0.66 * h, "outlet dome: $p$ = 0,\n$\\partial u / \\partial n$ = 0 (flux)", ha="right", va="center", fontsize=7.8, color=BC["flux"], path_effects=halo())
+ax.text(0.5 * (x1lim[0] + x1lim[1]), x2lim[0] + 0.035 * h, "symmetry plane: slip (free)", ha="center", va="bottom", fontsize=7.8, color=BC["free"], path_effects=halo())
+ax.text(B[bm, 0].max() + 0.02 * span, B[bm, 1].min(), "the body: a no-slip band, $u$ = 0 (value),\nand a slip band (free)", ha="left", va="top", fontsize=7.8, color=BC["value"], path_effects=halo())
+nb = Am["n_boundary_cells_by_role"]
+ax.text(x1lim[0] + 0.08 * span, x2lim[0] + 0.3 * h,
+        f"global scalars: $U_\\mathrm{{ref}}$ = {Am['U_ref']:.2f} m/s, $L_\\mathrm{{ref}}$ = {L:.3f} m, $\\nu$ = {Am['nu']:.2e} m²/s, $\\rho$ = {Am['rho']:.3f} kg/m³\n"
+        f"Re = $U_\\mathrm{{ref}} L_\\mathrm{{ref}} / \\nu$ = {Am['Re']:.2e}; inlet $k$ = {Am['inlet']['turbulent_kinetic_energy']:.2e} m²/s², $\\omega$ = {Am['inlet']['specific_dissipation_rate']:.3g} 1/s\n"
+        f"boundary cells {Am['n_boundary_cells']:,} (inlet {nb['inlet']:,}, outlet {nb['outlet']:,}, no-slip {nb['no_slip']:,}, slip {nb['slip']:,}); volume cells {Am['n_interior_points']:,}\n"
+        f"stored frame: inlet direction ({', '.join(f'{v:.2f}' for v in np.asarray(Am['U_inf']) / Am['U_ref'])}), a random rotation of this view",
+        ha="left", va="top", fontsize=7.2, color=INK2, linespacing=1.4, bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=BASELINE))
+# -- middle left: the body alone
+ax3 = fig.add_subplot(gs[1, 0], projection="3d"); ax3.set_proj_type("ortho")
+mp = in_plane(A["body_mesh_points"], F, c0)[:, [0, 2, 1]]; tri = mp[A["body_mesh_cells"]]
+face = to_rgba_array(np.where(A["body_mesh_role"] == 0, BC["value"], SLIP_FACE))
+coll = Poly3DCollection(tri, facecolors=face, shade=True); coll.set_edgecolor("none"); ax3.add_collection3d(coll)
+ext = mp.max(0) - mp.min(0)
+ax3.set_xlim(mp[:, 0].min(), mp[:, 0].max()); ax3.set_ylim(mp[:, 1].min(), mp[:, 1].max()); ax3.set_zlim(mp[:, 2].min(), mp[:, 2].max())
+ax3.set_box_aspect(tuple(ext / ext.max()), zoom=1.5); ax3.view_init(elev=28, azim=-135); ax3.set_axis_off()
+ax3.set_title(f"the body: {Am['n_body_cells']:,} surface cells in two bands, from upstream and above", fontsize=9.5, loc="left")
+ax3.text2D(0.02, 0.1, "no-slip band: $u$ = 0 (value)", transform=ax3.transAxes, color=BC["value"], fontsize=8.2, path_effects=halo())
+ax3.text2D(0.02, 0.03, "slip band (free)", transform=ax3.transAxes, color=BC["free"], fontsize=8.2, path_effects=halo())
+# -- middle right: Cp near the body
+axz = fig.add_subplot(gs[1, 1])
+zx = (B[bm, 0].min() - 1.0 * L, B[bm, 0].max() + 2.0 * L); zy = (-1.1 * L, 1.1 * L)
+win = (SL[:, 0] > zx[0]) & (SL[:, 0] < zx[1]) & (SL[:, 1] > zy[0]) & (SL[:, 1] < zy[1])
+sc = sized_scatter(axz, SL[win, :2], A["slice_size"][win], A["slice_cp"][win], zx[1] - zx[0], cmap=DIVERGING, norm=norm, zorder=2)
+sized_scatter(axz, B[bm, :2], A["body_size"][bm], INK, zx[1] - zx[0], k=1.6, smin=3.0, zorder=4)
+map_axes(axz); axz.set_xlim(*zx); axz.set_ylim(*zy); axz.set_xlabel("$x_1$ [m]"); axz.set_ylabel("$x_2$ [m]")
+axz.set_title("$C_p$ in the plane, within two $L_\\mathrm{ref}$ of the body", fontsize=9.5)
+small_colorbar(fig, sc, axz, "$C_p$ [–]", extend="both")
+# -- bottom: the two fields over the whole plane
+def field_panel(ax, v, cmap, norm=None, vmin=None, vmax=None, outline=INK):
+    sc = sized_scatter(ax, SL[:, :2], A["slice_size"], v, span, cmap=cmap, norm=norm, vmin=vmin, vmax=vmax, zorder=2)
+    sized_scatter(ax, W[:, :2], A["band_size"], BASELINE, span, k=1.6, smin=2.0, zorder=3)
+    sized_scatter(ax, B[bm, :2], A["body_size"][bm], outline, span, k=1.6, smin=2.0, zorder=4)
+    map_axes(ax); ax.set_xlim(*x1lim); ax.set_ylim(*x2lim); ax.set_xlabel("$x_1$ [m]")
+    return sc
+cp_far = float(np.ceil(np.quantile(np.abs(A["slice_cp"]), 0.99) * 20) / 20)   # the whole plane on its own symmetric scale (99th percentile of |C_p|)
+ax = fig.add_subplot(gsb[0, 0]); sc = field_panel(ax, A["slice_cp"], DIVERGING, norm=TwoSlopeNorm(vcenter=0.0, vmin=-cp_far, vmax=cp_far)); ax.set_ylabel("$x_2$ [m]")
+ax.set_title("$C_p = p / q_\\mathrm{ref}$ over the whole plane", fontsize=9.5)
+small_colorbar(fig, sc, ax, "$C_p$ [–]", extend="both")
+um = A["slice_umag"]; vmax = float(np.ceil(np.quantile(um, 0.995) * 10) / 10)
+ax = fig.add_subplot(gsb[0, 1]); sc = field_panel(ax, um, SEQUENTIAL, vmin=0, vmax=vmax, outline=WHITE)
+ax.set_title("$|U| / U_\\mathrm{ref}$ over the whole plane", fontsize=9.5)
+small_colorbar(fig, sc, ax, "$|U| / U_\\mathrm{ref}$ [–]", extend="max")
+plt.show()
+```
+
+### The boundaries and their conditions {#sec-aerozoo-boundaries}
+
+**A boundary enters the model as faces, each labeled with its role and carrying the values its condition prescribes; nothing else about the problem is an input.** @tbl-aerozoo-roles lists the four roles. The one-hot role label tells the model which kind of condition a face carries; the prescribed values, zero where a role prescribes nothing, tell it the data of that condition. The body is not a separate input: its no-slip band sits on the no-slip mesh beside any ground plane or duct wall, and its slip bands sit on the slip mesh beside the symmetry planes. A role can be empty: a case without slip walls has a slip mesh of zero faces.
+
+| role | where it sits | what it prescribes | kind |
+|---|---|---|---|
+| `inlet` | the upstream face or dome; a second face in the dual-inlet boxes | velocity, turbulent kinetic energy $k$, specific dissipation rate $\omega$, intermittency $\gamma$, transition Reynolds number $Re_\theta$ | value |
+| `outlet` | the downstream face or dome | gauge pressure $p = 0$ with zero normal gradient of velocity; values to use where flow re-enters | value on pressure, flux on velocity |
+| `no_slip` | the body's no-slip band, ground planes, confining walls, duct walls | $u = 0$ | value |
+| `slip` | the body's slip bands, symmetry planes, the box walls that are not no-slip | zero normal velocity and zero tangential stress | free |
+
+: The four boundary roles of AeroZoo and the conditions they carry. Each face of every role reaches ISLA with its position, normal, area, a one-hot role label and the prescribed values in the table (velocity as a rank-1 input, the rest as rank 0). How to read this: the "kind" column is the color of the role in @fig-aerozoo-problem and @fig-aerozoo-samples; a role is a condition type, not a piece of geometry, so one mesh can hold parts of the body and parts of the enclosure. Data: datasets/aerozoo_uvolume.yaml of the recipe. {#tbl-aerozoo-roles}
+
+```{python}
+#| label: para-aerozoo-samples
+#| output: asis
+Zs_, Zsm = load_samples("aerozoo")
+cs = Zsm["cases"]; vr = Zsm["val_ranges"]; vc = Zsm["val_counts"]
+print(f"**Across the set, every part of the problem changes from case to case.** @fig-aerozoo-samples shows six of the {Zsm['n_val']} validation cases, one per geometry bank for the six banks other than the "
+      f"procedural cars, with the four enclosure families cycled over them and, within each (bank, enclosure) group, the case whose Reynolds "
+      f"number is nearest an even ladder across the split's range (log10 Re {vr['log10_Re'][0]:.1f} to {vr['log10_Re'][1]:.1f}); the six span "
+      f"Re {sci(min(c['Re'] for c in cs))} to {sci(max(c['Re'] for c in cs))} and reference lengths of {min(c['L_ref'] for c in cs):.3g} to "
+      f"{max(c['L_ref'] for c in cs):.3g} m, against {vr['L_ref'][0]:.3g} to {vr['L_ref'][1]:.3g} m over the split. The split holds "
+      + ", ".join(f"{n} cases in a {AZ_ENCLOSURE[f]}" for f, n in vc['enclosures'].items()) + ".")
+```
+
+```{python}
+#| label: fig-aerozoo-samples
+#| fig-cap: >
+#|   Six AeroZoo validation cases spanning the geometry banks, the enclosure
+#|   families and the Reynolds decades, each in its own mid-span plane
+#|   (through the body's centroid, containing the inlet direction, normal to
+#|   the body's widest cross-flow axis) and colored by the speed ratio
+#|   $|U| / U_\mathrm{ref}$ on one shared scale, each cell drawn at its own
+#|   size. The enclosure is drawn where the plane cuts it, colored by the
+#|   condition it carries (inlet and no-slip walls: value; outlet: flux; slip
+#|   walls and symmetry planes: free), the body's section is outlined in
+#|   white over black, and the black arrow is the inlet direction, the one
+#|   global vector, which runs along $x_1$ in every panel by construction.
+#|   Each title names the bank, the enclosure family and scenario, the
+#|   Reynolds number and the reference length; the panels are paired by shape,
+#|   not ordered by Reynolds number. How to read this: the axes are in meters
+#|   and differ by three orders of magnitude between panels, so compare
+#|   shapes, not sizes; the color scale is clipped at the median panel's
+#|   99.5th percentile, so the nozzle's throat and the dual inlet's jet
+#|   saturate; a duct's "enclosure" is the flow passage itself and its walls
+#|   are no-slip; colors are the reference CFD fields, not predictions, and
+#|   the stored coordinates of every case are a random rotation of the view
+#|   shown. Data: results/sample_figures_2026-10-02/aerozoo.npz.
+#| code-fold: true
+Zs_, Zsm = load_samples("aerozoo")
+cs = Zsm["cases"]; so, bo, lo_ = Zs_["slice_offsets"], Zs_["body_offsets"], Zs_["band_offsets"]
+P = []
+for i, c in enumerate(cs):
+    F, c0 = Zs_["frames"][i], Zs_["body_centroids"][i]
+    SL = in_plane(part(Zs_["slice_points"], so, i), F, c0); B = in_plane(part(Zs_["body_points"], bo, i), F, c0); W = in_plane(part(Zs_["band_points"], lo_, i), F, c0)
+    x1 = (min(SL[:, 0].min(), W[:, 0].min()), max(SL[:, 0].max(), W[:, 0].max())); x2 = (min(SL[:, 1].min(), W[:, 1].min()), max(SL[:, 1].max(), W[:, 1].max()))
+    pad = 0.03 * (x1[1] - x1[0])
+    P.append(dict(SL=SL, B=B, W=W, x1=(x1[0] - pad, x1[1] + pad), x2=(x2[0] - pad, x2[1] + pad), aspect=(x2[1] - x2[0]) / (x1[1] - x1[0] + 2 * pad),
+                  ssz=part(Zs_["slice_size"], so, i), bsz=part(Zs_["body_size"], bo, i), wsz=part(Zs_["band_size"], lo_, i),
+                  um=part(Zs_["slice_umag"], so, i), wrole=part(Zs_["band_role"], lo_, i), c=c))
+vmax = float(np.ceil(np.median([np.quantile(p["um"], 0.995) for p in P]) * 4) / 4)
+order = np.argsort([p["aspect"] for p in P]); rows = [order[0:2], order[2:4], order[4:6]]   # pair panels of similar shape per row
+hr = [max(P[j]["aspect"] for j in r) for r in rows]; colw = 3.5
+fig = plt.figure(figsize=(8, colw * sum(hr) + 0.7 * len(rows) + 0.8))
+gs = fig.add_gridspec(3, 2, height_ratios=[colw * r + 0.7 for r in hr], hspace=0.3, wspace=0.32, left=0.08, right=0.9, top=0.95, bottom=0.07)
+axes = []
+for ri, row in enumerate(rows):
+    for ci, j in enumerate(row):
+        p = P[j]; c = p["c"]; ax = fig.add_subplot(gs[ri, ci]); axes.append(ax)
+        span = p["x1"][1] - p["x1"][0]; h = p["x2"][1] - p["x2"][0]
+        ax.set_xlim(*p["x1"]); ax.set_ylim(*p["x2"]); map_axes(ax)
+        sc = sized_scatter(ax, p["SL"][:, :2], p["ssz"], p["um"], span, k=1.7, cmap=SEQUENTIAL, vmin=0, vmax=vmax, zorder=2)
+        for r, (lab, kind) in AZ_WALL.items():
+            m = p["wrole"] == r
+            if m.any():
+                sized_scatter(ax, p["W"][m, :2], p["wsz"][m], BC[kind], span, k=2.4, smin=4.0, zorder=3)
+        bm = cut(p["B"], p["bsz"])
+        sized_scatter(ax, p["B"][bm, :2], p["bsz"][bm], INK, span, k=2.4, smin=4.0, zorder=4); sized_scatter(ax, p["B"][bm, :2], p["bsz"][bm], WHITE, span, k=1.2, smin=1.2, zorder=5)
+        xa, ya = p["x1"][0] + 0.03 * span, p["x2"][0] + 0.86 * h
+        ax.annotate("", xy=(xa + 0.1 * span, ya), xytext=(xa, ya), arrowprops=dict(arrowstyle="-|>", color=INK, lw=1.6), zorder=6)
+        prof = AZ_PROFILE.get(c["profile"], c["profile"].replace("_", " "))
+        ax.set_title(f"{c['bank']} in a {AZ_SHORT[c['enclosure']]}" + (f" ({prof})" if prof else "") + f"\nRe = {sci(c['Re'])}, $L_\\mathrm{{ref}}$ = {c['L_ref']:.3g} m", fontsize=7.6)
+        ax.set_xlabel("$x_1$ [m]", fontsize=8); ax.set_ylabel("$x_2$ [m]", fontsize=8)
+        ax.tick_params(labelsize=7)
+cb = fig.colorbar(sc, ax=axes, fraction=0.02, pad=0.01, extend="max"); cb.set_label("$|U| / U_\\mathrm{ref}$ [–]"); cb.outline.set_visible(False)
+fig.legend(handles=[Line2D([], [], color=BC["value"], marker="s", ls="none", ms=6, label="inlet, no-slip walls (value)"),
+                    Line2D([], [], color=BC["flux"], marker="s", ls="none", ms=6, label="outlet (flux)"),
+                    Line2D([], [], color=BC["free"], marker="s", ls="none", ms=6, label="slip walls, symmetry plane (free)"),
+                    Line2D([], [], color=INK, marker="s", mfc=WHITE, ls="none", ms=6, label="body section"),
+                    Line2D([], [], color=INK, marker=">", ls="-", ms=6, label="inlet direction $\\hat g_1$")],
+           loc="lower center", ncol=5, fontsize=7.6, bbox_to_anchor=(0.49, 0.0))
+plt.show()
+```
+
+```{python}
+#| label: para-aerozoo-diversity
+#| output: asis
+C = LAB_META["counts"]
+enc = C["enclosure"]; banks = {k: v for k, v in C["bank"].items() if k != "None"}; dec = C["log10_re_decade"]; lay = C["body_layout"]; q = C["quality"]
+n = LAB_META["n_cases"]
+LABS = {k: v for k, v in LAB.items()}
+n_dl = sum(1 for v in LABS.values() if v.get("body_layout") in (None, "None"))
+n_dl_duct = sum(1 for v in LABS.values() if v.get("body_layout") in (None, "None") and v.get("enclosure") == "internal_duct")
+print(f"**Two facts about the release that @fig-aerozoo-families does not show.** The body's own condition varies: "
+      f"{lay['all_no_slip']:,} bodies are all no-slip, {lay['mixed_bands_2'] + lay['mixed_bands_3']:,} carry slip bands, and the other "
+      f"{n_dl:,} cases" + (" are internal ducts whose" if n_dl == n_dl_duct else ", most of them internal ducts, whose")
+      + " body carries no layout label in the release. And the labels are of mixed quality: the solver's own convergence census marks "
+      f"{q['mean_unstable']:,} of the {n:,} cases ({q['mean_unstable'] / n * 100:.0f}%) as `mean_unstable`, a time-averaged solution whose "
+      "averages over successive blocks of iterations still drifted, and both populations stay in every split. The 22 frozen splits of the "
+      "release place cases by a hash of the geometry, so no body crosses train, validation and test.")
+```
+
+### Files, sampling and normalization {#sec-data-aerozoo}
+
+**The release is read natively, as PhysicsNeMo `DomainMesh` files in dimensional SI units; the recipe draws the interior points and the boundary faces uniformly at random and makes every field dimensionless by the case's reference scales.**
+
+- **Layout.** `shard-NNN/<case_id>/domain.pdmsh`. The interior is a point cloud of cell centroids with the solution fields and the cell volumes; the four boundaries are triangle meshes with all data on the cells: the solution on every boundary, the prescribed values under `prescribed.dirichlet.*` and the outlet's reverse-flow values under `prescribed.reverse_flow.*`. The global data hold the fluid (density, kinematic viscosity), the reference velocity, speed, length and dynamic pressure, and identity and diagnostic blocks that are never inputs.
+- **Interior draw.** The release stores the interior in the solver's cell order, which runs through space, so the recipe reads a copy whose interior rows are randomly permuted once per case; a contiguous block of that copy is a uniform sample. Each step draws 200,000 interior points.
+- **Boundary draw.** Each boundary is read whole, and the first transform keeps a uniform random 50,000 of its faces when it has more (`SubsampleMesh`), multiplying each kept face's area by the boundary's face count over 50,000, so every boundary integral stays unbiased. The inlet and outlet usually fall under the cap and are kept whole. GeoTransolver's distance fields are computed from the same draw.
+- **Normalization** (`aerozoo_uvolume.yaml`). Coordinates are divided by the reference length and centered on the interior sample's mean. Velocity is divided by the reference speed, the gauge pressure by the reference dynamic pressure (so `pressure` is a pressure coefficient), the eddy viscosity by speed times length, $k$ by the speed squared and $\omega$ by speed over length; the prescribed values on the boundaries follow the same rules. The Reynolds number enters as $(\log_{10}(U L / \nu) - 5.5) / 1.5$. Each target is then standardized by its mean and standard deviation over the training side of the split, so the per-field relative L2 is computed on standardized fields: its ratios between models order them and are not physical percentages.
+
+```{python}
+#| label: para-aerozoo-omega
+#| output: asis
+OUT = json.load(open(AZ / "probe" / "outliers.json")); TR_ = OUT["scan"]["full.train"]; TH = OUT["thresholds"]
+mx, mn = TR_["per_field_n_max_gt_threshold"], TR_["per_field_n_mean_gt_threshold"]
+print(f"**The specific dissipation rate has a heavy tail that the other fields lack, which makes its column partly a count of cases.** Of "
+      f"the {TR_['n_cases']:,} training cases of the `full` split, {mx['omega']:,} hold at least one interior point whose standardized "
+      f"$\\omega$ exceeds {TH['max_abs_z']:.0f}, against {mx['tke']} on turbulent kinetic energy and "
+      f"{'none' if max(mx[f] for f in ('velocity', 'pressure', 'nut')) == 0 else 'a few'} on velocity, pressure and eddy viscosity; over the "
+      "whole release, 238 cases hold a point above 1,000 standard deviations and 110 above 10,000. Each extreme is a single point. When one "
+      "point dominates a case's target norm, that case's relative L2 on $\\omega$ saturates at one for every model. The other wide fields are "
+      f"the pressure coefficient of the fastest cases ({mn['pressure']} training cases whose standardized pressure averages above "
+      f"{TH['mean_abs_z']:.0f} in magnitude over the case) and the "
+      f"eddy viscosity of the slowest ({mn['nut']}, mostly in the spherical enclosures). No field is clipped or transformed beyond the "
+      "normalization above. Data: results/campaigns_2026-10-09/aerozoo/probe/outliers.json.")
+```
+
+## What is measured {#sec-aerozoo-measured}
+
+```{python}
+#| label: para-aerozoo-measured
+#| output: asis
+F_ = SPLITS["full"]
+cost = {a: list(RZ["cost"][a]["full"].values()) for a in ("ISLA", "ISLA-DTT", "GeoTransolver")}
+params = {a: v[0]["n_parameters"] / 1e6 for a, v in cost.items()}
+spe = cost["ISLA"][0]["steps_per_epoch"]
+print(f"**The interior task on the `full` split: {F_['n_train']:,} training cases, {F_['n_val']} validation cases, {F_['n_test']} test cases; "
+      "200,000 interior points and up to 50,000 faces per boundary per case; 250 epochs; two seeds; float32 scoring of the final "
+      "checkpoints on the test side.** The validation side selects nothing; the test side of every split is scored once. The metric is the "
+      "per-case relative L2 per field on the standardized fields, averaged over the cases (@sec-metrics). No model trains with rotation or "
+      "translation augmentation, and none needs to see a canonical pose: the stored coordinates of every case are already a random rotation. "
+      f"One epoch of the `full` split is {spe:,} steps at one case per rank, so 250 epochs are {250 * spe:,} steps. Two architectures and one "
+      "variant run at their reference configurations:")
+print()
+print(f"- **ISLA**: width 512, 12 layers, 512 slices, learning rate 3.75e-4, {params['ISLA']:.1f}M parameters; the slice sublayer reads the "
+      "normalized token state (@sec-isla-layer).")
+print(f"- **ISLA-DTT**: the same configuration with read-only prediction points (`query_independent=True`), which also read every boundary "
+      f"token at every layer through a Barnes–Hut cluster forest (@sec-arch-modes), {params['ISLA-DTT']:.1f}M parameters.")
+print(f"- **GeoTransolver-volume**, the GeoTransolver of the interior tasks with its ball-query local features on (@sec-baselines): "
+      f"width 256, local width 32, learning rate 1e-3, {params['GeoTransolver']:.1f}M parameters; called GeoTransolver below.")
+print()
+print("Transolver is not trained on AeroZoo. **Cost.** On four GB300 ranks in bfloat16, the median step of the final epoch and the peak "
+      "device memory any rank reports: " + "; ".join(f"{a} {mean(c['step_seconds_median'] for c in v):.2f} s and {max(c['mem_gb_max'] for c in v):.0f} GiB"
+                                                      for a, v in cost.items())
+      + ". Instrument (step time and memory): 250-epoch training runs of these configurations on shared nodes, ISLA and ISLA-DTT with "
+      "the raw slice reads (@sec-study-configurations); the normalized slice reads change no parameter and no tensor shape. Data: "
+      "results/campaigns_2026-10-09/aerozoo/aerozoo_reduction.json.")
+```
+
+```{python}
+#| label: para-aerozoo-inputs
+#| output: asis
+n_dual = LAB_META["counts"]["profile"]["dual_inlet"]
+print("**The architectures read the same problem through different inputs** (@tbl-aerozoo-inputs). ISLA reads the four boundaries face by "
+      "face; GeoTransolver reads each interior point with its signed distance and the distance's gradient to the `no_slip` faces and its "
+      "signed distance to the `slip` faces, and never sees a boundary face. GeoTransolver has no "
+      f"channel at all for the inlet and outlet faces, and in the {n_dual} dual-inlet boxes the second inlet's velocity reaches ISLA as "
+      "per-face values and GeoTransolver not at all (its global vector holds the primary inlet's direction). Neither model sees the body "
+      "identifier, the solution on the boundaries or the solver's diagnostics.")
+```
+
+| | boundary | global inputs | at each prediction point |
+|---|---|---|---|
+| ISLA | the four boundary meshes, up to 50,000 faces each: position, normal, area, one-hot role, prescribed values | the inlet direction $\hat g_1$ (rank 1); the standardized log Reynolds number and the inlet's four standardized turbulence quantities (rank 0) | position, entering only through relational invariants; the distance and direction to the nearest boundary token, computed inside the model |
+| ISLA-DTT | as ISLA, and every boundary token read at every layer | as ISLA | as ISLA; the prediction points read the slices and never write into them |
+| GeoTransolver | none | one vector: the inlet direction, the log Reynolds number and the four inlet turbulence quantities | coordinates; the signed distance and its gradient to the `no_slip` faces and the signed distance to the `slip` faces, computed from the same boundary draw |
+
+: What each architecture receives on the AeroZoo interior task. How to read this: the two global columns carry the same information in different packaging; the difference is the boundary column, where ISLA has the faces with their roles and prescribed values and GeoTransolver has distances to two of the four roles; a role mixes body and enclosure (@tbl-aerozoo-roles), so neither distance is "the distance to the body". Data: conf/model/isla_volume_aerozoo.yaml, conf/model/geotransolver_volume_aerozoo.yaml and datasets/aerozoo_uvolume.yaml of the recipe. {#tbl-aerozoo-inputs}
+
+### The splits, and what each one asks {#sec-aerozoo-splits}
+
+```{python}
+#| label: para-aerozoo-splits
+#| output: asis
+C = LAB_META["counts"]; enc = C["enclosure"]; dec = C["log10_re_decade"]; bank = C["bank"]; prof = C["profile"]
+print("**Each held-out split removes one family from training and tests on it, and each family isolates a different input the model must "
+      "generalize over: the far boundary, a global scalar, the body's shape, or the layout of the boundary conditions.** The readout of a "
+      "held-out split is each architecture's *penalty*: its test error on the held-out family divided by its own test error on the `full` "
+      "split. A held-out split also trains on fewer cases than `full`, and both architectures pay that; the comparison is therefore the "
+      "ratio of the two architectures' penalties, never a held-out error alone. @tbl-aerozoo-splits lists the six held-out splits on which "
+      "the open questions of @sec-interior-aerozoo are read.")
+print()
+print("Three of the six are built to separate a model that reads boundary faces with their roles from one that reads distances to walls "
+      "(@tbl-aerozoo-inputs). With the enclosure held out, the far boundary takes a new shape and new roles: domes for the inlet and the "
+      "outlet, a symmetry disk, duct walls. ISLA reads them as faces; GeoTransolver sees them only through its wall distances and the extent "
+      "of the point cloud. In a crossflow box the flow must turn toward a side face, and only the outlet's role says which face that is; "
+      "GeoTransolver has no outlet input. In a dual-inlet box a second prescribed velocity enters through the top face; ISLA reads it face by "
+      "face and GeoTransolver does not receive it. The Reynolds split changes no geometry and tests extrapolation in one global scalar, as "
+      "the AirfRANS extrapolation splits do (@sec-interior-extrapolation). The two bank splits test the body's shape, one with a large and "
+      "one with a small loss of training data.")
+```
+
+```{python}
+#| label: out-tbl-aerozoo-splits
+#| output: asis
+rows = [
+    ("`family_non_box`", "the enclosures other than the box: spherical caps, spheres, ducts", sum(v for k, v in enc.items() if k != "rectangular_prism"),
+     "the far boundary's shape and roles"),
+    ("`reynolds`", "every case at $Re \\ge 10^6$", sum(v for k, v in dec.items() if int(k) >= 6), "one global scalar, beyond its training range"),
+    ("`bank_blobs`", "the procedural blobs, the largest bank", bank["blobs"], "the body's shape, with a third of the data removed"),
+    ("`bank_zero_to_cad`", "the CAD bank", bank["zero_to_cad"], "the body's shape: flat faces and sharp edges"),
+    ("`profile_crossflow`", "boxes whose outlet sits on a side face beside the inlet", prof["crossflow"], "where the outlet is"),
+    ("`profile_dual_inlet`", "boxes with a second inlet on the top face", prof["dual_inlet"], "a second prescribed inlet velocity"),
+]
+out = "| split | held out of training, tested on | cases | what must generalize |\n|---|---|--:|---|\n"
+for r in rows:
+    out += f"| {r[0]} | {r[1]} | {r[2]:,} | {r[3]} |\n"
+print(out)
+print(f": The held-out splits of AeroZoo on which ISLA is compared with GeoTransolver and with ISLA-DTT, with the number of cases of the "
+      f"held-out family in the release of {LAB_META['n_cases']:,}. The in-distribution `full` split trains on {SPLITS['full']['n_train']:,} "
+      "cases of every family. How to read this: a held-out split trains on the rest of the release and tests on the family, so the larger "
+      "the family, the smaller its training set; the last column names what a model must carry beyond its training "
+      "distribution. Data: results/campaigns_2026-10-09/aerozoo/case_labels.json (cases per family in the release). "
+      "{#tbl-aerozoo-splits}")
+```
+
+```{python}
+#| label: fig-aerozoo-families
+#| fig-cap: >
+#|   The release by family, and what each held-out split removes: case counts
+#|   by enclosure, geometry bank, box layout (external boxes only) and decade
+#|   of Reynolds number, with the families each held-out split of
+#|   @tbl-aerozoo-splits holds out drawn in black and named. How to read this:
+#|   a long black bar is a held-out split that also takes much of the training
+#|   data away, so its penalty mixes generalization with data size (the blob
+#|   bank most); a short one tests generalization at almost the full training
+#|   set (the CAD bank, the box layouts); the gray bars are what such a split
+#|   trains on. Data: results/campaigns_2026-10-09/aerozoo/case_labels.json.
+#| fig-alt: "Four stacked horizontal bar charts of AeroZoo case counts by enclosure, bank, box layout and Reynolds decade, with the held-out families in black."
+#| code-fold: true
+C = LAB_META["counts"]
+NICE = {"rectangular_prism": "external box", "opposed_hemisphere": "spherical cap", "opposed_sphere": "sphere", "internal_duct": "duct",
+        "blender_streamlined": "Blender streamlined", "blender_bluff": "Blender bluff", "zero_to_cad": "CAD bank", "streamlined": "streamlined",
+        "cars": "cars", "airframes": "airframes", "blobs": "procedural blobs", "ground_effect": "ground effect", "crossflow": "crossflow",
+        "dual_inlet": "dual inlet", "confined_opposed": "confined", "open_opposed": "open"}
+BOX = ("ground_effect", "crossflow", "dual_inlet", "confined_opposed", "open_opposed")
+groups = [
+    ("enclosure", {k: v for k, v in C["enclosure"].items()}, {"opposed_hemisphere": "family_non_box", "opposed_sphere": "family_non_box", "internal_duct": "family_non_box"}),
+    ("geometry bank", {k: v for k, v in C["bank"].items() if k != "None"}, {"blobs": "bank_blobs", "zero_to_cad": "bank_zero_to_cad"}),
+    ("box layout", {k: C["profile"][k] for k in BOX}, {"crossflow": "profile_crossflow", "dual_inlet": "profile_dual_inlet"}),
+    ("Reynolds-number decade", {f"$10^{{{k}}}$ to $10^{{{int(k) + 1}}}$": v for k, v in sorted(C["log10_re_decade"].items())},
+     {"$10^{6}$ to $10^{7}$": "reynolds", "$10^{7}$ to $10^{8}$": "reynolds"}),
+]
+fig, axes = plt.subplots(len(groups), 1, figsize=(8, 7.6), sharex=True,
+                         gridspec_kw=dict(height_ratios=[len(g[1]) for g in groups], hspace=0.45))
+for ax, (title, counts, held) in zip(axes, groups):
+    items = sorted(counts.items(), key=lambda kv: kv[1]) if title != "Reynolds-number decade" else list(counts.items())[::-1]
+    ys = np.arange(len(items))
+    for y, (k, v) in zip(ys, items):
+        h = k in held
+        ax.barh(y, v, color=INK if h else BASELINE, height=0.7)
+        if h:
+            ax.text(v + 25, y, held[k], va="center", ha="left", fontsize=8.6, family="monospace", color=INK)
+    ax.set_yticks(ys); ax.set_yticklabels([NICE.get(k, k) for k, _ in items], fontsize=8.5)
+    ax.set_title(f"by {title}", fontsize=9.5); ax.grid(axis="y", visible=False)
+axes[-1].set_xlabel("cases in the release [count]")
+axes[0].set_xlim(0, max(max(g[1].values()) for g in groups) * 1.18)
+plt.show()
+```
+
+## How ISLA trains on this dataset {#sec-aerozoo-trajectories}
+
+**With the normalized slice reads, ISLA's reference configuration trains through all 250 epochs on AeroZoo without losing its validation minimum; the raw-read variant, the ablation that pools and broadcasts the raw token state, loses it within the first 60 epochs.** AeroZoo is where the difference between the two reads shows most clearly. In the raw-read variant each block's update reads the raw stream, so each block multiplies the stream's norm by a factor above one and the norm grows geometrically with depth and training time; the normalized reads make each update additive (@sec-isla-layer). @tbl-aerozoo-training gives the trainer's validation loss of the four `full`-split training runs, two seeds of each read, under the sampling of @sec-data-aerozoo at the reference learning rate.
+
+| validation loss on the 386 `full` validation cases | normalized slice reads (ISLA) | raw-read variant (ablation) |
+|---|---|---|
+| minimum over training, seeds 42 / 43 | 0.0215 / 0.0209 | 0.0315 / 0.0374 |
+| at epoch 70 | 0.0248 / 0.0236 | 0.120 / 0.143 |
+| largest ratio to the running minimum | 1.059 / 1.084 over all 250 epochs | above 2 by epoch 60 on both seeds |
+
+: Validation loss of ISLA's reference configuration on the AeroZoo `full` split with the normalized slice reads and with the raw-read variant: the trainer's own validation every ten epochs, bfloat16, the Huber loss (quadratic for small residuals, linear for large ones) summed over the five standardized targets, at the training draw; learning rate 3.75e-4, uniform boundary draws, two seeds each. How to read this: a ratio to the running minimum of one means the loss never rose above its best; the raw-read runs reach their minimum in the first 30 epochs and their loss is above twice that minimum from epoch 60; at epoch 249 the normalized-read runs read 0.0222 and 0.0223; validation loss is not the test-side metric of the standing. Data: the training records of the four runs, as recorded in the lab notebook (@sec-notebook). {#tbl-aerozoo-training}
+
+## The registered questions {#sec-interior-aerozoo}
+
+```{python}
+#| label: para-aerozoo-standing
+#| output: asis
+QUESTIONS = (
+    "- **Does ISLA generalize better than GeoTransolver to a family it never saw?** The readout is GeoTransolver's penalty ÷ ISLA's on each "
+    "held-out split of @tbl-aerozoo-splits, with the seed rule applied per field. The enclosure, crossflow and dual-inlet splits are the ones "
+    "built to separate a model that reads boundary faces with their roles from one that reads distances to walls (@tbl-aerozoo-inputs). "
+    "The bar set before the runs: on the enclosure split ISLA's penalty is at least 20% smaller than GeoTransolver's; the claim fails if "
+    "it is not smaller at all (results/campaigns_2026-10-09/aerozoo/aerozoo_reduction.json, its `predictions` block).\n"
+    "- **Does ISLA-DTT match ISLA on held-out families?** ISLA-DTT's prediction at a point depends on that point and the boundary alone, so it "
+    "can be evaluated in any number of chunks; the question is what that independence costs in accuracy. The readout is ISLA-DTT ÷ ISLA on "
+    "velocity and pressure on every held-out split, and in distribution on `full`; the bar set before the runs is ISLA-DTT within 5% of "
+    "ISLA on every field of `full`.\n")
+if HAVE:
+    print(f"**{St.ds.name}: the standing of the reference configurations in distribution and on the held-out families.** "
+          + ("ISLA's checkpoints are the raw-read variant, without the normalized slice reads. " if not St.ds.reference else "")
+          + f"@tbl-aerozoo-full is the `full` split; the held-out splits follow.")
+    print()
+    print(St.table("tbl-aerozoo-full", f"The AeroZoo interior task, `full` split, {SPLITS['full']['n_test']} test cases",
+                   protocols=("native",)))
+    if St.has("ISLA-DTT"):
+        print(f"ISLA-DTT ÷ ISLA on the same split: " + " / ".join(f"{St.err('ISLA-DTT', f) / St.err('ISLA', f):.2f}" for f in St.fields)
+              + " on " + " / ".join(St.fields.values()) + f" (seed means). Data: {St.source}.")
+        print()
+    held = St.raw.get("splits", {})
+    if held:
+        arms = {name.split()[0]: d for sp in held.values() for name, d in sp["arms"].items()}
+        names = [a for a in ("ISLA", "ISLA-DTT", "GeoTransolver") if a in arms]
+        fl = list(St.fields)
+        full = {a: St.arms[a]["native"] for a in names if a in St.arms}
+        pen = lambda A_, a, f: A_[a]["native"][f]["mean"] / full[a][f]["mean"]
+        out = ("| split | " + " | ".join(f"{a} penalty" for a in names) + " | GeoTransolver's penalty ÷ ISLA's |\n|---|"
+               + "---|" * (len(names) + 1) + "\n")
+        for sp, d in held.items():
+            A_ = {name.split()[0]: v for name, v in d["arms"].items()}
+            cells = [" / ".join(f"{pen(A_, a, f):.2f}" for f in fl) if a in A_ and a in full else "–" for a in names]
+            both = all(a in A_ and a in full for a in ("ISLA", "GeoTransolver"))
+            cells.append(" / ".join(f"{pen(A_, 'GeoTransolver', f) / pen(A_, 'ISLA', f):.2f}" for f in fl) if both else "–")
+            out += f"| `{sp}` | " + " | ".join(cells) + " |\n"
+        print(out)
+        print(f": Penalties of holding a family out: each architecture's test error on the held-out family ÷ its own `full` test error, seed "
+              f"means, float32, the fields {' / '.join(St.fields[f] for f in fl)}. Each cell lists the fields in that order. How to read this: a smaller penalty means "
+              f"the error grew less when the family left training; the last column above one means ISLA's grew less; compare penalties, not "
+              f"held-out errors. Data: {St.source} (splits). {{#tbl-aerozoo-heldout}}")
+    print()
+    print("Two questions are read on these numbers:")
+    print()
+    print(QUESTIONS)
+else:
+    PR = RZ["predictions"]; P2F = PR["P2"]["per_field"]
+    def by(v):
+        n = [FIELDS[f] for f, d in P2F.items() if d["verdict"] == v]
+        return n[0] if len(n) == 1 else ", ".join(n[:-1]) + " and " + n[-1]
+    print("**The held-out splits decide two questions about ISLA on this dataset; for the reference configuration both are open "
+          "(@sec-open-questions).** The standing of "
+          "the reference configurations on AeroZoo is the test-side scoring of their final checkpoints on `full` and on the six splits of "
+          "@tbl-aerozoo-splits, under the protocol of @sec-aerozoo-measured, read by the seed rule.")
+    print()
+    print(QUESTIONS)
+    print("Scored on ISLA and ISLA-DTT checkpoints with the raw slice reads, the variant whose ISLA training loses its validation minimum "
+          "(@tbl-aerozoo-training), the "
+          f"registered predictions read: on `full`, GeoTransolver ÷ ISLA is {PR['P1']['velocity_ratio']:.2f} on velocity and "
+          f"{PR['P1']['pressure_ratio']:.2f} on pressure, against a bar of at least 1.2 on velocity and at most 0.9 on pressure "
+          f"({PR['P1']['verdict']}); on the enclosure split ISLA's penalty is {P2F['velocity_l2']['isla_penalty']:.2f} on velocity "
+          f"against GeoTransolver's {P2F['velocity_l2']['gt_penalty']:.2f}, and the bar is {PR['P2']['verdict']}: falsified on "
+          f"{by('falsified')}, supported on {by('supported')}, between its two thresholds on {by('between')}; and ISLA-DTT ÷ ISLA "
+          f"on `full` runs from {min(PR['P4']['ratios'].values()):.2f} to {max(PR['P4']['ratios'].values()):.2f} across the fields, "
+          f"outside the 5% bar ({PR['P4']['verdict']}). What the reference configuration, with the normalized slice reads, scores "
+          "against the same bars is the open question.")
+```
+
+<!-- RENDERING SLOT: fig-aerozoo-prediction: truth / ISLA / GeoTransolver / Transolver and errors on one held-out case -->
+
+## What this dataset does not say {#sec-aerozoo-limits}
+
+```{python}
+#| label: para-aerozoo-limits
+#| output: asis
+print("**AeroZoo tests generalization across families within one PDE, steady incompressible RANS with one closure, and only on the "
+      "interior task.**")
+print()
+print("- **Not resource-matched.** ISLA, ISLA-DTT and GeoTransolver differ in parameters, step time and memory (@sec-aerozoo-measured) and do "
+      "not receive the same inputs (@tbl-aerozoo-inputs); a standing here compares the configurations as each is scored on every dataset.")
+print("- **Penalties mix generalization with data size.** Every held-out split trains on fewer cases than `full`; only the ratio of penalties "
+      "across architectures is read, and the mechanism behind a smaller or larger penalty is not measured by it.")
+print("- **Standardized fields.** Every error is on standardized fields, so a ratio orders the models and is not a physical percentage; the "
+      "specific dissipation column is partly a count of cases whose target norm one point dominates (@sec-data-aerozoo).")
+print("- **Label noise.** A quarter of the labels are time averages the solver marked as still drifting; nothing here says how large that "
+      "noise is in physical units.")
+print("- **One discretization-dependent input.** Each prediction point's distance and direction come from the nearest of the up to 50,000 "
+      "sampled faces per boundary, so the interior prediction depends on the boundary draw, as on AirfRANS (@sec-airfrans-boundary-law). Whether "
+      "an exact form computed from the full-resolution boundaries removes that dependence is an open design question (@sec-open-questions).")
+print("- **Not measured here:** the surface task (the boundary solution and the wall shear from the same inputs), the uniform-point-cloud "
+      "and rotated-and-translated scorings of the other chapters (the stored poses are already random; the pose contract is measured on the "
+      "other datasets, @sec-invariances), and Transolver.")
+```

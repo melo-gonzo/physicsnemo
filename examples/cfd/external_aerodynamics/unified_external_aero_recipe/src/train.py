@@ -379,10 +379,18 @@ def _run_epoch(
         ### Load and run forward inside _fail_together, so a failure on one
         ### rank stops every rank before the next DDP collective.
         batches = iter(dataloader)
+        next_batch = None
+
+        def load(step: int):
+            with _fail_together(
+                dist_manager, f"{mode} epoch {epoch}, step {step} (data loading)"
+            ):
+                return recursive_to_device(next(batches), dist_manager.device)
+
         for i in range(num_steps):
             where = f"{mode} epoch {epoch}, step {i}"
-            with _fail_together(dist_manager, f"{where} (data loading)"):
-                batch = recursive_to_device(next(batches), dist_manager.device)
+            batch = load(i) if next_batch is None else next_batch
+            next_batch = None
             with _fail_together(dist_manager, f"{where} (forward/loss)"):
                 loss, losses, metrics = forward_pass(
                     batch,
@@ -398,10 +406,19 @@ def _run_epoch(
                 optimizer.zero_grad()
                 if precision == "float16" and scaler is not None:
                     scaler.scale(loss).backward()
+                    if i + 1 < num_steps:
+                        next_batch = load(i + 1)
                     scaler.step(optimizer)
                     scaler.update()
                 else:
                     loss.backward()
+                    ### Load the next batch now, while the GPU still runs this
+                    ### backward: the loader's host-side work (the lookahead
+                    ### sample's host-to-device copy and transforms) then
+                    ### overlaps GPU work instead of leaving the GPU idle at the
+                    ### start of the next step. Same samples, same order.
+                    if i + 1 < num_steps:
+                        next_batch = load(i + 1)
                     ### Skip the update on a NaN/inf loss or gradient, as
                     ### GradScaler does for float16. DDP has averaged the
                     ### gradients, so every rank makes the same choice.

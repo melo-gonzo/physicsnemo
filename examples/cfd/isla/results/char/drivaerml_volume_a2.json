@@ -1,0 +1,374 @@
+{
+ "protocol": "A2-RERUN artifacts (2026-10-17, #sec-nb-a2-rerun-jeb-t2d, #sec-nb-a2-rerun-drivaerml,\n#sec-nb-a2-rerun-suv-lug): the CHAR-PROTOCOLS record of each\nrerun dataset with ISLA's arm replaced by the A2 reruns (the reference configuration with the normalized slice reads, seeds 42\nand 43, final checkpoints, the CHAR scorer: float32, native mesh / uniform point cloud / rotated + translated). The A2 scores\nare the reductions committed in results/campaigns_2026-10-17/a2r/<stem>_a2_scores.json (copied unmodified from\nscratch/isla-a2-rerun-2026-10-17/, written there by char_a2_table.py and deepjeb_a2_table.py); the baselines' arms are the CHAR\nrecord's, unchanged (GeoTransolver and Transolver are not rerun). Writes results/char/<dataset>_a2.json in the schema of\nresults/char/<dataset>.json (protocols, fields, isla_arm, arms[arm][protocol][field] = {mean, per_seed, n_cases, n_seeds},\ncomplete), so the chapters' protocol_table() and char_arms() read it unchanged, plus the key \"raw_read_isla\", the CHAR record's\nISLA arm (raw slice reads), which protocol_table ignores. n_cases is the A2 record's where it has one (DeepJEB++), else the CHAR\nISLA arm's: the A2 lanes are scored on the same validation split by the same scorer.\nusage: python a2r_protocol_artifacts_2026-10-17.py",
+ "protocols": {
+  "native": "native mesh",
+  "area": "uniform point cloud",
+  "posed": "rotated + translated"
+ },
+ "fields": {
+  "pressure_l2": "pressure",
+  "velocity_l2": "velocity",
+  "nut_l2": "eddy viscosity"
+ },
+ "isla_arm": "ISLA 512 with 512 slices",
+ "arms": {
+  "ISLA 512 with 512 slices": {
+   "native": {
+    "pressure_l2": {
+     "mean": 0.040858518332242966,
+     "per_seed": {
+      "42": 0.04131508866945902,
+      "43": 0.04040194799502691
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.06595566868782043,
+     "per_seed": {
+      "42": 0.06621550520261128,
+      "43": 0.06569583217302959
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.08806381126244862,
+     "per_seed": {
+      "42": 0.08946662147839864,
+      "43": 0.08666100104649861
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "mean": 0.19603749116261798,
+     "per_seed": {
+      "42": 0.18128442764282227,
+      "43": 0.21079055468241373
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.3469758133093516,
+     "per_seed": {
+      "42": 0.31425140301386517,
+      "43": 0.37970022360483807
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.4826085567474365,
+     "per_seed": {
+      "42": 0.5750472942988077,
+      "43": 0.39016981919606525
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "mean": 0.040862789998451866,
+     "per_seed": {
+      "42": 0.041317502657572426,
+      "43": 0.04040807733933131
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.06599079817533493,
+     "per_seed": {
+      "42": 0.06625109910964966,
+      "43": 0.0657304972410202
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.08807075520356496,
+     "per_seed": {
+      "42": 0.08947690327962239,
+      "43": 0.08666460712750752
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    }
+   }
+  },
+  "GeoTransolver 256": {
+   "native": {
+    "pressure_l2": {
+     "mean": 0.04867631693681081,
+     "per_seed": {
+      "42": 0.04895009100437164,
+      "43": 0.04840254286924998
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.10021389027436575,
+     "per_seed": {
+      "42": 0.09985670447349548,
+      "43": 0.10057107607523601
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.08375356594721475,
+     "per_seed": {
+      "42": 0.08438313007354736,
+      "43": 0.08312400182088216
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "mean": 0.04867631693681081,
+     "per_seed": {
+      "42": 0.04895009100437164,
+      "43": 0.04840254286924998
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.10021389027436575,
+     "per_seed": {
+      "42": 0.09985670447349548,
+      "43": 0.10057107607523601
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.08375356594721475,
+     "per_seed": {
+      "42": 0.08438313007354736,
+      "43": 0.08312400182088216
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "mean": 0.7952865362167358,
+     "per_seed": {
+      "42": 0.7836399078369141,
+      "43": 0.8069331645965576
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 1.3025505940119426,
+     "per_seed": {
+      "42": 1.3047649065653484,
+      "43": 1.3003362814585369
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 1.3717615207036338,
+     "per_seed": {
+      "42": 1.096341848373413,
+      "43": 1.6471811930338542
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    }
+   }
+  },
+  "Transolver 512 x 16 at 100k cells": {
+   "native": {
+    "pressure_l2": {
+     "mean": 0.05248650908470154,
+     "per_seed": {
+      "42": 0.0523449977238973,
+      "43": 0.052628020445505776
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.12501340607802075,
+     "per_seed": {
+      "42": 0.12463819980621338,
+      "43": 0.1253886123498281
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.08932746450106302,
+     "per_seed": {
+      "42": 0.08906075358390808,
+      "43": 0.08959417541821797
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "mean": 0.05248650908470154,
+     "per_seed": {
+      "42": 0.0523449977238973,
+      "43": 0.052628020445505776
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.12501340607802075,
+     "per_seed": {
+      "42": 0.12463819980621338,
+      "43": 0.1253886123498281
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.08932746450106302,
+     "per_seed": {
+      "42": 0.08906075358390808,
+      "43": 0.08959417541821797
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "mean": 0.8131156762440999,
+     "per_seed": {
+      "42": 0.8119870821634928,
+      "43": 0.814244270324707
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 1.2467988729476929,
+     "per_seed": {
+      "42": 1.191336949666341,
+      "43": 1.3022607962290447
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 1.0875399112701416,
+     "per_seed": {
+      "42": 1.0429192384084065,
+      "43": 1.1321605841318767
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    }
+   }
+  }
+ },
+ "complete": true,
+ "raw_read_isla": {
+  "label": "ISLA 512 with 512 slices",
+  "native": {
+   "pressure_l2": {
+    "mean": 0.03937830900152524,
+    "per_seed": {
+     "42": 0.03872724622488022,
+     "43": 0.040029371778170265
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   },
+   "velocity_l2": {
+    "mean": 0.06347634891668956,
+    "per_seed": {
+     "42": 0.061888630191485085,
+     "43": 0.06506406764189403
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   },
+   "nut_l2": {
+    "mean": 0.08761712908744812,
+    "per_seed": {
+     "42": 0.08682671189308167,
+     "43": 0.08840754628181458
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   }
+  },
+  "area": {
+   "pressure_l2": {
+    "mean": 0.31136712431907654,
+    "per_seed": {
+     "42": 0.35089051723480225,
+     "43": 0.27184373140335083
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   },
+   "velocity_l2": {
+    "mean": 0.41698173681894934,
+    "per_seed": {
+     "42": 0.4361788829167684,
+     "43": 0.39778459072113037
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   },
+   "nut_l2": {
+    "mean": 0.5826345086097717,
+    "per_seed": {
+     "42": 0.6700983047485352,
+     "43": 0.4951707124710083
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   }
+  },
+  "posed": {
+   "pressure_l2": {
+    "mean": 0.03938508530457815,
+    "per_seed": {
+     "42": 0.03873667617638906,
+     "43": 0.040033494432767235
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   },
+   "velocity_l2": {
+    "mean": 0.0635076214869817,
+    "per_seed": {
+     "42": 0.061917429169019066,
+     "43": 0.06509781380494435
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   },
+   "nut_l2": {
+    "mean": 0.08762017885843913,
+    "per_seed": {
+     "42": 0.08683250347773235,
+     "43": 0.08840785423914592
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   }
+  }
+ }
+}

@@ -1,0 +1,52 @@
+{
+ "tensile2d": {
+  "sample_id": "00238_sample_000238_sample_000238",
+  "source": {
+   "t2d_isla/native": {
+    "row": 15,
+    "run_id": "a2r_t2dz_isla_seed42",
+    "dataset": "plaid_tensile2d_2d",
+    "model": "isla_tensile2d",
+    "cells": 200000,
+    "lhr_dump_job": 271987,
+    "dump": "$T/book_figs_2026-10-18/dump/t2d_isla/native/ (copy: fig/dump/t2d_isla/native/)"
+   },
+   "t2d_gt/native": {
+    "row": 16,
+    "run_id": "cl_r_t2dz_gt_seed42",
+    "dataset": "plaid_tensile2d",
+    "model": "geotransolver_tensile2d",
+    "cells": 200000,
+    "lhr_dump_job": 275252,
+    "dump": "$T/book_figs_2026-10-18/dump/t2d_gt/native/ (copy: fig/dump/t2d_gt/native/)"
+   },
+   "t2d_t/native": {
+    "row": 17,
+    "run_id": "cl_r_t2dz_t_seed42",
+    "dataset": "plaid_tensile2d",
+    "model": "transolver_tensile2d",
+    "cells": 200000,
+    "lhr_dump_job": 275252,
+    "dump": "$T/book_figs_2026-10-18/dump/t2d_t/native/ (copy: fig/dump/t2d_t/native/)"
+   }
+  },
+  "n_points_scored": 9547,
+  "per_sample_rel_l2": {
+   "stress_l2": {
+    "ISLA": 0.006692214403301477,
+    "GeoTransolver": 0.006023834925144911,
+    "Transolver": 0.007124852389097214
+   },
+   "displacement_l2": {
+    "ISLA": 0.006757862400263548,
+    "GeoTransolver": 0.0058926367200911045,
+    "Transolver": 0.004402869381010532
+   },
+   "q_l2": {
+    "ISLA": 0.3147153854370117,
+    "GeoTransolver": 0.596491813659668,
+    "Transolver": 0.16677816212177277
+   }
+  }
+ }
+}
