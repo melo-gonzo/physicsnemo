@@ -426,8 +426,9 @@ the full-resolution boundary and the global inputs, before the token draw:
 - **Density and viscosity.** A rank-0 global with the `role` `density` is
   $\rho$; one with the `role` `viscosity` is $\nu$. Both are consumed, not
   read as scalars. With a viscosity the model appends one global scalar,
-  $z \equiv (\log_{10}(U L / \nu) - m) / s$, with $m$ and $s$ given by the
-  constructor's `reynolds={"mean": m, "std": s}`.
+  $\log_{10} \mathrm{Re}$ with $\mathrm{Re} \equiv U L / \nu$, minus a mean and
+  divided by a standard deviation that the constructor's
+  `reynolds={"mean": ..., "std": ...}` gives.
 
 Each declared input enters divided by $c \prod_k \text{scale}_k^{e_k}$, its
 constant times its units' scales, and each declared output is the head's
@@ -459,7 +460,7 @@ print(f"**The constant $c$ starts the head at the right size.** A freshly initia
       f"head would start {min(_orders):.0f} to {max(_orders):.0f} orders of magnitude off on these fields; with it, each starts at "
       "order one and learns the spread around the median.")
 print()
-print(f"These constants, $m$, $s$ and every $c$, belong to a split of a dataset: each is fitted on the split's training cases "
+print(f"These constants, the two of `reynolds` and every $c$, belong to a split of a dataset: each is fitted on the split's training cases "
       f"(the medians of per-case RMS values, and the mean and standard deviation of $\\log_{{10}}(U L / \\nu)$, through the class's "
       f"own scale functions), and each dataset file holds its split's values under `isla_constants`. The model configurations "
       f"leave them `null`, and the recipe's `train.py` and `infer.py` fill them from the dataset file; a configuration whose "
