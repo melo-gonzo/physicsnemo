@@ -149,7 +149,7 @@ for title, keys in GROUPS:
 ceiling, so the comparison is matched in memory, not in parameters.** The
 three reference configurations come from candidates that train under
 80 GiB per GPU on two selection datasets, the DrivAerML Surface task and
-the 210-wing HiLiftAeroML set; the registered selection rule named no
+HiLiftAeroML at 510 training cases; the registered selection rule named no
 single configuration for both datasets, and each pick has the smallest joint score over the two
 (@sec-selection). No architecture's pick, ISLA's included, is its most
 accurate candidate on the car, and for the baselines the wing scores that

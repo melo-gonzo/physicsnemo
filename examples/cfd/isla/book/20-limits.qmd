@@ -147,7 +147,7 @@ the law re-fitted at the reference configuration (@sec-oq-scaling).
 **Every HiLiftAeroML accuracy number in this book is scored on the shared 180-case validation set
 on final-epoch checkpoints, and the dataset's scored test splits share its geometries.** No
 checkpoint is selected on validation error. The validation set did enter decisions, among them the
-rule that fixed the reference configurations, which read the 210-wing rung (@sec-protocol). The
+rule that fixed the reference configurations, which read the 510-case rung (@sec-protocol). The
 test splits scored for regime extrapolation (angle of attack, stall) and for flap deflection hold,
 between them, every one of the 180 validation geometries
 (results/hilift_exposure_ledger_2026-09-08.json), so none of them confirms the validation numbers
@@ -348,7 +348,7 @@ if HELD:
                  "the baselines' velocity error scored on its two in-plane components, on the standing's checkpoints", "scoring only"))
 rows += [
     ("Do GeoTransolver and Transolver keep their reference configurations when the selection's wings read the unit direction?",
-     "the baselines' candidates retrained on the 210 wings with the unit direction, two seeds each, and the selection rule applied again",
+     "the baselines' candidates retrained on the 510 wing cases with the unit direction, two seeds each, and the selection rule applied again",
      "not priced (the wing rung is not in the cost record)"),
     ("Do the scaling law, the cell-count saturation and the capacity floor hold at the reference configuration?", "the case ladder at three sizes around the reference and a cell ladder at 435 cars, on the DrivAerML Surface task", fmt_h(q5)),
     ("What causes ISLA's stress and displacement deficit on Tensile2d?", "ISLA's error per node on the polyline against the interior, beside the baselines'; GeoTransolver + ISLA's measure-weighted pooling", fmt_h(q6)),
@@ -474,8 +474,8 @@ T_REF, T_CAR = "t_h512_l16_c100k", "t_h1024_c100k"  # width 512, 16 layers (the 
 assert SEL["drivaer_surface"]["GeoTransolver"]["winner"] == GT_BIG and SEL["hilift_210"]["GeoTransolver"]["winner"] == GT_REF
 assert SEL["drivaer_surface"]["Transolver"]["winner"] == T_CAR and SEL["hilift_210"]["Transolver"]["winner"] == T_REF
 print("**The open question is whether GeoTransolver and Transolver keep their reference configurations when the selection's wings give "
-      "them the unit direction.** The selection scored every candidate on the DrivAerML Surface task and on HiLiftAeroML at 210 training "
-      "wings (@sec-selection), and on the wings the baselines read the freestream in inch/s, which costs them on this rung (@tbl-hilift-unit-drive). Under the 80 GiB budget, "
+      "them the unit direction.** The selection scored every candidate on the DrivAerML Surface task and on HiLiftAeroML at 510 training "
+      "cases (@sec-selection), and on the wings the baselines read the freestream in inch/s, which costs them on this rung (@tbl-hilift-unit-drive). Under the 80 GiB budget, "
       f"GeoTransolver at width 1,024 trained on 100,000 cells has a surface pressure error of {sel('GeoTransolver', GT_BIG, 'drivaer_surface'):.4f} "
       f"on the DrivAerML Surface task against {sel('GeoTransolver', GT_REF, 'drivaer_surface'):.4f} for the reference width 256, and "
       f"{sel('GeoTransolver', GT_BIG, 'hilift_210'):.3f} against {sel('GeoTransolver', GT_REF, 'hilift_210'):.3f} on the wings, which cost it "
@@ -484,7 +484,7 @@ print("**The open question is whether GeoTransolver and Transolver keep their re
       "at 100,000 cells and scored at 200,000 as every candidate of the selection (@sec-selection), and trails on the wings, "
       f"{sel('Transolver', T_CAR, 'hilift_210'):.4f} against {sel('Transolver', T_REF, 'hilift_210'):.4f} (@tbl-selection). If the wing "
       "ranking is an artifact of the raw vector, the baselines' reference configurations, and every standing scored with them, may change. "
-      "What would settle it: the GeoTransolver and Transolver candidates of @tbl-selection retrained on the 210 wings reading the unit "
+      "What would settle it: the GeoTransolver and Transolver candidates of @tbl-selection retrained on the 510 wing cases reading the unit "
       "direction, two seeds each, and the registered rule applied again. Cost: not priced, because the wing rung is not in the cost record. "
       "Data: results/char/ref80_select_2026-10-03.json.")
 ```

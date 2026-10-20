@@ -447,7 +447,7 @@ toward a floor at the large ones, on both datasets.
 #|   floor. *Instrument:* ISLA at 192, 384 and 768 wide, 256 slices, 1e-3 / 5e-4 / 5e-4, raw slice
 #|   reads (@sec-study-configurations); GeoTransolver at 256, 512 and 1,024 wide, 3e-3 / 3e-3 /
 #|   1e-3. Black-edged stars: the three reference configurations at the full training set of 435
-#|   cars and of 210 wings, a different instrument (results/char/drivaerml_surface_a2.json,
+#|   cars and of 510 wing cases, a different instrument (results/char/drivaerml_surface_a2.json,
 #|   results/char/hilift_surface_a2.json; every baseline reading the unit direction), offset
 #|   sideways for legibility. How to read this: the
 #|   vertical spread between shades is what parameters buy at one training-set size; the slope is
@@ -464,7 +464,7 @@ def mid(a, b):
     return mpl.colors.to_hex((np.array(mpl.colors.to_rgb(a)) + np.array(mpl.colors.to_rgb(b))) / 2)
 shades = {"isla": [BLUE_PALE, BLUE_LIGHT, BLUE], "gt": [RED_LIGHT, mid(RED_LIGHT, RED), RED]}
 PANELS = (("drivaerml", "DrivAerML Surface task (48 validation cars)", [27, 54, 109, 218, 435], (22, 600), (0.030, 0.165), [0.04, 0.05, 0.07, 0.1, 0.15], SURF, 435),
-          ("hilift", "HiLiftAeroML (180 validation wings)", [35, 210, 510, 1260], (28, 1560), (0.024, 0.17), [0.03, 0.04, 0.05, 0.07, 0.1, 0.15], HLS, 210))
+          ("hilift", "HiLiftAeroML (180 validation wings)", [35, 210, 510, 1260], (28, 1560), (0.024, 0.17), [0.03, 0.04, 0.05, 0.07, 0.1, 0.15], HLS, 510))
 fig, axes = plt.subplots(2, 1, figsize=(8.0, 9.2))
 for ax, (ds, title, ticks, xlim, ylim, yticks, stand, nref) in zip(axes, PANELS):
     pts, params = grid(ds)
