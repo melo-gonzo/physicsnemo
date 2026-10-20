@@ -54,11 +54,19 @@ training:
     lr: 3.75e-4
 
 # Whole-model torch.compile: one graph, compiled once for every token count; see isla_volume.yaml.
+# The options are those of mode max-autotune-no-cudagraphs (max_autotune and coordinate_descent_tuning)
+# with Inductor's mix-order reduction off: on this graph it fuses a per-point sum with a sum over the
+# points into one kernel, and torch 2.12 returns the second sum, a (1, n_slices, 1) softmax denominator
+# saved for backward, as (1, n_slices), so the compiled backward fails its first step ("wrong number
+# of dimensions"). torch 2.13 returns it at its shape; there the mode line can come back.
 compile: true
 compile_options:
   fullgraph: true
   dynamic: true
-  mode: max-autotune-no-cudagraphs
+  options:
+    max_autotune: true
+    coordinate_descent_tuning: true
+    triton.mix_order_reduction: false
 
 forward_kwargs:
   boundary_meshes:

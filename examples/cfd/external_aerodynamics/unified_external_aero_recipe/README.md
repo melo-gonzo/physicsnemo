@@ -370,9 +370,12 @@ Triton geometry kernel wherever it can run (CUDA) and the eager PyTorch region
 otherwise. The configs (all but `isla_volume_aerozoo`, see its comment)
 compile the whole model
 (`compile: true` with `compile_options` `fullgraph: true`, `dynamic: true`
-and `mode: max-autotune-no-cudagraphs`): one graph with dynamic shapes, so a
-new mesh size does not recompile it (see `isla_volume.yaml` for the first
-compile's cost and the one exception); the per-block `compile_blocks` is off. For
+and `mode: max-autotune-no-cudagraphs`; `isla_volume_airfrans` gives that
+mode's two options instead, with Inductor's mix-order reduction off, which
+torch 2.12 miscompiles on its graph, see its comment): one graph with dynamic
+shapes, so a new mesh size does not recompile it (see `isla_volume.yaml` for
+the first compile's cost and the one exception); the per-block
+`compile_blocks` is off. For
 ISLA-DTT (`model.query_independent=true`), whose boundary read breaks the graph, set
 `compile=false model.compile_blocks=true` instead.
 
