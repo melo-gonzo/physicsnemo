@@ -38925,3 +38925,56 @@ A2 rows stay in the record as the partner.
 **Next.** The capacity audit's phase-1 case geo_LHC002_AoA_18 reads tonight.
 It shows whether ISLA can fit a post-stall case at all, which separates a
 capacity limit from a generalization one.
+
+## 2026-10-20 — Head-frame normalization (E1): on AirfRANS and DeepJEB++ it matches or beats the raw read, and it removes the head frame's collapse to a single point on DeepJEB++ {#sec-nb-headnorm-jb}
+
+**Question** (E1 HEAD-NORM, pre-registered 2026-10-18 in
+scratch/isla-headnorm-2026-10-18/PREREG.md). Should ISLA's head frame read
+the normalized state norm_out(h) rather than the raw residual stream, so that
+its routing scores cannot grow with the stream? HEADNORM changes only that
+read, with the same parameters. CONTROL is A2. Both arms are two seeds on
+AirfRANS (scored 2026-10-19) and DeepJEB++ (5,540 test samples, epoch 40,
+float32).
+
+| Dataset | Field | CONTROL | HEADNORM | HEADNORM ÷ CONTROL (seeds) |
+|---|---|---|---|---|
+| AirfRANS | pressure | 0.01828 | 0.01808 | 0.989 (1.039, 0.942) |
+| AirfRANS | velocity | 0.00950 | 0.00958 | 1.008 (1.022, 0.994) |
+| AirfRANS | eddy viscosity | 0.02143 | 0.02039 | 0.952 (0.973, 0.931) |
+| DeepJEB++ | von Mises | 0.40030 | 0.39652 | 0.991 (0.993, 0.988) |
+| DeepJEB++ | displacement | 0.16868 | 0.16245 | 0.963 (0.951, 0.975) |
+
+Native relative L2, seed means. Posed and area equal native to the digits
+shown, since the pose is exact and DeepJEB++ is read whole.
+
+**The instrument.** On DeepJEB++, CONTROL's head frame collapses to an argmax
+on both seeds from epochs 13 to 19: the smallest seed support is one point,
+with a largest weight of 0.64. Its seed-logit p99.9 grows 1,335 and 1,516
+times, to about 5,200. HEADNORM never collapses: its smallest support is
+13,996 tokens, its largest weight 0.004, and its final p99.9 is 0.57. On
+AirfRANS neither arm collapses, and HEADNORM's p99.9 is 0.54 against
+CONTROL's 7.5. The stream itself still grows on DeepJEB++ in both arms, to
+about 2.2e4. HEADNORM bounds what the head frame reads, not the stream.
+
+**Verdict.** The registered rule needs 14 ratios. Two were on AeroZoo's
+label-era protocol, which was retired, so the rule cannot complete as
+written. On the 12 ratios that exist, the accuracy test (a') holds: the
+geometric mean is 0.980, the largest ratio is 1.008, and none reaches 1.10.
+The instrument tests (b1) to (b3) hold on both datasets. The two missing
+ratios can block adoption only through the 1.10 clause, since each would
+have to exceed 1.21 to break the 1.01 bar on the mean.
+
+**Predictions.** P-ACC held: every ratio lies in [0.95, 1.05], and the
+geometric mean lies in [0.97, 1.01]. P-JEB held, with displacement at 0.963.
+HEADNORM's final p99.9 on DeepJEB++ fell in the predicted 0.3 to 15. Both
+CONTROL lanes collapsed by epoch 39 as predicted. Seed 42's growth of 1,516
+sits just above the predicted 200 to 1,500.
+
+**Decision.** Adopt on principle, after one clean AeroZoo pair under the
+corrected protocol. The change removes a degenerate head frame at no measured
+cost. The pair is 0.9.0 with HEADNORM against the running 0.9.0 lanes on
+family_non_box. It applies the 1.10 clause to velocity and pressure and the
+instrument tests to AeroZoo, and it is pre-registered before submission as
+E1-AZ. HEADNORM then enters the next reference version. The 0.9.0 standings
+stay until that version is rerun
+(scratch/isla-headnorm-2026-10-18/RESULTS_JB_2026-10-20.txt).
