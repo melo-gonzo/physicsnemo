@@ -59,7 +59,7 @@ print(f"**On the AirfRANS interior task ISLA " + "; it ".join(f"{both(f)} on {l}
       + f". It keeps its error to within {isla_posed * 100:.2f}% when every case is rotated and translated, and when its airfoil is "
       f"thinned, its interior error depends strongly on which segments it keeps.** The ISLA checkpoints are of the {S.FORM_TAG} "
       "(@sec-checkpoint-form). ", end="")
-print("AirfRANS is the book's two-dimensional flow dataset, and its one global scalar input is the inlet speed. The chapter shows "
+print("AirfRANS is the book's two-dimensional flow dataset, and its one global input is the inlet velocity. The chapter shows "
       "the problem, what is measured, the standing of the three reference configurations, three studies that belong to this dataset (the "
       "training-airfoil ladder, the read-only prediction points at a study configuration and at the reference one, the extrapolation splits) "
       "and the boundary-sampling study, and ends with what the "
@@ -68,7 +68,7 @@ print("AirfRANS is the book's two-dimensional flow dataset, and its one global s
 
 ## The problem: NACA airfoils across Reynolds number and incidence {#sec-dataset-airfrans}
 
-**Each AirfRANS case is a two-dimensional incompressible RANS solution around one NACA airfoil, and the model must recover the whole flow field from the airfoil's outline and the inlet condition.** The source (Bonnet et al., 2022) holds 1,000 solutions with the $k$–$\omega$ SST closure, at Reynolds numbers of 2 to 6 million and angles of attack of −5° to 15°. The boundary is the airfoil polyline: about a thousand line segments, each with an outward normal and its length as the measure weight $w_i$ (the length the segment stands for in every boundary integral). Two global inputs close the problem. The inlet direction is the one *global vector* $\hat g_1$, a unit vector at the angle of attack. The inlet speed $U_\infty$ is the one *global scalar*. The *prediction points* are points of the stored interior mesh; at each one the model predicts pressure, velocity and the eddy viscosity of the turbulence model. @fig-problem-airfrans shows one test case.
+**Each AirfRANS case is a two-dimensional incompressible RANS solution around one NACA airfoil, and the model must recover the whole flow field from the airfoil's outline and the inlet condition.** The source (Bonnet et al., 2022) holds 1,000 solutions with the $k$–$\omega$ SST closure, at Reynolds numbers of 2 to 6 million and angles of attack of −5° to 15°. The boundary is the airfoil polyline: about a thousand line segments, each with an outward normal and its length as the measure weight $w_i$ (the length the segment stands for in every boundary integral). The inlet velocity closes the problem. Its direction is the one *global vector* $\hat g_1$, a unit vector at the angle of attack; its speed $U_\infty$ sets the Reynolds number with the chord and the air's kinematic viscosity, which is the same on every case. The *prediction points* are points of the stored interior mesh; at each one the model predicts pressure, velocity and the eddy viscosity of the turbulence model. @fig-problem-airfrans shows one test case.
 
 ```{python}
 #| label: fig-problem-airfrans
@@ -76,7 +76,7 @@ print("AirfRANS is the book's two-dimensional flow dataset, and its one global s
 #|   The AirfRANS problem, on one test airfoil. Top: what the model is given,
 #|   the airfoil polyline with its outward normals (every twelfth drawn), the
 #|   inlet direction $\hat g_1$ (black arrow, the global vector) and the inlet
-#|   speed (the global scalar); the printed window is where the prediction
+#|   speed $U_\infty$; the printed window is where the prediction
 #|   points lie. Middle: the pressure coefficient
 #|   $C_p = p / \tfrac{1}{2} U_\infty^2$ (kinematic pressure) at the interior
 #|   mesh points near the airfoil. Bottom: the speed ratio $|U| / U_\infty$ at
@@ -94,7 +94,7 @@ ax = axes[0]
 ax.add_collection(LineCollection(bp[bc][:, :, :2], colors=BC["free"], linewidths=2.0, zorder=3))
 k = slice(None, None, 12); ax.quiver(mid[k, 0], mid[k, 1], bn[k, 0], bn[k, 1], color=MUTED, scale=28, width=0.0025, headwidth=3, zorder=2)
 u = A["U_inf_dir"]; ax.annotate("", xy=(-0.45 + 0.3 * u[0], 0.38 + 0.3 * u[1]), xytext=(-0.45, 0.38), arrowprops=dict(arrowstyle="-|>", color=INK, lw=2.0))
-ax.text(-0.1, 0.40, f"inlet along $\\hat g_1$ at {Am['aoa_deg']:.2f}° (the global vector); $U_\\infty$ = {Am['U_inf_mag']:.1f} m/s (the global scalar); Re = {Am['Re'] / 1e6:.1f} million", ha="left", va="center", fontsize=8.5, color=INK2)
+ax.text(-0.1, 0.40, f"inlet along $\\hat g_1$ at {Am['aoa_deg']:.2f}° (the global vector); $U_\\infty$ = {Am['U_inf_mag']:.1f} m/s; Re = {Am['Re'] / 1e6:.1f} million", ha="left", va="center", fontsize=8.5, color=INK2)
 ib = A["interior_bbox"]
 map_axes(ax); ax.set_xlim(-0.5, 1.5); ax.set_ylim(-0.55, 0.55); ax.set_ylabel("y / chord [–]")
 ax.set_title(f"the boundary: {Am['n_boundary_cells']:,} line segments (position, normal, length), a no-slip wall; prediction points fill {ib[0,0]:.0f} < x < {ib[1,0]:.0f}, {ib[0,1]:.0f} < y < {ib[1,1]:.0f} chords", fontsize=9.2)
@@ -166,7 +166,7 @@ The geometry family is narrow: smooth airfoils of one parameterization, in a pla
 **The release is converted once from VTK into the recipe's mesh format, and the targets are made dimensionless by the inlet condition.** Each case directory of the release, `airFoil2D_SST_<speed>_<aoa>_<NACA parameters>`, holds an `_internal.vtu` interior of about 177,000 cells with velocity `U`, pressure `p`, eddy viscosity `nut` and the signed distance `implicit_distance` at the points, an `_aerofoil.vtp` polyline and a `_freestream.vtp` far boundary. The chord is 1 m and the kinematic viscosity 1.56e-5 m²/s.
 
 - **Conversion** (`airfrans_convert.py`, @tbl-data-files). The interior becomes a point cloud with `velocity`, `pressure`, `nut`, `sdf` (the stored signed distance, positive outside the airfoil) and `sdf_normals`, the in-plane unit vector from the nearest airfoil point. The boundary `airfoil` is line cells with in-plane outward normals and the segment lengths as `quadrature_measure`. `global_data` holds `U_inf` (parsed from the case name and checked against the far boundary), `U_inf_dir`, `U_inf_mag`, `aoa_deg`, `Re` and the NACA parameters.
-- **Normalization** (`airfrans_uvolume_2d.yaml`). Pressure is kinematic ($\rho_\infty = 1$, $p_\infty = 0$) and divided by $\tfrac{1}{2} U_\infty^2$; velocity is divided by $U_\infty$; `nut` keeps its units and is standardized (mean 7.9e-4 m²/s, standard deviation 2.4e-3 m²/s, from the converter's per-case statistics).
+- **Normalization** (`airfrans_uvolume_2d.yaml`). Pressure is kinematic ($\rho_\infty = 1$, $p_\infty = 0$) and divided by $\tfrac{1}{2} U_\infty^2$; velocity is divided by $U_\infty$; `nut` keeps its units and is standardized (mean 7.9e-4 m²/s, standard deviation 2.4e-3 m²/s, from the converter's per-case statistics). These targets are every model's. ISLA's configuration declares the velocity and the pressure dimensionless, since they are already divided by $U_\infty$, its velocity scale, and `nut` in the units $U L$: the head predicts $\nu_t / (c\, U L)$, with the constant $c$ fitted on the training airfoils, and the model returns $c\, \hat y\, U L$ standardized by the same constants as the target (@sec-using-scales).
 - **The interior draw.** The reader takes each case whole and the first transform keeps a uniform random subset of the interior points (`SubsampleMesh`). The stored points run through space in the solver's order, so a uniform draw is needed to cover the domain.
 - **Splits** (the release's manifest, unchanged). `full`: 800 train / 200 test; `scarce`: 200 train; `reynolds`: 504 / 496, an extrapolation in Reynolds number; `aoa`: 804 / 196, an extrapolation in angle of attack. The training-airfoil ladder uses nested subsets of 50 to 400 airfoils inside `full` (@sec-airfrans-ladder).
 
@@ -192,11 +192,11 @@ print("No model trains with rotation or translation augmentation. **The three do
 
 | | boundary | global inputs | at each prediction point |
 |---|---|---|---|
-| ISLA | the airfoil polyline, the one condition `airfoil`: each segment's position, normal and length | $\hat g_1$, the unit inlet direction (rank 1), and the inlet speed $U_\infty$ in m/s (rank 0) | position, entering only through relational invariants; the exact signed distance and direction to the full-resolution airfoil, computed inside the model |
+| ISLA | the airfoil polyline, the one condition `airfoil`: each segment's position, normal and length | the inlet velocity `U_inf` (rank 1), declared as the velocity source: its direction is $\hat g_1$ and its magnitude the velocity scale $U = U_\infty$; with the air's kinematic viscosity, a constant of the configuration, and the length unit $L$ of the airfoil, the one global scalar is the standardized $\log_{10}(U L / \nu)$ (@sec-using-scales) | position, entering only through relational invariants; the exact signed distance and direction to the full-resolution airfoil, computed inside the model |
 | GeoTransolver | none | $\hat g_1$ and the inlet speed standardized over the 800 training airfoils, read by the context projector | coordinates; the stored `sdf` and `sdf_normals` |
 | Transolver | none | the same two, concatenated to every point's features | coordinates; the stored `sdf` and `sdf_normals` |
 
-: What each architecture receives on the AirfRANS interior task. How to read this: only ISLA reads the airfoil itself; the baselines read the stored signed distance, computed by the converter from the full airfoil, and ISLA computes the same quantity itself from the airfoil it is given and reads no stored field. The standing's ISLA checkpoints are of the nearest-token form: they also read `sdf` and `sdf_normals`, and took their built-in distance and direction from the nearest boundary token, the one input of their interior task that changes with the boundary sample (@sec-checkpoint-form, @sec-airfrans-boundary-law); the global column carries the same information for all three, the baselines' at a scale of one; the baselines read the planar case embedded in three dimensions, with a third coordinate and a third velocity component. Data: conf/model/isla_volume_airfrans.yaml of the recipe, the two baselines' recipe configurations (@sec-baselines) and results/campaigns_2026-10-19/drive_fix/PREREG.md. {#tbl-airfrans-inputs}
+: What each architecture receives on the AirfRANS interior task. How to read this: only ISLA reads the airfoil itself; the baselines read the stored signed distance, computed by the converter from the full airfoil, and ISLA computes the same quantity itself from the airfoil it is given and reads no stored field. The standing's ISLA checkpoints are of the nearest-token form: they also read `sdf` and `sdf_normals`, and took their built-in distance and direction from the nearest boundary token, the one input of their interior task that changes with the boundary sample (@sec-checkpoint-form, @sec-airfrans-boundary-law); the global column carries the same information for all three: the baselines read the direction and the speed standardized to a scale of one, ISLA the direction and the Reynolds number its declared scales form, and the standing's checkpoints the direction and the raw speed in m/s as a global scalar; the baselines read the planar case embedded in three dimensions, with a third coordinate and a third velocity component. Data: conf/model/isla_volume_airfrans.yaml of the recipe, the two baselines' recipe configurations (@sec-baselines) and results/campaigns_2026-10-19/drive_fix/PREREG.md. {#tbl-airfrans-inputs}
 
 ```{python}
 #| label: para-airfrans-scorings

@@ -94,7 +94,7 @@ print(f"- **Not that ISLA is more accurate in distribution in general.** Across 
   augmentation and scored in random poses (@sec-pose).
 - **Not that the standing measures ISLA as Part II defines it.** Its ISLA checkpoints are of the
   nearest-token form, which differs from the class in how the boundary and the prediction points
-  enter the model (@sec-checkpoint-form); the class's own standing is @sec-oq-class-standing.
+  enter the model, in its length unit and in its scales (@sec-checkpoint-form); the class's own standing is @sec-oq-class-standing.
 - **Not that the standing's pose invariance is exact on every mesh.** In its checkpoints it is exact
   to roundoff where each prediction point has one nearest boundary sample, and it is not where the
   mesh puts points equidistant from two: the lug's structured hexahedral mesh and the nodes on
@@ -356,7 +356,7 @@ fmt_h = lambda h: f"{h:,.0f}" if h < 1000 else f"{h / 1000:.1f} thousand"
 #| output: asis
 rows = [
     ("Do the standing's verdicts hold for ISLA as Part II defines it?",
-     "the ISLA lanes of AirfRANS, the DrivAerML Surface and Volume tasks, SHIFT-SUV, Tensile2d, the lug and DeepJEB++ retrained at the reference configuration with the class (each condition's own input layer, the exact wall geometry with the continuous encoding, the boundary drawn inside the model, no stored signed distance), two seeds, scored under the scoring protocol against the same baseline checkpoints; per dataset, the seed rule's verdicts and the pose and resampling shifts; HiLiftAeroML first needs a decimated geometry asset",
+     "the ISLA lanes of AirfRANS, the DrivAerML Surface and Volume tasks, SHIFT-SUV, Tensile2d, the lug and DeepJEB++ retrained at the reference configuration with the class (each condition's own input layer, the exact wall geometry with the continuous encoding, the boundary drawn inside the model, no stored signed distance, the exact length unit, the declared scales on AirfRANS), two seeds, scored under the scoring protocol against the same baseline checkpoints; per dataset, the seed rule's verdicts and the pose and resampling shifts; HiLiftAeroML first needs a decimated geometry asset",
      CLASS_COST),
     ("Should ISLA-DTT be ISLA's only interior form?", "ISLA-DTT ÷ ISLA on velocity and pressure on `full` and each AeroZoo held-out split under the benchmark protocol, at equal size", AZ_COST),
     ("How large is ISLA-DTT's tree error at θ = 1 where its forest's frame ties?", "ISLA-DTT scored rotated and translated, and under boundary redraws, on cases whose boundary has near-equal principal variances", "scoring only"),
@@ -399,11 +399,13 @@ print(": The open questions, the measurement that would settle each, and its cos
 #| label: para-oq-class-standing
 #| output: asis
 print("**The open question is whether the standing's verdicts hold for ISLA as Part II defines it.** Every ISLA checkpoint of the "
-      "standing is of the nearest-token form (@sec-checkpoint-form), and the class differs from it in four inputs: each boundary condition "
+      "standing is of the nearest-token form (@sec-checkpoint-form), and the class differs from it in six inputs: each boundary condition "
       "has its own input layer rather than a one-hot label in one shared schema; each prediction point's wall distance and direction are "
       "exact against the full-resolution boundary, with the continuous encoding, rather than from the nearest sampled token; the boundary "
-      "tokens are drawn inside the model rather than by the datapipe; and no stored signed distance is read, where the form read it on "
-      "AirfRANS, Tensile2d and the lug. The baselines' inputs are the same in both. The evidence of chapter 04 bears on single properties "
+      "tokens are drawn inside the model rather than by the datapipe; no stored signed distance is read, where the form read it on "
+      "AirfRANS, Tensile2d and the lug; the length unit is exact for the full-resolution boundary rather than computed from the "
+      "given cells' centroids; and on AirfRANS the inlet speed enters through the declared scales rather than as a raw global "
+      "scalar (@sec-using-scales). The baselines' inputs are the same in both. The evidence of chapter 04 bears on single properties "
       "of the class (@sec-exact-geometry-draw, @sec-medial-ties), not on its standing. What would settle it: on AirfRANS, the "
       "DrivAerML Surface and Volume tasks, SHIFT-SUV, Tensile2d, the lug and DeepJEB++, the ISLA lanes retrained at the reference "
       "configuration with the class as it is, two seeds (42 and 43), scored under the scoring protocol of @sec-protocol on the same scoring sets and against the same baseline checkpoints; per dataset, the seed rule "

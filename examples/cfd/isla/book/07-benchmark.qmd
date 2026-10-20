@@ -130,7 +130,9 @@ MI = [
      "the same, with `U_inf` concatenated", "the same information at 2,680 times the scale"),
     ("shift_suv", f"{BC}; `U_inf_dir`, constant", f"{GP}; `U_inf` = $(30, 0, 0)$ m/s on every case",
      "the same, with `U_inf` concatenated", "the same: a constant vector"),
-    ("airfrans", f"{BC}; {NT}; `U_inf_dir` and the raw inlet speed `U_inf_mag` (31 to 94 m/s) as a scalar",
+    ("airfrans", f"{BC}; {NT}; the inlet velocity `U_inf` as the velocity source of its declared scales: its direction, and as the one "
+     "scalar the Reynolds number from its magnitude, the airfoil's length unit and the configuration's constant kinematic viscosity, "
+     "log-standardized by dataset constants",
      f"{GV}; `U_inf_dir` and the inlet speed standardized over the training airfoils, read by the context projector",
      "the same per-point fields, with the same two globals concatenated",
      "the same information; the baselines also predict an out-of-plane velocity component, which leaves their velocity error "
@@ -170,7 +172,8 @@ print(": What each model receives, per dataset: the global inputs with their uni
       "conditions, and the per-point geometry. The ISLA column is ISLA as the recipe configures it (`conf/model/isla_*.yaml`); the "
       "standing's ISLA checkpoints are of the nearest-token form, which read one boundary with label fields, took the wall distance "
       "and direction from the nearest sampled boundary token and, on AirfRANS, Tensile2d and the lug, also read `sdf` and "
-      "`sdf_normals` (@sec-checkpoint-form). The baselines' columns are the configurations of the standing's training runs. `U_inf` is the "
+      "`sdf_normals`, and on AirfRANS read `U_inf_dir` and the raw inlet speed `U_inf_mag` in m/s in place of the declared "
+      "scales (@sec-checkpoint-form). The baselines' columns are the configurations of the standing's training runs. `U_inf` is the "
       "freestream velocity as the dataset stores it; `U_inf_dir` is the same vector normalized; `sdf` and `sdf_normals` are "
       "the stored signed distance to the full-resolution boundary and its gradient. How to read this: the last column says "
       "whether the baselines receive the same information as ISLA; a row marked *no standing comparison* is one whose "
@@ -701,7 +704,7 @@ are held out per checkpoint but do not confirm a result across the whole set of 
 **Every ISLA checkpoint in Part IV, the standing's and every trained ISLA the book draws, is of one earlier form of ISLA's
 inputs, the *nearest-token form*. It has the reference configuration's width, depth, slices and learning rate and, except on
 HiLiftAeroML, the normalized slice reads, and it differs from the class of Part II in how the boundary and the prediction points enter the
-model.** The standings come from the checkpoints that the program's ledger (@sec-program-status) names the A2 reference.
+model, in its length unit and in its scales.** The standings come from the checkpoints that the program's ledger (@sec-program-status) names the A2 reference.
 @tbl-checkpoint-form lists the differences item by item. The class refuses checkpoints of any other version
 (@sec-using-checkpoint), so these checkpoints are records of the form, not models the class loads.
 
@@ -712,6 +715,8 @@ model.** The standings come from the checkpoints that the program's ledger (@sec
 | boundary tokens | drawn by the datapipe before the forward call; the model reads the sample it is given | drawn inside the forward call from the full-resolution meshes: in proportion to measure, water-filled across the conditions, systematic along a space-filling order, each kept cell carrying its Horvitz–Thompson measure; a fixed start at evaluation |
 | a prediction point's wall geometry | the distance and direction to the nearest *sampled* boundary token, signed by that token's normal | the exact closest point on the full-resolution boundary meshes, signed by the pseudo-normal, encoded continuously through the surface; the same for every draw of the boundary tokens (@sec-exact-geometry-draw) |
 | stored signed distance | on AirfRANS, Tensile2d and the lug, the dataset's `sdf` and `sdf_normals` read as a prediction-point input | none read |
+| length unit $L$ | the RMS pairwise distance of the boundary cells the model is given, each cell at its centroid; on the interior task, of the datapipe's sample | the RMS pairwise distance of the full-resolution boundary, computed before the draw, each cell with its own second moment: exact for the meshed boundary and the same for every draw (@sec-isla-frame) |
+| scales | none declared; on AirfRANS the inlet direction and the raw inlet speed in m/s as a global scalar | the scales the AirfRANS and AeroZoo configurations declare, computed per case from the boundary and the global inputs; none declared elsewhere (@sec-using-scales) |
 
 : The nearest-token form of the standing's ISLA checkpoints against ISLA as the class defines it. On a surface task the
 prediction points are the boundary cells, so the last two rows do not arise there. How to read this: the rows are the

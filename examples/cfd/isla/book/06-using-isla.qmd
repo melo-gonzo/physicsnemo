@@ -111,6 +111,7 @@ interior task's boundary draw, the geometry kernel's selection.
 #| output: asis
 KINDS = {
     "declarations of your data": ["output_schema", "boundary_schemas", "global_schema", "dim"],
+    "the dataset constants of declared scales": ["reynolds", "output_stats"],
     "the task and its interior tokens": ["interior", "boundary_tokens", "query_independent"],
     "capacity and execution": ["hidden", "n_layers", "n_slices", "compile_blocks"],
 }
@@ -118,7 +119,7 @@ SIG = [k for k in inspect.signature(ISLA.__init__).parameters if k != "self"]
 assert sorted(sum(KINDS.values(), [])) == sorted(SIG), (KINDS, SIG)
 assert all(p.kind is inspect.Parameter.KEYWORD_ONLY for k, p in inspect.signature(ISLA.__init__).parameters.items() if k != "self")
 REQUIRED = [k for k in SIG if inspect.signature(ISLA.__init__).parameters[k].default is inspect.Parameter.empty]
-print(f"The constructor's {len(SIG)} arguments (@tbl-arch-switches), all keyword-only, are of three kinds: "
+print(f"The constructor's {len(SIG)} arguments (@tbl-arch-switches), all keyword-only, are of {['no', 'one', 'two', 'three', 'four', 'five'][len(KINDS)]} kinds: "
       + "; ".join(f"{kind} ({', '.join(f'`{a}`' for a in args)})" for kind, args in KINDS.items())
       + f". Only {' and '.join(f'`{a}`' for a in REQUIRED)} have no default (read from the constructor's signature as the "
       "page renders). A change of size is an experiment, not a configuration of the book; the capacity studies of "
@@ -391,13 +392,83 @@ coordinate frame are not: they describe how the cases were posed, not the
 PDE, and a solver never takes them (@sec-pose-prior). Ground planes and
 symmetry planes are real boundaries and belong among the boundary meshes.
 
-**A magnitude that matters is a rank-0 global input.** Declare it
-(`U_inf_mag: {rank: 0}`) and pass it under its name. No fixed power of a
+**A magnitude that matters is a rank-0 global input, or a declared scale.**
+Declare it as a rank-0 field and pass it under its name, and the model
+learns its effect as it learns any other parameter: no fixed power of a
 far-field speed is a physical law for every output (a pressure coefficient
-is of degree zero in it, a dimensional pressure of degree two), so the model
-learns the dependence as it learns any other parameter. The AirfRANS
-configuration passes the inlet speed this way (@tbl-using-configs lists every
-configuration's global inputs, @tbl-airfrans-inputs AirfRANS's whole input).
+is of degree zero in it, a dimensional pressure of degree two). Where the
+units of the fields are known, declare them instead, and the model makes
+its inputs and outputs dimensionless by the case's own scales
+(@sec-using-scales). The AirfRANS configuration takes the inlet speed that
+way, as the magnitude of its velocity source `U_inf` (@tbl-using-configs
+lists every configuration's global inputs, @tbl-airfrans-inputs AirfRANS's
+whole input).
+
+### Declared scales {#sec-using-scales}
+
+**A model can bring its own scales: each field declares its units, and ISLA
+divides the inputs and multiplies the outputs by scales it computes from
+each case.** The declarations are opt-in keys beside a field's `rank`, on a
+condition's schema, on `global_schema` and on `output_schema`. `units` gives
+the field's exponents of three base scales: the length unit $L$, a velocity
+$U$ and a density $\rho$ (`{U: 2, rho: 1}` for a gauge pressure). `scale`
+gives a positive constant $c$, the typical size of the field once it is
+dimensionless. The model computes the scales of each case in float64, from
+the full-resolution boundary and the global inputs, before the token draw:
+
+- **Length.** $L$ is the length unit of every model (@sec-arch-frame).
+- **Velocity.** A field flagged `velocity_scale: true` is a *source*: one or
+  more rank-1 boundary fields, or one rank-1 global. Over the boundary
+  sources' cells with measures $a$, $U \equiv (\sum a \lvert v \rvert^2 /
+  \sum a)^{1/2}$, and the direction $\hat g \equiv \sum a v / \lvert
+  \sum a v \rvert$ is appended to the global directions. A global source
+  gives $U = \lvert v \rvert$ and is a global direction already.
+- **Density and viscosity.** A rank-0 global with the `role` `density` is
+  $\rho$; one with the `role` `viscosity` is $\nu$. Both are consumed, not
+  read as scalars. With a viscosity the model appends one global scalar,
+  $\log_{10} \mathrm{Re}$ with $\mathrm{Re} \equiv U L / \nu$, minus a mean and
+  divided by a standard deviation that the constructor's
+  `reynolds={"mean": ..., "std": ...}` gives.
+
+Each declared input enters divided by $c \prod_k \text{scale}_k^{e_k}$, its
+constant times its units' scales, and each declared output is the head's
+dimensionless prediction $\hat y$ times the same product, $y = c\, \hat y
+\prod_k \text{scale}_k^{e_k}$, assembled in the parameters' precision
+(float32) even under autocast, and then
+standardized by the dataset's constant `output_stats`, so the model returns
+the standardized targets the loss compares. A model that declares nothing is
+the unscaled model. A similarity of the problem (lengths times one factor,
+velocities another, densities a third) leaves every internal state unchanged
+and scales each output by its units, a contract the tests check in float64
+(`test_isla_scales.py`).
+
+```{python}
+#| label: para-using-scales
+#| output: asis
+import standing as S
+_scaled = [n for n in ISLA_CFGS if ISLA(**{k: v for k, v in S.recipe_model(n).items() if k in ("output_schema", "boundary_schemas",
+           "global_schema", "reynolds", "interior", "dim")}, hidden=8, n_layers=1, n_slices=2)._scaled]
+_az = S.isla_constants("isla_volume_aerozoo"); _af = S.isla_constants("isla_volume_airfrans")
+_fit = json.load(open(RES / "aerozoo_dataset" / "isla_constants_fits.json"))["fits"]["full"]["scale_quartiles"]
+_e = lambda x: sci(float(f"{x:.2g}"))   # 4.7e-4
+_orders = [abs(math.log10(c)) for c in (_az["output_scale"]["nut"], _az["output_scale"]["omega"], _af["output_scale"]["nut"])]
+print(f"**The constant $c$ starts the head at the right size.** A freshly initialized head predicts values of order one. "
+      f"Made dimensionless by $U L$, an eddy viscosity is far smaller: on AeroZoo's training cases the per-case RMS of "
+      f"$\\nu_t / (U L)$ has the median {_e(_az['output_scale']['nut'])} (quartiles {_e(_fit['nut'][0])} and {_e(_fit['nut'][2])}), "
+      f"and that of $\\omega L / U$ the median {_az['output_scale']['omega']:,.0f} (quartiles {_fit['omega'][0]:,.0f} and "
+      f"{_fit['omega'][2]:,.0f}); on AirfRANS's, $\\nu_t / (U L)$ has the median {_e(_af['output_scale']['nut'])}. Without $c$ the "
+      f"head would start {min(_orders):.0f} to {max(_orders):.0f} orders of magnitude off on these fields; with it, each starts at "
+      "order one and learns the spread around the median.")
+print()
+print(f"These constants, the two of `reynolds` and every $c$, belong to a split of a dataset: each is fitted on the split's training cases "
+      f"(the medians of per-case RMS values, and the mean and standard deviation of $\\log_{{10}}(U L / \\nu)$, through the class's "
+      f"own scale functions), and each dataset file holds its split's values under `isla_constants`. The model configurations "
+      f"leave them `null`, and the recipe's `train.py` and `infer.py` fill them from the dataset file; a configuration whose "
+      f"dataset file lacks one is refused. Of the recipe's {len(ISLA_CFGS)} ISLA configurations, "
+      f"{' and '.join(f'`{n}`' for n in _scaled)} declare scales (@sec-data-aerozoo, @sec-data-airfrans); the others declare none, "
+      "so for them the scales change nothing. Source: the recipe's `conf/model/isla_*.yaml` and `datasets/*.yaml`, and "
+      "results/aerozoo_dataset/isla_constants_fits.json for the quartiles.")
+```
 
 ### The interior task: exact geometry and the in-model draw {#sec-using-interior}
 
@@ -702,7 +773,8 @@ the orientation of an interior task's boundaries).
 #| label: tbl-using-configs
 #| output: asis
 def decl(d):
-    return ", ".join(f"`{k}` ({v['rank']})" for k, v in (d or {}).items()) or "none"
+    tag = lambda v: "".join([", velocity source" if v.get("velocity_scale") else "", f", {v['role']}" if v.get("role") else ""])
+    return ", ".join(f"`{k}` ({v['rank']}{tag(v)})" for k, v in (d or {}).items()) or "none"
 o = "| configuration | task | dim | outputs (rank) | global inputs (rank) | boundary inputs | compile |\n|---|---|--:|---|---|--:|---|\n"
 for n, c in ISLA_CFGS.items():
     m = c["model"]
@@ -713,7 +785,8 @@ for n, c in ISLA_CFGS.items():
 print(o)
 print(": The recipe's ISLA model configurations (`conf/model/isla_*.yaml`, a parent's `defaults` merged in), read as the page "
       "renders. Every one is the reference configuration at the same learning rate. How to read this: \"boundary inputs\" counts "
-      "the declared per-cell fields; a rank-1 global input is a direction and a rank-0 one a scalar; \"compile\" is the whole-model `torch.compile` or the per-block `compile_blocks` (the "
+      "the declared per-cell fields; a rank-1 global input is a direction and a rank-0 one a scalar, except a velocity source, "
+      "whose magnitude is the velocity scale $U$, and a global with a role, which the declared scales consume (@sec-using-scales); \"compile\" is the whole-model `torch.compile` or the per-block `compile_blocks` (the "
       "AeroZoo configuration, whose four boundaries recompile the whole-model graph). It does not say which dataset file each "
       "configuration was paired with in a standing; the dataset chapters do.")
 ```
@@ -859,10 +932,10 @@ with zipfile.ZipFile(path) as zin, zipfile.ZipFile(old, "w") as zout:
     for item in zin.namelist():
         data = zin.read(item)
         if item == "metadata.json":
-            data = json.dumps({**json.loads(data), "mdlus_file_version": "0.7.0"}).encode()
+            data = json.dumps({**json.loads(data), "mdlus_file_version": "0.8.0"}).encode()
         zout.writestr(item, data)
 state = surface.state_dict()
-state._metadata[""]["version"] = 1
+state._metadata[""]["version"] = 8   # torch's state-dict version of the module as 0.8.0 wrote it
 refusals = {}
 for label, call in {"`ISLA.from_checkpoint`": lambda: ISLA.from_checkpoint(old),
                     "`load_state_dict`": lambda: loaded.load_state_dict(state)}.items():
@@ -892,9 +965,11 @@ print(f"**A checkpoint of any version other than {ISLA.__model_checkpoint_versio
       "load weights into a built model (`Module.load`, `load_checkpoint`, the recipe's resume, `init_from` and inference, "
       "and `load_state_dict` itself) go through a pre-hook that refuses a state dict with the parameter layout of a "
       "checkpoint before 0.7.0, or with torch's state-dict version of the module other than the class's "
-      f"`_version = {ISLA._version}`. The second mark tells apart a 0.7.0 state dict, whose layout is the current one and "
-      "whose prediction points were trained on an earlier geometry encoding. The cell above marks the example's file as "
-      "written by 0.7.0 and its state dict with torch's earlier version; both are refused:")
+      f"`_version = {ISLA._version}`. The second mark tells apart a state dict of 0.7.0 or 0.8.0, whose layout is the current "
+      "one but whose weights were trained on another forward: in 0.7.0 another geometry encoding of the prediction points, and in both a length "
+      "unit from the given or drawn cells' centroids alone instead of the full-resolution boundary with each cell's own second "
+      "moment. The cell above marks "
+      "the example's file as written by 0.8.0 and its state dict with 0.8.0's version mark; both are refused:")
 print()
 for label, msg in refusals.items():
     print(f"- {label}: \"{msg}\"")
@@ -976,9 +1051,12 @@ print(f"- **The geometry kernel is chosen for you.** At the first forward pass t
       "function. It logs the choice once. A planar model, a model with no global direction (the lug) and a model with "
       "rank-2 inputs run eager. To force one path, set the model's `geo_kernel` attribute to `\"eager\"` or `\"fused\"` "
       "before the first forward pass.")
-print(f"- **Compile the whole model.** The recipe's ISLA configurations do: `compile: true` with `compile_options` "
+_whole = [n for n, c in ISLA_CFGS.items() if c.get("compile")]; _rest = [n for n in ISLA_CFGS if n not in _whole]
+assert all(c.get("compile_options") == opts for c in ISLA_CFGS.values())   # one set of options in every configuration
+print(f"- **Compile the whole model.** The recipe's ISLA configurations do, all but {', '.join(f'`{n}`' for n in _rest)}: "
+      "`compile: true` with `compile_options` "
       + ", ".join(f"`{k}: {str(v).lower() if isinstance(v, bool) else v}`" for k, v in opts.items())
-      + ". The forward, `Mesh` in and out, traces to one graph and compiles once with dynamic shapes, so the case-to-case "
+      + ", the same options in every configuration. The forward, `Mesh` in and out, traces to one graph and compiles once with dynamic shapes, so the case-to-case "
       "change in mesh size does not recompile; validation, in eval mode, compiles a second graph. The first compile is "
       "long, so keep `TORCHINDUCTOR_CACHE_DIR` and `TRITON_CACHE_DIR` across the links of a chained run. The mode leaves "
       "out CUDA graphs on purpose: they are static-shape and would record a graph for every case size.")
