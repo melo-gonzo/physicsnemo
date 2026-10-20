@@ -69,6 +69,13 @@ pipeline:
       global_data: [TimeValue]
     - _target_: ${dp:CenterMesh}
       use_area_weighting: false
+    # The unit freestream direction is the baselines' global input
+    # (geotransolver_volume.yaml, transolver_volume.yaml read
+    # global_data.U_inf_dir), as in drivaer_ml_volume_reference.yaml; U_inf
+    # itself stays physical for re-dimensionalization.
+    - _target_: ${dp:ComputeFreestreamDirection}
+      velocity_field: U_inf
+      output_field: U_inf_dir
     - _target_: ${dp:NonDimensionalizeByMetadata}
       fields:
         UMeanTrim: velocity

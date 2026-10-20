@@ -282,6 +282,20 @@ _TENSOR_INPUT_RECIPES: list[_RecipeSpec] = [
         "volume",
         [],
     ),
+    _RecipeSpec(
+        "geotransolver_volume_airfrans",
+        "geotransolver_volume_airfrans",
+        "airfrans_uvolume_ud",
+        "volume",
+        [],
+    ),
+    _RecipeSpec(
+        "transolver_volume_airfrans",
+        "transolver_volume_airfrans",
+        "airfrans_uvolume_ud",
+        "volume",
+        [],
+    ),
 ]
 
 
@@ -394,6 +408,119 @@ def test_tensor_input_config_synthetic_e2e(
     )
     loss, _ = lc(pred_td, batch["targets"])
     assert torch.isfinite(loss), f"loss not finite: {float(loss)}"
+
+
+### ---------------------------------------------------------------------------
+### The baselines' freestream input (the drive rule, 2026-10-18)
+### ---------------------------------------------------------------------------
+
+
+### Every baseline config x freestream dataset pairing the recipe documents (with
+### the _area / _posed scoring twins), and the global inputs its forward_kwargs
+### must read: the unit freestream direction, plus the standardized speed where
+### the speed varies (AirfRANS), never the raw U_inf vector.
+_UNIT_DRIVE = ["global_data.U_inf_dir"]
+_UNIT_DRIVE_AND_SPEED = ["global_data.U_inf_dir", "global_data.U_inf_mag_std"]
+_SURFACE_DATASETS = (
+    "drivaer_ml_surface",
+    "drivaer_ml_surface_posed",
+    "shift_suv_surface",
+    "shift_suv_surface_area",
+    "shift_suv_surface_posed",
+    "shift_suv_estate_surface",
+    "shift_suv_fastback_surface",
+    "highlift_surface",
+)
+_VOLUME_DATASETS = (
+    "drivaer_ml_volume",
+    "drivaer_ml_volume_reference",
+    "drivaer_ml_volume_reference_area",
+    "drivaer_ml_volume_reference_posed",
+)
+_AIRFRANS_DATASETS = (
+    "airfrans_uvolume_ud",
+    "airfrans_uvolume_ud_area",
+    "airfrans_uvolume_ud_posed",
+)
+_BASELINE_DRIVES: list[tuple[str, str, list[str]]] = [
+    *(
+        (m, d, _UNIT_DRIVE)
+        for m in ("geotransolver_surface", "transolver_surface")
+        for d in _SURFACE_DATASETS
+    ),
+    *(
+        (m, d, _UNIT_DRIVE)
+        for m in ("geotransolver_volume", "transolver_volume")
+        for d in _VOLUME_DATASETS
+    ),
+    ("geotransolver_volume_highlift", "highlift_volume", _UNIT_DRIVE),
+    *(
+        (m, d, _UNIT_DRIVE_AND_SPEED)
+        for m in ("geotransolver_volume_airfrans", "transolver_volume_airfrans")
+        for d in _AIRFRANS_DATASETS
+    ),
+]
+
+
+def _spec_leaves(spec) -> list[str]:
+    """Every string path in a forward_kwargs spec."""
+    if isinstance(spec, str):
+        return [spec]
+    if isinstance(spec, dict):
+        return [leaf for v in spec.values() for leaf in _spec_leaves(v)]
+    if isinstance(spec, list):
+        return [leaf for v in spec for leaf in _spec_leaves(v)]
+    return []
+
+
+@pytest.mark.parametrize(
+    "model,dataset,drive",
+    _BASELINE_DRIVES,
+    ids=[f"{m}-{d}" for m, d, _ in _BASELINE_DRIVES],
+)
+def test_baseline_reads_the_unit_freestream_drive(
+    model: str, dataset: str, drive: list[str]
+) -> None:
+    """A plain run of a baseline config reads U_inf_dir (with U_inf_mag_std where the speed
+    varies), its dataset produces those leaves, and the collate resolves them, not the raw U_inf."""
+    train_cfg = _compose_train_cfg(model, dataset)
+    spec = OmegaConf.to_container(train_cfg.forward_kwargs, resolve=True)
+    key = "global_embedding" if "global_embedding" in spec else "fx"
+    read = spec[key] if key == "global_embedding" else spec[key]["source"]
+    assert ([read] if isinstance(read, str) else read) == drive
+    assert "global_data.U_inf" not in _spec_leaves(spec)
+    dim_key = "global_dim" if key == "global_embedding" else "functional_dim"
+    assert train_cfg.model[dim_key] == 3 + len(drive) - 1
+
+    ### The dataset writes every leaf the drive reads (the AirfRANS case files store U_inf_dir).
+    transforms = OmegaConf.to_container(
+        OmegaConf.load(
+            _RECIPE_ROOT / "datasets" / f"{dataset}.yaml"
+        ).pipeline.transforms,
+        resolve=False,
+    )
+    produced = {"U_inf_dir"} if dataset.startswith("airfrans") else set()
+    for t in transforms:
+        if "ComputeFreestreamDirection" in t["_target_"]:
+            produced.add(t["output_field"])
+        if "SplitGlobalVector" in t["_target_"]:
+            produced.update(t["names"])
+    assert {d.removeprefix("global_data.") for d in drive} <= produced
+
+    ### Through the recipe collate: the 30 m/s synthetic U_inf never reaches the model.
+    target_config = _load_dataset_targets(dataset)
+    if "surface" in model:
+        domain = _surface_domain_mesh(target_config)
+    else:
+        domain = _volume_domain_mesh(target_config)
+    domain.global_data["U_inf_mag_std"] = torch.tensor(-1.25)
+    collate = build_collate_fn(
+        input_type="tensors", forward_kwargs_spec=spec, target_config=target_config
+    )
+    x = collate([(domain, {})])["forward_kwargs"][key]
+    expected = torch.tensor([1.0, 0.0, 0.0, -1.25][: 3 + len(drive) - 1])
+    rows = x.reshape(-1, x.shape[-1])
+    torch.testing.assert_close(rows, expected.expand_as(rows))
 
 
 ### ---------------------------------------------------------------------------

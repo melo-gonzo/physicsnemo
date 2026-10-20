@@ -21,6 +21,13 @@
 # Same `embedding` + `fx` shape as the surface variant, but the
 # embedding pulls the precomputed SDF / SDF normals from
 # `interior.point_data` instead of the surface boundary's cell normals.
+#
+# Freestream input (the drive rule, 2026-10-18): the unit freestream
+# direction U_inf_dir (ComputeFreestreamDirection in the dataset YAMLs),
+# never the raw U_inf vector. The DrivAerML speed is a per-dataset
+# constant, so no magnitude channel is added; where the speed varies
+# (AirfRANS) the baseline has its own template,
+# transolver_volume_airfrans.yaml.
 dataset_reader_overrides:
   # This point-based model consumes only the volume interior.
   drop_in_file_boundaries: true
@@ -34,13 +41,13 @@ forward_kwargs:
     - interior.point_data.sdf
     - interior.point_data.sdf_normals
   fx:
-    source: global_data.U_inf
+    source: global_data.U_inf_dir
     expand_like: embedding
 
 model:
   _target_: physicsnemo.models.transolver.Transolver
   out_dim: ${out_dim}     # auto-set from the chosen dataset's `targets:` block
-  functional_dim: 3       # fx = freestream velocity U_inf (3)
+  functional_dim: 3       # fx = unit freestream direction U_inf_dir (3)
   embedding_dim: 7        # embedding = points (3) + SDF (1) + SDF normals (3)
   n_layers: 12
   n_hidden: 256

@@ -20,9 +20,16 @@
 # ---------------------------------------------------------------------------
 # Transolver concats `[embedding, fx]` along the last dim, so `fx` must
 # match `embedding`'s spatial dim.  The `expand_like` modifier
-# broadcasts the freestream `U_inf` (a per-sample vector) across the
-# per-cell axis of `embedding`, so `fx` ends up shaped to align with
-# the per-cell features in `embedding`.
+# broadcasts the unit freestream direction `U_inf_dir` (a per-sample
+# vector) across the per-cell axis of `embedding`, so `fx` ends up shaped
+# to align with the per-cell features in `embedding`.
+#
+# Freestream input (the drive rule, 2026-10-18): U_inf_dir
+# (ComputeFreestreamDirection in the dataset YAMLs), never the raw U_inf
+# vector. On the datasets this template serves (DrivAerML, SHIFT-SUV,
+# HiLift) the speed is a per-dataset constant, so no magnitude channel is
+# added; where the speed varies (AirfRANS) the baseline has its own
+# template, transolver_volume_airfrans.yaml.
 input_type: tensors
 output_type: tensors
 
@@ -31,13 +38,13 @@ forward_kwargs:
     - interior.points
     - boundaries.vehicle.cell_data.normals
   fx:
-    source: global_data.U_inf
+    source: global_data.U_inf_dir
     expand_like: embedding
 
 model:
   _target_: physicsnemo.models.transolver.Transolver
   out_dim: ${out_dim}     # auto-set from the chosen dataset's `targets:` block
-  functional_dim: 3       # fx = freestream velocity U_inf (3)
+  functional_dim: 3       # fx = unit freestream direction U_inf_dir (3)
   embedding_dim: 6        # embedding = points (3) + normals (3)
   n_layers: 8
   n_hidden: 256
