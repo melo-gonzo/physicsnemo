@@ -369,6 +369,12 @@ question per split, never two combined into one score.
 The last two are the invariances ISLA is built for. @sec-invariances
 defines them and the instruments that read them.
 
+The directions are not equally useful to a designer, whose next case is a
+new body, a new enclosure or a new flow condition. The book reads the
+cross-family directions as the test of usefulness and AeroZoo, whose
+held-out splits run along them, as their benchmark; @sec-aerozoo-why makes
+the case. The in-distribution standing reads the first direction only.
+
 ## How we measure {#sec-part-eval}
 
 **Every number in the book is a relative field error, a ratio of two such

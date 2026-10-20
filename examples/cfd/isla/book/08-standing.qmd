@@ -13,7 +13,9 @@ print(f"**On the {len(S.available())} tasks with a standing, ISLA at its referen
       "level on others and trails on a few, and on every flow task it is the only one of the three architectures whose error "
       "does not change when the test geometry is moved or resampled.** This chapter is the evidence of Part IV on one page: one "
       "table with every headline number, one figure for each of the two invariances, and a reading of where ISLA leads and "
-      "trails. Each dataset chapter then opens up its rows. The ISLA checkpoints of every row are of the nearest-token form, which "
+      "trails. Each dataset chapter then opens up its rows. Every row is scored in distribution, on a dataset that covers one narrow "
+      "family, so the standing measures interpolation within each family, not the generalization to new families that design needs "
+      "and that the book tests on AeroZoo (@sec-aerozoo-why). The ISLA checkpoints of every row are of the nearest-token form, which "
       "differs from the class of Part II in how the boundary and the prediction points enter the model, in its length unit and in its "
       "scales (@sec-checkpoint-form).")
 ```
