@@ -1,0 +1,800 @@
+{
+ "source": "HILIFT-090 (scratch/isla-hilift090-2026-10-20): highlift_surface_medium validation split, 180 cases, ISLA's 200,000-cell set, float32, epoch-500 checkpoints, native mesh; per-case relative L2, seed means over 42 and 43. ISLA = a2r_hl_isla (the standing's checkpoints), GeoTransolver = udrv_hl_gt, Transolver = udrv_hl_t, raw-read variant = r80_hl_isla_w512_s512 (the CHAR record's ISLA, raw slice reads, scored on another 200,000-cell draw).",
+ "n_cases": 180,
+ "mean": {
+  "isla_p": 0.04318084444444444,
+  "gt_p": 0.03902207222222222,
+  "t_p": 0.03941013333333333,
+  "old_p": 0.04066363888888889,
+  "isla_wss": 0.09425911111111113,
+  "gt_wss": 0.08903457222222223,
+  "t_wss": 0.08783319444444444,
+  "old_wss": 0.09333662777777778
+ },
+ "isla_over_gt": {
+  "pressure": 1.106574868667633,
+  "wall_shear": 1.058679889828065
+ },
+ "isla_over_t": {
+  "pressure": 1.0956787199682427,
+  "wall_shear": 1.073160457242975
+ },
+ "gt_gap": {
+  "total_gap_mean": 0.004158772222222222,
+  "top10": [
+   {
+    "case": "geo_LHC002_AoA_18",
+    "aoa": 18,
+    "post_stall": true,
+    "isla": 0.218722,
+    "gt": 0.048325,
+    "share": 0.22762727781570147
+   },
+   {
+    "case": "geo_LHC132_AoA_22",
+    "aoa": 22,
+    "post_stall": true,
+    "isla": 0.19017,
+    "gt": 0.057062,
+    "share": 0.17781423203162258
+   },
+   {
+    "case": "geo_LHC153_AoA_16",
+    "aoa": 16,
+    "post_stall": true,
+    "isla": 0.278091,
+    "gt": 0.168895,
+    "share": 0.1458710436707415
+   },
+   {
+    "case": "geo_LHC162_AoA_16",
+    "aoa": 16,
+    "post_stall": true,
+    "isla": 0.24792,
+    "gt": 0.15797,
+    "share": 0.12016099837158135
+   },
+   {
+    "case": "geo_LHC119_AoA_16",
+    "aoa": 16,
+    "post_stall": true,
+    "isla": 0.208029,
+    "gt": 0.138614,
+    "share": 0.09272902392399467
+   },
+   {
+    "case": "geo_LHC131_AoA_18",
+    "aoa": 18,
+    "post_stall": true,
+    "isla": 0.108022,
+    "gt": 0.047768,
+    "share": 0.08049117060457214
+   },
+   {
+    "case": "geo_LHC040_AoA_16",
+    "aoa": 16,
+    "post_stall": true,
+    "isla": 0.287245,
+    "gt": 0.24539,
+    "share": 0.05591260241070078
+   },
+   {
+    "case": "geo_LHC173_AoA_4",
+    "aoa": 4,
+    "post_stall": false,
+    "isla": 0.059231,
+    "gt": 0.019163,
+    "share": 0.053525412815481066
+   },
+   {
+    "case": "geo_LHC163_AoA_22",
+    "aoa": 22,
+    "post_stall": true,
+    "isla": 0.06487,
+    "gt": 0.04113,
+    "share": 0.03171341969251074
+   },
+   {
+    "case": "geo_LHC096_AoA_18",
+    "aoa": 18,
+    "post_stall": true,
+    "isla": 0.089072,
+    "gt": 0.070589,
+    "share": 0.02469078079935451
+   }
+  ],
+  "top10_share": 1.0105359621362608,
+  "isla_over_gt_without_top10": {
+   "pressure": 0.998691837393746,
+   "wall_shear": 1.016854133095284
+  }
+ },
+ "t_offset": {
+  "isla_worse_on": 153,
+  "by_aoa": {
+   "4": {
+    "n": 17,
+    "isla_over_t": 1.2022113493548232,
+    "isla_over_gt": 1.0943606313996899
+   },
+   "6": {
+    "n": 18,
+    "isla_over_t": 1.1533090949019988,
+    "isla_over_gt": 0.9944480680013043
+   },
+   "8": {
+    "n": 19,
+    "isla_over_t": 1.1483358886589263,
+    "isla_over_gt": 1.0067394232208136
+   },
+   "10": {
+    "n": 13,
+    "isla_over_t": 1.140056686935784,
+    "isla_over_gt": 1.0223376739707317
+   },
+   "12": {
+    "n": 17,
+    "isla_over_t": 1.1235092287931308,
+    "isla_over_gt": 0.985416081509443
+   },
+   "14": {
+    "n": 15,
+    "isla_over_t": 0.9153966399854823,
+    "isla_over_gt": 0.9396883076458714
+   },
+   "16": {
+    "n": 15,
+    "isla_over_t": 1.153534037753605,
+    "isla_over_gt": 1.300174314198418
+   },
+   "18": {
+    "n": 27,
+    "isla_over_t": 1.112416144607048,
+    "isla_over_gt": 1.2097796697836507
+   },
+   "20": {
+    "n": 15,
+    "isla_over_t": 1.0607371933155005,
+    "isla_over_gt": 0.9586963020731788
+   },
+   "22": {
+    "n": 24,
+    "isla_over_t": 1.0924122247651658,
+    "isla_over_gt": 1.1580511038127224
+   }
+  }
+ },
+ "raw_read": {
+  "isla_over_raw": {
+   "pressure": 1.0619031061738886,
+   "wall_shear": 1.009883401139472
+  },
+  "by_aoa": {
+   "4": {
+    "n": 17,
+    "isla_over_raw": 0.9797629674031313,
+    "share": -0.0205651328523473
+   },
+   "6": {
+    "n": 18,
+    "isla_over_raw": 0.9357432402334178,
+    "share": -0.057305610057007655
+   },
+   "8": {
+    "n": 19,
+    "isla_over_raw": 0.9506551970385547,
+    "share": -0.043158528968410714
+   },
+   "10": {
+    "n": 13,
+    "isla_over_raw": 0.9761519546701828,
+    "share": -0.014769464375177947
+   },
+   "12": {
+    "n": 17,
+    "isla_over_raw": 0.9411872221501596,
+    "share": -0.0440303069762104
+   },
+   "14": {
+    "n": 15,
+    "isla_over_raw": 0.9893884715699675,
+    "share": -0.018865717495370738
+   },
+   "16": {
+    "n": 15,
+    "isla_over_raw": 1.7062967393598982,
+    "share": 1.2183660452397609
+   },
+   "18": {
+    "n": 27,
+    "isla_over_raw": 0.9857862038627611,
+    "share": -0.051059706861886094
+   },
+   "20": {
+    "n": 15,
+    "isla_over_raw": 0.9818466207851333,
+    "share": -0.03009730808193387
+   },
+   "22": {
+    "n": 24,
+    "isla_over_raw": 1.018915324067253,
+    "share": 0.06148573042858376
+   }
+  },
+  "top3": [
+   {
+    "case": "geo_LHC153_AoA_16",
+    "aoa": 16,
+    "share": 0.40161378247924834
+   },
+   {
+    "case": "geo_LHC162_AoA_16",
+    "aoa": 16,
+    "share": 0.379850230745293
+   },
+   {
+    "case": "geo_LHC119_AoA_16",
+    "aoa": 16,
+    "share": 0.3400353566675568
+   }
+  ]
+ },
+ "top10_per_seed": {
+  "geo_LHC002_AoA_18": {
+   "ISLA": [
+    0.214,
+    0.223
+   ],
+   "raw_read": [
+    0.099,
+    0.238
+   ],
+   "GeoTransolver": [
+    0.054,
+    0.043
+   ],
+   "Transolver": [
+    0.033,
+    0.146
+   ]
+  },
+  "geo_LHC132_AoA_22": {
+   "ISLA": [
+    0.203,
+    0.177
+   ],
+   "raw_read": [
+    0.098,
+    0.118
+   ],
+   "GeoTransolver": [
+    0.066,
+    0.049
+   ],
+   "Transolver": [
+    0.15,
+    0.13
+   ]
+  },
+  "geo_LHC153_AoA_16": {
+   "ISLA": [
+    0.269,
+    0.288
+   ],
+   "raw_read": [
+    0.137,
+    0.055
+   ],
+   "GeoTransolver": [
+    0.251,
+    0.087
+   ],
+   "Transolver": [
+    0.286,
+    0.13
+   ]
+  },
+  "geo_LHC162_AoA_16": {
+   "ISLA": [
+    0.255,
+    0.241
+   ],
+   "raw_read": [
+    0.1,
+    0.052
+   ],
+   "GeoTransolver": [
+    0.124,
+    0.192
+   ],
+   "Transolver": [
+    0.25,
+    0.165
+   ]
+  },
+  "geo_LHC119_AoA_16": {
+   "ISLA": [
+    0.243,
+    0.173
+   ],
+   "raw_read": [
+    0.065,
+    0.043
+   ],
+   "GeoTransolver": [
+    0.074,
+    0.204
+   ],
+   "Transolver": [
+    0.131,
+    0.066
+   ]
+  },
+  "geo_LHC131_AoA_18": {
+   "ISLA": [
+    0.109,
+    0.107
+   ],
+   "raw_read": [
+    0.057,
+    0.104
+   ],
+   "GeoTransolver": [
+    0.066,
+    0.03
+   ],
+   "Transolver": [
+    0.032,
+    0.076
+   ]
+  },
+  "geo_LHC040_AoA_16": {
+   "ISLA": [
+    0.295,
+    0.279
+   ],
+   "raw_read": [
+    0.21,
+    0.237
+   ],
+   "GeoTransolver": [
+    0.257,
+    0.234
+   ],
+   "Transolver": [
+    0.282,
+    0.23
+   ]
+  },
+  "geo_LHC173_AoA_4": {
+   "ISLA": [
+    0.064,
+    0.054
+   ],
+   "raw_read": [
+    0.042,
+    0.047
+   ],
+   "GeoTransolver": [
+    0.018,
+    0.021
+   ],
+   "Transolver": [
+    0.016,
+    0.017
+   ]
+  },
+  "geo_LHC163_AoA_22": {
+   "ISLA": [
+    0.079,
+    0.051
+   ],
+   "raw_read": [
+    0.059,
+    0.066
+   ],
+   "GeoTransolver": [
+    0.041,
+    0.041
+   ],
+   "Transolver": [
+    0.036,
+    0.049
+   ]
+  },
+  "geo_LHC096_AoA_18": {
+   "ISLA": [
+    0.103,
+    0.075
+   ],
+   "raw_read": [
+    0.064,
+    0.114
+   ],
+   "GeoTransolver": [
+    0.077,
+    0.065
+   ],
+   "Transolver": [
+    0.094,
+    0.108
+   ]
+  }
+ },
+ "spearman_isla_over_gt_aoa_ge_16": {
+  "AoA": -0.09,
+  "post_stall": -0.02,
+  "hi_deflection": 0.11,
+  "GT error (difficulty)": 0.06,
+  "T error": 0.1,
+  "n train cases same geo": -0.07,
+  "n train AoA>=16 same geo": -0.07,
+  "|dAoA|to nearest same-geo train case": 0.06,
+  "slat area share": 0.03,
+  "flap area share": 0.1,
+  "n_cells": 0.08
+ },
+ "training": {
+  "n_train": 510,
+  "n_val": 180,
+  "train_by_aoa": {
+   "4": 51,
+   "6": 60,
+   "8": 54,
+   "10": 51,
+   "12": 48,
+   "14": 54,
+   "16": 49,
+   "18": 45,
+   "20": 50,
+   "22": 48
+  },
+  "n_train_aoa_ge_16": 192,
+  "n_val_geometries": 118,
+  "n_val_geometries_in_train": 113
+ },
+ "spatial": {
+  "pressure by element": {
+   "flap": {
+    "area": 0.037,
+    "isla_e2": 0.00012800000000000002,
+    "gt_e2": 0.00012,
+    "t_e2": 0.00011100000000000001,
+    "share_of_isla_minus_gt": 0.01,
+    "share_of_isla_minus_t": 0.06
+   },
+   "main": {
+    "area": 0.684,
+    "isla_e2": 0.0037570000000000004,
+    "gt_e2": 0.002769,
+    "t_e2": 0.003626,
+    "share_of_isla_minus_gt": 0.82,
+    "share_of_isla_minus_t": 0.42
+   },
+   "other": {
+    "area": 0.253,
+    "isla_e2": 0.000278,
+    "gt_e2": 0.000267,
+    "t_e2": 0.00025299999999999997,
+    "share_of_isla_minus_gt": 0.01,
+    "share_of_isla_minus_t": 0.08
+   },
+   "slat": {
+    "area": 0.026,
+    "isla_e2": 0.00045999999999999996,
+    "gt_e2": 0.000263,
+    "t_e2": 0.000323,
+    "share_of_isla_minus_gt": 0.16,
+    "share_of_isla_minus_t": 0.44
+   }
+  },
+  "_n_labeled": 174,
+  "wall shear by element": {
+   "flap": {
+    "area": 0.037,
+    "isla_e2": 0.000942,
+    "gt_e2": 0.0008990000000000001,
+    "t_e2": 0.000795,
+    "share_of_isla_minus_gt": 0.03,
+    "share_of_isla_minus_t": 0.14
+   },
+   "main": {
+    "area": 0.684,
+    "isla_e2": 0.0077220000000000006,
+    "gt_e2": 0.006449,
+    "t_e2": 0.007241,
+    "share_of_isla_minus_gt": 0.8,
+    "share_of_isla_minus_t": 0.47
+   },
+   "other": {
+    "area": 0.253,
+    "isla_e2": 0.001373,
+    "gt_e2": 0.0013160000000000001,
+    "t_e2": 0.0012490000000000001,
+    "share_of_isla_minus_gt": 0.04,
+    "share_of_isla_minus_t": 0.12
+   },
+   "slat": {
+    "area": 0.026,
+    "isla_e2": 0.00131,
+    "gt_e2": 0.001085,
+    "t_e2": 0.001044,
+    "share_of_isla_minus_gt": 0.14,
+    "share_of_isla_minus_t": 0.26
+   }
+  },
+  "pressure by cp": {
+   "-1..0": {
+    "area": 0.282,
+    "isla_e2": 0.000468,
+    "gt_e2": 0.000447,
+    "t_e2": 0.00038300000000000004,
+    "share_of_isla_minus_gt": 0.02,
+    "share_of_isla_minus_t": 0.29
+   },
+   "-2..-1": {
+    "area": 0.037,
+    "isla_e2": 0.000543,
+    "gt_e2": 0.0005160000000000001,
+    "t_e2": 0.00047000000000000004,
+    "share_of_isla_minus_gt": 0.02,
+    "share_of_isla_minus_t": 0.25
+   },
+   "-4..-2": {
+    "area": 0.011,
+    "isla_e2": 0.001011,
+    "gt_e2": 0.0008010000000000001,
+    "t_e2": 0.000925,
+    "share_of_isla_minus_gt": 0.18,
+    "share_of_isla_minus_t": 0.29
+   },
+   ">0": {
+    "area": 0.668,
+    "isla_e2": 0.000175,
+    "gt_e2": 0.00015000000000000001,
+    "t_e2": 0.00012900000000000002,
+    "share_of_isla_minus_gt": 0.02,
+    "share_of_isla_minus_t": 0.15
+   },
+   "cp<-4": {
+    "area": 0.002,
+    "isla_e2": 0.002328,
+    "gt_e2": 0.0014420000000000001,
+    "t_e2": 0.002321,
+    "share_of_isla_minus_gt": 0.76,
+    "share_of_isla_minus_t": 0.02
+   }
+  },
+  "wall shear by cp": {
+   "-1..0": {
+    "area": 0.282,
+    "isla_e2": 0.0029430000000000003,
+    "gt_e2": 0.0027940000000000005,
+    "t_e2": 0.0026190000000000002,
+    "share_of_isla_minus_gt": 0.1,
+    "share_of_isla_minus_t": 0.32
+   },
+   "-2..-1": {
+    "area": 0.037,
+    "isla_e2": 0.002363,
+    "gt_e2": 0.002164,
+    "t_e2": 0.002259,
+    "share_of_isla_minus_gt": 0.13,
+    "share_of_isla_minus_t": 0.1
+   },
+   "-4..-2": {
+    "area": 0.011,
+    "isla_e2": 0.002264,
+    "gt_e2": 0.0018670000000000002,
+    "t_e2": 0.002063,
+    "share_of_isla_minus_gt": 0.25,
+    "share_of_isla_minus_t": 0.2
+   },
+   ">0": {
+    "area": 0.668,
+    "isla_e2": 0.0013980000000000002,
+    "gt_e2": 0.001312,
+    "t_e2": 0.0011400000000000002,
+    "share_of_isla_minus_gt": 0.05,
+    "share_of_isla_minus_t": 0.26
+   },
+   "cp<-4": {
+    "area": 0.002,
+    "isla_e2": 0.002284,
+    "gt_e2": 0.001552,
+    "t_e2": 0.002164,
+    "share_of_isla_minus_gt": 0.47,
+    "share_of_isla_minus_t": 0.12
+   }
+  },
+  "pressure by flow": {
+   "attached": {
+    "area": 0.966,
+    "isla_e2": 0.003836,
+    "gt_e2": 0.0027440000000000003,
+    "t_e2": 0.003568,
+    "share_of_isla_minus_gt": 0.93,
+    "share_of_isla_minus_t": 0.9
+   },
+   "reversed": {
+    "area": 0.034,
+    "isla_e2": 0.000689,
+    "gt_e2": 0.000612,
+    "t_e2": 0.00066,
+    "share_of_isla_minus_gt": 0.07,
+    "share_of_isla_minus_t": 0.1
+   }
+  },
+  "wall shear by flow": {
+   "attached": {
+    "area": 0.966,
+    "isla_e2": 0.008759000000000001,
+    "gt_e2": 0.007453,
+    "t_e2": 0.007882,
+    "share_of_isla_minus_gt": 0.84,
+    "share_of_isla_minus_t": 0.87
+   },
+   "reversed": {
+    "area": 0.034,
+    "isla_e2": 0.002493,
+    "gt_e2": 0.0022370000000000003,
+    "t_e2": 0.0023620000000000004,
+    "share_of_isla_minus_gt": 0.16,
+    "share_of_isla_minus_t": 0.13
+   }
+  },
+  "pressure by span": {
+   "y0": {
+    "area": 0.731,
+    "isla_e2": 0.000545,
+    "gt_e2": 0.000526,
+    "t_e2": 0.000389,
+    "share_of_isla_minus_gt": 0.02,
+    "share_of_isla_minus_t": 0.53
+   },
+   "y1": {
+    "area": 0.149,
+    "isla_e2": 0.000459,
+    "gt_e2": 0.00045999999999999996,
+    "t_e2": 0.000438,
+    "share_of_isla_minus_gt": -0.0,
+    "share_of_isla_minus_t": 0.07
+   },
+   "y2": {
+    "area": 0.054,
+    "isla_e2": 0.0014210000000000002,
+    "gt_e2": 0.0009910000000000001,
+    "t_e2": 0.00126,
+    "share_of_isla_minus_gt": 0.37,
+    "share_of_isla_minus_t": 0.54
+   },
+   "y3": {
+    "area": 0.04,
+    "isla_e2": 0.0018410000000000002,
+    "gt_e2": 0.001158,
+    "t_e2": 0.001872,
+    "share_of_isla_minus_gt": 0.58,
+    "share_of_isla_minus_t": -0.11
+   },
+   "y4": {
+    "area": 0.025,
+    "isla_e2": 0.00025800000000000004,
+    "gt_e2": 0.00022200000000000003,
+    "t_e2": 0.000268,
+    "share_of_isla_minus_gt": 0.03,
+    "share_of_isla_minus_t": -0.04
+   }
+  },
+  "wall shear by span": {
+   "y0": {
+    "area": 0.731,
+    "isla_e2": 0.002224,
+    "gt_e2": 0.0022340000000000003,
+    "t_e2": 0.0020570000000000002,
+    "share_of_isla_minus_gt": -0.01,
+    "share_of_isla_minus_t": 0.17
+   },
+   "y1": {
+    "area": 0.149,
+    "isla_e2": 0.0026170000000000004,
+    "gt_e2": 0.002517,
+    "t_e2": 0.002366,
+    "share_of_isla_minus_gt": 0.06,
+    "share_of_isla_minus_t": 0.25
+   },
+   "y2": {
+    "area": 0.054,
+    "isla_e2": 0.002615,
+    "gt_e2": 0.001947,
+    "t_e2": 0.002249,
+    "share_of_isla_minus_gt": 0.43,
+    "share_of_isla_minus_t": 0.36
+   },
+   "y3": {
+    "area": 0.04,
+    "isla_e2": 0.002679,
+    "gt_e2": 0.00206,
+    "t_e2": 0.002636,
+    "share_of_isla_minus_gt": 0.4,
+    "share_of_isla_minus_t": 0.04
+   },
+   "y4": {
+    "area": 0.025,
+    "isla_e2": 0.001118,
+    "gt_e2": 0.0009320000000000001,
+    "t_e2": 0.000936,
+    "share_of_isla_minus_gt": 0.12,
+    "share_of_isla_minus_t": 0.18
+   }
+  },
+  "pressure by elem_flow": {
+   "flap_rev": {
+    "area": 0.001,
+    "isla_e2": 9e-06,
+    "gt_e2": 9e-06,
+    "t_e2": 7.000000000000001e-06,
+    "share_of_isla_minus_gt": -0.0,
+    "share_of_isla_minus_t": 0.01
+   },
+   "main_rev": {
+    "area": 0.024,
+    "isla_e2": 0.0005830000000000001,
+    "gt_e2": 0.000523,
+    "t_e2": 0.000573,
+    "share_of_isla_minus_gt": 0.05,
+    "share_of_isla_minus_t": 0.03
+   },
+   "other_rev": {
+    "area": 0.005,
+    "isla_e2": 3.7e-05,
+    "gt_e2": 3.8e-05,
+    "t_e2": 3.4000000000000007e-05,
+    "share_of_isla_minus_gt": -0.0,
+    "share_of_isla_minus_t": 0.01
+   },
+   "slat_rev": {
+    "area": 0.003,
+    "isla_e2": 6.3e-05,
+    "gt_e2": 4.3e-05,
+    "t_e2": 5e-05,
+    "share_of_isla_minus_gt": 0.02,
+    "share_of_isla_minus_t": 0.04
+   }
+  },
+  "wall shear by elem_flow": {
+   "flap_rev": {
+    "area": 0.001,
+    "isla_e2": 8.1e-05,
+    "gt_e2": 7.800000000000001e-05,
+    "t_e2": 6.6e-05,
+    "share_of_isla_minus_gt": 0.0,
+    "share_of_isla_minus_t": 0.01
+   },
+   "main_rev": {
+    "area": 0.024,
+    "isla_e2": 0.0019960000000000004,
+    "gt_e2": 0.001793,
+    "t_e2": 0.001957,
+    "share_of_isla_minus_gt": 0.13,
+    "share_of_isla_minus_t": 0.04
+   },
+   "other_rev": {
+    "area": 0.005,
+    "isla_e2": 0.00015600000000000002,
+    "gt_e2": 0.000152,
+    "t_e2": 0.000139,
+    "share_of_isla_minus_gt": 0.0,
+    "share_of_isla_minus_t": 0.02
+   },
+   "slat_rev": {
+    "area": 0.003,
+    "isla_e2": 0.000303,
+    "gt_e2": 0.00025,
+    "t_e2": 0.000244,
+    "share_of_isla_minus_gt": 0.03,
+    "share_of_isla_minus_t": 0.06
+   }
+  },
+  "_note": "squared relative L2 per case split over surface regions, averaged over the cases; ISLA the mean of its two seeds, GeoTransolver and Transolver seed 42; cp bins by the true pressure coefficient; span bins y0..y4 are fifths of the semispan from the root; elements from the per-cell labels of the labeled validation cases"
+ }
+}
