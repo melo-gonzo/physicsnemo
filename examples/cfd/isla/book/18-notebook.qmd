@@ -38729,3 +38729,45 @@ the difference moved GeoTransolver by 0.6 percent.
 model reads the full-resolution surfaces, and HiLift's are large enough
 to need a decimated geometry asset first. A design lane scopes that asset,
 together with ISLA's error at high angle of attack.
+
+## 2026-10-20 — Unit-direction reruns of the constant-drive baselines: GeoTransolver moves by at most 1 percent, and Transolver gains up to 10 percent on DrivAerML Volume {#sec-nb-drive-fix2-scored}
+
+**Question** (DRIVE-FIX2, after @sec-nb-drive-fix-scored). On DrivAerML
+and SHIFT-SUV the freestream is constant, and ten baseline lanes still
+read it as the raw velocity vector. Rerun with the unit direction, as the
+AirfRANS and HiLift lanes now read it, do they change? Each rerun copies
+its CHAR predecessor except for the drive input. All are scored in float32
+at epoch 500 on ISLA's 200,000-cell sets.
+
+| Dataset | GeoTransolver: unit ÷ raw drive | GeoTransolver ÷ A2 ISLA | Transolver: unit ÷ raw drive | Transolver ÷ A2 ISLA |
+|---|---|---|---|---|
+| DrivAerML Surface (p / wall shear) | 1.000 / 1.002 | 1.023 / 0.995 | 0.973 / 0.974 | 0.951 / 0.969 |
+| DrivAerML Volume (p / v / eddy viscosity) | 0.988 / 0.997 / 1.009 | 1.175 / 1.514 / 0.959 | 0.942 / 0.898 / 0.986 | 1.210 / 1.701 / 1.000 |
+| SHIFT-SUV (p / wall shear) | 0.990 / 0.991 | 0.999 / 0.982 | 0.988 / 0.988 | 0.919 / 0.945 |
+
+Native relative L2, seed means. The Transolver ratios on DrivAerML Surface
+are R2's 200,000-cell rescore (@sec-nb-drive-fix-scored).
+
+**Finding.** The unit direction moves GeoTransolver by at most about 1
+percent on every constant-drive dataset. It lowers Transolver's error by 1
+to 10 percent, most on DrivAerML Volume velocity. These rows replace the
+raw-drive rows as the standings. On DrivAerML Volume, A2 ISLA's lead over
+Transolver falls from 1.28 / 1.90 to 1.21 / 1.70, and GeoTransolver leads
+A2 ISLA on eddy viscosity (0.959). On SHIFT-SUV, Transolver leads A2 ISLA
+(0.919 / 0.945) and GeoTransolver is level.
+
+**Caveats.**
+
+- The new Transolver rows are scored on ISLA's 200,000-cell set, while their
+  CHAR predecessors used Transolver's own cell count. So the area and posed
+  values of old and new are not comparable; compare them only across arms
+  on the same set.
+- For DrivAerML Volume this scorer's area protocol equals native, so no
+  Volume area ratio is quoted from these rows.
+- Posed, the baselines' errors are 0.8 to 1.3 on DrivAerML Volume and 1.06
+  to 1.27 on the two surface datasets, against ISLA's near-native
+  (scratch/isla-drive-fix2-2026-10-19/RESULTS.md).
+
+**Next.** Every baseline lane now reads the unit direction, plus a
+standardized speed where the speed varies. The recipe's baseline defaults
+follow, so that new runs read the fair drive by default.
