@@ -58,7 +58,9 @@ training:
 # with Inductor's mix-order reduction off: on this graph it fuses a per-point sum with a sum over the
 # points into one kernel, and torch 2.12 returns the second sum, a (1, n_slices, 1) softmax denominator
 # saved for backward, as (1, n_slices), so the compiled backward fails its first step ("wrong number
-# of dimensions"). torch 2.13 returns it at its shape; there the mode line can come back.
+# of dimensions"). torch 2.13 returns it at its shape, but its mix-order column sums still add the padded
+# rows after a prologue such as exp, a silent error (pytorch/pytorch#195845, fixed on main on 2026-09-29):
+# the mode line can come back with a torch that has both fixes.
 compile: true
 compile_options:
   fullgraph: true
