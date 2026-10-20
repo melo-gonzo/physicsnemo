@@ -220,7 +220,7 @@ print("On the DrivAerML tasks and on SHIFT-SUV every case has the same freestrea
       "checkpoints, and each physical-vector twin stays in its standing artifact as a record. Data: "
       "results/campaigns_2026-10-19/drive_fix/drivefix_scores_2026-10-19.json (the band: PREREG.md beside it), "
       "results/campaigns_2026-10-20/drive_fix2/ud2_scores_2026-10-20.json, "
-      "results/campaigns_2026-10-19/drive_fix2/scoreset/tset200k_scores.json, results/char/<dataset>_a2.json (`raw_drive_*`).")
+      "results/campaigns_2026-10-19/drive_fix2/scoreset/tset200k_scores.json, results/char/*_a2.json (`raw_drive_*`).")
 ```
 
 ```{python}
@@ -430,7 +430,7 @@ print("The registered rule named no reference configuration, so the picks were m
       + "The joint score did not take the candidate most accurate on the DrivAerML Surface task for any architecture, under the "
       "same budget: " + "; ".join(car_best_text(a) for a in S.ARCHS) + ". "
       f"No GeoTransolver candidate is within 3% of the best on both datasets; width 256 is the best on the wings and trails by "
-      f"{pct(gt[0])} on the cars. On the wings GeoTransolver and Transolver read the freestream in inch/s (@tbl-model-inputs), "
+      f"{pct(gt[0])} on the cars. In the selection's wing runs GeoTransolver and Transolver read the freestream in inch/s (@tbl-hilift-unit-drive), "
       "so the wing scores that decided their picks are scores under that input; a reselection with the unit direction on the wings "
       "is an open question (@sec-oq-reference-selection). @tbl-selection lists every candidate.")
 ```

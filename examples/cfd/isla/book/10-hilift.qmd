@@ -21,6 +21,16 @@ KEY = {"ISLA": "isla_ref", "GeoTransolver": "gt", "Transolver": "t"}
 seeds_txt = lambda a, f, p="native": " and ".join(f"{v:.4f}" for v in HL.seeds(a, f, p))
 
 
+def both(st, fields, p="native"):
+    """'ISLA trails both baselines on pressure (…) and on wall shear (…)' where one verdict holds against both on every field, else
+    one clause per field."""
+    v = {st.verdict(b, f, p) for b in S.BASELINES for f in fields}
+    if len(v) > 1:
+        return " and ".join(f"{clause(st, f, p)} on {st.fields[f]}" for f in fields)
+    r = lambda f: f"GeoTransolver ÷ ISLA {S.fmt_ratio(st.ratio('GeoTransolver', f, p))}, Transolver ÷ ISLA {S.fmt_ratio(st.ratio('Transolver', f, p))}"
+    return f"ISLA {v.pop()} both baselines " + " and ".join(f"on {st.fields[f]} ({r(f)})" for f in fields)
+
+
 def clause(st, f, p="native"):
     """ISLA against both baselines on one field, worded by the seed rule (standing.Standing.verdict)."""
     v = {b: st.verdict(b, f, p) for b in S.BASELINES}
@@ -109,7 +119,7 @@ RATIO = {k: mean(v[3]) / mean(v[2]) for k, v in RUNGS.items()}
 #| label: para-hilift-lede
 #| output: asis
 print(f"The three architectures are {S.CONFIG['ISLA']}, {S.CONFIG['GeoTransolver']} and {S.CONFIG['Transolver']}, each at its reference configuration (@sec-selection). "
-      + f"In one paragraph: at the 210-wing rung on the native mesh {clause(HL, 'pressure_l2')} on surface pressure and {clause(HL, 'tau_wall_l2')} on wall shear. "
+      + f"In one paragraph: at the 210-wing rung on the native mesh {both(HL, HL_F)}. "
       + "Only ISLA keeps its error on a uniform point cloud of the aircraft and under rotation and translation, so under those two scorings ISLA leads "
       f"both baselines by a factor of {S.fmt_ratio(min(HL.ratio(b, f, 'area') for b in S.BASELINES for f in HL_F))} or more (@sec-de-result). On the data-efficiency "
       "ladders, run on a smaller ISLA against unit-direction baselines, GeoTransolver is ahead or level on every rung, its lead largest "
@@ -363,12 +373,10 @@ The dataset's volume files carry interior coordinates for 31 of the 1,800 cases 
 #| output: asis
 span = lambda p: (S.fmt_ratio(min(HL.ratio(b, f, p) for b in S.BASELINES for f in HL_F)),
                   S.fmt_ratio(max(HL.ratio(b, f, p) for b in S.BASELINES for f in HL_F)))
-print(f"**At the 210-wing rung, on the native mesh, {clause(HL, 'pressure_l2')} on surface pressure and {clause(HL, 'tau_wall_l2')} "
-      "on wall shear; on the uniform point cloud and rotated and translated, ISLA leads both by a wide margin.** Every model reads the "
-      "unit far-field direction. On the native mesh the baselines are "
-      f"{S.fmt_pct(min(HL.ratio(b, 'pressure_l2') for b in S.BASELINES))} to {S.fmt_pct(max(HL.ratio(b, 'pressure_l2') for b in S.BASELINES))} "
-      f"more accurate on pressure and {S.fmt_pct(max(HL.ratio(b, 'tau_wall_l2') for b in S.BASELINES))} to "
-      f"{S.fmt_pct(min(HL.ratio(b, 'tau_wall_l2') for b in S.BASELINES))} on wall shear. On the uniform point cloud baseline ÷ ISLA is "
+gain = lambda f: " to ".join(S.fmt_pct(r) for r in sorted((HL.ratio(b, f) for b in S.BASELINES), key=lambda r: abs(r - 1)))
+print(f"**At the 210-wing rung, on the native mesh, {both(HL, HL_F)}; on the uniform point cloud and rotated and translated, ISLA "
+      "leads both by a wide margin.** Every model reads the unit far-field direction. On the native mesh the baselines' errors are "
+      f"{gain('pressure_l2')} lower than ISLA's on pressure and {gain('tau_wall_l2')} lower on wall shear. On the uniform point cloud baseline ÷ ISLA is "
       f"{span('area')[0]} to {span('area')[1]} on the two fields, and rotated and translated {span('posed')[0]} to {span('posed')[1]}. "
       "@tbl-hilift-protocols is the standing and @fig-hilift-shifts draws it. The standing has no row for ISLA as Part II defines it: "
       "the class reads the full-resolution boundary, and on this aircraft that first needs a decimated geometry asset "
@@ -416,7 +424,7 @@ print(f"Three readings. **First, the native verdicts are firm by the seed rule:*
       f"seed, while every baseline error is at least {posed_floor:.2f}, near or above the score of predicting zero, even though the far-field "
       "direction is rotated with the case. ISLA's offset is registered as a failure: the check registered before these baselines were scored "
       "put ISLA's rotated-and-translated error within 0.2% of its native error on every field and seed, as it is to within "
-      f"{100 * max(abs(S.Standing(k).shift('ISLA', f, 'posed') - 1) for k in ('drivaerml_surface', 'shift_suv') for f in S.DATASETS[k].headline):.2f}% "
+      f"{100 * max(abs(S.Standing(k).shift('ISLA', f, 'posed') - 1) for k in ('drivaerml_surface', 'shift_suv') for f in S.DATASETS[k].headline):.3f}% "
       "on the DrivAerML Surface task and SHIFT-SUV, and what produces the offset on this dataset is not located (@sec-de-limits).")
 ```
 
@@ -431,8 +439,8 @@ print(f"Three readings. **First, the native verdicts are firm by the seed rule:*
 #|   below the axis. ISLA checkpoints of the nearest-token form
 #|   (@sec-checkpoint-form). How to read this: below 14° the flow is attached
 #|   and ISLA and GeoTransolver are close while Transolver is lower; from 14°
-#|   up the errors of all three rise and GeoTransolver's is the lowest at most
-#|   angles; a mean per angle does not show the spread of the cases within
+#|   up the errors of all three rise, and GeoTransolver's is the lowest at
+#|   16°, 18° and 22°; a mean per angle does not show the spread of the cases within
 #|   it. Data: results/char/hilift_surface_a2.json (`case_level`).
 BA = CL["by_aoa"]; aoas_ = sorted(int(a) for a in BA)
 fig, ax = plt.subplots(figsize=(7.6, 3.8))
@@ -486,7 +494,7 @@ for b in S.BASELINES:
         print(f"| {b}, {lab} | {arm['native']['pressure_l2']['mean']:.4f} | {arm['native']['tau_wall_l2']['mean']:.4f} | "
               f"{arm['area']['pressure_l2']['mean']:.4f} | {arm['native']['pressure_l2']['mean'] / HL.err('ISLA', 'pressure_l2'):.2f} |")
 print()
-print(": The baselines of @tbl-hilift-protocols with the freestream as its unit direction (the standing's arms) and as the physical vector in "
+print(": The baselines of @tbl-hilift-protocols with the freestream as its unit direction (the standing's checkpoints) and as the physical vector in "
       "inch/s, at their reference configurations on the HiLiftAeroML 210-wing rung: area-weighted relative L2 on the 180 validation cases, "
       "seed means over two seeds, float32, every model scored on the same 200,000 cells per case as ISLA. How to read this: the two rows of "
       "a baseline differ only in that one input; ÷ ISLA divides by the native pressure error of the standing's ISLA (ISLA checkpoints of the "

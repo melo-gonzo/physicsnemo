@@ -496,7 +496,7 @@ print("The verdict is that of GeoTransolver's reference configuration, which is 
       f"the same budget its h1024_c100k candidate (width 1,024, trained at 100,000 cells) scored {sel('drivaer_surface', 'gt_h1024_c100k'):.4f} "
       f"on surface pressure against the reference width 256's {sel('drivaer_surface', 'gt_h256'):.4f}, and was not taken because it "
       f"scored {sel('hilift_210', 'gt_h1024_c100k'):.4f} against {sel('hilift_210', 'gt_h256'):.4f} on the 210 HiLiftAeroML wings, where "
-      "the baselines read the freestream in inch/s (@sec-selection).")
+      "the selection's baselines read the freestream in inch/s (@sec-selection).")
 ```
 
 ```{python}
@@ -509,7 +509,7 @@ rendering_figure("fig-drivaerml-prediction", [("figures/renderings/drivaerml_sur
     f"The three reference configurations on one validation car of the DrivAerML Surface task, {_R['sample_id'].split('_')[0]}, left side; Transolver is scored and drawn on its own 100,000 cells, the other two on 200,000. Relative L2 on this case: {case_errors(_R['per_sample_rel_l2'])}. " + "Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one "
       f"symmetric scale. ISLA checkpoints of the {S.FORM_TAG} (@sec-checkpoint-form). How to read this: one case, chosen as the case of median ISLA error (seed 42 of each reference configuration), "
       "not a standing; the standing is the table above. The baselines drawn are their checkpoints that read the freestream as the "
-      "constant physical vector, kept on record beside the standing's unit-direction arms (@sec-unit-direction-rule). "
+      "constant physical vector, kept on record beside the standing's unit-direction checkpoints (@sec-unit-direction-rule). "
     + "Data: results/renderings_2026-10-18/arrays/render_car.json.", nrow=2)
 ```
 
@@ -577,7 +577,7 @@ rendering_figure("fig-drivaerml-volume-prediction", [("figures/renderings/drivae
     f"The three reference configurations on one validation car of the DrivAerML Volume task, {_R['sample_id'].split('_')[0]}: the {_R['n_points_in_slab_window']:,} scored prediction points within {100 * _R['slab_half_width_m']:.0f} cm of the symmetry plane, side view. Relative L2 on this case: {case_errors(_R['per_sample_rel_l2'])}. " + "Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one "
       f"symmetric scale. ISLA checkpoints of the {S.FORM_TAG} (@sec-checkpoint-form). How to read this: one case, chosen as the case of median ISLA error (seed 42 of each reference configuration), "
       "not a standing; the standing is the table above. The baselines drawn are their checkpoints that read the freestream as the "
-      "constant physical vector, kept on record beside the standing's unit-direction arms (@sec-unit-direction-rule). "
+      "constant physical vector, kept on record beside the standing's unit-direction checkpoints (@sec-unit-direction-rule). "
     + "Data: results/renderings_2026-10-18/arrays/render_2d_drivaerml_volume.json.", nrow=2)
 ```
 
