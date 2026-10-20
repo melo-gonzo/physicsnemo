@@ -279,7 +279,7 @@ def test_isla_save_from_checkpoint_round_trip(device, tmp_path):
 
 
 def test_isla_reference_checkpoint_matches_golden(device):
-    """The committed reference checkpoint (version 0.8.0) keeps loading, without a
+    """The committed reference checkpoint (version 0.9.0) keeps loading, without a
     warning, and keeps its outputs."""
     DATA_DIR.mkdir(exist_ok=True)
     ckpt = DATA_DIR / "isla_default_v1.mdlus"
@@ -301,7 +301,7 @@ def test_isla_reference_checkpoint_matches_golden(device):
     _assert_dict_close(out, ref, atol=tol, rtol=tol)
 
 
-@pytest.mark.parametrize("version", ["0.3.0", "0.4.0", "0.5.0", "0.6.0", "0.7.0"])
+@pytest.mark.parametrize("version", ["0.3.0", "0.4.0", "0.5.0", "0.6.0", "0.7.0", "0.8.0"])
 def test_isla_checkpoint_of_an_earlier_version_is_refused(tmp_path, version):
     """ISLA keeps no upgrade path: a checkpoint written at an earlier version (here
     the reference checkpoint relabelled) fails to load with an error naming both
@@ -318,8 +318,8 @@ def test_isla_checkpoint_of_an_earlier_version_is_refused(tmp_path, version):
                 meta["mdlus_file_version"] = version
                 data = json.dumps(meta).encode()
             zout.writestr(item, data)
-    assert ISLA.__model_checkpoint_version__ == "0.8.0"
-    with pytest.raises(IOError, match=re.escape(f"version {version} is not compatible with current version 0.8.0")):
+    assert ISLA.__model_checkpoint_version__ == "0.9.0"
+    with pytest.raises(IOError, match=re.escape(f"version {version} is not compatible with current version 0.9.0")):
         Module.from_checkpoint(str(old))
 
 
@@ -356,12 +356,14 @@ def test_isla_earlier_state_dict_is_refused_on_every_loading_path(tmp_path):
     fresh.load(str(path))  # the current layout loads
 
 
-def test_isla_0_7_0_state_dict_is_refused_on_every_loading_path(tmp_path):
-    """0.7.0 has the current parameter layout but the earlier geometry encoding of
-    the prediction points: its state dict, told apart by the state-dict version torch
-    records (1 before 0.8.0, as every 0.7.0 checkpoint carries), is refused by
-    ``Module.load``, ``load_state_dict`` and through a DDP-style wrapper, with the
-    version named; the current state dict loads."""
+@pytest.mark.parametrize("release, version", [("0.7.0", 1), ("0.8.0", 8)])
+def test_isla_0_7_0_and_0_8_0_state_dicts_are_refused_on_every_loading_path(tmp_path, release, version):
+    """0.7.0 and 0.8.0 have the current parameter layout but an earlier forward (the
+    prediction points' geometry encoding before 0.8.0, the interior task's length unit
+    measured on the drawn tokens before 0.9.0): their state dicts, told apart by the
+    state-dict version torch records (1 before 0.8.0, as every 0.7.0 checkpoint
+    carries, and 8 for 0.8.0), are refused by ``Module.load``, ``load_state_dict`` and
+    through a DDP-style wrapper, with the version named; the current state dict loads."""
     import io
     import zipfile
 
@@ -369,22 +371,22 @@ def test_isla_0_7_0_state_dict_is_refused_on_every_loading_path(tmp_path):
     path = tmp_path / "isla.mdlus"
     model.save(path)
     old = model.state_dict()
-    assert old._metadata[""]["version"] == ISLA._version == 8
-    old._metadata[""]["version"] = 1  # what 0.7.0 (nn.Module's default) wrote
+    assert old._metadata[""]["version"] == ISLA._version == 9
+    old._metadata[""]["version"] = version  # what that release wrote
     buf = io.BytesIO()
     torch.save(old, buf)
-    stale = tmp_path / "isla_0.7.0_weights.mdlus"
+    stale = tmp_path / f"isla_{release}_weights.mdlus"
     with zipfile.ZipFile(path) as zin, zipfile.ZipFile(stale, "w") as zout:
         for item in zin.infolist():
             zout.writestr(item, buf.getvalue() if item.filename == "model.pt" else zin.read(item.filename))
     fresh = ISLA(**CONFIGS["interior"])
-    with pytest.raises(RuntimeError, match=r"before version 0\.8\.0 \(state-dict version 1"):
+    with pytest.raises(RuntimeError, match=rf"before version 0\.9\.0 \(state-dict version {version}"):
         fresh.load(str(stale), strict=True)
     with pytest.raises(RuntimeError, match="no upgrade path"):
         fresh.load_state_dict(old, strict=False)
     wrapped = torch.nn.ModuleDict({"module": model}).state_dict()
-    wrapped._metadata["module"]["version"] = 1
-    with pytest.raises(RuntimeError, match="before version 0.8.0"):
+    wrapped._metadata["module"]["version"] = version
+    with pytest.raises(RuntimeError, match="before version 0.9.0"):
         torch.nn.ModuleDict({"module": fresh}).load_state_dict(wrapped)
     fresh.load(str(path))  # the current state dict loads
     _assert_dict_close(fresh.state_dict(), model.state_dict(), atol=0.0, rtol=0.0)

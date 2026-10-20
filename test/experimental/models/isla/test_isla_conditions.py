@@ -65,11 +65,30 @@ OFFSETS = {
 }
 
 
-def _model(interior=False, schemas=SCHEMAS, **kw):
+#: The same conditions with ISLA's own scales: the inlet's velocity is the source of U
+#: and of the derived direction g, the fields and outputs carry units.
+SCALED = {
+    "inlet": {"u": {"rank": 1, "units": {"U": 1}, "velocity_scale": True}, "k": {"rank": 0, "units": {"U": 2}}},
+    "outlet": {
+        "p": {"rank": 0, "units": {"U": 2}},
+        "u_rev": {"rank": 1, "units": {"U": 1}},
+        "T": {"rank": 2, "symmetric": True, "units": {"U": 2}},
+    },
+    "no_slip": {},
+    "slip": {},
+}
+SCALED_OUT = {
+    "p": {"rank": 0, "units": {"U": 2}},
+    "v": {"rank": 1, "units": {"U": 1}},
+    "s": {"rank": 2, "symmetric": True, "units": {"U": 1, "L": 1}},
+}
+
+
+def _model(interior=False, schemas=SCHEMAS, output_schema=OUT, **kw):
     torch.manual_seed(0)
     return (
         ISLA(
-            output_schema=OUT,
+            output_schema=output_schema,
             boundary_schemas=schemas,
             global_schema={"g": {"rank": 1}, "re": {"rank": 0}},
             interior=interior,
@@ -116,12 +135,15 @@ def _specs(m, name):
     return m.boundary_schemas[name]
 
 
+@pytest.mark.parametrize("scaled", [False, True], ids=["unscaled", "scaled"])
 @pytest.mark.parametrize("improper", [False, True], ids=["rotation", "reflection"])
 @pytest.mark.parametrize("interior", [False, True], ids=["surface", "interior"])
-def test_every_condition_s_fields_are_covariant(interior, improper):
+def test_every_condition_s_fields_are_covariant(interior, improper, scaled):
     """Rotations and reflections with a translation: every condition's vector and
-    tensor fields move with the geometry, and every output transforms by its rank."""
-    m = _model(interior)
+    tensor fields move with the geometry, and every output transforms by its rank;
+    with ISLA's own scales the derived direction g moves with the source as well."""
+    m = _model(interior, **(dict(schemas=SCALED, output_schema=SCALED_OUT) if scaled else {}))
+    assert m.n_global_vectors == 1 + scaled
     meshes = _meshes()
     q = Q if interior else None
     base = _run(m, meshes, q=q)

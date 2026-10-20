@@ -52,6 +52,10 @@ SIZES = [({"inlet": 23, "wall": 41}, 57), ({"inlet": 31, "wall": 37}, 45)]
 SCHEMAS = {
     "interior": {"inlet": {"bc": {"rank": 0}, "u_bc": {"rank": 1}}, "wall": {}},
     "inputs": {"inlet": {"T": {"rank": 2}}, "wall": {"bc": {"rank": 0}}},
+    "scales": {
+        "inlet": {"bc": {"rank": 0, "units": {"U": 2}}, "u_bc": {"rank": 1, "units": {"U": 1}, "velocity_scale": True}},
+        "wall": {},
+    },
 }
 
 
@@ -65,12 +69,27 @@ def _model(task: str) -> ISLA:
             "global_schema": {"g": {"rank": 1}, "re": {"rank": 0}},
             "interior": True,
         }
-    else:  # inputs
+    elif task == "inputs":
         kw = {
             "boundary_schemas": SCHEMAS["inputs"],
             "global_schema": {"g": {"rank": 1}},
             "interior": True,
         }
+    else:  # scales: ISLA's own, with the derived direction, Re and output_stats
+        return ISLA(
+            output_schema={"p": {"rank": 0, "units": {"U": 2, "rho": 1}}, "v": {"rank": 1, "units": {"U": 1}}},
+            boundary_schemas=SCHEMAS["scales"],
+            global_schema={
+                "rho": {"rank": 0, "role": "density"},
+                "nu": {"rank": 0, "units": {"U": 1, "L": 1}, "role": "viscosity"},
+            },
+            reynolds={"mean": 5.0, "std": 1.0},
+            output_stats={"p": {"mean": 1.0, "std": 30.0}, "v": {"mean": 0.0, "std": 4.0}},
+            interior=True,
+            hidden=32,
+            n_layers=2,
+            n_slices=8,
+        )
     return ISLA(
         output_schema=PV, hidden=32, n_layers=2, n_slices=8, **kw
     )
@@ -89,8 +108,10 @@ def _case(task: str, sizes: dict, nq: int, device, seed: int) -> dict:
     drv = torch.nn.functional.normalize(torch.randn(3, generator=g), dim=0)
     case = {"boundary_meshes": meshes, "global_data": {"g": drv.to(device)}}
 
-    if task == "interior":
+    if task in ("interior", "scales"):
         case["global_data"]["re"] = torch.tensor(0.3, device=device)
+        case["global_data"]["rho"] = torch.tensor(1.2, device=device)
+        case["global_data"]["nu"] = torch.tensor(1.5e-5, device=device)
         case["prediction_points"] = (2 * torch.randn(nq, 3, generator=g)).to(device)
     elif task == "inputs":
         ### a point-cloud Mesh (its points alone are read), not a bare tensor
@@ -117,7 +138,7 @@ def _assert_close(a, b, device, rel=3e-2):
 
 
 @pytest.mark.parametrize("device", DEVICES)
-@pytest.mark.parametrize("task", ["surface", "interior", "inputs"])
+@pytest.mark.parametrize("task", ["surface", "interior", "inputs", "scales"])
 def test_whole_model_compiles_fullgraph_with_dynamic_shapes_and_matches_eager(
     task, device
 ):
