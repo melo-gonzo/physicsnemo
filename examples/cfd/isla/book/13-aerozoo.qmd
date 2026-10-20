@@ -458,6 +458,8 @@ plt.show()
 
 ## The standing {#sec-interior-aerozoo}
 
+<!-- SLOT: ISLA at the current class: one row beside the nearest-token-form row; native/area/posed seed means and per-seed values (standing.DATASETS["aerozoo"].current) -->
+
 **The book holds no model comparison on AeroZoo.** The benchmark protocol (@sec-aerozoo-allowed) fixes what a standing reads: each
 model's test error on the `full` split, and its penalty on each held-out split of @tbl-aerozoo-splits, its error on the held-out
 family divided by its own `full` error, both read by the seed rule per field (@sec-fair-comparison); and ISLA-DTT ÷ ISLA on the same
@@ -467,6 +469,9 @@ question of @sec-oq-aerozoo.
 <!-- SLOT: the AeroZoo standing (results/char/<file>.json named by standing.DATASETS["aerozoo"].artifact; the `full` split under
 "arms", protocol "native"; held-out splits under "splits": {split: {"arms": {...}}}): the `full` table, ISLA-DTT ÷ ISLA, and the
 penalty table per held-out split -->
+
+<!-- SLOT: the compliant AeroZoo table, four architectures (ISLA, ISLA-DTT, GeoTransolver Option B, the Transolver floor) on the
+`full` split and the held-out splits, and the decision between ISLA and ISLA-DTT that it settles -->
 
 <!-- RENDERING SLOT: fig-aerozoo-prediction: truth / ISLA / GeoTransolver / Transolver and errors on one held-out case -->
 

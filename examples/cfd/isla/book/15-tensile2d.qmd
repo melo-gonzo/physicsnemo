@@ -275,6 +275,8 @@ ISLA_EPOCH = COST["ISLA"]["epoch_seconds"] / statistics.mean(COST[a]["epoch_seco
 
 ## The standing {#sec-interior-tensile2d}
 
+<!-- SLOT: ISLA at the current class: one row beside the nearest-token-form row; native/area/posed seed means and per-seed values (standing.DATASETS["tensile2d"].current) -->
+
 ```{python}
 #| label: tensile2d-lede
 #| output: asis
@@ -441,7 +443,7 @@ print(f"**The perturbation is real but small on this mesh, and that is why the s
       "the native one (@sec-standing). The cause belongs to the geometry construction, not to the trained model. The class has no selection "
       "to make: its wall geometry is the exact closest point on the polyline, and a node on the polyline takes $d = 0$ with the pseudo-normal "
       "as its direction (@sec-exact-geometry-draw). Trained with that geometry and the continuous distance channel, otherwise in the "
-      "nearest-token form (the stored signed distance still among its inputs), the same configuration "
+      "nearest-token form (the stored signed distance still read as a prediction-point input), the same configuration "
       f"keeps its rotated and translated error within {100 * T2_CONT:.2f}% of native on every field and seed (@sec-medial-ties; data: "
       "results/campaigns_2026-10-19/geo_evidence/geo_evidence.json).")
 ```

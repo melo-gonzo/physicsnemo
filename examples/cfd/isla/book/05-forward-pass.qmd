@@ -277,10 +277,10 @@ they enter only as the differences $r_i - z_s$ of stage 3 and $r_i - z^f$ of
 stage 4. The log measure $\ell_i$ is the bias that makes every softmax over
 tokens a quadrature rule (@sec-isla-quadrature). A boundary mesh without a
 stored `_effective_measure` contributes its cells' geometric measures, so
-$\ell_i$ is always defined. On the interior task $L$ is computed from the
-drawn tokens with their Horvitz–Thompson measures, so it is a quadrature
-estimate of the same statistic of the full surface, and it moves with the
-draw by that quadrature's error.
+$\ell_i$ is always defined. $L$ is computed from the tokens: on a surface
+task from every given cell, on the interior task from the drawn tokens with
+their Horvitz–Thompson measures, a quadrature estimate of the same statistic
+of the full surface that moves with the draw by that quadrature's error.
 
 ::: {.callout-note collapse="true" title="Stage 1 in the code"}
 Each condition's cells become rows of one token set in `forward`; the length unit is one function, and the frame is a few lines of `_forward_tokens` (the token state then stores `r = points / gauge`): no center survives either.
@@ -1262,8 +1262,9 @@ a stored signed-distance field computed from the same surface. Both are
 built from a difference of positions, so $\delta_q$ is invariant and $u_q$
 covariant under every rigid motion and reflection (with the cells
 re-oriented so that their normals follow the map), and $\delta_q$ scales
-with the geometry. $s_q$ inherits the draw only through $L$, a factor
-common to every point of the case (stage 1).
+with the geometry. $s_q = \delta_q / L$ inherits the draw only through
+$L$, a factor common to every point of the case, by $L$'s quadrature error
+(stage 1).
 
 The search runs in `forward`, where the meshes are, before the draw, at the
 points' precision and outside autocast. In three dimensions it is a Warp
@@ -1295,17 +1296,21 @@ print(f"The prediction points' only input is their positions. The recipe's inter
       "signed-distance field.")
 ```
 
-**What the exact geometry measures.** Two pre-registered comparisons on the
-AirfRANS interior task isolate this stage (@tbl-arch-geo-evidence). The
+**What the exact geometry measures.** Two pre-registered comparisons
+isolate this stage (@tbl-arch-geo-evidence), the first on the AirfRANS
+interior task, the second on it and on PLAID Tensile2d and the GINOT lug. The
 first replaces the nearest-token geometry of the nearest-token form
 (@sec-checkpoint-form) by the exact geometry, read through a signed
 logarithm $\operatorname{sign}(s_q) \log(\lvert s_q \rvert + 10^{-12})$;
 the second keeps the exact geometry and replaces that channel by
 $\operatorname{asinh}(s_q / \varepsilon)$ and the direction $u_q$ by
-$\operatorname{sign}(\delta_q)\, u_q$, the encoding above. Both
-comparisons ran on the recipe of the nearest-token form, which also gives
-the prediction points the stored signed-distance field as an input; the
-reference reads none. Chapter 4 gives what the exact geometry does to the
+$\operatorname{sign}(\delta_q)\, u_q$, the encoding above. Every arm
+except the first comparison's control reads the exact built-in geometry,
+and every arm is otherwise of the nearest-token form: it still reads the
+stored signed distance and its direction as a prediction-point input on all
+three datasets (the second comparison's variant encodes that channel as it
+encodes $s_q$). The class reads no stored field, so neither comparison is a
+measurement of the class. Chapter 4 gives what the exact geometry does to the
 contracts (@sec-exact-geometry-draw, @sec-medial-ties).
 
 ```{python}
@@ -1337,7 +1342,8 @@ print(out)
 G_dec = float(np.exp(np.mean(np.log(dec))))
 print(f": The exact-geometry evidence: area-weighted relative L2 of each control and variant, seed means of two seeds (42, 43) "
       f"and the per-seed ratios paired by seed, native meshes, float32, final checkpoints. Instrument: ISLA at the reference "
-      f"configuration with the normalized slice reads, both arms of a comparison trained alike; AirfRANS uniform interior "
+      f"configuration with the normalized slice reads, both arms of a comparison trained alike, every arm reading the stored "
+      f"signed distance as a prediction-point input beside its built-in geometry; AirfRANS uniform interior "
       f"task, 200 test cases; PLAID Tensile2d and the GINOT lug on their interior tasks. Results: "
       f"results/campaigns_2026-10-19/geo_evidence/geo_evidence.json (`geo1_airfrans`, `geo_cont`). How to read this: a "
       f"ratio compares two ISLA variants, the variant over its control, and below one means the variant is more accurate; "
@@ -1355,7 +1361,8 @@ def all_below(var, ctl, fields):
 r1 = g1["geo1_over_a2s"]["native"]; r2 = gc["af"]["cont_over_ctl"]["native"]; rl = gc["lug"]["cont_over_ctl"]["native"]["von_mises_l2"]
 b1 = all_below(g1["geo1"]["native"], g1["a2s"]["native"], AFF); b2 = all_below(gc["af"]["cont"]["native"], gc["af"]["ctl"]["native"], AFF)
 lug_above = min(seeds_of(gc["lug"]["cont"]["native"], "von_mises_l2")) > max(seeds_of(gc["lug"]["ctl"]["native"], "von_mises_l2"))
-print(f"On the AirfRANS interior task the exact geometry is more accurate than the nearest-token geometry on all three "
+print(f"On the AirfRANS interior task, with the stored signed distance read in both arms, the exact geometry is more accurate "
+      f"than the nearest-token geometry on all three "
       f"fields (ratios {r1['pressure_l2']:.2f} / {r1['velocity_l2']:.2f} / {r1['nut_l2']:.2f} on pressure / velocity / eddy "
       f"viscosity{', every seed below' if b1 else ''}), and the continuous encoding is more accurate than the signed "
       f"logarithm again ({r2['pressure_l2']:.3f} / {r2['velocity_l2']:.3f} / {r2['nut_l2']:.3f}"

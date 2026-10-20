@@ -59,7 +59,7 @@ print(f"**On the AirfRANS interior task ISLA " + "; it ".join(f"{both(f)} on {l}
       + f". It keeps its error to within {isla_posed * 100:.2f}% when every case is rotated and translated, and when its airfoil is "
       f"thinned, its interior error depends strongly on which segments it keeps.** The ISLA checkpoints are of the {S.FORM_TAG} "
       "(@sec-checkpoint-form). ", end="")
-print("AirfRANS is the book's two-dimensional interior dataset and its one case with a global scalar input, the inlet speed. The chapter shows "
+print("AirfRANS is the book's two-dimensional flow dataset, and its one global scalar input is the inlet speed. The chapter shows "
       "the problem, what is measured, the standing of the three reference configurations, three studies that belong to this dataset (the "
       "training-airfoil ladder, the read-only prediction points at a study configuration and at the reference one, the extrapolation splits) "
       "and the boundary-sampling study, and ends with what the "
@@ -186,10 +186,8 @@ print(f"- **ISLA**: width 512, 12 layers, 512 slices, learning rate 3.75e-4, {PA
 print(f"- **GeoTransolver**: width 256, learning rate 1e-3, {PARAMS['GeoTransolver'] / 1e6:.1f}M parameters.")
 print(f"- **Transolver**: width 512, 16 layers, learning rate 1e-3, {PARAMS['Transolver'] / 1e6:.1f}M parameters.")
 print()
-print("No model trains with rotation or translation augmentation. **The three do not receive the same inputs** (@tbl-airfrans-inputs, "
-      "@tbl-model-inputs): GeoTransolver and Transolver never see the airfoil, only a signed distance to it stored at every point, and they "
-      "read the unit inlet direction and the inlet speed standardized over the training airfoils, where ISLA reads the speed in m/s. "
-      "They also run the planar case embedded in three dimensions and predict three velocity components.")
+print("No model trains with rotation or translation augmentation. **The three do not receive the same inputs** (@tbl-airfrans-inputs): "
+      "GeoTransolver and Transolver never see the airfoil, only a signed distance to it stored at every point.")
 ```
 
 | | boundary | global inputs | at each prediction point |
@@ -217,6 +215,8 @@ print("**Cost.** One training epoch on four GB300 ranks in bfloat16 (peak device
 ```
 
 ## The standing {#sec-interior-airfrans}
+
+<!-- SLOT: ISLA at the current class: one row beside the nearest-token-form row; native/area/posed seed means and per-seed values (standing.DATASETS["airfrans"].current) -->
 
 ```{python}
 #| label: para-airfrans-standing-lede
@@ -583,8 +583,8 @@ print(f"**The interior error of the standing's ISLA checkpoints depends on which
       "of the nearest-token form (@sec-checkpoint-form). Each prediction point takes a distance and a direction from its nearest boundary token, and that direction "
       "serves as the point's normal in every relational invariant (@sec-isla-relational). A nearest-token distance overestimates the true wall "
       "distance by up to half the local token spacing, and the spacing is set by the draw. @fig-airfrans-draw-spacing shows what the two "
-      "draws do to the spacing on a real AirfRANS airfoil. A variant with the class's wall geometry, the exact closest point on the full-resolution "
-      "airfoil, reverses the law effect on the same draws: for it the length-proportional draw is the better one (@sec-airfrans-limits).")
+      "draws do to the spacing on a real AirfRANS airfoil. A variant whose built-in wall geometry is the exact closest point on the "
+      "full-resolution airfoil, with the stored signed distance still read as a prediction-point input, reverses the law effect on the same draws: for it the length-proportional draw is the better one (@sec-airfrans-limits).")
 ```
 
 ```{python}
@@ -707,8 +707,9 @@ print("- **No cross-architecture discretization reading.** The boundary draw is 
       "(@sec-invariances).")
 print(f"- **The boundary-draw study is of the nearest-token form.** The standing's checkpoints take each prediction point's "
       "distance and direction from the nearest sampled boundary token, which ties the interior prediction to the boundary sample; the class "
-      "takes them from the exact closest point of the full-resolution airfoil. A variant with that closest point (and the nearest-token "
-      "form's logarithmic distance channel), trained at the reference configuration, was scored on the same draws: its "
+      "takes them from the exact closest point of the full-resolution airfoil. A variant with that closest point as its built-in geometry, "
+      "otherwise of the nearest-token form (its logarithmic distance channel, and the stored signed distance read as a prediction-point "
+      "input), trained at the reference configuration, was scored on the same draws: its "
       f"length ÷ uniform ratio is {gx['pressure_l2']:.2f} on pressure and {gx['velocity_l2']:.2f} on velocity (seed means), and its uniform ÷ "
       f"native count effect is {min(gc):.1f} to {max(gc):.1f} on those fields (results/char/airfrans_area2_a2.json): thinning the airfoil it "
       "is given still costs it. The class's own standing on this dataset is open (@sec-oq-class-standing).")

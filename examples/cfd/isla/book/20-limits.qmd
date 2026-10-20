@@ -356,7 +356,7 @@ fmt_h = lambda h: f"{h:,.0f}" if h < 1000 else f"{h / 1000:.1f} thousand"
 #| output: asis
 rows = [
     ("Do the standing's verdicts hold for ISLA as Part II defines it?",
-     "every standing's ISLA lanes retrained at the reference configuration with the class (each condition's own input layer, the exact wall geometry with the continuous encoding, the boundary drawn inside the model, no stored signed distance), two seeds, scored under the scoring protocol against the same baseline checkpoints; per dataset, the seed rule's verdicts and the pose and resampling shifts",
+     "the ISLA lanes of AirfRANS, the DrivAerML Surface and Volume tasks, SHIFT-SUV, Tensile2d, the lug and DeepJEB++ retrained at the reference configuration with the class (each condition's own input layer, the exact wall geometry with the continuous encoding, the boundary drawn inside the model, no stored signed distance), two seeds, scored under the scoring protocol against the same baseline checkpoints; per dataset, the seed rule's verdicts and the pose and resampling shifts; HiLiftAeroML first needs a decimated geometry asset",
      CLASS_COST),
     ("Should ISLA-DTT be ISLA's only interior form?", "ISLA-DTT ÷ ISLA on velocity and pressure on `full` and each AeroZoo held-out split under the benchmark protocol, at equal size", AZ_COST),
     ("How large is ISLA-DTT's tree error at θ = 1 where its forest's frame ties?", "ISLA-DTT scored rotated and translated, and under boundary redraws, on cases whose boundary has near-equal principal variances", "scoring only"),
@@ -404,11 +404,14 @@ print("**The open question is whether the standing's verdicts hold for ISLA as P
       "exact against the full-resolution boundary, with the continuous encoding, rather than from the nearest sampled token; the boundary "
       "tokens are drawn inside the model rather than by the datapipe; and no stored signed distance is read, where the form read it on "
       "AirfRANS, Tensile2d and the lug. The baselines' inputs are the same in both. The evidence of chapter 04 bears on single properties "
-      "of the class (@sec-exact-geometry-draw, @sec-medial-ties), not on its standing. What would settle it: on every dataset with a "
-      "standing, the ISLA lanes retrained at the reference configuration with the class as it is, two seeds (42 and 43), scored under the "
-      "scoring protocol of @sec-protocol on the same scoring sets and against the same baseline checkpoints; per dataset, the seed rule "
+      "of the class (@sec-exact-geometry-draw, @sec-medial-ties), not on its standing. What would settle it: on AirfRANS, the "
+      "DrivAerML Surface and Volume tasks, SHIFT-SUV, Tensile2d, the lug and DeepJEB++, the ISLA lanes retrained at the reference "
+      "configuration with the class as it is, two seeds (42 and 43), scored under the scoring protocol of @sec-protocol on the same scoring sets and against the same baseline checkpoints; per dataset, the seed rule "
       "applied to every headline field, read on whether each verdict of @tbl-thesis holds, with the rotated and translated and the "
-      f"resampled shifts beside it. On HiLiftAeroML the same lanes also carry the normalized slice reads. Cost: {CLASS_COST}.")
+      "resampled shifts beside it. HiLiftAeroML's row at the class is open for a reason of its own: the class reads each boundary "
+      "condition whole, as one full-resolution mesh with its exact geometry, and a HiLiftAeroML case is the largest surface of the "
+      "book (@sec-hilift), so that input needs a decimated geometry asset of each wing first. "
+      f"Cost: {CLASS_COST}.")
 ```
 
 ### ISLA or ISLA-DTT as the interior form {#sec-oq-dtt}
@@ -613,7 +616,8 @@ rng = lambda arm: " and ".join(f"{v:.2f}" for v in GC[arm]["von_mises_l2"].value
 n_pose = sum(all(abs(ST[k].shift("ISLA", f, "posed") - 1) <= 0.002 for f in ST[k].ds.headline) for k in ST)
 print("**The open question is whether ISLA's pose invariance can be exact on the lug, where the class's exact wall geometry still leaves "
       "a tie.** The exact closest point removes the nearest-token selection, and with it most of the lug's pose shift: trained with it, "
-      f"and otherwise in the nearest-token form, the posed ÷ native error is {rng('ctl')} per seed, and {rng('cont')} with the continuous "
+      f"and otherwise in the nearest-token form (the stored signed distance still read as a prediction-point input), the posed ÷ native "
+      f"error is {rng('ctl')} per seed, and {rng('cont')} with the continuous "
       f"distance channel, against {rng('a2')} for the standing's checkpoints (results/campaigns_2026-10-19/geo_evidence/geo_evidence.json). "
       "What is left is the direction on the medial surface: a node on the plate's mid-thickness plane is equally far from the top and the "
       "bottom face, so its direction is up or down by rounding, and no encoding of the distance, which is continuous there, removes it "

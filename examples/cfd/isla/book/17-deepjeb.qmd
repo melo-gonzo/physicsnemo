@@ -126,6 +126,8 @@ print("\n: The cost of training on DeepJEB++ at the three reference configuratio
 
 ## The standing {#sec-surface-deepjeb}
 
+<!-- SLOT: ISLA at the current class: one row beside the nearest-token-form row; native/area/posed seed means and per-seed values (standing.DATASETS["deepjeb"].current) -->
+
 ```{python}
 #| label: para-deepjeb-lede
 #| output: asis

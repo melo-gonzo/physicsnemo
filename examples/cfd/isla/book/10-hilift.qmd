@@ -377,6 +377,8 @@ The dataset's volume files carry interior coordinates for 31 of the 1,800 cases 
 
 ## The standing {#sec-de-result}
 
+<!-- SLOT: ISLA at the current class: one row beside the nearest-token-form row; native/area/posed seed means and per-seed values (standing.DATASETS["hilift"].current) -->
+
 ```{python}
 #| label: para-de-lede
 #| output: asis
