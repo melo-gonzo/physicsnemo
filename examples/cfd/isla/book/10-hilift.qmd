@@ -377,6 +377,8 @@ The dataset's volume files carry interior coordinates for 31 of the 1,800 cases 
 
 ## The standing {#sec-de-result}
 
+<!-- SLOT: ISLA at the current class: one row beside the nearest-token-form row; native/area/posed seed means and per-seed values (standing.DATASETS["hilift"].current) -->
+
 ```{python}
 #| label: para-de-lede
 #| output: asis
@@ -411,8 +413,9 @@ print(hl_table("tbl-hilift-protocols", "HiLiftAeroML at the 210-wing rung, 180 v
 #|   wall shear (bottom), seed mean (marker, printed) and the two seeds (black
 #|   dots), logarithmic axis; ISLA blue squares, GeoTransolver red circles,
 #|   Transolver amber triangles; the dashed line at one is the error of
-#|   predicting zero everywhere. How to read this: read each architecture down
-#|   the rows against its own native marker: ISLA's stays put and the
+#|   predicting zero everywhere. ISLA checkpoints of the nearest-token form
+#|   with the raw slice reads (@sec-checkpoint-form). How to read this: read
+#|   each architecture down the rows against its own native marker: ISLA's stays put and the
 #|   baselines' move right; the native row is a record, not a comparison,
 #|   when the baselines read the freestream as a physical vector
 #|   (@tbl-hilift-protocols); the figure does not show where on the aircraft

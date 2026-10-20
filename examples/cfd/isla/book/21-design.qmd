@@ -64,6 +64,8 @@ NAMES = [
     ("**is not compared with**", "the verdict on a standing whose baselines read the freestream as a physical vector rather than its unit direction (`standing.DATASETS[...].fair_drive` is False): the ratios are given and no comparison is drawn from them; also the verdict on a field whose errors are not measured alike for the architectures (`standing.DATASETS[...].provisional`, marked §, empty on every standing)", "@sec-standing, @sec-oq-unit-direction"),
     ("precise failure terms", "\"the validation loss rises 3x and does not recover\", \"routes every token to one slice\"; never \"collapsed\" or \"diverged\" without the measurement", "@sec-isla-layer"),
     ("**contract**", "a structural property asserted to roundoff as a unit test (rigid motion, remeshing)", "@sec-isla-contracts"),
+    ("**boundary condition** (of a model)", "a named part of the boundary with its own declared per-cell fields (`boundary_schemas`) and its own input layer; one mesh per condition in `forward`", "@sec-using-conditions"),
+    ("**the nearest-token form** (of a checkpoint)", "the form of the ISLA checkpoints behind the standings and the trained-model figures: one boundary schema shared by all conditions (labels as one-hot cell fields), boundary tokens drawn by the datapipe, each prediction point's wall distance and direction from the nearest sampled boundary token, and on AirfRANS, Tensile2d and the lug the stored signed distance read as a prediction-point input", "@sec-checkpoint-form"),
 ]
 DATASET_NAMES = ", ".join(d.name for d in S.DATASETS.values())
 out = "| name | what it is | defined in |\n|---|---|---|\n" + "".join(f"| {a} | {b} | {c} |\n" for a, b, c in NAMES)
@@ -89,9 +91,10 @@ SYM = [
     ("$Z_s$", "slice state, a measure-weighted mean", ""),
     ("$\\pi_{is}$", "read-back weight of token $i$ on slice $s$", "softmax over slices"),
     ("$\\hat u_i$", "radial basis vector of token $i$ from its soft anchor", "the equivariant head's basis"),
-    ("$d_q,\\; \\hat\\nu_q$", "signed distance and unit direction of prediction point $q$ from its nearest boundary token, its wall geometry on the interior task", "`nearest_boundary_geometry`"),
+    ("$d_q,\\; \\hat\\nu_q$", "signed distance of prediction point $q$ to the boundary surface, from the exact closest point on the full-resolution cells (positive on the side the normals point to), and its direction $\\hat\\nu_q = \\operatorname{sign}(d_q)\\, u_q$, with $u_q$ the closest cell's normal turned toward $q$, or the unit vector from the closest point where that point is on an edge or a vertex; its wall geometry on the interior task", "`exact_boundary_geometry`"),
+    ("$s_q \\equiv d_q / L$", "the scaled distance, read with $\\operatorname{asinh}(s_q / 10^{-6})$ as the point's two distance channels", "`soft_log_length`"),
     ("$M$", "number of slices ($M = 512$ in the reference configuration)", "`n_slices`"),
-    ("$N,\\; Q,\\; d$", "boundary tokens, prediction points, spatial dimension", "`dim`"),
+    ("$N,\\; Q,\\; d$", "boundary tokens, prediction points, spatial dimension", "`boundary_tokens` (interior task), `dim`"),
     ("$\\varepsilon,\\; n,\\; P$", "error, training cases and trainable parameters in the scaling law (@sec-scaling-law)", ""),
 ]
 out = "| symbol | meaning | in the code |\n|---|---|---|\n" + "".join(f"| {a} | {b} | {c} |\n" for a, b, c in SYM)
@@ -200,9 +203,10 @@ zero, and weight each sampled cell by its measure over its inclusion probability
 Horvitz–Thompson weight). Every sum ISLA forms is then an unbiased estimate of a surface integral,
 every ratio of such sums (a slice state, an anchor) a consistent one, and the prediction converges
 to one field as the sample is refined, whatever the law (@sec-principle). At a finite count the prediction moves by quadrature variance, which
-shrinks with the count (@sec-deficit-anatomy). The one input that does not converge this way is
-the interior's nearest-token wall geometry, which reads the sample spacing and is an open
-question (@sec-oq-geometry).
+shrinks with the count (@sec-deficit-anatomy). The interior's wall geometry needs no such
+argument: the model computes it exactly from the full-resolution surface, so it is the same for
+every draw of the boundary tokens and converges as $O(h^2)$ under refinement of the surface
+(@sec-exact-geometry-draw).
 
 Two questions are asked of every proposed change, before and after it is measured. *Why should
 this work*, in mechanistic terms? And would a practitioner of classical CFD object to what the
@@ -212,8 +216,8 @@ ablation, labeled as one wherever it appears.
 ## The ledger {#sec-principled-ledger}
 
 **Each row names a decision as the class implements it, the principle it follows, the
-alternative it declines and the evidence.** Rows 1 to 10 are architecture; rows 11 to 13 are
-protocol and program decisions, labeled as such. The evidence column points to the chapter that
+alternative it declines and the evidence.** Rows 1 to 15 are architecture; row 16 is the
+recipe's; rows 17 to 19 are protocol and program decisions, labeled as such. The evidence column points to the chapter that
 carries the measurement and its artifact; where it quotes a number, the number is computed from
 the standing as this page renders.
 
@@ -241,37 +245,55 @@ LEDGER = [
     ("5. Fields of declared tensor rank", "inputs of any rank enter through O(d) invariants against the token's own directions; outputs leave through an equivariant tensor basis",
      "a component is a view of a tensor, never a channel", "components along the dataset's axes fed or read as separate scalars",
      "the covariance contracts hold to roundoff for every declared rank (@sec-isla-heads, @sec-isla-contracts)"),
-    ("6. Bounded routing", "each block routes by the cosine between the normalized token state and a per-slice prototype, times a fixed temperature, so every logit is bounded",
+    ("6. Boundary conditions by name", "`boundary_schemas` declares each condition with its own per-cell fields; each condition's tokens enter through its own input layer, whose column on the constant is the condition's learned offset, then the shared GELU and linear layer. Only the first layer is per condition, applied in one block layout over every declared condition: the interior task's draw decides which condition each token belongs to, so the layout keeps static shapes, and every condition's parameters take part in every pass, present or not, as DDP requires",
+     "a solver knows which boundary carries which condition without a field that says so: the identity is structural, in the parameters, and a condition declares only the data it prescribes", "one schema shared by every condition, with one-hot condition tags and zero-filled fields (the nearest-token form); a second layer per condition, which needs a data-dependent split of the drawn tokens or one full-width product per condition over every token",
+     "@sec-using-conditions; `test_isla_conditions.py` (the order of the mapping changes nothing, an absent condition is one without cells, every condition's parameters train when it is absent)"),
+    ("7. Per-condition equivariant maps onto shared channels", "a condition's vectors and tensors reach the slice layers through its own linear maps (`vector_map`, `tensor_map`, initialized to the identity padded with zeros) onto shared channels, as many as the widest condition has",
+     "a linear combination with scalar weights commutes with every orthogonal map, so the channels are true vectors and tensors and every contract holds per condition", "every condition's vectors on every token, zero-filled where a condition has none, which widens the geometry region (two vector channels on AeroZoo, where its widest condition has one)",
+     "`test_isla_conditions.py` (every condition's fields covariant, reflections included); @sec-isla-contracts"),
+    ("8. Shared slice layers", "every condition's tokens route into the same slices, form the same anchors and read the same slice states",
+     "conditions interact through the solution, so they share the partition that couples them; the cost of a layer does not grow with the number of conditions", "slice layers per condition, as GLOBE has kernels per condition: they would split the partition by condition and lose the coupling, or multiply the parameters and the dominant per-layer cost by the number of conditions",
+     "@sec-isla-slices, @sec-using-conditions"),
+    ("9. Bounded routing", "each block routes by the cosine between the normalized token state and a per-slice prototype, times a fixed temperature, so every logit is bounded",
      "trainability: no block can send every point to one slice however its weights grow", "unbounded affine routing logits",
      "@sec-isla-slices, @sec-arch-routing-trained"),
-    ("7. Normalized slice reads", "the routing, pooling and broadcast read the normalized state; the raw state enters only the residual identity",
+    ("10. Normalized slice reads", "the routing, pooling and broadcast read the normalized state; the raw state enters only the residual identity",
      "trainability: an additive residual stream, whose norm does not grow block by block", "the raw-read variant, whose stream grows multiplicatively at the reference rate",
      "@sec-isla-layer"),
-    ("8. Prediction-point routing mass", "the prediction points' total routing weight is a learned fraction of the boundary measure, split equally over them",
+    ("11. Prediction-point routing mass", "the prediction points' total routing weight is a learned fraction of the boundary measure, split equally over them",
      "a readout must not read the cell count or the request size", "a fixed mass per prediction point",
      "@sec-isla-contracts, @sec-limits-query-independence"),
-    ("9. Interior wall geometry computed inside the model", "each prediction point takes its wall distance and direction from the nearest boundary token, by an exact search",
-     "geometry from the boundary the model is given, never from a field computed outside it", "a stored distance field as a built-in input; it can still enter as an ordinary declared field",
-     "the one discretization-dependent input (@sec-limits-boundary-law); its exact form is open (@sec-oq-geometry)"),
-    ("10. Interacting prediction points by default, read-only as an option", "interior tokens write into the slices; `query_independent=True` (ISLA-DTT) makes them read-only",
+    ("12. Exact interior wall geometry", "each prediction point takes its signed distance and direction from the exact closest point on the full-resolution cells of every given boundary (point to face; a Warp BVH in three dimensions, a brute force in two; differentiable), signed by the pseudo-normal, and reads them as $[s_q, \\operatorname{asinh}(s_q / 10^{-6})]$ with $s_q = d_q / L$ and the direction $\\operatorname{sign}(d_q)\\, u_q$, continuous through the surface",
+     "geometry is a function of the surface the model is given, never of the sample drawn from it or of a field computed outside it", "the distance and direction to the nearest sampled boundary token (the nearest-token form), which reads the sample spacing; a stored signed-distance field as an input; an encoding that jumps at the wall",
+     "the interior inputs do not depend on the boundary draw (@sec-exact-geometry-draw); what is left on the solids is direction ties on the medial surface (@sec-medial-ties); `test_isla_interior_geometry.py` ($O(h^2)$ under refinement, invariance to splitting a cell), `test_isla_query_encoding.py` (continuity at the surface)"),
+    ("13. The boundary draw inside the model", "the interior task takes each boundary at full resolution and draws `boundary_tokens` (200,000) cells in the forward pass: water-filled over the conditions, each kept with probability proportional to its measure, capped at one, by systematic sampling along the Morton order of the centroids, with its Horvitz–Thompson weight $a_i / \\pi_i$ and an exact count $\\min(\\text{cells}, \\text{budget})$; a random start in training, a fixed start (0.5) in evaluation",
+     "the boundary tokens are a quadrature of the surface: unbiased for every measure-weighted sum, exact on a condition kept whole, spread over the surface, with static shapes and a deterministic inference", "a draw by the datapipe, which fixes the sample before the model sees the surface; an independent draw, whose sample clumps",
+     "`test_isla_sampling.py` (exact count, unbiased Horvitz–Thompson sums, spread over the surface), `test_isla_interior_geometry.py` (deterministic evaluation; a finer input mesh reads as another draw of the same quadrature); @sec-using-interior"),
+    ("14. Interacting prediction points by default, read-only as an option", "interior tokens write into the slices; `query_independent=True` (ISLA-DTT) makes them read-only",
      "state a limitation rather than hide it: the interacting form is deployed at its training request count", "query-count augmentation as the default",
      "@sec-limits-query-independence; which form is ISLA's is open (@sec-oq-dtt)"),
-    ("11. One configuration for every dataset (protocol)", "width 512, 12 layers, 512 slices, 3.75e-4 on every task, trained at 200,000 cells per case where a case has more and on whole meshes where it has fewer, for the epochs of each dataset's protocol",
+    ("15. The surface output is one Mesh", "the surface task returns one point-cloud `Mesh` at the given conditions' cells, the conditions in sorted order and each condition's cells in its mesh's order; `torch.split` by the conditions' cell counts gives each condition's rows",
+     "the output is one field over the boundary, and the recipe's loss, metrics and inference consume one set of targets over points", "a mapping of meshes per condition, which moves the concatenation into the recipe and a condition-keyed target set into every dataset",
+     "@sec-using-conditions; DeepJEB++'s scored points are put in the prediction order by `reorder_interior` (@sec-using-recipe-conditions)"),
+    ("16. Orientation as a recipe transform (recipe)", "the model reads every cell's normal as given and signs its distances by it; a dataset file reverses a boundary wound away from the prediction points' domain with `FlipBoundaryOrientation`, set per dataset",
+     "which side of a boundary is the domain is a datum of the dataset; a mesh alone does not say it (an inlet, an open wall, a duct has no inside)", "a rule inside the model that guesses the side from the mesh; rewriting the stored files",
+     "@sec-using-orientation; `test_isla_interior_geometry.py` (the sign follows the surface's orientation)"),
+    ("17. One configuration for every dataset (protocol)", "width 512, 12 layers, 512 slices, 3.75e-4 on every task, trained at 200,000 cells per case where a case has more and on whole meshes where it has fewer, for the epochs of each dataset's protocol",
      "a surrogate that changes its construction per dataset has no claim to generalize across them", "per-dataset widths or rates", "@sec-standing"),
-    ("12. The same physical information, float32 scoring (protocol)", "each architecture receives the problem's physical information through the channels it has, listed per dataset, and is scored in float32",
+    ("18. The same physical information, float32 scoring (protocol)", "each architecture receives the problem's physical information through the channels it has, listed per dataset, and is scored in float32",
      "compare architectures, not protocols", "bfloat16 scoring, whose offsets fall unevenly across architectures",
      "@tbl-model-inputs, @sec-protocol" + (f"; where a record breaks the rule ({' and '.join(UNFAIR)}: the baselines read the freestream as a physical vector) no comparison is drawn (@sec-oq-unit-direction)" if UNFAIR else "")
      + "".join(f"; on {d.short} the baselines' {f.replace('_l2', '')} error includes an out-of-plane component that ISLA's planar prediction does not have, so {f.replace('_l2', '')} carries no verdict (@{d.section})"
                for d in S.DATASETS.values() if d.artifact and d.fair_drive for f in d.provisional)
-     + "; on the GINOT bracket lug GeoTransolver reads ISLA's boundary-condition labels on the surface triangles, and Transolver, which has no boundary path, receives none, because the data has no nodal condition tags; the lead over Transolver carries that caveat (@sec-lug)"),
-    ("13. The baselines unmodified (program)", "GeoTransolver and Transolver run as released; ISLA's features enter them only as labeled ablations",
+     + "; on the GINOT bracket lug GeoTransolver reads the dataset's boundary-condition labels on the surface triangles, and Transolver, which has no boundary path, receives none, because the data has no nodal condition tags; the lead over Transolver carries that caveat (@sec-lug)"),
+    ("19. The baselines unmodified (program)", "GeoTransolver and Transolver run as released; ISLA's features enter them only as labeled ablations",
      "released models are not modified", "back-porting measure weights and origin-free positions into them", "@sec-baselines"),
 ]
 out = "| decision | what ISLA does | principle | alternative declined | evidence |\n|---|---|---|---|---|\n"
 out += "".join("| " + " | ".join(r) + " |\n" for r in LEDGER)
 print(out)
 print(": The design-decision ledger of the class. How to read this: each row is a decision and its reason; a row does not "
-      "say what the declined alternative would score, and rows 6 and 7 are decisions about trainability with no physical principle at "
+      "say what the declined alternative would score, and rows 9 and 10 are decisions about trainability with no physical principle at "
       f"stake. The numbers in rows 1 and 2 are the DrivAerML Surface task's standing ({SURF.source}).")
 ```
 

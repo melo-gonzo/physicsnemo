@@ -43,6 +43,15 @@ CONFIG = {
 #: Seed means closer than this fraction are level, whatever the seeds do (the selection rule's tie band).
 TIE_BAND = 0.03
 
+#: The form of ISLA every standing's ISLA checkpoints (and every trained ISLA the book shows) are of, as captions name it.
+FORM_TAG = "nearest-token form"
+
+#: The one sentence that says what that form is, for a chapter or a caption that needs it whole.
+FORM_NOTE = (f"The ISLA checkpoints of the standing are of the {FORM_TAG}: the normalized slice reads (HiLiftAeroML: the raw "
+             "reads), one boundary schema shared by every condition, boundary tokens drawn by the datapipe, each prediction point's wall "
+             "distance and direction from the nearest sampled boundary token, and on AirfRANS, Tensile2d and the lug the stored signed "
+             "distance read as a prediction-point input (@sec-checkpoint-form).")
+
 #: The protocol names as the book writes them.
 PROTOCOL = {"native": "native mesh", "area": "uniform point cloud", "posed": "rotated and translated"}
 
@@ -62,6 +71,9 @@ class Dataset:
     drive_note: str = ""  # what the baselines read instead, for the one sentence the chapters print (results/drive_audit_2026-10-18/)
     provisional: dict = field(default_factory=dict)  # field -> why its ratios are given without a verdict although the inputs are fair
     notes: dict = field(default_factory=dict)
+    # the artifact (file under results/char/) or arm of ISLA at the current class on this task, None until it is scored; a standing
+    # table then shows its one ISLA row (native, area and posed seed means and per-seed values) beside the nearest-token-form row
+    current: str | None = None
 
     @property
     def short(self) -> str:
@@ -211,7 +223,8 @@ class Standing:
                            + " | ".join(" / ".join(fmt_ratio(self.ratio(arch, f, p)) + ("§" if f in self.ds.provisional else "")
                                                    for f in fields) for p in protocols) + " |")
         cap = (f": {setting}: the architectures at their reference configurations, {flab}, "
-               f"relative L2 error (@sec-metrics), seed means over two seeds, float32; "
+               f"relative L2 error (@sec-metrics), seed means over two seeds, float32; ISLA checkpoints of the {FORM_TAG}"
+               + ("" if self.ds.reference else ", with the raw slice reads") + " (@sec-checkpoint-form); "
                + "each column scores the same checkpoint of each seed on the test cases as presented: "
                + ", ".join(f"*{PROTOCOL[p]}*" for p in protocols)
                + ". How to read this: lower is better; "
@@ -342,7 +355,8 @@ def plot_shifts(ax, protocol="posed", keys=None, field=None):
 # --- Cost of the reference configurations ------------------------------------------------------------
 #: Per task and architecture: training peak memory (GiB, max over four GB300 ranks), epoch wall time (s) and parameter
 #: count, from the one-epoch lanes of the reference configurations. The lanes ran with the raw slice reads; the
-#: normalized reads add no parameter and no tensor of note, so the counts are exact and the cost representative.
+#: normalized reads add no parameter and no tensor of note, so the counts are exact for the standing's checkpoints (the
+#: nearest-token form) and the cost representative.
 COST_FILE = "char_lanes_cost_2026-10-04.json"
 _COST_KEY = {"drivaerml_surface": "DrivAerML Surface", "drivaerml_volume": "DrivAerML Volume", "shift_suv": "Shift-SUV",
              "airfrans": "AirfRANS", "tensile2d": "Tensile2D", "lug": "lug", "deepjeb": "DeepJEB++"}

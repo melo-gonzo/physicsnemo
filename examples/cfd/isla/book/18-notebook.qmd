@@ -38652,10 +38652,11 @@ go on to AeroZoo.
   A pose changes which anchors the fixed evaluation stream draws.
 - The query-population probe confirms that A depends on its companions:
   far-field companions raise its error 26 to 63 times. In float64, B and
-  E move by at most 5e-12 of the RMS target. D moves by 2e-6, above the
-  1e-9 line. The likely cause is ISLA-DTT's cluster means, which run in
-  float32 by design at θ > 0, with an order-dependent sum on CUDA. A
-  float64 re-probe after that read is fixed will check this.
+  E move by at most 5e-12 of the RMS target. D first moved by 2e-6, above
+  the 1e-9 line, because its cluster means ran in float32 with an
+  order-dependent sum on CUDA: the same forward pass run twice moved it by
+  1e-6. With the cluster means in float64, D moves by at most 3e-14, so
+  ISLA-DTT is query-independent to roundoff.
 - Step time at mid-run, relative to A: B 1.00, C 1.20, D 1.22, E 1.21.
   Peak memory is 38.0 GB for A, 42.0 GB for D and 55.5 GB for C
   (scratch/isla-anchor-2026-10-18/RESULTS.md).

@@ -1,0 +1,11 @@
+{
+ "anc_mesh_seed42": {
+  "epoch0_median_s": 0.66,
+  "epoch0_n": 191,
+  "epoch250_median_s": 0.56,
+  "epoch250_n": 200,
+  "all_median_s": 0.647,
+  "peak_mem_gb": 55.7,
+  "epochs_logged": 500
+ }
+}

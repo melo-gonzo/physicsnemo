@@ -1,0 +1,5 @@
+idx	group	run_id	dataset	model	extra	lr	seed	cells	code	epochs
+72	cl	cl_r_jeb_isla_seed42	deepjebpp_surface	isla_surface_deepjebpp	train_split=train_clean val_split=test_clean +training.val_interval=2 model.hidden=512 model.n_slices=512	3.75e-4	42	200000	code_v20	40
+73	cl	cl_r_jeb_isla_seed43	deepjebpp_surface	isla_surface_deepjebpp	train_split=train_clean val_split=test_clean +training.val_interval=2 model.hidden=512 model.n_slices=512	3.75e-4	43	200000	code_v20	40
+0	jbn2	jbn2_isla_seed42	deepjebpp_surface	isla_surface_deepjebpp	train_split=train_clean val_split=test_clean +training.val_interval=2 model.hidden=512 model.n_slices=512	3.75e-4	42	200000	code_v20a2	40
+1	jbn2	jbn2_isla_seed43	deepjebpp_surface	isla_surface_deepjebpp	train_split=train_clean val_split=test_clean +training.val_interval=2 model.hidden=512 model.n_slices=512	3.75e-4	43	200000	code_v20a2	40

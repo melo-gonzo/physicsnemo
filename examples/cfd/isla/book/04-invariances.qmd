@@ -31,7 +31,7 @@ AREA_KEYS = [k for k in KEYS if "area" in S.DATASETS[k].protocols]   # where the
 HEAD = {k: ST[k].ds.headline[0] for k in KEYS}                # the field each dataset's bar shows
 NONREF = [S.DATASETS[k].name for k in KEYS if not S.DATASETS[k].reference]
 PR = J("precres_2026-09-18.json")["reduction"]; PRB, PRF = PR["bfloat16"], PR["float32"]
-TIE_FREE = [k for k in KEYS if k not in ("lug", "tensile2d", "hilift")]   # no tied nearest samples, reference standing
+TIE_FREE = [k for k in KEYS if k not in ("lug", "tensile2d", "hilift")]   # no tied nearest samples in the nearest-token form, normalized reads
 POSED_DEV = max(abs(ST[k].shift("ISLA", f, "posed") - 1) for k in TIE_FREE for f in ST[k].ds.headline)
 ```
 
@@ -65,6 +65,10 @@ apply.
 | cell splitting: every cell replaced by two coincident copies of half its measure | the interior prediction unchanged: the discrete measure, and every integral over it, is the same | $10^{-10}$ |
 | refinement of a fractal boundary (Koch curve, total length $\to \infty$) | the length unit $L$ converges: successive levels agree to $10^{-3}$ from level 4 on | converges |
 | a 10:1 biased resampling of 100,000 cells to 10,000, with Horvitz–Thompson weights | the prediction moves by less than four times what a fresh uniform draw moves it | ratio $< 4$ |
+| boundary conditions: the cells of one condition permuted; the input mapping given in another order | the outputs permute with the cells; the outputs unchanged, bitwise | $10^{-10}$; bitwise |
+| one condition remeshed by cell splitting, each condition in turn | the interior prediction unchanged | $10^{-10}$ |
+| a prediction point's wall distance and direction under another draw of the boundary tokens, and under splitting the surface's cells | unchanged: they are functions of the full-resolution surface | bitwise; $10^{-12}$ |
+| a prediction point moved through the surface | its distance channels and direction continuous | continuous |
 
 : The contract tests and what each verifies. The transformations act on the boundary cells (positions, normals, measure
 weights), on the global directions and, for the interior task, on the prediction points together. How to read this: a
@@ -77,19 +81,25 @@ vanishes as $\theta \to 0$ (@sec-arch-tree-read). The test functions are listed 
 
 ::: {.callout-note collapse="true" title="Optional: the test functions, row by row"}
 Rotation: `test_rotation_equivariance`, `test_frame_contracts` (`test_isla.py`). Reflection:
-`test_covariance_of_every_rank_and_parity` (`test_isla_heads.py`), `test_boundary_inputs_covariance` and
-`test_query_inputs_covariance` (`test_isla_inputs.py`), and the two-dimensional
+`test_covariance_of_every_rank_and_parity` (`test_isla_heads.py`), `test_boundary_inputs_covariance`
+(`test_isla_inputs.py`), and the two-dimensional
 `test_two_dimensional_contracts_rotation_translation_magnitude_and_reflection` (`test_isla_nd.py`). Translation:
 `test_translation_invariance`, `test_translation_invariance_alone`. Uniform rescale: `test_geometric_scale_equivariance`,
 `test_rms_distance_scale_contracts`. Measure-weight rescale: `test_measure_scale_invariance`. Cell splitting:
 `test_query_mass_refinement_invariance`. Refinement:
 `test_rms_distance_converges_on_koch_curve_where_total_measure_diverges`. Biased resampling:
-`test_frame_is_sampling_consistent`. The same files also test token permutation, several boundary meshes as one token set,
-the magnitude of a global vector, and the ISLA-DTT read.
+`test_frame_is_sampling_consistent`. Boundary conditions: `test_a_condition_s_cells_permute_with_its_outputs`,
+`test_the_order_of_the_input_mapping_changes_nothing`, `test_remeshing_one_condition_changes_no_interior_prediction` and
+`test_every_condition_s_fields_are_covariant` (`test_isla_conditions.py`). The prediction points' geometry:
+`test_builtin_geometry_is_the_surface_s_for_every_draw_of_the_tokens`, `test_exact_geometry_is_invariant_to_splitting_the_surface`,
+`test_exact_geometry_is_covariant_and_scales`, `test_convergence_is_second_order_under_refinement`
+(`test_isla_interior_geometry.py`) and `test_query_encoding_is_continuous_at_the_surface` (`test_isla_query_encoding.py`). The
+same files also test token permutation, an absent condition as one without cells, the magnitude of a global vector, and the
+ISLA-DTT read.
 :::
 
 The first five rows are exact symmetries of the algebra. Positions enter only as differences to slice anchors, which are
-themselves measure-weighted means. The length unit $L$, the measure-weighted RMS pairwise distance of the boundary sample, is
+themselves measure-weighted means. The length unit $L$, the measure-weighted RMS pairwise distance of the boundary tokens, is
 an integral that scales with the geometry. Every scalar the network forms is a norm or an inner product of vectors that
 rotate together (@sec-isla-frame, @sec-isla-relational). Vector and tensor outputs are assembled in a basis built from those
 same vectors (@sec-isla-heads). The last three rows are discretization statements. Cell splitting is exact, because a
@@ -106,10 +116,12 @@ sections are about them.
 - **Completeness of the representation.** The anchors are first moments, so two arrangements with the same first moments
   per slice are indistinguishable to a layer (`results/isla_first_moment_collision_2026-09-08.json`).
 - **The deployed arithmetic.** The tests run in float64. On the GPU in float32 the algebra keeps the contract to float32
-  roundoff, but one input of the interior task does not: where a prediction point is equally near two boundary samples, the
-  rounding of its coordinates decides which one it reads (@sec-nearest-ties). ISLA's rotated-and-translated error therefore
-  stays within `{python} f"{POSED_DEV:.1%}"` of its native error on every headline field of the tasks without such ties and
-  moves on the lug and on Tensile2d (@tbl-contract-shifts). On HiLiftAeroML, a surface task with no nearest-sample input whose
+  roundoff, but one input of the interior task does not: where a prediction point is equally far from two parts of the
+  surface, the rounding of its coordinates decides which side its direction takes (@sec-medial-ties). In the standing, whose
+  checkpoints read the nearest sampled token instead (the nearest-token form, @sec-checkpoint-form), the tie is between two
+  samples. ISLA's rotated-and-translated error there stays within `{python} f"{POSED_DEV:.1%}"` of its native error on every
+  headline field of the tasks without such ties and moves on the lug and on Tensile2d (@tbl-contract-shifts). On
+  HiLiftAeroML, a surface task with no nearest-sample input whose
   standing is of the raw-read variant, it is `{python} S.fmt_ratio(ST['hilift'].shift('ISLA', HEAD['hilift'], 'posed'))`
   times native; the cause of that move has not been measured. Under *bfloat16 autocast* (matrix products
   run in the 16-bit bfloat16 format, with an 8-bit significand of which 7 bits are stored) the rounding is larger still:
@@ -342,7 +354,8 @@ if NONREF:
 #|   seed mean of the task's first headline field (a field its standing reports, named in the row label), joined to 1 (no
 #|   shift) by a thin line on a log axis; small open dots are the two seeds and the printed number is the seed mean. ISLA blue, GeoTransolver red, Transolver amber. How to read
 #|   this: a marker at 1 means the protocol leaves that architecture's error unchanged; the figure does not rank native
-#|   accuracy (@sec-standing), and every headline field is in @tbl-contract-shifts. Data: results/char/*.json, read
+#|   accuracy (@sec-standing), and every headline field is in @tbl-contract-shifts. ISLA checkpoints of the
+#|   nearest-token form (@sec-checkpoint-form). Data: results/char/*.json, read
 #|   through standing.py.
 #| code-fold: true
 from matplotlib.ticker import FixedLocator, NullLocator
@@ -398,7 +411,8 @@ print("\n: Shifts of every headline field at the reference configurations: each 
       "rotated-and-translated protocol and under the uniform point cloud, divided by its own seed-mean native-mesh error, "
       "float32, final checkpoints, two seeds. The point-cloud columns are filled only where that protocol resamples the "
       "scored cells; elsewhere the protocol returns the native mesh, or (on the DrivAerML Volume task) redraws only ISLA's "
-      "boundary, which @sec-nearest-token reads. How to read this: 1.00 is no shift; a ratio here compares an "
+      "boundary, from which the nearest-token form computes its query geometry (@sec-exact-geometry-draw). ISLA checkpoints "
+      "of the nearest-token form (@sec-checkpoint-form). How to read this: 1.00 is no shift; a ratio here compares an "
       "architecture with itself, never with another architecture. Data: " + "; ".join(ST[k].source for k in KEYS)
       + ". {#tbl-contract-shifts}")
 ```
@@ -415,7 +429,7 @@ print("**The pose protocol tests the contract.** No reference configuration trai
       "so for them a rotated case is an input outside the training distribution, and their posed errors run from "
       f"{min(bpe):.2f} to {max(bpe):.1f}, the order of the field itself. ISLA has no frame to be out of (the frame in which "
       "ISLA-DTT builds its forest is computed from the boundary and turns with it, @sec-arch-modes). Its markers sit within 1% of one "
-      "except where its interior geometry ties (@sec-nearest-ties).")
+      "except where its interior geometry ties (@sec-medial-ties).")
 ```
 
 **The point-cloud protocol tests consistency.** The same checkpoint, trained under the native law, is scored on a sample of
@@ -495,37 +509,43 @@ print(f"The augmented baselines learn most of the invariance: their posed ÷ nat
       "(results/char/ref80_frontier_2026-10-02.json); all three read 200,000 cells per case.")
 ```
 
-## Where ISLA's own error moves {#sec-contract-bends}
+## Where ISLA's contract still bends {#sec-contract-bends}
 
-**ISLA's error moves in two places, and both come from one input: the wall distance and direction of an interior prediction
-point, which ISLA reads from the nearest sampled boundary token.** Everything else a prediction point reads (slice states,
-anchors, routing mass) is a measure-weighted quadrature and moves only by its quadrature error. A nearest-neighbor search
-over a sample is different. It is a discontinuous function of the sample: it changes when the sample changes, and on a mesh
-where two samples are equally near it changes under a rounding error. The two places below are that one mechanism under
-two perturbations.
+**An interior prediction point reads its wall distance and direction from the exact closest point of the full-resolution
+surface, so neither a different boundary draw nor a tie between two samples moves them. What still moves is the length
+unit, by its quadrature error, and the direction at a point equidistant from two parts of the surface.** Everything else a
+prediction point reads (slice states, anchors, routing mass) is a measure-weighted quadrature and moves only by its
+quadrature error (@sec-isla-interior). The standing of Part IV comes from checkpoints of the nearest-token form
+(@sec-checkpoint-form), whose prediction points read the nearest *sampled* boundary token instead. A nearest-neighbor search
+over a sample is a discontinuous function of the sample: it changes when the sample changes, and on a mesh where two samples
+are equally near it changes under a rounding error. The two sections below measure what that form's search costs, what the
+exact geometry of the class removes, and what is left.
 
-### A different boundary draw moves the interior inputs {#sec-nearest-token}
+### The interior inputs do not depend on the boundary draw {#sec-exact-geometry-draw}
 
-**On an interior task, each prediction point is given its signed distance to the wall and the direction to it, measured to
-the nearest sampled boundary token. A different boundary draw gives a different nearest token, so the input moves even
-though the surface has not.** @fig-nearest-token shows it on the airfoil. There the sampled distance overestimates the true
-one by up to half the gap between neighboring kept cells (on a surface in three dimensions, by up to the radius of the
-largest gap between tokens), and the overestimate depends on where the law put its samples. A model trained under the native
-law learns to read the native law's distances. Under the area law, which thins the samples where the mesher refined and
-adds them where it did not, its near-wall points read distances from a distribution it has not seen.
+**The class's wall distance is a function of the surface alone, the same for every draw of the boundary tokens; the
+nearest-token form's is a function of the draw.** @fig-nearest-token shows both on the airfoil. The distance to the nearest
+kept cell overestimates the true one by up to half the gap between neighboring kept cells (on a surface in three dimensions,
+by up to the radius of the largest gap between tokens), and the overestimate depends on where the law put its samples. A
+model trained under the native law learns to read the native law's distances. Under the area law, which thins the samples
+where the mesher refined and adds them where it did not, its near-wall points read distances from a distribution it has not
+seen. The exact distance is the blue line at one, whatever the draw (`test_builtin_geometry_is_the_surface_s_for_every_draw_of_the_tokens`).
+The scaled distance $s_q = d_q / L$ moves with the draw through $L$, a quadrature over the drawn tokens, but only by $L$'s
+quadrature error (@sec-arch-frame).
 
 ```{python}
 #| label: fig-nearest-token
 #| fig-cap: >
-#|   The wall distance of an interior prediction point, read from the nearest sampled boundary token, on the meshed airfoil
-#|   of @fig-sampling-laws. Top: the front of the airfoil, the kept cells of one native draw (gray squares) and of one
-#|   area-proportional draw (green diamonds), each an expected 80 of the 400 cells, and twelve prediction points (aqua) one
-#|   hundredth of a chord off the wall, each joined to its nearest kept cell under each draw. Bottom: for prediction points
-#|   at that distance all around the airfoil, the distance to the nearest kept cell divided by the exact distance to the
-#|   surface, under each draw. How to read this: 1 is the exact wall distance; the sampled distance is always larger, by up
-#|   to half the gap between neighboring kept cells, and the two draws give different values at the same point, so a model calibrated on one law's
-#|   distances reads another law's as new inputs. The section, its mesh and the draws are an illustration; no model is
-#|   involved, and the thin trailing-edge region (the outer 10% of arclength at each end) is left out.
+#|   The wall distance of an interior prediction point on the meshed airfoil of @fig-sampling-laws, read from the nearest
+#|   sampled boundary token (the nearest-token form) and from the exact closest point of the surface (ISLA). Top: the front of
+#|   the airfoil, the kept cells of one native draw (gray squares) and of one area-proportional draw (green diamonds), each an
+#|   expected 80 of the 400 cells, and twelve prediction points (aqua) one hundredth of a chord off the wall, each joined to
+#|   its nearest kept cell under each draw. Bottom: for prediction points at that distance all around the airfoil, each
+#|   distance divided by the exact distance to the surface. How to read this: 1 is the exact wall distance, which ISLA
+#|   reads under every draw (blue); the nearest-token distance is always larger, by up to half the gap between neighboring kept
+#|   cells, and the two draws give different values at the same point, so a model calibrated on one law's distances reads
+#|   another law's as new inputs. The section, its mesh and the draws are an illustration; no model is involved, and the thin
+#|   trailing-edge region (the outer 10% of arclength at each end) is left out.
 #| code-fold: true
 rng = np.random.default_rng(11)
 fine = joukowski(alpha_deg=6.0, n_cells=8000)
@@ -559,14 +579,14 @@ ax.set_xlabel(f"x [section units; chord {chord:.1f}]"); ax.set_ylabel("y [sectio
 ax.set_title("the front of the airfoil: each prediction point joined to its nearest kept cell under each draw", fontsize=9.5)
 ax.legend(loc="lower right", fontsize=8, frameon=True, facecolor="white", edgecolor=BASELINE)
 ax = axs[1]
-for dr, col, lab in ((draw_nat, INK2, "native draw"), (draw_area, GREEN, "area-proportional draw")):
+for dr, col, lab in ((draw_nat, INK2, "nearest token, native draw"), (draw_area, GREEN, "nearest token, area-proportional draw")):
     d_s, _ = nearest(Q, mid[dr])
     ax.plot(s_f[sel], d_s / d_exact, color=col, lw=1.5, label=lab)
-ax.axhline(1, color=INK2, lw=0.8, ls="--")
-ax.set_yscale("log"); ax.set_ylim(0.9, 12); ax.set_yticks([1, 2, 5, 10]); ax.set_yticklabels(["1", "2", "5", "10"]); ax.yaxis.set_minor_locator(NullLocator())
+ax.axhline(1, color=BLUE, lw=2.2, label="exact closest point (ISLA), every draw")
+ax.set_yscale("log"); ax.set_yticks([1, 2, 5, 10]); ax.set_yticklabels(["1", "2", "5", "10"]); ax.yaxis.set_minor_locator(NullLocator())
 ax.axvline(0.5, color=BASELINE, lw=0.8); ax.text(0.5, 0.97, "leading edge", ha="center", va="top", fontsize=8, color=MUTED, transform=ax.get_xaxis_transform(), path_effects=halo())
 ax.set_xlim(0, 1); ax.set_xlabel("position of the prediction point along the surface [fraction of arclength from the trailing edge]")
-ax.set_ylabel("sampled ÷ exact\nwall distance [–]"); ax.set_ylim(0.9, 25); ax.legend(loc="upper left", fontsize=8.5)
+ax.set_ylabel("read ÷ exact\nwall distance [–]"); ax.set_ylim(0.9, 25); ax.legend(loc="upper left", fontsize=8.5)
 plt.show()
 ```
 
@@ -576,35 +596,89 @@ plt.show()
 V = ST["drivaerml_volume"]; VG = J("char/vol_geo_2026-10-05.json"); vm = VG["mean_ratio_to_native"]
 vf = list(V.ds.headline)
 vs = " / ".join(S.fmt_ratio(V.shift("ISLA", f, "area")) for f in vf)
-print(f"The DrivAerML Volume task shows the effect at full scale. Under the point-cloud protocol, ISLA's error on "
-      f"{' / '.join(V.fields[f] for f in vf)} is {vs} times its native error ({V.source}). On that task the protocol redraws "
+print(f"**On the DrivAerML Volume task the nearest-token search accounts for all of the draw dependence.** Under the "
+      f"point-cloud protocol the standing's ISLA checkpoints (the nearest-token form) score "
+      f"{' / '.join(V.fields[f] for f in vf)} at {vs} times their native error ({V.source}). On that task the protocol redraws "
       "only ISLA's boundary tokens. The interior prediction points, the targets and the global inputs are the native ones, and "
-      "GeoTransolver and Transolver do not read the boundary at all, so their inputs and errors do not change. The shift is "
-      "therefore ISLA's alone, and it is real for the trained model. A scoring-time swap locates it, on a study "
-      "configuration at the reference configuration's width and slice count with the raw slice reads ("
-      + tag(512, 512, "3.75e-4").removesuffix(".") + "), whose own point-cloud shift is a different number from the "
-      "standing's. The swap keeps every area-law boundary token and recomputes only the prediction points' nearest-token "
-      f"distance and direction from the native draw. That model's error then returns to {vm['area_natgeo']['pressure_l2']:.3f} / {vm['area_natgeo']['velocity_l2']:.3f} / "
-      f"{vm['area_natgeo']['nut_l2']:.3f} of native, against {vm['area']['pressure_l2']:.1f} / {vm['area']['velocity_l2']:.1f} / "
-      f"{vm['area']['nut_l2']:.1f} of native without the swap. The slice states carry none of the shift. Replacing the sampled distance "
-      "with the exact stored signed-distance field does not help either: the error rises to "
-      f"{vm['native_sdfgeo']['pressure_l2']:.0f} times native, because the trained model is calibrated to the sampled distance "
-      "and its bias (results/char/vol_geo_2026-10-05.json).")
+      "GeoTransolver and Transolver do not read the boundary at all, so their inputs and errors do not change. A scoring-time "
+      "swap on a study configuration ("
+      + tag(512, 512, "3.75e-4").removesuffix(".") + ") keeps every area-law boundary token and recomputes only the prediction "
+      "points' nearest-token distance and direction from the native draw. The error then returns to "
+      f"{vm['area_natgeo']['pressure_l2']:.3f} / {vm['area_natgeo']['velocity_l2']:.3f} / {vm['area_natgeo']['nut_l2']:.3f} of "
+      f"native, against {vm['area']['pressure_l2']:.1f} / {vm['area']['velocity_l2']:.1f} / {vm['area']['nut_l2']:.1f} without "
+      "the swap, so the slice states carry none of the shift (results/char/vol_geo_2026-10-05.json).")
 ```
 
-The surface tasks do not have the effect, because a surface prediction point is itself a boundary token and reads no
-nearest-sample geometry. On the other interior tasks, AirfRANS and the solids, the point-cloud protocol returns the native
-mesh (@sec-protocol), so the standing does not measure the effect there. A query geometry that is exact at
-full resolution would remove the effect and is an open design question (@sec-open-questions).
+**Trained on a geometry that does not depend on the draw, ISLA no longer depends on it.** Two measurements test this on
+checkpoints that read a wall distance computed at full resolution (@tbl-geo-evidence). On the DrivAerML Volume task, a
+smaller ISLA trained with the dataset's stored full-mesh signed distance and its gradient as the query geometry scores the
+area-law redraw at its native error, where its twin trained on the nearest-token geometry rises eightfold to elevenfold.
+On the AirfRANS interior task, ISLA at its reference configuration with the exact closest-point geometry of the class, against the
+standing's nearest-token arm, is more accurate on the native mesh and much less sensitive to a reduced boundary budget: with
+the airfoil drawn down to 400 segments, the area law raises its error less than the uniform law of the same count (the
+law effect falls below one), and the count effect falls about 2.5-fold. The count effect that remains (the uniform draw of
+400 segments against the native airfoil) is the slice states' own dependence on how many tokens they integrate, and its
+registered bar, at most 4 on pressure and velocity, failed. Every arm of these measurements also reads the dataset's stored
+signed distance as a query input beside the built-in geometry, as the standing's AirfRANS arm does; the class reads none.
 
-### Tied nearest samples on the solid meshes {#sec-nearest-ties}
+```{python}
+#| label: cell-tbl-geo-evidence
+#| output: asis
+G0 = J("campaigns_2026-10-16/geo0/results.json")["runs"]
+GE = J("campaigns_2026-10-19/geo_evidence/geo_evidence.json"); G1 = GE["geo1_airfrans"]
+AFF = (("pressure_l2", "pressure"), ("velocity_l2", "velocity"), ("nut_l2", "eddy viscosity"))
+seeds2 = lambda d: " / ".join(f"{d[s]:.2f}" for s in ("42", "43"))
+rows = ["| measurement | field | full-resolution geometry (seeds 42 / 43) | nearest-token geometry (seeds 42 / 43) |", "|---|---|---|---|"]
+for f, lab in AFF:
+    R = lambda g: " / ".join(f"{G0[f'sg_drvol_{g}_seed{s}']['fields'][f]['R']:.3f}" for s in (42, 43))
+    rows.append(f"| DrivAerML Volume, area-law redraw ÷ native | {lab} | {R('provided')} | {R('internal')} |")
+for key, name in (("law_area_over_uniform", "AirfRANS, 400 segments: area law ÷ uniform law"),
+                  ("count_uniform_over_native", "AirfRANS, 400 segments: uniform law ÷ native")):
+    for f, lab in AFF[:2]:
+        rows.append(f"| {name} | {lab} | {seeds2(G1['geo1_effects'][key][f])} | {seeds2(G1['a2s_effects'][key][f])} |")
+for f, lab in AFF:
+    ps = G1["geo1_over_a2s_per_seed"][f]
+    rows.append(f"| AirfRANS, native error: exact ÷ nearest-token | {lab} | {G1['geo1_over_a2s']['native'][f]:.3f} (per seed {seeds2(ps)}) | 1 |")
+print("\n".join(rows))
+noise = max(v for k in ("geo1_effects", "a2s_effects") for f, _ in AFF[:2] for v in G1[k]["noise_abs_v_over_u_minus_1"][f].values())
+print("\n: Boundary-draw dependence of ISLA checkpoints trained on a full-resolution query geometry and of their twins "
+      "trained on the nearest-token geometry, float32, final checkpoints. DrivAerML Volume: the 48 validation cars, 200,000 "
+      "boundary tokens drawn from 1,000,000 cells by the area law; " + "Instrument: ISLA at 384 wide, 256 slices, raw slice "
+      "reads, the stored full-mesh signed distance and its gradient as the query geometry (@sec-study-configurations); "
+      "results/campaigns_2026-10-16/geo0/results.json. AirfRANS: ISLA's reference configuration with the normalized slice reads, "
+      "trained 500 epochs on the uniform-interior files, 200 test cases; full-resolution geometry is the class's exact closest "
+      "point (encoding $[s, \\operatorname{sign}(s)\\log(|s| + 10^{-12})]$), the nearest-token arm is the standing's; both also read "
+      "the stored signed distance as a query input. The 400-segment protocol draws an expected 400 airfoil segments by each law; "
+      f"a second uniform draw moves the error by at most {noise:.1%} (the noise floor). Data: "
+      "results/campaigns_2026-10-19/geo_evidence/geo_evidence.json, from the records in results/campaigns_2026-10-14/afu/. How to "
+      "read this: below one in the first rows means no draw dependence; a ratio here compares a checkpoint with itself or two "
+      "ISLA variants, never two architectures. {#tbl-geo-evidence}")
+```
 
-**Where a node is equidistant from two boundary cells, which one the nearest search picks depends on rounding, and a
-rotation changes the rounding.** The GINOT lug is meshed by structured hexahedra, so a node often sits exactly as far
-from two boundary centroids. PLAID Tensile2d is an unstructured triangle mesh, and its ties sit on the boundary polyline
-itself: a polyline node is equally far from the midpoints of its two segments. Natively the search breaks each tie
-one way. After a rotation and translation, the float32 coordinates round differently and the tie breaks the other way. The
-chosen token's normal can point in a different direction, the direction feature flips, and the prediction moves.
+```{python}
+#| label: para-geo-cont
+#| output: asis
+GC = GE["geo_cont"]["af"]
+cc = " / ".join(f"{GC['cont_over_ctl']['native'][f]:.3f}" for f, _ in AFF)
+ca = " / ".join(f"{GC['cont_over_a2']['native'][f]:.2f}" for f, _ in AFF)
+print("**The continuous encoding of the distance adds to the gain.** On the same AirfRANS task, the class's encoding "
+      "$[s, \\operatorname{asinh}(s / 10^{-6})]$ with the direction $\\operatorname{sign}(d)\\,u$ (@sec-isla-interior), against "
+      "the exact-geometry control with the signed logarithm, scores the native mesh at "
+      f"{cc} of the control's error on pressure / velocity / eddy viscosity, and at {ca} of the standing's nearest-token arm "
+      "(ISLA's reference configuration, normalized slice reads, two seeds, both arms also reading the stored signed distance; "
+      "results/campaigns_2026-10-19/geo_evidence/geo_evidence.json). Rotated and translated scoring gives the same errors to "
+      f"{max(abs(v - 1) for a in ('ctl', 'cont') for f, _ in AFF for v in GC['posed_over_native_per_seed'][a][f].values()):.2%} "
+      "on every field and seed.")
+```
+
+### What is left of the pose shift on the solids {#sec-medial-ties}
+
+**On the solids, the nearest-token form's pose shift comes from ties between samples, which exact geometry removes; what is
+left on the lug is a tie of the direction itself, on the part's medial surface.** The GINOT lug is meshed by structured
+hexahedra, so a node often sits exactly as far from two boundary centroids, and PLAID Tensile2d's ties sit on the boundary
+polyline, where a node is equally far from the midpoints of its two segments. For the nearest-token search, rounding breaks
+each such tie; after a rotation and translation the float32 coordinates round differently, the chosen token's normal can
+point another way, the direction feature flips and the prediction moves.
 
 ```{python}
 #| label: para-ties
@@ -612,24 +686,36 @@ chosen token's normal can point in a different direction, the direction feature 
 L_, T_ = ST["lug"], ST["tensile2d"]
 LT = J("char/lug_ties_2026-10-04.json"); tie = LT["two_nearest_tie_fraction_by_rel_gap"]
 TS = J("char/solids_ties_2026-10-18.json")["tensile2d"]["sample_000001"]
-print(f"On the lug, ISLA's rotated-and-translated error is {S.fmt_ratio(L_.shift('ISLA', 'von_mises_l2', 'posed'))} times its "
-      f"native error (seeds {' and '.join(S.fmt_ratio(a / b) for a, b in zip(L_.seeds('ISLA', 'von_mises_l2', 'posed'), L_.seeds('ISLA', 'von_mises_l2', 'native')))}; "
-      f"{L_.source}). The mesh explains why. On one test lug, {tie['1e-04']['fraction']:.0%} of the {LT['n_interior_nodes']:,} "
-      f"interior nodes have their two nearest boundary centroids within a relative gap of $10^{{-4}}$, and "
-      f"{tie['1e-07']['fraction']:.0%} within $10^{{-7}}$. A translation of one RMS radius applied in float32 changes the "
-      f"nearest boundary cell of {LT['nearest_index_changes_under_translation']['fraction']:.0%} of the nodes "
-      "(results/char/lug_ties_2026-10-04.json). On one Tensile2d specimen "
-      f"{TS['tied_fraction']:.0%} of the {TS['n_nodes']:,} nodes tie within $10^{{-4}}$, almost all of them nodes on the "
-      f"polyline ({TS['tied_on_boundary_nodes']} of its {TS['n_on_boundary']}), and the same rigid motion changes the nearest "
-      f"sample of {TS['nearest_changes_under_pose_fraction']:.0%} of the nodes (results/char/solids_ties_2026-10-18.json). "
-      f"ISLA's posed error there is {' / '.join(S.fmt_ratio(T_.shift('ISLA', f, 'posed')) for f in T_.ds.headline)} "
-      f"times native on {' / '.join(T_.fields[f] for f in T_.ds.headline)} ({T_.source}).")
+GL, GT = GE["geo_cont"]["lug"], GE["geo_cont"]["t2dz"]
+pn = lambda d, a, f: " and ".join(f"{d['posed_over_native_per_seed'][a][f][s]:.2f}" for s in ("42", "43"))
+t_dev = max(abs(v - 1) for f in GT["posed_over_native_per_seed"]["cont"] for v in GT["posed_over_native_per_seed"]["cont"][f].values())
+print(f"In the standing, ISLA's rotated-and-translated error on the lug is {S.fmt_ratio(L_.shift('ISLA', 'von_mises_l2', 'posed'))} "
+      f"times its native error (seeds {pn(GL, 'a2', 'von_mises_l2')}; {L_.source}). On one test lug, "
+      f"{tie['1e-04']['fraction']:.0%} of the {LT['n_interior_nodes']:,} interior nodes have their two nearest boundary centroids "
+      f"within a relative gap of $10^{{-4}}$, and a translation of one RMS radius applied in float32 changes the nearest boundary "
+      f"cell of {LT['nearest_index_changes_under_translation']['fraction']:.0%} of the nodes (results/char/lug_ties_2026-10-04.json). "
+      f"On one Tensile2d specimen {TS['tied_fraction']:.0%} of the {TS['n_nodes']:,} nodes tie within $10^{{-4}}$, almost all on "
+      f"the polyline, and the standing's posed error is {' / '.join(S.fmt_ratio(T_.shift('ISLA', f, 'posed')) for f in T_.ds.headline)} "
+      f"times native on {' / '.join(T_.fields[f] for f in T_.ds.headline)} ({T_.source}; results/char/solids_ties_2026-10-18.json).\n")
+print(f"With exact geometry (ISLA's reference configuration, normalized slice reads, two seeds, also reading the stored signed "
+      f"distance), posed ÷ native on Tensile2d is one to {t_dev:.2%} on every field and seed with the continuous encoding. On the "
+      f"lug it falls to {pn(GL, 'ctl', 'von_mises_l2')} with the signed-logarithm encoding and {pn(GL, 'cont', 'von_mises_l2')} with "
+      "the continuous one (results/campaigns_2026-10-19/geo_evidence/geo_evidence.json). On the lug's native mesh the "
+      f"continuous encoding reads {GL['cont_over_ctl']['native']['von_mises_l2']:.2f} of the signed-logarithm control's error, "
+      "with both of its seeds above both of the control's, and "
+      f"{GL['cont_over_a2']['native']['von_mises_l2']:.2f} of the standing's; on this noisy field the pre-registered rule "
+      "records the first and draws no verdict from it.")
 ```
 
-Both shifts are small beside the baselines'. Both are also a real limit of the class, not a scoring artifact. They
-belong to the same object as the Volume shift: the argmin over a sample is a discontinuous function of the sample and of its
-coordinates. A query geometry that is a continuous function of the boundary, or exact at full resolution, is the open
-question these shifts and @sec-nearest-token share (@sec-open-questions).
+The rest of the lug's shift has a different cause. A prediction point's direction is the unit gradient of its distance to
+the surface. On the *medial surface*, the set of points with two or more closest surface points, that gradient is not
+defined: a node on the thin plate's mid-thickness plane is equally far from the top and bottom faces, so its direction is
+$+n$ or $-n$, and float32 rounding of the posed coordinates picks which. Exact geometry reverses the direction of 0 to 2.3% of
+a lug case's nodes under the posed motion (six cases), and because the prediction points join the encoder as tokens, the
+perturbation spreads to the slices. No encoding of the distance removes it, because the distance is continuous across the
+medial surface (results/campaigns_2026-10-18/geo_cont/DESIGN_NOTE_medial_ties.md, which also sets out four ways to treat it).
+It is a limit of the class with no convergent knob, as float32 tie-breaking is: small beside the baselines' shifts, and real
+(@sec-oq-ties).
 
 ## Studies on a smaller ISLA {#sec-contract-studies}
 

@@ -1,0 +1,8 @@
+sg_af_provided_seed42 pressure: per-case a/u median 1.233, IQR 0.794-2.423, fraction > 1: 0.61, max 12.35
+sg_af_provided_seed42 velocity: per-case a/u median 1.478, IQR 1.012-2.475, fraction > 1: 0.77, max 10.71
+sg_af_provided_seed43 pressure: per-case a/u median 1.253, IQR 0.868-2.005, fraction > 1: 0.65, max 13.78
+sg_af_provided_seed43 velocity: per-case a/u median 1.327, IQR 0.991-2.195, fraction > 1: 0.74, max 7.68
+sg_af_internal_seed42 pressure: per-case a/u median 2.467, IQR 1.710-4.189, fraction > 1: 0.92, max 11.51
+sg_af_internal_seed42 velocity: per-case a/u median 1.559, IQR 1.129-2.197, fraction > 1: 0.86, max 4.28
+sg_af_internal_seed43 pressure: per-case a/u median 3.009, IQR 2.057-4.574, fraction > 1: 0.92, max 13.34
+sg_af_internal_seed43 velocity: per-case a/u median 1.597, IQR 1.271-2.228, fraction > 1: 0.87, max 4.07

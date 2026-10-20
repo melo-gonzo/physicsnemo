@@ -87,41 +87,48 @@ def listing(filename, qualname, start=None, end=None, docstring=False):
 #| output: asis
 print(f"The description holds for any width $D$, depth and slice count $M$. The class defaults are the reference "
       f"configuration of ISLA: `hidden={DEFAULTS['hidden']}`, `n_layers={DEFAULTS['n_layers']}`, "
-      f"`n_slices={DEFAULTS['n_slices']}` (read from the constructor's signature as the page renders). Every tensor size "
-      f"quoted below is at these values, with $N = 200{{,}}000$ boundary tokens per case, the training count of the "
-      f"reporting protocol (@sec-protocol).")
+      f"`n_slices={DEFAULTS['n_slices']}`, and on the interior task `boundary_tokens={DEFAULTS['boundary_tokens']:_}` "
+      f"(read from the constructor's signature as the page renders). Every tensor size quoted below is at these values, "
+      f"with $N$ = {DEFAULTS['boundary_tokens']:,} boundary tokens per case, the training count of the reporting protocol "
+      f"(@sec-protocol).")
 ```
 
 ## Notation {#sec-arch-notation}
 
 **One symbol per quantity, one code name per symbol.** Indices $i, j$ run
-over the $N$ tokens, $s, t$ over the $M$ slices, $k$ over the $K$ global
-directions, $q$ over the $Q$ prediction points of an interior task. The code
-carries a leading batch axis of one on every tensor; the table omits it.
+over the $N$ boundary tokens, $s, t$ over the $M$ slices, $k$ over the $K$
+global directions, $q$ over the $Q$ prediction points of an interior task,
+and $\beta$ over the named boundary conditions, with $\beta(i)$ the
+condition of token $i$. The code carries a leading batch axis of one on
+every tensor; the table omits it.
 
 | symbol | shape | code | meaning |
 |---|---|---|---|
-| $x_i, n_i, w_i$ | $N{\times}3,\ N{\times}3,\ N$ | `cell_centroids`, `cell_normals`, `cell_measures` of the boundary meshes | boundary token positions, outward normals, and the measure weight each token stands for (the cell's `_effective_measure` when the mesh stores one, else its geometric measure) |
+| $\beta$ | one name each | `boundary_schemas`, `model.boundary_names` | the boundary conditions by name, stored sorted; each is one boundary mesh at full resolution with the per-cell fields it alone declares |
+| $x_i, n_i, w_i$ | $N{\times}3,\ N{\times}3,\ N$ | `cell_centroids`, `cell_normals`, `cell_measures` of the boundary meshes | boundary token positions, normals, and the measure weight each token stands for: the cell's measure $\lvert C_i \rvert$ (its `_effective_measure` when the mesh stores one, else its geometric measure) on a surface task, its Horvitz–Thompson measure $\lvert C_i \rvert / \varpi_i$ on an interior task |
+| $\varpi_i$ | per cell | `pi` in `sample_boundary_cells` | the probability that the interior task's draw keeps cell $i$ (@sec-arch-boundary-draw) |
 | $g_k$, $\sigma$ | $K{\times}3$, $S$ | `global_schema` (rank 1, rank 0) | the problem's global vector inputs and global scalar inputs, as named fields (external aerodynamics: $K = 1$, the far-field direction) |
-| $v_i$, $A_i$ | $N{\times}3$, $N{\times}3{\times}3$ per field | `boundary_schema`, `query_schema` (rank 1, rank 2) | per-token tensor inputs (a prescribed traction, a prescribed stress); none on the aerodynamic tasks |
+| $v_i$, $A_i$ | $N{\times}3$, $N{\times}3{\times}3$ per field | `boundary_schemas[name]` (rank 1, rank 2) | per-cell tensor inputs of one condition (an inlet's prescribed velocity, a loaded face's traction); none on the DrivAerML and AirfRANS tasks |
+| $V_i$, $T_i$ | $N{\times}n_v{\times}3$, $N{\times}n_t{\times}3{\times}3$ | `vecs`, `tens` | the shared vector and tensor channels, onto which each condition's own maps (`vector_map`, `tensor_map`) take its vectors and tensors |
 | $\hat g_k$, $\hat n_i$ | $K{\times}3$, $N{\times}3$ | `g_unit`, `n_hat` | the same directions and normals at unit length |
 | $L$ | scalar | `gauge` | the length unit: the measure-weighted RMS pairwise distance of the boundary tokens |
 | $r_i$ | $N{\times}3$ | `r` | position in length units, $x_i / L$; enters only inside differences |
 | $\ell_i$ | $N$ | `log_w` | $\log w_i$, the measure bias of every softmax over tokens |
-| $\eta_i$ | $N{\times}(K + n_b + S)$ | `_token_seed` | the seed: the scalars a token has before any layer runs ($n_b$ counts the invariants of the boundary inputs) |
+| $\eta_i$ | $N{\times}(1 + K + n_\beta + S)$ | `seed` (`_condition_tokens`) | the seed: the scalars a token has before any layer runs, a constant 1 first ($n_\beta$ counts the invariants of condition $\beta$'s fields) |
 | $h_i$ | $N{\times}D$ | `h` | the token state, width $D$ (`hidden`) |
 | $\tilde h_i$ | $N{\times}D$ | `h_n` | $\mathrm{LN}(h_i)$, the normalized state the slice sublayer reads |
 | $\lambda_{is}$, $\lambda'_{is}$ | $N{\times}M$ | `logits`, `logits + bias` | routing logits before and after the geometric refinement |
 | $a_{is}$ | $N{\times}M$ | `a` | routing weights: a softmax over tokens $i$ for each slice $s$ |
 | $z_s, m_s$ | $M{\times}3$ | `z_pos`, `m_s` | the anchor of slice $s$: its mean position and its mean normal direction |
-| $\rho_{is}$, $\xi_{is}$ | $N{\times}M{\times}3$, $N{\times}M{\times}(5 + K + n_v + n_t)$ | `rel`, `geo` | the token-to-anchor separation, and the relational invariants formed from it ($n_v$ per-token vectors and $n_t$ rank-2 inputs; both zero on the aerodynamic tasks) |
+| $\rho_{is}$, $\xi_{is}$ | $N{\times}M{\times}3$, $N{\times}M{\times}(5 + K + n_v + n_t)$ | `rel`, `geo` | the token-to-anchor separation, and the relational invariants formed from it ($n_v$ shared vector channels and $n_t$ shared tensor channels; both zero on the DrivAerML and AirfRANS tasks) |
 | $\pi_{is}$ | $N{\times}M$ | `point_mix` | read-back weights: a softmax over slices $s$ for each token $i$ |
 | $\bar\xi_i$, $\gamma_i$ | $N{\times}(5 + K)$, $N{\times}D/2$ | `pooled`, `geo_pool` | the invariants pooled over slices, and their projection |
 | $Z_s$ | $M{\times}D$ | `z` | the slice state |
 | $b_i$ | $N{\times}D$ | `back` | the slice states read back to token $i$ |
 | $\hat u_i$ | $N{\times}3$ | `r_hat` | the head's radial direction, from the token's own soft anchor to the token |
 | $c_i$ | $N{\times}n_c$ | `coeffs` | the head's invariant coefficients, $n_c$ of them over all outputs |
-| $\delta_q$, $\hat\nu_q$ | $Q$, $Q{\times}3$ | `dist`, `q_nhat` | an interior prediction point's signed wall distance and its direction from the wall (@sec-arch-interior-geometry) |
+| $p_q$, $\delta_q$, $u_q$ | $Q{\times}3$, $Q$, $Q{\times}3$ | `exact_boundary_geometry` (`wall_distance`, `wall_direction`) | an interior prediction point's closest point on the full-resolution boundary surface, its signed distance to it and the direction from it (@sec-arch-interior-geometry) |
+| $s_q$, $\hat\nu_q$ | $Q$, $Q{\times}3$ | `s`, `q_nhat` | the signed distance in length units, $\delta_q / L$, and the point's direction $\operatorname{sign}(\delta_q)\, u_q$, which plays the normal's part |
 
 : The symbols of the forward pass, with the shape of each tensor at batch one and the identifier that holds it in the
 code. How to read this: a row names a quantity, not a step; the stage that computes it is given where it first appears
@@ -136,8 +143,10 @@ subscript is a learned affine map. Definitions use $\equiv$.
 **From the inputs to the last slice layer, the model computes only scalars
 that are invariant under rotation, translation and uniform rescaling.
 Vectors are rebuilt once, at the output.** @fig-isla-pass is the whole
-surface model. The interior task of @sec-arch-modes changes which tokens
-enter and which the head reads; it adds no stage.
+surface model. The interior task of @sec-arch-modes draws its boundary
+tokens from the cells, adds the prediction points as tokens, and changes
+which tokens the head reads; it adds no stage to the slice layers or the
+head.
 
 ```{mermaid}
 %%| label: fig-isla-pass
@@ -149,9 +158,11 @@ enter and which the head reads; it adds no stage.
 %%|   slice layer, the one repeated block, is opened up in @fig-isla-layer.
 %%|   How to read this: no box centers the geometry and no learned box
 %%|   receives a coordinate; the positions $r_i$ reach the learned path only
-%%|   through the anchors and the invariants formed against them. The figure
-%%|   does not show the interior task, which appends prediction-point tokens
-%%|   before stage 3 (@fig-isla-modes).
+%%|   through the anchors and the invariants formed against them. No box
+%%|   receives a tag naming a token's condition: a condition is told apart
+%%|   by its own input layer and maps. The figure does not show the interior
+%%|   task, which draws its boundary tokens from the cells and appends
+%%|   prediction-point tokens before stage 3 (@fig-isla-modes).
 %%{init: {"flowchart": {"wrappingWidth": 460}}}%%
 flowchart TB
     classDef data fill:#f4f3ee,stroke:#898781,color:#0b0b0b
@@ -159,10 +170,10 @@ flowchart TB
     classDef fixed fill:#ffffff,stroke:#2a78d6,stroke-dasharray:4 3,color:#0b0b0b
     classDef out fill:#e6f0fb,stroke:#2a78d6,stroke-width:2px,color:#0b0b0b
 
-    IN["boundary tokens x<sub>i</sub>, n<sub>i</sub>, w<sub>i</sub> (N×3, N×3, N)<br/>global inputs g<sub>k</sub> (K×3), σ (S)"]:::data
+    IN["named boundary conditions β, one mesh each:<br/>cells x<sub>i</sub>, n<sub>i</sub>, w<sub>i</sub> (N×3, N×3, N) and each condition's own fields<br/>global inputs g<sub>k</sub> (K×3), σ (S)"]:::data
     FR["stage 1, frame:<br/>L = RMS pairwise distance; r<sub>i</sub> = x<sub>i</sub> / L;<br/>unit n̂<sub>i</sub>, ĝ<sub>k</sub>; ℓ<sub>i</sub> = log w<sub>i</sub>"]:::fixed
-    SEED["stage 2, seed:<br/>η<sub>i</sub> = [n̂<sub>i</sub>·ĝ<sub>k</sub>, boundary-input invariants, σ]<br/>(N × (K + n<sub>b</sub> + S))"]:::fixed
-    EMB["embedding MLP → h<sub>i</sub> (N×D)"]:::learned
+    SEED["stage 2, seed, in a block layout over the conditions:<br/>η<sub>i</sub> = [1, n̂<sub>i</sub>·ĝ<sub>k</sub>, the invariants of condition β(i)'s fields, σ]"]:::fixed
+    EMB["condition β(i)'s input layer, then the shared GELU + Linear → h<sub>i</sub> (N×D);<br/>condition β(i)'s vector and tensor maps → shared channels V<sub>i</sub>, T<sub>i</sub>"]:::learned
     LAYER["stage 3, slice layer × 12 (opened up in the next figure):<br/>routing a<sub>is</sub> → anchors z<sub>s</sub>, m<sub>s</sub> → invariants ξ<sub>is</sub> → refined routing<br/>→ slice states Z<sub>s</sub> → read-back → h<sub>i</sub> (N×D)"]:::learned
     HF["stage 4, head frame: soft anchors from the final state;<br/>û<sub>i</sub> = direction from the token's anchor to the token (N×3)"]:::fixed
     HEAD["stage 5, linear head on LN(h<sub>i</sub>):<br/>invariant coefficients c<sub>i</sub> (N × n<sub>c</sub>)"]:::learned
@@ -174,12 +185,72 @@ flowchart TB
     FR -. "r<sub>i</sub>, n̂<sub>i</sub>, ĝ<sub>k</sub>, ℓ<sub>i</sub> to every layer" .-> LAYER
 ```
 
-## Stage 1: inputs and the frame {#sec-arch-frame}
+## Stage 1: the boundary by condition, and the frame {#sec-arch-frame}
 
-**The frame has a length unit and no origin.** The model receives the
-boundary as named meshes and reads its tokens off their cells, $x_i, n_i,
-w_i$ (centroid, normal, measure), together with the global inputs $g_k$ and
-$\sigma$ (@sec-isla-inputs). It normalizes every direction it is given,
+**The boundary arrives as named conditions, each one mesh at full
+resolution, and the frame the model builds from it has a length unit and no
+origin.** A boundary-value problem prescribes different data on different
+parts of its boundary: a velocity at an inlet, a pressure at an outlet,
+nothing but the wall itself on a no-slip body. ISLA takes the boundary in
+that form. `boundary_meshes` maps each condition's name to one mesh, a
+polyline in two dimensions or a surface in three, and that mesh's
+`cell_data` holds the fields its condition declares and no others
+(@sec-isla-inputs). The constructor fixes the names (`boundary_schemas`) and
+stores them sorted (`model.boundary_names`). A name is a non-empty string
+without `"."`, and it may not be an attribute of the `nn.ModuleDict` that
+holds the conditions' parameters (`"keys"`, `"update"`, `"training"`, ...).
+A forward pass takes any non-empty subset of the declared names in any
+order; the model walks them in sorted order, so the order of the mapping
+changes nothing, bitwise. An unknown name raises a `ValueError` that lists
+the declared ones, and a condition left out contributes what a condition
+with zero cells contributes: no tokens.
+
+```{python}
+#| label: tbl-arch-conditions
+#| output: asis
+import yaml
+CONF = Path(physicsnemo.__file__).parent.parent / "examples" / "cfd" / "external_aerodynamics" / "unified_external_aero_recipe" / "conf" / "model"
+rows_c = []
+for p in sorted(CONF.glob("isla_*.yaml")):
+    mb = yaml.safe_load(p.read_text()).get("model", {})
+    if not mb.get("boundary_schemas"):
+        continue
+    m_c = ISLA(output_schema={"y": {"rank": 0}}, boundary_schemas=mb["boundary_schemas"], global_schema=mb.get("global_schema"),
+               interior=bool(mb.get("interior")), hidden=8, n_layers=1, n_slices=2, dim=int(mb.get("dim", 3)))
+    for name, c in m_c.boundary_conditions.items():
+        fields = ", ".join(f"`{f}` ({s.rank})" for f, s in m_c.boundary_schemas[name].items()) or "none"
+        nv = 0 if c.vector_map is None else c.vector_map.shape[1]
+        rows_c.append((p.stem, "interior" if m_c.interior else "surface", name, fields, c.seed.in_features, nv, m_c.n_boundary_vecs))
+out = "| configuration | task | condition | its fields (rank) | input-layer columns | its vectors | shared vector channels |\n|---|---|---|---|--:|--:|--:|\n"
+last = None
+for cfg, task, name, fields, ncol, nv, nshared in rows_c:
+    head = (f"`{cfg}`", task) if cfg != last else ("", "")
+    out += f"| {head[0]} | {head[1]} | `{name}` | {fields} | {ncol} | {nv} | {nshared if cfg != last else ''} |\n"
+    last = cfg
+print(out)
+print(": The boundary conditions of the recipe's ISLA configurations, read from `conf/model/isla_*.yaml` and built into the "
+      "class as the page renders, conditions in the stored (sorted) order. The input-layer columns are $1 + K + n_\\beta + S$ "
+      "(the constant, the $K$ normal-direction cosines, the invariants of the condition's own fields, the $S$ global "
+      "scalars); a condition's vectors are its rank-1 fields, and the shared channels number as many as the widest "
+      "condition has. How to read this: a condition without fields still has its own input layer; the table does not "
+      "show the labels by which the lug, Tensile2d and DeepJEB++ datasets mark their conditions inside one mesh, which a "
+      "recipe transform splits into these meshes before the model sees them (@sec-isla-inputs).")
+```
+
+Every cell is a candidate token, read off its mesh as its centroid $x_i$,
+its normal $n_i$ and its measure $\lvert C_i \rvert$ (the length of a
+segment, the area of a triangle: the cell's `_effective_measure` when the
+mesh stores one, else its geometric measure). Before any token is chosen,
+the model computes every cell's seed scalars (stage 2) in its condition's
+columns of one block layout over all declared conditions, so the cells of
+every condition form one token set of fixed width (`_condition_tokens`). A
+surface task predicts at the cells it is given, so every cell is a token,
+with $w_i = \lvert C_i \rvert$. An interior task draws its $N$ tokens from
+the cells inside the forward pass and gives each the measure it stands for
+(@sec-arch-boundary-draw).
+
+The frame is built from the tokens, together with the global inputs $g_k$
+and $\sigma$. The model normalizes every direction it is given,
 $\hat g_k \equiv g_k / \lvert g_k \rvert$ and $\hat n_i \equiv n_i /
 \lvert n_i \rvert$, so the magnitude of a global vector never enters; a
 magnitude that matters is a global scalar input. The one length unit is a
@@ -206,53 +277,275 @@ they enter only as the differences $r_i - z_s$ of stage 3 and $r_i - z^f$ of
 stage 4. The log measure $\ell_i$ is the bias that makes every softmax over
 tokens a quadrature rule (@sec-isla-quadrature). A boundary mesh without a
 stored `_effective_measure` contributes its cells' geometric measures, so
-$\ell_i$ is always defined.
+$\ell_i$ is always defined. $L$ is computed from the tokens: on a surface
+task from every given cell, on the interior task from the drawn tokens with
+their Horvitz–Thompson measures, a quadrature estimate of the same statistic
+of the full surface that moves with the draw by that quadrature's error.
 
 ::: {.callout-note collapse="true" title="Stage 1 in the code"}
-The length unit is one function, and the frame is a few lines of `_forward_tokens` (the token state then stores `r = points / gauge`): no center survives either.
+Each condition's cells become rows of one token set in `forward`; the length unit is one function, and the frame is a few lines of `_forward_tokens` (the token state then stores `r = points / gauge`): no center survives either.
 
 ```{python}
 #| label: code-stage-1
 #| output: asis
+listing("model.py", "ISLA.forward", start="### The given conditions in canonical order.", end="query = None")
 listing("geometry.py", "rms_pairwise_distance")
 listing("model.py", "ISLA._forward_tokens", start="### Frame:", end="### Boundary inputs")
 ```
 :::
 
+### The interior task's boundary draw {#sec-arch-boundary-draw}
+
+**The interior task draws its boundary tokens inside the forward pass: a
+fixed budget of the full-resolution cells, shared over the conditions, each
+cell kept with a probability proportional to its measure and carrying the
+measure it stands for.** An interior task predicts at the prediction
+points, so its boundary tokens are a quadrature of the surface, and the
+model draws that quadrature itself (`sample_boundary_cells`). A surface task
+predicts at every cell it is given and samples none; it accepts only the
+default `boundary_tokens`.
+
+The draw has three steps. The budget $B$ (`boundary_tokens`) is shared over
+the given conditions by water filling: equal shares, a condition with fewer
+cells than its share kept whole and its unused share given equally to the
+others, until no share changes. Within a condition, each cell is kept with
+a probability proportional to its measure, capped at one, the constant
+chosen so that the probabilities add up to the condition's share. The cells
+are then laid end to end along a line, the conditions in sorted order and
+each condition's cells in the Morton (Z-order, a space-filling curve) order
+of their centroids, each cell an interval as long as its probability, and
+the cells under the points $u, u + 1, u + 2, \dots$ are kept: *systematic
+sampling*, a single random start $u$ for the whole case. @fig-arch-boundary-draw
+runs the class's own draw on the airfoil.
+
+```{python}
+#| label: fig-arch-boundary-draw
+#| fig-cap: >
+#|   The interior task's boundary draw, run by the class's `sample_boundary_cells` on the airfoil at 160 cells, finer
+#|   around the leading edge, with a budget of 32 tokens and the evaluation start $u = 1/2$. Top: each cell colored by
+#|   its inclusion probability $\varpi_i$, proportional to its length; the kept cells' centroids as black dots. Bottom:
+#|   the line of the systematic draw, the cells as intervals of length $\varpi_i$ in the Morton order of their centroids
+#|   (the first eight units of the line); the draw keeps the cells under the points $u + m$ (the ticks), the blue
+#|   intervals. How to read this: short cells are kept less often, and every kept cell stands for the same length, its
+#|   own over $\varpi_i$, so the dots are spread by arclength, not by cell count; a training step draws a new $u$, so the
+#|   dots move from step to step. It does not show the water filling over several conditions (the airfoil is one).
+#| fig-height: 5.0
+#| code-fold: true
+from physicsnemo.experimental.models.isla.sampling import sample_boundary_cells, pps_inclusion_probabilities
+from physicsnemo.experimental.models.isla.model import EVAL_START
+from physicsnemo.mesh.spatial.bvh import _compute_morton_codes
+frac_d = np.concatenate([[0.0], np.cumsum(1.0 - 0.75 * np.sin(np.linspace(0, np.pi, 160)) ** 6)]); frac_d /= frac_d[-1]
+JD = joukowski(n_cells=160, frac=frac_d)
+a_d, x_d = torch.tensor(JD["w"]), torch.tensor(JD["mid"])
+BUDGET_D = 32
+pi_d = pps_inclusion_probabilities(a_d.double(), torch.tensor(float(BUDGET_D), dtype=torch.float64)).numpy()
+kept_d, w_d = sample_boundary_cells([a_d], [x_d], BUDGET_D, torch.tensor(EVAL_START, dtype=torch.float64))
+kept_d = kept_d.numpy()
+order_d = _compute_morton_codes(x_d, isotropic=True).argsort(stable=True).numpy()
+fig, axes = plt.subplots(2, 1, figsize=(8.0, 5.0), gridspec_kw=dict(height_ratios=[2.3, 0.8], hspace=0.35))
+ax = axes[0]
+norm_d = plt.Normalize(0, pi_d.max())
+for i in range(len(a_d)):
+    ax.plot(JD["xy"][i:i + 2, 0], JD["xy"][i:i + 2, 1], color=plt.cm.viridis(norm_d(pi_d[i])), lw=3.2, solid_capstyle="butt")
+ax.plot(JD["mid"][kept_d, 0], JD["mid"][kept_d, 1], "o", color=INK, ms=4)
+ax.set_aspect("equal"); ax.axis("off")
+sm = plt.cm.ScalarMappable(norm=norm_d, cmap="viridis")
+cb = fig.colorbar(sm, ax=ax, fraction=0.03, pad=0.01); cb.outline.set_visible(False)
+cb.set_label(r"inclusion probability $\varpi_i$ [–]", fontsize=8.5); cb.ax.tick_params(labelsize=8)
+ax = axes[1]
+line_d = np.cumsum(pi_d[order_d]); start_d = line_d - pi_d[order_d]
+kept_set = set(kept_d.tolist())
+for j, c in enumerate(order_d):
+    if start_d[j] > 8:
+        break
+    col = BLUE if c in kept_set else ("#d9d7cf" if j % 2 else "#bdbab0")
+    ax.barh(0, min(pi_d[c], 8 - start_d[j]), left=start_d[j], height=0.6, color=col, edgecolor=WHITE, lw=0.4)
+for m in range(8):
+    ax.plot([EVAL_START + m] * 2, [-0.5, 0.5], color=INK, lw=1.0)
+ax.set_xlim(0, 8); ax.set_ylim(-0.6, 0.6); ax.set_yticks([])
+ax.set_xlabel(r"position along the line, cumulative $\varpi$ in the Morton order [–]")
+for sp in ("top", "right", "left"): ax.spines[sp].set_visible(False)
+ax.grid(False)
+plt.show()
+```
+
+In symbols, with $N_\beta$ the cell count of condition $\beta$, $B$ the
+budget, $\lambda$ the water level (`water_fill`), $c_\beta$ the
+proportionality constant of condition $\beta$
+(`pps_inclusion_probabilities`) and $u$ the start:
+
+$$
+b_\beta = \min(N_\beta, \lambda), \quad \sum_\beta b_\beta = \min\Big(\sum_\beta N_\beta,\ B\Big);
+\qquad
+\varpi_i = \min\big(1,\ c_\beta \lvert C_i \rvert\big), \quad \sum_{i \in \beta} \varpi_i = b_\beta;
+\qquad
+w_i = \frac{\lvert C_i \rvert}{\varpi_i} .
+$$
+
+The draw keeps exactly $k = \min(\sum_\beta N_\beta, B)$ cells, a number
+fixed by the cell counts alone, so the shapes are static and the draw
+traces into one compiled graph. Over a uniform start each cell is kept with
+probability exactly $\varpi_i$, and a cell with $\varpi_i = 1$ exactly
+once. Each kept cell carries its Horvitz–Thompson measure $w_i$, the
+importance weight of the survey-sampling literature, so for any per-cell
+quantity $f$
+
+$$
+\mathbb{E}_u \Big[ \sum_{i \text{ kept}} w_i\, f_i \Big] = \sum_{\text{all cells}} \lvert C_i \rvert\, f_i ,
+$$
+
+and the sum is exact on a condition kept whole. Every measure-weighted
+sum of the forward pass (the slice states, the anchors, the length unit,
+the prediction points' routing mass) is therefore a quadrature of the full
+surface. The kept cells are spaced evenly in cumulative probability along
+the space-filling curve, so the sample is spread over the surface rather
+than clumped. In training $u$ is drawn uniform on $[0, 1)$ from the global
+torch random-number generator at every step (`torch.manual_seed` reproduces
+a run), so the model sees a new quadrature of the same surface each time;
+in evaluation (`model.eval()`) $u = 1/2$ (`EVAL_START`), so inference is
+deterministic. The selection runs without gradient, in float64 and outside
+autocast, and the kept cells' measures keep their gradient. It selects rows
+of the token set whose seeds stage 2 has already computed for every cell,
+and returns them in the cells' own order, so a condition kept whole is its
+mesh as given.
+
+::: {.column-margin}
+Why proportional to measure: an uncapped kept cell then stands for
+$\lvert C_i \rvert / (c_\beta \lvert C_i \rvert) = 1 / c_\beta$, the same
+measure for every token of its condition. The draw spends tokens where the
+surface is, not where the mesher put its cells.
+:::
+
+::: {.callout-note collapse="true" title="The boundary draw in the code"}
+The water filling, the capped inclusion probabilities found exactly from the sorted measures, the systematic draw, and the lines of `forward` that pick the start and apply the draw.
+
+```{python}
+#| label: code-boundary-draw
+#| output: asis
+listing("sampling.py", "water_fill")
+listing("sampling.py", "pps_inclusion_probabilities")
+listing("sampling.py", "sample_boundary_cells")
+listing("model.py", "ISLA.forward", start="### The boundary tokens: the sample", end="query = query[None]")
+```
+:::
+
 ## Stage 2: the seed and the embedding {#sec-arch-seed}
 
-**A token's seed is every origin-free scalar the inputs offer, and it is
-small.** With no origin, a position alone has no invariant. The only
-scalars of $\{\hat n_i, \hat g_k\}$ that survive a rotation are the cosines
-between them. The seed is therefore
+**A token's seed is a constant and every origin-free scalar its inputs
+offer; its condition's own input layer maps the seed to the token width, and
+the condition is known to the network by those parameters alone.** With no
+origin, a position alone has no invariant. The only scalars of $\{\hat n_i,
+\hat g_k\}$ that survive a rotation are the cosines between them. To them
+the seed adds the invariants of the fields the token's condition declares
+and the global scalar inputs, behind a constant 1. Each condition has its
+own input layer (`boundary_conditions[name].seed`, a linear map without a
+bias), so its column on the constant is the condition's learned offset: two
+conditions that declare no field at all, a no-slip wall and a slip wall,
+start from different states. A GELU and a linear layer shared by every
+condition follow (`embed`). No input is a tag naming the condition (no
+one-hot field): the condition's identity is in the parameters its tokens
+read.
+
+The tokens of all conditions are encoded in one matrix product. Each
+token's seed sits in its condition's columns of a row as wide as all the
+conditions' seeds together, with zeros in the other conditions' columns, and
+the row multiplies the conditions' input layers placed side by side. That
+is exactly each condition's own map, with shapes fixed whatever the draw
+kept, and every condition's parameters take part in every pass, present or
+not, which distributed training needs (a parameter that receives no gradient
+stops it). @fig-arch-block-layout draws the layout for the AeroZoo
+configuration's four conditions.
+
+```{python}
+#| label: fig-arch-block-layout
+#| fig-cap: >
+#|   The block layout of the seed, for the four conditions of the recipe's AeroZoo configuration
+#|   (`isla_volume_aerozoo.yaml`), with the column widths read from the class (`ISLA._seed_columns`) as the page
+#|   renders and six tokens per condition for the picture. Each row is one boundary token; its seed fills its own
+#|   condition's columns (blue) and leaves zeros elsewhere (white), and one product with the four input layers side
+#|   by side gives every token its own condition's map. How to read this: the column count of a block is that condition's
+#|   $1 + K + n_\beta + S$ of @tbl-arch-conditions; in a real case the rows are the drawn tokens, mixed over the
+#|   conditions in the draw's order, and their numbers follow the water filling, not six each.
+#| fig-height: 3.0
+#| code-fold: true
+mb_az = yaml.safe_load((CONF / "isla_volume_aerozoo.yaml").read_text())["model"]
+M_AZ = ISLA(output_schema={"y": {"rank": 0}}, boundary_schemas=mb_az["boundary_schemas"], global_schema=mb_az["global_schema"],
+            interior=True, hidden=8, n_layers=1, n_slices=2)
+cols_az, names_az, per = M_AZ._seed_columns, M_AZ.boundary_names, 6
+fig, ax = plt.subplots(figsize=(8.0, 3.0))
+for b_, name in enumerate(names_az):
+    y0 = (len(names_az) - 1 - b_) * per
+    ax.add_patch(plt.Rectangle((0, y0), cols_az[-1], per, facecolor=WHITE, edgecolor=MUTED, lw=0.6))
+    ax.add_patch(plt.Rectangle((cols_az[b_], y0), cols_az[b_ + 1] - cols_az[b_], per, facecolor="#e6f0fb", edgecolor=BLUE, lw=0.9))
+    ax.text(-0.6, y0 + per / 2, f"tokens of {name}", ha="right", va="center", fontsize=8.5, color=INK)
+    ax.text((cols_az[b_] + cols_az[b_ + 1]) / 2, len(names_az) * per + 0.6, f"{name}: {cols_az[b_ + 1] - cols_az[b_]} columns",
+            ha="center", va="bottom", fontsize=8, color=INK)
+for c in cols_az[1:-1]:
+    ax.axvline(c, color=MUTED, lw=0.6)
+ax.set_xlim(-0.2, cols_az[-1] + 0.2); ax.set_ylim(0, len(names_az) * per + 3)
+ax.set_xlabel("seed column, all conditions side by side [–]"); ax.set_yticks([])
+for sp in ("top", "right", "left"): ax.spines[sp].set_visible(False)
+ax.grid(False)
+plt.show()
+```
+
+In symbols, with $W_\beta$ condition $\beta$'s input layer, $e_\beta$ its
+column on the constant, and $W_e, b_e$ the shared linear layer,
 
 $$
-\eta_i \equiv \big[\, \hat n_i \!\cdot\! \hat g_1,\ \dots,\ \hat n_i \!\cdot\! \hat g_K,\ \zeta_i,\ \sigma \,\big]
-\quad (K + n_b + S \text{ scalars}),
+\eta_i \equiv \big[\, 1,\ \hat n_i \!\cdot\! \hat g_1,\ \dots,\ \hat n_i \!\cdot\! \hat g_K,\ \zeta_i,\ \sigma \,\big]
+\quad (1 + K + n_\beta + S \text{ scalars}),
 \qquad
-h_i \equiv \mathrm{MLP}_{\mathrm{embed}}(\eta_i),
+h_i \equiv W_e\, \mathrm{GELU}\big(W_{\beta(i)}\, \eta_i\big) + b_e ,
 $$
 
-where $\zeta_i$ are the invariants of the declared per-cell boundary inputs
-and $\sigma$ the global scalar inputs, broadcast to every token. A rank-0
-boundary field is its own scalar. A rank-1 field $v_i$ contributes $v_i \cdot
+so $W_{\beta(i)} \eta_i = e_{\beta(i)} + {}$(the rest of the map on the
+scalars). $\zeta_i$ are the invariants of the fields condition $\beta(i)$
+declares and $\sigma$ the global scalar inputs, the same on every token. A
+rank-0 field is its own scalar. A rank-1 field $v_i$ contributes $v_i \cdot
 \hat n_i$, $v_i \cdot \hat g_k$, $\lvert v_i \rvert$ and its dot products
-with the token's other vector inputs. A rank-2 field $A_i$ contributes
+with the condition's other rank-1 fields. A rank-2 field $A_i$ contributes
 $a^{\mathsf T} A_i b$ over the frame vectors $a, b \in \{\hat n_i, \hat
-g_k\}$, its trace and its Frobenius norm. On the aerodynamic surface tasks
-$n_b = S = 0$ and $K = 1$, so the seed is one number per token: the cosine
-between the normal and the far-field direction. If the seed would be empty
-($K = n_b = S = 0$), every token starts from one learned constant, and all
-separation between tokens comes from the slice layers (`constant_seed`).
+g_k\}$, its trace and its Frobenius norm (`_InputSet._features`). On the
+DrivAerML Surface task there is one condition without fields, $K = 1$ and
+$S = 0$, so the seed is two numbers per token, the constant and the cosine
+between the normal and the far-field direction. With no global input and no
+field ($K = n_\beta = S = 0$) the seed is the constant alone: every token of
+a condition starts from the same learned state, and all separation between
+its tokens comes from the slice layers.
+
+**Vectors and tensors keep their rank.** A condition's rank-1 fields, and
+the vectors $A_i \hat n_i$, $A_i \hat g_k$ (and $A_i^{\mathsf T} \hat n_i$,
+$A_i^{\mathsf T} \hat g_k$ for a non-symmetric $A_i$) derived from its
+rank-2 fields, are its $p_\beta$ vectors. Its own linear map
+$\Phi_\beta$ (`vector_map`, $n_v \times p_\beta$) takes them onto $n_v$
+shared vector channels, as many as the widest condition has, and its map
+$\Psi_\beta$ (`tensor_map`) takes its rank-2 fields onto the shared tensor
+channels:
+
+$$
+V_{ia} = \sum_{b} (\Phi_{\beta(i)})_{ab}\, v_{ib}, \qquad
+T_{ia} = \sum_{b} (\Psi_{\beta(i)})_{ab}\, A_{ib} .
+$$
+
+A linear combination with scalar weights commutes with every orthogonal
+map, $R \sum_b \Phi_{ab} v_b = \sum_b \Phi_{ab} R v_b$, so the channels
+are true vectors and tensors like their inputs, and the slice layers
+contract them with the token-to-anchor direction (stage 3, step d). Both
+maps start as the identity padded with zeros, so condition $\beta$'s
+$j$-th vector starts as channel $j$; a condition without vectors has no map
+and carries zeros in the channels, as the prediction points do. The maps
+run in the inputs' precision, outside autocast.
 
 ::: {.callout-note collapse="true" title="Stage 2 in the code"}
-The seed is the cosines against the global directions, the boundary-input invariants and the global scalars, in that order; `_InputSet._features` is where a rank-1 or rank-2 per-token field becomes the invariants $\zeta_i$.
+A condition's seed is the constant, the cosines against the global directions, its fields' invariants and the global scalars, in that order, placed in its block of the layout; `_InputSet._features` is where a rank-1 or rank-2 field becomes the invariants $\zeta_i$; `_boundary_channels` applies the conditions' input layers side by side, the shared layer, and the vector and tensor maps.
 
 ```{python}
 #| label: code-stage-2
 #| output: asis
 listing("model.py", "ISLA._condition_tokens")
 listing("model.py", "ISLA._boundary_channels")
+listing("inputs.py", "_BoundaryCondition", docstring=True)
 listing("inputs.py", "_InputSet._features")
 ```
 :::
@@ -263,7 +556,10 @@ listing("inputs.py", "_InputSet._features")
 per slice, describes every token relative to every anchor by invariant
 scalars, and sends information up to the slices and back down together
 with those scalars.** It is the one block that repeats, twelve times, each
-copy with its own parameters (`_SliceBlock`). Its inputs are the token state
+copy with its own parameters (`_SliceBlock`), and every condition's tokens
+route into the same slices, form the same anchors and read the same slice
+states: that is how the conditions interact, and the cost does not grow with
+their number. Its inputs are the token state
 $h_i$ and the four frame quantities of stage 1, which every layer receives
 unchanged: $r_i$, $\hat n_i$, $\hat g_k$, $\ell_i$. Its output is the updated
 $h_i$.
@@ -412,12 +708,11 @@ $$
 
 Every entry is a norm or a dot product of vectors that move together, and
 every position appears as a difference, so no origin and no axis is
-referred to. A model with per-token tensor inputs appends, in the same
-place, $\hat\rho_{is} \cdot v$ for every per-token vector $v$ (the rank-1
-inputs, and $A \hat n_i$, $A \hat g_k$ for every rank-2 input $A$) and
-$\hat\rho_{is}^{\mathsf T} A \hat\rho_{is}$ for every rank-2 input. The
-width is then $5 + K + n_v + n_t$; on the aerodynamic tasks it is $5 + K =
-6$.
+referred to. A model whose conditions carry vectors or tensors appends, in
+the same place, $\hat\rho_{is} \cdot V_{ia}$ for every shared vector
+channel and $\hat\rho_{is}^{\mathsf T} T_{ia} \hat\rho_{is}$ for every shared
+tensor channel (stage 2). The width is then $5 + K + n_v + n_t$; on the
+DrivAerML and AirfRANS tasks it is $5 + K = 6$.
 
 **e. Refinement, and the read-back weights.** A linear map of the
 invariants to one scalar per pair refines the routing logit (`geo_logit`),
@@ -648,10 +943,14 @@ print(": Head coefficients per output field in three dimensions, by the number $
       "is one linear map whatever the outputs are.")
 ```
 
-The model returns a point-cloud `Mesh` whose `points` are the prediction
-points (the boundary token positions on a surface task) and whose
-`point_data` holds one leaf per declared output name, at its natural shape:
-$(N,)$ at rank 0, $(N, 3)$ at rank 1, $(N, 3, 3)$ at rank 2. Under an
+The model returns one point-cloud `Mesh`. On an interior task its `points`
+are the prediction points. On a surface task they are the given conditions'
+cell centroids, the conditions in sorted order and each condition's cells in
+its mesh's order, so a per-condition view is a split of the output by the
+conditions' cell counts. Its `point_data` holds one leaf per declared output
+name, at its natural shape: $(N,)$ at rank 0, $(N, 3)$ at rank 1, $(N, 3,
+3)$ at rank 2, and its `global_data` is the selected global inputs, passed
+through. Under an
 orthogonal map $R$ every true basis vector maps as $R t$, every pseudovector
 as $\det(R)\, R t$, and every coefficient is unchanged. An even output
 therefore maps as $R^{\otimes r} Y$ and an odd one as $\det(R)\, R^{\otimes
@@ -683,7 +982,7 @@ the reference configuration, built on the CPU as the page renders.
 def rows_for(m):
     blk = m.blocks[0]; nl = len(m.blocks)
     return [
-        ("embedding MLP (stage 2)", "`boundary_conditions`, `embed`", cnt(m.boundary_conditions) + cnt(m.embed), 1),
+        ("condition input layer and shared layer (stage 2)", "`boundary_conditions`, `embed`", cnt(m.boundary_conditions) + cnt(m.embed), 1),
         ("routing map, with its LayerNorm (step a)", "`norm_assign`, `assign`", cnt(blk.norm_assign) + cnt(blk.assign), nl),
         ("routing refinement (step e)", "`geo_logit`", cnt(blk.geo_logit), nl),
         ("pooled-invariant projection (step h)", "`geo_feat`", cnt(blk.geo_feat), nl),
@@ -717,6 +1016,17 @@ mlps = sum(c * n for name, _, c, n in R_ if name.startswith(("slice MLP", "token
 print(f"The two per-layer MLPs hold {100 * mlps / TOT:.0f}% of the total. The routing map of a layer is its "
       f"$M \\times D$ base prototypes ({seeds:,} numbers) and the prototype synthesis's two $D \\times D$ maps and gain ({proto:,}), "
       f"so the width $D$ sets the count quadratically and the slice count $M$ linearly.")
+print()
+# The interior task's extra parameters, on the same schemas: the prediction points' input layer and routing mass
+# (ISLA), and ISLA-DTT's kernel basis and per-layer boundary reads instead of the routing mass.
+kw = dict(output_schema={"pressure": {"rank": 0}, "wss": {"rank": 1}}, boundary_schemas={"vehicle": {}}, global_schema={"U_inf_dir": {"rank": 1}}, interior=True)
+INT_ = ISLA(**kw); DTT_ = ISLA(**kw, query_independent=True)
+print(f"An interior model adds the prediction points' own parameters (`qt`): their input layer `qt.seed`, "
+      f"{cnt(INT_.qt.seed):,} numbers on these schemas, and, in ISLA, the one routing-mass scalar `qt.logw`, "
+      f"{cnt(INT_) - TOT:,} in all. ISLA-DTT has no routing mass; its boundary read adds the kernel basis "
+      f"({cnt(DTT_.kernel_basis):,}) and one read per layer ({cnt(DTT_.kernel_reads[0]):,} each), "
+      f"{cnt(DTT_) - TOT:,} beyond the surface model in all (counted from the class as the page renders).")
+del INT_, DTT_
 ```
 
 ## The two tasks: surface and interior {#sec-arch-modes}
@@ -725,28 +1035,30 @@ print(f"The two per-layer MLPs hold {100 * mlps / TOT:.0f}% of the total. The ro
 differ in which points are tokens and which the head reads, and the choice
 is made at construction (`interior=False` or `True`).** @fig-isla-modes
 places them side by side. Everything above described the first. In the
-second, the prediction points join the boundary tokens before stage 3, and
-they come in two kinds: *interacting* prediction points (ISLA, the class
-default) carry routing mass and write into the slices; *read-only*
+second, the model draws its boundary tokens from the full-resolution cells
+(@sec-arch-boundary-draw), and the prediction points join them before
+stage 3. They come in two kinds: *interacting* prediction points (ISLA, the
+class default) carry routing mass and write into the slices; *read-only*
 prediction points (ISLA-DTT, `query_independent=True`) carry none and read
 the boundary cells directly instead (@sec-arch-passive-decoder). The tasks
-own different parameter sets (the interior task adds the prediction-point
-embedding, a type offset, and, for interacting points, the routing mass),
-which is why the task is a constructor argument: a parameter that takes no
-part in a forward pass stops distributed training.
+own different parameter sets (the interior task adds the prediction points'
+input layer and, for interacting points, the routing mass), which is why the
+task is a constructor argument: a parameter that takes no part in a forward
+pass stops distributed training.
 
 ```{mermaid}
 %%| label: fig-isla-modes
 %%| fig-cap: >
-%%|   The two tasks of ISLA. Surface (`interior=False`, the default): the boundary cells are the tokens and
-%%|   the head reads every one of them. Interior (`interior=True`): the prediction points join
-%%|   the slice layers as tokens, each with its signed wall distance and
-%%|   direction computed inside the model, and the head reads them alone;
-%%|   interacting points (ISLA) carry a learned routing mass, read-only points
-%%|   (ISLA-DTT) carry none and read the boundary cells after every layer.
+%%|   The two tasks of ISLA. Surface (`interior=False`, the default): every boundary cell is a token and
+%%|   the head reads every one of them. Interior (`interior=True`): the model draws its boundary tokens from the
+%%|   full-resolution cells, and the prediction points join the slice layers as tokens, each with its signed
+%%|   distance to the full-resolution surface and its direction computed inside the model, and the head reads them
+%%|   alone; interacting points (ISLA) carry a learned routing mass, read-only points (ISLA-DTT) carry none and read
+%%|   the boundary cells after every layer.
 %%|   How to read this: the slice layer, head frame and head are the same
 %%|   modules in every form; only the token set, the prediction points'
-%%|   routing mass and the boundary read change.
+%%|   routing mass and the boundary read change. The prediction points' geometry is computed against every cell,
+%%|   not against the drawn tokens.
 %%{init: {"flowchart": {"wrappingWidth": 460}}}%%
 flowchart LR
     classDef data fill:#f4f3ee,stroke:#898781,color:#0b0b0b
@@ -756,49 +1068,47 @@ flowchart LR
 
     subgraph S["surface task"]
         direction TB
-        S1["boundary tokens (N)"]:::data
+        S1["every boundary cell a token (N)"]:::data
         S2["slice layers × 12"]:::learned
         S3["head frame + head on all N tokens"]:::learned
         S1 --> S2 --> S3
     end
     subgraph Q["interior task"]
         direction TB
-        Q1["boundary tokens (N)"]:::data
-        Q0["wall geometry of each prediction point<br/>from the nearest boundary token"]:::fixed
-        Q2["prediction-point tokens (Q): seed, type offset,<br/>wall-distance embedding;<br/>routing mass (ISLA) or none (ISLA-DTT)"]:::aqua
+        Q1["named boundary meshes at full resolution"]:::data
+        QD["in-model draw: N boundary tokens<br/>with Horvitz–Thompson measures"]:::fixed
+        Q0["exact geometry of each prediction point<br/>against the full-resolution surface"]:::fixed
+        Q2["prediction-point tokens (Q): own input layer qt.seed;<br/>routing mass (ISLA) or none (ISLA-DTT)"]:::aqua
         Q3["slice layers × 12 on all N + Q tokens<br/>(ISLA-DTT: + boundary read after each layer)"]:::learned
         Q4["head frame + head on the Q prediction-point tokens"]:::learned
         Q1 --> Q0 --> Q2
-        Q1 --> Q3
+        Q1 --> QD --> Q3
         Q2 --> Q3 --> Q4
     end
 ```
 
 **Prediction points as tokens.** Each prediction point $q$ arrives as a
-position $x_q$ (the `points` of the prediction `Mesh`, or a bare $Q{\times}3$
-tensor) together with whatever per-point fields `query_schema` declares
-(read from its `point_data`). A prediction point has no normal and no area.
-The model gives it a direction $\hat\nu_q$, which plays the normal's part in
-every invariant, and a signed wall distance $\delta_q$, both computed from
-the boundary tokens (@sec-arch-interior-geometry). The point is then placed
-in the same frame and seeded like a boundary cell, with zeros in the
-boundary-input channels, and receives a learned type offset $t_q$ and an
-embedding of its wall distance in length units followed by the declared
-query inputs (`_QueryTokens`):
+position $x_q$ alone: the `points` of a point-cloud `Mesh`, whose
+`point_data` is not read, or a bare $Q{\times}3$ tensor. A prediction point
+has no normal, no area and no condition. The model gives it a direction
+$\hat\nu_q$, which plays the normal's part in every invariant, and a signed
+distance $s_q$ in length units, both computed from the boundary surface
+(@sec-arch-interior-geometry). The point is placed in the same frame, $r_q
+= x_q / L$, and has its own input layer (`qt.seed`, a linear map with a
+bias, which takes the part a condition's offset takes), followed by the same
+shared GELU and linear layer as the boundary tokens (`_QueryTokens`):
 
 $$
-\begin{aligned}
-r_q &= x_q / L, \qquad
-h_q = \mathrm{MLP}_{\mathrm{embed}}(\eta_q) + t_q + \mathrm{MLP}_{\mathrm{q}}(\phi_q), \\
-\phi_q &\equiv \big[\, \delta_q / L,\ \operatorname{sign}(\delta_q) \log(\lvert \delta_q \rvert / L + \epsilon),\ \text{declared query inputs} \,\big] .
-\end{aligned}
+h_q \equiv W_e\, \mathrm{GELU}\big(W_{\mathrm q}\, \phi_q + b_{\mathrm q}\big) + b_e ,
+\qquad
+\phi_q \equiv \big[\, \hat\nu_q \!\cdot\! \hat g_1,\ \dots,\ \hat\nu_q \!\cdot\! \hat g_K,\ \sigma,\
+s_q,\ \operatorname{asinh}(s_q / \varepsilon) \,\big] .
 $$
 
-The signed logarithm resolves the boundary layer, where $\delta_q / L$ is
-tiny. A declared rank-0 query input is a length: it is divided by $L$ and
-paired with its own signed logarithm in the same way. Rank-1 and rank-2
-query inputs enter through their invariants against $\{\hat\nu_q, \hat
-g_k\}$, as the boundary inputs of stage 2 do.
+The two distance channels are the built-in pair of
+@sec-arch-interior-geometry: $s_q$ itself, and its soft logarithm, which
+resolves the boundary layer, where $s_q$ is tiny. The prediction points
+carry zeros in the shared vector and tensor channels of stage 2.
 
 **Interacting prediction points: routing mass.** In ISLA the prediction
 points take part in every softmax over tokens. Their measure bias is not an
@@ -831,53 +1141,146 @@ listing("blocks.py", "_QueryTokens")
 ```
 :::
 
-### The prediction points' wall geometry {#sec-arch-interior-geometry}
+### The prediction points' geometry {#sec-arch-interior-geometry}
 
-**A prediction point's wall distance and direction come from the nearest
-boundary token, found by an exact search; they are the one input of the
-interior task that depends on how the boundary was sampled.** Stage 3 needs
-a direction at every token, and the embedding above needs a distance to the
-wall. Both are computed inside the model from the boundary tokens $x_i,
-\hat n_i$ and the point $x_q$, never taken as inputs. With $i^* \equiv
-\arg\min_i \lvert x_q - x_i \rvert$ the nearest boundary token,
+**A prediction point's signed distance and direction come from the exact
+closest point on the full-resolution boundary surface, so they are the same
+for every draw of the boundary tokens, and they are continuous through the
+surface.** Stage 3 needs a direction at every token, and the input layer
+above needs a distance to the wall. Both are computed inside the model and
+never taken as inputs; the model reads no stored signed-distance field.
+Picture a point a hair off an airfoil whose tokens kept every fifth panel:
+the nearest kept token is up to a few panels away, but the nearest point of
+the airfoil is directly below the point. The model therefore searches the
+surface itself, the union of the cells of every given boundary mesh at full
+resolution, for the closest point $p_q$ to $x_q$: point to face, never point
+to centroid (`exact_boundary_geometry`).
+
+The distance is signed by the pseudo-normal $\hat N_q$ of the feature $p_q$
+lies on: the cell's normal inside a cell; on an edge or a vertex the sum of
+the normals of the cells that share it, angle-weighted at a vertex in three
+dimensions (the construction of Bærentzen and Aanæs). The pseudo-normal
+gets the sign right behind a sharp trailing edge and at a concave corner,
+where the normal of the one closest cell would flip it. The distance is
+positive on the side the cells' normals point to; the recipe orients each
+dataset's boundary with a transform set per dataset file
+(`FlipBoundaryOrientation`). The direction $u_q$ points from the surface to
+the point: the closest cell's normal turned toward the point when $p_q$ is
+inside a cell, the unit difference otherwise. The token then reads the
+distance in length units and the direction times the sign of the distance,
+which is the gradient of the signed distance. @fig-arch-exact-geometry
+draws both on the airfoil, with the class's own functions.
+
+```{python}
+#| label: fig-arch-exact-geometry
+#| fig-cap: >
+#|   The prediction points' geometry on the airfoil of @fig-arch-boundary-draw, computed by the class's
+#|   `exact_boundary_geometry` and `soft_log_length` as the page renders. Top, mid-chord on both surfaces: prediction
+#|   points (aqua) joined by solid lines to their exact closest points $p_q$ on the full 160-cell polyline (gray), and
+#|   by dotted lines to the nearest token of two training-mode draws of 32 tokens (open and filled dots); the solid
+#|   lines are the model's geometry, the dotted ones show what a nearest-token search would read instead. Bottom: the
+#|   two distance channels, $s$ (aqua) and $\operatorname{asinh}(s / \varepsilon)$ (blue), against the signed
+#|   distance $s$ in length units, on an axis that is linear within $\pm\varepsilon = \pm 10^{-6}$ (the gray band, where
+#|   the soft logarithm is linear) and logarithmic outside. How to read this: the exact geometry does not depend on which tokens were
+#|   drawn, and the soft logarithm passes through zero with a finite slope, so a point on the wall reads what its
+#|   neighbors on either side read. It does not show a trained model.
+#| fig-height: 6.0
+#| code-fold: true
+from physicsnemo.experimental.models.isla.geometry import exact_boundary_geometry, soft_log_length, LENGTH_SOFTENING
+xy_g = torch.tensor(JD["xy"][:-1], dtype=torch.float64)
+n_g = len(xy_g)
+cells_g = torch.stack([(torch.arange(n_g) + 1) % n_g, torch.arange(n_g)], -1)   # oriented so the normals point out of the body
+x0, x1 = -0.2, 0.9                                                                # the window: mid-chord, both surfaces
+pick = [i for i in range(n_g) if x0 + 0.1 < JD["mid"][i, 0] < x1 - 0.1][::5]
+qs = np.concatenate([JD["mid"][pick] + off * JD["nrm"][pick] for off in (0.035, 0.09)])
+d_g, u_g = exact_boundary_geometry(torch.tensor(qs), xy_g, cells_g)
+p_g = qs - (d_g[:, None] * torch.where((d_g >= 0)[:, None], u_g, -u_g)).numpy()
+draws = [sample_boundary_cells([a_d], [x_d], BUDGET_D, torch.tensor(u0, dtype=torch.float64))[0].numpy() for u0 in (0.13, 0.71)]
+fig, axes = plt.subplots(2, 1, figsize=(8.0, 6.0), gridspec_kw=dict(height_ratios=[1.3, 1.0], hspace=0.3))
+ax = axes[0]
+ax.plot(JD["xy"][:, 0], JD["xy"][:, 1], color=MUTED, lw=1.4)
+for k, (kd, mfc) in enumerate(zip(draws, (WHITE, INK))):
+    tok = JD["mid"][kd]
+    for q in qs:
+        j = int(np.argmin(((tok - q) ** 2).sum(1)))
+        ax.plot([q[0], tok[j, 0]], [q[1], tok[j, 1]], ls=":", lw=0.9, color=INK if k else MUTED)
+    ax.plot(tok[:, 0], tok[:, 1], "o", ms=5, mfc=mfc, mec=INK, mew=0.8, zorder=4)
+for q, p in zip(qs, p_g):
+    ax.plot([q[0], p[0]], [q[1], p[1]], color=AQUA, lw=1.8)
+ax.plot(qs[:, 0], qs[:, 1], "o", color=AQUA, ms=5, zorder=5)
+ax.set_xlim(x0, x1); ax.set_aspect("equal"); ax.axis("off")
+ax = axes[1]
+s_ax = np.concatenate([-np.logspace(0, -9, 400), [0.0], np.logspace(-9, 0, 400)])
+y_ax = soft_log_length(torch.tensor(s_ax)).numpy()
+ax.axvspan(-LENGTH_SOFTENING, LENGTH_SOFTENING, color="#ecebe6", lw=0)
+ax.plot(s_ax, y_ax, color=BLUE, lw=1.8)
+ax.plot(s_ax, s_ax, color=AQUA, lw=1.4)
+label_line(ax, 1e-2, float(soft_log_length(torch.tensor(1e-2))), r"$\mathrm{asinh}(s/\varepsilon)$", BLUE, dy=-3.0)
+label_line(ax, 1e-2, 1e-2, r"$s$", AQUA, dy=2.0)
+ax.set_xscale("symlog", linthresh=LENGTH_SOFTENING)
+ax.set_xticks([-1, -1e-3, -1e-6, 0, 1e-6, 1e-3, 1]); ax.set_xticklabels(["−1", "−0.001", "−10⁻⁶", "0", "10⁻⁶", "0.001", "1"])
+ax.set_xlabel("signed distance in length units $s = \\delta / L$ [–]"); ax.set_ylabel("channel value [–]")
+for sp in ("top", "right"): ax.spines[sp].set_visible(False)
+plt.show()
+```
+
+In symbols, with $\hat n_f$ the normal of the cell $f$ that holds $p_q$:
 
 $$
-\hat\nu_q \equiv \frac{x_q - x_{i^*}}{\lvert x_q - x_{i^*} \rvert}, \qquad
-\delta_q \equiv \operatorname{sign}\big(\hat\nu_q \cdot \hat n_{i^*}\big)\, \lvert x_q - x_{i^*} \rvert ,
+\delta_q \equiv \operatorname{sign}\big((x_q - p_q) \cdot \hat N_q\big)\, \lvert x_q - p_q \rvert,
+\qquad
+u_q \equiv \begin{cases}
+  \operatorname{sign}(\delta_q)\, \hat n_f & p_q \text{ inside the cell } f, \\
+  (x_q - p_q) / \lvert x_q - p_q \rvert & \text{otherwise,}
+\end{cases}
 $$
 
-the direction from the boundary to the point and the distance signed by
-the nearest token's normal: positive on the side the normal points to. A
-point on a token takes that token's normal as $\hat\nu_q$ and $\delta_q = 0$;
-a tangent point ($\hat\nu_q \cdot \hat n_{i^*} = 0$) counts as positive. Both
-are built from a difference of positions, so $\delta_q$ is invariant and
-$\hat\nu_q$ covariant under every rigid motion and reflection, and $\delta_q$
-scales with the geometry (`nearest_boundary_geometry`).
+$$
+s_q \equiv \delta_q / L, \qquad
+\big[\, s_q,\ \operatorname{asinh}(s_q / \varepsilon) \,\big], \qquad
+\hat\nu_q \equiv \operatorname{sign}(\delta_q)\, u_q, \quad \operatorname{sign}(0) \equiv +1 .
+$$
 
-The search is exact brute force on the squared distance formed from the
-*difference* $x_q - x_i$: a Triton kernel (Triton is a Python language for
-writing GPU kernels) on CUDA that streams the boundary
-tokens in tiles past a block of points with a running minimum, so no
-$Q \times N$ matrix is ever written, and a chunked `torch.cdist` argmin
-elsewhere. The difference form matters: the expanded form $\lvert x
-\rvert^2 + \lvert y \rvert^2 - 2 x \cdot y$ in float32 has a rounding error
-that grows with $\lvert x \rvert^2$, enough to pick a wrong nearest token
-near the wall and to break translation invariance. The search runs without
-gradient and in float32 outside autocast; $\delta_q$ and $\hat\nu_q$ are then
-rebuilt from the gathered token, so they are differentiable in the positions.
+A point on the surface ($\lvert x_q - p_q \rvert$ at most `EPS`) takes
+$\delta_q = 0$ and $u_q = \hat N_q$; coincident vertices are welded first, so
+a surface stored in pieces, one mesh per condition, has the pseudo-normals
+of the surface it describes. Inside a cell $\hat\nu_q = \hat n_f$ on both
+sides of the wall, and $\operatorname{asinh}(s / \varepsilon)$ is $s /
+\varepsilon$ near zero and $\operatorname{sign}(s) \log(2 \lvert s \rvert /
+\varepsilon)$ far from it (`soft_log_length`): the code of a point is
+continuous through the surface, so a point on it, whose distance is zero or
+a rounding error of either sign, reads what the points just off it read on
+either side. The softening $\varepsilon$ is a numerical resolution in the
+length unit, not a parameter: above float32's resolution of a distance
+relative to $L$ and below the finest wall spacing of the reference datasets
+(the docstring of `soft_log_length` gives both).
 
-The nearest *token* is not the nearest point of the *surface*: on a
-DrivAerML car the tokens are 200,000 of up to 17 million cells, so near the
-wall $\delta_q$ overestimates the distance by up to the radius of the largest gap between tokens,
-$\hat\nu_q$ tilts with it, and both change with the draw. @fig-isla-interior draws the geometry, and
-@sec-nearest-token measures its draw dependence on a trained model. An exact
-full-resolution form of this stage is an open question (@sec-open-questions).
+$\delta_q$ and $u_q$ are functions of the surface and its orientation alone:
+the same for every draw of the boundary tokens, unchanged by splitting a
+cell, and converging as $O(h^2)$ under refinement of a smooth surface, like
+a stored signed-distance field computed from the same surface. Both are
+built from a difference of positions, so $\delta_q$ is invariant and $u_q$
+covariant under every rigid motion and reflection (with the cells
+re-oriented so that their normals follow the map), and $\delta_q$ scales
+with the geometry. $s_q = \delta_q / L$ inherits the draw only through
+$L$, a factor common to every point of the case, by $L$'s quadrature error
+(stage 1).
+
+The search runs in `forward`, where the meshes are, before the draw, at the
+points' precision and outside autocast. In three dimensions it is a Warp
+bounding-volume-hierarchy query over the triangles (a torch custom
+operator, in float32, whose closest cell differs from the exact one only at
+a tie at float32 resolution); in two it is an exact brute force over the
+segments, chunked over the points (`_closest_cell`). The interior task is
+implemented in two and three dimensions. The search runs without gradient;
+the closest point is then rebuilt from its cell's vertices with the
+barycentric weights of its region of the cell (computed in float64), so
+$\delta_q$ and $u_q$ are differentiable in the points and the vertex
+positions.
 
 ```{python}
 #| label: para-arch-sdf-configs
 #| output: asis
-import yaml
-CONF = Path(physicsnemo.__file__).parent.parent / "examples" / "cfd" / "external_aerodynamics" / "unified_external_aero_recipe" / "conf" / "model"
 def _model_block(name):
     cfg = yaml.safe_load((CONF / f"{name}.yaml").read_text())
     blk = dict(cfg.get("model", {}))
@@ -888,18 +1291,97 @@ def _model_block(name):
     return cfg, blk
 interior_cfgs = sorted(p.stem for p in CONF.glob("isla_*.yaml") if _model_block(p.stem)[1].get("interior"))
 fmt = lambda xs: ", ".join(f"`{x}`" for x in xs)
-print(f"The prediction points' only input is their positions: a stored signed-distance field is not read. The recipe's "
-      f"interior ISLA configurations are {fmt(interior_cfgs)} (read from `conf/model/` as the page renders).")
+print(f"The prediction points' only input is their positions. The recipe's interior ISLA configurations are "
+      f"{fmt(interior_cfgs)} (read from `conf/model/` as the page renders), and none of them gives ISLA a stored "
+      "signed-distance field.")
 ```
 
-::: {.callout-note collapse="true" title="The wall geometry in the code"}
-The search kernel never writes a $Q \times N$ block; the geometry is rebuilt from the gathered token so that it carries gradients.
+**What the exact geometry measures.** Two pre-registered comparisons
+isolate this stage (@tbl-arch-geo-evidence), the first on the AirfRANS
+interior task, the second on it and on PLAID Tensile2d and the GINOT lug. The
+first replaces the nearest-token geometry of the nearest-token form
+(@sec-checkpoint-form) by the exact geometry, read through a signed
+logarithm $\operatorname{sign}(s_q) \log(\lvert s_q \rvert + 10^{-12})$;
+the second keeps the exact geometry and replaces that channel by
+$\operatorname{asinh}(s_q / \varepsilon)$ and the direction $u_q$ by
+$\operatorname{sign}(\delta_q)\, u_q$, the encoding above. Every arm
+except the first comparison's control reads the exact built-in geometry,
+and every arm is otherwise of the nearest-token form: it still reads the
+stored signed distance and its direction as a prediction-point input on all
+three datasets (the second comparison's variant encodes that channel as it
+encodes $s_q$). The class reads no stored field, so neither comparison is a
+measurement of the class. Chapter 4 gives what the exact geometry does to the
+contracts (@sec-exact-geometry-draw, @sec-medial-ties).
+
+```{python}
+#| label: tbl-arch-geo-evidence
+#| output: asis
+GE = json.load(open(RES / "campaigns_2026-10-19" / "geo_evidence" / "geo_evidence.json"))
+g1, gc = GE["geo1_airfrans"], GE["geo_cont"]
+AFF = (("pressure_l2", "pressure"), ("velocity_l2", "velocity"), ("nut_l2", "eddy viscosity"))
+def seeds_of(arm, f):
+    return [arm[f]["per_seed"][s] for s in ("42", "43")]
+def row(label, var, ctl, f, fname, in_rule):
+    v, c = seeds_of(var, f), seeds_of(ctl, f)
+    r = np.mean(v) / np.mean(c)
+    side = "below" if max(v) < min(c) else ("above" if min(v) > max(c) else "overlap")
+    return f"| {label} | {fname} | {np.mean(c):.5f} | {np.mean(v):.5f} | {r:.3f} | {' / '.join(f'{x / y:.3f}' for x, y in zip(v, c))} | {side} | {in_rule} |\n"
+out = ("| comparison (variant ÷ control) | field | control | variant | ratio | per seed | variant seeds vs control seeds | in the registered rule |\n"
+       "|---|---|--:|--:|--:|--:|---|---|\n")
+for f, fname in AFF:
+    out += row("exact geometry ÷ nearest-token geometry, AirfRANS", g1["geo1"]["native"], g1["a2s"]["native"], f, fname, "–")
+dec = []
+for ds, lab, fields in (("af", "AirfRANS", AFF), ("t2dz", "PLAID Tensile2d", (("displacement_l2", "displacement"), ("stress_l2", "stress"), ("q_l2", "q"))),
+                        ("lug", "GINOT lug", (("von_mises_l2", "von Mises stress"),))):
+    for f, fname in fields:
+        rule = "yes" if (ds == "af" or f == "displacement_l2") else "no"
+        if rule == "yes":
+            dec.append(gc[ds]["cont_over_ctl"]["native"][f])
+        out += row(f"continuous encoding ÷ signed-log encoding, {lab}", gc[ds]["cont"]["native"], gc[ds]["ctl"]["native"], f, fname, rule)
+print(out)
+G_dec = float(np.exp(np.mean(np.log(dec))))
+print(f": The exact-geometry evidence: area-weighted relative L2 of each control and variant, seed means of two seeds (42, 43) "
+      f"and the per-seed ratios paired by seed, native meshes, float32, final checkpoints. Instrument: ISLA at the reference "
+      f"configuration with the normalized slice reads, both arms of a comparison trained alike, every arm reading the stored "
+      f"signed distance as a prediction-point input beside its built-in geometry; AirfRANS uniform interior "
+      f"task, 200 test cases; PLAID Tensile2d and the GINOT lug on their interior tasks. Results: "
+      f"results/campaigns_2026-10-19/geo_evidence/geo_evidence.json (`geo1_airfrans`, `geo_cont`). How to read this: a "
+      f"ratio compares two ISLA variants, the variant over its control, and below one means the variant is more accurate; "
+      f"\"below\" means both variant seeds lie below both control seeds. The registered rule of the second comparison read "
+      f"its four marked fields: their geometric mean ratio is {G_dec:.3f}, inside its adoption bar (at most 1.01, with no field "
+      f"at 1.10 or more); the other fields were reported beside the rule. The first comparison's control is the standing's "
+      f"ISLA arm, of the nearest-token form (@sec-checkpoint-form). The table does not compare ISLA with a baseline.")
+```
+
+```{python}
+#| label: para-arch-geo-evidence
+#| output: asis
+def all_below(var, ctl, fields):
+    return all(max(seeds_of(var, f)) < min(seeds_of(ctl, f)) for f, _ in fields)
+r1 = g1["geo1_over_a2s"]["native"]; r2 = gc["af"]["cont_over_ctl"]["native"]; rl = gc["lug"]["cont_over_ctl"]["native"]["von_mises_l2"]
+b1 = all_below(g1["geo1"]["native"], g1["a2s"]["native"], AFF); b2 = all_below(gc["af"]["cont"]["native"], gc["af"]["ctl"]["native"], AFF)
+lug_above = min(seeds_of(gc["lug"]["cont"]["native"], "von_mises_l2")) > max(seeds_of(gc["lug"]["ctl"]["native"], "von_mises_l2"))
+print(f"On the AirfRANS interior task, with the stored signed distance read in both arms, the exact geometry is more accurate "
+      f"than the nearest-token geometry on all three "
+      f"fields (ratios {r1['pressure_l2']:.2f} / {r1['velocity_l2']:.2f} / {r1['nut_l2']:.2f} on pressure / velocity / eddy "
+      f"viscosity{', every seed below' if b1 else ''}), and the continuous encoding is more accurate than the signed "
+      f"logarithm again ({r2['pressure_l2']:.3f} / {r2['velocity_l2']:.3f} / {r2['nut_l2']:.3f}"
+      f"{', every seed below' if b2 else '; the seeds overlap on ' + ' and '.join(n for f, n in AFF if not max(seeds_of(gc['af']['cont']['native'], f)) < min(seeds_of(gc['af']['ctl']['native'], f)))}). "
+      f"On the lug the continuous encoding's von Mises stress is less accurate ({rl:.3f}"
+      f"{', both seeds above' if lug_above else ''}); the rule left that field out because its seed spread is above 7% "
+      f"(results/campaigns_2026-10-18/geo_cont/PREREG.md).")
+```
+
+::: {.callout-note collapse="true" title="The geometry in the code"}
+`forward` concatenates the given meshes into one surface and calls the exact geometry before the draw; the closest cell comes from the BVH in three dimensions and from the brute force in two; the soft logarithm is one line.
 
 ```{python}
 #| label: code-interior-geometry
 #| output: asis
+listing("model.py", "ISLA.forward", start="### The points' geometry from the boundary surface", end="### The boundary tokens: the sample")
 listing("geometry.py", "exact_boundary_geometry")
 listing("geometry.py", "_closest_cell")
+listing("geometry.py", "soft_log_length")
 ```
 :::
 
@@ -909,9 +1391,9 @@ listing("geometry.py", "_closest_cell")
 read-only: at every slice layer they read the slices the boundary formed at
 that layer and never write into them, and after it they read the boundary
 cells (@sec-arch-global-read), so the prediction at a point is a function
-of that point and the boundary alone.** A read-only point is seeded and
-embedded as an interacting one is (the wall geometry, the declared query
-inputs, the type offset) and runs through the same twelve slice layers with
+of that point and the boundary alone.** A read-only point is encoded as an
+interacting one is (its exact geometry and its own input layer `qt.seed`)
+and runs through the same twelve slice layers with
 the same parameters as the boundary tokens. Only its measure bias differs:
 $\ell_q = -\infty$, so every softmax over tokens gives it zero weight. It
 takes no part in the routing prototypes, the anchors $z_s, m_s$ (step c),
@@ -968,7 +1450,7 @@ print(": Matched-depth reading and slice count, without the boundary read: relat
       "100,000 prediction points from one contiguous window of the stored points, so ratios compare like with like and the "
       "absolute errors do not carry over (@sec-interior-airfrans). Instrument: on the car, ISLA at 512 wide, 512 slices "
       "(1,024 doubled), 3.75e-4, raw slice reads; on the airfoil, ISLA at 384 wide, 256 slices (512 doubled), 5e-4, raw slice "
-      "reads (@sec-study-configurations). How to read this: each ÷ compares a row with the base row of its own kind (read-only "
+      "reads (@sec-study-configurations); checkpoints of the nearest-token form (@sec-checkpoint-form). How to read this: each ÷ compares a row with the base row of its own kind (read-only "
       "or interacting) on the same dataset, above one meaning less accurate; the second row changes only which boundary state "
       "the points read, the third and fifth only the slice count; the two interacting car rows were trained on code that differs "
       "beyond the slice count, so their ratio is not a clean slice-count effect. Data: research/dtt/REPORT.md, its "
@@ -984,11 +1466,11 @@ each cell sits relative to the point and by how well their states
 match.** For a point $q$ and a cell $j$, with $\rho_{qj} \equiv r_q - r_j$,
 the kernel sees the pair's invariants $\iota_{qj}$: the distance
 $\lvert\rho_{qj}\rvert$, its logarithm, $\log(\lvert\rho_{qj}\rvert /
-\lvert\delta_q\rvert)$ (the distance in units of the point's own wall
-distance), the cosines of $\hat\rho_{qj}$ with $\hat n_j$, $\hat\nu_q$ and
-every $\hat g_k$, and $\hat\nu_q \cdot \hat n_j$ and $\hat n_j \cdot \hat
-g_k$; declared per-token vectors add their own cosines
-(`tree_pair_invariants`). One MLP shared by every layer maps $\iota_{qj}$ to
+\lvert s_q\rvert)$ (the distance in units of the point's own distance to
+the surface), the cosines of $\hat\rho_{qj}$ with $\hat n_j$, $\hat\nu_q$
+and every $\hat g_k$, and $\hat\nu_q \cdot \hat n_j$ and $\hat n_j \cdot
+\hat g_k$; each of the cell's shared vector channels $V_{ja}$ adds its
+cosines with $\hat\rho_{qj}$ and $\hat\nu_q$ (`tree_pair_invariants`). One MLP shared by every layer maps $\iota_{qj}$ to
 a basis of kernel functions per pair, once per forward pass
 (`_KernelBasis`), and each layer's kernel $\kappa_h$ is a learned
 combination of them for each head $h$. With $\omega_j \equiv w_j / \sum_i
@@ -1056,9 +1538,12 @@ gradient (`BoundaryForest`):
    cells). Opposite normals never share a tree, so no cluster spans both
    faces of a thin body.
 3. Every node holds a virtual cell: its cells' measure-weighted centroid,
-   their renormalized measure-weighted mean normal, their mean rank-1 inputs
-   and their total measure, and at every layer the measure-weighted means of
-   their keys and values.
+   their renormalized measure-weighted mean normal, their mean vector
+   channels and their total measure, and at every layer the
+   measure-weighted means of their keys and values. The means are sums over
+   a tree of pairwise sums in the working precision, float64 in a float64
+   model and float32 otherwise, bfloat16 rows included (`node_means`), so a
+   float64 model reads its clusters in float64 throughout.
 4. Each point walks every tree once. A node is read as one virtual cell
    when its box diagonal is below $\theta$ times the distance from the point
    to the box and its normals are coherent: their measure-weighted RMS chord
@@ -1118,8 +1603,76 @@ The read-only points' measure bias, the read after each layer, and one point's w
 listing("model.py", "ISLA._forward_tokens", start="if self.query_independent:", end="else:")
 listing("model.py", "ISLA._forward_tokens", start="for i, block in enumerate(self._block_callables()):", end="### The tokens the head reads")
 listing("tree_read.py", "BoundaryForest.point_pairs")
+listing("tree_read.py", "node_means")
 ```
 :::
+
+#### Read-only against interacting prediction points on AirfRANS {#sec-arch-dtt-evidence}
+
+**On the AirfRANS interior task ISLA-DTT is more accurate than interacting
+ISLA on pressure and velocity, at a higher cost per step; that is one
+dataset, and it does not settle which of the two forms is the reference.**
+One pre-registered comparison trained four interior designs alike on the
+AirfRANS uniform interior task: interacting ISLA; *passive* prediction
+points, read-only points without the boundary read, so that the boundary
+tokens are the only writers into the slices; ISLA-DTT, the passive points
+with the boundary read; and *ANCHOR*, passive points with 50,000 further
+interior points, placed by a law derived from the boundary alone, that
+write into the slices in the prediction points' place. The last three are
+query-independent. @tbl-arch-dtt-evidence gives each against interacting
+ISLA.
+
+```{python}
+#| label: tbl-arch-dtt-evidence
+#| output: asis
+ANC = RES / "campaigns_2026-10-18" / "anchor" / "readout"
+SC = json.load(open(ANC / "scores.json"))
+COST = json.load(open(ANC / "cost_partial.json"))
+ARMS = (("isla", "interacting ISLA (control)"), ("passive", "passive prediction points"), ("dtt", "ISLA-DTT"), ("anchor", "ANCHOR"))
+FLD = (("pressure_l2", "p"), ("velocity_l2", "v"), ("nut_l2", "nut"))
+err = lambda a, s, prot, f: SC[f"anc_{a}_seed{s}/{prot}"][f]
+sm = lambda a, prot, f: np.mean([err(a, s, prot, f) for s in (42, 43)])
+step = lambda a: np.mean([COST[f"anc_{a}_seed{s}"]["epoch250_median_s"] for s in (42, 43)])
+peak = lambda a: np.mean([COST[f"anc_{a}_seed{s}"]["peak_mem_gb"] for s in (42, 43)])
+posed_dev = lambda a: max(abs(err(a, s, "posed", f) / err(a, s, "native", f) - 1) for s in (42, 43) for f, _ in FLD)
+DA = {}
+out = ("| design | p / v / nut | ÷ interacting ISLA | both seeds below one | posed ÷ native, largest change | step at mid-run ÷ ISLA | peak memory [GB] |\n"
+       "|---|---|---|---|--:|--:|--:|\n")
+for a, lab in ARMS:
+    vals = [sm(a, "native", f) for f, _ in FLD]
+    rat = [sm(a, "native", f) / sm("isla", "native", f) for f, _ in FLD]
+    below = [n for f, n in FLD if all(err(a, s, "native", f) < err("isla", s, "native", f) for s in (42, 43))]
+    DA[a] = dict(rat=rat, below=below, dev=posed_dev(a), step=step(a) / step("isla"), peak=peak(a))
+    out += (f"| {lab} | {' / '.join(f'{x:.5f}' for x in vals)} | {'–' if a == 'isla' else ' / '.join(f'{x:.3f}' for x in rat)} | "
+            f"{'–' if a == 'isla' else (', '.join(below) or 'none')} | {100 * DA[a]['dev']:.2f}% | {DA[a]['step']:.2f} | {DA[a]['peak']:.1f} |\n")
+print(out)
+print(": Interior designs against interacting ISLA on the AirfRANS uniform interior task: area-weighted relative L2 of "
+      "pressure / velocity / eddy viscosity (p / v / nut), seed means of two seeds (42, 43), native meshes, float32, final "
+      "checkpoints, 200 test cases, 100,000 prediction points per case. Instrument: ISLA at the reference configuration "
+      "with the normalized slice reads, 500 epochs, every design trained alike; checkpoints of the nearest-token form "
+      "(@sec-checkpoint-form). \"Both seeds below one\" lists the fields on which each seed of the design is below the same "
+      "seed of interacting ISLA; the posed column is the largest change of a seed's error under the rotated and translated "
+      "scoring, over fields and seeds; step time is the median at epoch 250 on one GB300, and peak memory as the training "
+      "log reports it (rank 0). Results: results/campaigns_2026-10-18/anchor/readout/scores.json and cost_partial.json; "
+      "the registered rule and its outcome: results/campaigns_2026-10-18/anchor/RESULTS.md. How to read this: a ratio "
+      "compares a design with interacting ISLA, below one meaning the design is more accurate; it is not a baseline "
+      "comparison.")
+```
+
+```{python}
+#| label: para-arch-dtt-evidence
+#| output: asis
+d, b, c = DA["dtt"], DA["passive"], DA["anchor"]
+print(f"ISLA-DTT's errors are {d['rat'][0]:.3f} / {d['rat'][1]:.3f} / {d['rat'][2]:.3f} times interacting ISLA's on pressure / "
+      f"velocity / eddy viscosity, with both seeds below on {' and '.join({'p': 'pressure', 'v': 'velocity', 'nut': 'eddy viscosity'}[x] for x in d['below'])}, "
+      f"at {d['step']:.2f} times its step time at mid-run and a peak of {d['peak']:.1f} against {DA['isla']['peak']:.1f} GB. The "
+      f"passive points, which have no boundary read, are at {b['rat'][0]:.3f} on pressure and {b['rat'][1]:.3f} on velocity: "
+      f"the boundary read is what puts ISLA-DTT ahead on velocity. Interacting ISLA, the passive points and ISLA-DTT keep "
+      f"posed equal to native within {100 * max(DA[a]['dev'] for a in ('isla', 'passive', 'dtt')):.2f}%. ANCHOR does not "
+      f"replace interacting ISLA under its registered rule ({c['rat'][0]:.3f} / {c['rat'][1]:.3f} / {c['rat'][2]:.3f}), and it "
+      f"is not pose-exact (a change of up to {100 * c['dev']:.0f}% under the posed scoring). This is AirfRANS evidence on "
+      "checkpoints of the nearest-token form, and it does not decide between ISLA and ISLA-DTT as the reference choice.")
+```
 
 ## What the pass never does {#sec-arch-never}
 
@@ -1130,10 +1683,11 @@ read off the stages directly.**
   ISLA-DTT's forest is built in a canonical frame of the boundary
   (@sec-arch-tree-read), which decides only which cells are grouped for
   speed, not what a learned map reads. $r_i$ enters only as $r_i - z_s$ (step d), $r_i - \sum_s \pi^f_{is} z^f_s$
-  (stage 4), $x_q - x_{i^*}$ (the wall geometry) and $r_q - r_j$ (the
-  boundary read). Every learned input is a norm, a dot product, a log of one
-  of those, or a supplied scalar. The one mean position computed, inside
-  $L$, is consumed by a scalar. Anchors are means over *slices*, not over
+  (stage 4), $x_q - p_q$ (the prediction points' geometry) and $r_q - r_j$
+  (the boundary read). Every learned input is the constant 1, a norm, a dot
+  product, a logarithm or soft logarithm of one of those, or a supplied
+  scalar; no input names a token's condition. The one mean position
+  computed, inside $L$, is consumed by a scalar. Anchors are means over *slices*, not over
   the body, and only their differences from tokens are used.
 - **No positional encoding, and no prediction point attends to another.**
   Tokens exchange information through the $M$ slice states, and the routing
@@ -1192,8 +1746,9 @@ print(f"The unit roundoff of bfloat16 is {e16 / 2:.1e} against float32's {e32 / 
       "adequate for a learned map and too coarse for geometry: a separation $r_i - z_s$ of two nearby positions "
       "loses most of its digits. ISLA therefore keeps its geometry in float32 under autocast. Every contraction of "
       "geometric vectors is a broadcast multiply-and-sum rather than an `einsum` (which autocast would run in bfloat16; "
-      "`ISLA._dots`, `_relational_invariants`), the wall-geometry search runs with autocast disabled, and the softmax of "
-      "the prototype attention is taken in float32. The learned maps run in bfloat16.")
+      "`ISLA._dots`, `_relational_invariants`), the prediction points' geometry, the boundary draw and the conditions' "
+      "vector and tensor maps run with autocast disabled, and the softmax of the prototype attention is taken in float32. "
+      "The learned maps run in bfloat16.")
 ```
 
 **ISLA's case: the $N \times M$ tensors.** Steps b to h of every slice
@@ -1393,16 +1948,21 @@ that a flattened token axis divides by the token count (`_hint_token_axis`).
 ISLA-DTT is the exception. Its forest and each point's list of sources are
 sized by the data, which breaks a fullgraph trace, so it compiles each slice
 block separately instead (`compile_blocks=True`, @sec-arch-switches). So
-does ISLA on AeroZoo: with four boundary meshes whose capped cell counts are
-often equal, the compiler's guards tie their sizes and the whole-model graph
-recompiles case after case, so `isla_volume_aerozoo.yaml` compiles per
-block.
+does ISLA on AeroZoo: on its four boundary meshes the compiler ties the
+sizes of meshes whose cell counts are equal in the first case and guards
+the input meshes' caches by their size, so the whole-model graph recompiles
+case after case, and `isla_volume_aerozoo.yaml` compiles per block.
 
 **Where a training step's time goes.** @fig-arch-step-breakdown takes one
 warm training step of ISLA and of ISLA-DTT apart on AeroZoo, on one node of
 four GB300 GPUs under data parallelism (each GPU trains on its own case and
 the gradients are averaged across them, an *all-reduce*, during the reverse
-pass).
+pass). The profile is of the code of the nearest-token form
+(@sec-checkpoint-form): the datapipe drew the boundary tokens, and the
+prediction points' geometry came from a search for the nearest boundary
+token. It does not time the in-model draw or the exact surface search of
+@sec-arch-interior-geometry, and the book gives no measurement of those
+two stages' cost.
 
 ```{python}
 #| label: fig-arch-step-breakdown
@@ -1419,7 +1979,9 @@ pass).
 #|   gradient all-reduce, which is time the GPUs spend waiting for the
 #|   slowest of them; the data phase is the main thread preparing the next
 #|   case, measured with that preparation at the start of the step, where
-#|   the recipe runs it during the reverse pass (see the text). Data:
+#|   the recipe runs it during the reverse pass (see the text). The
+#|   module "nearest-token geometry" is the nearest-token form's search
+#|   (@sec-checkpoint-form), not the exact geometry. Data:
 #|   results/perf_2026-10-18/step_breakdown.json.
 #| code-fold: true
 PB = json.load(open(RES / "perf_2026-10-18" / "step_breakdown.json"))
@@ -1453,7 +2015,7 @@ ax.legend(handles=[plt.Rectangle((0, 0), 1, 1, color=c) for _, _, c in PH], labe
 for sp in ("top", "right"): ax.spines[sp].set_visible(False)
 ax.grid(axis="y", visible=False)
 ax = axes[1]
-MODS = [("slice blocks", lambda m: m["blocks"], VIOLET), ("nearest-boundary geometry", lambda m: m["nearest_boundary_geometry"], AQUA),
+MODS = [("slice blocks", lambda m: m["blocks"], VIOLET), ("nearest-token geometry", lambda m: m["nearest_boundary_geometry"], AQUA),
         ("tree: forest build", lambda m: m.get("tree_forest_build", 0), "#5f5e58"),
         ("tree: walk, plan and basis", lambda m: m.get("tree_walk", 0) + m.get("tree_pair_plan", 0) + m.get("tree_basis", 0), MUTED),
         ("tree reads", lambda m: m.get("tree_reads", 0), BASELINE)]
@@ -1492,11 +2054,12 @@ print(f"**The step is bound by the GPU, and what is left is waiting.** ISLA's wa
       f"the GPUs running kernels for about {100 * gb('isla'):.0f}% of it; its forward and reverse passes issue their kernels faster "
       f"than the GPU runs them ({HT['isla']['fwd_host']:.0f} ms of host time against {GK['isla']['fwd']:.0f} ms of kernels in the "
       f"forward, {HT['isla']['bwd_host']:.0f} against {GK['isla']['bwd']:.0f} in the reverse pass). In the forward, the twelve slice "
-      f"blocks take {FMi['blocks']:.0f} of {FMi['total']:.0f} ms and the nearest-boundary search of the prediction points "
+      f"blocks take {FMi['blocks']:.0f} of {FMi['total']:.0f} ms and that form's nearest-token search of the prediction points "
       f"{FMi['nearest_boundary_geometry']:.0f}. The optimizer is a small share: Muon stacks the matrices of equal shape and orthogonalizes "
       f"them in one batched Newton–Schulz iteration, {HT['isla']['opt_host']:.0f} ms of host time per step. Two costs are real. The "
-      f"first is rank imbalance: the four GPUs draw different numbers of boundary tokens ({bc['mean']:,} on average, {bc['max']:,} on "
-      f"the fullest), the forward of the slowest rank runs {ri['isla_fwd_max_minus_mean_ms'][0]} to {ri['isla_fwd_max_minus_mean_ms'][1]} ms "
+      f"first is rank imbalance: the datapipe of that form gave the four GPUs different numbers of boundary tokens ({bc['mean']:,} on "
+      f"average, {bc['max']:,} on the fullest; the in-model draw keeps exactly $\\min(\\text{{cells}}, B)$, which this profile does "
+      f"not measure), the forward of the slowest rank runs {ri['isla_fwd_max_minus_mean_ms'][0]} to {ri['isla_fwd_max_minus_mean_ms'][1]} ms "
       f"longer than the mean, and with the reverse pass the others wait {ri['isla_step_cost_ms'][0]} to {ri['isla_step_cost_ms'][1]} ms "
       f"per step ({100 * ri['isla_step_cost_fraction'][0]:.0f} to {100 * ri['isla_step_cost_fraction'][1]:.0f}%). The all-reduce kernels "
       f"take {dd['isla_bwd_nccl_kernel_ms'][0]} to {dd['isla_bwd_nccl_kernel_ms'][1]} ms of the reverse pass while moving the gradients "
@@ -1521,8 +2084,6 @@ print(f"**ISLA-DTT's forward waits on the host.** Its step takes {HT['isla_dtt']
       "Data: results/perf_2026-10-18/step_breakdown.json.")
 ```
 
-<!-- SLOT: single-input exact-geometry design: its step from results/perf_2026-10-18/step_breakdown.json "single_input_isla" -->
-
 **How the step scales with the case.** On one GPU, from 100,000 tokens per case up, ISLA's memory grows linearly in
 the number of tokens, as slice attention's $\mathcal{O}(NM)$ cost predicts, and so does its step time on the surface
 task; on the volume task its step grows faster. @fig-cost-sweep measures both for every reference configuration, and
@@ -1530,10 +2091,11 @@ task; on the volume task its step grows faster. @fig-cost-sweep measures both fo
 
 ## The switches {#sec-arch-switches}
 
-**The class has one frame, one routing form, one length unit and one wall
-geometry, and a short list of keyword-only arguments: the four field
-declarations, the task, the role of the prediction points, the three
-sizes, one compile knob and the spatial dimension.** @tbl-arch-switches
+**The class has one frame, one routing form, one length unit, one boundary
+draw and one prediction-point geometry, and a short list of keyword-only
+arguments: the three field declarations, the task, the role of the
+prediction points, the boundary-token budget, the three sizes, one compile
+knob and the spatial dimension.** @tbl-arch-switches
 reads each default from the constructor's signature; the behavior that is
 not an argument is described in the stages above.
 
@@ -1542,11 +2104,11 @@ not an argument is described in the stages above.
 #| output: asis
 WHAT = {
     "output_schema": ("5", "the output fields by name and rank spec (`{pressure: {rank: 0}, wss: {rank: 1}, stress: {rank: 2, symmetric: true}}`; `parity: odd` for a pseudotensor); each costs the coefficients of @tbl-arch-coeffs and is returned as a leaf of the output Mesh's `point_data` under its name. A dotted name (`surface.pressure`) is a nested leaf, in the output and in every input mapping"),
-    "boundary_schemas": ("2, 3d", "per-cell fields of rank 0 to 2, read from every boundary mesh's `cell_data`: their invariants join the seed (prediction-point tokens carry zeros), and rank-1 and rank-2 fields add their contractions with $\\hat\\rho_{is}$ to the relational invariants"),
+    "boundary_schemas": ("1, 2, 3d", "the boundary conditions by name, each with the per-cell fields of rank 0 to 2 it alone carries (`{}` for a condition without fields), stored sorted; `forward` takes any non-empty subset of the names, each condition's fields read from its own mesh's `cell_data`. Each condition has its own input layer (its column on the constant its learned offset) and its own vector and tensor maps onto the shared channels, whose contractions with $\\hat\\rho_{is}$ join the relational invariants (@sec-arch-frame, @sec-arch-seed)"),
     "global_schema": ("1, 2, 3d, 5", "per-case fields of rank 0 or 1, read from `global_data` by name: each rank-1 field is a global direction $\\hat g_k$ (one seed cosine, one relational cosine, two basis vectors); each rank-0 field widens the seed"),
-    "interior": ("modes", "the task: `False` predicts at the boundary cells and takes no prediction points; `True` predicts at the prediction points, which join the slice layers as tokens with the built-in wall geometry (@sec-arch-modes)"),
-    "query_independent": ("modes, after each layer", "interior task only: `True` is ISLA-DTT, with read-only prediction points (no routing mass) that read the boundary cells through the forest at $\\theta = 1$ after every slice layer (@sec-arch-passive-decoder); rank-2 per-token inputs are refused with it"),
-    "boundary_tokens": ("modes", "interior task only: the number of boundary tokens per case, drawn inside the model from the full-resolution boundary (the budget water-filled over the conditions, each cell drawn with probability proportional to its measure, each kept cell carrying its Horvitz-Thompson measure); a surface task takes the default"),
+    "interior": ("modes", "the task: `False` predicts at every boundary cell it is given and takes no prediction points; `True` draws its boundary tokens inside the model and predicts at the prediction points, which join the slice layers as tokens with their exact geometry against the full-resolution surface (@sec-arch-modes); implemented in two and three dimensions"),
+    "query_independent": ("modes, after each layer", "interior task only: `True` is ISLA-DTT, with read-only prediction points (no routing mass) that read the boundary cells through the forest at $\\theta = 1$ after every slice layer (@sec-arch-passive-decoder); rank-2 boundary fields are refused with it"),
+    "boundary_tokens": ("1, modes", "interior task only: the number of boundary tokens per case, drawn inside the model from the full-resolution boundary (the budget water-filled over the conditions, each cell drawn with probability proportional to its measure by a systematic draw along the Morton order, each kept cell carrying its Horvitz–Thompson measure; a random start in training, $u = 1/2$ in evaluation; @sec-arch-boundary-draw); a surface task reads every cell and accepts only the default"),
     "hidden": ("all", "the width $D$"),
     "n_layers": ("3", "the number of slice layers"),
     "n_slices": ("3, 4", "the slice count $M$ of every layer and of the head frame"),
@@ -1564,11 +2126,11 @@ assert set(WHAT) == set(sig) - {"self"}
 import physicsnemo.experimental.models.isla.geo_kernel as GK
 out += (f"| `geo_kernel` attribute (`{REF.geo_kernel!r}`) | 3 | not an argument and not stored in a checkpoint: how the geometry region "
         f"runs, never what it computes. `\"auto\"` resolves at the first forward pass to the fused kernel when the inputs are on "
-        f"CUDA, Triton is importable, `dim == 3`, there is at least one global direction, the global directions and rank-1 "
-        f"per-token vectors number at most {GK.MAX_DIRECTIONS}, there are at most {GK.MAX_SLICES:,} slices and no rank-2 "
-        f"per-token input, and to the eager region otherwise (`resolve_geo_kernel`); set `\"eager\"` or `\"fused\"` to force one |\n")
+        f"CUDA, Triton is importable, `dim == 3`, there is at least one global direction, the global directions and the shared "
+        f"vector channels number at most {GK.MAX_DIRECTIONS} together, there are at most {GK.MAX_SLICES:,} slices and no shared "
+        f"tensor channel, and to the eager region otherwise (`resolve_geo_kernel`); set `\"eager\"` or `\"fused\"` to force one |\n")
 print(out)
 print(": The constructor's keyword-only arguments, each default read from `inspect.signature(ISLA.__init__)` as the page "
       "renders, and the one execution attribute. How to read this: `hidden`, `n_layers` and `n_slices` default to the reference "
-      "configuration; every other default is the surface task with no declared inputs.")
+      "configuration; `boundary_schemas` has no default, and every other default is the surface task with no global inputs.")
 ```

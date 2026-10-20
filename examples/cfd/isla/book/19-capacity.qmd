@@ -398,8 +398,9 @@ print(out)
 print(": What the three reference configurations spend, per dataset and task: trainable parameters, the training allocator peak per GPU (the "
       "maximum over four GB300 ranks, bfloat16, one case per GPU), the wall time of one training epoch, and the GPU-hours of one training run "
       "(epoch time × epochs × four GPUs; 500 epochs, 40 on DeepJEB++), beside the seed-mean error of the dataset's first headline field from its "
-      "standing and the ratio baseline ÷ ISLA. The one-epoch cost runs used the raw slice reads, which have the same parameters and the "
-      "same tensors as the normalized reads, so the counts are exact and the costs representative. The AirfRANS baselines and the lug's "
+      f"standing and the ratio baseline ÷ ISLA, ISLA checkpoints of the {S.FORM_TAG} (@sec-checkpoint-form). The one-epoch cost runs used "
+      "the raw slice reads, which have the same parameters and the "
+      "same tensors as the normalized reads, so the counts are exact for the standing's checkpoints and the costs representative. The AirfRANS baselines and the lug's "
       "GeoTransolver were costed with the inputs of their earlier runs; their standing checkpoints' parameter counts agree with the "
       "table's to the printed precision. How to read this: the cost columns come "
       "from one-epoch runs of each configuration and the error "
@@ -894,7 +895,10 @@ print("**From 100,000 tokens per case up, the memory of a training step grows li
 #|   the last marker ran out of the GPU's memory. How to read this:
 #|   all axes are logarithmic and the lines join measurements, not fits; a slope of one decade
 #|   per decade is linear cost. The panel ranks per-step cost on one GPU; it does not give the
-#|   wall-clock time of a training run, which @tbl-ref-cost gives. Data:
+#|   wall-clock time of a training run, which @tbl-ref-cost gives. ISLA's
+#|   steps are of the nearest-token form (@sec-checkpoint-form); the class's
+#|   boundary draw inside the model and its exact wall geometry are not timed
+#|   here. Data:
 #|   results/renderings_2026-10-18/cost_sweep_ref_a2_gb300_bf16.json.
 #| fig-alt: "Two stacked log-log panels against tokens per case from 25,000 to 800,000: step time and peak memory of ISLA, GeoTransolver and Transolver on the surface task and of ISLA and ISLA-DTT on the volume task; memory rises linearly, and step time rises linearly on the surface task and faster than linearly for ISLA on the volume task."
 fig, (ax0, ax1) = plt.subplots(2, 1, figsize=(8.0, 7.0), sharex=True, gridspec_kw=dict(hspace=0.08))
@@ -949,7 +953,7 @@ print(f"Three readings follow. At {i25['tokens']:,} tokens ISLA's step ({i25['st
       f"{fg['km']:.0f} GiB per 100,000 tokens, against ISLA's {fi['kt']:.0f} ms and {fi['km']:.0f} GiB and Transolver's {ft['kt']:.0f} ms and "
       f"{ft['km']:.0f} GiB), with {RS['isla_surface_512x12']['n_params'] / RS['geotransolver_surface_256']['n_params']:.1f} times fewer parameters than ISLA, "
       f"and it is the only one that still trains a case of {max(r['tokens'] for r in ok('geotransolver_surface_256')):,} tokens on one GPU. At 200,000 tokens the surface steps take {i2['step_ms_median']:.0f}, {g2['step_ms_median']:.0f} and "
-      f"{t2['step_ms_median']:.0f} ms. On the Volume task the prediction points double the token count and add the nearest-token geometry: "
+      f"{t2['step_ms_median']:.0f} ms. On the Volume task the prediction points double the token count and add their wall geometry, here that of the nearest-token form: "
       f"ISLA's step at 200,000 boundary cells and 200,000 prediction points is {v2['step_ms_median']:.0f} ms at {v2['peak_allocated_gib']:.0f} GiB, "
       f"and ISLA-DTT's {d2['step_ms_median']:,.0f} ms at {d2['peak_allocated_gib']:.0f} GiB, {d2['step_ms_median'] / v2['step_ms_median']:.1f} times "
       "ISLA's: its Barnes–Hut forest is built from each case on the host and it is compiled per block rather than whole (@sec-arch-cost), "

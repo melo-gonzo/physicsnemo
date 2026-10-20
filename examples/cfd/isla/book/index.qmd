@@ -77,11 +77,13 @@ print(
     f"On the {len(SOLID)} solid-mechanics tasks the baselines' grow {base_posed_solid[0]:.1f}-fold to {base_posed_solid[1]:.0f}-fold; "
     f"ISLA's is unchanged on DeepJEB++ and moves up to {tie_shift['tensile2d']:.2f}-fold on Tensile2d and {tie_shift['lug']:.1f}-fold "
     "on the lug, where a mesh node is equally near two boundary samples and float32 rounding under the motion decides which one "
-    "it reads (@sec-invariances). "
+    "the standing's checkpoints read (@sec-invariances). "
     f"Redraw the surface as a uniform point cloud, and on the {len(SURF)} surface tasks every baseline error grows at least "
     f"{base_area:.1f}-fold while ISLA's stays within {100 * isla_area:.1f}%; on the DrivAerML Volume task the same redraw moves "
-    f"ISLA's own error {min(vol_area):.1f}-fold to {max(vol_area):.1f}-fold, because each interior point's wall distance is "
-    "computed from the boundary samples (@sec-nearest-token). "
+    f"ISLA's own error {min(vol_area):.1f}-fold to {max(vol_area):.1f}-fold, because those checkpoints compute each interior point's "
+    "wall distance from the boundary samples. They are of the nearest-token form, which differs from ISLA as Part II defines it in how "
+    "the boundary and the prediction points enter the model; the class computes the wall distance from the full-resolution surface "
+    "(@sec-checkpoint-form). "
     "Where ISLA trails, and where its own error moves, the book shows the mechanism."
 )
 ```
@@ -139,7 +141,8 @@ plt.show()
 #|   its reference configuration; a row marked ‡ has its baselines drawn
 #|   hollow and is not compared, because in that record they read the
 #|   freestream as a raw physical vector rather than a unit direction
-#|   (@sec-hilift). Data: results/char/; every number is in
+#|   (@sec-hilift). ISLA checkpoints of the nearest-token form
+#|   (@sec-checkpoint-form). Data: results/char/; every number is in
 #|   @tbl-thesis.
 #| fig-height: 6.6
 #| code-fold: true
