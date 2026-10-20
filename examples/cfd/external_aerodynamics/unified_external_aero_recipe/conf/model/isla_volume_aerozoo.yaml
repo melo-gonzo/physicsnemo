@@ -92,14 +92,16 @@ model:
   _target_: physicsnemo.experimental.models.isla.ISLA
   # The dataset's targets, by name and tensor rank, with their SI units and `scale`, the typical size (RMS) of the
   # target made dimensionless by ISLA's scales, so the head's prediction is of order one: y = scale * yhat * U^a L^b rho^c.
-  # PLACEHOLDER, refit in round 2 (on each split's train part, with the reynolds refit): pooled RMS over 48 full.train
-  # cases, 20,000 interior points each (kernel/isla_scales/scanc-294666 on LHR).
+  # PLACEHOLDER, refit in round 2 (on each split's train part, with the reynolds refit): the median over 48 full.train
+  # cases of each case's RMS, 20,000 interior points each (kernel/isla_scales/scanc-294666 on LHR; the pooled RMS,
+  # 0.77 / 1.6 / 1.5e-3 / 0.046 / 4.1e3, is set by the few largest cases and started the per-case relative loss
+  # above the zero predictor's in the GB300 smoke, 294924 against 295057).
   output_schema:
-    velocity: {rank: 1, units: {U: 1}, scale: 0.77}                 # m/s
-    pressure: {rank: 0, units: {U: 2, rho: 1}, scale: 1.6}          # gauge pressure, Pa
-    nut: {rank: 0, units: {U: 1, L: 1}, scale: 1.5e-3}              # m^2/s
-    tke: {rank: 0, units: {U: 2}, scale: 0.046}                     # m^2/s^2
-    omega: {rank: 0, units: {U: 1, L: -1}, scale: 4.1e3}            # 1/s
+    velocity: {rank: 1, units: {U: 1}, scale: 0.58}                 # m/s
+    pressure: {rank: 0, units: {U: 2, rho: 1}, scale: 0.107}        # gauge pressure, Pa
+    nut: {rank: 0, units: {U: 1, L: 1}, scale: 5.1e-4}              # m^2/s
+    tke: {rank: 0, units: {U: 2}, scale: 0.010}                     # m^2/s^2
+    omega: {rank: 0, units: {U: 1, L: -1}, scale: 487}              # 1/s
   boundary_schemas:              # the boundary conditions by name, each with the fields it prescribes (SI units)
     inlet:                       # Dirichlet: prescribed.dirichlet.{velocity, turbulence}
       bc_velocity: {rank: 1, units: {U: 1}, velocity_scale: true}   # the source of U and g
