@@ -174,9 +174,13 @@ def test_the_length_unit_is_the_full_boundary_s_for_every_draw():
     """An interior model without declared scales takes its length unit from every
     cell of the full-resolution boundary before the draw: two training draws of 60
     of 300 cells (different starts, different tokens) read the same unit, the
-    measure-weighted RMS pairwise distance of all the cells."""
+    measure-weighted RMS pairwise distance of all the cells, each with its own second
+    moment."""
     from physicsnemo.experimental.models import ISLA
-    from physicsnemo.experimental.models.isla.geometry import rms_pairwise_distance
+    from physicsnemo.experimental.models.isla.geometry import (
+        cell_second_moments,
+        rms_pairwise_distance,
+    )
     from test.experimental.models.isla._meshes import cloud, soup
 
     torch.manual_seed(0)
@@ -206,6 +210,8 @@ def test_the_length_unit_is_the_full_boundary_s_for_every_draw():
     full = rms_pairwise_distance(
         torch.cat([meshes[k].cell_centroids for k in "ab"])[None],
         torch.cat([meshes[k].cell_data["_effective_measure"] for k in "ab"])[None],
+        1e-12,
+        torch.cat([cell_second_moments(meshes[k]) for k in "ab"])[None],
     )
     (g0, p0), (g1, p1) = seen
     assert p0.shape[1] == 60 and not torch.equal(p0, p1)  # two different draws

@@ -45,6 +45,7 @@ import torch
 
 from physicsnemo.core.module import Module
 from physicsnemo.experimental.models import ISLA
+from physicsnemo.experimental.models.isla.geometry import cell_second_moments
 from physicsnemo.mesh.calculus.measure import cell_measures
 from test.experimental.models.isla._meshes import outputs, soup
 
@@ -197,7 +198,7 @@ def test_isla_forward_non_regression(device, config):
 def test_mesh_wrapper_is_exact_over_the_batched_routine(device, config):
     """The Mesh API is a wrapper: the same parameters run through ``forward`` on the
     meshes and through the internal batched routine on the very tensors the wrapper
-    reads (cell centroids, cell normals, effective cell measures, the cells as the
+    reads (cell centroids, cell normals, effective cell measures and second moments, the cells as the
     surface of the interior geometry, a batch axis of one) give bitwise-identical
     outputs."""
     model = _instantiate_model(**CONFIGS[config]).to(device)
@@ -214,6 +215,7 @@ def test_mesh_wrapper_is_exact_over_the_batched_routine(device, config):
             query_points=None if q is None else q[None],
             surface_points=mesh.points[None],
             surface_cells=mesh.cells[None],
+            cell_second_moments=cell_second_moments(mesh)[None],
         )
     expected_points = mesh.cell_centroids if q is None else q
     assert torch.equal(via_mesh.points, expected_points) and via_mesh.n_cells == 0

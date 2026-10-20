@@ -34,9 +34,12 @@ import torch
 
 from physicsnemo.datapipes.transforms.mesh import NormalizeMeshFields
 from physicsnemo.experimental.models import ISLA
-from physicsnemo.experimental.models.isla.geometry import rms_pairwise_distance
+from physicsnemo.experimental.models.isla.geometry import (
+    cell_second_moments,
+    rms_pairwise_distance,
+)
 from physicsnemo.mesh import Mesh
-from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY, cell_measures
+from physicsnemo.mesh.calculus.measure import cell_measures
 from test.experimental.models.isla._meshes import (
     cloud,
     law,
@@ -241,34 +244,33 @@ def test_the_source_s_condition_can_have_any_name():
         torch.testing.assert_close(out_b[name], out_a[name], atol=1e-10, rtol=1e-10)
 
 
-def _split(mesh: Mesh) -> Mesh:
-    """Every cell as two coincident half-measure copies carrying its fields."""
-    data = mesh.cell_data.apply(
-        lambda t: t.repeat_interleave(2, 0), batch_size=[2 * mesh.n_cells]
-    )
-    data[EFFECTIVE_MEASURE_KEY] = (
-        mesh.cell_data[EFFECTIVE_MEASURE_KEY].repeat_interleave(2) / 2
-    )
-    return Mesh(
-        points=mesh.points, cells=mesh.cells.repeat_interleave(2, 0), cell_data=data
+def _full_length(meshes) -> torch.Tensor:
+    """The exact RMS pairwise distance of the meshes' piecewise-flat cells."""
+    names = sorted(meshes)
+    return rms_pairwise_distance(
+        torch.cat([meshes[k].cell_centroids for k in names])[None],
+        torch.cat([cell_measures(meshes[k]) for k in names])[None],
+        1e-12,
+        torch.cat([cell_second_moments(meshes[k]) for k in names])[None],
     )
 
 
 def test_scales_are_independent_of_the_draw_and_of_refinement():
     """U, g, z and L are computed on the full-resolution boundary before the token
     draw: two training draws (different starts) of 60 of the 190 cells, and a
-    refinement of the source condition, give the same scales; L is the full mesh's."""
+    subdivision of the source condition's cells (each triangle into four, its data
+    carried), give the same scales; L is the full mesh's exact one."""
     m = _model(boundary_tokens=60).train()
     seen = _spy(m)
     meshes, gd, q = _case()
     for seed in (0, 1):
         torch.manual_seed(seed)
         _run(m, meshes, gd, q)
-    _run(m, {**meshes, "inlet": _split(meshes["inlet"])}, gd, q)
-    centroids = torch.cat([meshes[k].cell_centroids for k in sorted(meshes)])
-    full = rms_pairwise_distance(
-        centroids[None],
-        torch.cat([cell_measures(meshes[k]) for k in sorted(meshes)])[None],
+    _run(
+        m,
+        {**meshes, "inlet": meshes["inlet"].subdivide(levels=1, filter="linear")},
+        gd,
+        q,
     )
     for later in seen["scales"][1:]:
         for key in ("L", "U", "g", "z"):
@@ -276,10 +278,64 @@ def test_scales_are_independent_of_the_draw_and_of_refinement():
                 later[key], seen["scales"][0][key], atol=1e-13, rtol=1e-13
             )
     for gauge in seen["gauge"]:
-        torch.testing.assert_close(gauge, full, atol=0, rtol=1e-13)
+        torch.testing.assert_close(gauge, _full_length(meshes), atol=0, rtol=1e-13)
     assert seen["h"][0].shape[1] == 25 and not torch.equal(
         seen["h"][0], seen["h"][1]
     )  # the draws differ
+
+
+@pytest.mark.parametrize("dim", [2, 3])
+def test_the_length_unit_is_exact_under_subdivision(dim):
+    """L is the RMS distance between two points of the piecewise-flat boundary, each
+    cell with its own second moment: subdividing every cell (segments in two in two
+    dimensions, triangles in four in three) at three levels leaves it unchanged to
+    roundoff, where the centroids alone converge only as h^2 (a 4 % change here)."""
+    from test.experimental.models.isla.test_isla_interior_geometry import (
+        _polygon,
+        _sphere,
+    )
+
+    if dim == 2:
+        t = torch.linspace(0, 2 * math.pi, 13, dtype=D)[:-1]
+        mesh = _polygon(torch.stack([2.0 * t.cos(), 0.7 * t.sin()], -1))
+    else:
+        mesh = _sphere(1)
+        mesh = Mesh(
+            points=mesh.points * torch.tensor([2.0, 1.0, 0.5], dtype=D),
+            cells=mesh.cells,
+        )
+    torch.manual_seed(0)
+    m = (
+        ISLA(
+            output_schema={"p": {"rank": 0}},
+            boundary_schemas={"wall": {}},
+            interior=True,
+            dim=dim,
+            hidden=16,
+            n_layers=1,
+            n_slices=4,
+        )
+        .double()
+        .eval()
+    )
+    seen = []
+    inner = m._forward_tokens
+    m._forward_tokens = lambda *a, **k: seen.append(k["gauge"]) or inner(*a, **k)
+    q = torch.zeros(3, dim, dtype=D)
+    lengths, centroid_only = [], []
+    for _ in range(4):
+        with torch.no_grad():
+            m(boundary_meshes={"wall": mesh}, prediction_points=q)
+        lengths.append(seen[-1].reshape(()))
+        centroid_only.append(
+            rms_pairwise_distance(
+                mesh.cell_centroids[None], cell_measures(mesh)[None]
+            ).reshape(())
+        )
+        mesh = mesh.subdivide(levels=1, filter="linear")
+    for L in lengths[1:]:
+        torch.testing.assert_close(L, lengths[0], atol=0, rtol=1e-12)
+    assert abs(float(centroid_only[0] / lengths[0]) - 1) > 1e-3
 
 
 @pytest.mark.parametrize("config", ["default", "interior", "dtt"])
@@ -332,7 +388,10 @@ def test_the_scales_take_their_hand_values():
     pts = torch.cat([meshes[k].cell_centroids for k in "ab"])
     w = torch.cat(a) / sum_a
     centre = (w[:, None] * pts).sum(0)
-    L = (2 * (w * (pts - centre).square().sum(-1)).sum()).sqrt()
+    J = torch.cat(
+        [cell_second_moments(meshes[k]) for k in "ab"]
+    )  # each triangle's own second moment
+    L = (2 * (w * ((pts - centre).square().sum(-1) + J)).sum()).sqrt()
     torch.testing.assert_close(sc["L"], L, atol=0, rtol=1e-13)
     torch.testing.assert_close(sc["U"], U, atol=0, rtol=1e-13)
     torch.testing.assert_close(sc["g"][0, 0], m1 / m1.norm(), atol=1e-14, rtol=0)
@@ -447,9 +506,20 @@ def test_an_absent_or_zero_source_and_bad_declarations_are_refused():
         ),
         (dict(outputs_={"p": {"rank": 0, "scale": 0.0}}), "positive finite"),
         (
-            dict(schemas={**SCHEMAS, "wall": {"k": {"rank": 0, "scale": 2.0}}}),
-            "declared on an output",
+            dict(
+                globals_={
+                    **GLOBALS,
+                    "physics.density": {"rank": 0, "role": "density", "scale": 2.0},
+                }
+            ),
+            "takes no scale",
         ),
+        (
+            dict(globals_={**GLOBALS, "d": {"rank": 1, "units": {"L": 1}}}),
+            "direction only",
+        ),
+        (dict(reynolds={"mean": float("nan"), "std": 1.0}), "finite numbers"),
+        (dict(reynolds={"mean": 5.0, "std": float("inf")}), "finite numbers"),
     ]
     for kw, match in bad:
         with pytest.raises((ValueError, TypeError), match=match):
@@ -582,4 +652,42 @@ def test_an_output_s_scale_multiplies_the_head_s_prediction():
         "rank": 0,
         "units": {"U": 1, "L": 1},
         "scale": 1e-4,
+    }
+
+
+def test_an_input_s_scale_divides_it_after_its_units():
+    """``scale: c`` on an input is the typical size of its dimensionless value: the
+    model reads x / (c prod scale^exp), the same as the unscaled declaration given
+    x / c, for a boundary scalar, a boundary vector and a rank-0 global."""
+    scaled = {
+        **SCHEMAS,
+        "inlet": {
+            **SCHEMAS["inlet"],
+            "bc_omega": {**SCHEMAS["inlet"]["bc_omega"], "scale": 400.0},
+            "bc_gamma": {"rank": 0, "scale": 0.5},
+        },
+        "outlet": {"bc_pressure": {**SCHEMAS["outlet"]["bc_pressure"], "scale": 0.1}},
+    }
+    globals_ = {**GLOBALS, "phi": {"rank": 0, "units": {"U": 1}, "scale": 3.0}}
+    plain_globals = {**GLOBALS, "phi": {"rank": 0, "units": {"U": 1}}}
+    a, b = _model(globals_=plain_globals), _model(schemas=scaled, globals_=globals_)
+    b.load_state_dict(a.state_dict())
+    meshes, gd, q = _case()
+    gd = {**gd, "phi": torch.tensor(12.0, dtype=D)}
+    divided = {}
+    for name, mesh in meshes.items():
+        data = mesh.cell_data.clone()
+        for f, spec in scaled[name].items():
+            if "scale" in spec:
+                data[f] = data[f] / spec["scale"]
+        divided[name] = mesh.with_data(cell_data=data)
+    ya = _run(a, divided, {**gd, "phi": gd["phi"] / 3.0}, q)
+    yb = _run(b, meshes, gd, q)
+    for name in ya:
+        torch.testing.assert_close(
+            yb[name], ya[name], atol=1e-12 * ya[name].abs().max(), rtol=1e-11
+        )
+    assert b._args["__args__"]["boundary_schemas"]["inlet"]["bc_gamma"] == {
+        "rank": 0,
+        "scale": 0.5,
     }

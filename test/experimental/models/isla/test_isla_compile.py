@@ -75,6 +75,21 @@ def _model(task: str) -> ISLA:
             "global_schema": {"g": {"rank": 1}},
             "interior": True,
         }
+    elif task == "global_source":  # ISLA's own scales from a global source (AirfRANS's U_inf)
+        return ISLA(
+            output_schema={"p": {"rank": 0}, "v": {"rank": 1}, "nut": {"rank": 0, "units": {"U": 1, "L": 1}, "scale": 1e-4}},
+            boundary_schemas={"wall": {}},
+            global_schema={
+                "g": {"rank": 1, "units": {"U": 1}, "velocity_scale": True},
+                "nu": {"rank": 0, "units": {"U": 1, "L": 1}, "role": "viscosity"},
+            },
+            reynolds={"mean": 6.0, "std": 0.2},
+            output_stats={"nut": {"mean": 1e-3, "std": 2e-3}},
+            interior=True,
+            hidden=32,
+            n_layers=2,
+            n_slices=8,
+        )
     else:  # scales: ISLA's own, with the derived direction, Re and output_stats
         return ISLA(
             output_schema={"p": {"rank": 0, "units": {"U": 2, "rho": 1}}, "v": {"rank": 1, "units": {"U": 1}}},
@@ -97,7 +112,7 @@ def _model(task: str) -> ISLA:
 
 def _case(task: str, sizes: dict, nq: int, device, seed: int) -> dict:
     g = torch.Generator().manual_seed(seed)
-    if task == "surface":
+    if task in ("surface", "global_source"):
         sizes = {"wall": sum(sizes.values())}
     meshes = {}
     for k, (name, n) in enumerate(sorted(sizes.items())):
@@ -108,7 +123,7 @@ def _case(task: str, sizes: dict, nq: int, device, seed: int) -> dict:
     drv = torch.nn.functional.normalize(torch.randn(3, generator=g), dim=0)
     case = {"boundary_meshes": meshes, "global_data": {"g": drv.to(device)}}
 
-    if task in ("interior", "scales"):
+    if task in ("interior", "scales", "global_source"):
         case["global_data"]["re"] = torch.tensor(0.3, device=device)
         case["global_data"]["rho"] = torch.tensor(1.2, device=device)
         case["global_data"]["nu"] = torch.tensor(1.5e-5, device=device)
@@ -138,7 +153,7 @@ def _assert_close(a, b, device, rel=3e-2):
 
 
 @pytest.mark.parametrize("device", DEVICES)
-@pytest.mark.parametrize("task", ["surface", "interior", "inputs", "scales"])
+@pytest.mark.parametrize("task", ["surface", "interior", "inputs", "scales", "global_source"])
 def test_whole_model_compiles_fullgraph_with_dynamic_shapes_and_matches_eager(
     task, device
 ):

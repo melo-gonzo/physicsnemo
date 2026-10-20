@@ -22,9 +22,10 @@ A field of a boundary condition's schema, of ``global_schema`` or of
 velocity ``U`` and the density ``rho``), ``velocity_scale: true`` (a rank-1 field
 that is a source of ``U`` and of the direction ``g``) and, for a rank-0 global,
 ``role`` (``density`` or ``viscosity``, consumed for the units and the Reynolds
-number) and, for an output, ``scale`` (a positive constant ``c``, the typical size of
-the dimensionless output, so the head predicts ``y / (c prod scale^exp)`` of order
-one). :func:`split_scale_keys` pops them before
+number) and, for an output, a boundary field or a rank-0 global input, ``scale`` (a
+positive constant ``c``, the typical size of the field made dimensionless by its units:
+an input enters as ``x / (c prod scale^exp)``, and the head predicts ``y / (c prod
+scale^exp)``, both of order one). :func:`split_scale_keys` pops them before
 :meth:`~physicsnemo.mesh.fields.FieldSchema.parse`, so the shared
 :class:`~physicsnemo.mesh.fields.RankSpec` grammar is untouched. Private to
 :mod:`physicsnemo.experimental.models.isla`."""
@@ -80,10 +81,6 @@ def _check_local(kind: str, name: str, local: Mapping) -> dict:
         out["velocity_scale"] = local["velocity_scale"]
     if "scale" in local:
         c = local["scale"]
-        if kind != "output_schema":
-            raise ValueError(
-                f"{where}: a scale is declared on an output; got one in {kind}"
-            )
         if (
             isinstance(c, bool)
             or not isinstance(c, Real)

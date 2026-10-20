@@ -130,15 +130,16 @@ pooled over the boundary sources' full-resolution cells (a global source's
 magnitude), and with boundary sources :math:`\hat g = \sum a v / |\sum a v|` is
 appended to the global directions (a global source is a direction already); both
 are computed per case in float64 before the draw, and an absent or zero source
-is refused. Rank-0 globals with the ``role`` ``density`` and ``viscosity`` give
+is refused (in eager mode; torch.compile skips the data-dependent checks). Rank-0 globals with the ``role`` ``density`` and ``viscosity`` give
 :math:`\rho` and :math:`\nu` and are not appended; with ``reynolds={"mean": m,
 "std": s}`` the global scalar :math:`z = (\log_{10}(U L / \nu) - m) / s` is
 appended. Every declared boundary field and rank-0 global is divided by its
-units' :math:`\prod \text{scale}^{\text{exp}}` before it enters the invariants,
-and every output with units is the head's dimensionless prediction times it
-(and times the output's constant ``scale``, the typical size of the dimensionless
-output, default 1), then standardized by the constants ``output_stats`` (vector
-means zero). The
+units' :math:`\prod \text{scale}^{\text{exp}}` and by its constant ``scale`` (the
+typical size of the dimensionless field, default 1) before it enters the invariants,
+and every output with units is the head's dimensionless prediction times both, then
+standardized by the constants ``output_stats`` (vector means zero). The length
+:math:`L` is exact for the piecewise-flat boundary: each cell enters with its own
+second moment about its centroid, so a subdivision of the cells changes nothing. The
 keys are ISLA's own, popped before the shared grammar parses the field; with
 none declared the model is the unscaled one. So a similarity of the problem
 (lengths times :math:`s`, velocities :math:`c`, densities :math:`r`) leaves
@@ -288,6 +289,7 @@ import logging
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
+from numbers import Real
 
 import torch
 import torch.nn as nn
@@ -303,6 +305,7 @@ from physicsnemo.experimental.models.isla.blocks import (
     _softmax_over_points,
 )
 from physicsnemo.experimental.models.isla.geometry import (
+    cell_second_moments,
     exact_boundary_geometry,
     rms_pairwise_distance,
     soft_log_length,
@@ -950,6 +953,17 @@ class ISLA(Module):
                     raise ValueError(f"{kind}[{name!r}]: a velocity_scale source is a rank-1 field; got rank {rank}")
                 if "role" in local and rank != 0:
                     raise ValueError(f"{kind}[{name!r}]: a {local['role']} is a rank-0 global; got rank {rank}")
+                if "role" in local and "scale" in local:
+                    raise ValueError(f"{kind}[{name!r}]: the {local['role']} is consumed, not an input; it takes no scale")
+                if kind == "global_schema" and rank == 1 and not local.get("velocity_scale"):
+                    if "units" in local or "scale" in local:
+                        raise ValueError(
+                            f"{kind}[{name!r}]: a rank-1 global that is not a velocity_scale source enters as a "
+                            "direction only, so units and a scale have no effect on it; declare its magnitude as a "
+                            "rank-0 global"
+                        )
+                if kind == "global_schema" and rank == 1 and "scale" in local:
+                    raise ValueError(f"{kind}[{name!r}]: a velocity source's magnitude is U; it takes no scale")
                 if "role" not in local:
                     used |= set(local.get("units", {}))
         self._output_units = {n: e["units"] for n, e in out_extras.items() if e.get("units")}
@@ -959,8 +973,12 @@ class ISLA(Module):
             for n, e in g_extras.items()
             if e.get("units") and "role" not in e and self.global_schema[n].rank == 0
         }
+        self._global_scale = {n: e["scale"] for n, e in g_extras.items() if "scale" in e}
         self._boundary_units = {
             c: {n: e["units"] for n, e in extras.items() if e.get("units")} for c, extras in b_extras.items()
+        }
+        self._boundary_scale = {
+            c: {n: e["scale"] for n, e in extras.items() if "scale" in e} for c, extras in b_extras.items()
         }
         self._boundary_sources = [
             (c, n) for c, extras in b_extras.items() for n, e in extras.items() if e.get("velocity_scale")
@@ -972,10 +990,14 @@ class ISLA(Module):
                 if e["role"] in self._roles:
                     raise ValueError(f"global_schema: two fields have the role {e['role']!r}")
                 self._roles[e["role"]] = n
-        if self._boundary_sources and self._global_sources or len(self._global_sources) > 1:
+        if self._boundary_sources and self._global_sources:
             raise ValueError(
                 "the velocity_scale sources are rank-1 boundary fields or one rank-1 global, not both: "
                 f"got {self._boundary_sources!r} and {self._global_sources!r}"
+            )
+        if len(self._global_sources) > 1:
+            raise ValueError(
+                f"at most one rank-1 global is a velocity_scale source; got {self._global_sources!r}"
             )
         has_source = bool(self._boundary_sources or self._global_sources)
         if "U" in used and not has_source:
@@ -990,15 +1012,25 @@ class ISLA(Module):
         if reynolds is not None:
             if not has_source:
                 raise ValueError("reynolds needs a velocity_scale source (Re = U L / nu)")
-            if not isinstance(reynolds, Mapping) or set(reynolds) != {"mean", "std"} or not reynolds["std"] > 0:
-                raise ValueError(f"reynolds is {{mean, std}} with std > 0; got {reynolds!r}")
+            if (
+                not isinstance(reynolds, Mapping)
+                or set(reynolds) != {"mean", "std"}
+                or not all(isinstance(v, Real) and not isinstance(v, bool) and math.isfinite(v) for v in reynolds.values())
+                or not reynolds["std"] > 0
+            ):
+                raise ValueError(f"reynolds is {{mean, std}}, finite numbers with std > 0; got {reynolds!r}")
             reynolds = {"mean": float(reynolds["mean"]), "std": float(reynolds["std"])}
         self.reynolds = reynolds
         self.output_stats = check_output_stats(output_stats, self.output_schema)
-        ### The scales are declared when any field has units or is a source, or a role is.
-        self._scaled = bool(used or has_source or self._roles)
+        ### The scales are declared when any field has units, an input scale or is a
+        ### source, or a role is.
+        has_input_scale = bool(self._global_scale or any(self._boundary_scale.values()))
+        self._scaled = bool(used or has_source or self._roles or has_input_scale)
         ### The head and the redimensionalization run in the parameters' precision
-        ### under autocast whenever a physical output is assembled or standardized.
+        ### under autocast whenever a physical output is assembled or standardized. The
+        ### outputs' precision is bounded by the bf16 trunk either way; the fp32 head keeps
+        ### bf16's rounding of the head's own product and of a nonzero output mean (an
+        ### AirfRANS nut with mean / std 0.3) out of the outputs.
         self._fp32_head = self._scaled or self.output_stats is not None or bool(self._output_scale)
 
     @staticmethod
@@ -1256,10 +1288,10 @@ class ISLA(Module):
         g_scalars = _pack(global_rows, self._global_scalar_layout) if self.global_scalar_names else None
         if scales is None:
             return g_unit, g_scalars
-        if self._global_units:
+        if self._global_units or self._global_scale:
             g_scalars = g_scalars / torch.stack(
                 [
-                    (scale_factor(self._global_units.get(n), scales) or scales["L"].new_ones(())).to(like.dtype)
+                    self._input_factor(self._global_units.get(n), self._global_scale.get(n), scales).to(like.dtype)
                     for n in self.global_scalar_names
                 ]
             )
@@ -1277,7 +1309,9 @@ class ISLA(Module):
         source's magnitude), ``rho`` (the density role), the derived direction
         ``g`` ``(1, 1, d)`` (``None`` unless the sources are boundary fields) and
         ``z`` ``(1, 1)`` (``None`` without ``reynolds``). An absent or zero source,
-        or a non-positive density or viscosity, is refused."""
+        or a non-positive density or viscosity, is refused in eager mode; under
+        torch.compile these data-dependent checks are skipped (as every input check
+        of ``forward`` is), so a compiled model reads such a case as NaN or inf."""
         check = not torch.compiler.is_compiling()
         scales = {"L": gauge.reshape(()).double(), "g": None, "z": None}
         if self._boundary_sources:
@@ -1315,16 +1349,28 @@ class ISLA(Module):
             scales["z"] = ((log_re - self.reynolds["mean"]) / self.reynolds["std"])[None, None]
         return scales
 
+    @staticmethod
+    def _input_factor(units, c, scales) -> torch.Tensor:
+        """An input's divisor: its units' scale times its constant ``scale``."""
+        factor = scale_factor(units, scales)
+        if factor is None:
+            factor = scales["L"].new_ones(())
+        return factor if c is None else factor * c
+
     def _nondimensional(self, condition: str, fields: TensorDict, scales: dict | None) -> TensorDict:
-        """A condition's declared fields, each divided by its units' scale."""
-        units = self._boundary_units.get(condition) if scales is not None else None
-        if not units:
+        """A condition's declared fields, each divided by its units' scale and then by
+        its constant ``scale``."""
+        if scales is None:
+            return fields
+        units, cs = self._boundary_units.get(condition, {}), self._boundary_scale.get(condition, {})
+        names = [n for n in self.boundary_schemas[condition] if n in units or n in cs]
+        if not names:
             return fields
         fields = fields.clone(False)
-        for name, u in units.items():
+        for name in names:
             key = FieldSchema.key(name)
             t = fields.get(key)
-            fields.set(key, t / scale_factor(u, scales).to(t.dtype))
+            fields.set(key, t / self._input_factor(units.get(name), cs.get(name), scales).to(t.dtype))
         return fields
 
     def _redimensionalize(self, fields: TensorDict, scales: dict | None) -> TensorDict:
@@ -1534,11 +1580,16 @@ class ISLA(Module):
         like = meshes[0].points
         global_td = self._select_global_data(global_data, like.device)
         global_rows = self._global_rows(global_td, 1, like)
-        ### The length unit, the measure-weighted RMS pairwise distance of every cell
-        ### of the given boundaries at full resolution (exact, before any token draw),
-        ### and with declared scales the case's other scales (_case_scales).
+        ### The length unit, the measure-weighted RMS pairwise distance of the given
+        ### boundaries at full resolution, each cell with its own second moment (the
+        ### parallel-axis term), so it is exact for the piecewise-flat surface: the same
+        ### for every draw of the tokens and every subdivision of the cells. With
+        ### declared scales, the case's other scales (_case_scales).
         gauge = rms_pairwise_distance(
-            torch.cat([m.cell_centroids for m in meshes])[None], torch.cat(measures)[None], EPS
+            torch.cat([m.cell_centroids for m in meshes])[None],
+            torch.cat(measures)[None],
+            EPS,
+            torch.cat([cell_second_moments(m) for m in meshes])[None],
         )
         scales = self._case_scales(names, meshes, measures, global_rows, gauge) if self._scaled else None
         g_unit, g_scalars = self._global_fields(global_rows, like, scales)
@@ -1641,6 +1692,7 @@ class ISLA(Module):
         surface_points: Float[torch.Tensor, "batch vertices dim"] | None = None,
         surface_cells: Float[torch.Tensor, "batch cells dim"] | None = None,
         condition: str | None = None,
+        cell_second_moments: Float[torch.Tensor, "batch tokens"] | None = None,
     ) -> TensorDict:
         """The batched network on bare token tensors, the tokens of one boundary
         condition without per-cell fields (``condition``, default the model's one
@@ -1654,7 +1706,10 @@ class ISLA(Module):
         batch); ``query_points`` ``(B, Q, d)`` for an interior model, with the
         boundary surface each case's geometry is computed from as
         ``surface_points`` ``(B, V, d)`` and ``surface_cells`` ``(B, F, d)``
-        (vertex indices; :func:`exact_boundary_geometry`). The tokens are used as
+        (vertex indices; :func:`exact_boundary_geometry`); ``cell_second_moments``
+        ``(B, N)`` the tokens' own second moments in the length unit
+        (:func:`~physicsnemo.experimental.models.isla.geometry.cell_second_moments`;
+        ``None``: the tokens are points). The tokens are used as
         given: nothing is sampled here. Returns the outputs
         over the ``(B, N_out)`` tokens the head read.
         """
@@ -1701,7 +1756,13 @@ class ISLA(Module):
                 wall_direction=torch.stack([g[1] for g in geometry]),
                 batch_size=query_points.shape[:2],
             )
-        return self._redimensionalize(self._forward_tokens(boundary, query, g_unit, g_scalars), None)
+        gauge = rms_pairwise_distance(
+            points,
+            None if measure_weights is None else measure_weights.reshape(b, n),
+            EPS,
+            cell_second_moments,
+        )
+        return self._redimensionalize(self._forward_tokens(boundary, query, g_unit, g_scalars, gauge=gauge), None)
 
     def _forward_tokens(
         self,
