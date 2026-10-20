@@ -1,0 +1,320 @@
+{
+ "evals_ud2/clud_suv_gt_seed42/area": {
+  "metrics": {
+   "pressure_l2": 0.11758627072729246,
+   "wss_l2": 0.14820491906368372,
+   "wss_x_l2": 0.130848142835829,
+   "wss_y_l2": 0.21308193784771542,
+   "wss_z_l2": 0.1689381454930161
+  },
+  "n": 99,
+  "dataset": "shift_suv_surface_area",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_ud2/clud_suv_gt_seed42/native": {
+  "metrics": {
+   "pressure_l2": 0.04583843789919458,
+   "wss_l2": 0.06670436955461598,
+   "wss_x_l2": 0.05503774893404258,
+   "wss_y_l2": 0.1030192423348475,
+   "wss_z_l2": 0.08041197844225952
+  },
+  "n": 99,
+  "dataset": "shift_suv_surface",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_ud2/clud_suv_gt_seed42/posed": {
+  "metrics": {
+   "pressure_l2": 1.053126633769334,
+   "wss_l2": 1.1730491561119003,
+   "wss_x_l2": 1.4426426743016099,
+   "wss_y_l2": 1.0560471505829783,
+   "wss_z_l2": 1.1212189799607402
+  },
+  "n": 99,
+  "dataset": "shift_suv_surface_posed",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_ud2/clud_suv_gt_seed43/area": {
+  "metrics": {
+   "pressure_l2": 0.15457862314551768,
+   "wss_l2": 0.21141541606248027,
+   "wss_x_l2": 0.1843214516687875,
+   "wss_y_l2": 0.28454476173477944,
+   "wss_z_l2": 0.2538775049074732
+  },
+  "n": 99,
+  "dataset": "shift_suv_surface_area",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_ud2/clud_suv_gt_seed43/native": {
+  "metrics": {
+   "pressure_l2": 0.04523024414524888,
+   "wss_l2": 0.06627981108848495,
+   "wss_x_l2": 0.054766052901142774,
+   "wss_y_l2": 0.10256387729837436,
+   "wss_z_l2": 0.07980876017098475
+  },
+  "n": 99,
+  "dataset": "shift_suv_surface",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_ud2/clud_suv_gt_seed43/posed": {
+  "metrics": {
+   "pressure_l2": 1.0584014738448944,
+   "wss_l2": 1.1685123636264994,
+   "wss_x_l2": 1.4292556300307766,
+   "wss_y_l2": 1.0612630362462516,
+   "wss_z_l2": 1.1121360701744003
+  },
+  "n": 99,
+  "dataset": "shift_suv_surface_posed",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_ud2/clud_suv_t_seed42/area": {
+  "metrics": {
+   "pressure_l2": 0.12878677098437993,
+   "wss_l2": 0.1721434352373836,
+   "wss_x_l2": 0.15508092051804667,
+   "wss_y_l2": 0.22363246570933948,
+   "wss_z_l2": 0.19829786666715987
+  },
+  "n": 99,
+  "dataset": "shift_suv_surface_area",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_ud2/clud_suv_t_seed42/native": {
+  "metrics": {
+   "pressure_l2": 0.0418757236365116,
+   "wss_l2": 0.06385433312618372,
+   "wss_x_l2": 0.053164270189073354,
+   "wss_y_l2": 0.09581611132380938,
+   "wss_z_l2": 0.07686689646557124
+  },
+  "n": 99,
+  "dataset": "shift_suv_surface",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_ud2/clud_suv_t_seed42/posed": {
+  "metrics": {
+   "pressure_l2": 1.0771450466579862,
+   "wss_l2": 1.200468275282118,
+   "wss_x_l2": 1.5156194513494319,
+   "wss_y_l2": 1.0526407415216619,
+   "wss_z_l2": 1.1701731826319839
+  },
+  "n": 99,
+  "dataset": "shift_suv_surface_posed",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_ud2/clud_suv_t_seed43/area": {
+  "metrics": {
+   "pressure_l2": 0.13268622003420436,
+   "wss_l2": 0.1673730021775371,
+   "wss_x_l2": 0.1514839788880011,
+   "wss_y_l2": 0.23015941273082385,
+   "wss_z_l2": 0.18615928804031526
+  },
+  "n": 99,
+  "dataset": "shift_suv_surface_area",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_ud2/clud_suv_t_seed43/native": {
+  "metrics": {
+   "pressure_l2": 0.041976972059770065,
+   "wss_l2": 0.06404904163244998,
+   "wss_x_l2": 0.05361760264695293,
+   "wss_y_l2": 0.09581218102965693,
+   "wss_z_l2": 0.07667186043479225
+  },
+  "n": 99,
+  "dataset": "shift_suv_surface",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_ud2/clud_suv_t_seed43/posed": {
+  "metrics": {
+   "pressure_l2": 1.075631498086332,
+   "wss_l2": 1.1640503237945865,
+   "wss_x_l2": 1.4100893579348168,
+   "wss_y_l2": 1.0493686560428503,
+   "wss_z_l2": 1.1310995853308476
+  },
+  "n": 99,
+  "dataset": "shift_suv_surface_posed",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_ud2/clud_vol_t_seed42/area": {
+  "metrics": {
+   "nut_l2": 0.08805953462918599,
+   "pressure_l2": 0.049462124705314636,
+   "velocity_l2": 0.11377361416816711,
+   "velocity_x_l2": 0.0958627959092458,
+   "velocity_y_l2": 0.19141197204589844,
+   "velocity_z_l2": 0.14919543266296387
+  },
+  "n": 48,
+  "dataset": "drivaer_ml_volume_reference_area",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_ud2/clud_vol_t_seed42/native": {
+  "metrics": {
+   "nut_l2": 0.08805953462918599,
+   "pressure_l2": 0.049462124705314636,
+   "velocity_l2": 0.11377361416816711,
+   "velocity_x_l2": 0.0958627959092458,
+   "velocity_y_l2": 0.19141197204589844,
+   "velocity_z_l2": 0.14919543266296387
+  },
+  "n": 48,
+  "dataset": "drivaer_ml_volume_reference",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_ud2/clud_vol_t_seed42/posed": {
+  "metrics": {
+   "nut_l2": 1.096479336420695,
+   "pressure_l2": 0.7833855152130127,
+   "velocity_l2": 1.3428173065185547,
+   "velocity_x_l2": 2.036248048146566,
+   "velocity_y_l2": 1.0105078220367432,
+   "velocity_z_l2": 1.021305799484253
+  },
+  "n": 48,
+  "dataset": "drivaer_ml_volume_reference_posed",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_ud2/clud_vol_t_seed43/area": {
+  "metrics": {
+   "nut_l2": 0.08811232447624207,
+   "pressure_l2": 0.049488410353660583,
+   "velocity_l2": 0.11077256004015605,
+   "velocity_x_l2": 0.09368398785591125,
+   "velocity_y_l2": 0.18889236450195312,
+   "velocity_z_l2": 0.13624441623687744
+  },
+  "n": 48,
+  "dataset": "drivaer_ml_volume_reference_area",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_ud2/clud_vol_t_seed43/native": {
+  "metrics": {
+   "nut_l2": 0.08811232447624207,
+   "pressure_l2": 0.049488410353660583,
+   "velocity_l2": 0.11077256004015605,
+   "velocity_x_l2": 0.09368398785591125,
+   "velocity_y_l2": 0.18889236450195312,
+   "velocity_z_l2": 0.13624441623687744
+  },
+  "n": 48,
+  "dataset": "drivaer_ml_volume_reference",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_ud2/clud_vol_t_seed43/posed": {
+  "metrics": {
+   "nut_l2": 1.0686163902282715,
+   "pressure_l2": 0.7571432590484619,
+   "velocity_l2": 1.2025785446166992,
+   "velocity_x_l2": 1.637744426727295,
+   "velocity_y_l2": 1.0117109616597493,
+   "velocity_z_l2": 1.0100059509277344
+  },
+  "n": 48,
+  "dataset": "drivaer_ml_volume_reference_posed",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_ud2/r80ud_dr_gt_h256_seed42/area": {
+  "metrics": {
+   "pressure_l2": 0.3544321457544963,
+   "wss_l2": 0.41762232780456543,
+   "wss_x_l2": 0.34021226565043133,
+   "wss_y_l2": 0.6702645619710287,
+   "wss_z_l2": 0.5749017794926962
+  },
+  "n": 48,
+  "dataset": "drivaer_ml_surface_area",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_ud2/r80ud_dr_gt_h256_seed42/native": {
+  "metrics": {
+   "pressure_l2": 0.04540411631266276,
+   "wss_l2": 0.06956682602564494,
+   "wss_x_l2": 0.052377671003341675,
+   "wss_y_l2": 0.12162166833877563,
+   "wss_z_l2": 0.10136197010676067
+  },
+  "n": 48,
+  "dataset": "drivaer_ml_surface",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_ud2/r80ud_dr_gt_h256_seed42/posed": {
+  "metrics": {
+   "pressure_l2": 1.241477409998576,
+   "wss_l2": 1.313264528910319,
+   "wss_x_l2": 1.719191074371338,
+   "wss_y_l2": 1.1350154876708984,
+   "wss_z_l2": 1.2022197246551514
+  },
+  "n": 48,
+  "dataset": "drivaer_ml_surface_posed",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_ud2/r80ud_dr_gt_h256_seed43/area": {
+  "metrics": {
+   "pressure_l2": 0.39929425716400146,
+   "wss_l2": 0.44560190041859943,
+   "wss_x_l2": 0.3610392014185588,
+   "wss_y_l2": 0.7180354595184326,
+   "wss_z_l2": 0.6186935901641846
+  },
+  "n": 48,
+  "dataset": "drivaer_ml_surface_area",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_ud2/r80ud_dr_gt_h256_seed43/native": {
+  "metrics": {
+   "pressure_l2": 0.045629521210988365,
+   "wss_l2": 0.06967949867248535,
+   "wss_x_l2": 0.05245668192704519,
+   "wss_y_l2": 0.12159282962481181,
+   "wss_z_l2": 0.10178526242574056
+  },
+  "n": 48,
+  "dataset": "drivaer_ml_surface",
+  "epoch": 500,
+  "source": "summary"
+ },
+ "evals_ud2/r80ud_dr_gt_h256_seed43/posed": {
+  "metrics": {
+   "pressure_l2": 1.2858818372090657,
+   "wss_l2": 1.2363548278808594,
+   "wss_x_l2": 1.5279453595479329,
+   "wss_y_l2": 1.122252623240153,
+   "wss_z_l2": 1.1690575281778972
+  },
+  "n": 48,
+  "dataset": "drivaer_ml_surface_posed",
+  "epoch": 500,
+  "source": "summary"
+ }
+}

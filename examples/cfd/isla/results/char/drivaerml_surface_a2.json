@@ -1,5 +1,5 @@
 {
- "protocol": "A2-RERUN artifacts (2026-10-17, #sec-nb-a2-rerun-jeb-t2d, #sec-nb-a2-rerun-drivaerml,\n#sec-nb-a2-rerun-suv-lug): the CHAR-PROTOCOLS record of each\nrerun dataset with ISLA's arm replaced by the A2 reruns (the reference configuration with the normalized slice reads, seeds 42\nand 43, final checkpoints, the CHAR scorer: float32, native mesh / uniform point cloud / rotated + translated). The A2 scores\nare the reductions committed in results/campaigns_2026-10-17/a2r/<stem>_a2_scores.json (copied unmodified from\nscratch/isla-a2-rerun-2026-10-17/, written there by char_a2_table.py and deepjeb_a2_table.py); the baselines' arms are the CHAR\nrecord's, unchanged (GeoTransolver and Transolver are not rerun). Writes results/char/<dataset>_a2.json in the schema of\nresults/char/<dataset>.json (protocols, fields, isla_arm, arms[arm][protocol][field] = {mean, per_seed, n_cases, n_seeds},\ncomplete), so the chapters' protocol_table() and char_arms() read it unchanged, plus the key \"raw_read_isla\", the CHAR record's\nISLA arm (raw slice reads), which protocol_table ignores. n_cases is the A2 record's where it has one (DeepJEB++), else the CHAR\nISLA arm's: the A2 lanes are scored on the same validation split by the same scorer. Two lists replace a baseline arm: FAIR_INPUT\n(retrained on fair inputs) and SCORESET (the same checkpoints re-scored on ISLA's scored set); each keeps the replaced arm under its\nown key.\nusage: python a2r_protocol_artifacts_2026-10-17.py",
+ "protocol": "A2-RERUN artifacts (2026-10-17, #sec-nb-a2-rerun-jeb-t2d, #sec-nb-a2-rerun-drivaerml,\n#sec-nb-a2-rerun-suv-lug): the CHAR-PROTOCOLS record of each\nrerun dataset with ISLA's arm replaced by the A2 reruns (the reference configuration with the normalized slice reads, seeds 42\nand 43, final checkpoints, the CHAR scorer: float32, native mesh / uniform point cloud / rotated + translated). The A2 scores\nare the reductions committed in results/campaigns_2026-10-17/a2r/<stem>_a2_scores.json (copied unmodified from\nscratch/isla-a2-rerun-2026-10-17/, written there by char_a2_table.py and deepjeb_a2_table.py); the baselines' arms are the CHAR\nrecord's, unchanged (GeoTransolver and Transolver are not rerun). Writes results/char/<dataset>_a2.json in the schema of\nresults/char/<dataset>.json (protocols, fields, isla_arm, arms[arm][protocol][field] = {mean, per_seed, n_cases, n_seeds},\ncomplete), so the chapters' protocol_table() and char_arms() read it unchanged, plus the key \"raw_read_isla\", the CHAR record's\nISLA arm (raw slice reads), which protocol_table ignores. n_cases is the A2 record's where it has one (DeepJEB++), else the CHAR\nISLA arm's: the A2 lanes are scored on the same validation split by the same scorer. Two lists replace a baseline arm: FAIR_INPUT\n(retrained on fair inputs) and SCORESET (the same checkpoints re-scored on ISLA's scored set); each keeps the replaced arm under its\nown key. FAIR_INPUT applies after SCORESET.\nusage: python a2r_protocol_artifacts_2026-10-17.py",
  "protocols": {
   "native": "native mesh",
   "area": "uniform point cloud",
@@ -76,19 +76,19 @@
   "GeoTransolver 256": {
    "native": {
     "pressure_l2": {
-     "mean": 0.045512412985165916,
+     "mean": 0.04551681876182556,
      "per_seed": {
-      "42": 0.045521353681882225,
-      "43": 0.04550347228844961
+      "42": 0.04540411631266276,
+      "43": 0.045629521210988365
      },
      "n_cases": 48,
      "n_seeds": 2
     },
     "wss_l2": {
-     "mean": 0.0695289745926857,
+     "mean": 0.06962316234906515,
      "per_seed": {
-      "42": 0.06966223816076915,
-      "43": 0.06939571102460225
+      "42": 0.06956682602564494,
+      "43": 0.06967949867248535
      },
      "n_cases": 48,
      "n_seeds": 2
@@ -96,19 +96,19 @@
    },
    "area": {
     "pressure_l2": {
-     "mean": 0.4376755952835083,
+     "mean": 0.3768632014592489,
      "per_seed": {
-      "42": 0.4353092908859253,
-      "43": 0.4400418996810913
+      "42": 0.3544321457544963,
+      "43": 0.39929425716400146
      },
      "n_cases": 48,
      "n_seeds": 2
     },
     "wss_l2": {
-     "mean": 0.4821572105089823,
+     "mean": 0.4316121141115824,
      "per_seed": {
-      "42": 0.4817115863164266,
-      "43": 0.4826028347015381
+      "42": 0.41762232780456543,
+      "43": 0.44560190041859943
      },
      "n_cases": 48,
      "n_seeds": 2
@@ -116,19 +116,19 @@
    },
    "posed": {
     "pressure_l2": {
-     "mean": 1.2227567036946614,
+     "mean": 1.2636796236038208,
      "per_seed": {
-      "42": 1.2704215844472249,
-      "43": 1.175091822942098
+      "42": 1.241477409998576,
+      "43": 1.2858818372090657
      },
      "n_cases": 48,
      "n_seeds": 2
     },
     "wss_l2": {
-     "mean": 1.3649551471074421,
+     "mean": 1.2748096783955893,
      "per_seed": {
-      "42": 1.4375704129536946,
-      "43": 1.2923398812611897
+      "42": 1.313264528910319,
+      "43": 1.2363548278808594
      },
      "n_cases": 48,
      "n_seeds": 2
@@ -138,19 +138,19 @@
   "Transolver 512 x 16, trained at 100k cells": {
    "native": {
     "pressure_l2": {
-     "mean": 0.04351893067359924,
+     "mean": 0.04233710467815399,
      "per_seed": {
-      "42": 0.04365544021129608,
-      "43": 0.043382421135902405
+      "42": 0.042310893535614014,
+      "43": 0.04236331582069397
      },
      "n_cases": 48,
      "n_seeds": 2
     },
     "wss_l2": {
-     "mean": 0.06961449732383092,
+     "mean": 0.06782078742980957,
      "per_seed": {
-      "42": 0.06993295749028523,
-      "43": 0.0692960371573766
+      "42": 0.06758631765842438,
+      "43": 0.06805525720119476
      },
      "n_cases": 48,
      "n_seeds": 2
@@ -158,19 +158,19 @@
    },
    "area": {
     "pressure_l2": {
-     "mean": 0.2257297933101654,
+     "mean": 0.2890978654225667,
      "per_seed": {
-      "42": 0.2219638228416443,
-      "43": 0.22949576377868652
+      "42": 0.2939670880635579,
+      "43": 0.2842286427815755
      },
      "n_cases": 48,
      "n_seeds": 2
     },
     "wss_l2": {
-     "mean": 0.30394935607910156,
+     "mean": 0.36965916554133094,
      "per_seed": {
-      "42": 0.30687415599823,
-      "43": 0.30102455615997314
+      "42": 0.3652360439300537,
+      "43": 0.3740822871526082
      },
      "n_cases": 48,
      "n_seeds": 2
@@ -178,19 +178,19 @@
    },
    "posed": {
     "pressure_l2": {
-     "mean": 0.9845505158106486,
+     "mean": 1.2927921215693157,
      "per_seed": {
-      "42": 0.9937528769175211,
-      "43": 0.975348154703776
+      "42": 1.3002936045328777,
+      "43": 1.2852906386057537
      },
      "n_cases": 48,
      "n_seeds": 2
     },
     "wss_l2": {
-     "mean": 1.1651142438252766,
+     "mean": 1.3545211553573608,
      "per_seed": {
-      "42": 1.140182097752889,
-      "43": 1.1900463898976643
+      "42": 1.4021191596984863,
+      "43": 1.3069231510162354
      },
      "n_cases": 48,
      "n_seeds": 2
@@ -327,5 +327,135 @@
  },
  "scored_set": {
   "Transolver 512 x 16, trained at 100k cells": "re-scored on ISLA's 200,000-cell set (r80_dr_t_h512_l16_c100k, the same checkpoints); scores: campaigns_2026-10-19/drive_fix2/scoreset/tset200k_scores.json; the arm scored on its own draw is kept under transolver_100k_scoring"
+ },
+ "raw_drive_geotransolver": {
+  "label": "GeoTransolver 256, the arm it replaces",
+  "native": {
+   "pressure_l2": {
+    "mean": 0.045512412985165916,
+    "per_seed": {
+     "42": 0.045521353681882225,
+     "43": 0.04550347228844961
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   },
+   "wss_l2": {
+    "mean": 0.0695289745926857,
+    "per_seed": {
+     "42": 0.06966223816076915,
+     "43": 0.06939571102460225
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   }
+  },
+  "area": {
+   "pressure_l2": {
+    "mean": 0.4376755952835083,
+    "per_seed": {
+     "42": 0.4353092908859253,
+     "43": 0.4400418996810913
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   },
+   "wss_l2": {
+    "mean": 0.4821572105089823,
+    "per_seed": {
+     "42": 0.4817115863164266,
+     "43": 0.4826028347015381
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   }
+  },
+  "posed": {
+   "pressure_l2": {
+    "mean": 1.2227567036946614,
+    "per_seed": {
+     "42": 1.2704215844472249,
+     "43": 1.175091822942098
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   },
+   "wss_l2": {
+    "mean": 1.3649551471074421,
+    "per_seed": {
+     "42": 1.4375704129536946,
+     "43": 1.2923398812611897
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   }
+  }
+ },
+ "fair_input": {
+  "GeoTransolver 256": "retrained reading the unit freestream direction U_inf_dir (r80ud_dr_gt_h256); scores: campaigns_2026-10-20/drive_fix2/ud2_scores_2026-10-20.json; the replaced arm is kept under raw_drive_geotransolver",
+  "Transolver 512 x 16, trained at 100k cells": "retrained reading the unit freestream direction U_inf_dir (r80ud_dr_t_h512_l16_c100k), scored on ISLA's 200,000-cell set; scores: campaigns_2026-10-19/drive_fix2/scoreset/tset200k_scores.json; the replaced arm is kept under raw_drive_transolver"
+ },
+ "raw_drive_transolver": {
+  "label": "Transolver 512 x 16, trained at 100k cells, the arm it replaces",
+  "native": {
+   "pressure_l2": {
+    "mean": 0.04351893067359924,
+    "per_seed": {
+     "42": 0.04365544021129608,
+     "43": 0.043382421135902405
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   },
+   "wss_l2": {
+    "mean": 0.06961449732383092,
+    "per_seed": {
+     "42": 0.06993295749028523,
+     "43": 0.0692960371573766
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   }
+  },
+  "area": {
+   "pressure_l2": {
+    "mean": 0.2257297933101654,
+    "per_seed": {
+     "42": 0.2219638228416443,
+     "43": 0.22949576377868652
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   },
+   "wss_l2": {
+    "mean": 0.30394935607910156,
+    "per_seed": {
+     "42": 0.30687415599823,
+     "43": 0.30102455615997314
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   }
+  },
+  "posed": {
+   "pressure_l2": {
+    "mean": 0.9845505158106486,
+    "per_seed": {
+     "42": 0.9937528769175211,
+     "43": 0.975348154703776
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   },
+   "wss_l2": {
+    "mean": 1.1651142438252766,
+    "per_seed": {
+     "42": 1.140182097752889,
+     "43": 1.1900463898976643
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   }
+  }
  }
 }

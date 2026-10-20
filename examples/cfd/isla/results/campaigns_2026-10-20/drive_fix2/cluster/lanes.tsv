@@ -1,0 +1,9 @@
+idx	group	run_id	dataset	model	extra	lr	seed	cells	code	epochs
+0	clud	clud_vol_gt_seed42	drivaer_ml_volume_reference	geotransolver_volume	forward_kwargs.global_embedding=global_data.U_inf_dir	1e-3	42	200000	code_v20	500
+1	clud	clud_vol_gt_seed43	drivaer_ml_volume_reference	geotransolver_volume	forward_kwargs.global_embedding=global_data.U_inf_dir	1e-3	43	200000	code_v20	500
+2	clud	clud_vol_t_seed42	drivaer_ml_volume_reference	transolver_volume	model.n_hidden=512 model.n_layers=16 forward_kwargs.fx.source=global_data.U_inf_dir	1e-3	42	100000	code_v20	500
+3	clud	clud_vol_t_seed43	drivaer_ml_volume_reference	transolver_volume	model.n_hidden=512 model.n_layers=16 forward_kwargs.fx.source=global_data.U_inf_dir	1e-3	43	100000	code_v20	500
+4	clud	clud_suv_gt_seed42	shift_suv_surface	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir	1e-3	42	200000	code_v20	500
+5	clud	clud_suv_gt_seed43	shift_suv_surface	geotransolver_surface	forward_kwargs.global_embedding=global_data.U_inf_dir	1e-3	43	200000	code_v20	500
+6	clud	clud_suv_t_seed42	shift_suv_surface	transolver_surface	model.n_hidden=512 model.n_layers=16 forward_kwargs.fx.source=global_data.U_inf_dir	1e-3	42	100000	code_v20	500
+7	clud	clud_suv_t_seed43	shift_suv_surface	transolver_surface	model.n_hidden=512 model.n_layers=16 forward_kwargs.fx.source=global_data.U_inf_dir	1e-3	43	100000	code_v20	500

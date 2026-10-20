@@ -10,7 +10,7 @@ complete), so the chapters' protocol_table() and char_arms() read it unchanged, 
 ISLA arm (raw slice reads), which protocol_table ignores. n_cases is the A2 record's where it has one (DeepJEB++), else the CHAR
 ISLA arm's: the A2 lanes are scored on the same validation split by the same scorer. Two lists replace a baseline arm: FAIR_INPUT
 (retrained on fair inputs) and SCORESET (the same checkpoints re-scored on ISLA's scored set); each keeps the replaced arm under its
-own key.
+own key. FAIR_INPUT applies after SCORESET.
 usage: python a2r_protocol_artifacts_2026-10-17.py"""
 import json, os
 
@@ -27,10 +27,33 @@ DATASETS = {"drivaerml_surface": ("drivaerml_surface", None), "drivaerml_volume"
 # DRIVE-FIX (2026-10-19, campaigns_2026-10-19/drive_fix/README.md): on the lug GeoTransolver's geometry context becomes the surface
 # triangles with their normals and the four boundary-condition labels ISLA reads (bc_fixed, bc_hole, bc_loaded, bc_pressure), where the
 # CHAR arm's context is the interior nodes and reads no label.
+# DRIVE-FIX2 (2026-10-20, campaigns_2026-10-20/drive_fix2/README.md): on DrivAerML and SHIFT-SUV the baselines read U_inf_dir, the unit
+# freestream direction ISLA reads, in place of U_inf, the constant physical vector in m/s; each replaced arm is kept under
+# raw_drive_<arch>. The DrivAerML Surface Transolver arm is its unit-direction control of DRIVE-FIX (r80ud_dr_t), on ISLA's 200,000-cell
+# set (T-SCORESET), replacing the SCORESET arm. The Transolver reruns of DrivAerML Volume and SHIFT-SUV are scored on ISLA's
+# 200,000-cell set, their predecessors on their own 100,000-cell draw. The Volume area rows of this scorer equal its native rows.
+# Not yet scored: GeoTransolver on DrivAerML Volume (clud_vol_gt), still the CHAR arm (book/standing.py CONSTANT_DRIVE).
+UD2 = "campaigns_2026-10-20/drive_fix2/ud2_scores_2026-10-20.json"
+TSET = "campaigns_2026-10-19/drive_fix2/scoreset/tset200k_scores.json"
 FAIR_INPUT = {
     "lug": {"GeoTransolver 256": ("campaigns_2026-10-19/drive_fix/drivefix_scores_2026-10-19.json", "evals_lugbc/lugbc_gt",
                                   "unlabelled_geotransolver", "the surface triangles with their normals and the four boundary-condition "
                                   "labels as its geometry context (lugbc_gt)")},
+    "drivaerml_surface": {
+        "GeoTransolver 256": (UD2, "evals_ud2/r80ud_dr_gt_h256", "raw_drive_geotransolver",
+                              "the unit freestream direction U_inf_dir (r80ud_dr_gt_h256)"),
+        "Transolver 512 x 16, trained at 100k cells": (TSET, "evals_tset200k/r80ud_dr_t_h512_l16_c100k", "raw_drive_transolver",
+                                                       "the unit freestream direction U_inf_dir (r80ud_dr_t_h512_l16_c100k), scored on "
+                                                       "ISLA's 200,000-cell set")},
+    "drivaerml_volume": {
+        "Transolver 512 x 16 at 100k cells": (UD2, "evals_ud2/clud_vol_t", "raw_drive_transolver",
+                                              "the unit freestream direction U_inf_dir (clud_vol_t), scored on ISLA's 200,000-cell set; "
+                                              "its area rows equal its native rows in this scorer")},
+    "shift_suv_surface": {
+        "GeoTransolver 256": (UD2, "evals_ud2/clud_suv_gt", "raw_drive_geotransolver", "the unit freestream direction U_inf_dir (clud_suv_gt)"),
+        "Transolver 512 x 16 at 100k cells": (UD2, "evals_ud2/clud_suv_t", "raw_drive_transolver",
+                                              "the unit freestream direction U_inf_dir (clud_suv_t), scored on ISLA's 200,000-cell set, "
+                                              "its predecessor on its own 100,000-cell draw")},
 }
 # Baseline arms re-scored on ISLA's scored set: dataset -> {arm label: (score file under results/, run stem without _seedNN, the key
 # the replaced arm is kept under, the arm's new label, what changed)}. The score file is reduce_tset200k.py's layout
@@ -56,10 +79,12 @@ def rescored_arm(path, stem, fields, protocols, seeds=("42", "43")):
 
 
 def rerun_arm(path, stem, fields, protocols, seeds=("42", "43")):
-    """{protocol: {field: {mean, per_seed, n_cases, n_seeds}}} of a fair-input rerun, from a reduce_drivefix.py score file."""
+    """{protocol: {field: {mean, per_seed, n_cases, n_seeds}}} of a fair-input rerun, from a reduce_drivefix.py score file or a
+    reduce_tset200k.py one (whose rows carry no epoch; its scorer reads the final checkpoint)."""
     rec = json.load(open(f"{os.path.dirname(R)}/{path}"))
+    rec = rec.get("files", rec)
     runs = {s: {pk: rec[f"{stem}_seed{s}/{pk}"] for pk in protocols} for s in seeds}
-    assert all(r["epoch"] == 500 and r["source"] == "summary" for v in runs.values() for r in v.values())
+    assert all(r.get("epoch", 500) == 500 and r["source"] == "summary" for v in runs.values() for r in v.values())
     return {pk: {f: {"mean": sum(runs[s][pk]["metrics"][f] for s in seeds) / len(seeds),
                      "per_seed": {s: runs[s][pk]["metrics"][f] for s in seeds},
                      "n_cases": min(runs[s][pk]["n"] for s in seeds), "n_seeds": len(seeds)} for f in fields} for pk in protocols}
@@ -76,13 +101,13 @@ for ds, (stem, a2_arm) in DATASETS.items():
            "arms": {ISLA_ARM: arm, **{k: v for k, v in C["arms"].items() if k != C["isla_arm"]}},
            "complete": all(c["n_seeds"] == 2 for p in arm.values() for c in p.values()),
            "raw_read_isla": {"label": C["isla_arm"], **old}}
-    for label, (path, stem, key, reads) in FAIR_INPUT.get(ds, {}).items():
-        out[key] = {"label": f"{label}, the CHAR record's arm", **out["arms"][label]}
-        out["arms"][label] = rerun_arm(path, stem, C["fields"], C["protocols"])
-        out.setdefault("fair_input", {})[label] = f"retrained reading {reads}; scores: {path}; the replaced arm is kept under {key}"
     for label, (path, stem, key, new, what) in SCORESET.get(ds, {}).items():
         out[key] = {"label": f"{label}, the CHAR record's arm", **out["arms"].pop(label)}
         out["arms"][new] = rescored_arm(path, stem, C["fields"], C["protocols"])
         out.setdefault("scored_set", {})[new] = f"{what}; scores: {path}; the arm scored on its own draw is kept under {key}"
+    for label, (path, stem, key, reads) in FAIR_INPUT.get(ds, {}).items():  # after SCORESET, which may name the arm replaced here
+        out[key] = {"label": f"{label}, the arm it replaces", **out["arms"][label]}
+        out["arms"][label] = rerun_arm(path, stem, C["fields"], C["protocols"])
+        out.setdefault("fair_input", {})[label] = f"retrained reading {reads}; scores: {path}; the replaced arm is kept under {key}"
     json.dump(out, open(f"{R}/{ds}_a2.json", "w"), indent=1)
     print(ds, " ".join(f"{pk}:" + "/".join(f"{arm[pk][f]['mean']:.4f}" for f in C["fields"]) for pk in C["protocols"]))

@@ -1,5 +1,5 @@
 {
- "protocol": "A2-RERUN artifacts (2026-10-17, #sec-nb-a2-rerun-jeb-t2d, #sec-nb-a2-rerun-drivaerml,\n#sec-nb-a2-rerun-suv-lug): the CHAR-PROTOCOLS record of each\nrerun dataset with ISLA's arm replaced by the A2 reruns (the reference configuration with the normalized slice reads, seeds 42\nand 43, final checkpoints, the CHAR scorer: float32, native mesh / uniform point cloud / rotated + translated). The A2 scores\nare the reductions committed in results/campaigns_2026-10-17/a2r/<stem>_a2_scores.json (copied unmodified from\nscratch/isla-a2-rerun-2026-10-17/, written there by char_a2_table.py and deepjeb_a2_table.py); the baselines' arms are the CHAR\nrecord's, unchanged (GeoTransolver and Transolver are not rerun). Writes results/char/<dataset>_a2.json in the schema of\nresults/char/<dataset>.json (protocols, fields, isla_arm, arms[arm][protocol][field] = {mean, per_seed, n_cases, n_seeds},\ncomplete), so the chapters' protocol_table() and char_arms() read it unchanged, plus the key \"raw_read_isla\", the CHAR record's\nISLA arm (raw slice reads), which protocol_table ignores. n_cases is the A2 record's where it has one (DeepJEB++), else the CHAR\nISLA arm's: the A2 lanes are scored on the same validation split by the same scorer. Two lists replace a baseline arm: FAIR_INPUT\n(retrained on fair inputs) and SCORESET (the same checkpoints re-scored on ISLA's scored set); each keeps the replaced arm under its\nown key.\nusage: python a2r_protocol_artifacts_2026-10-17.py",
+ "protocol": "A2-RERUN artifacts (2026-10-17, #sec-nb-a2-rerun-jeb-t2d, #sec-nb-a2-rerun-drivaerml,\n#sec-nb-a2-rerun-suv-lug): the CHAR-PROTOCOLS record of each\nrerun dataset with ISLA's arm replaced by the A2 reruns (the reference configuration with the normalized slice reads, seeds 42\nand 43, final checkpoints, the CHAR scorer: float32, native mesh / uniform point cloud / rotated + translated). The A2 scores\nare the reductions committed in results/campaigns_2026-10-17/a2r/<stem>_a2_scores.json (copied unmodified from\nscratch/isla-a2-rerun-2026-10-17/, written there by char_a2_table.py and deepjeb_a2_table.py); the baselines' arms are the CHAR\nrecord's, unchanged (GeoTransolver and Transolver are not rerun). Writes results/char/<dataset>_a2.json in the schema of\nresults/char/<dataset>.json (protocols, fields, isla_arm, arms[arm][protocol][field] = {mean, per_seed, n_cases, n_seeds},\ncomplete), so the chapters' protocol_table() and char_arms() read it unchanged, plus the key \"raw_read_isla\", the CHAR record's\nISLA arm (raw slice reads), which protocol_table ignores. n_cases is the A2 record's where it has one (DeepJEB++), else the CHAR\nISLA arm's: the A2 lanes are scored on the same validation split by the same scorer. Two lists replace a baseline arm: FAIR_INPUT\n(retrained on fair inputs) and SCORESET (the same checkpoints re-scored on ISLA's scored set); each keeps the replaced arm under its\nown key. FAIR_INPUT applies after SCORESET.\nusage: python a2r_protocol_artifacts_2026-10-17.py",
  "protocols": {
   "native": "native mesh",
   "area": "uniform point cloud",
@@ -193,28 +193,28 @@
   "Transolver 512 x 16 at 100k cells": {
    "native": {
     "pressure_l2": {
-     "mean": 0.05248650908470154,
+     "mean": 0.04947526752948761,
      "per_seed": {
-      "42": 0.0523449977238973,
-      "43": 0.052628020445505776
+      "42": 0.049462124705314636,
+      "43": 0.049488410353660583
      },
      "n_cases": 48,
      "n_seeds": 2
     },
     "velocity_l2": {
-     "mean": 0.12501340607802075,
+     "mean": 0.11227308710416159,
      "per_seed": {
-      "42": 0.12463819980621338,
-      "43": 0.1253886123498281
+      "42": 0.11377361416816711,
+      "43": 0.11077256004015605
      },
      "n_cases": 48,
      "n_seeds": 2
     },
     "nut_l2": {
-     "mean": 0.08932746450106302,
+     "mean": 0.08808592955271402,
      "per_seed": {
-      "42": 0.08906075358390808,
-      "43": 0.08959417541821797
+      "42": 0.08805953462918599,
+      "43": 0.08811232447624207
      },
      "n_cases": 48,
      "n_seeds": 2
@@ -222,28 +222,28 @@
    },
    "area": {
     "pressure_l2": {
-     "mean": 0.05248650908470154,
+     "mean": 0.04947526752948761,
      "per_seed": {
-      "42": 0.0523449977238973,
-      "43": 0.052628020445505776
+      "42": 0.049462124705314636,
+      "43": 0.049488410353660583
      },
      "n_cases": 48,
      "n_seeds": 2
     },
     "velocity_l2": {
-     "mean": 0.12501340607802075,
+     "mean": 0.11227308710416159,
      "per_seed": {
-      "42": 0.12463819980621338,
-      "43": 0.1253886123498281
+      "42": 0.11377361416816711,
+      "43": 0.11077256004015605
      },
      "n_cases": 48,
      "n_seeds": 2
     },
     "nut_l2": {
-     "mean": 0.08932746450106302,
+     "mean": 0.08808592955271402,
      "per_seed": {
-      "42": 0.08906075358390808,
-      "43": 0.08959417541821797
+      "42": 0.08805953462918599,
+      "43": 0.08811232447624207
      },
      "n_cases": 48,
      "n_seeds": 2
@@ -251,28 +251,28 @@
    },
    "posed": {
     "pressure_l2": {
-     "mean": 0.8131156762440999,
+     "mean": 0.7702643871307373,
      "per_seed": {
-      "42": 0.8119870821634928,
-      "43": 0.814244270324707
+      "42": 0.7833855152130127,
+      "43": 0.7571432590484619
      },
      "n_cases": 48,
      "n_seeds": 2
     },
     "velocity_l2": {
-     "mean": 1.2467988729476929,
+     "mean": 1.272697925567627,
      "per_seed": {
-      "42": 1.191336949666341,
-      "43": 1.3022607962290447
+      "42": 1.3428173065185547,
+      "43": 1.2025785446166992
      },
      "n_cases": 48,
      "n_seeds": 2
     },
     "nut_l2": {
-     "mean": 1.0875399112701416,
+     "mean": 1.0825478633244834,
      "per_seed": {
-      "42": 1.0429192384084065,
-      "43": 1.1321605841318767
+      "42": 1.096479336420695,
+      "43": 1.0686163902282715
      },
      "n_cases": 48,
      "n_seeds": 2
@@ -370,5 +370,98 @@
     "n_seeds": 2
    }
   }
+ },
+ "raw_drive_transolver": {
+  "label": "Transolver 512 x 16 at 100k cells, the arm it replaces",
+  "native": {
+   "pressure_l2": {
+    "mean": 0.05248650908470154,
+    "per_seed": {
+     "42": 0.0523449977238973,
+     "43": 0.052628020445505776
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   },
+   "velocity_l2": {
+    "mean": 0.12501340607802075,
+    "per_seed": {
+     "42": 0.12463819980621338,
+     "43": 0.1253886123498281
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   },
+   "nut_l2": {
+    "mean": 0.08932746450106302,
+    "per_seed": {
+     "42": 0.08906075358390808,
+     "43": 0.08959417541821797
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   }
+  },
+  "area": {
+   "pressure_l2": {
+    "mean": 0.05248650908470154,
+    "per_seed": {
+     "42": 0.0523449977238973,
+     "43": 0.052628020445505776
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   },
+   "velocity_l2": {
+    "mean": 0.12501340607802075,
+    "per_seed": {
+     "42": 0.12463819980621338,
+     "43": 0.1253886123498281
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   },
+   "nut_l2": {
+    "mean": 0.08932746450106302,
+    "per_seed": {
+     "42": 0.08906075358390808,
+     "43": 0.08959417541821797
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   }
+  },
+  "posed": {
+   "pressure_l2": {
+    "mean": 0.8131156762440999,
+    "per_seed": {
+     "42": 0.8119870821634928,
+     "43": 0.814244270324707
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   },
+   "velocity_l2": {
+    "mean": 1.2467988729476929,
+    "per_seed": {
+     "42": 1.191336949666341,
+     "43": 1.3022607962290447
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   },
+   "nut_l2": {
+    "mean": 1.0875399112701416,
+    "per_seed": {
+     "42": 1.0429192384084065,
+     "43": 1.1321605841318767
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   }
+  }
+ },
+ "fair_input": {
+  "Transolver 512 x 16 at 100k cells": "retrained reading the unit freestream direction U_inf_dir (clud_vol_t), scored on ISLA's 200,000-cell set; its area rows equal its native rows in this scorer; scores: campaigns_2026-10-20/drive_fix2/ud2_scores_2026-10-20.json; the replaced arm is kept under raw_drive_transolver"
  }
 }
