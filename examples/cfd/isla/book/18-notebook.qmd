@@ -38591,3 +38591,77 @@ case, and not computable from the posed boundary.
   result, and it stands.
 - ISLA against ISLA-DTT, which Peter wants AeroZoo to decide, moves to the corrected lanes, which run both.
 - The AeroZoo ratios of the head-frame normalization test move to the corrected protocol.
+
+## 2026-10-19 — Boundary-drawn anchors do not replace interacting ISLA on AirfRANS, and ISLA-DTT leads it by 26 percent on pressure {#sec-nb-anchor-verdict}
+
+**Question** (E3b of the architecture agenda, pre-registered 2026-10-18 in
+scratch/isla-anchor-2026-10-18/PREREG.md). Interacting ISLA lets the
+requested points write into the slices, so its prediction at a point
+depends on which other points are requested. Can a query-independent ISLA
+match it when its interior writers are anchors drawn from the boundary
+alone, by a cosine law along the boundary normals out to the domain
+diameter? Five arms ran two seeds each on AirfRANS uniform, from one
+snapshot of the A2 code (nearest-token geometry):
+
+- A, interacting ISLA, the control;
+- B, passive: query-independent, with the boundary as the only writer;
+- C, ANCHOR: 50,000 boundary-drawn anchors as interior writers;
+- D, ISLA-DTT: query-independent, with its boundary read;
+- E, a diagnostic: 50,000 anchors at the CFD mesh nodes, which separates
+  the anchors' law from their role.
+
+**Rule.** C must first pass a validity check: far-field companion points
+move its predictions by at most 1e-4 in float32 and 1e-9 in float64. C
+replaces A if the geometric mean of C ÷ A over pressure and velocity is
+at most 1.05 and eddy viscosity is at most 1.10. It does not replace A if
+C ÷ A reaches 1.10 on pressure or velocity with both seeds agreeing.
+Otherwise Peter decides.
+
+| Arm | Pressure | Velocity | Eddy viscosity | ÷ A (p / v / eddy viscosity) |
+|---|---|---|---|---|
+| A, interacting ISLA | 0.01835 (0.01808, 0.01861) | 0.00971 (0.00940, 0.01002) | 0.02257 (0.02112, 0.02402) | 1 |
+| B, passive | 0.01569 (0.01685, 0.01452) | 0.01025 (0.01031, 0.01018) | 0.02417 (0.02372, 0.02461) | 0.855 / 1.055 / 1.071 |
+| C, ANCHOR | 0.02601 (0.02967, 0.02234) | 0.01438 (0.01648, 0.01228) | 0.02493 (0.02873, 0.02113) | 1.417 / 1.481 / 1.104 |
+| D, ISLA-DTT | 0.01361 (0.01356, 0.01367) | 0.00861 (0.00865, 0.00857) | 0.02231 (0.02137, 0.02324) | 0.742 / 0.887 / 0.988 |
+| E, mesh-node anchors | 0.02068 (0.02146, 0.01990) | 0.01054 (0.01052, 0.01056) | 0.02363 (0.02388, 0.02337) | 1.127 / 1.086 / 1.047 |
+
+Native relative L2 error, float32, 200 test cases at 100,000 points;
+seed means with seeds 42 and 43 in parentheses.
+
+**Verdict: does not replace.** C passes the validity check: far-field
+companions move its float64 predictions by at most 7e-12 of the RMS
+target. C ÷ A is 1.640 and 1.201 on pressure and 1.753 and 1.226 on
+velocity for seeds 42 and 43, all above 1.10. The geometric mean over
+pressure and velocity is 1.449. The ANCHOR line ends here and does not
+go on to AeroZoo.
+
+**Beside the rule.**
+
+- ISLA-DTT leads interacting ISLA by 26 percent on pressure and 11
+  percent on velocity, and eddy viscosity is level. Both seeds agree on
+  pressure (0.750, 0.734) and on velocity (0.920, 0.856). The
+  pre-registration expected the opposite, from the pre-A2 runs, in which
+  ISLA-DTT trailed ISLA by 11, 26 and 21 percent. The passive arm also
+  leads A on pressure (0.855). On AirfRANS, the coupling between
+  requested points seems to cost interacting ISLA accuracy.
+- Interior writers hurt pressure whatever their law. The mesh-node
+  anchors read 1.32 of the passive arm on pressure, and the boundary-drawn
+  ones 1.66.
+- C is not pose-exact as built. Its posed ÷ native reaches 1.185 on eddy
+  viscosity for seed 43, while every other run stays within 0.23 percent.
+  A pose changes which anchors the fixed evaluation stream draws.
+- The query-population probe confirms that A depends on its companions:
+  far-field companions raise its error 26 to 63 times. In float64, B and
+  E move by at most 5e-12 of the RMS target. D moves by 2e-6, above the
+  1e-9 line. The likely cause is ISLA-DTT's cluster means, which run in
+  float32 by design at θ > 0, with an order-dependent sum on CUDA. A
+  float64 re-probe after that read is fixed will check this.
+- Step time at mid-run, relative to A: B 1.00, C 1.20, D 1.22, E 1.21.
+  Peak memory is 38.0 GB for A, 42.0 GB for D and 55.5 GB for C
+  (scratch/isla-anchor-2026-10-18/RESULTS.md).
+
+**Next.** The corrected AeroZoo lanes decide ISLA against ISLA-DTT. This
+result goes beside them as AirfRANS evidence in ISLA-DTT's favor, on the
+A2 code with nearest-token geometry. The same comparison on the new
+reference (exact geometry, the continuous encoding and conditions by
+name) follows its adoption check.
