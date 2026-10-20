@@ -14,7 +14,8 @@ print(f"**On the {sum(S.DATASETS[k].fair_drive for k in S.available())} tasks it
       "does not change when the test geometry is moved or resampled.** This chapter is the evidence of Part IV on one page: one "
       "table with every headline number, one figure for each of the two invariances, and a reading of where ISLA leads and "
       "trails. Each dataset chapter then opens up its rows. The ISLA checkpoints of every row are of the nearest-token form, which "
-      "differs from the class of Part II in how the boundary and the prediction points enter the model (@sec-checkpoint-form).")
+      "differs from the class of Part II in how the boundary and the prediction points enter the model, in its length unit and in its "
+      "scales (@sec-checkpoint-form).")
 ```
 
 ```{python}

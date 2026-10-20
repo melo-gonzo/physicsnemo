@@ -46,7 +46,7 @@ symmetry built into the architecture, sums over the boundary weighted by
 the cells' measure, and dimensionless geometry (@sec-isla). No coordinate
 reaches a learned map. Every sum over the boundary is a measure-weighted quadrature
 rule. Position is stated only as invariants of a token against the slices'
-own anchors, in a length unit computed from the sample. Vector and tensor
+own anchors, in a length unit computed from the boundary. Vector and tensor
 outputs are rebuilt at the end from a basis that rotates with the body. The
 slice sublayer reads the normalized state. The forward pass with every
 tensor shape is @sec-architecture, and the contracts it holds to roundoff
@@ -198,8 +198,9 @@ checkpoints read the nearest sampled token instead
 forest uses a canonical frame of the boundary only to group cells for
 speed (@sec-arch-tree-read). Positions enter only as differences from the slices'
 own anchors, and the one length unit is the
-measure-weighted RMS pairwise distance of the boundary sample, a two-point
-integral that converges under refinement (@sec-isla-frame).
+measure-weighted RMS pairwise distance of the full-resolution boundary, a
+two-point integral that is exact for the meshed boundary and converges under
+refinement (@sec-isla-frame).
 
 *Prior work.* Translation invariance through relative positions is the
 standard construction of equivariant message passing. EGNN builds its

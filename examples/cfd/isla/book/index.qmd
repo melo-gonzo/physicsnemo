@@ -82,7 +82,7 @@ print(
     f"{base_area:.1f}-fold while ISLA's stays within {100 * isla_area:.1f}%; on the DrivAerML Volume task the same redraw moves "
     f"ISLA's own error {min(vol_area):.1f}-fold to {max(vol_area):.1f}-fold, because those checkpoints compute each interior point's "
     "wall distance from the boundary samples. They are of the nearest-token form, which differs from ISLA as Part II defines it in how "
-    "the boundary and the prediction points enter the model; the class computes the wall distance from the full-resolution surface "
+    "the boundary and the prediction points enter the model, in its length unit and in its scales; the class computes the wall distance from the full-resolution surface "
     "(@sec-checkpoint-form). "
     "Where ISLA trails, and where its own error moves, the book shows the mechanism."
 )

@@ -99,12 +99,21 @@ ISLA-DTT read.
 :::
 
 The first five rows are exact symmetries of the algebra. Positions enter only as differences to slice anchors, which are
-themselves measure-weighted means. The length unit $L$, the measure-weighted RMS pairwise distance of the boundary tokens, is
+themselves measure-weighted means. The length unit $L$, the measure-weighted RMS pairwise distance of the full-resolution boundary, is
 an integral that scales with the geometry. Every scalar the network forms is a norm or an inner product of vectors that
 rotate together (@sec-isla-frame, @sec-isla-relational). Vector and tensor outputs are assembled in a basis built from those
 same vectors (@sec-isla-heads). The last three rows are discretization statements. Cell splitting is exact, because a
 quadrature over the split cells is the same sum. Refinement and resampling are statements about a limit, and the next two
 sections are about them.
+
+**On the interior task the boundary draw is pose-invariant in the limit of its token budget.** A boundary with more cells
+than the budget `boundary_tokens` is subsampled by the systematic draw of @sec-arch-boundary-draw, which lays the cells
+along a Morton order of their centroids taken along the dataset's axes. A rotated case therefore draws different cells, and
+its prediction moves by the difference between two quadratures of the same surface. That difference vanishes as the budget
+reaches the full resolution, where every cell is kept, and the posed protocol measures what remains at the working budget.
+A boundary with no more cells than the budget is kept whole and is exact, as in the tests above. The length unit, the
+declared scales and each prediction point's wall geometry are computed from the full-resolution boundary before the draw,
+so none of them moves with it.
 
 ::: {.callout-warning title="What is not a contract"}
 - **The magnitude of a global vector input.** It is discarded by design: a direction is normalized, and a magnitude that
@@ -530,8 +539,8 @@ by up to the radius of the largest gap between tokens), and the overestimate dep
 model trained under the native law learns to read the native law's distances. Under the area law, which thins the samples
 where the mesher refined and adds them where it did not, its near-wall points read distances from a distribution it has not
 seen. The exact distance is the blue line at one, whatever the draw (`test_builtin_geometry_is_the_surface_s_for_every_draw_of_the_tokens`).
-The scaled distance $s_q = d_q / L$ moves with the draw through $L$, a quadrature over the drawn tokens, but only by $L$'s
-quadrature error (@sec-arch-frame).
+The scaled distance $s_q = d_q / L$ is the same for every draw too, since $L$ is computed from the full-resolution boundary
+before the draw (@sec-arch-frame).
 
 ```{python}
 #| label: fig-nearest-token
