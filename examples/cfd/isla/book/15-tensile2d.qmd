@@ -49,7 +49,7 @@ def lug_conditions(ax, bp, bc, fixed, loaded, hole, lw=4.0, fill="#e4e3dc"):
     ax.plot(ctr[0] + R * np.cos(t), ctr[1] + R * np.sin(t), color=BC["flux"], lw=lw, solid_capstyle="butt", zorder=5)
 ```
 
-**On a planar notched specimen whose target includes the stress tensor, GeoTransolver leads ISLA on stress and displacement: ISLA's error is `{python} f"{1 / max(GT_SD):.1f}"` to `{python} f"{1 / min(GT_SD):.1f}"` times GeoTransolver's.** ISLA is the one architecture of the three that keeps its answer when the specimen is rotated and translated. It keeps it to within `{python} f"{100 * (POSE_HI - 1):.0f}"`%, and the rest has a cause this chapter locates: mesh nodes that sit on the boundary itself, where the input ISLA builds from its nearest boundary sample is decided by rounding.
+**On a planar notched specimen whose target includes the stress tensor, GeoTransolver leads ISLA on stress and displacement: ISLA's error is `{python} f"{1 / max(GT_SD):.1f}"` to `{python} f"{1 / min(GT_SD):.1f}"` times GeoTransolver's.** ISLA is the one architecture of the three that keeps its answer when the specimen is rotated and translated. It keeps it to within `{python} f"{100 * (POSE_HI - 1):.0f}"`%, and the rest has a cause this chapter locates: mesh nodes that sit on the boundary itself, where the input the standing's checkpoints build from their nearest boundary sample is decided by rounding. Those checkpoints are of the nearest-token form (@sec-checkpoint-form).
 
 ## Three solids, three tests {#sec-solids}
 
@@ -234,7 +234,7 @@ print(f"**Diversity.** Each of the {G['n_ok']} cases has its own geometry and it
 **702 two-dimensional quasi-static elasto-viscoplastic tension cases of a notched specimen (Safran; CC-BY-SA-4.0; Hugging Face `PLAID-datasets/Tensile2d`), of which the 500 official training samples carry targets.** Plane strain, small deformations. Each sample is an unstructured triangle mesh of 6 to 12 thousand nodes in $[-1, 1]$ (a unit half-width): a pressure $P$ on the top edge, a fixed bottom edge ($u_2 = 0$) with its bottom-left node pinned ($u_1 = 0$), free curved notches, and five scalar parameters of the elasto-viscoplastic constitutive law, which the release names only $p_1 \ldots p_5$. The 200 test samples and the 2 out-of-distribution samples ship without output fields; the converter writes them under `withheld/`, which no model reads.
 
 - **Conversion** (`plaid_tensile2d_convert.py`). Interior: every node, embedded at $z = 0$, with `displacement` $(U_1, U_2, 0)$, `q`, the stress components `sig11`, `sig22`, `sig12` (MPa), the stored signed distance `sdf` (negative inside) and its gradient `sdf_normals`, and the nodal tags `tag_top`, `tag_bottom`, `tag_bottomleft`. Boundary `outer`: every triangle edge owned by one triangle, as line cells with outward in-plane normals, segment lengths as the measure, and the per-cell labels `bc_loaded`, `bc_fixed`, `bc_pinned` and `bc_pressure` ($= P$ on loaded cells). Global data: `P`, `p1` … `p5`.
-- **What each model receives.** ISLA (`isla_tensile2d.yaml`, `dim: 2` after `RestrictToPlane`) reads the outer cells with the four labels, the six standardized scalars as six global scalars, and every node as a prediction point with the stored `sdf` and `sdf_normals`. Inside the model each prediction point also gets the signed distance and the direction to its nearest boundary sample (@sec-tensile2d-ties). GeoTransolver and Transolver read every node with its coordinates, the same stored `sdf` and `sdf_normals` and the three nodal tags `tag_top`, `tag_bottom`, `tag_bottomleft`, which carry the boundary conditions to them, and the six scalars as their global embedding (@tbl-model-inputs). They predict the three stress components as three scalars.
+- **What each model receives.** ISLA (`isla_tensile2d.yaml`, `dim: 2` after `RestrictToPlane`) reads the outer polyline as four named boundary conditions, which `SplitBoundaryByLabels` cuts from its labels in the order `loaded`, `fixed`, `pinned`, the first winning where two mark a cell: the bottom edge's cell at the pinned corner stays `fixed`, the left side's cell at that node is `pinned`, and the unlabeled cells are `free`; only `loaded` carries a field, the applied pressure. The six standardized scalars are six global scalars, and every node is a prediction point, which gets its exact signed distance and direction to the polyline inside the model; ISLA reads no stored `sdf`. The standing's checkpoints, of the nearest-token form, read the outer cells as one boundary with the four label fields, the stored `sdf` and `sdf_normals` at every node, and the distance and direction to the nearest boundary sample (@sec-checkpoint-form, @sec-tensile2d-ties). GeoTransolver and Transolver read every node with its coordinates, the same stored `sdf` and `sdf_normals` and the three nodal tags `tag_top`, `tag_bottom`, `tag_bottomleft`, which carry the boundary conditions to them, and the six scalars as their global embedding (@tbl-model-inputs). They predict the three stress components as three scalars.
 - **Normalization** (statistics over `train_400`). The six scalars are standardized per component. **Every target of rank one or more is normalized with zero mean and one isotropic scale**, because a vector shifted by a fixed mean vector, which does not rotate with the specimen, or a tensor scaled per component, is no longer equivariant: no equivariant model can emit it for a rotated specimen. The displacement is divided by `{python} f"{DISP_SCALE:.2e}"` and the three stress components by the one scale `{python} f"{STRESS_SCALE:.1f}"` MPa, the root mean of $(\sigma_{11}^2 + \sigma_{22}^2 + 2\sigma_{12}^2)/4$ over the training nodes. The plastic strain is standardized to zero mean and unit variance. The baselines train on the same normalized numbers.
 - **Splits.** `val_100` holds 100 samples drawn with seed 0 from `train_500` minus `train_250`, so the official nested ladder up to `train_250` stays disjoint from it, and `train_400` is `train_500` minus `val_100`. Every model trains on `train_400` and is scored on `val_100`.
 - **Pitfalls.** Most specimens never yield. On 69 of the 100 validation specimens $q$ is identically zero, which the standardization maps to the constant `{python} f"{-Q_MEAN / Q_STD:.4f}"`. On those specimens the relative error of $q$ is the model's absolute error divided by `{python} f"{Q_MEAN / Q_STD:.4f}"`: the size of a constant offset, not an error in a plastic field. The numbers of PLAID's public benchmark leaderboard are on the withheld test set and are not comparable to `val_100` figures.
@@ -306,7 +306,7 @@ import json as _json
 _R = _json.load(open(RENDER_DIR / "render_2d_tensile2d.json"))["tensile2d"]
 rendering_figure("fig-tensile2d-prediction", [("figures/renderings/tensile2d_stress.png", "von Mises stress of the in-plane components")],
     f"The three reference configurations on one PLAID Tensile2d validation specimen, {_R['sample_id'].split('_')[0]}. Relative L2 on this case: {case_errors(_R['per_sample_rel_l2'])}. " + "Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one "
-      "symmetric scale. How to read this: one case, chosen as the case of median ISLA error (seed 42 of each reference configuration), "
+      f"symmetric scale. ISLA checkpoints of the {S.FORM_TAG} (@sec-checkpoint-form). How to read this: one case, chosen as the case of median ISLA error (seed 42 of each reference configuration), "
       "not a standing; the standing is the table above. "
     + "Data: results/renderings_2026-10-18/arrays/render_2d_tensile2d.json.", nrow=None)
 ```
@@ -343,16 +343,16 @@ print(f"**Rotated and translated, ISLA keeps its answer and the baselines lose t
 
 ### Why ISLA's error moves under the pose {#sec-tensile2d-ties}
 
-**ISLA's prediction is exactly equivariant in exact arithmetic; on this mesh it is not in float32, because a few hundred nodes tie for their nearest boundary sample and rounding breaks the tie.** Every prediction point gets two quantities from the boundary sample nearest to it: the signed distance $d$ to that sample and the unit direction $\hat\nu$ from it, which serves as the point's own "normal" in every invariant it computes (@sec-isla-relational). With $y^\ast$ the nearest boundary-cell centroid and $n^\ast$ its outward normal,
+**The standing's checkpoints are exactly equivariant in exact arithmetic; on this mesh they are not in float32, because a few hundred nodes tie for their nearest boundary sample and rounding breaks the tie.** In the nearest-token form of those checkpoints (@sec-checkpoint-form) every prediction point gets two quantities from the boundary sample nearest to it: the signed distance $d$ to that sample and the unit direction $\hat\nu$ from it, which serves as the point's own "normal" in every invariant it computes (@sec-isla-relational). With $y^\ast$ the nearest boundary-cell centroid and $n^\ast$ its outward normal,
 
 $$
 \hat\nu \equiv \frac{x - y^\ast}{\lvert x - y^\ast \rvert}, \qquad d \equiv \operatorname{sign}(\hat\nu \cdot n^\ast)\,\lvert x - y^\ast \rvert,
 \qquad y^\ast = \arg\min_j \lvert x - y_j \rvert ,
 $$
 
-with the tangent case $\hat\nu \cdot n^\ast = 0$ counted as the positive side (`nearest_boundary_geometry`). Both are functions of differences of positions, so a rigid motion leaves $d$ unchanged and rotates $\hat\nu$ with the body. The argmin is the weak point. Where two samples are equally near, the choice between them is a discontinuous function of position, and rounding the rotated coordinates to float32 can make it either way.
+with the tangent case $\hat\nu \cdot n^\ast = 0$ counted as the positive side. Both are functions of differences of positions, so a rigid motion leaves $d$ unchanged and rotates $\hat\nu$ with the body. The argmin is the weak point. Where two samples are equally near, the choice between them is a discontinuous function of position, and rounding the rotated coordinates to float32 can make it either way.
 
-On Tensile2d the tied points are almost all the nodes that lie on the polyline itself (@fig-tensile2d-ties). Such a node is the junction of two segments, and the two segment midpoints beside it are equally far from it. The direction from either midpoint to the node runs along the wall, so the two candidates give $\hat\nu = +t$ and $\hat\nu = -t$ for the wall tangent $t$: a reversal. Along the wall $\hat\nu \cdot n^\ast$ is zero in exact arithmetic, so the sign of $d$ is decided by rounding as well. The node's distance input therefore jumps between two values of opposite sign, and the logarithmic channel ISLA builds from it, $\operatorname{sign}(s)\log\lvert s\rvert$ with $s = d/L$, jumps further.
+On Tensile2d the tied points are almost all the nodes that lie on the polyline itself (@fig-tensile2d-ties). Such a node is the junction of two segments, and the two segment midpoints beside it are equally far from it. The direction from either midpoint to the node runs along the wall, so the two candidates give $\hat\nu = +t$ and $\hat\nu = -t$ for the wall tangent $t$: a reversal. Along the wall $\hat\nu \cdot n^\ast$ is zero in exact arithmetic, so the sign of $d$ is decided by rounding as well. The node's distance input therefore jumps between two values of opposite sign, and the logarithmic channel the form builds from it, $\operatorname{sign}(s)\log\lvert s\rvert$ with $s = d/L$, jumps further.
 
 ```{python}
 #| label: fig-tensile2d-ties
@@ -362,7 +362,7 @@ On Tensile2d the tied points are almost all the nodes that lie on the polyline i
 #|   boundary sample changes when the specimen is rotated by 37° and translated
 #|   by one RMS node radius in float32 (aqua, filled). Bottom: a stretch of the
 #|   free notch, enlarged: the polyline (gray), its segment midpoints, which are
-#|   ISLA's boundary samples (black), and the mesh nodes (gray circles), the node that switches filled aqua; at one
+#|   the boundary samples of the nearest-token form (black), and the mesh nodes (gray circles), the node that switches filled aqua; at one
 #|   node on the wall the two arrows are the directions $\hat\nu$ from its two equally
 #|   near samples, opposite along the wall. How to read this: the nodes that
 #|   switch are the nodes on the polyline; the interior nodes keep their
@@ -417,6 +417,9 @@ plt.show()
 #| label: para-tensile2d-ties
 #| output: asis
 ch = [r["nearest_changes_under_pose_fraction"] for r in TT.values()]
+# the exact-geometry control with the continuous encoding (GEO-CONT, `cont`): posed / native per seed and field
+T2_CONT = max(abs(v - 1) for fv in json.load(open(RES / "campaigns_2026-10-19" / "geo_evidence" / "geo_evidence.json"))["geo_cont"]["t2dz"]
+              ["posed_over_native_per_seed"]["cont"].values() for v in fv.values())
 rg = f"{T1['float32_rounding_rel_gap_median']:.0e}".replace("e-0", "e-")   # median float32 rounding band of the relative gap
 print(f"**The counts, on the seven specimens the chapter draws.** {100 * min(ch):.1f}% to {100 * max(ch):.1f}% of the nodes change their "
       f"nearest sample under one generic pose. On the validation specimen of @fig-problem-tensile2d that is "
@@ -435,8 +438,12 @@ print(f"**The perturbation is real but small on this mesh, and that is why the s
       f"field, and ISLA's error moves by {100 * (POSE_LO - 1):.0f}% to {100 * (POSE_HI - 1):.0f}% per seed. The lug, a structured hexahedral "
       "mesh, ties far more of its nodes, interior ones included, and there the same construction multiplies ISLA's error (@sec-interior-lug). "
       "On the unstructured DrivAerML and AirfRANS interior meshes ties are rare and the rotated and translated scoring reproduces "
-      "the native one (@sec-standing). The remedy belongs to the geometry construction, not to the trained model: an input that is a "
-      "continuous function of position at ties, such as the exact distance and direction to the boundary surface (@sec-open-questions).")
+      "the native one (@sec-standing). The cause belongs to the geometry construction, not to the trained model. The class has no selection "
+      "to make: its wall geometry is the exact closest point on the polyline, and a node on the polyline takes $d = 0$ with the pseudo-normal "
+      "as its direction (@sec-exact-geometry-draw). Trained with that geometry and the continuous distance channel, otherwise in the "
+      "nearest-token form (the stored signed distance still among its inputs), the same configuration "
+      f"keeps its rotated and translated error within {100 * T2_CONT:.2f}% of native on every field and seed (@sec-medial-ties; data: "
+      "results/campaigns_2026-10-19/geo_evidence/geo_evidence.json).")
 ```
 
 ### A thinner boundary {#sec-tensile2d-boundary-law}
@@ -464,14 +471,14 @@ print(f"\n: ISLA on the {N_VAL} validation specimens with the boundary polyline 
       "Data: results/char/area2_2026-10-16.json. {#tbl-tensile2d-area2}")
 ```
 
-**Thinning the free edges multiplies ISLA's stress and displacement errors by `{python} f"{min(CNT):.0f}"` to `{python} f"{max(CNT):.0f}"`, and the law of the draw has no effect, because on this polyline the two laws are the same draw.** @tbl-tensile2d-area2 keeps every labeled segment and thins the free notches to about a third. The segments are nearly equal in length, so drawing in proportion to length or uniformly keeps almost the same segments, and area ÷ uniform is `{python} f"{min(LAW):.2f}"` to `{python} f"{max(LAW):.2f}"`. Thinning changes the input of every node beside a removed segment: its nearest sample is farther away, so its distance and direction change. The table does not separate that from the change of the slice states, which become measure-weighted means over fewer tokens. The plastic-strain row sits inside its own noise floor, since a redraw moves the few yielded nodes' error by as much as the law does.
+**Thinning the free edges multiplies ISLA's stress and displacement errors by `{python} f"{min(CNT):.0f}"` to `{python} f"{max(CNT):.0f}"`, and the law of the draw has no effect, because on this polyline the two laws are the same draw.** @tbl-tensile2d-area2 keeps every labeled segment and thins the free notches to about a third. The segments are nearly equal in length, so drawing in proportion to length or uniformly keeps almost the same segments, and area ÷ uniform is `{python} f"{min(LAW):.2f}"` to `{python} f"{max(LAW):.2f}"`. In the nearest-token form, thinning changes the input of every node beside a removed segment: its nearest sample is farther away, so its distance and direction change. The table does not separate that from the change of the slice states, which become measure-weighted means over fewer tokens. The plastic-strain row sits inside its own noise floor, since a redraw moves the few yielded nodes' error by as much as the law does.
 
 ## What this dataset does not say {#sec-tensile2d-limits}
 
 **Tensile2d measures a tensor target in a planar solid, with six global scalars and the pose contract in its tensor form; it measures neither a change of geometry class nor the sampling law of the boundary.**
 
 - **Where ISLA's deficit sits is open.** ISLA trails GeoTransolver on stress and displacement and Transolver on displacement and plastic strain, the only trails among the solids' standings (@tbl-tensile2d-protocols), and where on the specimen the excess error sits is not measured. One measurement would locate it: ISLA's error on the polyline nodes against its error in the interior, set beside the baselines'. If ISLA's excess sits on the polyline, the tie construction of @sec-tensile2d-ties accounts for part of the native deficit as well; if it sits at the notch root, it does not.
-- **The pose contract holds to a few percent, not exactly.** The residual shift is the nearest-sample construction at nodes on the boundary, a property of ISLA's interior geometry input on meshes whose prediction points include boundary nodes. An exact, continuous form of that input is an open design question (@sec-open-questions).
+- **The standing's pose contract holds to a few percent, not exactly.** The residual shift is the nearest-sample construction at nodes on the boundary, a property of the nearest-token form's interior geometry on meshes whose prediction points include boundary nodes (@sec-checkpoint-form). The class's exact geometry removes the selection (@sec-tensile2d-ties); the class's own standing on this dataset is open (@sec-oq-class-standing).
 - **The plastic-strain column is an ordering on a constant-offset metric.** It says little about how well any of the three predicts the plastic field, since the 69 validation specimens that never yield dominate it.
 - **The sampling law is not separable here.** The segments are nearly equal, so the length-proportional and uniform draws coincide, and only ISLA reads the boundary; independence of the sampling law is measured on the surface datasets (@sec-invariances).
 - **One specimen family, configurations not matched in cost.** The notch moves and widens and the outline stays a tension specimen. The three architectures run at their reference configurations with the parameters and memory of @tbl-tensile2d-cost.
