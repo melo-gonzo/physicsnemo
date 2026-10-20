@@ -68,7 +68,10 @@ OFFSETS = {
 #: The same conditions with ISLA's own scales: the inlet's velocity is the source of U
 #: and of the derived direction g, the fields and outputs carry units.
 SCALED = {
-    "inlet": {"u": {"rank": 1, "units": {"U": 1}, "velocity_scale": True}, "k": {"rank": 0, "units": {"U": 2}}},
+    "inlet": {
+        "u": {"rank": 1, "units": {"U": 1}, "velocity_scale": True},
+        "k": {"rank": 0, "units": {"U": 2}},
+    },
     "outlet": {
         "p": {"rank": 0, "units": {"U": 2}},
         "u_rev": {"rank": 1, "units": {"U": 1}},
@@ -142,7 +145,9 @@ def test_every_condition_s_fields_are_covariant(interior, improper, scaled):
     """Rotations and reflections with a translation: every condition's vector and
     tensor fields move with the geometry, and every output transforms by its rank;
     with ISLA's own scales the derived direction g moves with the source as well."""
-    m = _model(interior, **(dict(schemas=SCALED, output_schema=SCALED_OUT) if scaled else {}))
+    m = _model(
+        interior, **(dict(schemas=SCALED, output_schema=SCALED_OUT) if scaled else {})
+    )
     assert m.n_global_vectors == 1 + scaled
     meshes = _meshes()
     q = Q if interior else None
