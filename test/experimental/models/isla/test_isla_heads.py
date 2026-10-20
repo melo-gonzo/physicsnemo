@@ -71,7 +71,9 @@ def _globals(K):
 
 def _model(K=1, output_schema=OUTPUTS, **kw):
     torch.manual_seed(0)
-    base = dict(hidden=32, n_layers=2, n_slices=8, output_schema=output_schema, global_schema=_globals(K))
+    base = dict(
+        hidden=32, n_layers=2, n_slices=8, output_schema=output_schema, boundary_schemas={"wall": {}}, global_schema=_globals(K)
+    )
     base.update(kw)
     return ISLA(**base).double().eval()
 
@@ -200,7 +202,7 @@ def test_rank_spec_grammar_is_validated():
     """The shared grammar (FieldSchema.parse) validates the fields; ISLA adds its
     rank ceilings and the refusal of pseudotensor inputs. A bare integer is not a
     field declaration."""
-    base = dict(hidden=32, n_layers=1, n_slices=8, global_schema={"g": {"rank": 1}})
+    base = dict(hidden=32, n_layers=1, n_slices=8, boundary_schemas={"wall": {}}, global_schema={"g": {"rank": 1}})
     with pytest.raises(NotImplementedError, match="rank 5 is not supported"):
         ISLA(output_schema={"x": {"rank": 5}}, **base)
     with pytest.raises(ValueError, match="unknown keys"):
@@ -210,7 +212,7 @@ def test_rank_spec_grammar_is_validated():
     with pytest.raises(TypeError, match="output_schema\\['x'\\] must be a RankSpec or a mapping"):
         ISLA(output_schema={"x": 0}, **base)
     with pytest.raises(TypeError, match="global_schema\\['g'\\] must be a RankSpec or a mapping"):
-        ISLA(output_schema={"x": {"rank": 0}}, hidden=32, n_layers=1, n_slices=8, global_schema={"g": 1})
+        ISLA(output_schema={"x": {"rank": 0}}, **{**base, "global_schema": {"g": 1}})
     with pytest.raises(ValueError, match="parity must be"):
         ISLA(output_schema={"x": {"rank": 1, "parity": "mixed"}}, **base)
     with pytest.raises(ValueError, match="unknown keys \\['channels'\\]"):
@@ -220,11 +222,11 @@ def test_rank_spec_grammar_is_validated():
     with pytest.raises(ValueError, match="at least one field"):
         ISLA(output_schema={}, **base)
     with pytest.raises(NotImplementedError, match="pseudotensor"):
-        ISLA(output_schema={"p": {"rank": 0}}, boundary_schema={"w": {"rank": 1, "parity": "odd"}}, **base)
+        ISLA(output_schema={"p": {"rank": 0}}, **{**base, "boundary_schemas": {"wall": {"w": {"rank": 1, "parity": "odd"}}}})
     with pytest.raises(NotImplementedError, match="rank 3 is not supported"):
-        ISLA(output_schema={"p": {"rank": 0}}, boundary_schema={"T": {"rank": 3}}, **base)
+        ISLA(output_schema={"p": {"rank": 0}}, **{**base, "boundary_schemas": {"wall": {"T": {"rank": 3}}}})
     with pytest.raises(NotImplementedError, match="rank 2 is not supported"):
-        ISLA(output_schema={"p": {"rank": 0}}, hidden=32, n_layers=1, n_slices=8, global_schema={"T": {"rank": 2}})
+        ISLA(output_schema={"p": {"rank": 0}}, **{**base, "global_schema": {"T": {"rank": 2}}})
     with pytest.raises(TypeError, match="mapping"):
         ISLA(output_schema=[0, 1], **base)
     ### a RankSpec instance is a leaf too
@@ -238,8 +240,8 @@ def test_rank_two_output_in_the_interior_task():
     mesh, drv = _boundary(200)
     q_pts, _, _, _ = cloud(50, seed=1)
     outputs_ = {"p": {"rank": 0}, "v": {"rank": 1}, "sig": {"rank": 2, "symmetric": True}, "t": {"rank": 2}}
-    m = _model(1, output_schema=outputs_, interior=True, query_schema={"sdf": {"rank": 0}})
-    q = points_mesh(q_pts, {"sdf": torch.rand(50, dtype=D)})
+    m = _model(1, output_schema=outputs_, interior=True)
+    q = points_mesh(q_pts)
     base = _forward(m, mesh, drv, 1, q=q)
     assert base["sig"].shape == (50, 3, 3)
     for improper in (False, True):

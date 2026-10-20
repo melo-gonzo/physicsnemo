@@ -221,24 +221,18 @@ class _RoutingLogits(nn.Module):
 
 
 class _QueryTokens(nn.Module):
-    """The query tokens' own parameters (the interior mode): a learned token-type
-    offset, the log of the learned fraction of the total boundary measure that is
-    their routing weight (``routing_mass=False``, passive tokens: none, ``logw`` is
-    ``None``), and the embedding of their per-query features (the built-in signed
-    distance to the sampled boundary as ``[d/L, sign(d) log(|d|/L + eps)]`` ahead of
-    the fields declared in ``query_schema``)."""
+    """The query tokens' own parameters (the interior mode): their input layer
+    ``seed``, which maps their seed (the K terms n_q.g_k, the global scalars, the
+    built-in signed distance to the boundary surface as ``[s, asinh(s / 1e-6)]``,
+    ``s = d / L``) to the token width, followed, as a boundary condition's input layer is, by the model's
+    shared GELU and linear layer; and the log of the learned fraction of the total
+    boundary measure that is their routing weight (``routing_mass=False``, passive
+    tokens: none, ``logw`` is ``None``)."""
 
-    def __init__(self, hidden: int, n_features: int, routing_mass: bool = True) -> None:
+    def __init__(self, hidden: int, n_seed: int, routing_mass: bool = True) -> None:
         super().__init__()
         self.logw = nn.Parameter(torch.zeros(1)) if routing_mass else None
-        self.type_offset = nn.Parameter(torch.zeros(hidden))
-        self.embed = nn.Sequential(
-            nn.Linear(n_features, hidden), nn.GELU(), nn.Linear(hidden, hidden)
-        )
-
-    def forward(self, h_seed: torch.Tensor, feat: torch.Tensor) -> torch.Tensor:
-        """The query tokens' initial state from their seed embedding and features."""
-        return h_seed + self.type_offset.to(h_seed.dtype) + self.embed(feat).to(h_seed.dtype)
+        self.seed = nn.Linear(n_seed, hidden)
 
 
 class _SliceBlock(nn.Module):

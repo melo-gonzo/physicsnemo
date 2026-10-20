@@ -16,14 +16,26 @@
 # limitations under the License.
 
 # ISLA, surface task, on DeepJEB++ (deepjebpp_surface): the reference configuration of isla_surface.yaml on a linear-elastic
-# bracket. The outputs are predicted at the bracket's surface cells (`boundaries.surface`, the FEM surface triangulation);
-# the load case enters through the boundary mesh's per-cell fields (boundary_schema: the clamped cells, the loaded cells and
-# the applied traction vector on them) and through the global inputs: the load direction (force direction or moment axis)
-# as the one rank-1 global input, and the load type as two rank-0 global fields (the dataset's SplitGlobalVector splits the
+# bracket. The outputs are predicted at the bracket's surface cells (`boundaries.surface`, the FEM surface triangulation),
+# which the dataset labels by condition (bc_fixed, bc_loaded); SplitBoundaryByLabels (dataset_append_transforms below, for
+# this model only) splits it into three named boundary conditions (boundary_schemas): the loaded cells with the applied
+# traction vector, the clamped cells and the free surface, and puts the scored cell centroids (the interior point cloud) in
+# the order of ISLA's predictions (the conditions in sorted name order). The load case also enters through the global
+# inputs: the load direction (force direction or moment axis) as the one rank-1 global input, and the load type as two rank-0 global fields (the dataset's SplitGlobalVector splits the
 # stored one-hot `load_type` into `is_force` / `is_torque`). One global direction plus one rank-1 boundary input: the fused
 # geometry kernel applies.
 input_type: mesh
 output_type: mesh
+
+# ISLA-only steps after the dataset's own chain (the baselines read the dataset as it is): one boundary per condition, the
+# loaded label winning where both mark a cell, the unlabelled cells the free surface; the interior (the scored cell
+# centroids and their targets) permuted to the order of the predictions, the same points.
+dataset_append_transforms:
+  - _target_: ${dp:SplitBoundaryByLabels}
+    boundary: surface
+    labels: {loaded: bc_loaded, fixed: bc_fixed}
+    rest: free
+    reorder_interior: true
 
 training:
   optimizer:
@@ -38,8 +50,10 @@ compile_options:
   mode: max-autotune-no-cudagraphs
 
 forward_kwargs:
-  boundary_meshes:
-    surface: boundaries.surface   # Mesh[2, 3]; centroids, normals and the subsample's corrected measure are read from it
+  boundary_meshes:                # Mesh[2, 3] each; centroids, normals and the subsample's corrected measure are read from them
+    fixed: boundaries.fixed
+    free: boundaries.free
+    loaded: boundaries.loaded
   global_data: global_data        # the case's TensorDict; the model selects its declared leaves
 
 model:
@@ -47,10 +61,11 @@ model:
   output_schema:                  # the dataset's targets, by name and tensor rank
     von_mises: {rank: 0}
     displacement: {rank: 1}
-  boundary_schema:                # per-boundary-cell inputs
-    bc_fixed: {rank: 0}           # 1 on cells touching a clamped bolt node
-    bc_loaded: {rank: 0}          # 1 on cells touching a loaded lug node
-    bc_load: {rank: 1}            # the applied traction on the loaded cells (standardized by the dataset config), 0 elsewhere
+  boundary_schemas:               # the boundary conditions by name, each with its own per-cell fields
+    fixed: {}                     # the cells touching a clamped bolt node
+    loaded:                       # the cells touching a loaded lug node
+      bc_load: {rank: 1}          # the applied traction (standardized by the dataset config)
+    free: {}                      # the traction-free rest of the surface
   global_schema:
     load_dir: {rank: 1}           # the load direction (force) or moment axis (torsion); normalized to a unit direction inside the model
     is_force: {rank: 0}           # the load-type one-hot, one rank-0 field per component (SplitGlobalVector)

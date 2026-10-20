@@ -19,8 +19,8 @@ r"""Release-readiness tests for ISLA (MODELS_IMPLEMENTATION.md MOD-008a/b/c).
 Constructor and public attributes for a minimal and a custom configuration; forward
 non-regression against golden outputs stored next to this file; the exactness of the
 Mesh wrapper over the internal batched routine; checkpoint save and
-``Module.from_checkpoint`` round trip; a committed reference ``.mdlus``; and the
-backbone golden.
+``Module.from_checkpoint`` round trip; a committed reference ``.mdlus`` (and the
+refusal of a checkpoint of an earlier version); and the backbone golden.
 
 **Regenerating the goldens**: delete ``data/isla_default_v1.pth``,
 ``data/isla_interior_v1.pth``, ``data/isla_dtt_v1.pth``, ``data/isla_default_v1.mdlus`` and
@@ -31,12 +31,13 @@ backbone golden.
 twice: the first run recreates each missing file from the current code (and fails on
 purpose), the second run must pass. ``data/isla_backbone_v1.pth`` is regenerated only
 when the backbone changes by decision (a forward hook on ``norm_out`` under
-``CONFIGS["default"]`` / ``_make_tensors`` below; last recorded when the slice
-sublayer came to pool and broadcast the normalized state, H-RESID arm A2) and pins
-the backbone bitwise through the internal batched routine.
+``CONFIGS["default"]`` / ``_make_tensors`` below; last recorded when the boundary
+conditions came to be declared by name, each with its own input layer, checkpoint
+0.7.0) and pins the backbone through the internal batched routine.
 """
 
 import re
+import warnings
 from pathlib import Path
 
 import pytest
@@ -49,8 +50,13 @@ from test.experimental.models.isla._meshes import outputs, soup
 
 DATA_DIR = Path(__file__).parent / "data"
 
-#: Every configuration declares one scalar and one vector output and one global direction.
-IO = dict(output_schema={"p": {"rank": 0}, "v": {"rank": 1}}, global_schema={"g": {"rank": 1}})
+#: Every configuration declares one scalar and one vector output, one boundary condition
+#: without fields and one global direction.
+IO = dict(
+    output_schema={"p": {"rank": 0}, "v": {"rank": 1}},
+    boundary_schemas={"wall": {}},
+    global_schema={"g": {"rank": 1}},
+)
 
 #: One small configuration in its three forms: a surface task, an interior task (the
 #: constructor's ``interior`` flag) and ISLA-DTT (``query_independent``).
@@ -139,7 +145,7 @@ def test_isla_constructor_attributes(config):
         assert m.geo_kernel == "auto"
         assert m.interior is False and m.qt is None
         assert m.n_global_vectors == 1 and m.n_global_scalars == 0
-        assert m.boundary_schema == {} and m.query_schema == {}
+        assert m.boundary_schemas == {"wall": {}}
     else:
         m = ISLA(
             output_schema={
@@ -151,8 +157,7 @@ def test_isla_constructor_attributes(config):
                 "stress": {"rank": 2, "symmetric": True},
             },
             global_schema={"g1": {"rank": 1}, "g2": {"rank": 1}, "re": {"rank": 0}},
-            boundary_schema={"trace": {"rank": 0}, "traction": {"rank": 1}},
-            query_schema={"sdf": {"rank": 0}},
+            boundary_schemas={"wall": {"trace": {"rank": 0}, "traction": {"rank": 1}}, "outlet": {}},
             interior=True,
             hidden=64,
             n_layers=3,
@@ -163,8 +168,9 @@ def test_isla_constructor_attributes(config):
         assert len(m.blocks) == 3
         assert m.geo_kernel == "auto"
         assert m.n_global_vectors == 2 and m.n_global_scalars == 1
-        assert list(m.boundary_schema) == ["trace", "traction"]
-        assert list(m.query_schema) == ["sdf"]
+        assert list(m.boundary_schemas) == ["outlet", "wall"]  # canonical order
+        assert list(m.boundary_schemas["wall"]) == ["trace", "traction"]
+        assert list(m.boundary_conditions) == ["outlet", "wall"]
         assert m.interior is True and m.qt is not None
     assert isinstance(m, Module)
 
@@ -191,8 +197,9 @@ def test_isla_forward_non_regression(device, config):
 def test_mesh_wrapper_is_exact_over_the_batched_routine(device, config):
     """The Mesh API is a wrapper: the same parameters run through ``forward`` on the
     meshes and through the internal batched routine on the very tensors the wrapper
-    reads (cell centroids, cell normals, effective cell measures, a batch axis of
-    one) give bitwise-identical outputs."""
+    reads (cell centroids, cell normals, effective cell measures, the cells as the
+    surface of the interior geometry, a batch axis of one) give bitwise-identical
+    outputs."""
     model = _instantiate_model(**CONFIGS[config]).to(device)
     inputs = _make_inputs(device, query=(config != "default"))
     mesh = inputs["boundary_meshes"]["wall"]
@@ -205,14 +212,25 @@ def test_mesh_wrapper_is_exact_over_the_batched_routine(device, config):
             measure_weights=cell_measures(mesh)[None],
             global_inputs={"g": inputs["global_data"]["g"]},
             query_points=None if q is None else q[None],
+            surface_points=mesh.points[None],
+            surface_cells=mesh.cells[None],
         )
     expected_points = mesh.cell_centroids if q is None else q
     assert torch.equal(via_mesh.points, expected_points) and via_mesh.n_cells == 0
     for k, v in direct.items():
         if config == "dtt" and via_mesh.point_data[k].is_cuda:
-            ### The boundary read's node means are float32 sums by CUDA's index_add, in no
-            ### fixed order, so the two calls agree to float32 roundoff there, not bitwise.
-            torch.testing.assert_close(via_mesh.point_data[k], v[0], rtol=1e-6, atol=1e-8)
+            ### The boundary read's node means are float32 sums by CUDA's index_add, whose
+            ### atomics add in no fixed order, so the two calls agree to float32 roundoff,
+            ### not bitwise (non-bitwise results from atomics are fine within a small
+            ### multiple of float32 eps). The bound is eps times the length of the reordered
+            ### sums (at most the 64 boundary cells summed into one node), relative to each
+            ### element and, for the elements near zero, to the field's RMS: about 1.2e-7
+            ### absolute on p, six times the largest difference seen on a GB300 (2.05e-8).
+            eps, depth = torch.finfo(torch.float32).eps, mesh.n_cells
+            ref = v[0]
+            torch.testing.assert_close(
+                via_mesh.point_data[k], ref, rtol=depth * eps, atol=depth * eps * float(ref.square().mean().sqrt())
+            )
         else:
             assert torch.equal(via_mesh.point_data[k], v[0]), k
     assert torch.equal(via_mesh.global_data["g"], inputs["global_data"]["g"])
@@ -254,27 +272,27 @@ def test_isla_save_from_checkpoint_round_trip(device, tmp_path):
     ### starts at "auto" (fused on CUDA), so it takes the saved model's choice.
     assert loaded.geo_kernel == "auto"
     loaded.geo_kernel = model.geo_kernel
-    for name in ("n_slices", "interior", "n_global_vectors", "output_schema", "global_schema"):
+    for name in ("n_slices", "interior", "n_global_vectors", "output_schema", "boundary_schemas", "global_schema"):
         assert getattr(loaded, name) == getattr(model, name), name
     with torch.no_grad():
         _assert_dict_close(outputs(loaded(**inputs)), outputs(model(**inputs)), atol=0.0, rtol=0.0)
 
 
 def test_isla_reference_checkpoint_matches_golden(device):
-    """The committed reference checkpoint keeps loading and keeps its outputs. It was
-    written at checkpoint version 0.3.0, with the constructor arguments 0.4.0 removed
-    (``mlp_ratio``, ``geo_checkpoint``, ``geo_kernel="eager"``, ``eps``, the
-    ``kernel_read`` options), so it loads through the argument mapper."""
+    """The committed reference checkpoint (version 0.8.0) keeps loading, without a
+    warning, and keeps its outputs."""
     DATA_DIR.mkdir(exist_ok=True)
     ckpt = DATA_DIR / "isla_default_v1.mdlus"
     if not ckpt.exists():
         _instantiate_model(seed=7, **CONFIGS["default"]).save(ckpt)
         raise IOError(f"Reference checkpoint {ckpt} was missing and has been created; commit it and re-run.")
-    with pytest.warns(UserWarning, match="0.3.0 ISLA checkpoint"):
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
         model = Module.from_checkpoint(str(ckpt)).to(device).eval()
+    assert not [w for w in caught if "checkpoint" in str(w.message)]
     assert isinstance(model, ISLA)
     assert model.n_slices == 8 and model.geo_kernel == "auto" and list(model.output_schema) == ["p", "v"]
-    assert model.interior is False
+    assert model.interior is False and model.boundary_schemas == {"wall": {}}
     inputs = _make_inputs(device)
     with torch.no_grad():
         out = outputs(model(**inputs))
@@ -283,122 +301,93 @@ def test_isla_reference_checkpoint_matches_golden(device):
     _assert_dict_close(out, ref, atol=tol, rtol=tol)
 
 
-@pytest.mark.parametrize("version", ["0.1.0", "0.2.0"])
-def test_isla_older_checkpoints_load_with_a_warning(tmp_path, version):
-    """A 0.1.0 checkpoint (``outputs``, ``global_inputs``, ...) loads through the
-    backward-compatibility mapper, which renames the field declarations to
-    ``output_schema``, ``global_schema`` and so on; a 0.2.0 checkpoint loads as it
-    is. Both warn that their slice blocks were trained on the raw reads. The fixture
-    is the committed reference checkpoint rewritten to that version's declarations
-    and file version, so the mapper is exercised against the current architecture's
-    weights."""
+@pytest.mark.parametrize("version", ["0.3.0", "0.4.0", "0.5.0", "0.6.0", "0.7.0"])
+def test_isla_checkpoint_of_an_earlier_version_is_refused(tmp_path, version):
+    """ISLA keeps no upgrade path: a checkpoint written at an earlier version (here
+    the reference checkpoint relabelled) fails to load with an error naming both
+    versions."""
     import json
     import zipfile
 
-    src = DATA_DIR / "isla_default_v1.mdlus"
     old = tmp_path / f"isla_{version}.mdlus"
-    renamed = {new: old_name for old_name, new in ISLA._RENAMED_ARGS.items()} if version == "0.1.0" else {}
-    with zipfile.ZipFile(src) as zin, zipfile.ZipFile(old, "w", zipfile.ZIP_STORED) as zout:
+    with zipfile.ZipFile(DATA_DIR / "isla_default_v1.mdlus") as zin, zipfile.ZipFile(old, "w") as zout:
         for item in zin.infolist():
             data = zin.read(item.filename)
-            if item.filename == "args.json":
-                args = json.loads(data)
-                args["__args__"] = {renamed.get(k, k): v for k, v in args["__args__"].items()}
-                data = json.dumps(args).encode()
-            elif item.filename == "metadata.json":
+            if item.filename == "metadata.json":
                 meta = json.loads(data)
                 meta["mdlus_file_version"] = version
                 data = json.dumps(meta).encode()
             zout.writestr(item, data)
-    with pytest.warns(UserWarning, match=f"{version} ISLA checkpoint.*raw residual stream"):
-        model = Module.from_checkpoint(str(old))
-    assert list(model.output_schema) == ["p", "v"] and list(model.global_schema) == ["g"]
-    assert model.boundary_schema == {} and model.query_schema == {}
-    assert ISLA.__model_checkpoint_version__ == "0.4.0"
+    assert ISLA.__model_checkpoint_version__ == "0.8.0"
+    with pytest.raises(IOError, match=re.escape(f"version {version} is not compatible with current version 0.8.0")):
+        Module.from_checkpoint(str(old))
 
 
-def _rewrite_checkpoint(src, dst, version: str, extra_args: dict) -> None:
-    """Copy the checkpoint ``src`` to ``dst`` as checkpoint ``version`` with
-    ``extra_args`` added to its constructor arguments."""
-    import json
+def test_isla_earlier_state_dict_is_refused_on_every_loading_path(tmp_path):
+    """A checkpoint whose weights have the parameter layout before 0.7.0 (the shared
+    seed embedding ``embed.0``, ``qt.type_offset``, ``qt.embed``), loaded the way the
+    recipe resumes and initializes (``Module.load``, strict), fails with the version
+    named rather than with a list of missing and unexpected keys; so does
+    ``load_state_dict`` itself."""
+    import io
     import zipfile
 
-    with zipfile.ZipFile(src) as zin, zipfile.ZipFile(dst, "w", zipfile.ZIP_STORED) as zout:
+    model = _instantiate_model(**CONFIGS["interior"])
+    path = tmp_path / "isla.mdlus"
+    model.save(path)
+    old = {k: v for k, v in model.state_dict().items() if not k.startswith(("boundary_conditions.", "qt.seed."))}
+    old["embed.0.weight"] = torch.zeros(32, 2)
+    old["qt.type_offset"] = torch.zeros(32)
+    old["qt.embed.0.weight"] = torch.zeros(32, 2)
+    buf = io.BytesIO()
+    torch.save(old, buf)
+    stale = tmp_path / "isla_0.6.0_weights.mdlus"
+    with zipfile.ZipFile(path) as zin, zipfile.ZipFile(stale, "w") as zout:
         for item in zin.infolist():
-            data = zin.read(item.filename)
-            if item.filename == "args.json":
-                args = json.loads(data)
-                args["__args__"].update(extra_args)
-                data = json.dumps(args).encode()
-            elif item.filename == "metadata.json":
-                meta = json.loads(data)
-                meta["mdlus_file_version"] = version
-                data = json.dumps(meta).encode()
-            zout.writestr(item, data)
+            zout.writestr(item, buf.getvalue() if item.filename == "model.pt" else zin.read(item.filename))
+    fresh = ISLA(**CONFIGS["interior"])
+    with pytest.raises(RuntimeError, match="parameter layout of a checkpoint before version 0.7.0"):
+        fresh.load(str(stale), strict=True)
+    with pytest.raises(RuntimeError, match="no upgrade path"):
+        fresh.load_state_dict(old, strict=False)
+    ### a DDP-style prefix is seen through
+    with pytest.raises(RuntimeError, match="before version 0.7.0"):
+        torch.nn.ModuleDict({"module": fresh}).load_state_dict({f"module.{k}": v for k, v in old.items()})
+    fresh.load(str(path))  # the current layout loads
 
 
-#: The constructor arguments of a 0.3.0 ISLA-DTT checkpoint that 0.4.0 removed:
-#: the read-only interior task with the "mean" read, no radius, the forest at theta 1
-#: after every block, and the other removed arguments at the values every run used.
-DTT_0_3_0 = dict(
-    kernel_read="mean",
-    kernel_read_radius=None,
-    kernel_read_blocks=None,
-    kernel_read_theta=1.0,
-    mlp_ratio=4,
-    geo_checkpoint=True,
-    geo_kernel=None,
-    eps=1e-12,
-)
+def test_isla_0_7_0_state_dict_is_refused_on_every_loading_path(tmp_path):
+    """0.7.0 has the current parameter layout but the earlier geometry encoding of
+    the prediction points: its state dict, told apart by the state-dict version torch
+    records (1 before 0.8.0, as every 0.7.0 checkpoint carries), is refused by
+    ``Module.load``, ``load_state_dict`` and through a DDP-style wrapper, with the
+    version named; the current state dict loads."""
+    import io
+    import zipfile
 
-
-def test_isla_dtt_checkpoint_of_0_3_0_loads_as_query_independent(tmp_path):
-    """A 0.3.0 ISLA-DTT checkpoint (``kernel_read="mean"``, ``kernel_read_radius=None``,
-    ``kernel_read_theta=1.0``) loads as ``query_independent=True`` with the same
-    parameters and the same outputs, bitwise."""
-    model = _instantiate_model(seed=3, **CONFIGS["dtt"])
-    model.save(tmp_path / "dtt.mdlus")
-    _rewrite_checkpoint(tmp_path / "dtt.mdlus", tmp_path / "dtt_0.3.0.mdlus", "0.3.0", DTT_0_3_0)
-    with pytest.warns(UserWarning, match="0.3.0 ISLA checkpoint.*query_independent=True"):
-        loaded = Module.from_checkpoint(str(tmp_path / "dtt_0.3.0.mdlus")).eval()
-    assert loaded.query_independent and len(loaded.kernel_reads) == 2
-    loaded.geo_kernel = "eager"
-    inputs = _make_inputs("cpu", query=True)
-    with torch.no_grad():
-        _assert_dict_close(outputs(loaded(**inputs)), outputs(model(**inputs)), atol=0.0, rtol=0.0)
-
-
-@pytest.mark.parametrize(
-    "removed, named",
-    [
-        ({"kernel_read": "sum", "kernel_read_radius": 0.01, "kernel_read_theta": None}, "kernel_read='sum'"),
-        ({"kernel_read_radius": 0.01, "kernel_read_theta": None}, "kernel_read_radius=0.01"),
-        ({"kernel_read_theta": None}, "kernel_read_theta=None"),
-        ({"kernel_read_theta": 0.5}, "kernel_read_theta=0.5"),
-        ({"kernel_read_blocks": 1}, "kernel_read_blocks=1"),
-        ({"kernel_read": None}, "query_independent=True and kernel_read=None"),
-        ({"mlp_ratio": 8}, "mlp_ratio=8"),
-        ({"eps": 1e-8}, "eps=1e-08"),
-    ],
-)
-def test_isla_older_checkpoint_with_a_removed_setting_is_refused(removed, named):
-    """A removed argument at any value other than the one 0.4.0 builds is an error
-    that names the setting."""
-    args = {**CONFIGS["dtt"], **DTT_0_3_0, **removed}
-    with pytest.raises(ValueError, match=re.escape(named)):
-        ISLA._backward_compat_arg_mapper("0.3.0", args)
-
-
-def test_isla_older_checkpoint_drops_the_removed_arguments():
-    """The values every run used, and the defaults of a model without the read (a
-    stored ``kernel_read_radius=0.01`` included), map to no argument at all."""
-    surface = dict(
-        CONFIGS["default"], mlp_ratio=4, geo_checkpoint=False, geo_kernel="fused", eps=1e-12,
-        kernel_read=None, kernel_read_radius=0.01, kernel_read_blocks=None, kernel_read_theta=None,
-    )
-    assert ISLA._backward_compat_arg_mapper("0.3.0", dict(surface)) == CONFIGS["default"]
-    dtt = {**CONFIGS["dtt"], **DTT_0_3_0, "kernel_read_blocks": 2}
-    assert ISLA._backward_compat_arg_mapper("0.3.0", dtt) == CONFIGS["dtt"]
+    model = _instantiate_model(**CONFIGS["interior"])
+    path = tmp_path / "isla.mdlus"
+    model.save(path)
+    old = model.state_dict()
+    assert old._metadata[""]["version"] == ISLA._version == 8
+    old._metadata[""]["version"] = 1  # what 0.7.0 (nn.Module's default) wrote
+    buf = io.BytesIO()
+    torch.save(old, buf)
+    stale = tmp_path / "isla_0.7.0_weights.mdlus"
+    with zipfile.ZipFile(path) as zin, zipfile.ZipFile(stale, "w") as zout:
+        for item in zin.infolist():
+            zout.writestr(item, buf.getvalue() if item.filename == "model.pt" else zin.read(item.filename))
+    fresh = ISLA(**CONFIGS["interior"])
+    with pytest.raises(RuntimeError, match=r"before version 0\.8\.0 \(state-dict version 1"):
+        fresh.load(str(stale), strict=True)
+    with pytest.raises(RuntimeError, match="no upgrade path"):
+        fresh.load_state_dict(old, strict=False)
+    wrapped = torch.nn.ModuleDict({"module": model}).state_dict()
+    wrapped._metadata["module"]["version"] = 1
+    with pytest.raises(RuntimeError, match="before version 0.8.0"):
+        torch.nn.ModuleDict({"module": fresh}).load_state_dict(wrapped)
+    fresh.load(str(path))  # the current state dict loads
+    _assert_dict_close(fresh.state_dict(), model.state_dict(), atol=0.0, rtol=0.0)
 
 
 def test_isla_unknown_constructor_argument_is_a_type_error():

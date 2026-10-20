@@ -17,14 +17,25 @@
 
 # ISLA, interior task, on PLAID Tensile2d (plaid_tensile2d_2d): the reference configuration of isla_volume.yaml in two
 # dimensions (`dim: 2`; pair with a dataset config that runs RestrictToPlane first, as isla_volume_airfrans.yaml does). The
-# boundary is the specimen's closed outer polyline (`boundaries.outer`, line cells with in-plane normals and segment lengths);
-# the boundary conditions enter as per-boundary-cell fields of that mesh (boundary_schema: the loaded top edge, the fixed
-# bottom edge, the pinned corner and the applied pressure), the six input scalars as named rank-0 global inputs (the
-# dataset's SplitGlobalVector standardizes `params` and splits it), and the stored signed distance and its gradient as
-# per-query inputs (query_schema), the same wall geometry the tensor-input baselines read. The targets are the dataset's
+# boundary is the specimen's closed outer polyline (`boundaries.outer`, line cells with in-plane normals and segment lengths),
+# which the dataset labels by condition (bc_loaded, bc_fixed, bc_pinned); SplitBoundaryByLabels (dataset_append_transforms
+# below, for this model only) splits it into four named boundary conditions (boundary_schemas): the loaded top edge with its
+# applied pressure, the fixed bottom edge, the left side's cell at the pinned corner and the free sides. The six input
+# scalars enter as named rank-0 global inputs (the dataset's SplitGlobalVector standardizes `params` and splits it). No
+# query_schema: each node's distance and direction to the boundary are computed inside the model, exactly, from the
+# boundary meshes, so the dataset's stored sdf and sdf_normals (the baselines' inputs) are not read. The targets are the dataset's
 # native fields: four scalars and the in-plane displacement vector. No global direction: the fused kernel does not apply.
 input_type: mesh
 output_type: mesh
+
+# ISLA-only steps after the dataset's own chain (the baselines read the dataset as it is): one boundary per condition, the
+# first label winning where two mark a cell, so the bottom edge's cell at the pinned node stays `fixed` (u2 = 0 along it)
+# and the left side's cell at that node carries `pinned`; the unlabelled cells the free sides.
+dataset_append_transforms:
+  - _target_: ${dp:SplitBoundaryByLabels}
+    boundary: outer
+    labels: {loaded: bc_loaded, fixed: bc_fixed, pinned: bc_pinned}
+    rest: free
 
 training:
   optimizer:
@@ -38,9 +49,12 @@ compile_options:
   mode: max-autotune-no-cudagraphs
 
 forward_kwargs:
-  boundary_meshes:
-    outer: boundaries.outer       # Mesh[1, 2] after RestrictToPlane: line cells with in-plane normals and segment lengths
-  prediction_points: interior     # the specimen's mesh nodes as a point cloud; point_data carries the query_schema fields
+  boundary_meshes:                # Mesh[1, 2] each after RestrictToPlane: line cells with in-plane normals and segment lengths,
+    pinned: boundaries.pinned     # wound with their normals into the specimen: the built-in signed distance is already positive
+    loaded: boundaries.loaded     # at the interior nodes, so no FlipBoundaryOrientation
+    fixed: boundaries.fixed
+    free: boundaries.free
+  prediction_points: interior     # the specimen's mesh nodes as a point cloud
   global_data: global_data        # the case's TensorDict; the model selects its declared leaves
 
 model:
@@ -52,14 +66,12 @@ model:
                                   # RestrictToPlane); the recipe reads sig11 / sig22 / sig12 off it (dataset targets: stress: {type:
                                   # symmetric_tensor, components: {sig11: xx, sig22: yy, sig12: xy}}). Replaces the three rank-0 heads,
                                   # which were invariant where the components rotate as a tensor (posed protocol, 2026-10-03).
-  boundary_schema:                # per-boundary-cell inputs, all rank 0 (0/1 labels and the scaled pressure)
-    bc_loaded: {rank: 0}          # 1 on the top edge (pressure P)
-    bc_fixed: {rank: 0}           # 1 on the bottom edge (U2 = 0)
-    bc_pinned: {rank: 0}          # 1 on the cells touching the pinned bottom-left node (U1 = 0)
-    bc_pressure: {rank: 0}        # P on the loaded cells (scaled to O(1) by the dataset config), 0 elsewhere
-  query_schema:
-    sdf: {rank: 0}                # the stored signed distance (a length, scaled by the frame's length unit inside the model)
-    sdf_normals: {rank: 1}        # the stored SDF gradient, in the plane after RestrictToPlane
+  boundary_schemas:               # the boundary conditions by name, each with its own per-cell fields
+    pinned: {}                    # the left side's cell touching the pinned bottom-left node (U1 = 0 there)
+    loaded:                       # the top edge
+      bc_pressure: {rank: 0}      # the applied pressure P (scaled to O(1) by the dataset config)
+    fixed: {}                     # the bottom edge (U2 = 0)
+    free: {}                      # the traction-free sides
   global_schema:                  # the standardized input scalars, one rank-0 field each (SplitGlobalVector)
     P_std: {rank: 0}
     p1_std: {rank: 0}
@@ -69,6 +81,7 @@ model:
     p5_std: {rank: 0}
   dim: 2                          # the problem is planar
   interior: true                  # predict at prediction_points, which join the encoder as tokens
+  boundary_tokens: 200000         # boundary tokens drawn per case inside the model (equal to the class default; the outer polyline is kept whole)
   hidden: 512                     # the reference configuration (REF-80 verdict, 2026-10-04): most accurate under 80 GiB per GPU on DrivAerML Surface and the 210-wing rung; equal to the class defaults
   n_layers: 12
   n_slices: 512

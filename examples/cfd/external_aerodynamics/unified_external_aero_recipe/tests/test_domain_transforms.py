@@ -142,3 +142,40 @@ def test_stack_scalar_fields_builds_a_zero_padded_vector():
     with pytest.raises(ValueError):
         StackScalarFields(fields=["a", "b", "c", "d"], output_field="bc")
 
+
+
+def test_flip_boundary_orientation_reverses_the_named_boundaries():
+    """The named boundary's cells are rewound (every normal reversed, centroids and
+    measures unchanged) and its stored normals negated; other boundaries, the
+    interior, the other fields and the stored files' meshes are untouched; an
+    unknown boundary is refused, a stored-normal name a boundary lacks is skipped.
+    A two-dimensional (segment) boundary flips the same way."""
+    from domain_transforms import FlipBoundaryOrientation
+
+    wall = _two_triangles()
+    wall = wall.with_data(cell_data=wall.cell_data.update({"normals": wall.cell_normals.clone()}))
+    seg = Mesh(points=torch.tensor([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]]), cells=torch.tensor([[0, 1], [1, 2]]))
+    inlet = _two_triangles()
+    domain = DomainMesh(
+        interior=Mesh(points=torch.randn(5, 3)),
+        boundaries={"wall": wall, "inlet": inlet},
+        global_data={"U": torch.ones(3)},
+    )
+    before = wall.cell_normals.clone()
+    out = FlipBoundaryOrientation(boundaries=["wall"], normal_fields=["normals", "absent"]).apply_to_domain(domain)
+    flipped = out.boundaries["wall"]
+    assert torch.equal(flipped.cell_normals, -before)
+    assert torch.equal(flipped.cell_data["normals"], -before)
+    assert torch.equal(flipped.cell_data["pressure"], wall.cell_data["pressure"])
+    assert torch.allclose(flipped.cell_centroids, wall.cell_centroids)
+    assert torch.allclose(cell_measures(flipped), cell_measures(wall))
+    assert torch.equal(wall.cell_normals, before)  # the input mesh is not modified
+    assert out.boundaries["inlet"] is inlet and out.interior is domain.interior
+    assert torch.equal(out.global_data["U"], torch.ones(3))
+    twice = FlipBoundaryOrientation(boundaries=["wall"], normal_fields=["normals"]).apply_to_domain(out)
+    assert torch.equal(twice.boundaries["wall"].cells, wall.cells)
+    d2 = DomainMesh(interior=Mesh(points=torch.randn(3, 2)), boundaries={"airfoil": seg})
+    seg_n = seg.cell_normals.clone()
+    assert torch.equal(FlipBoundaryOrientation(boundaries=["airfoil"]).apply_to_domain(d2).boundaries["airfoil"].cell_normals, -seg_n)
+    with pytest.raises(KeyError, match="'outlet'"):
+        FlipBoundaryOrientation(boundaries=["outlet"]).apply_to_domain(domain)

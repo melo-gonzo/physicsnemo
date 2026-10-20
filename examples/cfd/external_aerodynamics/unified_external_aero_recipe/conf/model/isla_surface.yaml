@@ -81,6 +81,8 @@ model:
   output_schema:                 # the dataset's targets, by name and tensor rank (0 scalar, 1 vector)
     pressure: {rank: 0}
     wss: {rank: 1}
+  boundary_schemas:              # the boundary conditions by name, each with its own per-cell fields
+    vehicle: {}                  # the vehicle surface, a no-slip wall: no per-cell fields
   global_schema:
     U_inf_dir: {rank: 1}         # a rank-1 global input, read from global_data.U_inf_dir; normalized to a unit direction inside the model
   hidden: 512                  # the reference configuration (REF-80 verdict, 2026-10-04): most accurate under 80 GiB per GPU on DrivAerML Surface and the 210-wing rung; equal to the class defaults

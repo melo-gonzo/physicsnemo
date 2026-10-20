@@ -31,7 +31,7 @@ RESEARCH = Path("..") / "research"
 DEFAULTS = {k: v.default for k, v in inspect.signature(ISLA.__init__).parameters.items() if v.default is not inspect.Parameter.empty}
 # The reference configuration is the class defaults; the surface model of the DrivAerML Surface task.
 torch.manual_seed(0)
-REF = ISLA(output_schema={"pressure": {"rank": 0}, "wss": {"rank": 1}}, global_schema={"U_inf_dir": {"rank": 1}})
+REF = ISLA(output_schema={"pressure": {"rank": 0}, "wss": {"rank": 1}}, boundary_schemas={"vehicle": {}}, global_schema={"U_inf_dir": {"rank": 1}})
 cnt = lambda mod: sum(p.numel() for p in mod.parameters())
 ```
 
@@ -251,9 +251,8 @@ The seed is the cosines against the global directions, the boundary-input invari
 ```{python}
 #| label: code-stage-2
 #| output: asis
-listing("model.py", "ISLA._seed_invariants")
-listing("model.py", "ISLA._with_global_scalars")
-listing("model.py", "ISLA._token_seed")
+listing("model.py", "ISLA._condition_tokens")
+listing("model.py", "ISLA._boundary_channels")
 listing("inputs.py", "_InputSet._features")
 ```
 :::
@@ -637,7 +636,7 @@ specs = [("scalar (pressure)", {"rank": 0}), ("vector (wall shear stress)", {"ra
 rows = []
 for K in (0, 1, 2):
     gs = {f"g{k}": {"rank": 1} for k in range(K)}
-    m3 = ISLA(output_schema={f"o{j}": s for j, (_, s) in enumerate(specs)}, global_schema=gs or None, hidden=8, n_layers=1, n_slices=2)
+    m3 = ISLA(output_schema={f"o{j}": s for j, (_, s) in enumerate(specs)}, boundary_schemas={"vehicle": {}}, global_schema=gs or None, hidden=8, n_layers=1, n_slices=2)
     rows.append([m3.output_layouts[f"o{j}"].n_coeffs for j in range(len(specs))])
 out = "| output | $K = 0$ | $K = 1$ | $K = 2$ |\n|---|--:|--:|--:|\n"
 for j, (name, _) in enumerate(specs):
@@ -684,7 +683,7 @@ the reference configuration, built on the CPU as the page renders.
 def rows_for(m):
     blk = m.blocks[0]; nl = len(m.blocks)
     return [
-        ("embedding MLP (stage 2)", "`embed`", cnt(m.embed), 1),
+        ("embedding MLP (stage 2)", "`boundary_conditions`, `embed`", cnt(m.boundary_conditions) + cnt(m.embed), 1),
         ("routing map, with its LayerNorm (step a)", "`norm_assign`, `assign`", cnt(blk.norm_assign) + cnt(blk.assign), nl),
         ("routing refinement (step e)", "`geo_logit`", cnt(blk.geo_logit), nl),
         ("pooled-invariant projection (step h)", "`geo_feat`", cnt(blk.geo_feat), nl),
@@ -888,13 +887,9 @@ def _model_block(name):
             blk = {**base, **blk}
     return cfg, blk
 interior_cfgs = sorted(p.stem for p in CONF.glob("isla_*.yaml") if _model_block(p.stem)[1].get("interior"))
-with_sdf = [n for n in interior_cfgs if _model_block(n)[1].get("query_schema")]
-without = [n for n in interior_cfgs if n not in with_sdf]
 fmt = lambda xs: ", ".join(f"`{x}`" for x in xs)
-print(f"A dataset that stores a full-mesh signed-distance field and its gradient may pass them as ordinary `query_schema` "
-      f"fields (`sdf`, rank 0, and `sdf_normals`, rank 1), and the model's own geometry is computed regardless. Of the recipe's "
-      f"interior ISLA configurations, {fmt(with_sdf)} declare them and {fmt(without)} do not (read from "
-      f"`conf/model/` as the page renders).")
+print(f"The prediction points' only input is their positions: a stored signed-distance field is not read. The recipe's "
+      f"interior ISLA configurations are {fmt(interior_cfgs)} (read from `conf/model/` as the page renders).")
 ```
 
 ::: {.callout-note collapse="true" title="The wall geometry in the code"}
@@ -903,8 +898,8 @@ The search kernel never writes a $Q \times N$ block; the geometry is rebuilt fro
 ```{python}
 #| label: code-interior-geometry
 #| output: asis
-listing("geometry.py", "nearest_boundary_geometry")
-listing("geometry.py", "_nearest_index")
+listing("geometry.py", "exact_boundary_geometry")
+listing("geometry.py", "_closest_cell")
 ```
 :::
 
@@ -1547,11 +1542,11 @@ not an argument is described in the stages above.
 #| output: asis
 WHAT = {
     "output_schema": ("5", "the output fields by name and rank spec (`{pressure: {rank: 0}, wss: {rank: 1}, stress: {rank: 2, symmetric: true}}`; `parity: odd` for a pseudotensor); each costs the coefficients of @tbl-arch-coeffs and is returned as a leaf of the output Mesh's `point_data` under its name. A dotted name (`surface.pressure`) is a nested leaf, in the output and in every input mapping"),
-    "boundary_schema": ("2, 3d", "per-cell fields of rank 0 to 2, read from every boundary mesh's `cell_data`: their invariants join the seed (prediction-point tokens carry zeros), and rank-1 and rank-2 fields add their contractions with $\\hat\\rho_{is}$ to the relational invariants"),
-    "query_schema": ("interior", "per-prediction-point fields of rank 0 to 2, read from the prediction Mesh's `point_data` and carried by the prediction-point tokens through their own embedding after the built-in wall distance; rank-0 fields are lengths, divided by $L$ and paired with a signed log; requires `interior=True`"),
+    "boundary_schemas": ("2, 3d", "per-cell fields of rank 0 to 2, read from every boundary mesh's `cell_data`: their invariants join the seed (prediction-point tokens carry zeros), and rank-1 and rank-2 fields add their contractions with $\\hat\\rho_{is}$ to the relational invariants"),
     "global_schema": ("1, 2, 3d, 5", "per-case fields of rank 0 or 1, read from `global_data` by name: each rank-1 field is a global direction $\\hat g_k$ (one seed cosine, one relational cosine, two basis vectors); each rank-0 field widens the seed"),
     "interior": ("modes", "the task: `False` predicts at the boundary cells and takes no prediction points; `True` predicts at the prediction points, which join the slice layers as tokens with the built-in wall geometry (@sec-arch-modes)"),
     "query_independent": ("modes, after each layer", "interior task only: `True` is ISLA-DTT, with read-only prediction points (no routing mass) that read the boundary cells through the forest at $\\theta = 1$ after every slice layer (@sec-arch-passive-decoder); rank-2 per-token inputs are refused with it"),
+    "boundary_tokens": ("modes", "interior task only: the number of boundary tokens per case, drawn inside the model from the full-resolution boundary (the budget water-filled over the conditions, each cell drawn with probability proportional to its measure, each kept cell carrying its Horvitz-Thompson measure); a surface task takes the default"),
     "hidden": ("all", "the width $D$"),
     "n_layers": ("3", "the number of slice layers"),
     "n_slices": ("3, 4", "the slice count $M$ of every layer and of the head frame"),

@@ -158,6 +158,7 @@ def test_isla_training_on_thin_triangles(device):
     )
     model = ISLA(
         output_schema={"pressure": {"rank": 0}},
+        boundary_schemas={"vehicle": {}},
         global_schema={"U_inf_dir": {"rank": 1}},
         hidden=16,
         n_layers=1,

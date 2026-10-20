@@ -17,7 +17,7 @@
 """The ISLA recipe configurations compose to the mesh contract and run end to end.
 
 ``model=isla_surface`` (surface task: predictions at the boundary cells) and
-``model=isla_volume`` / ``model=isla_volume_sdf`` (interior task: predictions at the
+``model=isla_volume`` (interior task: predictions at the
 dataset's interior points) all declare ``input_type: mesh`` / ``output_type: mesh`` and
 map the DomainMesh's boundary and global data onto ISLA's keyword-only mesh forward.
 Each config is composed with Hydra, instantiated at a reduced width, and driven through
@@ -58,7 +58,6 @@ SMALL = [
 CONFIGS = [
     ("isla_surface", "drivaer_ml_surface"),
     ("isla_volume", "drivaer_ml_volume_reference"),
-    ("isla_volume_sdf", "drivaer_ml_volume_reference"),
 ]
 
 
@@ -100,17 +99,13 @@ def _surface_domain(n_cells: int = 12) -> DomainMesh:
 
 def _volume_domain() -> DomainMesh:
     """What drivaer_ml_volume_reference.yaml hands the collate: an interior point cloud
-    with sdf / sdf_normals and the targets, a vehicle boundary with the corrected measure
+    with sdf / sdf_normals and the targets, the whole vehicle boundary with its measure
     materialized by ComposeQuadratureMeasure, and U_inf_dir in global_data."""
     domain = make_volume_domain_mesh(n_pts=64)
-    vehicle = domain.boundaries["vehicle"]
-    scale_measures(vehicle, 4.0)
-    vehicle = ComposeQuadratureMeasure()(vehicle)
+    vehicle = ComposeQuadratureMeasure()(domain.boundaries["vehicle"])
     gd = domain.global_data.clone()
     gd["U_inf_dir"] = torch.tensor([1.0, 0.0, 0.0])
-    return DomainMesh(
-        interior=domain.interior, boundaries={"vehicle": vehicle}, global_data=gd
-    )
+    return DomainMesh(interior=domain.interior, boundaries={"vehicle": vehicle}, global_data=gd)
 
 
 def _targets(dataset: str) -> dict:
@@ -210,17 +205,20 @@ def test_isla_surface_composes_and_runs():
 
 
 def test_isla_volume_composes_and_runs():
-    """Interior task: the interior Mesh is the prediction-point cloud; no query inputs
-    are declared, so the stored sdf / sdf_normals are not read."""
+    """Interior task: the interior Mesh is the prediction-point cloud, whose points
+    alone the model reads (not the stored sdf / sdf_normals)."""
     cfg = _compose("isla_volume", "drivaer_ml_volume_reference", *SMALL)
     assert cfg.model.interior is True
     assert cfg.forward_kwargs.prediction_points == "interior"
-    assert cfg.model.get("query_schema") is None
     assert OmegaConf.to_container(cfg.model.output_schema) == {
         "velocity": {"rank": 1},
         "pressure": {"rank": 0},
         "nut": {"rank": 0},
     }
+    ### One boundary input: the full-resolution vehicle, the surface of the prediction
+    ### points' geometry and the source of the tokens the model draws.
+    assert set(cfg.forward_kwargs) == {"boundary_meshes", "prediction_points", "global_data"}
+    assert OmegaConf.to_container(cfg.forward_kwargs.boundary_meshes) == {"vehicle": "boundaries.vehicle"}
     domain = _volume_domain()
     batch, out, pred = _run(cfg, domain, _targets("drivaer_ml_volume_reference"))
     assert batch["forward_kwargs"]["prediction_points"] is domain.interior
@@ -228,30 +226,17 @@ def test_isla_volume_composes_and_runs():
     assert pred["velocity"].shape == (64, 3) and pred["nut"].shape == (64,)
 
 
-def test_isla_volume_sdf_declares_the_stored_sdf_as_query_inputs():
-    """The stored SDF and its gradient enter as declared rank-0 / rank-1 query inputs read
-    from the prediction Mesh's point_data; everything else is isla_volume."""
-    cfg = _compose("isla_volume_sdf", "drivaer_ml_volume_reference", *SMALL)
-    base = _compose("isla_volume", "drivaer_ml_volume_reference", *SMALL)
-    assert OmegaConf.to_container(cfg.model.query_schema) == {
-        "sdf": {"rank": 0},
-        "sdf_normals": {"rank": 1},
-    }
-    assert OmegaConf.to_container(cfg.forward_kwargs) == OmegaConf.to_container(
-        base.forward_kwargs
-    )
-    domain = _volume_domain()
-    _, out, _ = _run(cfg, domain, _targets("drivaer_ml_volume_reference"))
-    torch.testing.assert_close(out.points, domain.interior.points)
-    ### Without the declared leaves the model refuses the prediction Mesh.
-    model = hydra.utils.instantiate(cfg.model)
-    bare = Mesh(points=domain.interior.points)
-    with pytest.raises(ValueError, match="missing the declared fields"):
-        model(
-            boundary_meshes={"vehicle": domain.boundaries["vehicle"]},
-            prediction_points=bare,
-            global_data=domain.global_data,
-        )
+@pytest.mark.parametrize(
+    "model",
+    ["isla_volume", "isla_volume_aerozoo", "isla_volume_airfrans", "isla_tensile2d", "isla_lug"],
+)
+def test_the_interior_configs_build_their_model(model):
+    """One input contract: an interior ISLA reads its prediction points' positions
+    alone and computes their wall distance and direction itself from the boundary
+    meshes (the dataset's stored sdf and sdf_normals are the baselines' inputs);
+    every interior config builds its model."""
+    cfg = _compose(model, "drivaer_ml_volume_reference", *SMALL)
+    assert hydra.utils.instantiate(cfg.model).interior is True
 
 
 def test_isla_volume_composes_with_the_corrected_measure_dataset():
@@ -263,6 +248,43 @@ def test_isla_volume_composes_with_the_corrected_measure_dataset():
     targets = [t["_target_"] for t in raw]
     assert "ComposeQuadratureMeasure" in targets[-1], targets
     assert ds.pipeline.reader.boundary_subsample == "cells"
+
+
+@pytest.mark.parametrize("suffix", ["", "_area", "_posed"])
+def test_reference_volume_datasets_read_the_vehicle_whole_into_the_fluid(suffix):
+    """ISLA draws its boundary tokens inside the model, so every reference volume
+    dataset file reads the vehicle whole (no boundary cell cap, no subsampling
+    transform), reverses its stored winding so the normals point into the fluid, and
+    drops the STL once the stored SDF is computed from it."""
+    ds = OmegaConf.load(
+        _RECIPE_ROOT / "datasets" / f"drivaer_ml_volume_reference{suffix}.yaml"
+    )
+    assert ds.pipeline.reader.get("subsample_n_cells") is None
+    raw = OmegaConf.to_container(ds.pipeline.transforms, resolve=False)
+    targets = [str(t["_target_"]) for t in raw]
+    assert not any("Subsample" in t for t in targets), targets
+    flips = [t for t in raw if "FlipBoundaryOrientation" in str(t["_target_"])]
+    assert [t["boundaries"] for t in flips] == [["vehicle"]]
+    dropped = [t.get("names", []) for t in raw if "DropBoundary" in str(t["_target_"])]
+    assert ["stl_geometry"] in dropped
+    sdf = targets.index("${dp:ComputeSDFFromBoundary}")
+    assert sdf < targets.index("${dp:DropBoundary}")
+
+
+@pytest.mark.parametrize("model", sorted(p.stem for p in (_RECIPE_ROOT / "conf" / "model").glob("isla_*.yaml")))
+def test_interior_isla_configs_use_the_class_default_boundary_budget(model):
+    """Every interior ISLA config draws the class default of boundary tokens (no config
+    overrides it); the surface configs, which sample nothing, do not set it."""
+    import inspect
+
+    from physicsnemo.experimental.models.isla import ISLA
+
+    cfg = _compose(model, "drivaer_ml_volume_reference")
+    default = inspect.signature(ISLA.__init__).parameters["boundary_tokens"].default
+    if cfg.model.get("interior", False):
+        assert cfg.model.boundary_tokens == default == 200_000
+    else:
+        assert "boundary_tokens" not in cfg.model
 
 
 def test_corrected_measure_sees_the_surface_area():

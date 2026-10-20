@@ -50,6 +50,7 @@ def _model(global_schema=None, **kw):
     torch.manual_seed(0)
     if global_schema is None:
         global_schema = {"g": {"rank": 1}}
+    kw.setdefault("boundary_schemas", {"wall": {}})
     return ISLA(output_schema=PV, global_schema=global_schema, hidden=32, n_layers=2, n_slices=8, **kw).to(D).eval()
 
 
@@ -79,12 +80,11 @@ def _assert_se3(m, mesh, gd, q=None, atol=1e-10):
 
 def test_zero_global_vectors():
     """K = 0: no direction anywhere in the problem (steady conduction with pinned
-    boundary values). The seed is constant and the model is still exactly
+    boundary values). The seed is the constant alone and the model is still exactly
     SE(3)-covariant and measure-scale invariant; global_data may be None."""
     m = _model(global_schema={})
     mesh = _boundary()
-    assert m.constant_seed
-    assert m.embed[0].in_features == 1
+    assert m.boundary_conditions["wall"].seed.in_features == 1  # the constant alone
     assert m.n_true_basis == 3  # n, u, and e_theta(u, n)
     assert m.n_pseudo_basis == 1  # n x u
     base = _assert_se3(m, mesh, {})
@@ -104,7 +104,7 @@ def test_two_global_vectors():
     mesh = _boundary()
     gv = torch.randn(2, 3, dtype=D, generator=torch.Generator().manual_seed(1))
     gd = {"g1": gv[0], "g2": gv[1]}
-    assert m.embed[0].in_features == 2  # n.g_1, n.g_2
+    assert m.boundary_conditions["wall"].seed.in_features == 1 + 2  # the constant, n.g_1, n.g_2
     assert m.n_true_basis == 7 and m.n_pseudo_basis == 6
     base = _assert_se3(m, mesh, gd)
     scaled = _run(m, mesh, {"g1": 3.0 * gv[0], "g2": 0.2 * gv[1]})
@@ -133,7 +133,7 @@ def test_global_scalars_condition_every_token():
     A TensorDict with nested groups is read by dotted name."""
     mesh = _boundary()
     m = _model({"g": {"rank": 1}, "cond.kappa": {"rank": 0}, "cond.E": {"rank": 0}}, interior=True)
-    assert m.embed[0].in_features == 1 + 2  # n.g plus the two scalars
+    assert m.boundary_conditions["wall"].seed.in_features == 1 + 1 + 2  # the constant, n.g and the two scalars
     assert m.n_global_scalars == 2
     gv = torch.randn(3, dtype=D, generator=torch.Generator().manual_seed(1))
     gd = {"g": gv, "cond.kappa": torch.tensor(0.3, dtype=D), "cond.E": torch.tensor(-1.2, dtype=D)}
@@ -157,39 +157,39 @@ def test_no_global_inputs_at_all_with_scalars_only():
     """K = 0 with S = 1: a parameterized PDE family with no preferred direction."""
     mesh = _boundary()
     m = _model({"kappa": {"rank": 0}})
-    assert not m.constant_seed and m.embed[0].in_features == 1
+    assert m.boundary_conditions["wall"].seed.in_features == 1 + 1  # the constant and the scalar
     base = _assert_se3(m, mesh, {"kappa": torch.tensor([0.5], dtype=D)})
     other = _run(m, mesh, {"kappa": torch.tensor([1.0], dtype=D)})
     assert not same(other, base, atol=1e-3)
 
 
 def test_one_vector_layout():
-    """K = 1, S = 0: seed width 1, geometry width 6; the head has 5 true basis
+    """K = 1, S = 0: seed width 2 (the constant and n.g), geometry width 6; the head has 5 true basis
     vectors and 3 pseudovectors."""
     m = _model()
     assert (m.n_global_vectors, m.n_global_scalars) == (1, 0)
-    assert m.embed[0].in_features == 1
+    assert m.boundary_conditions["wall"].seed.in_features == 1 + 1
     assert m.blocks[0].geo_logit.in_features == 6
     assert m.n_true_basis == 5 and m.n_pseudo_basis == 3
 
 
 def test_bad_global_specs_rejected():
     with pytest.raises(ValueError, match="non-negative"):
-        ISLA(output_schema=PV, global_schema={"g": {"rank": -1}}, hidden=32, n_layers=1, n_slices=8)
+        ISLA(output_schema=PV, boundary_schemas={"wall": {}}, global_schema={"g": {"rank": -1}}, hidden=32, n_layers=1, n_slices=8)
     with pytest.raises(NotImplementedError, match="rank 2 is not supported"):
-        ISLA(output_schema=PV, global_schema={"T": {"rank": 2}}, hidden=32, n_layers=1, n_slices=8)
+        ISLA(output_schema=PV, boundary_schemas={"wall": {}}, global_schema={"T": {"rank": 2}}, hidden=32, n_layers=1, n_slices=8)
 
 
 def test_boundary_data_reaches_the_interior_prediction():
     """A boundary-value problem needs the per-cell boundary data (Dirichlet trace)
-    on the boundary tokens and zeros on the prediction-point tokens. The covariance
+    on the boundary tokens. The covariance
     contracts hold, and the interior prediction depends on the boundary data."""
     pts, nrm, w, _ = cloud(200, scale=(1.0, 1.0, 1.0))
     bsc = torch.randn(200, dtype=D, generator=torch.Generator().manual_seed(3))
     q = torch.randn(30, 3, dtype=D, generator=torch.Generator().manual_seed(2)) * 0.5
     gd = {"kappa": torch.tensor(0.7, dtype=D)}
-    m = _model(global_schema={"kappa": {"rank": 0}}, boundary_schema={"trace": {"rank": 0}}, interior=True)
-    assert m.embed[0].in_features == 2  # boundary scalar + global scalar (no directions)
+    m = _model(global_schema={"kappa": {"rank": 0}}, boundary_schemas={"wall": {"trace": {"rank": 0}}}, interior=True)
+    assert m.boundary_conditions["wall"].seed.in_features == 1 + 2  # the constant, the boundary scalar and the global scalar (no directions)
     base = _assert_se3(m, soup(pts, nrm, w, cell_data={"trace": bsc}), gd, q=q)
     other = _run(m, soup(pts, nrm, w, cell_data={"trace": bsc + 1.0}), gd, q)
     assert base.point_data["p"].shape == (30,) and not same(other, base, atol=1e-3)

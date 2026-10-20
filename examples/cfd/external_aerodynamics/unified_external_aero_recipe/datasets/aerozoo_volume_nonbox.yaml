@@ -123,7 +123,7 @@ pipeline:
       output_field: U_inf_dir
     # (f) One boundary grammar for the four roles: a one-hot role label on every boundary and a
     # zero-filled copy of every prescribed field a boundary lacks (a 0-face slip mesh gets zero rows), so
-    # ISLA's boundary_schema applies to all four. Renamed to flat names below.
+    # one declaration reads all four (ISLA declares each condition's own fields and drops this step). Renamed below.
     - _target_: ${dp:HarmonizeBoundaryFields}
       one_hot:
         inlet: bc_inlet
@@ -184,7 +184,7 @@ pipeline:
         prescribed.reverse_flow.intermittency: bc_intermittency_reverse
         prescribed.reverse_flow.momentum_thickness_reynolds_number: bc_retheta_reverse
     # (g) Signed distances for GeoTransolver's local embedding (ISLA computes its own geometry from the
-    # boundary tokens and declares no query_schema). Pseudo-normal sign from the fast nearest-triangle
+    # boundary surface and declares no query_schema). Pseudo-normal sign from the fast nearest-triangle
     # kernel, no winding-number pass: the body is closed and the slip walls are planar. Both are computed
     # from the boundary as the reader hands it over (the 50,000-face subsample on bodies above the cap).
     - _target_: ${dp:ComputeSDFFromBoundary}
@@ -200,6 +200,13 @@ pipeline:
       normals_field: null
       use_winding_number: false
       allow_empty_boundary: true
+    # (g') The four boundaries are stored with their normals out of the fluid (the OpenFOAM convention; the
+    # release's schema, pdmsh-schema-v5, uses n "pointing out of the fluid" in its force integral). Reverse
+    # them so their normals point into the fluid, as AirfRANS's airfoil and the reoriented DrivAerML vehicle
+    # do: ISLA's built-in signed distance is positive on the side the normals point to, so positive in the
+    # fluid. After the SDF passes, so GeoTransolver's stored distances are those of the stored files.
+    - _target_: ${dp:FlipBoundaryOrientation}
+      boundaries: [inlet, outlet, no_slip, slip]
     # (h) The five targets under their recipe names; intermittency and Re_theta_t are not predicted.
     - _target_: ${dp:RenameMeshFields}
       point_data:

@@ -18,7 +18,8 @@
 
 :func:`_declare` parses and checks one of the constructor's rank-spec declarations;
 :class:`_InputSet` holds one token class's per-token fields and turns them into the
-seed invariants, the block-level derived vectors and the block-level rank-2 tensors.
+seed invariants, the block-level derived vectors and the block-level rank-2 tensors;
+:class:`_BoundaryCondition` holds one named boundary condition's input parameters.
 Private to :mod:`physicsnemo.experimental.models.isla`."""
 
 import dataclasses
@@ -26,6 +27,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 import torch
+import torch.nn as nn
 from tensordict import PackLayout, TensorDict
 
 from physicsnemo.mesh.fields import FieldSchema, FieldSchemaLike, RankSpec
@@ -118,14 +120,13 @@ def _pair_indices(f: int, symmetric: bool) -> tuple[torch.Tensor, torch.Tensor]:
 
 @dataclass(frozen=True, eq=False)
 class _InputSet:
-    """The per-token tensor inputs of one token class (boundary cells, or interior
-    queries) and the invariants they contribute.
+    """The per-cell tensor inputs of one boundary condition and the invariants
+    they contribute.
 
     With ``F = 1 + K`` frame vectors ``{n_hat, g_1..g_K}`` per token, ``P`` rank-1
     inputs and ``Q`` rank-2 inputs (``Q_s`` of them symmetric):
 
-    * seed features (into the token's embedding): the rank-0 fields
-      (``x 2`` when ``scaled_scalars``: ``[s, sign(s) log(|s| + eps)]``), then
+    * seed features (into the token's embedding): the rank-0 fields, then
       per rank-1 input its ``F`` frame cosines and its norm and the
       ``P(P-1)/2`` pairwise dot products of the rank-1 inputs, then per rank-2
       input the ``F(F+1)/2`` (symmetric) or ``F**2`` frame contractions
@@ -134,14 +135,10 @@ class _InputSet:
       slice layer): the ``P`` rank-1 inputs and, per rank-2 input, the ``F``
       derived true vectors ``T a`` (plus ``T^T a`` when not symmetric);
     * block tensors (``rho^T T rho`` in every slice layer): the ``Q`` rank-2 inputs.
-
-    ``scaled_scalars`` marks the query set, whose rank-0 fields are lengths in
-    the frame's unit; boundary scalars enter raw.
     """
 
     specs: Mapping[str, RankSpec]
     n_frame: int
-    scaled_scalars: bool
     dim: int = 3
     n_scalar: int = field(init=False)
     rank1: list[str] = field(init=False)
@@ -163,14 +160,13 @@ class _InputSet:
         set_ = object.__setattr__
         set_(self, "n_frame", f)
         set_(self, "dim", int(self.dim))
-        set_(self, "scaled_scalars", bool(self.scaled_scalars))
         set_(self, "n_scalar", n_scalar)
         set_(self, "rank1", rank1)
         set_(self, "rank2", rank2)
         set_(
             self,
             "n_features",
-            (2 if self.scaled_scalars else 1) * n_scalar
+            n_scalar
             + p * f
             + p
             + p * (p - 1) // 2
@@ -187,31 +183,25 @@ class _InputSet:
     def __bool__(self) -> bool:
         return bool(self.specs)
 
-    def features(self, fields: TensorDict, frame, *, gauge=None, eps=0.0):
+    def features(self, fields: TensorDict, frame):
         """Invariants of one token class.
 
         ``fields`` holds the declared fields over the ``(B, N)`` tokens; ``frame``
         is ``(B, N, F, d)``: the token's true frame vectors ``[n_hat, g_1..g_K]``
         in ``d`` spatial dimensions. Returns ``(seed (B, N, n_features), vecs (B,
-        N, n_block_vecs, d), tens (B, N, n_block_tens, d, d))``; ``gauge`` (``(B,
-        1, 1)``) divides the rank-0 fields when ``scaled_scalars``.
+        N, n_block_vecs, d), tens (B, N, n_block_tens, d, d))``.
         """
         ### The invariants and the derived vectors are geometry: computed in the
         ### input precision even under autocast (the embedding that consumes the
         ### seed is autocast on its own).
         with torch.autocast(frame.device.type, enabled=False):
-            return self._features(fields.to(frame.dtype), frame, gauge, eps)
+            return self._features(fields.to(frame.dtype), frame)
 
-    def _features(self, fields, frame, gauge, eps):
+    def _features(self, fields, frame):
         b, n, _, d = frame.shape
         seed, vecs, tens = [], [], []
         if self.n_scalar:
-            s = _pack(fields, self.scalar_layout)  # (B, N, S)
-            if self.scaled_scalars:
-                s = s / gauge
-                ### [s, sign(s) log(|s| + eps)] per field, the fields in schema order.
-                s = torch.stack([s, torch.sign(s) * torch.log(s.abs() + eps)], -1).flatten(2)
-            seed.append(s)
+            seed.append(_pack(fields, self.scalar_layout))  # (B, N, S)
         if self.rank1:
             v = _pack(fields, self.vector_layout).unflatten(-1, (-1, d))  # (B, N, P, d)
             seed.append(_contract_vectors(v, frame).flatten(2))  # (B, N, P*F)
@@ -240,6 +230,31 @@ class _InputSet:
         vecs_t = torch.cat(vecs, 2) if vecs else frame.new_zeros(b, n, 0, d)
         tens_t = tens if self.rank2 else frame.new_zeros(b, n, 0, d, d)
         return seed_t, vecs_t, tens_t
+
+
+class _BoundaryCondition(nn.Module):
+    """One named boundary condition's input parameters.
+
+    ``seed`` is the condition's input layer, ``(hidden, 1 + n_seed)`` without a bias:
+    it maps the condition's seed ``[1, n.g_k, field invariants, global scalars]``
+    to the token width, its first column (on the constant 1) being the condition's
+    learned offset, so that two conditions differ in the parameters their tokens
+    read even when neither declares a field. ``vector_map`` ``(n_vecs, P')`` and
+    ``tensor_map`` ``(n_tens, Q)`` are linear maps from the condition's own block
+    vectors and rank-2 tensors (:class:`_InputSet`) to the model's shared channels;
+    a linear combination with scalar weights commutes with every orthogonal map, so
+    the channels are true vectors and tensors like their inputs. Both start as the
+    identity padded with zeros (the condition's ``j``-th vector is channel ``j``)
+    and are ``None`` where the condition has no such input.
+    """
+
+    def __init__(self, inputs: _InputSet, n_seed: int, hidden: int, n_vecs: int, n_tens: int) -> None:
+        super().__init__()
+        self.inputs = inputs
+        self.seed = nn.Linear(1 + n_seed, hidden, bias=False)
+        p, q = inputs.n_block_vecs, inputs.n_block_tens
+        self.vector_map = nn.Parameter(torch.eye(n_vecs, p)) if p else None
+        self.tensor_map = nn.Parameter(torch.eye(n_tens, q)) if q else None
 
 
 def _contract_vectors(x, y):

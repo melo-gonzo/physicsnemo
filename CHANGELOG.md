@@ -59,9 +59,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Adds `physicsnemo.experimental.models.isla.ISLA` (Invariant Slice
   Attention), an O(d)/SE(d)-equivariant (any spatial dimension d >= 2),
   measure-aware slice-attention surrogate for steady boundary-value problems.
-  Inputs (global, per-boundary-cell, per-query) and outputs are named fields of
-  declared tensor rank, declared by `global_schema`, `boundary_schema`,
-  `query_schema` and `output_schema` (`output_schema={"pressure": {"rank": 0},
+  Inputs (global and per-boundary-cell) and outputs are named fields of
+  declared tensor rank, declared by `global_schema`, `boundary_schemas` (the
+  boundary conditions by name, each with its own per-cell fields) and
+  `output_schema` (`output_schema={"pressure": {"rank": 0},
   "wss": {"rank": 1}, "stress": {"rank": 2, "symmetric": True}}`, see
   `FieldSchema` under Changed); every input enters through O(d)-invariants and
   every output leaves through an exactly equivariant basis (ranks up to 4, even
@@ -72,7 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `forward` are keyword-only. An exact fused Triton kernel for the per-layer
   geometry region is selected automatically on CUDA. The unified
   external-aerodynamics recipe gains ISLA model configs (`isla_surface`,
-  `isla_volume`, `isla_volume_sdf`).
+  `isla_volume`).
 - Mesh readers load saved meshes with `tensordict` memory maps opened
   read-only (`physicsnemo.datapipes.readers.mesh.read_only_memory_maps`), so
   page faults on a networked file system no longer take write extent locks

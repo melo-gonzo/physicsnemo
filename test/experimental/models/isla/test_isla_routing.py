@@ -62,6 +62,7 @@ def test_cosine_routing_keeps_the_contracts_and_all_parameters_train():
     m = (
         ISLA(
             output_schema=PV,
+            boundary_schemas={"wall": {}},
             global_schema={"g": {"rank": 1}},
             hidden=32,
             n_layers=2,

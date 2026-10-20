@@ -56,6 +56,7 @@ def test_initialize_from_checkpoint_loads_weights_only(tmp_path):
     torch.manual_seed(0)
     src = ISLA(
         output_schema={"p": {"rank": 0}, "v": {"rank": 1}},
+        boundary_schemas={"wall": {}},
         global_schema={"g": {"rank": 1}},
         hidden=32,
         n_layers=2,
@@ -67,6 +68,7 @@ def test_initialize_from_checkpoint_loads_weights_only(tmp_path):
     torch.manual_seed(1)
     dst = ISLA(
         output_schema={"p": {"rank": 0}, "v": {"rank": 1}},
+        boundary_schemas={"wall": {}},
         global_schema={"g": {"rank": 1}},
         hidden=32,
         n_layers=2,
@@ -84,6 +86,7 @@ def test_initialize_from_checkpoint_rejects_architecture_mismatch(tmp_path):
     """init_from refuses a checkpoint whose architecture differs from the model's."""
     src = ISLA(
         output_schema={"p": {"rank": 0}, "v": {"rank": 1}},
+        boundary_schemas={"wall": {}},
         global_schema={"g": {"rank": 1}},
         hidden=32,
         n_layers=2,
@@ -92,6 +95,7 @@ def test_initialize_from_checkpoint_rejects_architecture_mismatch(tmp_path):
     save_checkpoint(str(tmp_path), models=src, epoch=1)
     other = ISLA(
         output_schema={"p": {"rank": 0}, "v": {"rank": 1}},
+        boundary_schemas={"wall": {}},
         global_schema={"g": {"rank": 1}},
         hidden=48,
         n_layers=2,

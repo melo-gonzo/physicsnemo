@@ -27,18 +27,18 @@
 # TensorDict, one case per call; the output is a point-cloud Mesh at the
 # prediction points with the output_schema fields in its point_data.
 #
-# Each prediction point's built-in geometry, its signed distance to the
-# nearest boundary token and the direction to it, is computed inside the
-# model from the boundary sample and is never an input; this configuration
-# declares no `query_schema`, so the dataset's stored sdf / sdf_normals are
-# not read. isla_volume_sdf.yaml declares them as query inputs (the stored
-# field is computed on the full mesh, the internal one on the 200,000-cell
-# sample; the INTERNAL-GEOMETRY measurement).
-#
-# The boundary measure must sum to the surface area: a subsampled boundary's
-# raw cell areas sum to the kept fraction of it, so the model reads the
-# Horvitz-Thompson corrected `cell_data._effective_measure` that the reader's
-# cell subsample writes (`boundary_subsample: cells`). Pair this model config
+# The vehicle boundary is the full-resolution surface (the reference dataset
+# files read it whole, its normals reoriented into the fluid). Each prediction
+# point's built-in geometry, its signed distance to that surface and the
+# direction from it, is computed inside the model from the exact closest point
+# on its cells (positive in the fluid) and is never an input. The boundary
+# tokens are drawn from the same cells inside the model: `boundary_tokens`
+# (200,000, the class default) cells with probability proportional to their
+# area, each carrying its Horvitz-Thompson measure, so the measure-weighted
+# reads are quadratures of the whole surface; a uniform draw per step in
+# training, a fixed one in evaluation. This configuration declares no
+# `query_schema`, so the dataset's stored sdf / sdf_normals (the baselines'
+# inputs) are not read. Pair this model config
 # with datasets/drivaer_ml_volume_reference.yaml, which also writes the unit
 # freestream direction `U_inf_dir` the model reads.
 input_type: mesh
@@ -55,10 +55,11 @@ training:
 # Whole-model torch.compile, the fastest way to run ISLA: the forward, Mesh in
 # and out, traces to one graph with no breaks (fullgraph) and compiles once with
 # dynamic shapes for every token count, so the case-to-case change in boundary
-# and point counts does not recompile (one exception: boundaries with equal cell
-# counts in the first case, common at a subsample cap, are tied by Dynamo's duck
-# sizing, and the first case where they differ compiles once more; validation
-# compiles its own graph). max-autotune-no-cudagraphs on purpose:
+# and point counts does not recompile (the in-model boundary draw's token count,
+# min(cells, boundary_tokens), is a symbolic size of the same graph; one
+# exception: boundaries with equal cell counts in the first case are tied by
+# Dynamo's duck sizing, and the first case where they differ compiles once more;
+# validation, in evaluation mode, compiles its own graph). max-autotune-no-cudagraphs on purpose:
 # plain max-autotune also captures CUDA graphs, which are static-shape and would
 # record a new graph for every token count; at training sizes dynamic shapes are
 # faster than padding the cases to CUDA-graph size buckets. The first compile
@@ -75,8 +76,8 @@ compile_options:
 
 forward_kwargs:
   boundary_meshes:
-    vehicle: boundaries.vehicle       # Mesh[2, 3] with the corrected cell measure in cell_data
-  prediction_points: interior         # the interior point-cloud Mesh (its point_data carries any query_schema fields)
+    vehicle: boundaries.vehicle       # Mesh[2, 3]: the full-resolution vehicle surface, normals into the fluid
+  prediction_points: interior         # the interior point-cloud Mesh (its points)
   global_data: global_data            # the case's TensorDict; the model selects its declared leaves
 
 model:
@@ -85,9 +86,12 @@ model:
     velocity: {rank: 1}
     pressure: {rank: 0}
     nut: {rank: 0}
+  boundary_schemas:              # the boundary conditions by name, each with its own per-cell fields
+    vehicle: {}                  # the vehicle surface, a no-slip wall: no per-cell fields
   global_schema:
     U_inf_dir: {rank: 1}         # the unit freestream direction, read from global_data.U_inf_dir
   interior: true                 # predict at prediction_points, which join the encoder as tokens
+  boundary_tokens: 200000        # boundary tokens drawn per case inside the model (equal to the class default)
   hidden: 512                  # the reference configuration (REF-80 verdict, 2026-10-04): most accurate under 80 GiB per GPU on DrivAerML Surface and the 210-wing rung; equal to the class defaults
   n_layers: 12
   n_slices: 512
