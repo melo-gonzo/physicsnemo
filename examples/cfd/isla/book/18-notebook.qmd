@@ -32866,7 +32866,7 @@ static-prototype, tensor-path or earlier-snapshot lane is load-bearing. No
 new dataset enters except AeroZoo, when Peter says it is ready.
 
 **Datasets and tasks.** DrivAerML (surface; volume), HighLiftAeroML
-(surface at the 210-wing rung; volume), AirfRANS (interior, two
+(surface on the 510-case medium set; volume), AirfRANS (interior, two
 dimensions), Shift-SUV (surface), Tensile2D (interior, two dimensions,
 solids), the bracket lug (interior, solids), DeepJEB++ (surface, solids).
 OLBC is the one fixed-mesh set: a fixed mesh is unrealistic for almost any
@@ -32897,7 +32897,7 @@ GB. For ISLA the candidates spend its memory lead along each axis: width
 For GeoTransolver: width 256 / 512 / 1,024 and 12 / 24 layers at 256
 slices. For Transolver: width 256 / 512 / 1,024 and 8 / 16 layers. The
 frontier candidates train for 500 epochs, two seeds, on DrivAerML Surface
-and the 210-wing rung (two datasets); the reference configuration per
+and the 510-case HiLift medium set (two datasets); the reference configuration per
 architecture is the candidate with the lowest seed-mean headline error on
 both, ties within 3% resolved toward the cheaper step. The learning rate
 follows the width rule of @sec-using-lr for ISLA and the recipe defaults
@@ -33022,7 +33022,7 @@ evaluation at 200,000 cells, not training (the cells law of
 seeds on DrivAerML Surface (group `r80`, jobs 976553 to 976582); four
 ISLA probes at 100,000 cells (width 768, 24 layers, both, width 512 with
 24 layers) decide whether ISLA's frontier extends along the cells axis
-too, and the 210-wing twin follows.
+too, and the HiLift twin (510 training cases) follows.
 
 **The cells axis, later the same day.** The four ISLA probes at 100,000
 cells recorded: width 768 42.1 GiB, 24 layers 43.3, width 512 with 24
@@ -33033,7 +33033,7 @@ of ISLA therefore has fourteen members in all: the four at 200,000 cells
 and these three at 100,000. They joined the DrivAerML Surface lanes (rows
 22 to 27 of `kernel/char/r80_lanes.tsv`), and the whole frontier of the
 three architectures, fourteen candidates with two seeds, launched as the
-210-wing twin on `highlift_surface_medium` (rows 28 to 55, validation
+510-case twin on `highlift_surface_medium` (rows 28 to 55, validation
 every 25 epochs as in the other wing lanes). Every candidate is scored at
 the reporting protocol, 200,000 cells, including the `*_c100k_*` lanes
 that trained at 100,000 (their 100,000-cell scoring is kept as a secondary
@@ -33219,7 +33219,7 @@ under 0.0443), and the cheapest is width 768 at 100,000 cells (42.1 GiB
 against the reference's 44.4). GeoTransolver: width 1,024 at 100,000 cells
 alone. Transolver: width 1,024 at 100,000 cells (46.7 GiB) over width 512
 with 16 layers (62.0, within 1%). The reference configuration is the
-candidate that wins on both datasets; the 210-wing twin (rows 28 to 55,
+candidate that wins on both datasets; the 510-case HiLift twin (rows 28 to 55,
 running) decides. If the two halves disagree for ISLA, the decision is
 written here with its reason; note already that the ISLA tie set is wide
 and a tie-break by two GiB of memory between a 150M-parameter model at
@@ -33230,7 +33230,7 @@ preference, so the wing half's ordering will carry the weight.
 
 **Setting.** CHAR-LANES (@sec-nb-char-prereg) trains every dataset x
 task x architecture x two seeds under one reference configuration per
-architecture. The DrivAerML Surface and HiLift 210-wing lanes of the
+architecture. The DrivAerML Surface and HiLift 510-case lanes of the
 REF-80 frontier are already those lanes; the remaining six tasks launched
 today (group `cl`, `kernel/char/cl_lanes.{tsv,sbatch}`, copies in
 `results/campaigns_2026-10-02/char/kernel/cl/`) under the DrivAerML-half
@@ -33570,11 +33570,11 @@ ties). The candidate fix is a measure-weighted average over near-tied
 samples in the geometry construction, a post-campaign change. The chapter
 reports the 2x as measured with this mechanism.
 
-## 2026-10-04 — Status, REF-80 wing half nearly scored (27 of 28 lanes): the 210-wing rung orders the candidates differently from DrivAerML on every architecture; ISLA width 512 with 512 slices leads (0.0407, the only candidate within 3% of the best); GeoTransolver width 1,024 at 100,000 cells, the DrivAerML winner, reads 0.252 on the wings (0.18 and 0.32 per seed, five times its width-256 sibling at 0.0492); Transolver width 512 with 16 layers at 100,000 cells leads (0.0433); the reference decision is written when the last lane is scored {#sec-nb-ref80-wing-half}
+## 2026-10-04 — Status, REF-80 wing half nearly scored (27 of 28 lanes): the 510-case HiLift set orders the candidates differently from DrivAerML on every architecture; ISLA width 512 with 512 slices leads (0.0407, the only candidate within 3% of the best); GeoTransolver width 1,024 at 100,000 cells, the DrivAerML winner, reads 0.252 on the wings (0.18 and 0.32 per seed, five times its width-256 sibling at 0.0492); Transolver width 512 with 16 layers at 100,000 cells leads (0.0433); the reference decision is written when the last lane is scored {#sec-nb-ref80-wing-half}
 
 **Setting.** The second half of the REF-80 selection (@sec-nb-ref80-drivaer-half):
 the same fourteen under-80 GiB candidates trained 500 epochs with two seeds on
-the HiLift 210-wing medium rung (`r80_hl_*`, 180 validation cases, 200,000
+the HiLift 510-case medium set (`r80_hl_*`, 180 validation cases, 200,000
 cells, float32), reduced by `results/char/ref80_select_2026-10-03.py`. One lane
 (ISLA width 512, seed 43) and one scoring (GeoTransolver width 256, seed 43)
 are outstanding; neither can move the orderings below by more than a tie.
@@ -33594,7 +33594,7 @@ candidates separate (0.0407 to 0.0451, 11%) where on the cars they were flat
 not depth or cells. (2) **GeoTransolver's DrivAerML winner does not transfer**:
 width 1,024 at 100,000 cells, 0.0404 on the cars, reads 0.252 on the wings
 with both seeds far apart, the signature of a training that did not settle
-at that width and rate on 210 wings; width 256 at 200,000 cells, 12% behind
+at that width and rate on the 510-case set; width 256 at 200,000 cells, 12% behind
 on the cars, is its best wing candidate. (3) Transolver's two 100,000-cell
 candidates swap places across the datasets within 3%. **Under the
 preregistered rule (the reference is the candidate that wins both datasets;
@@ -33621,7 +33621,7 @@ under the final references follow when the last lane is scored.
 **Setting.** REF-80 picks, for each of the three architectures, the one
 configuration that trains under 80 GiB per GPU (the H100-class budget) and
 is the most accurate on two selection datasets, DrivAerML Surface (435 cars,
-48 validation cars) and the HiLift 210-wing rung (180 validation wings), with
+48 validation cars) and the HiLift 510-case medium set (180 validation wings), with
 every candidate trained 500 epochs on two seeds and scored in float32 at
 200,000 cells per case (@sec-nb-char-prereg, @sec-nb-ref80-frontier). The
 DrivAerML half was read on 2026-10-03 (@sec-nb-ref80-drivaer-half); the last
@@ -33640,7 +33640,7 @@ memory).** On DrivAerML Surface: ISLA 512 slices 0.0430 (0.0431 / 0.0428,
 0.0406, 71 GiB), width 512 at 100,000 0.0419 (49), width 256 0.0455 (0.0455 /
 0.0455, 78); Transolver width 1,024 at 100,000 0.0432 (47), width 512 with 16
 layers at 100,000 0.0435 (62), width 512 0.0466 (65), width 256 0.0556 (52).
-On the 210 wings: ISLA width 512 with 512 slices 0.0407 (0.0402 / 0.0411),
+On the 510-case medium set: ISLA width 512 with 512 slices 0.0407 (0.0402 / 0.0411),
 width 512 0.0420 (0.0443 / 0.0397), 512 slices 0.0425 (0.0415 / 0.0436),
 width 768 at 100,000 0.0425 (0.0410 / 0.0441), reference 0.0450 (0.0442 /
 0.0459), width 512 with 24 layers 0.0451, 24 layers 0.0461; GeoTransolver
@@ -33693,7 +33693,7 @@ datasets by the rule above; none is the most accurate on DrivAerML Surface
 alone, where GeoTransolver width 1,024 at 100,000 cells leads every
 candidate (0.0404) but reads 0.252 on the wings (@sec-nb-ref80-wing-half for
 the reading of that lane: two seeds far apart, a training that did not
-settle at that width and rate on 210 wings, not a scoring fault).
+settle at that width and rate on the 510-case set, not a scoring fault).
 
 **What the selection says about the axes.** ISLA spends its memory lead
 best on slices and width together (the wing ordering), and gains nothing on
@@ -37642,7 +37642,7 @@ values.
 | Dataset | Cells reaching the area step ÷ budget | Verdict | Evidence |
 |---|---|---|---|
 | DrivAerML Surface | 1,000,000-cell uniform pool (of 16.5M to 17.7M) ÷ 200,000 | resampled for every model | ISLA 1.005 / 1.019 (pressure / wall shear); GeoTransolver 9.6 / 6.9; Transolver 6.4 / 5.1; 0 of 48 cases identical |
-| HiLiftAeroML, 210-wing rung | 1,000,000-cell pool (of about 290M) ÷ 200,000 | resampled for every model | ISLA 1.013 / 1.013; GeoTransolver 4.2 / 3.1; Transolver 9.1 / 5.5 |
+| HiLiftAeroML, 510-case medium set | 1,000,000-cell pool (of about 290M) ÷ 200,000 | resampled for every model | ISLA 1.013 / 1.013; GeoTransolver 4.2 / 3.1; Transolver 9.1 / 5.5 |
 | Shift-SUV | 1,000,000-cell pool (of 5.0M) ÷ 200,000 | resampled for every model | ISLA 0.999 / 1.001; GeoTransolver 3.3 / 3.0; Transolver 2.8 / 2.2 |
 | DrivAerML Volume | ISLA: vehicle pool of 1,000,000 ÷ 200,000; interior 0 cells; the baselines load no boundary | ISLA's boundary only | ISLA 7.9 / 6.6 / 6.6 (pressure / velocity / eddy viscosity; seed 42 pressure 9.1); GeoTransolver and Transolver 288 of 288 per-case values identical |
 | AirfRANS, block and uniform files | airfoil 843 to 1,217 segments ÷ 100,000; interior 0 cells | native mesh | baselines identical (1,200 of 1,200 block, 200 of 200 uniform); ISLA 995 of 1,000 and 200 of 200 identical, the rest within 6.4e-7; ISLA-DTT within 2e-6 |
@@ -38797,3 +38797,19 @@ A2 ISLA on eddy viscosity (0.959). On SHIFT-SUV, Transolver leads A2 ISLA
 **Next.** Every baseline lane now reads the unit direction, plus a
 standardized speed where the speed varies. The recipe's baseline defaults
 follow, so that new runs read the fair drive by default.
+
+## 2026-10-20 — Correction: HiLift's medium set, which every HiLift standing trains on, has 510 training cases, not 210 {#sec-nb-hl-medium-510}
+
+The CHAR pre-registration, the REF-80 entries of 2026-10-02 to 2026-10-04 and
+the area-protocol audit of 2026-10-16 called the HiLift selection and
+standing set "the 210-wing rung". Those runs (`r80_hl_*`, and later
+`a2r_hl_*`, `udrv_hl_*` and `h090_hl_*`) train on
+`highlift_surface_medium`. Its manifest lists 510 training and 180
+validation cases, and the training logs show 127 samples per rank on 4
+GPUs. Those entries now say "the 510-case medium set". Their numbers and
+verdicts are unchanged. The ledger's REF-80 row has the same correction.
+
+The genuine 210-case references stay as written: the September ladder's
+210-case rung (`geometry_scarce`), the UDRV-L-210 study
+(@sec-nb-udrvl-210-verdict) and the wing-element anatomy on the
+`*_hl210` runs. The book writer found the mislabel.
