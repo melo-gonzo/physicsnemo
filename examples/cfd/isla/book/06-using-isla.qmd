@@ -6,7 +6,8 @@ chapter refers to it rather than repeating it.
 
 **ISLA ships as one class with one reference configuration, trained and
 evaluated by the unified external-aerodynamics recipe, and this chapter is
-its operating manual.** It says which configuration to run, what the model
+its operating manual.** It says which configuration to run, how to declare
+the boundary conditions, what the model
 needs from your data and what it returns, the commands that train and
 evaluate it, the one learning rate and why the optimizer matters for it,
 how to draw cells at inference, how to load a checkpoint, what a step
@@ -102,15 +103,27 @@ the selection that also fixed the reference configurations of GeoTransolver
 different winners, and the configuration with the best score over both was
 taken; @sec-selection gives the rule, the outcome and every candidate. Everything else
 about ISLA is fixed in the class: the frame, the routing, the length unit,
-the wall geometry of interior prediction points, the geometry kernel's
-selection. The arguments left on the constructor (@tbl-arch-switches) are
-of three kinds: declarations of your data (`output_schema`,
-`boundary_schema`, `query_schema`, `global_schema`, `dim`); the task
-(`interior`) and the role of interior prediction points
-(`query_independent`); and capacity and execution (`hidden`, `n_layers`,
-`n_slices`, `compile_blocks`). A change of size is an experiment, not a
-configuration of the book; the capacity studies of @sec-capacity are where
-such changes are measured.
+the exact wall geometry of interior prediction points, the law of the
+interior task's boundary draw, the geometry kernel's selection.
+
+```{python}
+#| label: para-using-arguments
+#| output: asis
+KINDS = {
+    "declarations of your data": ["output_schema", "boundary_schemas", "global_schema", "dim"],
+    "the task and its interior tokens": ["interior", "boundary_tokens", "query_independent"],
+    "capacity and execution": ["hidden", "n_layers", "n_slices", "compile_blocks"],
+}
+SIG = [k for k in inspect.signature(ISLA.__init__).parameters if k != "self"]
+assert sorted(sum(KINDS.values(), [])) == sorted(SIG), (KINDS, SIG)
+assert all(p.kind is inspect.Parameter.KEYWORD_ONLY for k, p in inspect.signature(ISLA.__init__).parameters.items() if k != "self")
+REQUIRED = [k for k in SIG if inspect.signature(ISLA.__init__).parameters[k].default is inspect.Parameter.empty]
+print(f"The constructor's {len(SIG)} arguments (@tbl-arch-switches), all keyword-only, are of three kinds: "
+      + "; ".join(f"{kind} ({', '.join(f'`{a}`' for a in args)})" for kind, args in KINDS.items())
+      + f". Only {' and '.join(f'`{a}`' for a in REQUIRED)} have no default (read from the constructor's signature as the "
+      "page renders). A change of size is an experiment, not a configuration of the book; the capacity studies of "
+      "@sec-capacity are where such changes are measured.")
+```
 
 ::: {.callout-note title="Interacting or read-only prediction points"}
 An interior prediction of ISLA is a function of the whole set of
@@ -128,38 +141,41 @@ datasets is in @sec-interior-read-only and @sec-airfrans-read-only.
 
 ## What the model needs from your data {#sec-using-inputs}
 
-**ISLA takes the boundary as named meshes, the prediction points as a
-point cloud, and the problem's data as named fields of declared rank; it
-returns a point cloud with the outputs in its point data. The two inputs
-that are easy to get wrong are the measures, which must be proportional to
-the measure each cell represents, with one constant across every boundary
-mesh, and the global directions, which must be directions.**
+**ISLA takes the boundary as one mesh per named boundary condition, the
+prediction points as a point cloud, and the problem's data as named fields
+of declared rank; it returns a point cloud with the outputs in its point
+data. The inputs that are easy to get wrong are the measures, which must be
+proportional to the measure each cell represents, with one constant across
+every boundary mesh, the orientation of the cells, and the global
+directions, which must be directions.**
 The forward call is keyword-only and takes three arguments:
 
-- `boundary_meshes`: a mapping from a name (one entry per boundary
-  condition or part) to a `Mesh[dim - 1, dim]`, a triangulated surface in
-  three dimensions or a polyline in two. Its cells are the tokens: the cell
-  centroid is the position, the cell normal the outward normal, and the
-  cell's effective measure (`cell_data["_effective_measure"]` when present,
-  else the geometric measure) the measure weight. The meshes are
-  concatenated in sorted key order into one token set with one input
-  embedding; the names set only that order. One `boundary_schema` applies
-  to every mesh, and each of its fields is read from each mesh's
-  `cell_data` by name, so every mesh carries every declared field. A
-  condition's identity reaches the model only as such a field: the AeroZoo
-  recipe writes one-hot role tags (`bc_inlet`, `bc_outlet`, `bc_no_slip`,
-  `bc_slip`) and the prescribed values, zero where a role prescribes none.
-- `prediction_points`: for the interior task, a point-cloud `Mesh` whose
-  `points` are the prediction points and whose `point_data` carries the
-  `query_schema` fields, or a bare `(Q, dim)` tensor when none are
-  declared. Omitted on a surface task, where the outputs come back at the
-  boundary cells.
+- `boundary_meshes`: a mapping from the boundary-condition names declared
+  in `boundary_schemas` to `Mesh[dim - 1, dim]` objects, a triangulated
+  surface in three dimensions or a polyline in two. A boundary cell has its
+  centroid as position, its normal as normal, and its effective measure
+  (`cell_data["_effective_measure"]` when present, else the geometric
+  measure) as measure weight. Any non-empty subset of the declared names may
+  be passed, in any order: the model reads the given conditions in sorted
+  name order, so two orders of the mapping give bitwise the same output, and
+  a condition left out contributes nothing, as one with zero cells does. A
+  name that is not declared is an error. Each mesh's `cell_data` carries its
+  own condition's declared fields, read by name; other cell data are
+  ignored. On the surface task every cell is a token. On the interior task
+  every mesh goes in at full resolution: its cells are the surface the
+  prediction points' geometry is measured against, and the model draws its
+  boundary tokens from them (@sec-using-interior).
+- `prediction_points`: for the interior task, a point-cloud `Mesh`, of
+  which only the `points` are read, or a bare `(Q, dim)` tensor. A
+  prediction point carries no declared field: its position, and the
+  geometry the model computes for it, are all it has. Omitted on a surface
+  task, where the outputs come back at the boundary cells.
 - `global_data`: a TensorDict or a mapping with the `global_schema` fields
   as leaves, a `(dim,)` vector for a rank-1 field and a scalar for a rank-0
   field. Extra leaves are ignored; a missing one is an error.
 
-Each of the four declarations, `output_schema`, `boundary_schema`,
-`query_schema` and `global_schema`, maps a field name to a *rank spec*:
+Each declaration, `output_schema`, each condition's schema in
+`boundary_schemas`, and `global_schema`, maps a field name to a *rank spec*:
 `{"rank": r}`, with `"symmetric": True` for a symmetric tensor of rank 2 or
 more and `"parity": "odd"` for a pseudotensor output (a vorticity). Rank 0
 is a scalar, rank 1 a vector, rank 2 a matrix that rotates as a tensor.
@@ -168,8 +184,9 @@ or 1. One name declares one field, so a parameter vector is several rank-0
 names.
 
 The example below builds the airfoil as a polyline `Mesh`, orients its
-cells so that their normals point out of the body, and calls a surface
-model and an interior model on it.
+cells so that their normals point out of the body into the fluid, and calls
+a surface model and an interior model on it, each with one boundary
+condition, `airfoil`, that declares no field.
 
 ```{python}
 #| label: using-forward-demo
@@ -179,7 +196,7 @@ J = joukowski(n_cells=80)                                # the book's running ex
 verts = torch.as_tensor(J["xy"], dtype=torch.float64)    # (81, 2) closed polyline
 cells = torch.stack([torch.arange(80), torch.arange(1, 81)], dim=1)   # (80, 2)
 airfoil = Mesh(points=verts, cells=cells)                # Mesh[1, 2]: a polyline
-# A cell's normal follows its vertex order, and ISLA reads it as outward: orient the cells.
+# A cell's normal follows its vertex order; ISLA reads it as given: orient the cells into the fluid.
 if ((airfoil.cell_centroids - verts.mean(0)) * airfoil.cell_normals).sum(-1).mean() < 0:
     cells = cells.flip(1)
     airfoil = Mesh(points=verts, cells=cells)
@@ -230,10 +247,100 @@ print(": What goes in and what comes out of the example above, read from the ten
 ```
 
 The output is a point-cloud `Mesh`. On the surface task its `points` are
-the boundary token positions in token order; on the interior task they are
+the boundary cells' centroids, the given conditions in sorted name order and
+each condition's cells in its mesh's order; on the interior task they are
 the prediction points. Its `point_data` holds one leaf per declared output
 at its natural shape, and its `global_data` is the selected `global_data`
-passed through. Four of the inputs need a word.
+passed through.
+
+### Boundary conditions by name {#sec-using-conditions}
+
+**Declare each boundary condition by name with the fields it prescribes;
+the condition's identity is in the model's parameters, so no tag field
+names it.** `boundary_schemas` maps each name to its schema: an inlet's
+prescribed velocity as `{"bc_velocity": {"rank": 1}}`, a loaded face's
+pressure as `{"bc_pressure": {"rank": 0}}`, a no-slip wall as `{}`. The
+constructor stores the names sorted, as `model.boundary_names`. A name is a
+non-empty string without `"."`, and it may not be an attribute of
+`nn.ModuleDict` (`keys`, `update`, `training`, ...), because the names key
+the `ModuleDict` that holds the conditions' parameters; either fault is a
+`ValueError` at construction.
+
+Each condition owns an input layer, `boundary_conditions[name].seed`, a
+linear map without bias from the condition's seed (a constant 1, the
+cosines $n_i \cdot \hat g_k$, the invariants of its own fields and the
+global scalars) to the token width, followed by the shared GELU and linear
+layer `embed`. Its column on the constant is the condition's learned
+offset, so two conditions that declare no field still start apart and stay
+apart. A condition's vector and tensor fields reach the slice layers
+through its own linear maps (`vector_map`, `tensor_map`) onto shared
+channels, as many as the widest condition has; the slice layers themselves
+are shared by every condition (@sec-arch-seed). The cell below declares two
+conditions on the airfoil, a blowing slot near the trailing edge with a
+prescribed jet velocity and the rest of the wall, and calls the model with
+the conditions in both orders, with one of them alone, and with two names
+it does not accept.
+
+```{python}
+#| label: using-conditions-demo
+#| echo: true
+#| code-fold: false
+c = airfoil.cell_centroids
+slot = (c[:, 1] > 0) & (c[:, 0] > c[:, 0].quantile(0.8))      # upper surface, last fifth of the chord
+n_jet = 0.3 * airfoil.cell_normals[slot]                      # blowing along the normal, into the fluid
+jet = Mesh(points=verts, cells=cells[slot], cell_data={"u_jet": n_jet})
+wall = Mesh(points=verts, cells=cells[~slot])
+
+torch.manual_seed(0)
+two = ISLA(output_schema={"cp": {"rank": 0}, "tau": {"rank": 1}},
+           boundary_schemas={"wall": {}, "jet": {"u_jet": {"rank": 1}}},
+           global_schema={"freestream": {"rank": 1}},
+           hidden=32, n_layers=2, n_slices=8, dim=2).double().eval()
+g = {"freestream": freestream}
+with torch.no_grad():
+    a = two(boundary_meshes={"wall": wall, "jet": jet}, global_data=g)
+    b = two(boundary_meshes={"jet": jet, "wall": wall}, global_data=g)
+    alone = two(boundary_meshes={"wall": wall}, global_data=g)
+# One Mesh at the given conditions' cells, sorted by name: split it per condition.
+counts = [{"jet": jet, "wall": wall}[name].n_cells for name in two.boundary_names]
+cp_by_condition = dict(zip(two.boundary_names, torch.split(a.point_data["cp"], counts)))
+
+refused = {}
+for label, call in {
+    "an nn.ModuleDict attribute as a name": lambda: ISLA(output_schema={"cp": {"rank": 0}}, boundary_schemas={"keys": {}}, dim=2),
+    "an undeclared name in forward": lambda: two(boundary_meshes={"flap": wall}, global_data=g),
+}.items():
+    try:
+        call()
+    except ValueError as err:
+        refused[label] = str(err)
+```
+
+```{python}
+#| label: para-using-conditions
+#| output: asis
+same = all(torch.equal(a.point_data[k], b.point_data[k]) for k in ("cp", "tau")) and torch.equal(a.points, b.points)
+print(f"`two.boundary_names` is {two.boundary_names}: declared as `wall`, `jet`, stored sorted. The slot has {jet.n_cells} "
+      f"cells and the wall {wall.n_cells}; the output has {a.n_points} points, the slot's first. The two orders of the mapping give "
+      f"{'bitwise equal' if same else 'different'} outputs, and the wall alone gives {alone.n_points} points, a prediction "
+      "for a case without the slot. `torch.split` by the conditions' cell counts, in `boundary_names` order, gives each "
+      f"condition its own rows ({', '.join(f'`{k}`: {tuple(v.shape)}' for k, v in cp_by_condition.items())}). The two "
+      "refused calls raise `ValueError`:")
+print()
+for label, msg in refused.items():
+    print(f"- {label}: \"{msg}\"")
+print()
+assert len(refused) == 2 and same
+```
+
+**The surface output is one `Mesh`, not one per condition.** The recipe's
+loss, metrics and inference consume one set of targets over points, and the
+interior task's prediction points belong to no condition, so a mapping of
+meshes would only move the concatenation into the recipe. Where the
+dataset's scored points are in another order, the recipe puts them in the
+prediction order (`reorder_interior`, @sec-using-recipe-conditions).
+
+Four of the inputs need a word.
 
 **The measures must be proportional to what each cell represents.** A
 common factor is invisible. The routing reads $\log w$ through a softmax,
@@ -243,7 +350,8 @@ $\omega$ (@sec-arch-modes), shifts by the same constant; and scaling every
 measure by 5 leaves every output unchanged
 (@tbl-using-contracts). What the model reads is each cell's share of the
 boundary, so one constant must hold across all the boundary meshes of a
-case. When the recipe keeps $n$ of $N$ cells, each kept cell carries the
+case. A surface model reads every cell it is given, so when the recipe
+keeps $n$ of $N$ surface cells, each kept cell carries the
 Horvitz–Thompson weight, its area divided by its probability of being kept
 ($N/n$ times its area under a uniform draw), in the mesh's
 `_effective_measure` cell field. That weight is an importance weight: the
@@ -252,7 +360,9 @@ integrals over the whole surface, not over the retained fraction of it
 (@sec-isla-quadrature). Under a uniform draw at one rate the factor $N/n$
 is common to every cell; it matters where the probability of being kept
 differs between cells or between meshes. A boundary passed
-whole, like the airfoil above, needs no such field. Measures carry their
+whole, like the airfoil above, needs no such field, and an interior model,
+which takes its boundary whole and draws its own tokens, computes the
+weights itself (@sec-using-interior). Measures carry their
 represented dimension and scale geometrically: on a planar problem the
 measure is the segment length.
 
@@ -288,26 +398,234 @@ is of degree zero in it, a dimensional pressure of degree two), so the model
 learns the dependence as it learns any other parameter. The AirfRANS
 configuration passes the inlet speed this way.
 
-For the interior task the model needs the prediction points and nothing
-else about them. It computes each point's signed wall distance and
-direction from the nearest boundary token (@sec-arch-interior-geometry),
-so no signed-distance field has to be stored, sampled or declared. A
-dataset that carries a full-mesh signed-distance field may pass it and its
-gradient as ordinary `query_schema` fields (`sdf: {rank: 0}`, `sdf_normals:
-{rank: 1}`) in the prediction mesh's `point_data`.
+### The interior task: exact geometry and the in-model draw {#sec-using-interior}
 
-**The recipe's contract.** A recipe model configuration declares
-`input_type: mesh` and `output_type: mesh`. Under the first, the datapipe's
-`Mesh` objects and per-case tensors pass to `forward` as they are, one case
-per step with no batch axis, through a `forward_kwargs` mapping whose keys
-are the three argument names above and whose values name the datapipe
-fields (`boundaries.vehicle` under `boundary_meshes`, the interior point
-cloud under `prediction_points`, the case's global tensors under
+**On the interior task, pass every boundary at full resolution and the
+prediction points as bare positions: the model computes each point's
+geometry exactly from the whole surface and draws its own boundary tokens.**
+For each prediction point $x_q$ the model finds the closest point $p_q$ on
+the union of the given meshes' cells (point to face, a Warp BVH search in
+three dimensions and a brute force over the segments in two). The signed
+distance $d_q = \pm|x_q - p_q|$ takes the sign of the pseudo-normal of the
+closest feature, positive on the side the normals point to; the direction
+$u_q$ is the cell's normal turned toward the query when $p_q$ lies inside a
+cell, else $(x_q - p_q)/|x_q - p_q|$. The point reads $s_q = d_q / L$ and
+$\operatorname{asinh}(s_q / 10^{-6})$ as its two distance channels and
+$\hat\nu_q = \operatorname{sign}(d_q)\, u_q$, with $\operatorname{sign}(0) =
++1$, as its direction (@sec-arch-interior-geometry). Both are continuous
+through the surface, the same for every draw of the boundary tokens,
+unchanged when a cell is split, and convergent as $O(h^2)$ under refinement,
+like a stored signed-distance field computed from the same surface. The
+model therefore reads no stored field and takes no per-point input at all.
+The datasets compute `sdf` and `sdf_normals` for the baselines, whose
+inputs they are.
+
+The boundary tokens are a sample of the same cells, drawn inside the
+forward pass (`sampling.sample_boundary_cells`):
+
+- **Budget.** `boundary_tokens` (default 200,000) tokens per case in
+  total, shared over the given conditions by water filling: equal shares, a
+  condition with fewer cells than its share kept whole and its unused share
+  given to the others. The count is exactly $\min(\text{cells},
+  \texttt{boundary\_tokens})$, a function of the cell counts alone, so the
+  draw has static shapes and compiles into the one whole-model graph.
+- **Law.** A cell is kept with probability $\pi_i$ proportional to its
+  measure, capped at one, by systematic sampling along the Morton order of
+  the centroids: one start $u$, then every unit step along the cells laid end
+  to end, each as an interval of length $\pi_i$. The sample is spread over
+  the surface rather than clumped.
+- **Weights.** Each kept cell carries its Horvitz–Thompson measure $a_i /
+  \pi_i$, so every measure-weighted sum over the tokens is an unbiased
+  quadrature of the full surface, exact on a condition kept whole.
+- **Start.** In training $u$ is uniform from the global torch RNG, a new
+  quadrature of the same surface at every step (`torch.manual_seed`
+  reproduces a run); in evaluation (`model.eval()`) $u = 0.5$
+  (`EVAL_START` in `model.py`), so inference is deterministic.
+
+A surface model reads every cell it is given and samples none: it predicts
+at those cells, and its constructor raises a `ValueError` for any
+`boundary_tokens` other than the default. The cell below draws 40 tokens from the
+airfoil's 80 segments with an interior model.
+
+```{python}
+#| label: using-draw-demo
+#| echo: true
+#| code-fold: false
+from physicsnemo.experimental.models.isla import model as isla_model
+from physicsnemo.experimental.models.isla.sampling import sample_boundary_cells
+
+lengths = airfoil.cell_areas
+kept, w_ht = sample_boundary_cells([lengths], [airfoil.cell_centroids], 40,
+                                   torch.tensor(isla_model.EVAL_START, dtype=torch.float64))
+
+torch.manual_seed(0)
+sparse = ISLA(output_schema={"p": {"rank": 0}}, boundary_schemas={"airfoil": {}},
+              global_schema={"freestream": {"rank": 1}}, interior=True, boundary_tokens=40,
+              hidden=32, n_layers=2, n_slices=8, dim=2).double()
+ask = dict(boundary_meshes={"airfoil": airfoil}, prediction_points=grid, global_data={"freestream": freestream})
+with torch.no_grad():
+    sparse.eval();  ev1, ev2 = sparse(**ask).point_data["p"], sparse(**ask).point_data["p"]
+    sparse.train(); tr1, tr2 = sparse(**ask).point_data["p"], sparse(**ask).point_data["p"]
+```
+
+```{python}
+#| label: para-using-draw
+#| output: asis
+print(f"The draw keeps {kept.numel()} of the {airfoil.n_cells} segments. Their raw lengths sum to "
+      f"{lengths[kept].sum():.4f} and their Horvitz–Thompson measures to {w_ht.sum():.4f}, against the airfoil's "
+      f"{lengths.sum():.4f}. Two evaluation-mode calls give "
+      f"{'bitwise equal' if torch.equal(ev1, ev2) else 'different'} predictions; two training-mode calls draw two "
+      f"samples, and their predictions differ by {float((tr1 - tr2).norm() / tr2.norm()):.1e} "
+      "in relative L2 on this untrained model.")
+```
+
+### Orientation {#sec-using-orientation}
+
+**Orient every boundary so that its normals point into the domain where
+the prediction points lie: into the fluid for a flow, into the solid for a
+stress problem.** The model reads each cell's normal as given and never
+flips it. On the interior task the normals sign the distance, so a model
+trained with normals into the fluid sees positive distances at all its
+prediction points and directions $\hat\nu_q$ pointing away from the wall. A
+boundary wound the other way presents negative distances and reversed
+normals to every invariant: a different input, not a symmetry the model
+undoes. The model cannot choose the orientation itself, because a mesh
+does not say which side is the domain (an inlet, an open wall or a duct has
+no inside), and the pseudo-normal sign assumes a closed, consistently
+oriented surface. On the surface task the orientation enters only through
+the normals' invariants and needs only to be the same across a dataset's
+cases.
+
+The recipe sets the orientation per dataset file with the transform
+`FlipBoundaryOrientation` (`src/domain_transforms.py`): for each boundary
+it names, it swaps the last two vertices of every cell, which reverses the
+normal and leaves the cell and its measure unchanged, and negates any
+stored normal fields it lists, so the stored files stay as they are.
+
+```{python}
+#| label: tbl-using-orientation
+#| output: asis
+DSETS = RECIPE / "datasets"
+def flips(path):
+    """The boundaries a dataset file's FlipBoundaryOrientation steps reverse (none: the empty list)."""
+    steps = (yaml.safe_load(path.read_text()).get("pipeline") or {}).get("transforms") or []
+    return [b for t in steps if "FlipBoundaryOrientation" in str(t.get("_target_", "")) for b in t["boundaries"]]
+families = {"DrivAerML Volume (`drivaer_ml_volume_reference*`)": "drivaer_ml_volume_reference*.yaml",
+            "AeroZoo (`aerozoo_volume*`, `aerozoo_uvolume*`)": "aerozoo_*volume*.yaml",
+            "AirfRANS interior (`airfrans_*volume*`)": "airfrans_*volume*.yaml",
+            "DrivAerML Surface (`drivaer_ml_surface*`)": "drivaer_ml_surface*.yaml"}
+o = "| dataset files | files | boundaries reversed |\n|---|--:|---|\n"
+FLIPS = {}
+for fam, pat in families.items():
+    FLIPS[pat] = found = {tuple(flips(p)) for p in sorted(DSETS.glob(pat))}
+    n = len(list(DSETS.glob(pat)))
+    o += f"| {fam} | {n} | " + ("; ".join(", ".join(f"`{b}`" for b in f) or "none" for f in sorted(found))) + " |\n"
+assert FLIPS["drivaer_ml_volume_reference*.yaml"] == {("vehicle",)}, FLIPS
+assert FLIPS["aerozoo_*volume*.yaml"] == {("inlet", "outlet", "no_slip", "slip")}, FLIPS
+assert FLIPS["airfrans_*volume*.yaml"] == {()} and FLIPS["drivaer_ml_surface*.yaml"] == {()}, FLIPS
+print(o)
+print(": The boundaries the recipe's dataset files reverse with `FlipBoundaryOrientation`, read from `datasets/*.yaml` as the "
+      "page renders. How to read this: the DrivAerML vehicle is stored wound into the body and AeroZoo's four boundaries out of "
+      "the fluid (the OpenFOAM convention), so both are reversed; AeroZoo reverses them after the passes that compute "
+      "GeoTransolver's stored distances, which are those of the stored files. AirfRANS's airfoil is stored with its normals "
+      "into the fluid and is read as it is. A surface task reads no distance. The table does not cover the solid-mechanics "
+      "datasets, whose files are not in the recipe tree (see below).")
+```
+
+Of the solids, the Tensile2d specimen's polyline is stored with its normals
+into the specimen and needs no reversal (`isla_tensile2d.yaml`). The lug's
+surface triangles are stored wound out of the solid, so `isla_lug.yaml`
+is paired with a dataset file that reverses `surface` before the split into
+conditions.
+
+### The recipe's contract and the configurations {#sec-using-recipe-conditions}
+
+**A recipe configuration names each boundary condition twice, once in
+`model.boundary_schemas` with its fields and once in
+`forward_kwargs.boundary_meshes` with the datapipe boundary it is read
+from.** A recipe model configuration declares `input_type: mesh` and
+`output_type: mesh`. Under the first, the datapipe's `Mesh` objects and
+per-case tensors pass to `forward` as they are, one case per step with no
+batch axis, through a `forward_kwargs` mapping whose keys are the three
+argument names above and whose values name the datapipe fields (one
+`boundaries.<name>` per condition under `boundary_meshes`, the interior
+point cloud under `prediction_points`, the case's global tensors under
 `global_data`). Under the second, the recipe reads its targets out of the
 returned mesh's `point_data` by the names of the `output_schema`
 declaration. GLOBE, another surrogate the recipe trains
 (`conf/model/globe_surface.yaml`), uses the same contract, so the two models
 are swapped by changing the model block alone.
+
+The configurations fall into three families. On DrivAerML, HiLiftAeroML
+and AirfRANS one condition, a no-slip wall, declares no field. AeroZoo's
+four boundaries are four conditions read directly from the dataset, each
+declaring only the values it prescribes. The GINOT bracket lug, PLAID
+Tensile2d and DeepJEB++ store their conditions in one labelled boundary,
+which the ISLA configuration splits into one boundary per condition with the
+recipe transform `SplitBoundaryByLabels`, listed under
+`dataset_append_transforms`. The recipe appends those steps to the
+dataset's own chain for that model configuration only (`src/datasets.py`),
+so the baselines read the dataset unchanged. It raises an error for a
+configuration whose `boundary_meshes` does not pass every split boundary under its own
+name, since a boundary left out would drop its cells without an error. The
+split gives each label field's cells to the first condition in `labels`
+that marks them and the cells no label marks to `rest`; the source boundary
+stays as it is for the baselines.
+
+```{python}
+#| label: tbl-using-conditions
+#| output: asis
+def fields(s):
+    return ", ".join(f"`{k}` ({v['rank']})" for k, v in (s or {}).items()) or "none"
+o = "| configuration | condition (declared fields, rank) | read from | split of the labelled boundary |\n|---|---|---|---|\n"
+for n, c in ISLA_CFGS.items():
+    schemas = c["model"]["boundary_schemas"]; given = c["forward_kwargs"]["boundary_meshes"]
+    assert set(schemas) == set(given), (n, schemas, given)
+    split = [t for t in c.get("dataset_append_transforms") or [] if "SplitBoundaryByLabels" in str(t["_target_"])]
+    how = "; ".join(f"`{t['boundary']}` by labels, first wins: " + ", ".join(f"`{k}` ← `{v}`" for k, v in t["labels"].items())
+                    + f"; rest `{t['rest']}`" + ("; scored points reordered (`reorder_interior`)" if t.get("reorder_interior") else "")
+                    for t in split) or "none"
+    for i, name in enumerate(sorted(schemas)):
+        o += (f"| {'`' + n + '`' if i == 0 else ''} | `{name}` ({fields(schemas[name])}) | `{given[name]}` | "
+              f"{how if i == 0 else ''} |\n")
+print(o)
+print(": The boundary conditions of every ISLA configuration of the recipe, in the model's sorted order, with the datapipe "
+      "boundary each is read from and the split that makes it (`conf/model/isla_*.yaml`, read as the page renders). How to read "
+      "this: a condition with no field is a wall or a free surface whose identity is its own input layer; \"first wins\" is the "
+      "priority where two labels mark one cell. The table does not show the global inputs or the outputs (@tbl-using-configs).")
+```
+
+```{python}
+#| label: para-using-splits
+#| output: asis
+T2 = ISLA_CFGS["isla_tensile2d"]["dataset_append_transforms"][0]["labels"]
+LUG = ISLA_CFGS["isla_lug"]["dataset_append_transforms"][0]["labels"]
+AZ = ISLA_CFGS["isla_volume_aerozoo"]
+assert list(T2).index("fixed") < list(T2).index("pinned") and list(LUG).index("loaded") < list(LUG).index("hole")
+print(f"The label order matters where two labels mark one cell. On Tensile2d the order is {', '.join(f'`{k}`' for k in T2)}: "
+      "the bottom edge's cell at the pinned corner node stays `fixed`, so the bottom edge's prescribed displacement holds "
+      "along all of it, and the pinned node is marked by the left side's cell at it, which only `bc_pinned` labels. On the lug "
+      f"the order is {', '.join(f'`{k}`' for k in LUG)}, because the loaded cells are part of the hole. On DeepJEB++ the "
+      "split also permutes the scored cell centroids into the order of ISLA's surface predictions (the conditions in sorted "
+      "order, each its cells in mesh order), the same points with the same targets. AeroZoo needs no split; its "
+      "configuration instead removes dataset steps ISLA does not read (`dataset_drop_transforms`: "
+      + ", ".join(f"`{t}`" for t in AZ["dataset_drop_transforms"])
+      + ") and lifts the reader's per-boundary cell cap (`dataset_reader_overrides`), so the four boundaries arrive whole "
+      "and the model draws their tokens.")
+```
+
+The Tensile2d configuration, as it stands in its file (comments omitted):
+
+```{python}
+#| label: code-using-tensile2d
+#| output: asis
+T2C = ISLA_CFGS["isla_tensile2d"]
+show = {"dataset_append_transforms": T2C["dataset_append_transforms"],
+        "forward_kwargs": {"boundary_meshes": T2C["forward_kwargs"]["boundary_meshes"]},
+        "model": {"boundary_schemas": T2C["model"]["boundary_schemas"], "dim": T2C["model"]["dim"],
+                  "interior": T2C["model"]["interior"]}}
+print("```yaml\n" + yaml.safe_dump(show, sort_keys=False, default_flow_style=None).rstrip() + "\n```")
+```
 
 ::: {.callout-note collapse="true" title="Nested field names"}
 A dataset that stores its fields in groups (`solution/pressure` on disk,
@@ -326,21 +644,23 @@ and `point_data` and in `global_data`.
 The architecture knows only that it was given named fields of declared
 rank. A buoyant flow passes gravity as its one direction. A magnetized flow
 passes two. Steady conduction with pinned temperatures passes no direction
-and supplies the pinned values as a rank-0 boundary input
-(`boundary_schema: {trace: {rank: 0}}`), which every boundary mesh
-carries: the pinned value on the pinned boundary, zero elsewhere, with a
-condition tag to tell the two apart.
-An elasticity problem passes its prescribed displacement and traction as
-rank-1 boundary inputs and predicts the stress as one symmetric rank-2
+and declares two conditions: the pinned boundary with its prescribed
+temperature (`pinned: {trace: {rank: 0}}`) and the insulated boundary with
+none (`insulated: {}`).
+An elasticity problem declares its clamped boundary, its loaded boundary
+with the traction as a rank-1 field, and its free surface, and predicts the
+stress as one symmetric rank-2
 output (`stress: {rank: 2, symmetric: true}`), from which the recipe reads
 a `symmetric_tensor` target's components along the dataset's axes. Each global
 direction adds one seed cosine, one relational cosine and two vectors to
 the output basis; each rank-1 boundary input adds its frame cosines and
-norm to the seed and one relational cosine per slice (@sec-arch-seed,
+norm to its condition's seed and, through the condition's vector map, its
+contraction with each anchor direction (@sec-arch-seed,
 @sec-arch-layer). The tests in `test_isla_global_inputs.py`,
-`test_isla_inputs.py`, `test_isla_heads.py` and `test_isla_nd.py` cover
-zero and two directions, global scalars, rank-1 and rank-2 inputs, every
-output rank and parity, and two dimensions.
+`test_isla_inputs.py`, `test_isla_conditions.py`, `test_isla_heads.py` and
+`test_isla_nd.py` cover zero and two directions, global scalars, rank-1 and
+rank-2 inputs on one condition or several, every output rank and parity,
+and two dimensions.
 :::
 
 ## Training {#sec-using-train}
@@ -354,8 +674,8 @@ ISLA needs no augmentation.** From the recipe root
 # DrivAerML Surface task (sampling_resolution defaults to 200,000 cells per case).
 python src/train.py model=isla_surface dataset=drivaer_ml_surface
 
-# DrivAerML Volume task: boundary -> interior, interacting prediction points. This configuration declares no
-# query_schema, so the dataset's stored sdf / sdf_normals are not read; model=isla_volume_sdf declares them.
+# DrivAerML Volume task: boundary -> interior, interacting prediction points. The dataset file reads the vehicle
+# whole and reverses it into the fluid; the model draws its 200,000 boundary tokens from it.
 python src/train.py model=isla_volume dataset=drivaer_ml_volume_reference
 
 # The same interior task with read-only prediction points (ISLA-DTT): its boundary read breaks the whole-model
@@ -374,7 +694,8 @@ python src/train.py model=isla_volume_airfrans dataset=airfrans_uvolume_2d
 from its file. The model configuration and the dataset file are chosen
 together: the dataset file writes the fields the model declares (the unit
 far-field direction `U_inf_dir`, the boundary meshes under the names of
-`forward_kwargs`, the Horvitz–Thompson measures of a subsampled boundary).
+`forward_kwargs`, the Horvitz–Thompson measures of a subsampled surface,
+the orientation of an interior task's boundaries).
 
 ```{python}
 #| label: tbl-using-configs
@@ -431,7 +752,7 @@ print(f"The recipe builds the optimizer from the parameters' shapes (`build_muon
       f"{BASE['training']['optimizer']['weight_decay']:g}. In the reference configuration of the DrivAerML Surface model that "
       f"is {len(two)} matrices holding {n2:,} parameters ({100 * n2 / (n2 + nr):.2f}% of the total) under Muon, and "
       f"{len(rest)} vectors and scalars holding {nr:,} (the biases, the LayerNorm scales and shifts, the routing gains and, "
-      f"in an interior model, the type offset and routing mass) under AdamW. The rate is the same for both, and the schedule "
+      f"in an interior model, the bias of the prediction points' input layer and their routing mass) under AdamW. The rate is the same for both, and the schedule "
       f"divides it by {1 / TRAIN['training']['scheduler']['gamma']:g} every {TRAIN['training']['scheduler']['step_size']} "
       f"epochs (`{TRAIN['training']['scheduler']['_target_']}`, `conf/train.yaml`).")
 ```
@@ -507,9 +828,12 @@ interleaved coordinate bits, a space-filling curve along which consecutive
 cells are spatial neighbors. A systematic sample has the same expectation
 as an independent draw for every cell-weighted integral and a lower
 variance for smooth integrands, the quadrature analog of stratified
-Monte Carlo. The headline comparisons of the book use the independent
-draw; a deployment at a reduced budget should use the stratified draw or
-more cells.
+Monte Carlo. The headline comparisons of the book on the surface tasks use
+the independent draw; a deployment at a reduced budget should use the
+stratified draw or more cells. The interior task needs no such stage: the
+model reads its boundary whole and draws its tokens itself, by systematic
+sampling along the same Morton order with inclusion probabilities
+proportional to area (@sec-using-interior).
 
 ## Loading a trained model {#sec-using-checkpoint}
 
@@ -530,6 +854,24 @@ with torch.no_grad():
     again = loaded(boundary_meshes={"airfoil": airfoil}, global_data={"freestream": freestream})
 with zipfile.ZipFile(path) as z:
     meta, args = json.loads(z.read("metadata.json")), json.loads(z.read("args.json"))["__args__"]
+
+# The same file marked as written by an earlier version, and a state dict with torch's earlier version mark.
+old = os.path.join(os.path.dirname(path), "isla_airfoil_earlier.mdlus")
+with zipfile.ZipFile(path) as zin, zipfile.ZipFile(old, "w") as zout:
+    for item in zin.namelist():
+        data = zin.read(item)
+        if item == "metadata.json":
+            data = json.dumps({**json.loads(data), "mdlus_file_version": "0.7.0"}).encode()
+        zout.writestr(item, data)
+state = surface.state_dict()
+state._metadata[""]["version"] = 1
+refusals = {}
+for label, call in {"`ISLA.from_checkpoint`": lambda: ISLA.from_checkpoint(old),
+                    "`load_state_dict`": lambda: loaded.load_state_dict(state)}.items():
+    try:
+        call()
+    except (IOError, RuntimeError) as err:
+        refusals[label] = f"{type(err).__name__}: {err}"
 ```
 
 ```{python}
@@ -539,9 +881,28 @@ same = all(torch.equal(again.point_data[k], out.point_data[k]) for k in ("cp", "
 print(f"The archive holds {', '.join(f'`{n}`' for n in sorted(zipfile.ZipFile(path).namelist()))}; its metadata records "
       f"checkpoint version {meta['mdlus_file_version']}, the class's `__model_checkpoint_version__`, and `args.json` records "
       f"every constructor argument ({', '.join(f'`{k}`' for k in args)}). The loaded model's outputs are "
-      f"{'bitwise equal to' if same else 'different from'} the saved model's. A checkpoint of any other version is refused "
-      "(ISLA keeps no upgrade path). The `geo_kernel` attribute is not stored: a loaded model starts at "
-      "`\"auto\"`.")
+      f"{'bitwise equal to' if same else 'different from'} the saved model's. The `geo_kernel` attribute is not stored: a "
+      "loaded model starts at `\"auto\"`.")
+```
+
+```{python}
+#| label: para-using-refusals
+#| output: asis
+assert len(refusals) == 2, refusals
+print(f"**A checkpoint of any version other than {ISLA.__model_checkpoint_version__} is refused, on every loading path, and "
+      "ISLA keeps no upgrade path.** `ISLA.from_checkpoint` compares the recorded version with the class's. The paths that "
+      "load weights into a built model (`Module.load`, `load_checkpoint`, the recipe's resume, `init_from` and inference, "
+      "and `load_state_dict` itself) go through a pre-hook that refuses a state dict with the parameter layout of a "
+      "checkpoint before 0.7.0, or with torch's state-dict version of the module other than the class's "
+      f"`_version = {ISLA._version}`. The second mark tells apart a 0.7.0 state dict, whose layout is the current one and "
+      "whose prediction points were trained on an earlier geometry encoding. The cell above marks the example's file as "
+      "written by 0.7.0 and its state dict with torch's earlier version; both are refused:")
+print()
+for label, msg in refusals.items():
+    print(f"- {label}: \"{msg}\"")
+print()
+print("A state dict rebuilt without torch's metadata (a dict comprehension over it) carries no version mark and is checked "
+      "by its layout alone.")
 ```
 
 The forward call mirrors the recipe mapping. For a model trained on
@@ -555,10 +916,11 @@ p, tau = out.point_data["pressure"], out.point_data["wss"]      # (N,) and (N, 3
 
 `vehicle` is a `Mesh` whose cells are the sampled surface, with the
 Horvitz–Thompson measures in its `_effective_measure` cell field when the
-surface is subsampled. For an interior model, pass `prediction_points` and
-read the outputs at those points; a checkpoint whose `query_schema`
-declares a stored signed-distance field expects it in the prediction mesh's
-`point_data`. Deploy an interior ISLA at its training point count (200,000
+surface is subsampled. For an interior model, pass every boundary
+condition's mesh at full resolution, oriented as in training, and
+`prediction_points`, and read the outputs at those points; in evaluation
+mode the boundary draw has its fixed start, so the prediction is
+deterministic. Deploy an interior ISLA at its training point count (200,000
 at the reporting protocol on DrivAerML), because an interacting point's
 prediction depends on the joint request (@sec-interior-companion). A model
 built with `query_independent=True` (ISLA-DTT) has no such rule and is
@@ -611,7 +973,7 @@ vol = ISLA_CFGS["isla_volume"]
 opts = vol["compile_options"]
 print(f"- **The geometry kernel is chosen for you.** At the first forward pass the model selects the fused Triton kernel "
       f"when the inputs are on CUDA, Triton is importable, the problem is three-dimensional, there is at least one global "
-      f"direction, the global directions and rank-1 per-token vectors number at most {GK.MAX_DIRECTIONS}, there are at most "
+      f"direction, the global directions and the shared boundary vector channels number at most {GK.MAX_DIRECTIONS}, there are at most "
       f"{GK.MAX_SLICES:,} slices and no rank-2 per-token input; otherwise it runs the eager region, which computes the same "
       "function. It logs the choice once. A planar model, a model with no global direction (the lug) and a model with "
       "rank-2 inputs run eager. To force one path, set the model's `geo_kernel` attribute to `\"eager\"` or `\"fused\"` "
