@@ -333,10 +333,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Unified external aero recipe: the final epoch is always checkpointed,
   resumed runs keep the epoch-mode learning-rate schedule (older checkpoints
-  resume one epoch behind), and fp16 runs save `GradScaler` state. A
-  non-finite gradient norm skips the optimizer step, as `GradScaler` already
-  did for fp16. A data-loading or forward failure on one rank now stops every
-  rank instead of leaving the others waiting for the process-group timeout.
+  resume one epoch behind), and fp16 runs save and restore `GradScaler` state.
 - `GLOBE` accepts `boundary_meshes` as a TensorDict, as the DrivAerML example
   passes them. Before, every forward pass of that example failed.
 - Under `torch.compile`, GLOBE no longer recompiles on its second training
