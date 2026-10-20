@@ -56,21 +56,23 @@ tie_shift = {k: max(shifts([k], ["ISLA"], "posed")) for k in ("tensile2d", "lug"
 ```{python}
 #| label: para-thesis
 #| output: asis
+n_lug = sum(k == "lug" and a == "Transolver" for k, _, a in V["leads"])
 print(
     "**ISLA is a slice-attention transformer that is exactly equivariant to rigid motions and consistent under a change of "
-    "mesh, by construction, and in distribution it is about as accurate as the strongest models of its family.** It is measured "
-    "against Transolver and its geometry-aware successor GeoTransolver, two published slice-attention surrogates, each at its own "
-    "reference configuration and scored the same way. "
-    f"Over the {n_pairs} comparisons of @fig-standing (each headline field of each dataset against each baseline"
-    + "".join(f", nor {d} {fl}, which the baselines predict with an out-of-plane component ISLA's planar prediction does not have"
-              for d, fl in HELD)
-    + f"), ISLA leads in {len(V['leads'])}"
-    + (f" ({n_lug} of them on the lug against Transolver, which reads no boundary-condition labels there)"
-       if (n_lug := sum(k == "lug" and a == "Transolver" for k, _, a in V["leads"])) else "")
-    + f", is level in {len(V['is level with'])} and trails in {len(V['trails'])}. "
-    f"Rotate and translate the test geometry, and on the {len(FLOW)} flow tasks every baseline error grows "
-    f"{base_posed_flow[0]:.0f}-fold to {base_posed_flow[1]:.0f}-fold while ISLA's stays within {100 * isla_posed:.1f}% of its native value. "
-    f"On the {len(SOLID)} solid-mechanics tasks the baselines' grow {base_posed_solid[0]:.1f}-fold to {base_posed_solid[1]:.0f}-fold; "
+    "mesh, by construction. On the native mesh, in distribution, it leads the strongest models of its family in "
+    f"{len(V['leads'])} of {n_pairs} comparisons, is level in {len(V['is level with'])} and trails in {len(V['trails'])}. "
+    f"Rotate and translate the test geometry, and on the {len(FLOW)} flow tasks ISLA's error stays within "
+    f"{100 * isla_posed:.1f}% of its native value while every baseline's grows {base_posed_flow[0]:.0f}-fold to "
+    f"{base_posed_flow[1]:.0f}-fold.** "
+    "The baselines are Transolver and its geometry-aware successor GeoTransolver, two published slice-attention surrogates, "
+    "each at its own reference configuration and scored the same way. A comparison in @fig-standing is one headline field of "
+    "one dataset against one baseline"
+    + "".join(f"; {d} {fl} is left out, because the baselines predict it with an out-of-plane component ISLA's planar "
+              "prediction does not have" for d, fl in HELD)
+    + (f"; {n_lug} of ISLA's leads {'is' if n_lug == 1 else 'are'} on the lug against Transolver, which reads no "
+       "boundary-condition labels there" if n_lug else "")
+    + ". "
+    f"On the {len(SOLID)} solid-mechanics tasks the same motion grows the baselines' errors {base_posed_solid[0]:.1f}-fold to {base_posed_solid[1]:.0f}-fold; "
     f"ISLA's is unchanged on DeepJEB++ and moves up to {tie_shift['tensile2d']:.2f}-fold on Tensile2d and {tie_shift['lug']:.1f}-fold "
     "on the lug, where a mesh node is equally near two boundary samples and float32 rounding under the motion decides which one "
     "the standing's checkpoints read (@sec-invariances). "
