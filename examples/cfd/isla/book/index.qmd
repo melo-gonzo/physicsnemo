@@ -58,30 +58,37 @@ tie_shift = {k: max(shifts([k], ["ISLA"], "posed")) for k in ("tensile2d", "lug"
 #| output: asis
 n_lug = sum(k == "lug" and a == "Transolver" for k, _, a in V["leads"])
 print(
-    "**ISLA is a slice-attention transformer that is exactly equivariant to rigid motions and consistent under a change of "
-    "mesh, by construction. On the native mesh, in distribution, it leads the strongest models of its family in "
-    f"{len(V['leads'])} of {n_pairs} comparisons, is level in {len(V['is level with'])} and trails in {len(V['trails'])}. "
-    f"Rotate and translate the test geometry, and on the {len(FLOW)} flow tasks ISLA's error stays within "
-    f"{100 * isla_posed:.1f}% of its native value while every baseline's grows {base_posed_flow[0]:.0f}-fold to "
-    f"{base_posed_flow[1]:.0f}-fold.** "
-    "The baselines are Transolver and its geometry-aware successor GeoTransolver, two published slice-attention surrogates, "
-    "each at its own reference configuration and scored the same way. A comparison in @fig-standing is one headline field of "
-    "one dataset against one baseline"
+    "**ISLA is a slice-attention transformer built to generalize: to predict the field on geometries, enclosures, inflow "
+    "conditions and Reynolds numbers outside its training family, which is what design asks of a surrogate.** It is exactly "
+    "equivariant to rigid motions and consistent under a change of mesh, by construction, and it computes its own scales from each "
+    "case, so its training data are spent on the physics rather than on frames, resolutions and units. "
+    "AeroZoo, whose held-out splits take a whole enclosure family, geometry bank, inflow layout or Reynolds range out of training, "
+    "is the book's test of generalization; @sec-aerozoo-why makes the case for it, and where ISLA stands on it is the open question "
+    "of @sec-oq-aerozoo. "
+    "The other benchmarks, DrivAerML, HiLiftAeroML, SHIFT-SUV, AirfRANS, Tensile2d, the lug and DeepJEB++, are here because the "
+    "community measures surrogates on them. Each covers one narrow family, so its native score measures interpolation within that "
+    "family. There ISLA leads the strongest models of its family, Transolver and its geometry-aware successor GeoTransolver, each at "
+    f"its reference configuration and scored the same way, in {len(V['leads'])} of {n_pairs} comparisons, is level in "
+    f"{len(V['is level with'])} and trails in {len(V['trails'])}. A comparison in @fig-standing is one headline field of one dataset "
+    "against one baseline"
     + "".join(f"; {d} {fl} is left out, because the baselines predict it with an out-of-plane component ISLA's planar "
               "prediction does not have" for d, fl in HELD)
     + (f"; {n_lug} of ISLA's leads {'is' if n_lug == 1 else 'are'} on the lug against Transolver, which reads no "
        "boundary-condition labels there" if n_lug else "")
     + ". "
-    f"On the {len(SOLID)} solid-mechanics tasks the same motion grows the baselines' errors {base_posed_solid[0]:.1f}-fold to {base_posed_solid[1]:.0f}-fold; "
-    f"ISLA's is unchanged on DeepJEB++ and moves up to {tie_shift['tensile2d']:.2f}-fold on Tensile2d and {tie_shift['lug']:.1f}-fold "
-    "on the lug, where a mesh node is equally near two boundary samples and float32 rounding under the motion decides which one "
-    "the standing's checkpoints read (@sec-invariances). "
+    "The same benchmarks measure what the invariances buy. "
+    f"Rotate and translate the test geometry, and on the {len(FLOW)} flow tasks ISLA's error stays within "
+    f"{100 * isla_posed:.1f}% of its native value while every baseline's grows {base_posed_flow[0]:.0f}-fold to "
+    f"{base_posed_flow[1]:.0f}-fold; on the {len(SOLID)} solid-mechanics tasks the baselines' errors grow {base_posed_solid[0]:.1f}-fold "
+    f"to {base_posed_solid[1]:.0f}-fold, and ISLA's is unchanged on DeepJEB++ and moves up to {tie_shift['tensile2d']:.2f}-fold on "
+    f"Tensile2d and {tie_shift['lug']:.1f}-fold on the lug, where a mesh node is equally near two boundary samples and float32 rounding "
+    "under the motion decides which one the standing's checkpoints read (@sec-invariances). "
     f"Redraw the surface as a uniform point cloud, and on the {len(SURF)} surface tasks every baseline error grows at least "
     f"{base_area:.1f}-fold while ISLA's stays within {100 * isla_area:.1f}%; on the DrivAerML Volume task the same redraw moves "
     f"ISLA's own error {min(vol_area):.1f}-fold to {max(vol_area):.1f}-fold, because those checkpoints compute each interior point's "
     "wall distance from the boundary samples. They are of the nearest-token form, which differs from ISLA as Part II defines it in how "
-    "the boundary and the prediction points enter the model, in its length unit and in its scales; the class computes the wall distance from the full-resolution surface "
-    "(@sec-checkpoint-form). "
+    "the boundary and the prediction points enter the model, in its length unit and in its scales; the class computes the wall distance "
+    "from the full-resolution surface (@sec-checkpoint-form). "
     "Where ISLA trails, and where its own error moves, the book shows the mechanism."
 )
 ```
@@ -221,8 +228,11 @@ it.** Three readers will want different paths through it.
 - **To use it**, read Part III: the configuration, inputs, commands and
   checkpoints (@sec-using) and the benchmark rules every number obeys
   (@sec-baselines). Then the dataset chapter closest to your problem.
-- **To judge it**, start with the standing (@sec-standing), then the
-  dataset chapters of Part IV, which all follow one order: the problem and
+- **To judge it**, start with what the book measures and why: the case
+  for generalization as the test of a design surrogate
+  (@sec-aerozoo-why). Then the standing on the in-distribution benchmarks
+  (@sec-standing) and the dataset chapters of Part IV, which all follow
+  one order: the problem and
   what varies, what is measured, the standing with pictures of the
   predictions, the studies that belong to that dataset, and what the
   dataset does not say. Then capacity and scaling (@sec-capacity), the

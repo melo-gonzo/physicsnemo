@@ -97,7 +97,7 @@ print(f"The reference configuration is width `hidden={DEFAULTS['hidden']}`, `n_l
 ```
 
 It was chosen among ISLA configurations that train in under 80 GiB per GPU,
-on the DrivAerML Surface task and on HiLiftAeroML at 210 training wings, by
+on the DrivAerML Surface task and on HiLiftAeroML at 510 training cases, by
 the selection that also fixed the reference configurations of GeoTransolver
 (width 256) and Transolver (width 512, 16 layers). The two datasets named
 different winners, and the configuration with the best score over both was

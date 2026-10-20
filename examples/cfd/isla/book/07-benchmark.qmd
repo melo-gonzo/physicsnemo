@@ -334,7 +334,7 @@ a control.** The *scoring set* of a dataset is its fixed validation or test set 
 on the DrivAerML Surface task, surface pressure and wall shear on 48 held-out cars at 200,000 cells, in float32; on the
 DrivAerML Volume task, pressure, velocity and eddy viscosity at 200,000 interior points of the same 48 cars; on
 HiLiftAeroML, 180 held-out wing cases shared by every *rung*, a training-set size of a data-efficiency ladder (the
-210-wing rung trains on 210 wings). A scoring set is never widened after a result is read from it. A control that changes it (another cell count, a pose, a sampling law) is reported as such and never mixed into a
+510-case rung trains on 510 cases). A scoring set is never widened after a result is read from it. A control that changes it (another cell count, a pose, a sampling law) is reported as such and never mixed into a
 standing. Its limits bind where stated: 48 cars is a small validation set, and two seeds a thin noise estimate
 (@sec-limits).
 
@@ -370,7 +370,7 @@ print(f"GeoTransolver at width 256 on the DrivAerML Surface task, fed the unit d
 ### How the reference configurations were chosen {#sec-selection}
 
 **Each reference configuration was chosen once, among candidates that train under 80 GiB per GPU, on two selection
-datasets: the DrivAerML Surface task and HiLiftAeroML at 210 training wings. The registered rule names a winner per
+datasets: the DrivAerML Surface task and HiLiftAeroML at 510 training cases. The registered rule names a winner per
 dataset, and the two datasets named different winners for every architecture.** Every candidate trained for 500 epochs on
 two seeds and was scored on the native mesh at 200,000 cells, by its seed-mean surface pressure error. The rule, written
 before the candidates were scored, takes on each dataset the candidate with the lowest error, with candidates within 3% of
@@ -383,7 +383,7 @@ with its reason.
 #| output: asis
 D = SEL["datasets"]
 nm = lambda k: "w384_s256" if k == "isla_ref" else k.replace("isla_", "").replace("gt_", "").replace("t_", "")
-out = "| architecture | winner on DrivAerML Surface | winner on the 210 wings | the two agree | reference configuration |\n|---|---|---|---|---|\n"
+out = "| architecture | winner on DrivAerML Surface | winner on the 510 wing cases | the two agree | reference configuration |\n|---|---|---|---|---|\n"
 for arch in S.ARCHS:
     w = SEL["reference"][arch]
     out += (f"| {arch} | {nm(w['winners']['drivaer_surface'])} | {nm(w['winners']['hilift_210'])} | "
@@ -438,7 +438,7 @@ print("The registered rule named no reference configuration, so the picks were m
 ```{python}
 #| label: cell-tbl-selection
 #| output: asis
-out = "| architecture | candidate | DrivAerML Surface: error ÷ best | 210 wings: error ÷ best | mean | training peak [GiB] |\n|---|---|--:|--:|--:|--:|\n"
+out = "| architecture | candidate | DrivAerML Surface: error ÷ best | 510 wing cases: error ÷ best | mean | training peak [GiB] |\n|---|---|--:|--:|--:|--:|\n"
 for arch in S.ARCHS:
     rows = sorted(((mj(r), k, r[0], r[1], r[2]) for k, r in JS[arch].items()))
     for j, (m, k, rd, rw, gib) in enumerate(rows):
@@ -470,7 +470,7 @@ rows = [
      "the Surface task", "drivaerml_surface", "@sec-drivaerml"),
     ("", "", "", "", "", "the Volume task", "drivaerml_volume", "@sec-drivaerml"),
     ("HiLiftAeroML", "high-lift wing geometries, each at ten angles of attack; surface pressure, velocity and wall shear", "the geometry and the flow direction", "1", "0",
-     "surface, the 210-wing rung", "hilift", "@sec-hilift"),
+     "surface, the 510-case rung", "hilift", "@sec-hilift"),
     ("SHIFT-SUV", "sport-utility bodies in two rear-end families; surface pressure and wall shear", "the geometry only", "1", "0",
      "surface", "shift_suv", "@sec-shift-suv"),
     ("AirfRANS", "two-dimensional incompressible RANS around NACA airfoils; pressure, velocity and eddy viscosity in the field", "the geometry, the inlet direction and speed", "1", "1",

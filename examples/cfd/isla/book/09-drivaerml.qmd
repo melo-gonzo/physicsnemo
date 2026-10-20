@@ -495,7 +495,7 @@ sel = lambda ds, k: SELC[ds]["GeoTransolver"]["candidates"][k]["pressure_l2"]
 print("The verdict is that of GeoTransolver's reference configuration, which is not its most accurate candidate on this task: under "
       f"the same budget its h1024_c100k candidate (width 1,024, trained at 100,000 cells) scored {sel('drivaer_surface', 'gt_h1024_c100k'):.4f} "
       f"on surface pressure against the reference width 256's {sel('drivaer_surface', 'gt_h256'):.4f}, and was not taken because it "
-      f"scored {sel('hilift_210', 'gt_h1024_c100k'):.4f} against {sel('hilift_210', 'gt_h256'):.4f} on the 210 HiLiftAeroML wings, where "
+      f"scored {sel('hilift_210', 'gt_h1024_c100k'):.4f} against {sel('hilift_210', 'gt_h256'):.4f} on HiLiftAeroML at 510 training cases, where "
       "the selection's baselines read the freestream in inch/s (@sec-selection).")
 ```
 
