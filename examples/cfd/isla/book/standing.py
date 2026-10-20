@@ -100,7 +100,7 @@ DATASETS = {
         # ISLA's arm is the normalized-read rerun (a2r_hl_isla) and the baselines read U_inf_dir (UDRV-HL: udrv_hl_gt, udrv_hl_t), every
         # arm on ISLA's 200,000-cell set (results/char/hilift_a2_2026-10-20.py); the CHAR record's raw-read ISLA arm and the baselines
         # reading U_inf, the physical freestream vector in inch/s, are kept in the file (raw_read_isla, raw_drive_<arch>, char_baselines);
-        # no current-class row: the class needs a decimated geometry asset of the wing
+        # no current-class row: the class's standing is the open question of 20 (sec-oq-class-standing)
         Dataset("hilift", "HiLiftAeroML (510 training cases)", "hilift_surface_a2.json",
                 ("pressure_l2", "tau_wall_l2"), ("native", "area", "posed"), "sec-de-result"),
         Dataset("shift_suv", "SHIFT-SUV", "shift_suv_surface_a2.json",

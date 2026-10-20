@@ -378,9 +378,8 @@ print(f"**At the 510-case rung, on the native mesh, {both(HL, HL_F)}; on the uni
       "leads both by a wide margin.** Every model reads the unit far-field direction. On the native mesh the baselines' errors are "
       f"{gain('pressure_l2')} lower than ISLA's on pressure and {gain('tau_wall_l2')} lower on wall shear. On the uniform point cloud baseline ÷ ISLA is "
       f"{span('area')[0]} to {span('area')[1]} on the two fields, and rotated and translated {span('posed')[0]} to {span('posed')[1]}. "
-      "@tbl-hilift-protocols is the standing and @fig-hilift-shifts draws it. The standing has no row for ISLA as Part II defines it: "
-      "the class reads the full-resolution boundary, and on this aircraft that first needs a decimated geometry asset "
-      "(@sec-oq-class-standing).")
+      "@tbl-hilift-protocols is the standing and @fig-hilift-shifts draws it. The standing has no row for ISLA as Part II defines it; "
+      "that row is part of the open question of @sec-oq-class-standing.")
 ```
 
 ```{python}

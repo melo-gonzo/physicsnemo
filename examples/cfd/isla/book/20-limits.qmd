@@ -336,7 +336,7 @@ fmt_h = lambda h: f"{h:,.0f}" if h < 1000 else f"{h / 1000:.1f} thousand"
 #| output: asis
 rows = [
     ("Do the standing's verdicts hold for ISLA as Part II defines it?",
-     "the ISLA lanes of AirfRANS, the DrivAerML Surface and Volume tasks, SHIFT-SUV, Tensile2d, the lug and DeepJEB++ retrained at the reference configuration with the class (each condition's own input layer, the exact wall geometry with the continuous encoding, the boundary drawn inside the model, no stored signed distance, the exact length unit, the declared scales on AirfRANS), two seeds, scored under the scoring protocol against the same baseline checkpoints; per dataset, the seed rule's verdicts and the pose and resampling shifts; HiLiftAeroML first needs a decimated geometry asset",
+     "the ISLA lanes of AirfRANS, the DrivAerML Surface and Volume tasks, HiLiftAeroML, SHIFT-SUV, Tensile2d, the lug and DeepJEB++ retrained at the reference configuration with the class (each condition's own input layer, the exact wall geometry with the continuous encoding, the boundary drawn inside the model, no stored signed distance, the exact length unit, the declared scales on AirfRANS), two seeds, scored under the scoring protocol against the same baseline checkpoints; per dataset, the seed rule's verdicts and the pose and resampling shifts",
      CLASS_COST),
     ("Should ISLA-DTT be ISLA's only interior form?", "ISLA-DTT ÷ ISLA on velocity and pressure on `full` and each AeroZoo held-out split under the benchmark protocol, at equal size", AZ_COST),
     ("How large is ISLA-DTT's tree error at θ = 1 where its forest's frame ties?", "ISLA-DTT scored rotated and translated, and under boundary redraws, on cases whose boundary has near-equal principal variances", "scoring only"),
@@ -378,12 +378,10 @@ print("**The open question is whether the standing's verdicts hold for ISLA as P
       "given cells' centroids; and on AirfRANS the inlet speed enters through the declared scales rather than as a raw global "
       "scalar (@sec-using-scales). The baselines' inputs are the same in both. The evidence of chapter 04 bears on single properties "
       "of the class (@sec-exact-geometry-draw, @sec-medial-ties), not on its standing. What would settle it: on AirfRANS, the "
-      "DrivAerML Surface and Volume tasks, SHIFT-SUV, Tensile2d, the lug and DeepJEB++, the ISLA lanes retrained at the reference "
+      "DrivAerML Surface and Volume tasks, HiLiftAeroML, SHIFT-SUV, Tensile2d, the lug and DeepJEB++, the ISLA lanes retrained at the reference "
       "configuration with the class as it is, two seeds (42 and 43), scored under the scoring protocol of @sec-protocol on the same scoring sets and against the same baseline checkpoints; per dataset, the seed rule "
       "applied to every headline field, read on whether each verdict of @tbl-thesis holds, with the rotated and translated and the "
-      "resampled shifts beside it. HiLiftAeroML's row at the class is open for a reason of its own: the class reads each boundary "
-      "condition whole, as one full-resolution mesh with its exact geometry, and a HiLiftAeroML case is the largest surface of the "
-      "book (@sec-hilift), so that input needs a decimated geometry asset of each wing first. "
+      "resampled shifts beside it. "
       f"Cost: {CLASS_COST}.")
 ```
 
