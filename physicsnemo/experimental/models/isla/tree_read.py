@@ -388,11 +388,13 @@ def node_means(x: torch.Tensor, forest: BoundaryForest, omega: torch.Tensor) -> 
     """The measure-weighted mean of the cells' rows ``x`` ``(N, ...)`` over every node
     of the forest, ``(M, ...)``, differentiable in ``x``: the leaves' sums by one
     scatter over the forest order, then every internal node as the sum of its two
-    children, depth by depth up to the roots, in float32 (a tree of pairwise sums,
-    no cancellation)."""
+    children, depth by depth up to the roots (a tree of pairwise sums, no
+    cancellation), in float64 for float64 rows and in float32 otherwise (float32,
+    bfloat16 and float16 rows alike)."""
+    work = torch.float64 if x.dtype == torch.float64 else torch.float32
     cells = forest.cells
-    flat = x.reshape(x.shape[0], -1).float()[cells]
-    weighted = flat * omega[cells, None].float()
+    flat = x.reshape(x.shape[0], -1).to(work)[cells]
+    weighted = flat * omega[cells, None].to(work)
     n_leaves = forest.leaf_ids.shape[0]
     leaf_sums = weighted.new_zeros(n_leaves, weighted.shape[1]).index_add(
         0, forest.position_leaf, weighted
@@ -402,7 +404,7 @@ def node_means(x: torch.Tensor, forest: BoundaryForest, omega: torch.Tensor) -> 
     )
     for nodes, left, right in forest.levels:
         sums = sums.index_put((nodes,), sums[left] + sums[right])
-    measure = forest.measure.float().clamp_min(torch.finfo(torch.float32).tiny)
+    measure = forest.measure.to(work).clamp_min(torch.finfo(work).tiny)
     return (sums / measure[:, None]).to(x.dtype).reshape(forest.n_nodes, *x.shape[1:])
 
 
