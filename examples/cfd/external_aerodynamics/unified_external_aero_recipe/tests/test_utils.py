@@ -337,20 +337,10 @@ def test_resolve_dict():
 
 _CONF = Path(__file__).resolve().parents[1] / "conf"
 _MODELS = sorted(p.stem for p in (_CONF / "model").glob("*.yaml"))
-#: What every ISLA template sets: one graph, compiled once for every token count.
+#: What every ISLA template sets: one graph, compiled once for every token count,
+#: with mode max-autotune-no-cudagraphs's options spelled out and Inductor's
+#: mix-order reduction off (see isla_volume_airfrans.yaml).
 _ISLA_COMPILE = {
-    "fullgraph": True,
-    "dynamic": True,
-    "mode": "max-autotune-no-cudagraphs",
-}
-#: ISLA templates that keep the per-block compile by default (whole-model
-#: recompiles open on AeroZoo; see the template).
-_ISLA_PER_BLOCK = {"isla_volume_aerozoo"}
-#: ISLA templates that spell the mode out as its options, with Inductor's
-#: mix-order reduction off (torch 2.12 returns a fused sum at the wrong rank on
-#: their graph; see the template).
-_ISLA_NO_MIX_ORDER = {"isla_volume_airfrans"}
-_ISLA_COMPILE_NO_MIX_ORDER = {
     "fullgraph": True,
     "dynamic": True,
     "options": {
@@ -359,6 +349,9 @@ _ISLA_COMPILE_NO_MIX_ORDER = {
         "triton.mix_order_reduction": False,
     },
 }
+#: ISLA templates that keep the per-block compile by default (whole-model
+#: recompiles open on AeroZoo; see the template).
+_ISLA_PER_BLOCK = {"isla_volume_aerozoo"}
 
 
 @pytest.mark.parametrize("entry,compiled_by_default", [("train", True), ("infer", False)])
@@ -373,8 +366,6 @@ def test_compile_model_passes_the_template_compile_options(
     calls = []
     monkeypatch.setattr(torch, "compile", lambda m, **kw: calls.append(kw) or m)
     expected = _ISLA_COMPILE if model.startswith("isla") else {}
-    if model in _ISLA_NO_MIX_ORDER:
-        expected = _ISLA_COMPILE_NO_MIX_ORDER
     per_block = model in _ISLA_PER_BLOCK
     compiled_by_default = compiled_by_default and not per_block
     net = torch.nn.Linear(2, 2)

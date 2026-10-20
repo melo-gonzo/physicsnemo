@@ -370,9 +370,11 @@ Triton geometry kernel wherever it can run (CUDA) and the eager PyTorch region
 otherwise. The configs (all but `isla_volume_aerozoo`, see its comment)
 compile the whole model
 (`compile: true` with `compile_options` `fullgraph: true`, `dynamic: true`
-and `mode: max-autotune-no-cudagraphs`; `isla_volume_airfrans` gives that
-mode's two options instead, with Inductor's mix-order reduction off, which
-torch 2.12 miscompiles on its graph, see its comment): one graph with dynamic
+and the two options of `mode: max-autotune-no-cudagraphs`, `max_autotune` and
+`coordinate_descent_tuning`, with Inductor's mix-order reduction off: torch 2.12
+returns a fused sum at the wrong rank on the AirfRANS graph, and torch 2.12-2.13 add
+padded rows to its column sums (pytorch/pytorch#195845), see
+`isla_volume_airfrans.yaml`): one graph with dynamic
 shapes, so a new mesh size does not recompile it (see `isla_volume.yaml` for
 the first compile's cost and the one exception); the per-block
 `compile_blocks` is off. For
