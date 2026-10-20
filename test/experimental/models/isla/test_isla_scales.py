@@ -341,7 +341,10 @@ def test_the_length_unit_is_exact_under_subdivision(dim):
 @pytest.mark.parametrize("config", ["default", "interior", "dtt"])
 def test_declaring_nothing_is_the_release_model(config):
     """Keys that declare nothing (``units: {}``, ``velocity_scale: false``) leave the
-    model the unscaled one, bitwise equal to the release goldens."""
+    model the unscaled one: bitwise equal to the release configuration with the same
+    parameters, and equal to the release goldens at their tolerance (the goldens are
+    bitwise on the recording architecture and differ at the last bits across CPU
+    architectures, BLAS reduction order)."""
     from test.experimental.models.isla.test_isla_release import (
         CONFIGS,
         _instantiate_model,
@@ -351,13 +354,15 @@ def test_declaring_nothing_is_the_release_model(config):
     cfg = dict(CONFIGS[config])
     cfg["output_schema"] = {"p": {"rank": 0, "units": {}}, "v": {"rank": 1}}
     cfg["global_schema"] = {"g": {"rank": 1, "velocity_scale": False}}
-    model = _instantiate_model(**cfg)
+    model, release = _instantiate_model(**cfg), _instantiate_model(**CONFIGS[config])
     assert not model._scaled and not model._fp32_head
+    inputs = _make_inputs("cpu", query=(config != "default"))
     with torch.no_grad():
-        out = outputs(model(**_make_inputs("cpu", query=(config != "default"))))
+        out, same = outputs(model(**inputs)), outputs(release(**inputs))
     ref = torch.load(DATA_DIR / f"isla_{config}_v1.pth", weights_only=True)["output"]
     for k in ref:
-        assert torch.equal(out[k], ref[k]), k
+        assert torch.equal(out[k], same[k]), k
+        torch.testing.assert_close(out[k], ref[k], atol=1e-5, rtol=1e-5)
 
 
 def test_the_scales_take_their_hand_values():
