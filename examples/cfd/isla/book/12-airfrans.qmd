@@ -538,7 +538,7 @@ print("**Outside the training range ISLA's interior error grows by a factor of "
       "its own error on the `full` split (@tbl-interior-airfrans-extrap). GeoTransolver-volume's growth factors are given beside ISLA's and "
       "are not compared with them: it reads the inlet velocity as the physical vector, and its magnitude and angle are exactly what leaves "
       "the training range on these splits, so a difference in growth would measure the input as much as the architecture "
-      "(@sec-oq-unit-direction).")
+      "(@sec-unit-direction-rule).")
 ```
 
 ```{python}

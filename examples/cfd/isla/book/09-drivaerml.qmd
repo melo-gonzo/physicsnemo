@@ -86,7 +86,7 @@ print(f"The three architectures are {S.CONFIG['ISLA']}, {S.CONFIG['GeoTransolver
 
 ## The problem: one notchback, 484 shapes, one wind {#sec-benchmarks}
 
-**DrivAerML is 484 parametrically morphed variants of one notchback car, each simulated once in the same far-field flow, so the geometry is the only thing that varies.** The base body is the DrivAer notchback, a public research sedan. Each variant is a parametric morph of it, simulated with a hybrid RANS/LES closure; the fields are time averages over the simulated window with the start-up transient trimmed. Every model is given the vehicle surface alone. ISLA reads the positions, outward normals and areas of its cells and the unit far-field direction; GeoTransolver and Transolver read the cells' centered coordinates and normals and the freestream as the physical vector, 38.9 m/s along $x$ on every car, which carries no information beyond the direction (@tbl-model-inputs). The ground plane and the outer boundaries of the domain exist in the simulation but are not inputs, which is the information diet of every published model on the dataset. @fig-problem-drivaer shows one validation car with both tasks' fields.
+**DrivAerML is 484 parametrically morphed variants of one notchback car, each simulated once in the same far-field flow, so the geometry is the only thing that varies.** The base body is the DrivAer notchback, a public research sedan. Each variant is a parametric morph of it, simulated with a hybrid RANS/LES closure; the fields are time averages over the simulated window with the start-up transient trimmed. Every model is given the vehicle surface alone. ISLA reads the positions, outward normals and areas of its cells and the unit far-field direction; GeoTransolver and Transolver read the cells' centered coordinates and normals and the same unit direction (@tbl-model-inputs). The ground plane and the outer boundaries of the domain exist in the simulation but are not inputs, which is the information diet of every published model on the dataset. @fig-problem-drivaer shows one validation car with both tasks' fields.
 
 ```{python}
 #| label: fig-problem-drivaer
@@ -307,7 +307,7 @@ print(f"**The Surface task predicts the pressure and the wall-shear vector at th
       "relative L2 error of each field, $\\lVert \\hat f - f \\rVert_w / \\lVert f \\rVert_w$ with every cell weighted by its area, and "
       "the reported number is its mean over the cars (@sec-metrics). ISLA receives the sampled cells' positions, outward normals and "
       "areas, and $\\hat g_1$; GeoTransolver and Transolver receive the cells' centered coordinates and normals, no areas, and the "
-      "constant freestream vector (@tbl-model-inputs). No model trains with rotation or translation augmentation.")
+      "same unit direction (@tbl-model-inputs). No model trains with rotation or translation augmentation.")
 ```
 
 The three architectures run at their reference configurations, the one configuration of each architecture that the book scores on every dataset (@sec-selection, @tbl-architectures):
@@ -399,7 +399,7 @@ plt.show()
 
 **Metric.** For one car and one field the error is the relative L2 over the prediction points, with the field in its training normalization: pressure as $C_p$; velocity as $U / |U_\infty|$ with the far-field speed included, the Frobenius norm over the three components; eddy viscosity standardized to zero mean and unit scale before scoring. The eddy-viscosity denominator is the norm of a mean-subtracted field, so an eddy-viscosity error of 0.10 is not a 10% error in physical $\nu_t$; orderings under the metric hold, percentages do not. The velocity denominator includes the far-field speed, which every point carries, so the velocity error reads small against the wake's own deficit. The reported number is the mean over the 48 cars. Training and scoring use 200,000 boundary cells and 200,000 interior points per car (Transolver trains at 100,000), 500 epochs, two seeds, float32.
 
-**What each architecture receives** (@tbl-interior-inputs, @tbl-model-inputs). The three architectures do not see the same inputs. GeoTransolver and Transolver never see the boundary sample. Their tokens are the interior points alone, each carrying its coordinates and the exact signed distance to the full-resolution body and its gradient, computed by the datapipe, with the freestream as the constant physical vector, 38.9 m/s along $x$. That is the boundary in a different, denser form. ISLA's tokens are the boundary sample, which it draws itself from the full-resolution surface, and the interior points together, with the unit far-field direction. ISLA does not read the stored field: each interior point's wall distance and direction are computed inside the model, exactly, against the full-resolution surface. The standing's ISLA checkpoints, of the nearest-token form, took them from the nearest token of a boundary sample drawn by the datapipe (@sec-checkpoint-form).
+**What each architecture receives** (@tbl-interior-inputs, @tbl-model-inputs). The three architectures do not see the same inputs. GeoTransolver and Transolver never see the boundary sample. Their tokens are the interior points alone, each carrying its coordinates and the exact signed distance to the full-resolution body and its gradient, computed by the datapipe, with the unit far-field direction. That is the boundary in a different, denser form. ISLA's tokens are the boundary sample, which it draws itself from the full-resolution surface, and the interior points together, with the unit far-field direction. ISLA does not read the stored field: each interior point's wall distance and direction are computed inside the model, exactly, against the full-resolution surface. The standing's ISLA checkpoints, of the nearest-token form, took them from the nearest token of a boundary sample drawn by the datapipe (@sec-checkpoint-form).
 
 | architecture | what an interior point is | what it knows about the geometry | does a prediction depend on the other points requested? |
 |---|---|---|---|
@@ -431,8 +431,8 @@ plt.show()
 ```{python}
 #| label: para-surface-lede
 #| output: asis
-print(f"**On the native mesh of the DrivAerML Surface task the three reference configurations are level: {clause(SURF, 'pressure_l2')} on "
-      f"surface pressure, and {clause(SURF, 'wss_l2')} on wall shear.** {SURF.drive_sentence()}On the uniform point cloud and under rotation and translation, "
+print(f"**On the native mesh of the DrivAerML Surface task {clause(SURF, 'pressure_l2')} on "
+      f"surface pressure, and {clause(SURF, 'wss_l2')} on wall shear.** On the uniform point cloud and under rotation and translation, "
       "ISLA's error is its native error and the baselines' is not. @tbl-drivaerml-surface-protocols is the standing; "
       "@fig-drivaerml-shifts draws it.")
 ```
@@ -453,7 +453,8 @@ print(SURF.table("tbl-drivaerml-surface-protocols", "The DrivAerML Surface task,
 #|   GeoTransolver red circles, Transolver amber triangles. The dashed line at
 #|   one is the error of predicting zero everywhere. ISLA checkpoints of the
 #|   nearest-token form (@sec-checkpoint-form). How to read this: within
-#|   the native row the three markers overlap, the three are level; moving down,
+#|   the native row the three markers sit within a few percent of one
+#|   another, Transolver's lowest; moving down,
 #|   ISLA's marker stays where it is and the baselines' move right by five to
 #|   thirty times. It does not show why the native errors are what they are.
 #|   Data: results/char/drivaerml_surface_a2.json.
@@ -465,12 +466,15 @@ protocol_dots(SURF, SURF_F); plt.show()
 #| output: asis
 posed_floor = min(SURF.err(a, f, "posed") for a in S.BASELINES for f in SURF_F)
 isla_spread = max(SURF.seeds('ISLA', 'pressure_l2')) / min(SURF.seeds('ISLA', 'pressure_l2'))
-nat_dev = max(abs(SURF.ratio(b, 'pressure_l2') - 1) for b in S.BASELINES)
-print(f"Three readings. **First, on the native mesh the three are level within seed noise.** ISLA's two pressure seeds are {seeds_txt(SURF, 'ISLA', 'pressure_l2')}, "
-      f"GeoTransolver's {seeds_txt(SURF, 'GeoTransolver', 'pressure_l2')} and Transolver's {seeds_txt(SURF, 'Transolver', 'pressure_l2')}: "
-      f"ISLA's seeds differ from each other by {pct(isla_spread)}, "
-      f"{'more than' if isla_spread - 1 > nat_dev else 'about as much as'} either baseline's mean differs from ISLA's ({pct(1 + nat_dev)} at most), "
-      "so no seed rule separates them. "
+gt_dev = max(abs(SURF.ratio('GeoTransolver', f) - 1) for f in SURF_F)
+assert all(SURF.verdict("Transolver", f) == "trails" and SURF.verdict("GeoTransolver", f) == "is level with" for f in SURF_F)
+print(f"Three readings. **First, on the native mesh the gaps are a few percent: Transolver leads and GeoTransolver is level.** "
+      f"ISLA's two pressure seeds are {seeds_txt(SURF, 'ISLA', 'pressure_l2')}, "
+      f"GeoTransolver's {seeds_txt(SURF, 'GeoTransolver', 'pressure_l2')} and Transolver's {seeds_txt(SURF, 'Transolver', 'pressure_l2')}. "
+      f"Transolver's mean is {pct(SURF.ratio('Transolver', 'pressure_l2'))} below ISLA's on pressure and "
+      f"{pct(SURF.ratio('Transolver', 'wss_l2'))} on wall shear, with every Transolver seed below every ISLA seed on both fields; "
+      f"GeoTransolver's is within {pct(1 + gt_dev)} of ISLA's on both, inside the level band, while ISLA's own seeds differ by "
+      f"{pct(isla_spread)}. "
       f"**Second, the uniform point cloud separates them.** ISLA's error there is {SURF.shift('ISLA', 'pressure_l2', 'area'):.3f} / "
       f"{SURF.shift('ISLA', 'wss_l2', 'area'):.3f} of its native error (pressure / wall shear), the noise of one 200,000-cell redraw; "
       f"GeoTransolver's is {S.fmt_ratio(SURF.shift('GeoTransolver', 'pressure_l2', 'area'))} / {S.fmt_ratio(SURF.shift('GeoTransolver', 'wss_l2', 'area'))} "
@@ -481,7 +485,7 @@ print(f"Three readings. **First, on the native mesh the three are level within s
       f"is at least {posed_floor:.2f}, near or above the score of predicting zero: the baselines have no answer for a car in a frame they never saw.")
 ```
 
-The level native standing is a statement about these three configurations under one memory budget, not about matched capacity: GeoTransolver reaches ISLA's native error with `{python} f"{SURF_COST['GeoTransolver']['n_parameters'] / SURF_COST['ISLA']['n_parameters'] * 100:.0f}%"` of its parameters (@tbl-drivaerml-configs). What separates the three on this dataset is not the native number but what happens to it when the car is presented in any other way.
+The native standing is a statement about these three configurations under one memory budget, not about matched capacity: GeoTransolver reaches ISLA's native error with `{python} f"{SURF_COST['GeoTransolver']['n_parameters'] / SURF_COST['ISLA']['n_parameters'] * 100:.0f}%"` of its parameters, and Transolver betters it with `{python} f"{SURF_COST['Transolver']['n_parameters'] / SURF_COST['ISLA']['n_parameters'] * 100:.0f}%"` (@tbl-drivaerml-configs). What separates the three on this dataset is not the native number but what happens to it when the car is presented in any other way.
 
 ```{python}
 #| label: para-surface-selection
@@ -492,7 +496,7 @@ print("The verdict is that of GeoTransolver's reference configuration, which is 
       f"the same budget its h1024_c100k candidate (width 1,024, trained at 100,000 cells) scored {sel('drivaer_surface', 'gt_h1024_c100k'):.4f} "
       f"on surface pressure against the reference width 256's {sel('drivaer_surface', 'gt_h256'):.4f}, and was not taken because it "
       f"scored {sel('hilift_210', 'gt_h1024_c100k'):.4f} against {sel('hilift_210', 'gt_h256'):.4f} on the 210 HiLiftAeroML wings, where "
-      "the baselines read the freestream in inch/s (@sec-selection).")
+      "the selection's baselines read the freestream in inch/s (@sec-selection).")
 ```
 
 ```{python}
@@ -504,7 +508,8 @@ _R = _json.load(open(RENDER_DIR / "render_car.json"))
 rendering_figure("fig-drivaerml-prediction", [("figures/renderings/drivaerml_surface_cp.png", "Pressure coefficient"), ("figures/renderings/drivaerml_surface_cf.png", "Wall shear")],
     f"The three reference configurations on one validation car of the DrivAerML Surface task, {_R['sample_id'].split('_')[0]}, left side; Transolver is scored and drawn on its own 100,000 cells, the other two on 200,000. Relative L2 on this case: {case_errors(_R['per_sample_rel_l2'])}. " + "Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one "
       f"symmetric scale. ISLA checkpoints of the {S.FORM_TAG} (@sec-checkpoint-form). How to read this: one case, chosen as the case of median ISLA error (seed 42 of each reference configuration), "
-      "not a standing; the standing is the table above. "
+      "not a standing; the standing is the table above. The baselines drawn are their checkpoints that read the freestream as the "
+      "constant physical vector, kept on record beside the standing's unit-direction checkpoints (@sec-unit-direction-rule). "
     + "Data: results/renderings_2026-10-18/arrays/render_car.json.", nrow=2)
 ```
 
@@ -516,7 +521,7 @@ rendering_figure("fig-drivaerml-prediction", [("figures/renderings/drivaerml_sur
 #| label: para-interior-results-lead
 #| output: asis
 print(f"**On the DrivAerML Volume task {clause(VOL, 'pressure_l2')} on interior pressure and {clause(VOL, 'velocity_l2')} on "
-      f"velocity; on eddy viscosity {clause(VOL, 'nut_l2')}.** {VOL.drive_sentence()}Rotated and translated, ISLA's error is its native error and the "
+      f"velocity; on eddy viscosity {clause(VOL, 'nut_l2')}.** Rotated and translated, ISLA's error is its native error and the "
       "baselines' errors rise to near or above the score of predicting zero. @tbl-drivaerml-volume-protocols is the standing and @fig-drivaerml-volume-shifts draws it.")
 ```
 
@@ -571,7 +576,8 @@ _R = _json.load(open(RENDER_DIR / "render_2d_drivaerml_volume.json"))["drivaerml
 rendering_figure("fig-drivaerml-volume-prediction", [("figures/renderings/drivaerml_volume_pressure.png", "Pressure"), ("figures/renderings/drivaerml_volume_velocity.png", "Velocity magnitude")],
     f"The three reference configurations on one validation car of the DrivAerML Volume task, {_R['sample_id'].split('_')[0]}: the {_R['n_points_in_slab_window']:,} scored prediction points within {100 * _R['slab_half_width_m']:.0f} cm of the symmetry plane, side view. Relative L2 on this case: {case_errors(_R['per_sample_rel_l2'])}. " + "Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one "
       f"symmetric scale. ISLA checkpoints of the {S.FORM_TAG} (@sec-checkpoint-form). How to read this: one case, chosen as the case of median ISLA error (seed 42 of each reference configuration), "
-      "not a standing; the standing is the table above. "
+      "not a standing; the standing is the table above. The baselines drawn are their checkpoints that read the freestream as the "
+      "constant physical vector, kept on record beside the standing's unit-direction checkpoints (@sec-unit-direction-rule). "
     + "Data: results/renderings_2026-10-18/arrays/render_2d_drivaerml_volume.json.", nrow=2)
 ```
 
@@ -816,7 +822,7 @@ print(f"The cause is the learned routing weight. ISLA's 200,000 interacting poin
 
 ## What this dataset does not say {#sec-interior-open}
 
-**DrivAerML is one car family in one far-field condition, scored in distribution, by three configurations that are matched in neither parameters nor inputs.** The level surface standing and the interior standing are statements about what one memory budget buys each architecture on this family. Nothing here measures a change of vehicle family, of far-field speed or direction, or of flow regime, because none varies in the set; @sec-shift-suv and @sec-hilift take those up in part, and @sec-limits states the rest.
+**DrivAerML is one car family in one far-field condition, scored in distribution, by three configurations that are matched in neither parameters nor inputs.** The surface standing and the interior standing are statements about what one memory budget buys each architecture on this family. Nothing here measures a change of vehicle family, of far-field speed or direction, or of flow regime, because none varies in the set; @sec-shift-suv and @sec-hilift take those up in part, and @sec-limits states the rest.
 
 Questions this dataset raises and leaves open:
 
