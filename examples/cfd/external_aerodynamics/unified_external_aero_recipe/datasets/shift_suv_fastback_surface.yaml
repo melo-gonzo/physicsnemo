@@ -53,6 +53,14 @@ pipeline:
           _target_: torch.tensor
           data: [1.0, 1.0, 0.0]
   transforms:
+    # Unit freestream direction as a NEW global leaf `U_inf_dir` (`U_inf`
+    # stays physical), as in shift_suv_surface.yaml: the baselines' global
+    # input (geotransolver_surface.yaml, transolver_surface.yaml). Placed
+    # before CenterMesh so the rotation augmentation (transform_global_data:
+    # true, inserted after CenterMesh) rotates it together with U_inf.
+    - _target_: ${dp:ComputeFreestreamDirection}
+      velocity_field: U_inf
+      output_field: U_inf_dir
     - _target_: ${dp:CenterMesh}
       use_area_weighting: true
     - _target_: ${dp:NonDimensionalizeByMetadata}

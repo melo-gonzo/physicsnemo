@@ -200,7 +200,7 @@ geometric embeddings.
 | Model | `GeoTransolver` (12 layers, 256 hidden, 8 heads) |
 | Attention type | `GALE` (also supports `GALE_FA` for FLARE-based self-attention) |
 | State mixing | `weighted` (learnable sigmoid gate; also supports `concat_project`) |
-| Input | Cell centroids (N×3) + surface normals (N×3) + freestream velocity (1×3) |
+| Input | Cell centroids (N×3) + surface normals (N×3) + unit freestream direction `U_inf_dir` (1×3) |
 | Output | Pressure (1) + wall shear stress (3) = 4 channels |
 | Loss | Huber (smooth L1), normalized by total channels |
 | Optimizer | Muon (2D params) + AdamW (other params) |
@@ -274,7 +274,7 @@ forward_kwargs:
     - interior.points
     - boundaries.vehicle.cell_data.normals
   local_positions: interior.points
-  global_embedding: global_data.U_inf
+  global_embedding: global_data.U_inf_dir
 ```
 
 Example (GLOBE surface):
@@ -295,8 +295,8 @@ Available models and datasets:
 
 | Group | Files |
 |---|---|
-| `model/` (`conf/model/*.yaml`) | `geotransolver_{surface,volume,volume_highlift}`, `transolver_{surface,volume}`, `flare_{surface,volume}`, `globe_{surface,volume}`, `isla_{surface,volume}`, `domino_{surface,volume}` |
-| `dataset/` (`datasets/*.yaml`) | `drivaer_ml_{surface,volume,volume_reference}`, `highlift_{surface,volume}`, `shift_suv_{estate,fastback}_surface` |
+| `model/` (`conf/model/*.yaml`) | `geotransolver_{surface,volume,volume_highlift,volume_airfrans}`, `transolver_{surface,volume,volume_airfrans}`, `flare_{surface,volume}`, `globe_{surface,volume}`, `isla_{surface,volume}`, `domino_{surface,volume}` |
+| `dataset/` (`datasets/*.yaml`) | `drivaer_ml_{surface,volume,volume_reference}`, `highlift_{surface,volume}`, `shift_suv_{estate,fastback}_surface`, `airfrans_uvolume_ud{,_area,_posed}` |
 
 Pick one of each on the CLI:
 
@@ -609,8 +609,8 @@ unified_external_aero_recipe/
     train.yaml                 # the training entry point
     infer.yaml                 # the inference entry point (companion)
     model/                     # model templates (Hydra group)
-      geotransolver_{surface,volume,volume_highlift}.yaml
-      transolver_{surface,volume}.yaml
+      geotransolver_{surface,volume,volume_highlift,volume_airfrans}.yaml
+      transolver_{surface,volume,volume_airfrans}.yaml
       flare_{surface,volume}.yaml
       globe_{surface,volume}.yaml
       domino_{surface,volume}.yaml
@@ -620,6 +620,7 @@ unified_external_aero_recipe/
     drivaer_ml_{surface,volume}.yaml
     highlift_{surface,volume}.yaml
     shift_suv_{estate,fastback}_surface.yaml
+    airfrans_uvolume_ud{,_area,_posed}.yaml
   src/
   tests/
 ```
@@ -795,6 +796,17 @@ python src/train.py model=isla_surface dataset=highlift_surface \
 # HiLift volume
 python src/train.py model=geotransolver_volume_highlift dataset=highlift_volume \
     compile=false training.num_epochs=200 sampling_resolution=100000
+
+# AirfRANS baselines. Every GeoTransolver / Transolver template reads the unit
+# freestream direction U_inf_dir, never the raw U_inf vector; AirfRANS's speed
+# varies, so its templates add the standardized speed U_inf_mag_std, which
+# the _ud datasets (and their _area / _posed scoring twins) write.
+python src/train.py model=geotransolver_volume_airfrans dataset=airfrans_uvolume_ud \
+    train_split=full_train val_split=full_test sampling_resolution=100000 \
+    training.optimizer.lr=1e-3
+python src/train.py model=transolver_volume_airfrans dataset=airfrans_uvolume_ud \
+    train_split=full_train val_split=full_test sampling_resolution=100000 \
+    training.optimizer.lr=1e-3
 
 # DoMINO (DRAFT, doesn't run end-to-end)
 python src/train.py model=domino_surface dataset=drivaer_ml_surface \

@@ -60,6 +60,12 @@ pipeline:
   #         _target_: torch.tensor
   #         data: [1.0, 1.0, 0.0]
   transforms:
+    # The unit freestream direction is the baseline's global input
+    # (geotransolver_volume_highlift.yaml reads global_data.U_inf_dir), as in
+    # highlift_surface.yaml; U_inf itself stays physical.
+    - _target_: ${dp:ComputeFreestreamDirection}
+      velocity_field: U_inf
+      output_field: U_inf_dir
     # - _target_: ${dp:CenterMesh}
     #   use_area_weighting: false
     # - _target_: ${dp:NonDimensionalizeByMetadata}

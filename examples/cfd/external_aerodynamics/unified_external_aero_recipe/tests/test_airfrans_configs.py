@@ -20,18 +20,21 @@ and their CHAR-PROTOCOLS _area / _posed scoring twins) and their uniform-interio
 AirfRANS stores the interior points in solver order, so the source files' reader cap (subsample_n_points, a
 cyclic contiguous block) keeps one spatial window per draw. The twins read each case whole and draw the interior
 with SubsampleMesh first in the chain. The tests pin that the twin is its source but for the draw, and run both
-through the real reader and transforms on a synthetic AirfRANS-shaped case whose stored order is spatial."""
+through the real reader and transforms on a synthetic AirfRANS-shaped case whose stored order is spatial. The
+baselines' airfrans_uvolume_ud*.yaml (DRIVE-FIX, 2026-10-18) add the standardized freestream speed."""
 
 import sys
 from pathlib import Path
 
 import pytest
 import torch
+from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 
 _RECIPE_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_RECIPE_ROOT / "src"))
 
+from collate import build_collate_fn  # noqa: E402
 from datasets import build_dataset, load_dataset_config  # noqa: E402
 
 from physicsnemo.datapipes.protocols import DatasetBase  # noqa: E402
@@ -212,3 +215,65 @@ def test_uniform_twin_draws_a_uniform_interior_subset(twin, case_root):
     finally:
         for ds in (old, new, whole):
             DatasetBase.close(ds)
+
+
+UD_TWINS = (
+    "airfrans_uvolume_ud",
+    "airfrans_uvolume_ud_area",
+    "airfrans_uvolume_ud_posed",
+)
+#: DRIVE-FIX R1 (2026-10-18): the standardized freestream speed the AirfRANS baselines read, from the
+#: full_train (800 cases) mean and population std of global_data.U_inf_mag.
+SPEED_STD = {
+    "_target_": "${dp:SplitGlobalVector}",
+    "field": "U_inf_mag",
+    "names": ["U_inf_mag_std"],
+    "mean": 62.116,
+    "std": 17.914,
+}
+
+
+@pytest.mark.parametrize("ud", UD_TWINS)
+def test_ud_twin_is_its_uniform_twin_plus_the_standardized_speed(ud):
+    """airfrans_uvolume_ud*.yaml (the AirfRANS baselines' datasets) is its airfrans_uvolume*.yaml with one
+    last transform, the SplitGlobalVector that writes U_inf_mag_std with fixed constants."""
+    datasets = _RECIPE_ROOT / "datasets"
+    a = OmegaConf.to_container(OmegaConf.load(datasets / f"{ud}.yaml"), resolve=False)
+    b = OmegaConf.to_container(
+        OmegaConf.load(datasets / f"{ud.replace('_ud', '', 1)}.yaml"), resolve=False
+    )
+    assert a["pipeline"]["transforms"].pop() == SPEED_STD
+    assert a == b
+
+
+@pytest.mark.parametrize(
+    "model", ["geotransolver_volume_airfrans", "transolver_volume_airfrans"]
+)
+@pytest.mark.parametrize("ud", UD_TWINS)
+def test_ud_twin_feeds_the_baselines_the_direction_and_the_standardized_speed(
+    ud, model, case_root
+):
+    """Through the real reader and chain and the recipe collate: the AirfRANS baseline configs read the unit
+    freestream direction and (|U_inf| - 62.116) / 17.914, never the raw U_inf vector."""
+    ds = _dataset(ud, case_root, K)
+    try:
+        sample = ds[0][0]
+    finally:
+        DatasetBase.close(ds)
+    with initialize_config_dir(
+        config_dir=str(_RECIPE_ROOT / "conf"), version_base=None
+    ):
+        cfg = compose(
+            config_name="train", overrides=[f"model={model}", f"dataset={ud}"]
+        )
+    spec = OmegaConf.to_container(cfg.forward_kwargs, resolve=True)
+    key = "global_embedding" if "global_embedding" in spec else "fx"
+    targets = {"pressure": "scalar", "nut": "scalar", "velocity": "vector"}
+    collate = build_collate_fn(
+        input_type="tensors", forward_kwargs_spec=spec, target_config=targets
+    )
+    x = collate([(sample, {})])["forward_kwargs"][key]
+    u = sample.global_data["U_inf"]
+    expected = torch.cat([u / u.norm(), ((u.norm() - 62.116) / 17.914).reshape(1)])
+    rows = x.reshape(-1, x.shape[-1])
+    torch.testing.assert_close(rows, expected.expand_as(rows))

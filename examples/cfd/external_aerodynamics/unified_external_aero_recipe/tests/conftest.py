@@ -108,6 +108,7 @@ def make_surface_domain_mesh(
         boundaries={"vehicle": vehicle},
         global_data={
             "U_inf": torch.tensor([30.0, 0.0, 0.0]),
+            "U_inf_dir": torch.tensor([1.0, 0.0, 0.0]),
             "p_inf": torch.tensor(0.0),
             "rho_inf": torch.tensor(1.225),
             "L_ref": torch.tensor(5.0),
@@ -161,6 +162,9 @@ def make_volume_domain_mesh(
         boundaries={"vehicle": vehicle},
         global_data={
             "U_inf": torch.tensor([30.0, 0.0, 0.0]),
+            "U_inf_dir": torch.tensor([1.0, 0.0, 0.0]),
+            # the AirfRANS baselines' standardized speed (airfrans_uvolume_ud.yaml)
+            "U_inf_mag_std": torch.tensor(0.0),
             "p_inf": torch.tensor(0.0),
             "rho_inf": torch.tensor(1.225),
             "L_ref": torch.tensor(5.0),

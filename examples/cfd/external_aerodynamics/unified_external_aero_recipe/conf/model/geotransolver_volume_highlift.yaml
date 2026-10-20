@@ -22,7 +22,9 @@
 # a different physical scale than the DrivAerML volume meshes; the
 # radii / neighbor counts therefore match the surface-style scale and
 # the local-feature path is disabled.  Same volume forward_kwargs as
-# the DrivAerML volume template.
+# the DrivAerML volume template, including its freestream input: the unit
+# freestream direction U_inf_dir, never the raw U_inf vector (the drive
+# rule, 2026-10-18; the HiLift speed is a per-dataset constant).
 dataset_reader_overrides:
   # This point-based model consumes only the volume interior.
   drop_in_file_boundaries: true
@@ -37,14 +39,14 @@ forward_kwargs:
     - interior.point_data.sdf
     - interior.point_data.sdf_normals
   local_positions: interior.points
-  global_embedding: global_data.U_inf
+  global_embedding: global_data.U_inf_dir
 
 model:
   _target_: physicsnemo.models.geotransolver.GeoTransolver
   out_dim: ${out_dim}     # auto-set from the chosen dataset's `targets:` block
   functional_dim: 7       # local_embedding = coords (3) + SDF (1) + SDF normals (3)
   geometry_dim: 3         # point coordinates
-  global_dim: 3           # freestream velocity U_inf (3)
+  global_dim: 3           # unit freestream direction U_inf_dir (3)
   n_layers: 12
   n_hidden: 256
   dropout: 0.0

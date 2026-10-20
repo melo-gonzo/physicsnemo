@@ -29,6 +29,13 @@
 #
 # Each train_*.yaml overrides `out_dim` (channel count from `targets:`)
 # and, for FA variants, `attention_type` and (sometimes) `state_mixing_mode`.
+#
+# Freestream input (the drive rule, 2026-10-18): the unit freestream
+# direction U_inf_dir (ComputeFreestreamDirection in the dataset YAMLs),
+# never the raw U_inf vector. On the datasets this template serves
+# (DrivAerML, SHIFT-SUV, HiLift) the speed is a per-dataset constant, so
+# no magnitude channel is added; where the speed varies (AirfRANS) the
+# baseline has its own template, geotransolver_volume_airfrans.yaml.
 input_type: tensors
 output_type: tensors
 
@@ -38,14 +45,14 @@ forward_kwargs:
     - interior.points
     - boundaries.vehicle.cell_data.normals
   local_positions: interior.points
-  global_embedding: global_data.U_inf
+  global_embedding: global_data.U_inf_dir
 
 model:
   _target_: physicsnemo.models.geotransolver.GeoTransolver
   out_dim: ${out_dim}     # auto-set from the chosen dataset's `targets:` block
   functional_dim: 6       # local_embedding = geometry coords (3) + normals (3)
   geometry_dim: 3         # point coordinates
-  global_dim: 3           # inlet velocity (3)
+  global_dim: 3           # unit freestream direction U_inf_dir (3)
   n_layers: 12
   n_hidden: 256
   dropout: 0.0
