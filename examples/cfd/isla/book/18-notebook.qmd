@@ -38720,22 +38720,26 @@ the difference moved GeoTransolver by 0.6 percent.
 
 **Where ISLA trails** (scratch/isla-hilift090-2026-10-20/RESULTS.md).
 
-- Against GeoTransolver, about 10 post-stall cases at angles of attack of
-  14 to 22 degrees carry essentially all of ISLA's 10.7 percent pressure
-  deficit. Without them ISLA ÷ GeoTransolver is 0.999 on pressure.
+- Against GeoTransolver, the ten largest-gap cases carry 101 percent of
+  ISLA's 10.7 percent pressure deficit: nine post-stall cases at angles of
+  attack of 14 to 22 degrees, and LHC173_4 at 4 degrees. Without them ISLA
+  ÷ GeoTransolver is 0.999 on pressure.
 - On those cases each model is either about right or badly wrong, with
-  errors near 0.2 to 0.29 and lift 4 to 8 percent low: it predicts stall
-  where the CFD flow stays attached. Two cases, LHC002_18 and LHC132_22,
-  are wrong for every ISLA run and right for GeoTransolver; on the rest the
-  outcome changes with the seed, for every model.
+  errors near 0.2 to 0.29. Two cases, LHC002_18 and LHC132_22, carry 41
+  percent of the gap. They are wrong on both seeds of A2 ISLA and right for
+  GeoTransolver; the old reference reads 0.099 and 0.098 on them for seed
+  42. On the rest the outcome changes with the seed, for every model. The
+  record does not keep the sign of the error or the per-case lift.
 - On the surface, ISLA's excess error sits in the leading-edge suction
   peaks of the main element (82 percent) and the slat (16 percent), mostly
-  where Cp is below −4, which is 0.2 to 0.4 percent of the area.
+  where Cp is below −4, which is 0.2 to 0.4 percent of the area. In this
+  split, GeoTransolver and Transolver are seed 42 only.
 - Against Transolver the deficit is broad: ISLA is worse on 85 percent of
   cases, by 12 to 20 percent even at angles of attack of 4 to 12 degrees.
 - A2's 6 percent regression from the old reference is three cases at 16
   degrees, which the old reference gets right on both seeds and A2 gets
-  wrong on both. Everywhere else A2 is 1 to 6 percent better.
+  wrong on both. In the other angle bins A2 ÷ old reference spans 0.94 to
+  1.02.
 - Training coverage does not explain any of this: the split is random by
   case, and 192 training cases lie at 16 to 22 degrees.
 
@@ -38813,3 +38817,53 @@ The genuine 210-case references stay as written: the September ladder's
 210-case rung (`geometry_scarce`), the UDRV-L-210 study
 (@sec-nb-udrvl-210-verdict) and the wing-element anatomy on the
 `*_hl210` runs. The book writer found the mislabel.
+
+## 2026-10-20 — GLOBE on AirfRANS: at its published configuration it trails A2 ISLA on every field, and its posed score equals native {#sec-nb-globe-af-scored}
+
+**Question** (GLOBE-SCORE, pre-registered 2026-10-19 in
+scratch/isla-globe-2026-10-19/PREREG.md, at Peter's request). Where does
+GLOBE stand on AirfRANS? It runs at the authors' published configuration,
+the paper's Table 8 model trained on 4,096 points per step at a rate of
+1e-3. Everything else follows the recipe protocol: Muon and AdamW, StepLR,
+Huber loss, bf16 and 500 epochs. The boundary-layer scale is
+chord / √Re with a constant chord, per Peter's reference-length ruling. The
+comparison is with A2 ISLA and the fair-drive baselines. Scores are in
+float32 on the 200 test cases at 100,000 points.
+
+| Arm | Pressure | Velocity | Eddy viscosity | GLOBE ÷ arm |
+|---|---|---|---|---|
+| GLOBE | 0.02379 (0.02585, 0.02174) | 0.02142 (0.02290, 0.01993) | 0.03807 (0.04061, 0.03552) | 1 |
+| A2 ISLA | 0.01799 | 0.00946 | 0.02230 | 1.322 / 2.265 / 1.707 |
+| GeoTransolver, fair drive | 0.01090 | 0.03998 | 0.01708 | 2.183 / 0.536 / 2.229 |
+| Transolver, fair drive | 0.01090 | 0.02967 | 0.01782 | 2.183 / 0.722 / 2.137 |
+
+Native relative L2, seed means; GLOBE's seeds 42 and 43 in parentheses.
+Every per-seed ratio lies on the same side of one as its mean.
+
+**Verdicts.** There is no adoption rule: the result adds a GLOBE column to
+the AirfRANS standing. The fallback did not trigger; the worst validation
+was 1.86 times its running minimum. The AeroZoo stage requires GLOBE
+within 1.10 of A2 ISLA on some headline field. AirfRANS does not meet it,
+since the closest field is pressure at 1.32, and the trigger stays open
+until DrivAerML is scored.
+
+**Beside the rules.**
+
+- GLOBE's posed score equals native to float32 roundoff: the seed means
+  differ by at most 3.1e-5. Its rotation equivariance holds as measured,
+  as the knob rule credits it. Area equals native on AirfRANS for every
+  arm.
+- GLOBE beats both fair-drive baselines on velocity but trails them about
+  2.2 times on pressure and eddy viscosity.
+- GLOBE's seed spread is wide: seed 43 is 12 to 16 percent below seed 42,
+  against about 6 percent for ISLA.
+- The registered predictions that GLOBE would beat ISLA on pressure,
+  velocity or eddy viscosity (probabilities 0.6, 0.45 and 0.35) all failed.
+- The recipe protocol departs from the paper's: StepLR, Huber loss on the
+  standardized eddy viscosity, and no gradient clipping. So this tests
+  GLOBE under the shared protocol, not the paper's own AirfRANS numbers
+  (scratch/isla-globe-2026-10-19/RESULTS_AF.md).
+
+**Next.** The GLOBE DrivAerML lanes finish about 2026-10-24. The ISLA 0.9.0
+AirfRANS lanes (REF-090) are at epoch 300, and GLOBE ÷ ISLA 0.9.0 is
+reported beside this table when they are scored.
