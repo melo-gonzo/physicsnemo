@@ -1,0 +1,93 @@
+# AZ-COMPLIANT v2 PROPOSAL (scratch, 2026-10-19): the PDE inputs only, in PHYSICAL units, for every arm.
+# From recipe_geo2/datasets/aerozoo_uvolume.yaml: removed every reference.* read (U_inf/L_ref renames, ComputeLogReynolds,
+# both NonDimensionalizeByMetadata, ComputeFreestreamDirection), CenterMesh (raw coordinates), and the recipe-derived inlet
+# reductions (BoundaryFieldToGlobal / SplitGlobalVector / global_vector), and sdf_slip (its empty-mesh fill is a per-case
+# length). Kept: the SDF and normals to no_slip (the published body-SDF input). Added: nu_std.
+# No per-case derived scale is computed. ISLA drops SubsampleMesh, the SDF passes and HarmonizeBoundaryFields as before.
+train_datadir: ${dataset_paths.aerozoo}
+manifest: ${dataset_paths.aerozoo_manifest}
+
+pipeline:
+  reader:
+    _target_: ${dp:DomainMeshReader}
+    path: ${train_datadir}
+    pattern: "shard-*/case-*/domain.pdmsh"
+    subsample_n_points: ${sampling_resolution}   # interior queries (the recipe default 200,000; inference passes the same)
+    boundary_subsample: cells
+    drop_interior_cells: true
+    drop_in_file_boundaries: false
+  transforms:
+    - _target_: ${dp:SubsampleMesh}
+      n_cells: 50000
+    - _target_: ${dp:HarmonizeBoundaryFields}
+      one_hot:
+        inlet: bc_inlet
+        outlet: bc_outlet
+        no_slip: bc_no_slip
+        slip: bc_slip
+      fields:                                   # {cell_data field: rank}
+        prescribed.dirichlet.velocity: 1
+        prescribed.reverse_flow.velocity: 1
+        prescribed.dirichlet.gauge_pressure: 0
+        prescribed.dirichlet.turbulent_kinetic_energy: 0
+        prescribed.dirichlet.specific_dissipation_rate: 0
+        prescribed.dirichlet.intermittency: 0
+        prescribed.dirichlet.momentum_thickness_reynolds_number: 0
+        prescribed.reverse_flow.turbulent_kinetic_energy: 0
+        prescribed.reverse_flow.specific_dissipation_rate: 0
+        prescribed.reverse_flow.intermittency: 0
+        prescribed.reverse_flow.momentum_thickness_reynolds_number: 0
+    - _target_: ${dp:RenameMeshFields}
+      cell_data:
+        prescribed.dirichlet.velocity: bc_velocity
+        prescribed.reverse_flow.velocity: bc_velocity_reverse
+        prescribed.dirichlet.gauge_pressure: bc_pressure
+        prescribed.dirichlet.turbulent_kinetic_energy: bc_tke
+        prescribed.dirichlet.specific_dissipation_rate: bc_omega
+        prescribed.dirichlet.intermittency: bc_intermittency
+        prescribed.dirichlet.momentum_thickness_reynolds_number: bc_retheta
+        prescribed.reverse_flow.turbulent_kinetic_energy: bc_tke_reverse
+        prescribed.reverse_flow.specific_dissipation_rate: bc_omega_reverse
+        prescribed.reverse_flow.intermittency: bc_intermittency_reverse
+        prescribed.reverse_flow.momentum_thickness_reynolds_number: bc_retheta_reverse
+    - _target_: ${dp:ComputeSDFFromBoundary}
+      boundary_name: no_slip
+      sdf_field: sdf_wall
+      normals_field: sdf_wall_normals
+      use_winding_number: false
+    - _target_: ${dp:StandardizeGlobalLeaf}
+      field: physics.kinematic_viscosity
+      output_field: nu_std
+      log10: true
+      mean: -4.8
+      std: 1.3
+    - _target_: ${dp:FlipBoundaryOrientation}
+      boundaries: [inlet, outlet, no_slip, slip]
+    - _target_: ${dp:RenameMeshFields}
+      point_data:
+        solution.velocity: velocity
+        solution.gauge_pressure: pressure
+        solution.turbulent_kinematic_viscosity: nut
+        solution.turbulent_kinetic_energy: tke
+        solution.specific_dissipation_rate: omega
+    - _target_: ${dp:DropMeshFields}
+      point_data: [solution.intermittency, solution.momentum_thickness_reynolds_number]
+    # PHYSICAL targets (m/s, Pa, m^2/s, m^2/s^2, 1/s), one standardization per dataset, the same for every arm.
+    # PLACEHOLDER constants: refit on the train split with fill_stats.py.
+    - _target_: ${dp:NormalizeMeshFields}
+      association: point_data
+      fields:
+        velocity: {type: vector, mean: [0.0, 0.0, 0.0], std: 12.0}
+        pressure: {type: scalar, mean: 30.0, std: 400.0}
+        nut: {type: scalar, mean: 0.003, std: 0.05}
+        tke: {type: scalar, mean: 0.5, std: 5.0}
+        omega: {type: scalar, mean: 50.0, std: 5000.0}
+    - _target_: ${dp:ComposeQuadratureMeasure}
+
+targets:
+  velocity: vector
+  pressure: scalar
+  nut: scalar
+  tke: scalar
+  omega: scalar
+

@@ -122,7 +122,6 @@ def test_isla_runs_natively_in_two_dimensions_on_the_restricted_domain():
         boundary_schemas={
             "outer": {"bc_dirichlet": {"rank": 0}, "bc_value_g": {"rank": 0}}
         },
-        query_schema={"sdf_normals": {"rank": 1}},
         interior=True,
         hidden=32,
         n_layers=1,
@@ -130,7 +129,7 @@ def test_isla_runs_natively_in_two_dimensions_on_the_restricted_domain():
         dim=2,
     )
     ### The restricted boundary is a Mesh[1, 2] (a polyline): its cells carry the normals
-    ### and lengths ISLA reads; the interior Mesh's point_data carries the declared query input.
+    ### and lengths ISLA reads; of the interior Mesh it reads the points.
     out = model(
         boundary_meshes={"outer": d2.boundaries["outer"]}, prediction_points=d2.interior
     )

@@ -21,8 +21,9 @@
 # which the dataset labels by condition (bc_loaded, bc_fixed, bc_pinned); SplitBoundaryByLabels (dataset_append_transforms
 # below, for this model only) splits it into four named boundary conditions (boundary_schemas): the loaded top edge with its
 # applied pressure, the fixed bottom edge, the left side's cell at the pinned corner and the free sides. The six input
-# scalars enter as named rank-0 global inputs (the dataset's SplitGlobalVector standardizes `params` and splits it), and
-# the stored signed distance and its gradient as per-query inputs (query_schema), the same wall geometry the tensor-input baselines read. The targets are the dataset's
+# scalars enter as named rank-0 global inputs (the dataset's SplitGlobalVector standardizes `params` and splits it). No
+# query_schema: each node's distance and direction to the boundary are computed inside the model, exactly, from the
+# boundary meshes, so the dataset's stored sdf and sdf_normals (the baselines' inputs) are not read. The targets are the dataset's
 # native fields: four scalars and the in-plane displacement vector. No global direction: the fused kernel does not apply.
 input_type: mesh
 output_type: mesh
@@ -48,12 +49,12 @@ compile_options:
   mode: max-autotune-no-cudagraphs
 
 forward_kwargs:
-  boundary_meshes:                # Mesh[1, 2] each after RestrictToPlane: line cells with in-plane normals and segment lengths
-    pinned: boundaries.pinned
-    loaded: boundaries.loaded
+  boundary_meshes:                # Mesh[1, 2] each after RestrictToPlane: line cells with in-plane normals and segment lengths,
+    pinned: boundaries.pinned     # wound with their normals into the specimen: the built-in signed distance is already positive
+    loaded: boundaries.loaded     # at the interior nodes, so no FlipBoundaryOrientation
     fixed: boundaries.fixed
     free: boundaries.free
-  prediction_points: interior     # the specimen's mesh nodes as a point cloud; point_data carries the query_schema fields
+  prediction_points: interior     # the specimen's mesh nodes as a point cloud
   global_data: global_data        # the case's TensorDict; the model selects its declared leaves
 
 model:
@@ -71,9 +72,6 @@ model:
       bc_pressure: {rank: 0}      # the applied pressure P (scaled to O(1) by the dataset config)
     fixed: {}                     # the bottom edge (U2 = 0)
     free: {}                      # the traction-free sides
-  query_schema:
-    sdf: {rank: 0}                # the stored signed distance (a length, scaled by the frame's length unit inside the model)
-    sdf_normals: {rank: 1}        # the stored SDF gradient, in the plane after RestrictToPlane
   global_schema:                  # the standardized input scalars, one rank-0 field each (SplitGlobalVector)
     P_std: {rank: 0}
     p1_std: {rank: 0}

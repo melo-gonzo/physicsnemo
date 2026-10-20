@@ -42,7 +42,6 @@ from test.experimental.models.isla._meshes import (
     cloud,
     orthogonal,
     outputs,
-    points_mesh,
     soup,
     transform,
 )
@@ -89,34 +88,6 @@ def test_interior_contracts():
     assert not torch.allclose(far["p"], base["p"], atol=1e-6)
 
 
-def test_stored_distance_is_an_ordinary_query_input():
-    """A dataset's stored signed distance (and its gradient) enter as query_schema
-    fields of rank 0 and 1 from the prediction Mesh's point_data; the built-in
-    geometry is computed regardless, so the two channels coexist and both are live."""
-    pts, nrm, w, _ = cloud(120)
-    mesh = soup(pts, nrm, w)
-    drv = torch.tensor([0.3, 1.0, 0.2], dtype=D)
-    q, _, _, _ = cloud(25, seed=1, scale=(4.0, 4.0, 4.0))
-    d, grad = exact_boundary_geometry(q, mesh.points, mesh.cells)
-    m = _model(query_schema={"geometry.sdf": {"rank": 0}, "geometry.grad": {"rank": 1}})
-    assert m.qt.seed.in_features == 1 + 2 + (2 + (2 + 1))  # n.g, built-in pair, scaled scalar pair, vector cosines and norm
-
-    def call(sdf, g):
-        with torch.no_grad():
-            return outputs(
-                m(
-                    boundary_meshes={"wall": mesh},
-                    prediction_points=points_mesh(q, {"geometry": {"sdf": sdf, "grad": g}}),
-                    global_data={"g": drv},
-                )
-            )
-
-    base = call(d, grad)
-    assert base["p"].shape == (25,)
-    assert not torch.allclose(call(2 * d, grad)["p"], base["p"], atol=1e-6)
-    assert not torch.allclose(call(d, -grad)["p"], base["p"], atol=1e-6)
-
-
 def test_no_query_normals_argument():
     """The prediction-point direction is never an input."""
     pts, nrm, w, _ = cloud(20)
@@ -131,7 +102,7 @@ def test_fused_kernel_stays_available_with_the_built_in_distance():
     """The built-in distance enters the embedding, not the geometry region, so a model
     without rank-1 or rank-2 per-token inputs keeps the fused kernel."""
     m = ISLA(output_schema=PV, boundary_schemas=WALL, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=1, n_slices=8, interior=True)
-    assert m.n_query_builtin == 2 and m.qt.seed.in_features == 1 + 2
+    assert m.n_query_features == 2 and m.qt.seed.in_features == 1 + 2
     assert not (m.n_block_vecs or m.n_block_tens)
 
 
@@ -155,7 +126,8 @@ def test_checkpoint_round_trip_keeps_the_task(tmp_path):
 def test_saved_posed_airfrans_case_runs():
     """The AirfRANS posed validation case that crashed the 2026-10-03 inference, as
     saved forward kwargs (boundary polyline, 100,000 interior points with the stored
-    sdf / sdf_normals, inlet vectors), runs through a model of its schema."""
+    sdf / sdf_normals, which the model does not read, inlet vectors), runs through a
+    model of its schema."""
     saved = torch.load(os.environ["ISLA_AF_POSED_SAMPLE"], weights_only=False)
     kw = saved["forward_kwargs"]
     kw = {
@@ -168,7 +140,6 @@ def test_saved_posed_airfrans_case_runs():
         output_schema={"velocity": {"rank": 1}, "pressure": {"rank": 0}, "nut": {"rank": 0}},
         boundary_schemas={"airfoil": {}},
         global_schema={"U_inf_dir": {"rank": 1}, "U_inf_mag": {"rank": 0}},
-        query_schema={"sdf": {"rank": 0}, "sdf_normals": {"rank": 1}},
         dim=2, interior=True, hidden=32, n_layers=2, n_slices=8,
     ).cuda().eval()
     with torch.no_grad():

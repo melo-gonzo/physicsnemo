@@ -1,0 +1,19 @@
+{
+ "run": "afu_r_isla_seed42",
+ "n_cases": 200,
+ "n_matched_new": 200,
+ "n_matched_shared": 200,
+ "mean": {
+  "velocity_l2": 0.01160726438742131,
+  "velocity_xy_l2": 0.01160726438742131,
+  "velocity_x_l2": 0.009596267230808735,
+  "velocity_y_l2": 0.021282338921446355
+ },
+ "true_z_absmax_max": 0.0,
+ "max_reldiff_vs_new_rows": 1.9533014456872326e-07,
+ "max_reldiff_vs_shared_rows": 1.9533014456872326e-07,
+ "new_summary_velocity_l2": 0.011607264280319213,
+ "shared_summary_velocity_l2": 0.011607264280319213,
+ "tol": 1e-05,
+ "check_ok": true
+}

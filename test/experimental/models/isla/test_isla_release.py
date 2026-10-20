@@ -145,7 +145,7 @@ def test_isla_constructor_attributes(config):
         assert m.geo_kernel == "auto"
         assert m.interior is False and m.qt is None
         assert m.n_global_vectors == 1 and m.n_global_scalars == 0
-        assert m.boundary_schemas == {"wall": {}} and m.query_schema == {}
+        assert m.boundary_schemas == {"wall": {}}
     else:
         m = ISLA(
             output_schema={
@@ -158,7 +158,6 @@ def test_isla_constructor_attributes(config):
             },
             global_schema={"g1": {"rank": 1}, "g2": {"rank": 1}, "re": {"rank": 0}},
             boundary_schemas={"wall": {"trace": {"rank": 0}, "traction": {"rank": 1}}, "outlet": {}},
-            query_schema={"sdf": {"rank": 0}},
             interior=True,
             hidden=64,
             n_layers=3,
@@ -172,7 +171,6 @@ def test_isla_constructor_attributes(config):
         assert list(m.boundary_schemas) == ["outlet", "wall"]  # canonical order
         assert list(m.boundary_schemas["wall"]) == ["trace", "traction"]
         assert list(m.boundary_conditions) == ["outlet", "wall"]
-        assert list(m.query_schema) == ["sdf"]
         assert m.interior is True and m.qt is not None
     assert isinstance(m, Module)
 
@@ -281,7 +279,7 @@ def test_isla_save_from_checkpoint_round_trip(device, tmp_path):
 
 
 def test_isla_reference_checkpoint_matches_golden(device):
-    """The committed reference checkpoint (version 0.7.0) keeps loading, without a
+    """The committed reference checkpoint (version 0.8.0) keeps loading, without a
     warning, and keeps its outputs."""
     DATA_DIR.mkdir(exist_ok=True)
     ckpt = DATA_DIR / "isla_default_v1.mdlus"
@@ -303,7 +301,7 @@ def test_isla_reference_checkpoint_matches_golden(device):
     _assert_dict_close(out, ref, atol=tol, rtol=tol)
 
 
-@pytest.mark.parametrize("version", ["0.3.0", "0.4.0", "0.5.0", "0.6.0"])
+@pytest.mark.parametrize("version", ["0.3.0", "0.4.0", "0.5.0", "0.6.0", "0.7.0"])
 def test_isla_checkpoint_of_an_earlier_version_is_refused(tmp_path, version):
     """ISLA keeps no upgrade path: a checkpoint written at an earlier version (here
     the reference checkpoint relabelled) fails to load with an error naming both
@@ -320,8 +318,8 @@ def test_isla_checkpoint_of_an_earlier_version_is_refused(tmp_path, version):
                 meta["mdlus_file_version"] = version
                 data = json.dumps(meta).encode()
             zout.writestr(item, data)
-    assert ISLA.__model_checkpoint_version__ == "0.7.0"
-    with pytest.raises(IOError, match=re.escape(f"version {version} is not compatible with current version 0.7.0")):
+    assert ISLA.__model_checkpoint_version__ == "0.8.0"
+    with pytest.raises(IOError, match=re.escape(f"version {version} is not compatible with current version 0.8.0")):
         Module.from_checkpoint(str(old))
 
 
@@ -356,6 +354,40 @@ def test_isla_earlier_state_dict_is_refused_on_every_loading_path(tmp_path):
     with pytest.raises(RuntimeError, match="before version 0.7.0"):
         torch.nn.ModuleDict({"module": fresh}).load_state_dict({f"module.{k}": v for k, v in old.items()})
     fresh.load(str(path))  # the current layout loads
+
+
+def test_isla_0_7_0_state_dict_is_refused_on_every_loading_path(tmp_path):
+    """0.7.0 has the current parameter layout but the earlier geometry encoding of
+    the prediction points: its state dict, told apart by the state-dict version torch
+    records (1 before 0.8.0, as every 0.7.0 checkpoint carries), is refused by
+    ``Module.load``, ``load_state_dict`` and through a DDP-style wrapper, with the
+    version named; the current state dict loads."""
+    import io
+    import zipfile
+
+    model = _instantiate_model(**CONFIGS["interior"])
+    path = tmp_path / "isla.mdlus"
+    model.save(path)
+    old = model.state_dict()
+    assert old._metadata[""]["version"] == ISLA._version == 8
+    old._metadata[""]["version"] = 1  # what 0.7.0 (nn.Module's default) wrote
+    buf = io.BytesIO()
+    torch.save(old, buf)
+    stale = tmp_path / "isla_0.7.0_weights.mdlus"
+    with zipfile.ZipFile(path) as zin, zipfile.ZipFile(stale, "w") as zout:
+        for item in zin.infolist():
+            zout.writestr(item, buf.getvalue() if item.filename == "model.pt" else zin.read(item.filename))
+    fresh = ISLA(**CONFIGS["interior"])
+    with pytest.raises(RuntimeError, match=r"before version 0\.8\.0 \(state-dict version 1"):
+        fresh.load(str(stale), strict=True)
+    with pytest.raises(RuntimeError, match="no upgrade path"):
+        fresh.load_state_dict(old, strict=False)
+    wrapped = torch.nn.ModuleDict({"module": model}).state_dict()
+    wrapped._metadata["module"]["version"] = 1
+    with pytest.raises(RuntimeError, match="before version 0.8.0"):
+        torch.nn.ModuleDict({"module": fresh}).load_state_dict(wrapped)
+    fresh.load(str(path))  # the current state dict loads
+    _assert_dict_close(fresh.state_dict(), model.state_dict(), atol=0.0, rtol=0.0)
 
 
 def test_isla_unknown_constructor_argument_is_a_type_error():

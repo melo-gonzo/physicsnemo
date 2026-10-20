@@ -54,6 +54,24 @@ from jaxtyping import Float, Int
 from physicsnemo.mesh.spatial.bvh import _compute_morton_codes
 
 
+@torch.library.custom_op("physicsnemo::isla_cumsum", mutates_args=())
+def _cumsum(x: torch.Tensor) -> torch.Tensor:
+    """``x.cumsum(0)``, run by ATen under torch.compile as in eager.
+
+    The draw's float64 sums run over every full-resolution cell, an axis long enough
+    for Inductor to emit a split scan; under the whole-model compile with
+    ``mode="max-autotune-no-cudagraphs"`` that kernel failed on GB300 (an illegal
+    memory access, or "operation not supported on global/shared address space";
+    torch 2.12 and 2.14.1). As an opaque op the scan is ATen's, so the compiled
+    draw is the eager one, bitwise."""
+    return x.cumsum(0)
+
+
+@_cumsum.register_fake
+def _(x):
+    return torch.empty_like(x)
+
+
 def water_fill(
     counts: Float[torch.Tensor, " conditions"], budget: int
 ) -> Float[torch.Tensor, " conditions"]:
@@ -92,7 +110,7 @@ def pps_inclusion_probabilities(
     """
     n = measures.shape[0]
     a, order = measures.sort(descending=True)
-    tail = a.flip(0).cumsum(0).flip(0)  # sum of the measures from rank m on
+    tail = _cumsum(a.flip(0)).flip(0)  # sum of the measures from rank m on
     rank = torch.arange(n, device=a.device, dtype=a.dtype)
     uncapped = (share - rank) * a < tail
     m = torch.where(uncapped.any(), uncapped.to(torch.int8).argmax(), n)
@@ -135,8 +153,12 @@ def sample_boundary_cells(
         pi = torch.cat(pis)
         order = torch.cat(orders)
         total = sum(m.shape[0] for m in measures)
-        k = torch.sym_min(total, budget)
-        line = pi[order].cumsum(0)
+        ### k = min(total, budget) in integer division: 1 // (total // budget + 1)
+        ### is 1 when every cell is kept, else 0. A symbolic Min would be fixed to
+        ### one side of the budget when Inductor's FX-graph cache replays the guards
+        ### that hold it (evaluated with the builtin min), a recompile on the other.
+        k = budget + (total - budget) * (1 // (total // budget + 1))
+        line = _cumsum(pi[order])
         hits = start + torch.arange(k, device=pi.device, dtype=pi.dtype)
         position = torch.searchsorted(line, hits, right=True).clamp_max(total - 1)
         ### In the cells' own order, so a condition kept whole is its mesh as given.

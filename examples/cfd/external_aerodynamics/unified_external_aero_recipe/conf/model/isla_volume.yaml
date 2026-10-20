@@ -37,8 +37,8 @@
 # area, each carrying its Horvitz-Thompson measure, so the measure-weighted
 # reads are quadratures of the whole surface; a uniform draw per step in
 # training, a fixed one in evaluation. This configuration declares no
-# `query_schema`, so the dataset's stored sdf / sdf_normals are not read;
-# isla_volume_sdf.yaml declares them as query inputs. Pair this model config
+# `query_schema`, so the dataset's stored sdf / sdf_normals (the baselines'
+# inputs) are not read. Pair this model config
 # with datasets/drivaer_ml_volume_reference.yaml, which also writes the unit
 # freestream direction `U_inf_dir` the model reads.
 input_type: mesh
@@ -77,7 +77,7 @@ compile_options:
 forward_kwargs:
   boundary_meshes:
     vehicle: boundaries.vehicle       # Mesh[2, 3]: the full-resolution vehicle surface, normals into the fluid
-  prediction_points: interior         # the interior point-cloud Mesh (its point_data carries any query_schema fields)
+  prediction_points: interior         # the interior point-cloud Mesh (its points)
   global_data: global_data            # the case's TensorDict; the model selects its declared leaves
 
 model:

@@ -887,13 +887,9 @@ def _model_block(name):
             blk = {**base, **blk}
     return cfg, blk
 interior_cfgs = sorted(p.stem for p in CONF.glob("isla_*.yaml") if _model_block(p.stem)[1].get("interior"))
-with_sdf = [n for n in interior_cfgs if _model_block(n)[1].get("query_schema")]
-without = [n for n in interior_cfgs if n not in with_sdf]
 fmt = lambda xs: ", ".join(f"`{x}`" for x in xs)
-print(f"A dataset that stores a full-mesh signed-distance field and its gradient may pass them as ordinary `query_schema` "
-      f"fields (`sdf`, rank 0, and `sdf_normals`, rank 1), and the model's own geometry is computed regardless. Of the recipe's "
-      f"interior ISLA configurations, {fmt(with_sdf)} declare them and {fmt(without)} do not (read from "
-      f"`conf/model/` as the page renders).")
+print(f"The prediction points' only input is their positions: a stored signed-distance field is not read. The recipe's "
+      f"interior ISLA configurations are {fmt(interior_cfgs)} (read from `conf/model/` as the page renders).")
 ```
 
 ::: {.callout-note collapse="true" title="The wall geometry in the code"}
@@ -1104,21 +1100,13 @@ num = lambda s: float(re.search(r"[0-9.]+(?:e[0-9]+)?", s).group(0))
 floor_ = pick(cost_rows, "read-only, no read"); forest_ = pick(cost_rows, "forest, theta 1")
 per_point = re.search(r"\(([0-9,]+) per point, ([0-9]+)% nodes\)", forest_[3])
 pairs = num(forest_[3]); dense = 200_000 * 200_000
-AZ = json.load(open(RES / "campaigns_2026-10-09" / "aerozoo" / "aerozoo_reduction.json"))["cost"]
-def az(arm):
-    runs = [r for split in AZ[arm].values() for r in split.values()]
-    return (np.median([r["step_seconds_median"] for r in runs]), max(r["mem_gb_max"] for r in runs), runs[0]["n_parameters"])
-s_i, m_i, p_i = az("ISLA"); s_d, m_d, p_d = az("ISLA-DTT")
 print(f"On one GB300 at 200,000 boundary cells and 200,000 prediction points (width 512, 512 slices, bfloat16, compiled "
       f"slice layers, one forward and backward pass), a point at $\\theta = 1$ reads about {per_point.group(1)} sources, "
       f"{per_point.group(2)}% of them virtual cells: ${pairs / 10 ** int(np.log10(pairs)):.1f} \\times 10^{{{int(np.log10(pairs))}}}$ pairs per layer, {dense / pairs:.0f} times fewer than reading "
       f"every cell. The step takes {num(forest_[0]):g} s and {num(forest_[2]):g} GiB against {num(floor_[0]):g} s and "
       f"{num(floor_[2]):g} GiB for the read-only model without the boundary read, {num(forest_[0]) / num(floor_[0]):.1f} times "
-      f"the step (research/dtt/REPORT.md, \"Verification and cost of the forest\"). In training on AeroZoo (four GB300 ranks, "
-      f"bfloat16, 200,000 prediction points per case; the median over training runs of each run's median step), ISLA-DTT steps in "
-      f"{s_d:.2f} s with at most {m_d:.0f} GiB reserved on its busiest rank against ISLA's {s_i:.2f} s and {m_i:.0f} GiB, "
-      f"{s_d / s_i:.1f} times the step, at {p_d / 1e6:.1f} million parameters against {p_i / 1e6:.1f} million "
-      f"(results/campaigns_2026-10-09/aerozoo/aerozoo_reduction.json, `cost`).")
+      f"the step (research/dtt/REPORT.md, \"Verification and cost of the forest\"). @fig-arch-step-breakdown takes one training step "
+      "of ISLA and of ISLA-DTT apart.")
 ```
 
 ::: {.callout-note collapse="true" title="The read-only task and the forest in the code"}
@@ -1529,9 +1517,7 @@ print(f"**ISLA-DTT's forward waits on the host.** Its step takes {HT['isla_dtt']
       f"{PB['kernel_launches_per_step']['isla_dtt']['fwd']:,} kernels against ISLA's {PB['kernel_launches_per_step']['isla']['fwd']:,}. "
       f"The slice blocks cost what they cost in ISLA ({FMd['blocks']:.0f} ms); the twelve tree reads add {FMd['tree_reads']:.0f}. "
       f"Its reverse pass is host-bound as well, which is why loading the next batch during it does not shorten its step. "
-      "These are means over the warm steps of one profiled run of each model on one split; the training-run step times of "
-      "@sec-arch-tree-read are medians over the logged steps of the training runs on all four splits, and their memory is "
-      "the reserved peak. "
+      "These are means over the warm steps of one profiled run of each model on one split. "
       "Data: results/perf_2026-10-18/step_breakdown.json.")
 ```
 
@@ -1557,7 +1543,6 @@ not an argument is described in the stages above.
 WHAT = {
     "output_schema": ("5", "the output fields by name and rank spec (`{pressure: {rank: 0}, wss: {rank: 1}, stress: {rank: 2, symmetric: true}}`; `parity: odd` for a pseudotensor); each costs the coefficients of @tbl-arch-coeffs and is returned as a leaf of the output Mesh's `point_data` under its name. A dotted name (`surface.pressure`) is a nested leaf, in the output and in every input mapping"),
     "boundary_schemas": ("2, 3d", "per-cell fields of rank 0 to 2, read from every boundary mesh's `cell_data`: their invariants join the seed (prediction-point tokens carry zeros), and rank-1 and rank-2 fields add their contractions with $\\hat\\rho_{is}$ to the relational invariants"),
-    "query_schema": ("interior", "per-prediction-point fields of rank 0 to 2, read from the prediction Mesh's `point_data` and carried by the prediction-point tokens through their own embedding after the built-in wall distance; rank-0 fields are lengths, divided by $L$ and paired with a signed log; requires `interior=True`"),
     "global_schema": ("1, 2, 3d, 5", "per-case fields of rank 0 or 1, read from `global_data` by name: each rank-1 field is a global direction $\\hat g_k$ (one seed cosine, one relational cosine, two basis vectors); each rank-0 field widens the seed"),
     "interior": ("modes", "the task: `False` predicts at the boundary cells and takes no prediction points; `True` predicts at the prediction points, which join the slice layers as tokens with the built-in wall geometry (@sec-arch-modes)"),
     "query_independent": ("modes, after each layer", "interior task only: `True` is ISLA-DTT, with read-only prediction points (no routing mass) that read the boundary cells through the forest at $\\theta = 1$ after every slice layer (@sec-arch-passive-decoder); rank-2 per-token inputs are refused with it"),

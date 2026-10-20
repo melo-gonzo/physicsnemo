@@ -992,7 +992,7 @@ class SqueezeScalarFields(MeshTransform):
 
     Converted datasets store some per-point scalars as one-channel columns (AirfRANS keeps its
     signed distance as ``(N, 1)``); a model with a declared field grammar reads a rank-0 field as a
-    plain ``(N,)`` tensor (ISLA's ``query_schema``, ``boundary_schemas``) and refuses the column. This
+    plain ``(N,)`` tensor (ISLA's ``boundary_schemas``) and refuses the column. This
     transform squeezes exactly one trailing axis of length one from each named field and leaves
     everything else untouched; a field that is already ``(N,)`` passes through, and a field whose
     trailing axis is not of length one is refused (it is not a scalar).

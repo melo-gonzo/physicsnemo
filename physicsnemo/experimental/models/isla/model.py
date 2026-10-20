@@ -52,9 +52,9 @@ declaration is a :class:`~physicsnemo.mesh.fields.FieldSchema`. ``symmetric`` (r
 ``parity="odd"`` (outputs only) a pseudotensor that flips sign under a
 reflection (a vorticity). One name declares one field; several independent
 scalars are several rank-0 names. The same grammar serves the constructor's
-``output_schema``, each schema of ``boundary_schemas``, ``query_schema`` and ``global_schema``, and
+``output_schema``, each schema of ``boundary_schemas`` and ``global_schema``, and
 the same dotted names address the fields in the meshes' ``cell_data`` and
-``point_data`` and in ``global_data`` (``td["surface", "pressure"]``).
+in ``global_data`` (``td["surface", "pressure"]``).
 
 **Inputs of any rank enter through invariants.** A rank-1 boundary input
 :math:`v_i` at a token contributes the seed scalars :math:`v_i \cdot \hat
@@ -134,12 +134,12 @@ uniform.
 **Surface and interior tasks.** ``interior=False`` (a surface task) predicts
 at the boundary cells themselves. ``interior=True`` (an interior task)
 predicts at the ``prediction_points`` given to ``forward`` (a point-cloud
-``Mesh``, or a bare ``(N, d)`` tensor when ``query_schema`` declares no
-fields): they join the encoder as interacting tokens next to the boundary
-cells and the outputs are returned for them only. Per-prediction-point inputs
-(declared in ``query_schema``, read from the prediction Mesh's ``point_data``)
-are carried by those tokens; per-cell boundary inputs (declared per condition in
-``boundary_schemas``) by the boundary cells of that condition. The prediction-point
+``Mesh``, whose ``points`` alone are read, or a bare ``(N, d)`` tensor): they
+join the encoder as interacting tokens next to the boundary cells and the
+outputs are returned for them only. Their only inputs are their positions and
+the geometry the model computes for them; per-cell boundary inputs (declared per
+condition in ``boundary_schemas``) are carried by the boundary cells of that
+condition. The prediction-point
 tokens' total routing weight is a learned fraction of the total boundary
 measure, split equally over them, so it is invariant to re-representing the
 same measure (splitting a boundary cell in two changes nothing) and scales
@@ -167,15 +167,18 @@ surface's cells (point to face, never point to centroid) gives the distance
 feature, so positive on the side the cells' normals point to, and the
 direction :math:`u_q`: the cell's normal, oriented toward the query, when
 :math:`p_q` is interior to a cell, else :math:`(x_q - p_q) / |x_q - p_q|`
-(:func:`exact_boundary_geometry`). :math:`d_q / L` with its signed logarithm
-enters the token's embedding as a built-in rank-0 channel ahead of the fields
-declared in ``query_schema``. :math:`(d_q, u_q)` are functions of the surface
+(:func:`exact_boundary_geometry`). The token reads :math:`s_q = d_q / L` and
+:math:`\operatorname{asinh}(s_q / 10^{-6})` (:func:`soft_log_length`; logarithmic
+away from the wall, linear through it) as its two distance channels, and
+:math:`\operatorname{sign}(d_q)\, u_q`
+(with :math:`\operatorname{sign}(0) = +1`, the gradient of the signed distance) as
+its direction. Both are continuous through the surface: a point on it, whose
+distance is zero or a rounding error of either sign, gets the code of the points
+just off it on either side. :math:`(d_q, u_q)` are functions of the surface
 and its orientation alone: the same for every draw of the boundary tokens,
 invariant to splitting a cell and converging as :math:`O(h^2)` under refinement
 of the surface, like a stored signed-distance field computed from the same
-surface. A dataset's stored signed-distance field or its gradient enter, if
-wanted, as ordinary ``query_schema`` fields (rank 0 / rank 1) like any other
-PDE data. The search is a Warp BVH in three dimensions (a torch custom op) and
+surface, which the model therefore does not read. The search is a Warp BVH in three dimensions (a torch custom op) and
 an exact brute force over the segments in two (the interior task is
 implemented in two and three dimensions); the closest point is rebuilt from its
 cell's vertices, so both quantities are differentiable, and both are built from
@@ -226,7 +229,7 @@ model starts at ``"auto"``); at 200,000 cells the
 fused kernel runs the training step in about a third of the eager time and
 memory. The per-token
 rank-2 contractions (rho^T T rho) are the standing kernel follow-up; until
-then a model with rank-2 boundary or query inputs runs the eager region.
+then a model with rank-2 boundary inputs runs the eager region.
 
 Every constructor argument and every ``forward`` input is keyword-only, so a
 call reads as the recipe's ``forward_kwargs`` mapping does and models can be
@@ -276,6 +279,7 @@ from physicsnemo.experimental.models.isla.blocks import (
 from physicsnemo.experimental.models.isla.geometry import (
     exact_boundary_geometry,
     rms_pairwise_distance,
+    soft_log_length,
 )
 from physicsnemo.experimental.models.isla.heads import (
     _assemble_output,
@@ -348,21 +352,17 @@ def _log_count(n: int, like: torch.Tensor) -> float | torch.Tensor:
     return torch.full((), n, dtype=torch.float64, device=like.device).log().to(like.dtype)
 
 
-def _tail(tokens: TensorDict, start) -> TensorDict:
-    """The tokens of a ``(B, N)`` TensorDict from ``start`` on. Each leaf is sliced
-    on its own: indexing the TensorDict (``tokens[:, start:]``) sizes the result
-    through ``slice.indices``, which under torch.compile fixes a symbolic token
-    count to its value (a recompile for every count)."""
-    b, n = tokens.batch_size
-    return tokens.apply(lambda t: t[:, start:], batch_size=[b, n - start])
-
-
-def _refuse_earlier_state_dict(module, state_dict, prefix, *args) -> None:
-    """A load_state_dict pre-hook: a state dict with the parameter layout of an ISLA
-    checkpoint before 0.7.0 (the shared seed embedding ``embed.0``, the prediction
-    points' ``qt.type_offset`` and ``qt.embed``) is refused with the versions named, on
-    every loading path (``Module.load``, ``load_checkpoint``, ``load_state_dict``), not
-    only ``Module.from_checkpoint``, which checks the recorded version."""
+def _refuse_earlier_state_dict(module, state_dict, prefix, local_metadata, *args) -> None:
+    """A load_state_dict pre-hook: a state dict of an earlier ISLA is refused with the
+    versions named, on every loading path (``Module.load``, ``load_checkpoint``,
+    ``load_state_dict``), not only ``Module.from_checkpoint``, which checks the
+    recorded version. Two marks tell an earlier state dict: the parameter layout
+    before 0.7.0 (the shared seed embedding ``embed.0``, the prediction points'
+    ``qt.type_offset`` and ``qt.embed``), and, for 0.7.0, whose layout is the
+    current one, the state-dict version torch records for every module
+    (``ISLA._version``, 1 before 0.8.0). A state dict rebuilt without torch's
+    metadata (a dict comprehension over it) carries no version and is read by its
+    layout alone."""
     old = sorted(
         k[len(prefix) :]
         for k in state_dict
@@ -371,10 +371,20 @@ def _refuse_earlier_state_dict(module, state_dict, prefix, *args) -> None:
     if old:
         raise RuntimeError(
             f"this ISLA state dict has the parameter layout of a checkpoint before version "
-            f"{module.__model_checkpoint_version__} ({', '.join(old[:3])}, ...): ISLA "
-            f"{module.__model_checkpoint_version__} declares its boundary conditions by name "
-            "(boundary_schemas) and keeps no upgrade path from earlier checkpoints (0.6.0 and "
-            "before); load it with the code that wrote it, or retrain"
+            f"0.7.0 ({', '.join(old[:3])}, ...): ISLA {module.__model_checkpoint_version__} "
+            "declares its boundary conditions by name (boundary_schemas) and keeps no upgrade "
+            "path from earlier checkpoints (0.6.0 and before); load it with the code that "
+            "wrote it, or retrain"
+        )
+    version = local_metadata.get("version")
+    if version is not None and version != type(module)._version:
+        raise RuntimeError(
+            f"this ISLA state dict was written before version {module.__model_checkpoint_version__} "
+            f"(state-dict version {version}, now {type(module)._version}): its weights have the "
+            "current layout but were trained on the prediction points' earlier geometry "
+            "encoding (sign(s) log(|s| + 1e-12) and the direction from the surface, in "
+            "place of asinh(s / 1e-6) and sign(d) times it), and ISLA keeps no upgrade path; "
+            "load it with the code that wrote it, or retrain"
         )
 
 
@@ -387,8 +397,8 @@ class ISLA(Module):
     rotation, reflection and translation covariance holds by construction (see
     the module docstring for the contracts). Every argument is keyword-only.
 
-    **Rank specs.** ``output_schema``, each schema of ``boundary_schemas``,
-    ``query_schema`` and ``global_schema`` are :data:`~physicsnemo.mesh.fields.FieldSchemaLike`
+    **Rank specs.** ``output_schema``, each schema of ``boundary_schemas`` and
+    ``global_schema`` are :data:`~physicsnemo.mesh.fields.FieldSchemaLike`
     declarations, the grammar shared by every mesh model
     (:meth:`~physicsnemo.mesh.fields.FieldSchema.parse`): a field is a
     :class:`~physicsnemo.mesh.fields.RankSpec` or a mapping of values
@@ -407,8 +417,8 @@ class ISLA(Module):
     boundary-condition names (each a ``Mesh[dim - 1, dim]`` whose cells have
     normals; any non-empty subset of the declared names), the
     per-case data as a TensorDict, and, for an interior task, the prediction
-    points as a point-cloud ``Mesh`` (or a bare ``(N, dim)`` tensor when
-    ``query_schema`` declares no fields). It returns a point-cloud ``Mesh`` whose
+    points as a point-cloud ``Mesh`` (its ``points``) or a bare ``(N, dim)``
+    tensor. It returns a point-cloud ``Mesh`` whose
     ``point_data`` holds the declared outputs. Details under ``forward``.
 
     **Execution.** The ``geo_kernel`` attribute (``"auto"``; set ``"eager"`` or
@@ -452,16 +462,6 @@ class ISLA(Module):
             the widest condition has, where they contract with the
             token-to-anchor direction (module docstring); the slice layers
             themselves are shared by every condition.
-        query_schema: Per-prediction-point fields of the interior task
-            (``interior=True`` required), a rank spec per name with ranks 0
-            to 2 and even parity, read from the prediction Mesh's
-            ``point_data`` (a material label, a source term, a dataset's
-            stored signed distance or its gradient). Carried by the
-            prediction-point tokens through their own embedding, with the
-            same invariants as boundary inputs. Rank-0 entries are lengths in
-            the frame's unit: each is divided by the length unit and enters
-            as ``[s, sign(s) log(|s| + eps)]``; rank-1 and rank-2 entries are
-            never scaled.
         global_schema: Per-case fields, a rank spec per name with rank 0
             (appended to every token's seed) or rank 1 (a global direction,
             normalized to unit length inside the model). The ``K`` rank-1
@@ -505,7 +505,7 @@ class ISLA(Module):
             docstring), so each prediction depends on its own point and the
             boundary only. The boundary read costs about two to four times the
             training step of ISLA and breaks the whole-model fullgraph compile
-            (use ``compile_blocks``); rank-2 boundary or query inputs are not
+            (use ``compile_blocks``); rank-2 boundary inputs are not
             supported with it.
         hidden: Token width of the slice blocks. The defaults ``hidden=512``,
             ``n_layers=12`` and ``n_slices=512`` are the reference
@@ -555,15 +555,23 @@ class ISLA(Module):
 
     ### 0.7.0: boundary conditions by name (boundary_schemas, one input layer and
     ### vector and tensor maps per condition), the prediction points' own input layer.
-    ### No earlier checkpoint loads: ISLA is unreleased and keeps no upgrade paths.
-    __model_checkpoint_version__ = "0.7.0"
+    ### 0.8.0: the prediction points' geometry encoding is continuous through the
+    ### surface (the built-in distance channel asinh(s / 1e-6) in place of
+    ### sign(s) log(|s| + 1e-12), the direction sign(d) u; same parameters, new
+    ### forward). No earlier checkpoint loads: ISLA is unreleased and keeps no
+    ### upgrade paths.
+    __model_checkpoint_version__ = "0.8.0"
+    #: torch's state-dict version of the module (``nn.Module._version``, recorded in
+    #: every state dict's metadata): 1 before 0.8.0, so a state dict of 0.7.0, whose
+    #: parameter layout is the current one, is told apart and refused on load
+    #: (:func:`_refuse_earlier_state_dict`).
+    _version = 8
 
     def __init__(
         self,
         *,
         output_schema: FieldSchemaLike,
         boundary_schemas: Mapping[str, FieldSchemaLike],
-        query_schema: FieldSchemaLike | None = None,
         global_schema: FieldSchemaLike | None = None,
         interior: bool = False,
         query_independent: bool = False,
@@ -634,9 +642,6 @@ class ISLA(Module):
             )
             for name in sorted(boundary_schemas)
         }
-        self.query_schema = _declare(
-            "query_schema", query_schema, max_rank=self.MAX_INPUT_RANK, allow_odd=False
-        )
         self.global_schema = _declare(
             "global_schema", global_schema, max_rank=1, allow_odd=False
         )
@@ -644,11 +649,6 @@ class ISLA(Module):
         ### has no prediction-point parameters; an interior task predicts at
         ### prediction points that join the encoder as tokens.
         self.interior = bool(interior)
-        if self.query_schema and not self.interior:
-            raise ValueError(
-                f"query_schema {sorted(self.query_schema)!r} declares per-prediction-"
-                "point fields of the interior task; declare them with interior=True"
-            )
         if self.interior and self.dim not in (2, 3):
             raise NotImplementedError(
                 "the interior task's built-in geometry (the exact distance to the boundary "
@@ -673,7 +673,7 @@ class ISLA(Module):
         ### is a dict and serializes as it stands; recording the parsed schemas
         ### keeps the metadata JSON-safe whatever container the caller passed
         ### (a Hydra DictConfig, for instance).
-        for key in ("output_schema", "query_schema", "global_schema"):
+        for key in ("output_schema", "global_schema"):
             self._args["__args__"][key] = getattr(self, key) or None
         self._args["__args__"]["boundary_schemas"] = self.boundary_schemas
         ### The problem's global data are zero or more global DIRECTIONS (each
@@ -702,23 +702,20 @@ class ISLA(Module):
         ### Writable: tests and debugging set "eager" or "fused" to force one.
         self.geo_kernel = "auto"
         self.n_slices = int(n_slices)
-        ### Each boundary condition's fields and the interior queries' fields, each set
-        ### with its own invariant layout (_InputSet). A condition's block vectors and
-        ### tensors reach the slice layers through its own linear maps onto shared
-        ### channels, as many as the widest condition has (_BoundaryCondition); every
-        ### token carries the UNION of the boundary channels and the query stacks
-        ### (zeros where a class has no such field), so one geometry region serves
-        ### every token. Rank-0 query fields are lengths in the frame's unit.
+        ### Each boundary condition's fields, each set with its own invariant layout
+        ### (_InputSet). A condition's block vectors and tensors reach the slice
+        ### layers through its own linear maps onto shared channels, as many as the
+        ### widest condition has (_BoundaryCondition); every token carries them
+        ### (zeros for the prediction points), so one geometry region serves every token.
         n_frame = 1 + K  # {n_hat, g_1..g_K}
         inputs = {
-            name: _InputSet(schema, n_frame, scaled_scalars=False, dim=self.dim)
+            name: _InputSet(schema, n_frame, dim=self.dim)
             for name, schema in self.boundary_schemas.items()
         }
-        self.qin = _InputSet(self.query_schema, n_frame, scaled_scalars=True, dim=self.dim)
         self.n_boundary_vecs = max(i.n_block_vecs for i in inputs.values())
         self.n_boundary_tens = max(i.n_block_tens for i in inputs.values())
-        self.n_block_vecs = self.n_boundary_vecs + self.qin.n_block_vecs
-        self.n_block_tens = self.n_boundary_tens + self.qin.n_block_tens
+        self.n_block_vecs = self.n_boundary_vecs
+        self.n_block_tens = self.n_boundary_tens
         ### A condition's seed: [1, n.g_k (the K origin-free scalars of {n, g_k};
         ### positions enter through the anchors), its fields' invariants, the global
         ### scalars], mapped to the token width by its own input layer and then by the
@@ -819,8 +816,7 @@ class ISLA(Module):
         ### Registered last, so the boundary-side parameter order is that of a
         ### surface model; a surface model (interior=False) has none of them, so
         ### every parameter it owns takes part in every forward pass.
-        self.n_query_builtin = 2
-        self.n_query_features = self.n_query_builtin + self.qin.n_features
+        self.n_query_features = 2  # the built-in distance channels
         self.qt = (
             _QueryTokens(
                 hidden,
@@ -841,10 +837,10 @@ class ISLA(Module):
         if self.query_independent:
             if self.n_block_tens:
                 raise NotImplementedError(
-                    "query_independent=True with rank-2 boundary or query inputs (the "
+                    "query_independent=True with rank-2 boundary inputs (the "
                     "boundary read's pair contractions are not implemented)"
                 )
-            n_geo = kernel_geo_width(K, self.qin.n_block_vecs, self.n_boundary_vecs)
+            n_geo = kernel_geo_width(K, self.n_boundary_vecs)
             self.kernel_basis = _KernelBasis(n_geo)
             self.kernel_reads = nn.ModuleList(_TreeKernelRead(hidden) for _ in range(n_layers))
         ### A state dict of an earlier version fails with its version named on every
@@ -947,11 +943,11 @@ class ISLA(Module):
                 tens = torch.einsum("vp,bnpij->bnvij", m, boundary["tens"])
         return h, vecs, tens
 
-    def _block_extras(self, b_vecs, b_tens, q_vecs, q_tens, b: int, n: int, like) -> dict:
-        """The union block-level stacks of one token class, as its token fields:
-        ``vecs`` [boundary channels, query-derived vectors] (B, N, P', d) and
-        ``tens`` [boundary channels, query tensors] (B, N, Q, d, d); zeros where the
-        class has no such field, and neither when no token carries one."""
+    def _block_extras(self, b_vecs, b_tens, b: int, n: int, like) -> dict:
+        """The block-level stacks of one token class, as its token fields: the
+        boundary channels ``vecs`` (B, N, P', d) and ``tens`` (B, N, Q, d, d);
+        zeros for the prediction points, which carry none, and neither when no
+        token carries one."""
         if not (self.n_block_vecs or self.n_block_tens):
             return {}
         d = self.dim
@@ -959,10 +955,7 @@ class ISLA(Module):
             b_vecs = like.new_zeros(b, n, self.n_boundary_vecs, d)
         if b_tens is None:
             b_tens = like.new_zeros(b, n, self.n_boundary_tens, d, d)
-        if q_vecs is None:
-            q_vecs = like.new_zeros(b, n, self.qin.n_block_vecs, d)
-            q_tens = like.new_zeros(b, n, self.qin.n_block_tens, d, d)
-        return {"vecs": torch.cat([b_vecs, q_vecs], 2), "tens": torch.cat([b_tens, q_tens], 2)}
+        return {"vecs": b_vecs, "tens": b_tens}
 
     def resolve_geo_kernel(self, points: torch.Tensor) -> str:
         """The geometry-kernel implementation this forward pass will use.
@@ -1012,7 +1005,7 @@ class ISLA(Module):
         )
         if points.is_cuda and HAS_TRITON and has_token_inputs and chosen == "eager":
             logger.warning(
-                "ISLA: rank-1 or rank-2 boundary/query inputs are present, so the fused "
+                "ISLA: rank-1 or rank-2 boundary inputs are present, so the fused "
                 "geometry kernel is not used (kernel follow-up); running the eager region."
             )
         return chosen
@@ -1050,7 +1043,7 @@ class ISLA(Module):
                 f"condition {condition!r} is not one of the declared boundary conditions "
                 f"{list(self.boundary_names)!r}"
             )
-        if self.boundary_schemas[condition] or self.qin:
+        if self.boundary_schemas[condition]:
             raise ValueError(
                 "the batched routine takes no per-token inputs; pass the meshes to forward"
             )
@@ -1175,8 +1168,8 @@ class ISLA(Module):
             if self.interior:
                 raise ValueError(
                     "this model was built with interior=True and predicts at prediction "
-                    "points; pass prediction_points (a point-cloud Mesh, or an (N, dim) "
-                    "tensor when query_schema declares no fields)"
+                    "points; pass prediction_points (a point-cloud Mesh or an (N, dim) "
+                    "tensor)"
                 )
             return
         if not self.interior:
@@ -1193,8 +1186,8 @@ class ISLA(Module):
             )
 
     def _validate_point_set(self, pts, label: str) -> None:
-        """An interior point set: a point-cloud Mesh carrying the ``query_schema``
-        fields, or a bare ``(N, dim)`` tensor when none are declared."""
+        """An interior point set: a point-cloud Mesh (its ``points``) or a bare
+        ``(N, dim)`` tensor."""
         d = self.dim
         if isinstance(pts, Mesh):
             if pts.n_spatial_dims != d:
@@ -1202,17 +1195,11 @@ class ISLA(Module):
                     f"{label} has {pts.n_spatial_dims} spatial "
                     f"dimensions; this model has dim={d}"
                 )
-            self._check_fields(self.query_schema, pts.point_data, pts.n_points, f"{label}.point_data")
             return
         if not isinstance(pts, torch.Tensor) or pts.ndim != 2 or pts.shape[-1] != d:
             raise ValueError(
                 f"{label} must be a point-cloud Mesh or a tensor of shape (N, {d}); "
                 f"got {tuple(pts.shape) if isinstance(pts, torch.Tensor) else type(pts).__name__}"
-            )
-        if self.query_schema:
-            raise ValueError(
-                f"this model's query_schema declares {sorted(self.query_schema)!r}; pass "
-                f"{label} as a Mesh whose point_data carries them"
             )
 
     def _select_global_data(self, global_data, device) -> TensorDict:
@@ -1272,18 +1259,14 @@ class ISLA(Module):
                 with its Horvitz-Thompson measure.
             prediction_points: The interior task's prediction points
                 (``interior=True``): a point-cloud ``Mesh`` whose ``points`` are
-                the prediction points and whose ``point_data`` carries the
-                ``query_schema`` fields, or a bare ``(N, dim)`` tensor when
-                none are declared. The points join the encoder as interacting
+                the prediction points (its ``point_data`` is not read), or a bare
+                ``(N, dim)`` tensor. The points join the encoder as interacting
                 tokens (passive readers with ``query_independent``); each
                 one's built-in geometry, its signed distance to the boundary
                 surface (the cells of ``boundary_meshes``) and the direction
                 from it, is computed inside the model from the exact closest
                 point on the surface's cells (:func:`exact_boundary_geometry`)
-                and is never an input. A
-                dataset's stored signed-distance field or its gradient enter, if
-                wanted, as ordinary ``query_schema`` fields (rank 0 / rank 1)
-                like any other PDE data. ``None`` for a surface task
+                and is never an input. ``None`` for a surface task
                 (``interior=False``): the outputs are predicted at the boundary
                 tokens.
             global_data: The case's per-case fields, a TensorDict (or mapping)
@@ -1370,18 +1353,11 @@ class ISLA(Module):
         )
 
     @staticmethod
-    def _token_inputs(points, data: TensorDict, schema, **geometry) -> TensorDict:
-        """One mesh's tokens as network inputs: their ``points`` and ``geometry``
-        and, under ``fields``, the ``schema`` fields of their ``data`` (the cell
-        or point data)."""
-        fields = data.select(*(FieldSchema.key(name) for name in schema))
-        return TensorDict(points=points, fields=fields, **geometry, batch_size=points.shape[:1])
-
-    def _point_set(self, pts) -> TensorDict:
-        """An interior point set's tokens: a point-cloud Mesh or a bare tensor."""
-        if isinstance(pts, Mesh):
-            return self._token_inputs(pts.points, pts.point_data, self.query_schema)
-        return self._token_inputs(pts, TensorDict(batch_size=pts.shape[:1]), {})
+    def _point_set(pts) -> TensorDict:
+        """An interior point set's tokens: the points of a point-cloud Mesh or a bare
+        tensor."""
+        points = pts.points if isinstance(pts, Mesh) else pts
+        return TensorDict(points=points, batch_size=points.shape[:1])
 
     def _tree_read_pairs(self, bnd: TensorDict, qry: TensorDict, q_wall, g_unit):
         """The boundary read's pairs (:mod:`tree_read`): each point's near cells and
@@ -1390,18 +1366,16 @@ class ISLA(Module):
         tokens and ``q_wall`` ``(B, Q)`` the points' built-in wall distance (frame
         units)."""
         r, n_hat, vecs, log_w = bnd["r"], bnd["n_hat"], bnd.get("vecs", None), bnd["log_w"]
-        q_r, q_nhat, q_vecs = qry["r"], qry["n_hat"], qry.get("vecs", None)
-        nb_vecs = self.n_boundary_vecs
+        q_r, q_nhat = qry["r"], qry["n_hat"]
         log_frac = log_w[..., 0] - torch.logsumexp(log_w[..., 0], dim=1, keepdim=True)
         return tree_read_pairs(
             self.kernel_basis,
             query_r=q_r,
             query_n=q_nhat,
             query_wall=q_wall,
-            query_vecs=None if q_vecs is None else q_vecs[:, :, nb_vecs:],
             boundary_r=r,
             boundary_n=n_hat,
-            boundary_vecs=None if vecs is None else vecs[:, :, :nb_vecs],
+            boundary_vecs=vecs,
             log_frac=log_frac,
             g_unit=g_unit,
             theta=self._tree_read_theta,
@@ -1422,7 +1396,7 @@ class ISLA(Module):
     ) -> TensorDict:
         """The batched network on bare token tensors, the tokens of one boundary
         condition without per-cell fields (``condition``, default the model's one
-        declared condition) and no query inputs; the release tests pin it, and it
+        declared condition); the release tests pin it, and it
         runs the same :meth:`_forward_tokens` as :meth:`forward`.
 
         ``points``, ``normals`` ``(B, N, d)``; ``measure_weights`` ``(B, N)``
@@ -1490,8 +1464,7 @@ class ISLA(Module):
         same weight) and the conditions' inputs in the block layout, ``seed`` and
         the block ``vecs`` and ``tens`` (:meth:`_condition_tokens`);
         ``query`` (interior) the prediction-point tokens over ``(B, Q)``:
-        ``points``, the ``query_schema`` fields under ``fields`` and the built-in
-        geometry ``wall_distance`` ``(B, Q)`` and ``wall_direction`` ``(B, Q, d)``
+        ``points`` and the built-in geometry ``wall_distance`` ``(B, Q)`` and ``wall_direction`` ``(B, Q, d)``
         (:func:`exact_boundary_geometry`);
         ``g_unit`` ``(B, K, d)`` and ``g_scalars`` ``(B, S)`` (or ``None``) the
         global inputs (:meth:`_global_fields`).
@@ -1536,7 +1509,7 @@ class ISLA(Module):
             n_hat=n_hat,
             g_hat=g_hat,
             log_w=log_w,
-            **self._block_extras(b_vecs, b_tens, None, None, b, n, points),
+            **self._block_extras(b_vecs, b_tens, b, n, points),
             batch_size=[b, n],
         )
 
@@ -1547,25 +1520,22 @@ class ISLA(Module):
             query_points = query["points"]
             nq = query_points.shape[1]
             ### The query's geometry from the boundary surface: the signed distance
-            ### to it (the built-in channel) and the direction from it (the token's
-            ### "normal" in every invariant), from the exact closest point.
+            ### to it (the built-in channels s and asinh(s / 1e-6)) and the gradient
+            ### of the signed distance, sign(d) u with sign(0) = +1 (the token's
+            ### "normal" in every invariant), from the exact closest point. Both are
+            ### continuous through the surface, so a point on it (d zero or a rounding
+            ### error of either sign) gets the code of its neighbours on either side.
             with torch.autocast(points.device.type, enabled=False):
-                dist, q_nhat = query["wall_distance"], query["wall_direction"].to(points.dtype)
-                s = (dist.to(points.dtype) / gauge.squeeze(-1))[..., None]  # (B, Q, 1), in frame units
-                builtin = torch.cat([s, torch.sign(s) * torch.log(s.abs() + EPS)], -1)
+                dist = query["wall_distance"].to(points.dtype)
+                u = query["wall_direction"].to(points.dtype)
+                q_nhat = torch.where((dist >= 0)[..., None], u, -u)
+                s = (dist / gauge.squeeze(-1))[..., None]  # (B, Q, 1), in frame units
+                builtin = torch.cat([s, soft_log_length(s)], -1)
             q_g = g_unit[:, None].expand(b, nq, K, dim)
             q_seed = [self._dots(q_nhat, q_g)]
             if g_scalars is not None:
                 q_seed.append(g_scalars[:, None, :].expand(b, nq, -1).to(points.dtype))
-            if self.qin:
-                q_frame = torch.cat([q_nhat[:, :, None], q_g], dim=2)
-                q_feat, q_vecs, q_tens = self.qin.features(
-                    query["fields"], q_frame, gauge=gauge, eps=EPS
-                )
-                q_feat = torch.cat([builtin, q_feat], -1)
-            else:
-                q_feat, q_vecs, q_tens = builtin, None, None
-            h_q = self.embed(self.qt.seed(torch.cat([*q_seed, q_feat], -1)))
+            h_q = self.embed(self.qt.seed(torch.cat([*q_seed, builtin], -1)))
             if self.query_independent:
                 ### Passive queries: log-weight -inf leaves them out of every softmax
                 ### over points (routing prototypes, anchors, slice states, head-frame
@@ -1587,7 +1557,7 @@ class ISLA(Module):
                 n_hat=q_nhat,
                 g_hat=q_g,
                 log_w=q_logw.expand(b, nq, 1),
-                **self._block_extras(None, None, q_vecs, q_tens, b, nq, points),
+                **self._block_extras(None, None, b, nq, points),
                 batch_size=[b, nq],
             )
             if self.kernel_reads is not None:
@@ -1612,7 +1582,7 @@ class ISLA(Module):
         ### The tokens the head reads: the prediction points in the interior mode,
         ### every token otherwise. The head frame builds its slice anchors from ALL
         ### tokens (r, log_w and h).
-        out = tokens if query is None else _tail(tokens, n_boundary)
+        out = tokens if query is None else tokens[:, n_boundary:]
         coeffs = self._coeff_layout.unpack(self.head(self.norm_out(out["h"])))
         if not self.needs_frame:
             ### Scalar-only outputs are the coefficients themselves; no token basis.

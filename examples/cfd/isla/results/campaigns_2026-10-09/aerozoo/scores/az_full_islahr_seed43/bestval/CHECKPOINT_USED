@@ -1,4 +1,0 @@
-total 0
-lrwxrwxrwx 1 psharpe dip 157 Oct 16 12:24 ISLA.0.201.mdlus -> /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/runs/az_full_islahr_seed43/checkpoints/ISLA.0.201.mdlus
-lrwxrwxrwx 1 psharpe dip 160 Oct 16 12:24 checkpoint.0.201.pt -> /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/runs/az_full_islahr_seed43/checkpoints/checkpoint.0.201.pt
-lrwxrwxrwx 1 psharpe dip 154 Oct 16 12:24 norm_stats.pt -> /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/runs/az_full_islahr_seed43/checkpoints/norm_stats.pt
