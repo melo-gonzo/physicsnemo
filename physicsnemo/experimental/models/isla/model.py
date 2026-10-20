@@ -27,10 +27,9 @@ model for an interior task), the
 problem's data as *named fields of declared tensor rank*: global inputs in a
 TensorDict (a direction, a diffusivity, a Reynolds number), per-cell boundary
 inputs in the meshes' ``cell_data``, declared per condition (an inlet's
-prescribed velocity, a loaded face's traction; a no-slip wall declares none)
-and, for an interior task, per-prediction-point
-inputs in the prediction Mesh's ``point_data`` (a material label, a source
-term). A point-cloud ``Mesh`` comes out whose ``point_data`` holds fields of
+prescribed velocity, a loaded face's traction; a no-slip wall declares none);
+an interior task's prediction points are read by their positions alone (their
+geometry is computed inside the model). A point-cloud ``Mesh`` comes out whose ``point_data`` holds fields of
 declared rank: scalars, vectors, rank-2 tensors, up to rank 4, each exactly
 covariant. The name states the design principle: the attention operates only
 on invariants of the per-point vector set :math:`\{r_i, n_i, \hat g_1, \dots,
@@ -136,8 +135,10 @@ is refused. Rank-0 globals with the ``role`` ``density`` and ``viscosity`` give
 "std": s}`` the global scalar :math:`z = (\log_{10}(U L / \nu) - m) / s` is
 appended. Every declared boundary field and rank-0 global is divided by its
 units' :math:`\prod \text{scale}^{\text{exp}}` before it enters the invariants,
-and every output with units is the head's dimensionless prediction times it,
-then standardized by the constants ``output_stats`` (vector means zero). The
+and every output with units is the head's dimensionless prediction times it
+(and times the output's constant ``scale``, the typical size of the dimensionless
+output, default 1), then standardized by the constants ``output_stats`` (vector
+means zero). The
 keys are ISLA's own, popped before the shared grammar parses the field; with
 none declared the model is the unscaled one. So a similarity of the problem
 (lengths times :math:`s`, velocities :math:`c`, densities :math:`r`) leaves
@@ -582,10 +583,11 @@ class ISLA(Module):
             the outputs as the head gives them (in physical units when declared).
             The units, sources and roles are declared in the schemas: each field's
             mapping may carry ``units`` ({``"L"``, ``"U"``, ``"rho"``} to
-            exponents), ``velocity_scale`` (rank 1, boundary or global) and
-            ``role`` (rank-0 global, ``"density"`` or ``"viscosity"``). With any of
-            them, or ``output_stats``, the head and the output assembly run in the
-            parameters' precision under autocast.
+            exponents), ``velocity_scale`` (rank 1, boundary or global),
+            ``role`` (rank-0 global, ``"density"`` or ``"viscosity"``) and
+            ``scale`` (an output's positive constant ``c``: ``y = c yhat prod
+            scale^exp``). With any of them, or ``output_stats``, the head and
+            the output assembly run in the parameters' precision under autocast.
 
     Output contract: a field declared with rank ``r`` and even parity
     transforms as a true rank-``r`` tensor under every orthogonal map of the
@@ -951,6 +953,7 @@ class ISLA(Module):
                 if "role" not in local:
                     used |= set(local.get("units", {}))
         self._output_units = {n: e["units"] for n, e in out_extras.items() if e.get("units")}
+        self._output_scale = {n: e["scale"] for n, e in out_extras.items() if "scale" in e}
         self._global_units = {
             n: e["units"]
             for n, e in g_extras.items()
@@ -996,7 +999,7 @@ class ISLA(Module):
         self._scaled = bool(used or has_source or self._roles)
         ### The head and the redimensionalization run in the parameters' precision
         ### under autocast whenever a physical output is assembled or standardized.
-        self._fp32_head = self._scaled or self.output_stats is not None
+        self._fp32_head = self._scaled or self.output_stats is not None or bool(self._output_scale)
 
     @staticmethod
     def _offsets(widths) -> tuple[int, ...]:
@@ -1325,16 +1328,19 @@ class ISLA(Module):
         return fields
 
     def _redimensionalize(self, fields: TensorDict, scales: dict | None) -> TensorDict:
-        """The outputs times their units' scale, then standardized by
-        ``output_stats``, in the outputs' precision (the head's, see
+        """The outputs times their constant ``scale`` and their units' scale, then
+        standardized by ``output_stats``, in the outputs' precision (the head's, see
         :meth:`_forward_tokens`)."""
         for name, spec in self.output_schema.items():
             factor = scale_factor(self._output_units.get(name), scales) if scales is not None else None
+            c = self._output_scale.get(name)
             stats = (self.output_stats or {}).get(name)
-            if factor is None and stats is None:
+            if factor is None and c is None and stats is None:
                 continue
             key = FieldSchema.key(name)
             y = fields.get(key)
+            if c is not None:
+                y = y * c
             if factor is not None:
                 y = y * factor.to(y.dtype)
             if stats is not None:

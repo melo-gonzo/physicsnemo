@@ -22,7 +22,9 @@ A field of a boundary condition's schema, of ``global_schema`` or of
 velocity ``U`` and the density ``rho``), ``velocity_scale: true`` (a rank-1 field
 that is a source of ``U`` and of the direction ``g``) and, for a rank-0 global,
 ``role`` (``density`` or ``viscosity``, consumed for the units and the Reynolds
-number). :func:`split_scale_keys` pops them before
+number) and, for an output, ``scale`` (a positive constant ``c``, the typical size of
+the dimensionless output, so the head predicts ``y / (c prod scale^exp)`` of order
+one). :func:`split_scale_keys` pops them before
 :meth:`~physicsnemo.mesh.fields.FieldSchema.parse`, so the shared
 :class:`~physicsnemo.mesh.fields.RankSpec` grammar is untouched. Private to
 :mod:`physicsnemo.experimental.models.isla`."""
@@ -40,7 +42,7 @@ BASE_SCALES = ("L", "U", "rho")
 #: The roles of rank-0 globals, each with the units it implies.
 ROLES = {"density": {"rho": 1}, "viscosity": {"U": 1, "L": 1}}
 #: The ISLA-local keys of a field declaration.
-SCALE_KEYS = ("units", "velocity_scale", "role")
+SCALE_KEYS = ("units", "velocity_scale", "role", "scale")
 
 
 def _check_local(kind: str, name: str, local: Mapping) -> dict:
@@ -76,6 +78,21 @@ def _check_local(kind: str, name: str, local: Mapping) -> dict:
         if kind == "output_schema" and local["velocity_scale"]:
             raise ValueError(f"{where}: an output cannot be a velocity_scale source")
         out["velocity_scale"] = local["velocity_scale"]
+    if "scale" in local:
+        c = local["scale"]
+        if kind != "output_schema":
+            raise ValueError(
+                f"{where}: a scale is declared on an output; got one in {kind}"
+            )
+        if (
+            isinstance(c, bool)
+            or not isinstance(c, Real)
+            or not (math.isfinite(c) and c > 0)
+        ):
+            raise ValueError(
+                f"{where}: scale must be a positive finite number; got {c!r}"
+            )
+        out["scale"] = float(c)
     if "role" in local:
         if kind != "global_schema":
             raise ValueError(

@@ -90,12 +90,16 @@ forward_kwargs:
 
 model:
   _target_: physicsnemo.experimental.models.isla.ISLA
-  output_schema:                 # the dataset's targets, by name and tensor rank, with their SI units
-    velocity: {rank: 1, units: {U: 1}}                   # m/s
-    pressure: {rank: 0, units: {U: 2, rho: 1}}           # gauge pressure, Pa
-    nut: {rank: 0, units: {U: 1, L: 1}}                  # m^2/s
-    tke: {rank: 0, units: {U: 2}}                        # m^2/s^2
-    omega: {rank: 0, units: {U: 1, L: -1}}               # 1/s
+  # The dataset's targets, by name and tensor rank, with their SI units and `scale`, the typical size (RMS) of the
+  # target made dimensionless by ISLA's scales, so the head's prediction is of order one: y = scale * yhat * U^a L^b rho^c.
+  # PLACEHOLDER, refit in round 2 (on each split's train part, with the reynolds refit): pooled RMS over 48 full.train
+  # cases, 20,000 interior points each (kernel/isla_scales/scanc-294666 on LHR).
+  output_schema:
+    velocity: {rank: 1, units: {U: 1}, scale: 0.77}                 # m/s
+    pressure: {rank: 0, units: {U: 2, rho: 1}, scale: 1.6}          # gauge pressure, Pa
+    nut: {rank: 0, units: {U: 1, L: 1}, scale: 1.5e-3}              # m^2/s
+    tke: {rank: 0, units: {U: 2}, scale: 0.046}                     # m^2/s^2
+    omega: {rank: 0, units: {U: 1, L: -1}, scale: 4.1e3}            # 1/s
   boundary_schemas:              # the boundary conditions by name, each with the fields it prescribes (SI units)
     inlet:                       # Dirichlet: prescribed.dirichlet.{velocity, turbulence}
       bc_velocity: {rank: 1, units: {U: 1}, velocity_scale: true}   # the source of U and g

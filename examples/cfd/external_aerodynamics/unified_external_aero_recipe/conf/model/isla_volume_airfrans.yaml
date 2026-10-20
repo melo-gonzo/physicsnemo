@@ -71,7 +71,7 @@ model:
   output_schema:                 # the dataset's targets, by name and tensor rank, with their units
     velocity: {rank: 1}          # v / |U_inf|: dimensionless (NonDimensionalizeByMetadata divides by ISLA's U)
     pressure: {rank: 0}          # Cp: dimensionless, likewise
-    nut: {rank: 0, units: {U: 1, L: 1}}   # m^2/s
+    nut: {rank: 0, units: {U: 1, L: 1}, scale: 1.0e-4}   # m^2/s; nu_t / (U L) ~ 1e-4 (PLACEHOLDER, refit in round 2)
   boundary_schemas:              # the boundary conditions by name, each with its own per-cell fields
     airfoil: {}                  # the airfoil, a no-slip wall: no per-cell fields
   global_schema:

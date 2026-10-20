@@ -445,6 +445,11 @@ def test_an_absent_or_zero_source_and_bad_declarations_are_refused():
             dict(output_stats={"other": {"mean": 0.0, "std": 2.0}}),
             "not a declared output",
         ),
+        (dict(outputs_={"p": {"rank": 0, "scale": 0.0}}), "positive finite"),
+        (
+            dict(schemas={**SCHEMAS, "wall": {"k": {"rank": 0, "scale": 2.0}}}),
+            "declared on an output",
+        ),
     ]
     for kw, match in bad:
         with pytest.raises((ValueError, TypeError), match=match):
@@ -555,3 +560,26 @@ def test_a_global_source_adds_no_direction():
         atol=1e-10 * base["nut"].abs().max(),
         rtol=1e-9,
     )
+
+
+def test_an_output_s_scale_multiplies_the_head_s_prediction():
+    """``scale: c`` is the typical size of the dimensionless output: the same
+    parameters give c times the output, before output_stats, the vector covariant as
+    before; the checkpoint arguments keep it with the declaration."""
+    cs = (0.5, 0.2, 1e-4, 3e3)
+    scaled = {name: {**f, "scale": c} for (name, f), c in zip(OUTPUTS.items(), cs)}
+    a = _model()
+    b = _model(outputs_=scaled, output_stats={"pressure": {"mean": 1.0, "std": 4.0}})
+    b.load_state_dict(a.state_dict())
+    meshes, gd, q = _case()
+    ya, yb = _run(a, meshes, gd, q), _run(b, meshes, gd, q)
+    for name, c in zip(OUTPUTS, cs):
+        expected = c * ya[name] if name != "pressure" else (c * ya[name] - 1.0) / 4.0
+        torch.testing.assert_close(
+            yb[name], expected, atol=1e-12 * expected.abs().max(), rtol=1e-12
+        )
+    assert b._args["__args__"]["output_schema"]["nut"] == {
+        "rank": 0,
+        "units": {"U": 1, "L": 1},
+        "scale": 1e-4,
+    }
