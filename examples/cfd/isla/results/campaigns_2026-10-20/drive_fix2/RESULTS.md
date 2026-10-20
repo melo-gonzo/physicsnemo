@@ -30,3 +30,22 @@ Unit-direction reruns against their constant-drive CHAR predecessors (cl_r_suv_g
   count, so its area and posed values (0.120 / 0.145 and 0.98 / 1.10) are not comparable with the new ones. Compare
   area and posed only between arms on the same 200k set.
 - Remaining: GeoTransolver on DrivAerML Volume (clud_vol_gt), still training.
+
+## DrivAerML Volume, GeoTransolver (reduced 2026-10-20 05:38 EDT; scorer 299613)
+
+| lane | native p / v / nut | unit ÷ constant drive | ÷ ISLA A2 (0.0409 / 0.0660 / 0.0881) | posed |
+|---|---|---|---|---|
+| GeoTransolver 256 (clud_vol_gt) | 0.0481 (0.0483, 0.0479) / 0.1000 (0.0989, 0.1010) / 0.0845 (0.0840, 0.0850) | 0.988 / 0.997 / 1.009 | 1.175 / 1.514 / 0.959 | 0.82 / 1.34 / 1.06 |
+
+Area equals native for this scorer on DrivAerML Volume, as for Transolver.
+
+## Summary of the ten reruns (native, unit ÷ constant drive; then ÷ ISLA A2)
+
+| dataset | GeoTransolver | Transolver |
+|---|---|---|
+| DrivAerML Surface (p / wss) | 1.000 / 1.002; 1.023 / 0.995 | R2 at 200k: 0.973 / 0.974; 0.951 / 0.969 |
+| DrivAerML Volume (p / v / nut) | 0.988 / 0.997 / 1.009; 1.175 / 1.514 / 0.959 | 0.942 / 0.898 / 0.986; 1.210 / 1.701 / 1.000 |
+| SHIFT-SUV (p / wss) | 0.990 / 0.991; 0.999 / 0.982 | 0.988 / 0.988; 0.919 / 0.945 |
+
+The unit direction moves GeoTransolver by at most about 1 percent on every constant-drive dataset. It lowers Transolver's
+error by 1 to 10 percent, the most on DrivAerML Volume.

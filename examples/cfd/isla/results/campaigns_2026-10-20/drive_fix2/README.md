@@ -11,7 +11,7 @@ protocols, seeds 42 and 43.
 | `clud_vol_t` | DrivAerML Volume, Transolver 512 x 16 (100,000 training cells) | `cl_r_vol_t` |
 | `clud_suv_gt` | SHIFT-SUV, GeoTransolver 256 | `cl_r_suv_gt` |
 | `clud_suv_t` | SHIFT-SUV, Transolver 512 x 16 (100,000 training cells) | `cl_r_suv_t` |
-| `clud_vol_gt` | DrivAerML Volume, GeoTransolver-volume 256 | not scored here (still training) |
+| `clud_vol_gt` | DrivAerML Volume, GeoTransolver-volume 256 | `cl_r_vol_gt` |
 
 - Copied unmodified from `scratch/isla-drive-fix2-2026-10-19/` of the main checkout: `RESULTS.md` (the readout), `JOBS.md`
   (lanes, jobs, md5s), `scores/evals_ud2/<run>/<protocol>/<run>/metrics.jsonl` (the scorer output, fetched from the LHR site's

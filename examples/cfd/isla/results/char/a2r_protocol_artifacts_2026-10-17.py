@@ -32,7 +32,6 @@ DATASETS = {"drivaerml_surface": ("drivaerml_surface", None), "drivaerml_volume"
 # raw_drive_<arch>. The DrivAerML Surface Transolver arm is its unit-direction control of DRIVE-FIX (r80ud_dr_t), on ISLA's 200,000-cell
 # set (T-SCORESET), replacing the SCORESET arm. The Transolver reruns of DrivAerML Volume and SHIFT-SUV are scored on ISLA's
 # 200,000-cell set, their predecessors on their own 100,000-cell draw. The Volume area rows of this scorer equal its native rows.
-# Not yet scored: GeoTransolver on DrivAerML Volume (clud_vol_gt), still the CHAR arm (book/standing.py CONSTANT_DRIVE).
 UD2 = "campaigns_2026-10-20/drive_fix2/ud2_scores_2026-10-20.json"
 TSET = "campaigns_2026-10-19/drive_fix2/scoreset/tset200k_scores.json"
 FAIR_INPUT = {
@@ -46,6 +45,8 @@ FAIR_INPUT = {
                                                        "the unit freestream direction U_inf_dir (r80ud_dr_t_h512_l16_c100k), scored on "
                                                        "ISLA's 200,000-cell set")},
     "drivaerml_volume": {
+        "GeoTransolver 256": (UD2, "evals_ud2/clud_vol_gt", "raw_drive_geotransolver",
+                              "the unit freestream direction U_inf_dir (clud_vol_gt); its area rows equal its native rows in this scorer"),
         "Transolver 512 x 16 at 100k cells": (UD2, "evals_ud2/clud_vol_t", "raw_drive_transolver",
                                               "the unit freestream direction U_inf_dir (clud_vol_t), scored on ISLA's 200,000-cell set; "
                                               "its area rows equal its native rows in this scorer")},
