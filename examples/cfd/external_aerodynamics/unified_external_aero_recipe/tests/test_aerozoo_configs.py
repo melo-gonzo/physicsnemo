@@ -44,6 +44,7 @@ from loss import LossCalculator  # noqa: E402
 from metrics import MetricCalculator  # noqa: E402
 from output_normalize import (  # noqa: E402
     check_model_output_stats,
+    model_dataset_constants,
     model_output_stats,
     normalize_output_to_tensordict,
 )
@@ -406,7 +407,13 @@ def test_dataset_files_read_no_label_and_derive_no_case_scale(dataset):
         f"# Statistics filled by aerozoo_pstats.py fill from pstats_{split}.train.json: split part {split}.train, "
     )
     ds = OmegaConf.load(path)
-    assert set(ds.keys()) == {"train_datadir", "manifest", "pipeline", "targets"}
+    assert set(ds.keys()) == {
+        "train_datadir",
+        "manifest",
+        "pipeline",
+        "targets",
+        "isla_constants",
+    }
     reader = OmegaConf.to_container(ds.pipeline.reader, resolve=False)
     assert "subsample_n_cells" not in reader and reader["boundary_subsample"] == "cells"
     assert reader["subsample_n_points"] == "${sampling_resolution}"
@@ -762,18 +769,26 @@ def test_isla_config_brings_its_own_scales_and_runs():
     spec = OmegaConf.to_container(cfg.forward_kwargs, resolve=True)
     batch = build_collate_fn("mesh", spec, TARGETS)([(d, {})])
     model = hydra.utils.instantiate(
-        cfg.model, _convert_="partial", **model_output_stats(cfg.model, normalizer)
+        cfg.model,
+        _convert_="partial",
+        **model_output_stats(cfg.model, normalizer),
+        **model_dataset_constants(cfg.model, ds),
     )
     check_model_output_stats(model, normalizer)
     assert model.n_global_vectors == 1 and model.n_global_scalars == 1  # g; z
-    assert model.output_stats["pressure"] == {"mean": 0.0, "std": pytest.approx(1129.26)}
+    assert model.output_stats["pressure"] == {
+        "mean": 0.0,
+        "std": pytest.approx(1129.26),
+    }
     seen = []
     scales = model._case_scales
     model._case_scales = lambda *a: seen.append(scales(*a)) or seen[-1]
     with torch.no_grad():
         out = model(**batch["forward_kwargs"])
     torch.testing.assert_close(seen[0]["U"], torch.tensor(U_INF, dtype=torch.float64))
-    torch.testing.assert_close(seen[0]["g"][0, 0], torch.tensor([1.0, 0.0, 0.0], dtype=torch.float64))
+    torch.testing.assert_close(
+        seen[0]["g"][0, 0], torch.tensor([1.0, 0.0, 0.0], dtype=torch.float64)
+    )
     pred = normalize_output_to_tensordict(out, TARGETS, "mesh")
     total, _ = LossCalculator(
         TARGETS,

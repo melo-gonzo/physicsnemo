@@ -235,8 +235,14 @@ def test_the_interior_configs_build_their_model(model):
     alone and computes their wall distance and direction itself from the boundary
     meshes (the dataset's stored sdf and sdf_normals are the baselines' inputs);
     every interior config builds its model."""
-    cfg = _compose(model, "drivaer_ml_volume_reference", *SMALL)
-    assert hydra.utils.instantiate(cfg.model).interior is True
+    from datasets import load_dataset_config
+    from output_normalize import model_dataset_constants
+
+    paired = {"isla_volume_aerozoo": "aerozoo_uvolume", "isla_volume_airfrans": "airfrans_volume_2d"}
+    dataset = paired.get(model, "drivaer_ml_volume_reference")
+    cfg = _compose(model, dataset, *SMALL)
+    ds = load_dataset_config(_RECIPE_ROOT / "datasets" / f"{dataset}.yaml")
+    assert hydra.utils.instantiate(cfg.model, **model_dataset_constants(cfg.model, ds)).interior is True
 
 
 def test_isla_volume_composes_with_the_corrected_measure_dataset():
@@ -386,29 +392,48 @@ def _airfrans_chain(cfg) -> list:
 
 
 def test_isla_airfrans_scales_follow_the_dataset_s_nondimensionalization():
-    """The guard that keeps the two from drifting apart: AirfRANS's NonDimensionalizeByMetadata divides the
-    velocity and pressure targets by the global ``U_inf`` (and q_inf), so ISLA's one velocity source is that
-    same leaf and those two outputs are declared dimensionless; nut, which the dataset leaves physical, has
-    the units U L. nu is the constant the config sets, not a raw input."""
+    """The guard that keeps the two from drifting apart: the dataset's own NonDimensionalizeByMetadata, run
+    on a mesh whose global_data hold only ISLA's declared velocity source (and the dataset's freestream
+    density and pressure), divides the velocity target by that source's magnitude and the pressure target by
+    its square, so the two outputs ISLA declares dimensionless are dimensionless in ISLA's own U; nut, which
+    the dataset leaves physical, has the units U L, and nu is the constant the config sets."""
     cfg = _compose("isla_volume_airfrans", "airfrans_volume_2d")
     gs = OmegaConf.to_container(cfg.model.global_schema)
-    assert [k for k, v in gs.items() if v.get("velocity_scale")] == ["U_inf"]
-    assert gs["nu"]["role"] == "viscosity" and "U_inf_mag" not in gs and "U_inf_dir" not in gs
+    (source,) = [k for k, v in gs.items() if v.get("velocity_scale")]
+    assert gs["nu"]["role"] == "viscosity" and not any(v["rank"] == 0 and "role" not in v for v in gs.values())
     ds = OmegaConf.load(_RECIPE_ROOT / "datasets" / "airfrans_volume_2d.yaml")
     raw = OmegaConf.to_container(ds.pipeline.transforms, resolve=False)
-    nondim = [t for t in raw if "NonDimensionalizeByMetadata" in t["_target_"]]
+    (nondim_cfg,) = [t for t in raw if "NonDimensionalizeByMetadata" in t["_target_"]]
+    nondim = hydra.utils.instantiate(nondim_cfg, _convert_="all")
     outs = OmegaConf.to_container(cfg.model.output_schema)
-    divided = {name for t in nondim for name, kind in t["fields"].items() if kind in ("velocity", "pressure")}
-    assert divided == {"velocity", "pressure"}
-    assert all("units" not in outs[name] for name in divided)
+    divided = {name for name, kind in nondim_cfg["fields"].items() if kind in ("velocity", "pressure")}
+    assert divided == {"velocity", "pressure"} and all("units" not in outs[n] for n in divided)
     assert outs["nut"]["units"] == {"U": 1, "L": 1}
+    n = 5
+    pd = {"velocity": torch.ones(n, 2), "pressure": torch.ones(n), "nut": torch.ones(n)}
+    for speed in (1.0, 4.0):
+        mesh = Mesh(
+            points=torch.zeros(n, 2),
+            point_data=dict(pd),
+            global_data={source: torch.tensor([0.6, 0.8]) * speed, "rho_inf": torch.tensor(1.0),
+                         "p_inf": torch.tensor(0.0)},
+        )
+        out = nondim(mesh).point_data
+        torch.testing.assert_close(out["velocity"], pd["velocity"] / speed)
+        torch.testing.assert_close(out["pressure"], pd["pressure"] / (0.5 * speed**2))
+        torch.testing.assert_close(out["nut"], pd["nut"])
 
 
 def test_isla_airfrans_similarity_end_to_end():
     """One synthetic AirfRANS case through the dataset's chain and ISLA: x -> s x, U_inf -> c U_inf and
     nu -> s c nu leave the dataset's velocity and Cp targets and ISLA's velocity and pressure outputs
     unchanged, and scale nut (the target and the output, in physical units) by s c."""
-    from output_normalize import check_model_output_stats, model_output_stats
+    from datasets import load_dataset_config
+    from output_normalize import (
+        check_model_output_stats,
+        model_dataset_constants,
+        model_output_stats,
+    )
 
     cfg = _compose("isla_volume_airfrans", "airfrans_volume_2d", *SMALL)
     targets = _targets("airfrans_volume_2d")
@@ -416,7 +441,13 @@ def test_isla_airfrans_similarity_end_to_end():
     chain = _airfrans_chain(cfg)
     (normalizer,) = [t for t in chain if type(t).__name__ == "NormalizeMeshFields"]
     torch.manual_seed(0)
-    model = hydra.utils.instantiate(cfg.model, _convert_="partial", **model_output_stats(cfg.model, normalizer))
+    ds = load_dataset_config(_RECIPE_ROOT / "datasets" / "airfrans_volume_2d.yaml")
+    model = hydra.utils.instantiate(
+        cfg.model,
+        _convert_="partial",
+        **model_output_stats(cfg.model, normalizer),
+        **model_dataset_constants(cfg.model, ds),
+    )
     check_model_output_stats(model, normalizer)
     model.eval()
     s, c = 0.3, 2.5
@@ -441,3 +472,30 @@ def test_isla_airfrans_similarity_end_to_end():
         td["nut"] = td["nut"] * stats["std"] + stats["mean"]
     torch.testing.assert_close(t1["nut"], s * c * t0["nut"], atol=1e-9, rtol=1e-4)
     torch.testing.assert_close(y1["nut"], s * c * y0["nut"], atol=1e-9, rtol=1e-4)
+
+
+@pytest.mark.parametrize(
+    "model, dataset",
+    [("isla_volume_aerozoo", f"aerozoo_uvolume{suffix}") for suffix in
+     ("", "_nonbox", "_reynolds", "_blobs", "_bank_zero_to_cad", "_profile_crossflow", "_profile_dual_inlet")]
+    + [("isla_volume_airfrans", f"airfrans_volume_2d{suffix}") for suffix in ("", "_area", "_posed")],
+)
+def test_isla_takes_its_split_s_constants_from_the_dataset_file(model, dataset):
+    """ISLA's AeroZoo and AirfRANS configs leave reynolds and each output's scale to the dataset file, whose
+    isla_constants are fitted on its split's training side; the model is built with them, a dataset file
+    without them is refused, and the config's own null values refuse to build alone."""
+    from datasets import load_dataset_config
+    from output_normalize import model_dataset_constants
+
+    cfg = _compose(model, dataset, *SMALL)
+    ds = load_dataset_config(_RECIPE_ROOT / "datasets" / f"{dataset}.yaml")
+    block = OmegaConf.to_container(ds.isla_constants)
+    m = hydra.utils.instantiate(cfg.model, **model_dataset_constants(cfg.model, ds))
+    assert m.reynolds == pytest.approx(block["reynolds"])
+    assert m._output_scale == pytest.approx(block["output_scale"])
+    for cond, scales in block.get("input_scale", {}).items():
+        assert m._boundary_scale[cond] == pytest.approx(scales)
+    with pytest.raises(ValueError, match="isla_constants"):
+        model_dataset_constants(cfg.model, OmegaConf.create({}))
+    with pytest.raises(Exception, match="positive finite number; got None|reynolds"):
+        hydra.utils.instantiate(cfg.model)

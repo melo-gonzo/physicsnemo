@@ -71,15 +71,14 @@ model:
   output_schema:                 # the dataset's targets, by name and tensor rank, with their units
     velocity: {rank: 1}          # v / |U_inf|: dimensionless (NonDimensionalizeByMetadata divides by ISLA's U)
     pressure: {rank: 0}          # Cp: dimensionless, likewise
-    nut: {rank: 0, units: {U: 1, L: 1}, scale: 1.0e-4}   # m^2/s; nu_t / (U L) ~ 1e-4 (PLACEHOLDER, refit in round 2)
+    nut: {rank: 0, units: {U: 1, L: 1}, scale: null}   # m^2/s; c from the dataset file's isla_constants (train.py)
   boundary_schemas:              # the boundary conditions by name, each with its own per-cell fields
     airfoil: {}                  # the airfoil, a no-slip wall: no per-cell fields
   global_schema:
     U_inf: {rank: 1, units: {U: 1}, velocity_scale: true}   # the farfield velocity (m/s): U = |U_inf|, g its direction
     nu: {rank: 0, units: {U: 1, L: 1}, role: viscosity}       # m^2/s, set above; consumed for Re
-  # z = (log10(U L / nu) - mean) / std. PLACEHOLDER: Re_chord uniform over 2e6-6e6 times L ~ 0.41 chord;
-  # refit on the train part in round 2, from the implemented scale function.
-  reynolds: {mean: 6.15, std: 0.14}
+  # z = (log10(U L / nu) - mean) / std over the train cases: the dataset file's isla_constants.reynolds (train.py).
+  reynolds: null
   output_stats: null             # injected by train.py: the dataset's NormalizeMeshFields stats (nut)
   dim: 2                         # the problem is planar: pair with datasets/airfrans_volume_2d.yaml (RestrictToPlane first in its pipeline)
   interior: true                 # predict at prediction_points, which join the encoder as tokens

@@ -41,7 +41,7 @@ from typing import Any, Literal, TypeAlias
 
 import torch
 from jaxtyping import Float
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from tensordict import TensorDict
 from utils import (
     FieldType,
@@ -97,6 +97,69 @@ def model_output_stats(model_cfg: DictConfig, normalizer: Any | None) -> dict:
     }
 
 
+def model_dataset_constants(model_cfg: DictConfig, dataset_cfg: DictConfig) -> dict:
+    """The constants a model config leaves to the dataset (ISLA's own scales: ``reynolds:
+    null`` and an output's or a boundary input's ``scale: null``), from the dataset file's ``isla_constants``
+    block, which is fitted per split on its training side like the targets' stats;
+    ``{}`` for a model config that leaves none. A config that leaves one to a dataset
+    file without it is refused."""
+
+    def nulls(schema):
+        return [
+            n
+            for n, f in schema.items()
+            if isinstance(f, dict) and "scale" in f and f["scale"] is None
+        ]
+
+    wants_re = "reynolds" in model_cfg and model_cfg.get("reynolds") is None
+    outputs = (
+        OmegaConf.to_container(model_cfg.output_schema)
+        if "output_schema" in model_cfg
+        else {}
+    )
+    conditions = (
+        OmegaConf.to_container(model_cfg.boundary_schemas)
+        if "boundary_schemas" in model_cfg
+        else {}
+    )
+    null_out = nulls(outputs)
+    null_in = {c: nulls(f or {}) for c, f in conditions.items() if nulls(f or {})}
+    if not (wants_re or null_out or null_in):
+        return {}
+    block = OmegaConf.select(dataset_cfg, "isla_constants", default=None)
+    block = OmegaConf.to_container(block) if block is not None else {}
+    given_in = block.get("input_scale", {})
+    missing = (
+        (["reynolds"] if wants_re and "reynolds" not in block else [])
+        + [
+            f"output_scale.{n}"
+            for n in null_out
+            if n not in block.get("output_scale", {})
+        ]
+        + [
+            f"input_scale.{c}.{n}"
+            for c, names in null_in.items()
+            for n in names
+            if n not in given_in.get(c, {})
+        ]
+    )
+    if missing:
+        raise ValueError(
+            f"the model config leaves {missing!r} to the dataset, whose file has no such isla_constants entry"
+        )
+    out = {"reynolds": block["reynolds"]} if wants_re else {}
+    if null_out:
+        for n in null_out:
+            outputs[n]["scale"] = block["output_scale"][n]
+        out["output_schema"] = outputs
+    if null_in:
+        for c, names in null_in.items():
+            for n in names:
+                conditions[c][n]["scale"] = given_in[c][n]
+        out["boundary_schemas"] = conditions
+    return out
+
+
 def check_model_output_stats(model: torch.nn.Module, normalizer: Any | None) -> None:
     """Refuse a model whose ``output_stats`` are not the dataset normalizer's: the
     model's standardized outputs and the targets must be in one space."""
@@ -106,7 +169,10 @@ def check_model_output_stats(model: torch.nn.Module, normalizer: Any | None) -> 
         return
     live = normalizer.stats if normalizer is not None else {}
     same = stats.keys() == live.keys() and all(
-        torch.allclose(torch.as_tensor(stats[k]["mean"], dtype=torch.float64), torch.as_tensor(live[k]["mean"]).double())
+        torch.allclose(
+            torch.as_tensor(stats[k]["mean"], dtype=torch.float64),
+            torch.as_tensor(live[k]["mean"]).double(),
+        )
         and math.isclose(stats[k]["std"], float(live[k]["std"]), rel_tol=1e-6)
         for k in stats
     )

@@ -173,3 +173,18 @@ targets:
   nut: scalar
   tke: scalar
   omega: scalar
+
+# ISLA's own constants for this split: conf/model/isla_volume_aerozoo.yaml leaves them null and train.py / infer.py
+# inject them. Fitted on profile_crossflow.train (2,820 of its 2,820 cases) with the implemented scale functions
+# (ISLA._gauge and ISLA._case_scales on the full-resolution boundaries): reynolds is the mean and the population std
+# over the train cases of log10(U L / nu); output_scale is, per output, the median over the train cases of the per-case
+# RMS of the target made dimensionless by its units (a seeded 20,000-point interior sample per case; velocity's the
+# isotropic RMS), and input_scale, per boundary input, the median over the train cases of the per-case area-weighted
+# RMS of the input made dimensionless by its units (a vector's of its magnitude): robust typical sizes, where the
+# pooled RMS is set by the few largest cases. LHR cpu-short jobs 295774-295776 (examples/cfd/isla/results/aerozoo_dataset/isla_constants_fit.py, code 6c3aac5a8), 2026-10-20.
+isla_constants:
+  reynolds: {mean: 5.969, std: 1.408}
+  output_scale: {velocity: 0.5746, pressure: 0.08286, nut: 0.0004706, tke: 0.009683, omega: 604.6}
+  input_scale:
+    inlet: {bc_intermittency: 1, bc_omega: 1.82, bc_retheta: 235.6, bc_tke: 0.0007466}
+    outlet: {bc_intermittency_reverse: 1, bc_omega_reverse: 1.725, bc_retheta_reverse: 235.6, bc_tke_reverse: 0.0006647, bc_velocity_reverse: 1}
