@@ -231,7 +231,8 @@ print(SUV.table("tbl-shift-suv-protocols", "SHIFT-SUV, estate family, 794 traini
 #|   shear (bottom), seed mean (marker, printed) and the two seeds (black
 #|   dots), logarithmic axis; ISLA blue squares, GeoTransolver red circles,
 #|   Transolver amber triangles; the dashed line at one is the error of
-#|   predicting zero everywhere. How to read this: in the native row
+#|   predicting zero everywhere. ISLA checkpoints of the nearest-token form
+#|   (@sec-checkpoint-form). How to read this: in the native row
 #|   Transolver's triangle sits left of the other two, its lead; down the rows
 #|   ISLA's square stays put and the baselines' markers move right, and
 #|   GeoTransolver's two seeds part on the point cloud. Data:
@@ -270,7 +271,7 @@ import json as _json
 _R = _json.load(open(RENDER_DIR / "render_cloud_shift_suv.json"))
 rendering_figure("fig-shift-suv-prediction", [("figures/renderings/shift_suv_cp.png", "Pressure coefficient")],
     f"The three reference configurations on one SHIFT-SUV case, {_R['sample_id'].split('_')[0]}, left side. Relative L2 on this case: {case_errors(_R['per_sample_rel_l2'])}. " + "Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one "
-      "symmetric scale. How to read this: one case, chosen as the case of median ISLA error (seed 42 of each reference configuration), "
+      f"symmetric scale. ISLA checkpoints of the {S.FORM_TAG} (@sec-checkpoint-form). How to read this: one case, chosen as the case of median ISLA error (seed 42 of each reference configuration), "
       "not a standing; the standing is the table above. "
     + "Data: results/renderings_2026-10-18/arrays/render_cloud_shift_suv.json.", nrow=None)
 ```

@@ -179,7 +179,7 @@ plt.show()
 
 ### The boundaries and their conditions {#sec-aerozoo-boundaries}
 
-**A boundary enters the model as faces, each labeled with its role and carrying the values its condition prescribes; nothing else about a boundary is an input.** @tbl-aerozoo-roles lists the four roles. The one-hot role label tells the model which kind of condition a face carries; the prescribed values, zero where a role prescribes nothing, tell it the data of that condition. The body is not a separate input: its no-slip band sits on the no-slip mesh beside any ground plane or duct wall, and its slip bands sit on the slip mesh beside the symmetry planes. A role can be empty: a case without slip walls has a slip mesh of zero faces.
+**A boundary enters the model as faces, grouped by their role and carrying the values their condition prescribes; nothing else about a boundary is an input.** @tbl-aerozoo-roles lists the four roles. ISLA reads each role as its own named boundary condition, through its own input layer, so which kind of condition a face carries is in the model's parameters rather than in a label; GeoTransolver reads a one-hot role label on each face. The prescribed values tell the model the data of that condition. The body is not a separate input: its no-slip band sits on the no-slip mesh beside any ground plane or duct wall, and its slip bands sit on the slip mesh beside the symmetry planes. A role can be empty: a case without slip walls has a slip mesh of zero faces.
 
 | role | where it sits | what it prescribes | kind |
 |---|---|---|---|
@@ -188,7 +188,7 @@ plt.show()
 | `no_slip` | the body's no-slip band, ground planes, confining walls, duct walls | $u = 0$ | value |
 | `slip` | the body's slip bands, symmetry planes, the box walls that are not no-slip | zero normal velocity and zero tangential stress | free |
 
-: The four boundary roles of AeroZoo and the conditions they carry. Each face of every role reaches ISLA with its position, normal, area, a one-hot role label and the prescribed values in the table (velocity as a rank-1 input, the rest as rank 0). How to read this: the "kind" column is the color of the role in @fig-aerozoo-problem and @fig-aerozoo-samples; a role is a condition type, not a piece of geometry, so one mesh can hold parts of the body and parts of the enclosure. Data: datasets/aerozoo_uvolume.yaml of the recipe. {#tbl-aerozoo-roles}
+: The four boundary roles of AeroZoo and the conditions they carry. Each face of every role reaches ISLA in its role's own mesh, with its position, normal, area and the values its role prescribes in the table (velocity as a rank-1 input, the rest as rank 0). How to read this: the "kind" column is the color of the role in @fig-aerozoo-problem and @fig-aerozoo-samples; a role is a condition type, not a piece of geometry, so one mesh can hold parts of the body and parts of the enclosure. Data: datasets/aerozoo_uvolume.yaml of the recipe. {#tbl-aerozoo-roles}
 
 ```{python}
 #| label: para-aerozoo-samples
@@ -296,7 +296,7 @@ print(f"**Two facts about the release that @fig-aerozoo-families does not show.*
 
 - **Layout.** `shard-NNN/<case_id>/domain.pdmsh`. The interior is a point cloud of cell centroids with the solution fields and the cell volumes; the four boundaries are triangle meshes with all data on the cells: the solution on every boundary, the prescribed values under `prescribed.dirichlet.*` and the outlet's reverse-flow values under `prescribed.reverse_flow.*`. The global data hold the fluid (density, kinematic viscosity), the reference velocity, speed, length and dynamic pressure, and identity and diagnostic blocks that are never inputs.
 - **Interior draw.** The release stores the interior in the solver's cell order, which runs through space, so the recipe reads a copy whose interior rows are randomly permuted once per case; a contiguous block of that copy is a uniform sample. Each step draws 200,000 interior points.
-- **Boundary draw.** Each boundary is read whole, and the first transform keeps a uniform random 50,000 of its faces when it has more (`SubsampleMesh`), multiplying each kept face's area by the boundary's face count over 50,000, so every boundary integral stays unbiased. The inlet and outlet usually fall under the cap and are kept whole. The baselines' distance to the `no_slip` faces is computed from the same draw.
+- **Boundary draw.** Each boundary is read whole, and the first transform keeps a uniform random 50,000 of its faces when it has more (`SubsampleMesh`), multiplying each kept face's area by the boundary's face count over 50,000, so every boundary integral stays unbiased. The inlet and outlet usually fall under the cap and are kept whole. The baselines' distance to the `no_slip` faces is computed from the same draw. ISLA's configuration removes this transform: ISLA reads each boundary whole and draws its own 200,000 faces per case inside the model, water-filled over the four roles (@sec-exact-geometry-draw).
 - **Dataset files.** `datasets/aerozoo_uvolume.yaml` defines the `full` split, and `_nonbox`, `_reynolds`, `_blobs`, `_bank_zero_to_cad`, `_profile_crossflow` and `_profile_dual_inlet` beside it define the six held-out splits of @tbl-aerozoo-splits; each holds physical PDE inputs only. The release's other 15 frozen splits have no file of the protocol.
 - **Normalization.** Coordinates stay in meters, uncentered, and the prescribed values on the boundaries stay in SI units. Each of the five targets, in SI units, is divided by one constant per field for the dataset, the same for every model, and keeps its zero: the standardization scales and does not shift. Nothing is derived per case.
 - **Loss.** Every model trains on the per-case relative L2 of each target field, with velocity weighted 3, so a slow, small case weighs in the loss as much as a fast, large one.
@@ -353,7 +353,7 @@ print("**The architectures read the same problem through different inputs** (@tb
 
 | | boundary | global inputs | at each prediction point |
 |---|---|---|---|
-| ISLA | the four boundary meshes, up to 50,000 faces each: position, normal, area, one-hot condition type, prescribed values in SI units | the kinematic viscosity and the density; computed inside the model from the boundary: the length unit $L$, a velocity scale $U$, the inlet direction $\hat g_1$ and the standardized log Reynolds number | position, entering only through relational invariants; the distance and direction to the nearest boundary token, computed inside the model |
+| ISLA | the four boundary meshes as four named conditions, at full resolution, from which the model draws 200,000 faces per case, 50,000 per role where every role has more: position, normal, area, the role's prescribed values in SI units | the kinematic viscosity and the density; computed inside the model from the boundary: the length unit $L$, a velocity scale $U$, the inlet direction $\hat g_1$ and the standardized log Reynolds number | position, entering only through relational invariants; the exact distance and direction to the union of the four meshes, computed inside the model |
 | ISLA-DTT | as ISLA, and every boundary token read at every layer | as ISLA | as ISLA; the prediction points read the slices and never write into them |
 | GeoTransolver | every boundary face as one geometry token: centroid in meters, one-hot condition type, prescribed values, each column standardized by one constant per dataset | the kinematic viscosity, as its logarithm standardized by dataset constants | coordinates in meters; the signed distance and normal to the `no_slip` faces |
 | Transolver | none | the same viscosity input, concatenated to every point's features | coordinates in meters; the signed distance and normal to the `no_slip` faces |
@@ -492,9 +492,9 @@ print("- **Per-case relative errors.** Every error is the relative L2 of a physi
       "one point dominates (@sec-data-aerozoo).")
 print("- **Label noise.** A quarter of the labels are time averages the solver marked as still drifting; nothing here says how large that "
       "noise is in physical units.")
-print("- **One discretization-dependent input.** Each prediction point's distance and direction come from the nearest of the up to 50,000 "
-      "sampled faces per boundary, so the interior prediction depends on the boundary draw, as on AirfRANS (@sec-airfrans-boundary-law). Whether "
-      "an exact form computed from the full-resolution boundaries removes that dependence is an open design question (@sec-open-questions).")
+print("- **The boundary draw is not measured here.** Each prediction point's distance and direction are computed against the full-resolution "
+      "boundaries, the same for every draw of boundary tokens (@sec-exact-geometry-draw); the draw moves only the slice states, by quadrature "
+      "noise, whose size on AeroZoo is not measured.")
 print("- **Not part of the protocol:** the surface task (the boundary solution and the wall shear from the same inputs), and the "
       "uniform-point-cloud and rotated-and-translated scorings of the other chapters (the stored poses are already random; the pose "
       "contract is measured on the other datasets, @sec-invariances).")
