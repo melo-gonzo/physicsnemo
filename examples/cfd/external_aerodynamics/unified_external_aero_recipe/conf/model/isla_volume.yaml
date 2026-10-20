@@ -59,8 +59,8 @@ training:
 # min(cells, boundary_tokens), is a symbolic size of the same graph; one
 # exception: boundaries with equal cell counts in the first case are tied by
 # Dynamo's duck sizing, and the first case where they differ compiles once more;
-# validation, in evaluation mode, compiles its own graph). max-autotune-no-cudagraphs on purpose:
-# plain max-autotune also captures CUDA graphs, which are static-shape and would
+# validation, in evaluation mode, compiles its own graph). The options of max-autotune-no-cudagraphs on purpose
+# (mix-order reduction off, see isla_volume_airfrans.yaml): plain max-autotune also captures CUDA graphs, which are static-shape and would
 # record a new graph for every token count; at training sizes dynamic shapes are
 # faster than padding the cases to CUDA-graph size buckets. The first compile
 # is long (about 11 minutes on a cold cache for DrivAerML Surface on a GB300,
@@ -72,7 +72,10 @@ compile: true
 compile_options:
   fullgraph: true
   dynamic: true
-  mode: max-autotune-no-cudagraphs
+  options:                       # mode max-autotune-no-cudagraphs's options, with mix-order reduction off
+    max_autotune: true           # (torch 2.12-2.13 miscompile it; see isla_volume_airfrans.yaml)
+    coordinate_descent_tuning: true
+    triton.mix_order_reduction: false
 
 forward_kwargs:
   boundary_meshes:

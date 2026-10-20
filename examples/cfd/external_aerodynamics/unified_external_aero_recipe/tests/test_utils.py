@@ -337,11 +337,17 @@ def test_resolve_dict():
 
 _CONF = Path(__file__).resolve().parents[1] / "conf"
 _MODELS = sorted(p.stem for p in (_CONF / "model").glob("*.yaml"))
-#: What every ISLA template sets: one graph, compiled once for every token count.
+#: What every ISLA template sets: one graph, compiled once for every token count,
+#: with mode max-autotune-no-cudagraphs's options spelled out and Inductor's
+#: mix-order reduction off (see isla_volume_airfrans.yaml).
 _ISLA_COMPILE = {
     "fullgraph": True,
     "dynamic": True,
-    "mode": "max-autotune-no-cudagraphs",
+    "options": {
+        "max_autotune": True,
+        "coordinate_descent_tuning": True,
+        "triton.mix_order_reduction": False,
+    },
 }
 #: ISLA templates that keep the per-block compile by default (whole-model
 #: recompiles open on AeroZoo; see the template).

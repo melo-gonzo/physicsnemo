@@ -44,7 +44,10 @@ compile: true
 compile_options:
   fullgraph: true
   dynamic: true
-  mode: max-autotune-no-cudagraphs
+  options:                       # mode max-autotune-no-cudagraphs's options, with mix-order reduction off
+    max_autotune: true           # (torch 2.12-2.13 miscompile it; see isla_volume_airfrans.yaml)
+    coordinate_descent_tuning: true
+    triton.mix_order_reduction: false
 
 forward_kwargs:
   boundary_meshes:                # Mesh[2, 3] each: the lug's surface triangles, split by condition, as stored (no dataset

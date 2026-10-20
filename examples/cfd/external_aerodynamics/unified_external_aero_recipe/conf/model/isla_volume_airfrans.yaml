@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# ISLA, interior task, on AirfRANS (airfrans_volume_2d): the reference configuration of isla_volume.yaml in two
+# ISLA, interior task, on AirfRANS (airfrans_uvolume_2d, the uniform protocol): the reference configuration of isla_volume.yaml in two
 # dimensions, with the airfoil boundary and the farfield velocity U_inf as the global input.
 #
 # ISLA brings its own scales (the model's docstring, *Scales*): the length L is the airfoil's RMS pairwise
@@ -54,11 +54,21 @@ training:
     lr: 3.75e-4
 
 # Whole-model torch.compile: one graph, compiled once for every token count; see isla_volume.yaml.
+# The options are those of mode max-autotune-no-cudagraphs (max_autotune and coordinate_descent_tuning)
+# with Inductor's mix-order reduction off: on this graph it fuses a per-point sum with a sum over the
+# points into one kernel, and torch 2.12 returns the second sum, a (1, n_slices, 1) softmax denominator
+# saved for backward, as (1, n_slices), so the compiled backward fails its first step ("wrong number
+# of dimensions"). torch 2.13 returns it at its shape, but its mix-order column sums still add the padded
+# rows after a prologue such as exp, a silent error (pytorch/pytorch#195845, fixed on main on 2026-09-29):
+# the mode line can come back with a torch that has both fixes.
 compile: true
 compile_options:
   fullgraph: true
   dynamic: true
-  mode: max-autotune-no-cudagraphs
+  options:
+    max_autotune: true
+    coordinate_descent_tuning: true
+    triton.mix_order_reduction: false
 
 forward_kwargs:
   boundary_meshes:
@@ -80,7 +90,7 @@ model:
   # z = (log10(U L / nu) - mean) / std over the train cases: the dataset file's isla_constants.reynolds (train.py).
   reynolds: null
   output_stats: null             # injected by train.py: the dataset's NormalizeMeshFields stats (nut)
-  dim: 2                         # the problem is planar: pair with datasets/airfrans_volume_2d.yaml (RestrictToPlane first in its pipeline)
+  dim: 2                         # the problem is planar: pair with datasets/airfrans_uvolume_2d.yaml (RestrictToPlane first after the uniform draw)
   interior: true                 # predict at prediction_points, which join the encoder as tokens
   boundary_tokens: 200000        # boundary tokens drawn per case inside the model (equal to the class default; the airfoil is kept whole)
   hidden: 512                  # the reference configuration (REF-80 verdict, 2026-10-04): most accurate under 80 GiB per GPU on DrivAerML Surface and the 210-wing rung; equal to the class defaults

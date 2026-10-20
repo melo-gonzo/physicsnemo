@@ -420,8 +420,9 @@ def _refuse_earlier_state_dict(module, state_dict, prefix, local_metadata, *args
             "current layout but were trained on an earlier forward (before 0.8.0, the "
             "prediction points' geometry encoding sign(s) log(|s| + 1e-12) and the direction "
             "from the surface, in place of asinh(s / 1e-6) and sign(d) times it; before "
-            "0.9.0, the interior task's length unit measured on the drawn tokens, in place "
-            "of the full-resolution boundary), and ISLA keeps no upgrade path; "
+            "0.9.0, the length unit without each boundary cell's own second moment, and for "
+            "the interior task measured on the drawn tokens in place of the full-resolution "
+            "boundary), and ISLA keeps no upgrade path; "
             "load it with the code that wrote it, or retrain"
         )
 
