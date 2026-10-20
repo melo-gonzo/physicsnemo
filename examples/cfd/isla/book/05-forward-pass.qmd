@@ -111,7 +111,7 @@ every tensor; the table omits it.
 | $v_i$, $A_i$ | $N{\times}3$, $N{\times}3{\times}3$ per field | `boundary_schemas[name]` (rank 1, rank 2) | per-cell tensor inputs of one condition (an inlet's prescribed velocity, a loaded face's traction); none on the DrivAerML and AirfRANS tasks |
 | $V_i$, $T_i$ | $N{\times}n_v{\times}3$, $N{\times}n_t{\times}3{\times}3$ | `vecs`, `tens` | the shared vector and tensor channels, onto which each condition's own maps (`vector_map`, `tensor_map`) take its vectors and tensors |
 | $\hat g_k$, $\hat n_i$ | $K{\times}3$, $N{\times}3$ | `g_unit`, `n_hat` | the same directions and normals at unit length |
-| $L$ | scalar | `gauge` | the length unit: the measure-weighted RMS pairwise distance of the boundary tokens |
+| $L$ | scalar | `gauge` | the length unit: the measure-weighted RMS pairwise distance of the full-resolution boundary |
 | $r_i$ | $N{\times}3$ | `r` | position in length units, $x_i / L$; enters only inside differences |
 | $\ell_i$ | $N$ | `log_w` | $\log w_i$, the measure bias of every softmax over tokens |
 | $\eta_i$ | $N{\times}(1 + K + n_\beta + S)$ | `seed` (`_condition_tokens`) | the seed: the scalars a token has before any layer runs, a constant 1 first ($n_\beta$ counts the invariants of condition $\beta$'s fields) |
@@ -268,7 +268,15 @@ r_i \equiv x_i / L,
 $$
 
 The code evaluates the second form (`rms_pairwise_distance`, $O(N)$
-through the variance identity). The weighted mean $\bar x$ is an
+through the variance identity) over every cell of the full-resolution
+boundary, each cell with its centroid $x_i$, its measure and its own second
+moment about its centroid,
+$J_i \equiv \frac{1}{(n+1)(n+2)} \sum_k \lvert v_k - x_i \rvert^2$ for an
+$n$-simplex with vertices $v_k$ (a segment's $\ell^2 / 12$,
+`cell_second_moments`), added to $\lvert x_i - \bar x \rvert^2$ in the
+second form. With $J_i$ the sum is the exact RMS distance between two points
+of the piecewise-flat surface, so a subdivision of the cells leaves $L$
+unchanged to roundoff. The weighted mean $\bar x$ is an
 intermediate of this scalar only and is never used as a center. $L$ is
 unchanged by a rigid motion, scales with the geometry, is unchanged by a
 uniform rescale of the weights (they are normalized first), and converges
@@ -278,19 +286,20 @@ they enter only as the differences $r_i - z_s$ of stage 3 and $r_i - z^f$ of
 stage 4. The log measure $\ell_i$ is the bias that makes every softmax over
 tokens a quadrature rule (@sec-isla-quadrature). A boundary mesh without a
 stored `_effective_measure` contributes its cells' geometric measures, so
-$\ell_i$ is always defined. $L$ is computed from the tokens: on a surface
-task from every given cell, on the interior task from the drawn tokens with
-their Horvitz–Thompson measures, a quadrature estimate of the same statistic
-of the full surface that moves with the draw by that quadrature's error.
+$\ell_i$ is always defined. $L$ is computed in `forward` from the given
+meshes before the interior task draws its tokens (`ISLA._gauge`), so on both
+tasks it is the same for every draw of the boundary tokens.
 
 ::: {.callout-note collapse="true" title="Stage 1 in the code"}
-Each condition's cells become rows of one token set in `forward`; the length unit is one function, and the frame is a few lines of `_forward_tokens` (the token state then stores `r = points / gauge`): no center survives either.
+Each condition's cells become rows of one token set in `forward`; the length unit is one function of the full-resolution cells, and the frame is a few lines of `_forward_tokens` (the token state then stores `r = points / gauge`): no center survives either.
 
 ```{python}
 #| label: code-stage-1
 #| output: asis
 listing("model.py", "ISLA.forward", start="### The given conditions in canonical order.", end="query = None")
+listing("model.py", "ISLA._gauge")
 listing("geometry.py", "rms_pairwise_distance")
+listing("geometry.py", "cell_second_moments")
 listing("model.py", "ISLA._forward_tokens", start="### Frame:", end="### Boundary inputs")
 ```
 :::
@@ -396,9 +405,10 @@ $$
 $$
 
 and the sum is exact on a condition kept whole. Every measure-weighted
-sum of the forward pass (the slice states, the anchors, the length unit,
-the prediction points' routing mass) is therefore a quadrature of the full
-surface. The kept cells are spaced evenly in cumulative probability along
+sum over the tokens (the slice states, the anchors, the prediction points'
+routing mass) is therefore a quadrature of the full surface; the length unit
+and the declared scales are computed from the full surface itself, before
+the draw. The kept cells are spaced evenly in cumulative probability along
 the space-filling curve, so the sample is spread over the surface rather
 than clumped. In training $u$ is drawn uniform on $[0, 1)$ from the global
 torch random-number generator at every step (`torch.manual_seed` reproduces

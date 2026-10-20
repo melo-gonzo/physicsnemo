@@ -49,8 +49,9 @@ FORM_TAG = "nearest-token form"
 #: The one sentence that says what that form is, for a chapter or a caption that needs it whole.
 FORM_NOTE = (f"The ISLA checkpoints of the standing are of the {FORM_TAG}: the normalized slice reads (HiLiftAeroML: the raw "
              "reads), one boundary schema shared by every condition, boundary tokens drawn by the datapipe, each prediction point's wall "
-             "distance and direction from the nearest sampled boundary token, and on AirfRANS, Tensile2d and the lug the stored signed "
-             "distance read as a prediction-point input (@sec-checkpoint-form).")
+             "distance and direction from the nearest sampled boundary token, on AirfRANS, Tensile2d and the lug the stored signed "
+             "distance read as a prediction-point input, a length unit from the given cells' centroids alone, and no declared scales "
+             "(@sec-checkpoint-form).")
 
 #: The protocol names as the book writes them.
 PROTOCOL = {"native": "native mesh", "area": "uniform point cloud", "posed": "rotated and translated"}
