@@ -38673,8 +38673,10 @@ name) follows its adoption check.
 (`highlift_surface_medium`, 180 validation cases, ISLA's 200,000-cell set,
 float32, epoch-500 checkpoints, two seeds):
 
-- the A2-RERUN rules for A2 ISLA, R-A2 (A2 ÷ old reference at most 1.05 on
-  every headline field) and R-POSE (posed ÷ native within 0.002 of one)
+- the A2-RERUN rule R-A2 for A2 ISLA (A2 ÷ old reference at most 1.05 on
+  every headline field). Its R-POSE bar does not apply to HiLift, whose
+  posed score it records without a bar, because the old reference already
+  read 1.010 and 1.006 posed ÷ native on pressure
   (scratch/isla-a2-rerun-2026-10-17/PREREG.md);
 - UDRV-HL P1 to P3 for the baselines that read the unit freestream
   direction instead of the physical freestream velocity
@@ -38699,24 +38701,48 @@ the difference moved GeoTransolver by 0.6 percent.
 
 - R-A2 fails on pressure: A2 ÷ old reference is 1.062, and both A2 seeds
   lie above both old seeds. It holds on wall shear (1.010).
-- R-POSE fails: posed ÷ native is 1.003 to 1.009 on every field and seed,
-  against the 0.002 bar. On DrivAerML and SHIFT-SUV it was at most 5.4e-4.
-  The cause was not found.
+- Posed, recorded: A2 ISLA's posed ÷ native is 1.005 to 1.009 on the
+  headline fields. It is a small constant shift on every case, about
+  +2e-4 to +6e-4, unrelated to angle of attack, and the old reference
+  shows it too, so it predates A2. Its cause is untested. On DrivAerML and
+  SHIFT-SUV the same ratio is at most 5.4e-4 from one.
 - P1 holds for both baselines. The unit direction lowers native pressure to
   0.744 of the physical-velocity lane for GeoTransolver (lower on 163 of 180
   cases) and to 0.908 for Transolver (156 of 180).
 - P2: Transolver is "baseline ahead", lower than A2 ISLA on 153 of 180
   cases. GeoTransolver falls between the bands: its ratio is 0.904, but it
-  is lower on only 99 of 180 cases, with a per-case median of 0.993. 95
-  percent of its lead comes from ISLA's 18 worst cases, all at angles of
-  attack of 16 to 22 degrees.
+  is lower on only 99 of 180 cases, with a per-case median of 0.993. About
+  95 percent of its lead comes from ISLA's 18 worst cases, at angles of
+  attack of 14 to 22 degrees.
 - P3 holds for the baselines: area ÷ native 2.7 to 4.3, posed ÷ native 12
-  to 24.
+  to 24. Its ISLA part, posed ÷ native within 0.002 of one, fails as
+  recorded above.
+
+**Where ISLA trails** (scratch/isla-hilift090-2026-10-20/RESULTS.md).
+
+- Against GeoTransolver, about 10 post-stall cases at angles of attack of
+  14 to 22 degrees carry essentially all of ISLA's 10.7 percent pressure
+  deficit. Without them ISLA ÷ GeoTransolver is 0.999 on pressure.
+- On those cases each model is either about right or badly wrong, with
+  errors near 0.2 to 0.29 and lift 4 to 8 percent low: it predicts stall
+  where the CFD flow stays attached. Two cases, LHC002_18 and LHC132_22,
+  are wrong for every ISLA run and right for GeoTransolver; on the rest the
+  outcome changes with the seed, for every model.
+- On the surface, ISLA's excess error sits in the leading-edge suction
+  peaks of the main element (82 percent) and the slat (16 percent), mostly
+  where Cp is below −4, which is 0.2 to 0.4 percent of the area.
+- Against Transolver the deficit is broad: ISLA is worse on 85 percent of
+  cases, by 12 to 20 percent even at angles of attack of 4 to 12 degrees.
+- A2's 6 percent regression from the old reference is three cases at 16
+  degrees, which the old reference gets right on both seeds and A2 gets
+  wrong on both. Everywhere else A2 is 1 to 6 percent better.
+- Training coverage does not explain any of this: the split is random by
+  case, and 192 training cases lie at 16 to 22 degrees.
 
 **Beside the rules.**
 
 - Under the area and posed protocols ISLA leads by a wide margin: baseline
-  ÷ ISLA is 2.6 to 3.9 on area and 11 to 22 posed, on every field.
+  ÷ ISLA is 2.7 to 3.9 on area and 15 to 22 posed on the headline fields.
 - The unit-direction rows replace the physical-velocity rows as HiLift's
   baseline standing, as DRIVE-FAIRNESS planned.
 - Against the old reference ISLA, the unit-drive baselines read 0.96
@@ -38725,10 +38751,10 @@ the difference moved GeoTransolver by 0.6 percent.
   lanes trained on LHR, and A2 ISLA on JHB and then LHR. The
   pre-registration accepted this (scratch/isla-udrv-hl-2026-10-18/RESULTS.md).
 
-**Next.** HiLift has no 0.9.0 row yet. Under single-input exact geometry the
-model reads the full-resolution surfaces, and HiLift's are large enough
-to need a decimated geometry asset first. A design lane scopes that asset,
-together with ISLA's error at high angle of attack.
+**Next.** HiLift needs no decimated geometry asset for 0.9.0. HiLift is a
+surface task, and the full-resolution boundary path runs only for interior
+prediction points. Measured on a GB300, 0.9.0 takes 64.5 GiB and 0.34 s
+per step, the same as A2. Its two lanes are the next HiLift row.
 
 ## 2026-10-20 — Unit-direction reruns of the constant-drive baselines: GeoTransolver moves by at most 1 percent, and Transolver gains up to 10 percent on DrivAerML Volume {#sec-nb-drive-fix2-scored}
 
