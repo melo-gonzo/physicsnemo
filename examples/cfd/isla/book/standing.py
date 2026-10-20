@@ -366,3 +366,36 @@ def cost(key: str, arch: str):
     """{peak_gib, epoch_seconds, n_parameters, source} of one reference configuration on one task, or None."""
     c = json.load(open(CHAR / COST_FILE))["cost"].get(_COST_KEY.get(key, ""), {})
     return c.get(arch)
+
+
+# --- The recipe's ISLA configurations -----------------------------------------------------------------
+RECIPE = Path(__file__).resolve().parents[2] / "external_aerodynamics" / "unified_external_aero_recipe"
+#: The dataset file each ISLA configuration that leaves constants to its dataset trains on (@tbl-data-files).
+ISLA_DATASET = {"isla_volume_aerozoo": "aerozoo_uvolume", "isla_volume_airfrans": "airfrans_uvolume_2d"}
+
+
+def isla_constants(name: str) -> dict:
+    """The ``isla_constants`` block of an ISLA configuration's dataset file (``{}`` for one that leaves none to it)."""
+    import yaml
+
+    if name not in ISLA_DATASET:
+        return {}
+    return yaml.safe_load((RECIPE / "datasets" / f"{ISLA_DATASET[name]}.yaml").read_text())["isla_constants"]
+
+
+def recipe_model(name: str) -> dict:
+    """The ``model`` block of the recipe's ``conf/model/<name>.yaml`` with the constants it leaves to its dataset
+    (``reynolds: null``, ``scale: null``) filled from the dataset file's ``isla_constants``, as train.py and infer.py
+    fill them (``output_normalize.model_dataset_constants``); the class refuses the block without them."""
+    import sys
+
+    import yaml
+    from omegaconf import OmegaConf
+
+    if str(RECIPE / "src") not in sys.path:
+        sys.path.insert(0, str(RECIPE / "src"))
+    from output_normalize import model_dataset_constants
+
+    block = yaml.safe_load((RECIPE / "conf" / "model" / f"{name}.yaml").read_text()).get("model", {})
+    dataset = OmegaConf.create({"isla_constants": isla_constants(name)})
+    return {**block, **model_dataset_constants(OmegaConf.create(block), dataset)}

@@ -209,14 +209,15 @@ with zero cells contributes: no tokens.
 #| label: tbl-arch-conditions
 #| output: asis
 import yaml
+import standing as S
 CONF = Path(physicsnemo.__file__).parent.parent / "examples" / "cfd" / "external_aerodynamics" / "unified_external_aero_recipe" / "conf" / "model"
 rows_c = []
 for p in sorted(CONF.glob("isla_*.yaml")):
-    mb = yaml.safe_load(p.read_text()).get("model", {})
+    mb = S.recipe_model(p.stem)   # with the constants it leaves to its dataset file, as train.py fills them
     if not mb.get("boundary_schemas"):
         continue
     m_c = ISLA(output_schema={"y": {"rank": 0}}, boundary_schemas=mb["boundary_schemas"], global_schema=mb.get("global_schema"),
-               interior=bool(mb.get("interior")), hidden=8, n_layers=1, n_slices=2, dim=int(mb.get("dim", 3)))
+               reynolds=mb.get("reynolds"), interior=bool(mb.get("interior")), hidden=8, n_layers=1, n_slices=2, dim=int(mb.get("dim", 3)))
     for name, c in m_c.boundary_conditions.items():
         fields = ", ".join(f"`{f}` ({s.rank})" for f, s in m_c.boundary_schemas[name].items()) or "none"
         nv = 0 if c.vector_map is None else c.vector_map.shape[1]
@@ -468,9 +469,9 @@ configuration's four conditions.
 #|   conditions in the draw's order, and their numbers follow the water filling, not six each.
 #| fig-height: 3.0
 #| code-fold: true
-mb_az = yaml.safe_load((CONF / "isla_volume_aerozoo.yaml").read_text())["model"]
+mb_az = S.recipe_model("isla_volume_aerozoo")
 M_AZ = ISLA(output_schema={"y": {"rank": 0}}, boundary_schemas=mb_az["boundary_schemas"], global_schema=mb_az["global_schema"],
-            interior=True, hidden=8, n_layers=1, n_slices=2)
+            reynolds=mb_az["reynolds"], interior=True, hidden=8, n_layers=1, n_slices=2)
 cols_az, names_az, per = M_AZ._seed_columns, M_AZ.boundary_names, 6
 fig, ax = plt.subplots(figsize=(8.0, 3.0))
 for b_, name in enumerate(names_az):
@@ -2095,7 +2096,8 @@ task; on the volume task its step grows faster. @fig-cost-sweep measures both fo
 draw and one prediction-point geometry, and a short list of keyword-only
 arguments: the three field declarations, the task, the role of the
 prediction points, the boundary-token budget, the three sizes, one compile
-knob and the spatial dimension.** @tbl-arch-switches
+knob, the spatial dimension, and the two dataset constants of the declared
+scales.** @tbl-arch-switches
 reads each default from the constructor's signature; the behavior that is
 not an argument is described in the stages above.
 
@@ -2103,9 +2105,11 @@ not an argument is described in the stages above.
 #| label: tbl-arch-switches
 #| output: asis
 WHAT = {
-    "output_schema": ("5", "the output fields by name and rank spec (`{pressure: {rank: 0}, wss: {rank: 1}, stress: {rank: 2, symmetric: true}}`; `parity: odd` for a pseudotensor); each costs the coefficients of @tbl-arch-coeffs and is returned as a leaf of the output Mesh's `point_data` under its name. A dotted name (`surface.pressure`) is a nested leaf, in the output and in every input mapping"),
-    "boundary_schemas": ("1, 2, 3d", "the boundary conditions by name, each with the per-cell fields of rank 0 to 2 it alone carries (`{}` for a condition without fields), stored sorted; `forward` takes any non-empty subset of the names, each condition's fields read from its own mesh's `cell_data`. Each condition has its own input layer (its column on the constant its learned offset) and its own vector and tensor maps onto the shared channels, whose contractions with $\\hat\\rho_{is}$ join the relational invariants (@sec-arch-frame, @sec-arch-seed)"),
-    "global_schema": ("1, 2, 3d, 5", "per-case fields of rank 0 or 1, read from `global_data` by name: each rank-1 field is a global direction $\\hat g_k$ (one seed cosine, one relational cosine, two basis vectors); each rank-0 field widens the seed"),
+    "output_schema": ("5", "the output fields by name and rank spec (`{pressure: {rank: 0}, wss: {rank: 1}, stress: {rank: 2, symmetric: true}}`; `parity: odd` for a pseudotensor); each costs the coefficients of @tbl-arch-coeffs and is returned as a leaf of the output Mesh's `point_data` under its name. A dotted name (`surface.pressure`) is a nested leaf, in the output and in every input mapping. An output may declare `units` and a constant `scale` (@sec-using-scales)"),
+    "boundary_schemas": ("1, 2, 3d", "the boundary conditions by name, each with the per-cell fields of rank 0 to 2 it alone carries (`{}` for a condition without fields, a field optionally with `units`, `scale` and `velocity_scale`, @sec-using-scales), stored sorted; `forward` takes any non-empty subset of the names, each condition's fields read from its own mesh's `cell_data`. Each condition has its own input layer (its column on the constant its learned offset) and its own vector and tensor maps onto the shared channels, whose contractions with $\\hat\\rho_{is}$ join the relational invariants (@sec-arch-frame, @sec-arch-seed)"),
+    "global_schema": ("1, 2, 3d, 5", "per-case fields of rank 0 or 1, read from `global_data` by name: each rank-1 field is a global direction $\\hat g_k$ (one seed cosine, one relational cosine, two basis vectors); each rank-0 field widens the seed; a field may declare `units`, `scale`, `velocity_scale` or the `role` `density` or `viscosity` (@sec-using-scales)"),
+    "reynolds": ("1, 2", "`{mean, std}`, the standardization of $\\log_{10}(U L / \\nu)$ over a split's training cases, appended to the global scalars as one column; required with a global of the role `viscosity` and refused without one; a dataset constant, which the recipe fills from the dataset file (@sec-using-scales)"),
+    "output_stats": ("5", "`{name: {mean, std}}`, the dataset's constant standardization of each output after its units are restored, so the model returns the standardized targets the loss compares; a vector's mean is zero (@sec-using-scales)"),
     "interior": ("modes", "the task: `False` predicts at every boundary cell it is given and takes no prediction points; `True` draws its boundary tokens inside the model and predicts at the prediction points, which join the slice layers as tokens with their exact geometry against the full-resolution surface (@sec-arch-modes); implemented in two and three dimensions"),
     "query_independent": ("modes, after each layer", "interior task only: `True` is ISLA-DTT, with read-only prediction points (no routing mass) that read the boundary cells through the forest at $\\theta = 1$ after every slice layer (@sec-arch-passive-decoder); rank-2 boundary fields are refused with it"),
     "boundary_tokens": ("1, modes", "interior task only: the number of boundary tokens per case, drawn inside the model from the full-resolution boundary (the budget water-filled over the conditions, each cell drawn with probability proportional to its measure by a systematic draw along the Morton order, each kept cell carrying its Horvitz–Thompson measure; a random start in training, $u = 1/2$ in evaluation; @sec-arch-boundary-draw); a surface task reads every cell and accepts only the default"),
