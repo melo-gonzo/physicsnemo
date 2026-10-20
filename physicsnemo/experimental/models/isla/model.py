@@ -1302,6 +1302,18 @@ class ISLA(Module):
             g_scalars = z if g_scalars is None else torch.cat([g_scalars, z], -1)
         return g_unit, g_scalars
 
+    @staticmethod
+    def _gauge(meshes, measures) -> torch.Tensor:
+        """The length unit ``(1, 1, 1)`` of the given boundary meshes: the RMS pairwise
+        distance of their piecewise-flat cells, each cell with its centroid, measure and
+        own second moment (:func:`rms_pairwise_distance`)."""
+        return rms_pairwise_distance(
+            torch.cat([m.cell_centroids for m in meshes])[None],
+            torch.cat(measures)[None],
+            EPS,
+            torch.cat([cell_second_moments(m) for m in meshes])[None],
+        )
+
     def _case_scales(self, names, meshes, measures, global_rows: TensorDict, gauge) -> dict:
         """The case's scales in float64 from its full-resolution boundary and its
         globals, before the token draw: ``L`` (the gauge), ``U`` (the
@@ -1585,12 +1597,7 @@ class ISLA(Module):
         ### parallel-axis term), so it is exact for the piecewise-flat surface: the same
         ### for every draw of the tokens and every subdivision of the cells. With
         ### declared scales, the case's other scales (_case_scales).
-        gauge = rms_pairwise_distance(
-            torch.cat([m.cell_centroids for m in meshes])[None],
-            torch.cat(measures)[None],
-            EPS,
-            torch.cat([cell_second_moments(m) for m in meshes])[None],
-        )
+        gauge = self._gauge(meshes, measures)
         scales = self._case_scales(names, meshes, measures, global_rows, gauge) if self._scaled else None
         g_unit, g_scalars = self._global_fields(global_rows, like, scales)
         ### The boundary cells, each condition's with its own inputs, concatenated in
