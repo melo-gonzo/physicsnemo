@@ -37,6 +37,9 @@ Recipe-local datapipe components that the library does not provide.
   :class:`BoundaryFieldToGlobal` and :class:`ConcatGlobalFields`; and
   :class:`SplitBoundaryByLabels`, one boundary per condition for a dataset that
   labels its conditions inside one mesh.
+- Physical-input AeroZoo: :class:`StandardizeGlobalLeaf`, a global PDE
+  parameter standardized by per-dataset constants, and :class:`MergeBoundaries`,
+  the boundaries' faces as one token set for a tensor-input model.
 
 Recipe-local module registered into the global datapipe component registry
 so the classes can be referenced via ``${dp:...}`` short names in Hydra
@@ -63,6 +66,7 @@ from physicsnemo.datapipes.transforms.mesh import (
 )
 from physicsnemo.datapipes.transforms.mesh.base import MeshTransform
 from physicsnemo.datapipes.transforms.mesh.transforms import (
+    NormalizeMeshFields,
     _compact_points,
 )
 from physicsnemo.mesh import DomainMesh, Mesh
@@ -1904,4 +1908,161 @@ class SplitBoundaryByLabels(MeshTransform):
         return (
             f"boundary={self.boundary!r}, labels={self.labels}, rest={self.rest!r}, "
             f"reorder_interior={self.reorder_interior}"
+        )
+
+
+@register()
+class StandardizeGlobalLeaf(MeshTransform):
+    r"""Standardize one global PDE parameter by per-dataset constants (AeroZoo, 2026-10-19).
+
+    ``global_data[output_field] = (f(global_data[field]) - mean) / std`` with ``f = log10`` when ``log10`` is
+    set and the identity otherwise. ``mean`` and ``std`` are constants of the dataset (fitted on its training
+    side), so this is one fixed elementwise map, the same for every case: no per-case scale is derived. The
+    baselines' only global input on AeroZoo is the kinematic viscosity this way (it spans five decades, so
+    the map is linear in its logarithm). The source leaf stays; writing over an existing leaf is refused.
+    Domain-aware: on a ``DomainMesh`` it reads and writes the domain-level ``global_data``.
+    """
+
+    def __init__(
+        self,
+        field: str,
+        output_field: str,
+        mean: float,
+        std: float,
+        log10: bool = False,
+    ) -> None:
+        super().__init__()
+        self.field = str(field)
+        self.output_field = str(output_field)
+        self.mean = float(mean)
+        self.std = float(std)
+        self.log10 = bool(log10)
+        if self.std <= 0:
+            raise ValueError(
+                f"StandardizeGlobalLeaf: std must be positive, got {std!r}"
+            )
+
+    def _write(self, global_data: TensorDict) -> TensorDict:
+        who = "StandardizeGlobalLeaf"
+        _refuse_existing_globals(global_data, [self.output_field], who)
+        value = _global_leaf(global_data, self.field, who).float()
+        if self.log10:
+            if not (torch.isfinite(value).all() and (value > 0).all()):
+                raise ValueError(
+                    f"{who}: log10 needs finite positive {self.field!r}, got {value!r}"
+                )
+            value = torch.log10(value)
+        new_gd = global_data.clone()
+        new_gd[self.output_field] = (value - self.mean) / self.std
+        return new_gd
+
+    def __call__(self, mesh: Mesh) -> Mesh:
+        return mesh.with_data(global_data=self._write(mesh.global_data))
+
+    def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
+        """Standardize in the domain-level ``global_data``."""
+        return DomainMesh(
+            interior=domain.interior,
+            boundaries=domain.boundaries,
+            global_data=self._write(domain.global_data),
+        )
+
+    def extra_repr(self) -> str:
+        f = f"log10({self.field})" if self.log10 else self.field
+        return f"{self.output_field} = ({f} - {self.mean}) / {self.std}"
+
+
+@register()
+class MergeBoundaries(MeshTransform):
+    r"""Concatenate named boundaries, with selected ``cell_data`` fields, into one more boundary (AeroZoo, 2026-10-19).
+
+    ``boundaries[output]`` is the cells of ``boundaries`` in the listed order (points and cells concatenated,
+    :meth:`Mesh.merge`) carrying only the ``fields`` of their ``cell_data``, which every listed boundary must
+    have at the same trailing shape (:class:`HarmonizeBoundaryFields` gives them a common set). It is the one
+    point set a tensor-input model reads as its geometry tokens, e.g. GeoTransolver's ``geometry`` =
+    ``[boundaries.merged.cell_centroids, boundaries.merged.cell_data.bc_*]``: every face with its condition
+    type and prescribed values. ``standardize`` optionally applies :class:`NormalizeMeshFields` (``cell_data``,
+    per-dataset constants) to the merged boundary only, so the source boundaries keep their physical values.
+    The sources are unchanged; an existing ``output`` boundary is refused. Bare ``Mesh`` inputs pass through.
+    A model that reads the boundaries by name (ISLA) drops this step.
+
+    Args:
+        boundaries: the boundaries to merge, in order.
+        fields: the ``cell_data`` fields to carry (a ``"."`` addresses a nested leaf).
+        output: the name of the new boundary. Not ``all`` or another ``TensorDict`` attribute, which a
+            ``forward_kwargs`` path would resolve to the attribute.
+        standardize: ``NormalizeMeshFields`` ``fields`` for the merged ``cell_data`` (default none).
+    """
+
+    def __init__(
+        self,
+        boundaries: Sequence[str],
+        fields: Sequence[str],
+        output: str = "merged",
+        standardize: dict[str, dict] | None = None,
+    ) -> None:
+        super().__init__()
+        self.boundaries = [str(b) for b in boundaries]
+        self.fields = [str(f) for f in fields]
+        self.output = str(output)
+        if not self.boundaries or not self.fields:
+            raise ValueError("MergeBoundaries: boundaries and fields must not be empty")
+        if hasattr(TensorDict, self.output):
+            raise ValueError(
+                f"MergeBoundaries: output {self.output!r} is a TensorDict attribute; a "
+                f"forward_kwargs path would not reach the boundary"
+            )
+        self.normalize = (
+            NormalizeMeshFields(association="cell_data", fields=dict(standardize))
+            if standardize
+            else None
+        )
+
+    def to(self, device: torch.device | str) -> "MergeBoundaries":
+        """Move the transform and its nested standardization (which the base ``to`` does not reach) to *device*."""
+        super().to(device)
+        if self.normalize is not None:
+            self.normalize.to(device)
+        return self
+
+    def __call__(self, mesh: Mesh) -> Mesh:
+        return mesh
+
+    def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
+        """Write the merged boundary next to its sources."""
+        missing = [b for b in self.boundaries if b not in domain.boundary_names]
+        if missing:
+            raise KeyError(
+                f"MergeBoundaries: boundaries {missing!r} not found; available: "
+                f"{domain.boundary_names!r}"
+            )
+        if self.output in domain.boundary_names:
+            raise ValueError(
+                f"MergeBoundaries: boundary {self.output!r} already exists"
+            )
+        parts = []
+        for name in self.boundaries:
+            b = domain.boundaries[name]
+            cd = {}
+            for field in self.fields:
+                key = as_nested_key(field)
+                if key not in b.cell_data:
+                    raise KeyError(
+                        f"MergeBoundaries: boundaries[{name!r}].cell_data lacks {field!r}"
+                    )
+                cd[key] = b.cell_data[key]
+            parts.append(Mesh(points=b.points, cells=b.cells, cell_data=cd))
+        merged = Mesh.merge(parts)
+        if self.normalize is not None:
+            merged = self.normalize(merged)
+        return DomainMesh(
+            interior=domain.interior,
+            boundaries={**domain.boundaries, self.output: merged},
+            global_data=domain.global_data,
+        )
+
+    def extra_repr(self) -> str:
+        return (
+            f"{self.output} = merge({self.boundaries}), fields={self.fields}, "
+            f"standardize={self.normalize is not None}"
         )

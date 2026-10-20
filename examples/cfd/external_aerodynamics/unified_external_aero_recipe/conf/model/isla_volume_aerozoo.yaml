@@ -15,7 +15,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# ISLA, interior task, on AeroZoo v1.2 (datasets/aerozoo_volume.yaml): the reference configuration of
+# TODO (step 2, ISLA's own scales, next on psharpe/isla-bc-names): this config does not run on the AeroZoo
+# files. Since 2026-10-19 they give the PDE data only, in SI units (datasets/aerozoo_uvolume.yaml), and no
+# longer write the label-derived globals declared below (U_inf_dir, log_re_std, inlet_*_std) or
+# nondimensionalize the boundary values, so ISLA refuses the case at its first forward (the declared global
+# leaves are missing; test_aerozoo_configs.py pins this). Step 2 declares the physical fields with their units,
+# nu and rho as globals, ISLA's internal length / velocity scales and Reynolds number, and the same loss and
+# field weights as the baselines (geotransolver_volume_aerozoo.yaml).
+#
+# ISLA, interior task, on AeroZoo v1.2 (datasets/aerozoo_uvolume.yaml): the reference configuration of
 # isla_volume.yaml with the case's four boundaries (inlet, outlet, no_slip, slip) as four named boundary
 # conditions (boundary_schemas). Each condition declares only the values it prescribes, read from its own
 # mesh's cell_data (the dataset's prescribed.* fields under their recipe names, nondimensionalized): the
@@ -34,16 +42,14 @@
 # `boundary_tokens` (200,000, the class default) per case, water-filled over the four roles (50,000 each when
 # all four have more faces; a role with fewer is kept whole and its unused share goes to the others), each
 # face drawn with probability proportional to its area and carrying its Horvitz-Thompson measure. So the
-# datapipe's boundary subsampling is switched off for this model only (GeoTransolver keeps it):
-# `dataset_reader_overrides` lifts the reader's per-boundary cap of the aerozoo_volume* files, and
-# `dataset_drop_transforms` removes the aerozoo_uvolume* files' SubsampleMesh and the SDF passes only
-# GeoTransolver reads.
-dataset_reader_overrides:
-  subsample_n_cells: null             # aerozoo_volume*: every boundary read whole
+# datapipe's boundary subsampling is switched off for this model only (the baselines keep it): the files'
+# reader reads every boundary whole, and `dataset_drop_transforms` removes their SubsampleMesh and the steps
+# only the baselines read.
 dataset_drop_transforms:
-  - SubsampleMesh                     # aerozoo_uvolume*: the per-boundary 50,000-face cap
-  - ComputeSDFFromBoundary            # sdf_wall / sdf_slip: GeoTransolver's inputs, not ISLA's
+  - SubsampleMesh                     # the per-boundary 50,000-face cap
+  - ComputeSDFFromBoundary            # sdf_wall / sdf_wall_normals: the baselines' inputs, not ISLA's
   - HarmonizeBoundaryFields           # the one-hot role labels and zero-filled fields: ISLA reads each condition's own
+  - MergeBoundaries                   # GeoTransolver's face tokens, made from the harmonized fields
 input_type: mesh
 output_type: mesh
 

@@ -16,52 +16,83 @@
 # limitations under the License.
 
 # ---------------------------------------------------------------------------
-# GeoTransolver template -- VOLUME recipe for AeroZoo v1.2.
+# GeoTransolver template -- VOLUME recipe for AeroZoo v1.2, physical inputs.
 # ---------------------------------------------------------------------------
-# geotransolver_volume.yaml (the reference GeoTransolver volume configuration:
-# width 256, 12 layers, 256 slices, the DrivAerML radii) on
-# datasets/aerozoo_volume.yaml. The local embedding is the point's coordinates
-# plus the dataset's two signed distances: to the no_slip body with its
-# gradient (sdf_wall, sdf_wall_normals) and to the slip walls (sdf_slip; the
-# bounding-box diagonal on a case without them). The global embedding is the
-# dataset's `global_vector` = [U_inf_dir (3), log_re_std (1), the inlet's four
-# standardized turbulence quantities], the same global information ISLA
-# declares leaf by leaf in isla_volume_aerozoo.yaml.
+# On datasets/aerozoo_uvolume*.yaml (the PDE data only, in SI units, no
+# per-case scale; 2026-10-19) GeoTransolver sees the
+# boundary conditions through its documented geometry-features channel:
+# `geometry` is every boundary face of the case's four boundaries
+# (boundaries.merged, MergeBoundaries), each one token carrying its centroid
+# (m, raw), its condition type (one-hot inlet / outlet / no_slip / slip) and
+# its prescribed values (velocity, pressure, k, omega, intermittency,
+# Re_theta_t and the outlet's reverse-flow values, standardized by
+# per-dataset constants). The tokenizer takes any geometry_dim; the ball
+# query does not (it accepts xyz only), so the ball-query local features are
+# off. That departs from the released GeoTransolver configurations, which all
+# set include_local_features: true (transformer_models, crash, drop_test);
+# false is the constructor default and is unit-tested
+# (test/models/geotransolver), so it is supported. The local embedding is the
+# query point (m, raw) with its signed distance and normal to the no_slip body
+# (m); the global embedding is log10 nu standardized by per-dataset constants
+# (nu_std), the only global PDE parameter. Width, depth, slices and the rate
+# are the reference configuration's (geotransolver_volume.yaml; the CHAR rate
+# 1e-3). The released model code is unchanged: this is a choice of inputs.
+#
+# The loss is the per-case relative L2 every AeroZoo model sets
+# (loss.py `case_relative_l2`): each case's error per field over its own
+# physical targets' norm, so the cases weigh alike although their physical
+# magnitudes span decades. Velocity weighs 3: case_relative_l2 gives each
+# field one term (the vector's components jointly), so the weight keeps the
+# channel balance of the per-component losses, velocity's 3 components
+# against the 4 scalars (ISLA's AeroZoo config is to use the same weights).
+# The targets are standardized by scale only, so the recipe's relative-L2
+# metric is the physical relative L2 of each field and case.
 dataset_reader_overrides:
-  # Unlike the DrivAerML template, the boundaries stay: the pipeline's SDF
-  # transforms read no_slip and slip, and the inlet's prescribed turbulence is
-  # reduced to globals from its faces.
+  # The boundaries stay: the SDF and the merged face tokens are made from them.
   drop_in_file_boundaries: false
 
 input_type: tensors
 output_type: tensors
 
 # The CHAR campaign's GeoTransolver rate on DrivAerML Volume, 1e-3
-# (results/campaigns_2026-10-02/char/kernel/cl/cl_lanes.tsv, lanes cl_vol_gt_seed42/43,
-# column lr = 1e-3; the final-reference smoke lane
-# results/campaigns_2026-10-02/char/cs/cs_r_vol_gt/metrics.jsonl records
-# training.optimizer.lr = 0.001 at n_hidden 256 and 200,000 cells); the recipe
-# default 3e-3 was never used for GeoTransolver in that campaign.
+# (results/campaigns_2026-10-02/char/kernel/cl/cl_lanes.tsv, lanes cl_vol_gt_seed42/43).
 training:
   optimizer:
     lr: 1.0e-3
+  loss_type: case_relative_l2
+  field_weights:
+    velocity: 3
 
 forward_kwargs:
-  geometry: interior.points
+  geometry:
+    - boundaries.merged.cell_centroids
+    - boundaries.merged.cell_data.bc_inlet
+    - boundaries.merged.cell_data.bc_outlet
+    - boundaries.merged.cell_data.bc_no_slip
+    - boundaries.merged.cell_data.bc_slip
+    - boundaries.merged.cell_data.bc_velocity
+    - boundaries.merged.cell_data.bc_velocity_reverse
+    - boundaries.merged.cell_data.bc_pressure
+    - boundaries.merged.cell_data.bc_tke
+    - boundaries.merged.cell_data.bc_omega
+    - boundaries.merged.cell_data.bc_intermittency
+    - boundaries.merged.cell_data.bc_retheta
+    - boundaries.merged.cell_data.bc_tke_reverse
+    - boundaries.merged.cell_data.bc_omega_reverse
+    - boundaries.merged.cell_data.bc_intermittency_reverse
+    - boundaries.merged.cell_data.bc_retheta_reverse
   local_embedding:
     - interior.points
     - interior.point_data.sdf_wall
     - interior.point_data.sdf_wall_normals
-    - interior.point_data.sdf_slip
-  local_positions: interior.points
-  global_embedding: global_data.global_vector
+  global_embedding: global_data.nu_std
 
 model:
   _target_: physicsnemo.models.geotransolver.GeoTransolver
   out_dim: ${out_dim}     # auto-set from the chosen dataset's `targets:` block
-  functional_dim: 8       # local_embedding = coords (3) + sdf_wall (1) + sdf_wall_normals (3) + sdf_slip (1)
-  geometry_dim: 3         # point coordinates
-  global_dim: 8           # global_vector: U_inf_dir (3) + log_re_std (1) + inlet turbulence (4)
+  functional_dim: 7       # local_embedding = coords (3) + sdf_wall (1) + sdf_wall_normals (3)
+  geometry_dim: 22        # centroid (3) + one-hot (4) + two velocities (6) + nine scalar values
+  global_dim: 1           # nu_std
   n_layers: 12
   n_hidden: 256
   dropout: 0.0
@@ -71,10 +102,7 @@ model:
   slice_num: 256
   use_te: false
   plus: false
-  include_local_features: true
-  radii: [0.01, 0.05, 0.25, 1.0, 2.5, 5.0]
-  neighbors_in_radius: [8, 16, 32, 32, 64, 128]
-  n_hidden_local: 32
+  include_local_features: false
   state_mixing_mode: "weighted"  # "weighted" (default) or "concat_project"
   activation_checkpointing: false
   checkpointing_ratio: 1.0

@@ -380,6 +380,59 @@ class TestRelativeLosses:
         for key in ldict.keys():
             assert torch.equal(legacy_dict[key], ldict[key])
 
+    def test_case_relative_l2_against_a_hand_computation(self):
+        """Per case and field, ``RMS(err) / RMS(target + mean / std)``: two points, numbers by hand.
+
+        Pressure, standardized with mean 2 and std 4 (offset 0.5): targets [0.5, -0.5] are 4 and 0 physically
+        over 4, i.e. [1, 0], RMS sqrt(1/2); errors [0.1, -0.3], RMS sqrt(0.05); ratio sqrt(0.1). Velocity, mean 0:
+        targets (3, 4, 0) and (0, 0, 0), RMS of the norm sqrt(25 / 2); errors (1, 0, 0) and (0, 2, 0), RMS
+        sqrt(5 / 2); ratio sqrt(1 / 5). Total (sqrt(0.1) + sqrt(0.2)) / 4 channels."""
+        target = _make_td(
+            {
+                "p": torch.tensor([[0.5, -0.5]]),
+                "u": torch.tensor([[[3.0, 4.0, 0.0], [0.0, 0.0, 0.0]]]),
+            }
+        )
+        pred = _make_td(
+            {
+                "p": torch.tensor([[0.6, -0.8]]),
+                "u": torch.tensor([[[4.0, 4.0, 0.0], [0.0, 2.0, 0.0]]]),
+            }
+        )
+        lc = LossCalculator(
+            {"p": "scalar", "u": "vector"},
+            loss_type="case_relative_l2",
+            target_offsets={"p": 2.0 / 4.0},
+        )
+        total, ldict = lc(pred, target)
+        torch.testing.assert_close(ldict["loss/p"], torch.tensor(0.1).sqrt())
+        torch.testing.assert_close(ldict["loss/u"], torch.tensor(0.2).sqrt())
+        torch.testing.assert_close(total, (ldict["loss/p"] + ldict["loss/u"]) / 4)
+
+    def test_case_relative_l2_weighs_every_case_alike(self):
+        """Scaling a case's physical field and its error by c leaves its loss as it is; each leading index is a
+        case, and the result is the mean of the cases' own ratios. An all-zero case reads RMS(err) / floor."""
+        from loss import CASE_RELATIVE_FLOOR
+
+        torch.manual_seed(3)
+        t, e = torch.randn(1, 50), 0.1 * torch.randn(1, 50)
+        lc = LossCalculator({"p": "scalar"}, loss_type="case_relative_l2")
+        one = lc(_make_td({"p": t + e}), _make_td({"p": t}))[0]
+        for c in (1e-4, 1e3):
+            scaled = lc(_make_td({"p": c * (t + e)}), _make_td({"p": c * t}))[0]
+            torch.testing.assert_close(scaled, one)
+        two = torch.cat([t, 1e-3 * t]), torch.cat([e, 1e-3 * e])
+        both = lc(_make_td({"p": two[0] + two[1]}), _make_td({"p": two[0]}))[0]
+        torch.testing.assert_close(both, one, rtol=1e-5, atol=0.0)
+        zero = lc(_make_td({"p": e}), _make_td({"p": torch.zeros_like(e)}))[0]
+        torch.testing.assert_close(zero, e.pow(2).mean().sqrt() / CASE_RELATIVE_FLOOR)
+
+    def test_case_relative_l2_is_not_the_default(self):
+        """The recipe's default loss stays Huber; offsets name only declared fields."""
+        assert LossCalculator({"p": "scalar"}).loss_type == "huber"
+        with pytest.raises(ValueError, match="target_offsets"):
+            LossCalculator({"p": "scalar"}, target_offsets={"q": 1.0})
+
     def test_unknown_loss_type_rejected(self):
         """Typos fail at construction with the accepted names in the message."""
         with pytest.raises(ValueError, match="relative_mse"):

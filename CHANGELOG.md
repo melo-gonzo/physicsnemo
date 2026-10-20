@@ -39,6 +39,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unified external aero recipe: `NonDimensionalizeByMetadata` gains
   `scale_geometry` so chained instances scale the geometry once; inference
   re-dimensionalizes with the field maps of every instance.
+- Unified external aero recipe: `training.loss_type: case_relative_l2`, each
+  case's relative L2 per field in the dataset's units; the
+  `StandardizeGlobalLeaf` and `MergeBoundaries` transforms; the AeroZoo
+  dataset files (`aerozoo_uvolume*.yaml`) give the PDE data only, in SI units,
+  with the GeoTransolver and new Transolver AeroZoo configs on them.
 - Extends the diffusion module to support flow matching. The new API
   surface covers three pieces:
   - New losses in `physicsnemo.diffusion.metrics.losses` train against a

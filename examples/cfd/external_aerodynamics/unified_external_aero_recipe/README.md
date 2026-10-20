@@ -429,11 +429,13 @@ probability proportional to its area by systematic sampling along the Morton
 order of the centroids and carrying its Horvitz-Thompson measure; a random
 start per step in training, a fixed one in evaluation. So the interior
 configs' datasets read the boundaries whole: the DrivAerML reference volume
-files carry no boundary cell cap, and `isla_volume_aerozoo.yaml` lifts the
-AeroZoo files' per-boundary cap for ISLA only (`dataset_reader_overrides`
-for the reader's cap, `dataset_drop_transforms` for the uniform twins'
-`SubsampleMesh` and the SDF passes only GeoTransolver reads; a model config's
-`dataset_drop_transforms` removes every dataset transform of a named class).
+files carry no boundary cell cap, and `isla_volume_aerozoo.yaml` drops the
+AeroZoo files' per-boundary draw for ISLA only (`dataset_drop_transforms`
+for their `SubsampleMesh` and the steps only the baselines read; a model
+config's `dataset_drop_transforms` removes every dataset transform of a named
+class). Since the AeroZoo files give the PDE data only (2026-10-19),
+`isla_volume_aerozoo.yaml` awaits ISLA's own scales and does not run on them
+yet (see its TODO).
 On AirfRANS, Tensile2d and the lug the boundary is below the budget and every
 cell is a token. No ISLA config reads a dataset's stored `sdf` or
 `sdf_normals`: those are the baselines' inputs.
@@ -444,8 +446,8 @@ boundaries out of the fluid (the OpenFOAM convention), AirfRANS's airfoil
 into the fluid. The `FlipBoundaryOrientation` transform
 (`src/domain_transforms.py`) reverses the cells and any named stored normals
 of the boundaries it names; the DrivAerML reference volume files set it for
-the vehicle and every AeroZoo file for its four roles (after the SDF passes,
-so GeoTransolver's stored distances are unchanged), so every interior
+the vehicle and every AeroZoo file for its four roles (after the SDF pass,
+so the baselines' stored distances are unchanged), so every interior
 dataset hands ISLA normals that point into the fluid and its signed distance
 is positive there. The stored files are never modified.
 

@@ -34,7 +34,6 @@ Usage::
 """
 
 import os
-from pathlib import Path
 import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager, nullcontext
@@ -991,10 +990,23 @@ def main(cfg: DictConfig) -> None:
         target_config=target_config,
         metrics=metrics_list,
     )
+    loss_type = cfg.training.get("loss_type", "huber")
+    ### case_relative_l2 measures each case's error against its targets in the dataset's units: it reads
+    ### the standardization's mean / std (a field without stats has offset 0).
+    target_offsets = (
+        {
+            name: torch.as_tensor(s["mean"]) / torch.as_tensor(s["std"])
+            for name, s in normalizer.stats.items()
+            if name in target_config
+        }
+        if loss_type == "case_relative_l2" and normalizer is not None
+        else None
+    )
     loss_calculator = LossCalculator(
         target_config=target_config,
-        loss_type=cfg.training.get("loss_type", "huber"),
+        loss_type=loss_type,
         field_weights=field_weights,
+        target_offsets=target_offsets,
     )
     output_type = require_output_type(cfg)
     logger.info(f"Loss: {loss_calculator}")

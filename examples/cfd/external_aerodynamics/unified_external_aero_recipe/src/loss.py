@@ -31,6 +31,11 @@ Per-field weights (``field_weights``) multiply each per-field loss
 When ``normalize_by_channels=True`` the total is divided by the total
 channel count (``sum(per_field_dims)``) so the total scale is invariant
 to how many channels each field contributes.
+
+``"case_relative_l2"`` is the per-case relative L2 of each field over the
+case's own targets in the dataset's units (:func:`_case_relative_l2`): with
+one constant standardization of physical targets, whose magnitudes span
+decades across cases, every case then weighs alike (AeroZoo, 2026-10-19).
 """
 
 from __future__ import annotations
@@ -65,8 +70,24 @@ DEFAULT_HUBER_DELTA = 1.0
 ### anywhere), so the old name misled anyone comparing against reported RMSE
 ### numbers. ``LossCalculator`` rewrites it on construction with a warning.
 ### ``"relative_l2"`` is the square root of ``"relative_mse"``.
-LossType = Literal["huber", "mse", "relative_mse", "relative_l2", "rmse"]
-_VALID_LOSS_TYPES = ("huber", "mse", "relative_mse", "relative_l2", "rmse")
+LossType = Literal[
+    "huber", "mse", "relative_mse", "relative_l2", "rmse", "case_relative_l2"
+]
+_VALID_LOSS_TYPES = (
+    "huber",
+    "mse",
+    "relative_mse",
+    "relative_l2",
+    "rmse",
+    "case_relative_l2",
+)
+
+### The floor of ``case_relative_l2``'s denominator, the RMS of the case's
+### targets, in standardized units (fractions of the dataset's std): a case
+### whose field is identically zero reads ``RMS(error) / 1e-6`` instead of
+### dividing by zero. Far below any real case's RMS on AeroZoo (the smallest
+### case's RMS pressure is about 1e-5 of the dataset's std).
+CASE_RELATIVE_FLOOR = 1.0e-6
 
 
 ### ---------------------------------------------------------------------------
@@ -214,6 +235,37 @@ def _vector_loss(
     return total
 
 
+def _case_relative_l2(
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    offset: torch.Tensor,
+    *,
+    vector: bool,
+    target_measure: torch.Tensor | None = None,
+    floor: float = CASE_RELATIVE_FLOOR,
+) -> Float[torch.Tensor, ""]:
+    """Per case, ``RMS(pred - target) / max(RMS(target + offset), floor)``; averaged over the cases.
+
+    ``target`` is standardized, ``(y - mean) / std``, and ``offset`` is ``mean / std``, so ``target + offset``
+    is the physical target over the constant ``std`` and the ratio is the relative L2 of the field in its
+    physical units: the case's own norm, not the dataset's. The RMS runs over the point axis (the last one,
+    after the components of a vector, which count jointly: the Frobenius norm of the field), weighted by
+    ``target_measure`` when given; every leading axis is a case (the recipe's batch holds one).
+    """
+    diff2 = (pred - target) ** 2
+    ref2 = (target + offset.to(target)) ** 2
+    if vector:
+        diff2, ref2 = diff2.sum(dim=-1), ref2.sum(dim=-1)
+    if target_measure is None:
+        num, den = diff2.mean(dim=-1), ref2.mean(dim=-1)
+    else:
+        w = normalize_target_measure(target_measure)  # mean-one weights
+        num, den = (diff2 * w).mean(dim=-1), (ref2 * w).mean(dim=-1)
+    ratio = num / den.clamp_min(floor * floor)
+    ### clamp before the root, so an exact fit has a zero gradient, not a NaN
+    return ratio.clamp_min(torch.finfo(ratio.dtype).tiny).sqrt().mean()
+
+
 ### ---------------------------------------------------------------------------
 ### LossCalculator
 ### ---------------------------------------------------------------------------
@@ -238,6 +290,10 @@ class LossCalculator:
         normalize_by_channels: When ``True`` (default), divide the
             (weighted) total loss by ``sum(per_field_dims)`` so the total
             is invariant to how many channels each field contributes.
+        target_offsets: ``{name: mean / std}`` of the dataset's target
+            standardization, read by ``"case_relative_l2"`` only (a field
+            absent, or no dict, has offset 0: targets that are not
+            standardized, or standardized with mean 0).
 
     The returned loss dict contains one entry per field
     (``"loss/[prefix/]<name>"``) plus ``"loss/total"`` (or
@@ -253,6 +309,7 @@ class LossCalculator:
         prefix: str = "",
         normalize_by_channels: bool = True,
         delta: float = DEFAULT_HUBER_DELTA,
+        target_offsets: dict[str, torch.Tensor | float] | None = None,
     ) -> None:
         if loss_type not in _VALID_LOSS_TYPES:
             raise ValueError(
@@ -283,6 +340,17 @@ class LossCalculator:
         self.prefix = prefix
         self.normalize_by_channels = normalize_by_channels
         self.delta = delta
+        offsets = dict(target_offsets or {})
+        unknown_offsets = set(offsets) - set(target_config)
+        if unknown_offsets:
+            raise ValueError(
+                f"target_offsets references unknown fields {sorted(unknown_offsets)!r}; "
+                f"target_config has {sorted(target_config)!r}."
+            )
+        self.target_offsets: dict[str, torch.Tensor] = {
+            name: torch.as_tensor(offsets.get(name, 0.0), dtype=torch.float32)
+            for name in target_config
+        }
 
         ### Per-field tensors are looked up by name in the input TensorDict,
         ### so we just need a per-field dim count for total_channels.
@@ -375,7 +443,22 @@ class LossCalculator:
             key = as_nested_key(name)
             p, t = pred[key], target[key]
             kind = field_kind(field_type)
-            if kind == "scalar":
+            if self.loss_type == "case_relative_l2":
+                if kind == "scalar":
+                    p, t = align_scalar_shapes(p, t)
+                if p.shape != t.shape:
+                    raise ValueError(
+                        f"pred and target shapes must match for {name!r}, got "
+                        f"{tuple(p.shape)} vs {tuple(t.shape)}"
+                    )
+                field_loss = _case_relative_l2(
+                    p,
+                    t,
+                    self.target_offsets[name],
+                    vector=kind != "scalar",
+                    target_measure=align_target_measure(target_measure, p, kind),
+                )
+            elif kind == "scalar":
                 ### Caller may pass scalar fields as (..., 1) or (...);
                 ### normalize to a single shape so the loss is shape-agnostic.
                 p, t = align_scalar_shapes(p, t)
