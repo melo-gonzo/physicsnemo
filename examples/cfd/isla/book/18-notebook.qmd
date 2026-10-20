@@ -38867,3 +38867,61 @@ until DrivAerML is scored.
 **Next.** The GLOBE DrivAerML lanes finish about 2026-10-24. The ISLA 0.9.0
 AirfRANS lanes (REF-090) are at epoch 300, and GLOBE ÷ ISLA 0.9.0 is
 reported beside this table when they are scored.
+
+## 2026-10-20 — HiLift at 0.9.0: level with A2 ISLA, so 0.9.0 becomes HiLift's ISLA standing, and the unit-drive baselines still lead it natively by about 8 percent {#sec-nb-hilift-090-scored}
+
+**Question** (R-HL090, pre-registered 2026-10-20 before submission in
+scratch/isla-hilift090-2026-10-20/PREREG.md). Does ISLA 0.9.0 change
+HiLift's standing against A2 ISLA? On HiLift's surface path, 0.9.0 is A2 on
+the same 200,000 tokens plus boundary conditions by name, the in-model unit
+direction, and the length unit with per-cell second moments. Two seeds were
+trained on the medium set's 510 cases for 500 epochs. They were scored in
+float32 on the 180 validation cases at ISLA's 200,000 cells.
+
+| Arm | Pressure | Wall shear | Arm ÷ ISLA 0.9.0 |
+|---|---|---|---|
+| ISLA 0.9.0 | 0.04272 (0.04271, 0.04274) | 0.09634 (0.09612, 0.09657) | 1 |
+| A2 ISLA | 0.04318 (0.04352, 0.04284) | 0.09426 (0.09437, 0.09415) | 1.011 / 0.978 |
+| GeoTransolver, unit drive | 0.03902 | 0.08903 | 0.913 / 0.924 |
+| Transolver, unit drive | 0.03941 | 0.08783 | 0.922 / 0.912 |
+
+Native relative L2, seed means; seeds 42 and 43 in parentheses.
+
+**Verdict: level.** G is 0.989 on pressure (seeds 0.981 and 0.998) and
+1.022 on wall shear (seeds 1.019 and 1.026), both inside 0.95 to 1.05. Under
+the registered rule, the 0.9.0 rows become HiLift's ISLA standing, and the
+A2 rows stay in the record as the partner.
+
+**Predictions.**
+
+- P1 (level, 0.60) held.
+- P2 (0.55) held. All three angle-of-attack-16 cases stay wrong:
+  LHC153_16 at 0.219 (A2 0.278), LHC162_16 at 0.205 (0.248) and LHC119_16
+  at 0.189 (0.208). Each improved, but none fell below 0.15.
+- P3 (0.75) failed. LHC132_AoA_22 stays wrong at 0.198, but LHC002_AoA_18
+  moves to between at 0.137 (A2 0.219). Seed 42 gets it right at 0.081, the
+  first ISLA run to do so, and seed 43 stays wrong at 0.193.
+- P4 (0.70) held. Posed ÷ native is 1.009 on pressure for both seeds and
+  1.005 and 1.006 on wall shear, as with A2.
+- P5 and P6 (0.80 each) held. Both unit-drive baselines stay ahead
+  natively: their errors are 0.91 to 0.92 of 0.9.0's on both fields.
+- P7 (0.95) held. Under area and pose, 0.9.0 leads both baselines on
+  pressure by 3.2 times (Transolver, area) to 22 times (GeoTransolver,
+  posed).
+
+**Beside the rules.**
+
+- The post-stall cases move both ways and largely cancel in the mean. The
+  largest improvements are on LHC002_AoA_18 (−0.082) and LHC148_AoA_20
+  (−0.065). The largest regressions are on LHC035_AoA_22 (+0.030) and
+  LHC110_AoA_22 (+0.029).
+- The seed means agree to 0.07 percent on pressure, but single post-stall
+  cases flip between seeds: LHC002_18 reads 0.081 and 0.193, and LHC132_22
+  reads 0.250 and 0.146.
+- The registered consequence applies. 0.9.0 replaces A2, and the HiLift gap
+  to the baselines stays a stall-onset problem, to be studied separately
+  (scratch/isla-hilift090-2026-10-20/RESULTS_HL090.md).
+
+**Next.** The capacity audit's phase-1 case geo_LHC002_AoA_18 reads tonight.
+It shows whether ISLA can fit a post-stall case at all, which separates a
+capacity limit from a generalization one.
