@@ -1,0 +1,966 @@
+{
+ "root": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/kernel/anchor_af/qpop/out",
+ "tolerance": 0.0001,
+ "runs": {
+  "anc_anchor_seed42": {
+   "epoch": 500,
+   "n_cases": 200,
+   "query_independent": true,
+   "n_anchors": 50000,
+   "native_h": {
+    "pressure_l2": 0.029693431719206274,
+    "velocity_l2": 0.01649657977744937,
+    "nut_l2": 0.028672670871019365
+   },
+   "conditions": {
+    "repeat": {
+     "ratio": {
+      "pressure_l2": 1.00000000156823,
+      "velocity_l2": 1.0000000019759423,
+      "nut_l2": 1.0000000022736835
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 6.228153506526724e-05,
+      "velocity_l2": 2.058164136542473e-05,
+      "nut_l2": 1.9817232896457426e-05
+     }
+    },
+    "half": {
+     "ratio": {
+      "pressure_l2": 1.0000093913450134,
+      "velocity_l2": 1.0000025783224495,
+      "nut_l2": 1.0000009211666514
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.008170406334102154,
+      "velocity_l2": 0.0021788759622722864,
+      "nut_l2": 0.0019153603352606297
+     }
+    },
+    "far": {
+     "ratio": {
+      "pressure_l2": 0.9999918563387293,
+      "velocity_l2": 1.0000016894306833,
+      "nut_l2": 1.0000030231870976
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0038491373416036367,
+      "velocity_l2": 0.0015586002264171839,
+      "nut_l2": 0.0034323381260037422
+     }
+    },
+    "wall": {
+     "ratio": {
+      "pressure_l2": 0.9999918563387293,
+      "velocity_l2": 1.0000016894306833,
+      "nut_l2": 1.0000030231870976
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0038491373416036367,
+      "velocity_l2": 0.0015586002264171839,
+      "nut_l2": 0.0034323381260037422
+     }
+    },
+    "chunks": {
+     "ratio": {
+      "pressure_l2": 1.0000086898757599,
+      "velocity_l2": 1.0000005253183795,
+      "nut_l2": 0.9999922199420943
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0030352245084941387,
+      "velocity_l2": 0.0008386936387978494,
+      "nut_l2": 0.0034667281433939934
+     }
+    }
+   },
+   "geometry_check": {
+    "sdf_absdiff_max": 1.1920901021866825e-07,
+    "sdf_absdiff_median": 2.3038182299373045e-10,
+    "normals_dot_min": 0.7327334063655615,
+    "normals_dot_median": 0.9999611550573524,
+    "native_on_wall": 611,
+    "native_inside_airfoil": 0,
+    "far_inside_fraction": 0.00691,
+    "far_sdf_min": 2.506804493783028e-07,
+    "wall_sdf_median": 2.1310720512701664e-06,
+    "wall_distinct": 13979,
+    "wall_on_wall": 38739
+   },
+   "validity": {
+    "reference": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/evals_anc/anc_anchor_seed42/native/anc_anchor_seed42/metrics.jsonl",
+    "epoch": 500,
+    "n_cases": 200,
+    "of": 200,
+    "max_rel_diff": 0.0001676943524643158,
+    "ok": false
+   },
+   "worst_abs_ratio_minus_1_or_change": 0.008170406334102154,
+   "qi_ok": false
+  },
+  "anc_anchor_seed43": {
+   "epoch": 500,
+   "n_cases": 200,
+   "query_independent": true,
+   "n_anchors": 50000,
+   "native_h": {
+    "pressure_l2": 0.02235682284226641,
+    "velocity_l2": 0.012280941605567933,
+    "nut_l2": 0.021117141218855977
+   },
+   "conditions": {
+    "repeat": {
+     "ratio": {
+      "pressure_l2": 0.9999999891691287,
+      "velocity_l2": 0.9999999939332171,
+      "nut_l2": 0.9999999880922757
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0004065839166287333,
+      "velocity_l2": 8.527100726496428e-05,
+      "nut_l2": 4.4076259655412287e-05
+     }
+    },
+    "half": {
+     "ratio": {
+      "pressure_l2": 1.000003885887484,
+      "velocity_l2": 1.0000049474614179,
+      "nut_l2": 1.000019355895555
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.009529528208076954,
+      "velocity_l2": 0.005894516594707966,
+      "nut_l2": 0.005870609078556299
+     }
+    },
+    "far": {
+     "ratio": {
+      "pressure_l2": 0.9999918043630518,
+      "velocity_l2": 0.9999908948964571,
+      "nut_l2": 0.9999659146905414
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.020850352942943573,
+      "velocity_l2": 0.008242195472121239,
+      "nut_l2": 0.009203615598380566
+     }
+    },
+    "wall": {
+     "ratio": {
+      "pressure_l2": 0.9999918043630518,
+      "velocity_l2": 0.9999908948964571,
+      "nut_l2": 0.9999659146905414
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.020850352942943573,
+      "velocity_l2": 0.008242195472121239,
+      "nut_l2": 0.009203615598380566
+     }
+    },
+    "chunks": {
+     "ratio": {
+      "pressure_l2": 1.000005058745867,
+      "velocity_l2": 1.0000078361979914,
+      "nut_l2": 1.000030142750156
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0103837875649333,
+      "velocity_l2": 0.006474184338003397,
+      "nut_l2": 0.0064023383893072605
+     }
+    }
+   },
+   "geometry_check": {
+    "sdf_absdiff_max": 1.1920901021866825e-07,
+    "sdf_absdiff_median": 2.3038182299373045e-10,
+    "normals_dot_min": 0.7327334063655615,
+    "normals_dot_median": 0.9999611550573524,
+    "native_on_wall": 611,
+    "native_inside_airfoil": 0,
+    "far_inside_fraction": 0.00691,
+    "far_sdf_min": 2.506804493783028e-07,
+    "wall_sdf_median": 2.1310720512701664e-06,
+    "wall_distinct": 13979,
+    "wall_on_wall": 38739
+   },
+   "validity": {
+    "reference": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/evals_anc/anc_anchor_seed43/native/anc_anchor_seed43/metrics.jsonl",
+    "epoch": 500,
+    "n_cases": 200,
+    "of": 200,
+    "max_rel_diff": 3.020504098761135e-05,
+    "ok": true
+   },
+   "worst_abs_ratio_minus_1_or_change": 0.020850352942943573,
+   "qi_ok": false
+  },
+  "anc_dtt_seed42": {
+   "epoch": 500,
+   "n_cases": 200,
+   "query_independent": true,
+   "n_anchors": null,
+   "native_h": {
+    "pressure_l2": 0.013561211174819619,
+    "velocity_l2": 0.008654691509436816,
+    "nut_l2": 0.02133131548529491
+   },
+   "conditions": {
+    "repeat": {
+     "ratio": {
+      "pressure_l2": 0.9999999294359528,
+      "velocity_l2": 1.0000000002690224,
+      "nut_l2": 0.9999999586322681
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 6.059241059119813e-06,
+      "velocity_l2": 5.089276783110108e-06,
+      "nut_l2": 9.806057278183289e-06
+     }
+    },
+    "half": {
+     "ratio": {
+      "pressure_l2": 1.0000001399262737,
+      "velocity_l2": 1.0000001708292647,
+      "nut_l2": 1.0000011257698853
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.001403765520080924,
+      "velocity_l2": 5.574047099798918e-05,
+      "nut_l2": 0.0002866139984689653
+     }
+    },
+    "far": {
+     "ratio": {
+      "pressure_l2": 0.9999999857498395,
+      "velocity_l2": 0.9999998627985432,
+      "nut_l2": 0.9999991051908551
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0007158905500546098,
+      "velocity_l2": 2.7035363018512726e-05,
+      "nut_l2": 0.0003918159636668861
+     }
+    },
+    "wall": {
+     "ratio": {
+      "pressure_l2": 1.000000014936915,
+      "velocity_l2": 0.999999861453431,
+      "nut_l2": 0.9999990788857803
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0007147602154873312,
+      "velocity_l2": 2.7011226848117076e-05,
+      "nut_l2": 0.0003943740448448807
+     }
+    },
+    "chunks": {
+     "ratio": {
+      "pressure_l2": 0.9999989727866315,
+      "velocity_l2": 0.9999996214853929,
+      "nut_l2": 0.9999974303980377
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0006674512987956405,
+      "velocity_l2": 4.8163230530917645e-05,
+      "nut_l2": 0.0010428528767079115
+     }
+    }
+   },
+   "geometry_check": {
+    "sdf_absdiff_max": 1.1920901021866825e-07,
+    "sdf_absdiff_median": 2.3038182299373045e-10,
+    "normals_dot_min": 0.7327334063655615,
+    "normals_dot_median": 0.9999611550573524,
+    "native_on_wall": 611,
+    "native_inside_airfoil": 0,
+    "far_inside_fraction": 0.00691,
+    "far_sdf_min": 2.506804493783028e-07,
+    "wall_sdf_median": 2.1310720512701664e-06,
+    "wall_distinct": 13979,
+    "wall_on_wall": 38739
+   },
+   "validity": {
+    "reference": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/evals_anc/anc_dtt_seed42/native/anc_dtt_seed42/metrics.jsonl",
+    "epoch": 500,
+    "n_cases": 200,
+    "of": 200,
+    "max_rel_diff": 6.370018147799052e-05,
+    "ok": true
+   },
+   "worst_abs_ratio_minus_1_or_change": 0.001403765520080924,
+   "qi_ok": false
+  },
+  "anc_dtt_seed43": {
+   "epoch": 500,
+   "n_cases": 200,
+   "query_independent": true,
+   "n_anchors": null,
+   "native_h": {
+    "pressure_l2": 0.013676844553556293,
+    "velocity_l2": 0.008578772626351564,
+    "nut_l2": 0.023214380976278336
+   },
+   "conditions": {
+    "repeat": {
+     "ratio": {
+      "pressure_l2": 0.9999999794013101,
+      "velocity_l2": 0.9999999918579038,
+      "nut_l2": 1.0000000251742622
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 5.834825060446747e-06,
+      "velocity_l2": 4.684941814048216e-06,
+      "nut_l2": 1.1836315934488084e-05
+     }
+    },
+    "half": {
+     "ratio": {
+      "pressure_l2": 1.000000940900485,
+      "velocity_l2": 1.0000001628419266,
+      "nut_l2": 0.9999998727245465
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 2.885690082621295e-05,
+      "velocity_l2": 2.0511753973551095e-05,
+      "nut_l2": 4.1081519157160074e-05
+     }
+    },
+    "far": {
+     "ratio": {
+      "pressure_l2": 1.000001145270131,
+      "velocity_l2": 1.000000221193617,
+      "nut_l2": 0.9999999713153824
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 5.1630202506203204e-05,
+      "velocity_l2": 2.249078534077853e-05,
+      "nut_l2": 5.012522524339147e-05
+     }
+    },
+    "wall": {
+     "ratio": {
+      "pressure_l2": 1.0000011284166572,
+      "velocity_l2": 1.0000002179367784,
+      "nut_l2": 0.9999999879644961
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 5.1330898713786155e-05,
+      "velocity_l2": 2.2156933482619934e-05,
+      "nut_l2": 5.0606275181053206e-05
+     }
+    },
+    "chunks": {
+     "ratio": {
+      "pressure_l2": 1.0000000829054705,
+      "velocity_l2": 1.000000011398935,
+      "nut_l2": 0.9999999227721834
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 6.959894380997866e-05,
+      "velocity_l2": 3.121591726085171e-05,
+      "nut_l2": 5.310772394295782e-05
+     }
+    }
+   },
+   "geometry_check": {
+    "sdf_absdiff_max": 1.1920901021866825e-07,
+    "sdf_absdiff_median": 2.3038182299373045e-10,
+    "normals_dot_min": 0.7327334063655615,
+    "normals_dot_median": 0.9999611550573524,
+    "native_on_wall": 611,
+    "native_inside_airfoil": 0,
+    "far_inside_fraction": 0.00691,
+    "far_sdf_min": 2.506804493783028e-07,
+    "wall_sdf_median": 2.1310720512701664e-06,
+    "wall_distinct": 13979,
+    "wall_on_wall": 38739
+   },
+   "validity": {
+    "reference": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/evals_anc/anc_dtt_seed43/native/anc_dtt_seed43/metrics.jsonl",
+    "epoch": 500,
+    "n_cases": 200,
+    "of": 200,
+    "max_rel_diff": 3.205469365176636e-05,
+    "ok": true
+   },
+   "worst_abs_ratio_minus_1_or_change": 6.959894380997866e-05,
+   "qi_ok": true
+  },
+  "anc_isla_seed42": {
+   "epoch": 500,
+   "n_cases": 200,
+   "query_independent": false,
+   "n_anchors": null,
+   "native_h": {
+    "pressure_l2": 0.01809102232567966,
+    "velocity_l2": 0.009409087770618498,
+    "nut_l2": 0.02108192100888118
+   },
+   "conditions": {
+    "repeat": {
+     "ratio": {
+      "pressure_l2": 0.9999999951094172,
+      "velocity_l2": 1.0000000014847177,
+      "nut_l2": 0.9999999993373545
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 3.7064462503622053e-06,
+      "velocity_l2": 3.3477488159405766e-06,
+      "nut_l2": 3.211758303223178e-05
+     }
+    },
+    "half": {
+     "ratio": {
+      "pressure_l2": 1.2240436483912,
+      "velocity_l2": 1.0842924844800967,
+      "nut_l2": 1.1613209216726852
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.32730016112327576,
+      "velocity_l2": 0.05175529420375824,
+      "nut_l2": 0.9209768772125244
+     }
+    },
+    "far": {
+     "ratio": {
+      "pressure_l2": 62.57131412605219,
+      "velocity_l2": 31.688007341659517,
+      "nut_l2": 47.66492877384906
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 10.123459815979004,
+      "velocity_l2": 2.193347692489624,
+      "nut_l2": 14.735837936401367
+     }
+    },
+    "wall": {
+     "ratio": {
+      "pressure_l2": 17.08321786070778,
+      "velocity_l2": 18.094377952681796,
+      "nut_l2": 11.599479869148075
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 4.583099842071533,
+      "velocity_l2": 1.6924351453781128,
+      "nut_l2": 6.831511497497559
+     }
+    },
+    "chunks": {
+     "ratio": {
+      "pressure_l2": 1.5547117257719034,
+      "velocity_l2": 1.2495341850578092,
+      "nut_l2": 1.4138045253875842
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.7204801440238953,
+      "velocity_l2": 0.1187174990773201,
+      "nut_l2": 1.2145366668701172
+     }
+    }
+   },
+   "geometry_check": {
+    "sdf_absdiff_max": 1.1920901021866825e-07,
+    "sdf_absdiff_median": 2.3038182299373045e-10,
+    "normals_dot_min": 0.7327334063655615,
+    "normals_dot_median": 0.9999611550573524,
+    "native_on_wall": 611,
+    "native_inside_airfoil": 0,
+    "far_inside_fraction": 0.00691,
+    "far_sdf_min": 2.506804493783028e-07,
+    "wall_sdf_median": 2.1310720512701664e-06,
+    "wall_distinct": 13979,
+    "wall_on_wall": 38739
+   },
+   "validity": {
+    "reference": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/evals_anc/anc_isla_seed42/native/anc_isla_seed42/metrics.jsonl",
+    "epoch": 500,
+    "n_cases": 200,
+    "of": 200,
+    "max_rel_diff": 5.433421132882129e-05,
+    "ok": true
+   },
+   "worst_abs_ratio_minus_1_or_change": 61.57131412605219,
+   "qi_ok": false
+  },
+  "anc_isla_seed43": {
+   "epoch": 500,
+   "n_cases": 200,
+   "query_independent": false,
+   "n_anchors": null,
+   "native_h": {
+    "pressure_l2": 0.018606780176050962,
+    "velocity_l2": 0.010021479458082468,
+    "nut_l2": 0.023979745192918928
+   },
+   "conditions": {
+    "repeat": {
+     "ratio": {
+      "pressure_l2": 0.9999999979978856,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0000000011651364
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 5.55966926185647e-06,
+      "velocity_l2": 2.222689317932236e-06,
+      "nut_l2": 3.5078781365882605e-05
+     }
+    },
+    "half": {
+     "ratio": {
+      "pressure_l2": 1.268155986022175,
+      "velocity_l2": 1.0856263847165672,
+      "nut_l2": 1.1434432557476937
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.45994657278060913,
+      "velocity_l2": 0.14117003977298737,
+      "nut_l2": 1.6777284145355225
+     }
+    },
+    "far": {
+     "ratio": {
+      "pressure_l2": 31.555472572473032,
+      "velocity_l2": 25.88306238252389,
+      "nut_l2": 50.043295960808344
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 12.53503704071045,
+      "velocity_l2": 1.795968770980835,
+      "nut_l2": 23.118986129760742
+     }
+    },
+    "wall": {
+     "ratio": {
+      "pressure_l2": 16.717223088255306,
+      "velocity_l2": 15.893897503941488,
+      "nut_l2": 6.952476603719262
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 3.063321590423584,
+      "velocity_l2": 1.1778137683868408,
+      "nut_l2": 4.787388324737549
+     }
+    },
+    "chunks": {
+     "ratio": {
+      "pressure_l2": 1.6311716053999836,
+      "velocity_l2": 1.2527923438189095,
+      "nut_l2": 1.4302846459714145
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.8962634205818176,
+      "velocity_l2": 0.19880808889865875,
+      "nut_l2": 4.06911563873291
+     }
+    }
+   },
+   "geometry_check": {
+    "sdf_absdiff_max": 1.1920901021866825e-07,
+    "sdf_absdiff_median": 2.3038182299373045e-10,
+    "normals_dot_min": 0.7327334063655615,
+    "normals_dot_median": 0.9999611550573524,
+    "native_on_wall": 611,
+    "native_inside_airfoil": 0,
+    "far_inside_fraction": 0.00691,
+    "far_sdf_min": 2.506804493783028e-07,
+    "wall_sdf_median": 2.1310720512701664e-06,
+    "wall_distinct": 13979,
+    "wall_on_wall": 38739
+   },
+   "validity": {
+    "reference": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/evals_anc/anc_isla_seed43/native/anc_isla_seed43/metrics.jsonl",
+    "epoch": 500,
+    "n_cases": 200,
+    "of": 200,
+    "max_rel_diff": 3.6943440133039574e-05,
+    "ok": true
+   },
+   "worst_abs_ratio_minus_1_or_change": 49.043295960808344,
+   "qi_ok": false
+  },
+  "anc_mesh_seed42": {
+   "epoch": 500,
+   "n_cases": 200,
+   "query_independent": true,
+   "n_anchors": 50000,
+   "native_h": {
+    "pressure_l2": 0.021446192916482688,
+    "velocity_l2": 0.010519351193215698,
+    "nut_l2": 0.023906436911784113
+   },
+   "conditions": {
+    "repeat": {
+     "ratio": {
+      "pressure_l2": 1.0000000039083408,
+      "velocity_l2": 0.9999999977866444,
+      "nut_l2": 0.9999999964938718
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 6.628250048379414e-06,
+      "velocity_l2": 2.628375341373612e-06,
+      "nut_l2": 3.0813385819783434e-05
+     }
+    },
+    "half": {
+     "ratio": {
+      "pressure_l2": 0.9999991851109341,
+      "velocity_l2": 0.9999990460437571,
+      "nut_l2": 1.0000001836821588
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.00034499503090046346,
+      "velocity_l2": 0.00013944627426099032,
+      "nut_l2": 0.0005361679359339178
+     }
+    },
+    "far": {
+     "ratio": {
+      "pressure_l2": 1.0000020771745934,
+      "velocity_l2": 1.0000009833938717,
+      "nut_l2": 1.0000005699406112
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0010724796447902918,
+      "velocity_l2": 0.000308295275317505,
+      "nut_l2": 0.0006244436954148114
+     }
+    },
+    "wall": {
+     "ratio": {
+      "pressure_l2": 1.0000020771745934,
+      "velocity_l2": 1.0000009833938717,
+      "nut_l2": 1.0000005699406112
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0010724796447902918,
+      "velocity_l2": 0.000308295275317505,
+      "nut_l2": 0.0006244436954148114
+     }
+    },
+    "chunks": {
+     "ratio": {
+      "pressure_l2": 0.9999997309758719,
+      "velocity_l2": 0.99999870031762,
+      "nut_l2": 1.000000637141401
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.00039707875112071633,
+      "velocity_l2": 7.800319872330874e-05,
+      "nut_l2": 0.0004982066457159817
+     }
+    }
+   },
+   "geometry_check": {
+    "sdf_absdiff_max": 1.1920928955078125e-07,
+    "sdf_absdiff_median": 2.3050188494022628e-10,
+    "normals_dot_min": 0.7327600640932843,
+    "normals_dot_median": 0.999959150629922,
+    "native_on_wall": 597,
+    "native_inside_airfoil": 0,
+    "far_inside_fraction": 0.006935,
+    "far_sdf_min": 1.4753776413572766e-06,
+    "wall_sdf_median": 2.130172561010113e-06,
+    "wall_distinct": 13833,
+    "wall_on_wall": 38328
+   },
+   "validity": {
+    "reference": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/evals_anc/anc_mesh_seed42/native/anc_mesh_seed42/metrics.jsonl",
+    "epoch": 500,
+    "n_cases": 200,
+    "of": 200,
+    "max_rel_diff": 3.387374099022807e-05,
+    "ok": true
+   },
+   "worst_abs_ratio_minus_1_or_change": 0.0010724796447902918,
+   "qi_ok": false
+  },
+  "anc_mesh_seed43": {
+   "epoch": 500,
+   "n_cases": 200,
+   "query_independent": true,
+   "n_anchors": 50000,
+   "native_h": {
+    "pressure_l2": 0.019889382331166418,
+    "velocity_l2": 0.01055697355652228,
+    "nut_l2": 0.02339042027015239
+   },
+   "conditions": {
+    "repeat": {
+     "ratio": {
+      "pressure_l2": 0.9999999946151119,
+      "velocity_l2": 1.0000000004410934,
+      "nut_l2": 1.0000000091577743
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 7.009374712652061e-06,
+      "velocity_l2": 2.144898871847545e-06,
+      "nut_l2": 3.0474777304334566e-05
+     }
+    },
+    "half": {
+     "ratio": {
+      "pressure_l2": 1.0000009997161619,
+      "velocity_l2": 0.9999995028875767,
+      "nut_l2": 1.0000021297797963
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0018401382258161902,
+      "velocity_l2": 0.0005205445922911167,
+      "nut_l2": 0.0016356628620997071
+     }
+    },
+    "far": {
+     "ratio": {
+      "pressure_l2": 0.9999997191663849,
+      "velocity_l2": 1.0000013713598264,
+      "nut_l2": 0.9999990665042564
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0035256179980933666,
+      "velocity_l2": 0.0004298670683056116,
+      "nut_l2": 0.0018049369100481272
+     }
+    },
+    "wall": {
+     "ratio": {
+      "pressure_l2": 0.9999997191663849,
+      "velocity_l2": 1.0000013713598264,
+      "nut_l2": 0.9999990665042564
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0035256179980933666,
+      "velocity_l2": 0.0004298670683056116,
+      "nut_l2": 0.0018049369100481272
+     }
+    },
+    "chunks": {
+     "ratio": {
+      "pressure_l2": 1.0000034307589647,
+      "velocity_l2": 0.9999994905369574,
+      "nut_l2": 1.00000390041557
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0038742024917155504,
+      "velocity_l2": 0.0003561108314897865,
+      "nut_l2": 0.0025711748749017715
+     }
+    }
+   },
+   "geometry_check": {
+    "sdf_absdiff_max": 1.1920928955078125e-07,
+    "sdf_absdiff_median": 2.3050188494022628e-10,
+    "normals_dot_min": 0.7327600640932843,
+    "normals_dot_median": 0.999959150629922,
+    "native_on_wall": 597,
+    "native_inside_airfoil": 0,
+    "far_inside_fraction": 0.006935,
+    "far_sdf_min": 1.4753776413572766e-06,
+    "wall_sdf_median": 2.130172561010113e-06,
+    "wall_distinct": 13833,
+    "wall_on_wall": 38328
+   },
+   "validity": {
+    "reference": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/evals_anc/anc_mesh_seed43/native/anc_mesh_seed43/metrics.jsonl",
+    "epoch": 500,
+    "n_cases": 200,
+    "of": 200,
+    "max_rel_diff": 0.00011902555734847218,
+    "ok": false
+   },
+   "worst_abs_ratio_minus_1_or_change": 0.0038742024917155504,
+   "qi_ok": false
+  },
+  "anc_passive_seed42": {
+   "epoch": 500,
+   "n_cases": 200,
+   "query_independent": true,
+   "n_anchors": 0,
+   "native_h": {
+    "pressure_l2": 0.016856062135193497,
+    "velocity_l2": 0.010318005725275725,
+    "nut_l2": 0.023691110180225225
+   },
+   "conditions": {
+    "repeat": {
+     "ratio": {
+      "pressure_l2": 1.0000000171279624,
+      "velocity_l2": 0.999999996389525,
+      "nut_l2": 1.0000000129726487
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 3.971192654717015e-06,
+      "velocity_l2": 2.2564370283362223e-06,
+      "nut_l2": 2.9725848435191438e-05
+     }
+    },
+    "half": {
+     "ratio": {
+      "pressure_l2": 1.0000006192310915,
+      "velocity_l2": 1.0000004822240836,
+      "nut_l2": 1.0000017722407117
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0007677597459405661,
+      "velocity_l2": 9.766611765371636e-05,
+      "nut_l2": 0.0001594592904439196
+     }
+    },
+    "far": {
+     "ratio": {
+      "pressure_l2": 1.0000015042218575,
+      "velocity_l2": 1.000000401214048,
+      "nut_l2": 1.000000899240421
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0007876249146647751,
+      "velocity_l2": 6.072000542189926e-05,
+      "nut_l2": 0.00010981850937241688
+     }
+    },
+    "wall": {
+     "ratio": {
+      "pressure_l2": 1.0000015042218575,
+      "velocity_l2": 1.000000401214048,
+      "nut_l2": 1.000000899240421
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0007876249146647751,
+      "velocity_l2": 6.072000542189926e-05,
+      "nut_l2": 0.00010981850937241688
+     }
+    },
+    "chunks": {
+     "ratio": {
+      "pressure_l2": 1.0000004667369748,
+      "velocity_l2": 1.0000001608917977,
+      "nut_l2": 1.0000026835692828
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0019336864352226257,
+      "velocity_l2": 0.00015113502740859985,
+      "nut_l2": 0.0002294778823852539
+     }
+    }
+   },
+   "geometry_check": {
+    "sdf_absdiff_max": 1.1920901021866825e-07,
+    "sdf_absdiff_median": 2.3038182299373045e-10,
+    "normals_dot_min": 0.7327334063655615,
+    "normals_dot_median": 0.9999611550573524,
+    "native_on_wall": 611,
+    "native_inside_airfoil": 0,
+    "far_inside_fraction": 0.00691,
+    "far_sdf_min": 2.506804493783028e-07,
+    "wall_sdf_median": 2.1310720512701664e-06,
+    "wall_distinct": 13979,
+    "wall_on_wall": 38739
+   },
+   "validity": {
+    "reference": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/evals_anc/anc_passive_seed42/native/anc_passive_seed42/metrics.jsonl",
+    "epoch": 500,
+    "n_cases": 200,
+    "of": 200,
+    "max_rel_diff": 0.00010482383682568163,
+    "ok": false
+   },
+   "worst_abs_ratio_minus_1_or_change": 0.0019336864352226257,
+   "qi_ok": false
+  },
+  "anc_passive_seed43": {
+   "epoch": 500,
+   "n_cases": 200,
+   "query_independent": true,
+   "n_anchors": 0,
+   "native_h": {
+    "pressure_l2": 0.014529721217695624,
+    "velocity_l2": 0.010179765152279287,
+    "nut_l2": 0.02458828241098672
+   },
+   "conditions": {
+    "repeat": {
+     "ratio": {
+      "pressure_l2": 1.0000000035253767,
+      "velocity_l2": 1.0000000064041341,
+      "nut_l2": 1.0000000274605951
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 4.500684553931933e-06,
+      "velocity_l2": 2.2535971311299363e-06,
+      "nut_l2": 4.4076259655412287e-05
+     }
+    },
+    "half": {
+     "ratio": {
+      "pressure_l2": 1.0000003134380433,
+      "velocity_l2": 1.000000121221108,
+      "nut_l2": 1.0000008353702403
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0009372164495289326,
+      "velocity_l2": 0.00010830716200871393,
+      "nut_l2": 0.0001910724095068872
+     }
+    },
+    "far": {
+     "ratio": {
+      "pressure_l2": 0.9999997711709989,
+      "velocity_l2": 0.9999999240652684,
+      "nut_l2": 0.999998740410912
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0006443247548304498,
+      "velocity_l2": 8.220745075959712e-05,
+      "nut_l2": 0.00010176847717957571
+     }
+    },
+    "wall": {
+     "ratio": {
+      "pressure_l2": 0.9999997711709989,
+      "velocity_l2": 0.9999999240652684,
+      "nut_l2": 0.999998740410912
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0006443247548304498,
+      "velocity_l2": 8.220745075959712e-05,
+      "nut_l2": 0.00010176847717957571
+     }
+    },
+    "chunks": {
+     "ratio": {
+      "pressure_l2": 1.0000029454522883,
+      "velocity_l2": 1.0000000965194484,
+      "nut_l2": 0.9999991699324955
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.003705833572894335,
+      "velocity_l2": 0.00042638982995413244,
+      "nut_l2": 0.0002544562448747456
+     }
+    }
+   },
+   "geometry_check": {
+    "sdf_absdiff_max": 1.1920901021866825e-07,
+    "sdf_absdiff_median": 2.3038182299373045e-10,
+    "normals_dot_min": 0.7327334063655615,
+    "normals_dot_median": 0.9999611550573524,
+    "native_on_wall": 611,
+    "native_inside_airfoil": 0,
+    "far_inside_fraction": 0.00691,
+    "far_sdf_min": 2.506804493783028e-07,
+    "wall_sdf_median": 2.1310720512701664e-06,
+    "wall_distinct": 13979,
+    "wall_on_wall": 38739
+   },
+   "validity": {
+    "reference": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/evals_anc/anc_passive_seed43/native/anc_passive_seed43/metrics.jsonl",
+    "epoch": 500,
+    "n_cases": 200,
+    "of": 200,
+    "max_rel_diff": 6.504867474457699e-05,
+    "ok": true
+   },
+   "worst_abs_ratio_minus_1_or_change": 0.003705833572894335,
+   "qi_ok": false
+  }
+ }
+}
