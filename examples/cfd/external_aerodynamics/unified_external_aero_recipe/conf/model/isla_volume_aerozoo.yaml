@@ -15,28 +15,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# TODO (step 2, ISLA's own scales, next on psharpe/isla-bc-names): this config does not run on the AeroZoo
-# files. Since 2026-10-19 they give the PDE data only, in SI units (datasets/aerozoo_uvolume.yaml), and no
-# longer write the label-derived globals declared below (U_inf_dir, log_re_std, inlet_*_std) or
-# nondimensionalize the boundary values, so ISLA refuses the case at its first forward (the declared global
-# leaves are missing; test_aerozoo_configs.py pins this). Step 2 declares the physical fields with their units,
-# nu and rho as globals, ISLA's internal length / velocity scales and Reynolds number, and the same loss and
-# field weights as the baselines (geotransolver_volume_aerozoo.yaml).
+# ISLA, interior task, on AeroZoo v1.2 (datasets/aerozoo_uvolume.yaml, the PDE data only, in SI units): the
+# reference configuration of isla_volume.yaml with the case's four boundaries (inlet, outlet, no_slip, slip) as
+# four named boundary conditions (boundary_schemas). Each condition declares only the values it prescribes, read
+# from its own mesh's cell_data (the dataset's prescribed.* fields under their recipe names, in SI units): the
+# inlet its velocity and turbulence values, the outlet its pressure and reverse-flow values, the no-slip and slip
+# walls none. The condition's identity is in the model's parameters (its own input layer), so no role label is
+# read, and the dataset's HarmonizeBoundaryFields (one-hot role labels and zero-filled copies of the other roles'
+# fields) is dropped for this model. No query_schema: each prediction point's geometry (its signed distance to
+# the boundary surface, the union of the four meshes, and the direction from it) is computed inside the model
+# from the exact closest point on their cells, positive in the fluid (the dataset files reorient the four
+# boundaries, stored with their normals out of the fluid), so the dataset's stored SDF (the baselines' input)
+# is not read.
 #
-# ISLA, interior task, on AeroZoo v1.2 (datasets/aerozoo_uvolume.yaml): the reference configuration of
-# isla_volume.yaml with the case's four boundaries (inlet, outlet, no_slip, slip) as four named boundary
-# conditions (boundary_schemas). Each condition declares only the values it prescribes, read from its own
-# mesh's cell_data (the dataset's prescribed.* fields under their recipe names, nondimensionalized): the
-# inlet its velocity and turbulence values, the outlet its pressure and reverse-flow values, the no-slip
-# and slip walls none. The condition's identity is in the model's parameters (its own input layer), so no
-# role label is read, and the dataset's HarmonizeBoundaryFields (one-hot role labels and zero-filled
-# copies of the other roles' fields, written for the one-declaration ISLA) is dropped for this model.
-# The global inputs are the unit freestream direction, the standardized log Reynolds
-# number and the inlet's four standardized turbulence quantities. No query_schema: each prediction point's
-# geometry (its signed distance to the boundary surface, the union of the four meshes, and the direction from
-# it) is computed inside the model from the exact closest point on their cells, positive in the fluid (the
-# dataset files reorient the four boundaries, stored with their normals out of the fluid), so the dataset's
-# stored sdf_wall / sdf_slip (GeoTransolver's inputs) are not read.
+# ISLA brings its own scales (DESIGN_v2 section 4; the model's docstring, *Scales*): the length L is the RMS
+# pairwise distance of the four boundaries' faces at full resolution, the velocity U the area-weighted RMS
+# speed of the inlet's prescribed velocity (its velocity_scale source) and g its area-weighted mean direction
+# (the one global direction, K = 1), rho the density and nu the kinematic viscosity (physics.*, the PDE's
+# parameters, consumed by their roles). Each declared input is divided by its units' scale before it enters
+# the model, the standardized log10(U L / nu) is one global scalar, and each output is the head's dimensionless
+# prediction times its units' scale, then standardized by the dataset's own NormalizeMeshFields stats
+# (output_stats, which train.py injects and checks), so the loss compares it with the same physical targets as
+# every other arm. No label and no per-case scale of the recipe is read.
 #
 # The four boundaries go in at full resolution and ISLA draws its boundary tokens inside the model:
 # `boundary_tokens` (200,000, the class default) per case, water-filled over the four roles (50,000 each when
@@ -57,9 +57,15 @@ output_type: mesh
 # verdict, 2026-10-04; the width rule 1e-3 x 192 / hidden at 512): the recipe
 # default of 3e-3 drives the model to a mean-field plateau (book notebook:
 # lrref-verdict; see isla_surface.yaml).
+#
+# The loss is the per-case relative L2 with velocity weighed 3, as in geotransolver_volume_aerozoo.yaml (every
+# AeroZoo model sets the same): each case's error per field over its own physical targets' norm.
 training:
   optimizer:
     lr: 3.75e-4
+  loss_type: case_relative_l2
+  field_weights:
+    velocity: 3
 
 # Per-block compile here (compile_blocks below), not the whole-model compile of isla_volume.yaml: on
 # AeroZoo's four boundaries the whole-model graph recompiles (2026-10-16): Dynamo's duck sizing ties
@@ -84,35 +90,36 @@ forward_kwargs:
 
 model:
   _target_: physicsnemo.experimental.models.isla.ISLA
-  output_schema:                 # the dataset's targets, by name and tensor rank
-    velocity: {rank: 1}
-    pressure: {rank: 0}
-    nut: {rank: 0}
-    tke: {rank: 0}
-    omega: {rank: 0}
-  boundary_schemas:              # the boundary conditions by name, each with the fields it prescribes (nondimensional)
+  output_schema:                 # the dataset's targets, by name and tensor rank, with their SI units
+    velocity: {rank: 1, units: {U: 1}}                   # m/s
+    pressure: {rank: 0, units: {U: 2, rho: 1}}           # gauge pressure, Pa
+    nut: {rank: 0, units: {U: 1, L: 1}}                  # m^2/s
+    tke: {rank: 0, units: {U: 2}}                        # m^2/s^2
+    omega: {rank: 0, units: {U: 1, L: -1}}               # 1/s
+  boundary_schemas:              # the boundary conditions by name, each with the fields it prescribes (SI units)
     inlet:                       # Dirichlet: prescribed.dirichlet.{velocity, turbulence}
-      bc_velocity: {rank: 1}
-      bc_tke: {rank: 0}
-      bc_omega: {rank: 0}
-      bc_intermittency: {rank: 0}
-      bc_retheta: {rank: 0}
+      bc_velocity: {rank: 1, units: {U: 1}, velocity_scale: true}   # the source of U and g
+      bc_tke: {rank: 0, units: {U: 2}}
+      bc_omega: {rank: 0, units: {U: 1, L: -1}}
+      bc_intermittency: {rank: 0}                        # dimensionless
+      bc_retheta: {rank: 0}                              # dimensionless
     outlet:                      # prescribed.dirichlet.gauge_pressure and the prescribed.reverse_flow values
-      bc_pressure: {rank: 0}
-      bc_velocity_reverse: {rank: 1}
-      bc_tke_reverse: {rank: 0}
-      bc_omega_reverse: {rank: 0}
+      bc_pressure: {rank: 0, units: {U: 2, rho: 1}}
+      bc_velocity_reverse: {rank: 1, units: {U: 1}}
+      bc_tke_reverse: {rank: 0, units: {U: 2}}
+      bc_omega_reverse: {rank: 0, units: {U: 1, L: -1}}
       bc_intermittency_reverse: {rank: 0}
       bc_retheta_reverse: {rank: 0}
     no_slip: {}                  # the bodies: a wall at rest (its prescribed velocity is zero)
     slip: {}                     # the slip walls
-  global_schema:
-    U_inf_dir: {rank: 1}         # the unit freestream direction, read from global_data.U_inf_dir
-    log_re_std: {rank: 0}        # (log10 Re - 5.5) / 1.5
-    inlet_tke_std: {rank: 0}     # the inlet's turbulence quantities, standardized over the train split
-    inlet_omega_std: {rank: 0}
-    inlet_intermittency_std: {rank: 0}
-    inlet_retheta_std: {rank: 0}
+  global_schema:                 # no direction: g is derived from the inlet (K = 1)
+    physics.density: {rank: 0, role: density}            # kg/m^3, consumed for the units only
+    physics.kinematic_viscosity: {rank: 0, units: {U: 1, L: 1}, role: viscosity}   # m^2/s, consumed for Re
+  # z = (log10(U L / nu) - mean) / std, with ISLA's own U and L (box-scale L, so not the label-era 5.5 / 1.5 of
+  # L_ref). PLACEHOLDER: the scan of 284 cases (DESIGN_v2 section 5, scan 285444) gave mean 5.94, std 1.43;
+  # refit on each split's train part in round 2, from the implemented scale function.
+  reynolds: {mean: 5.94, std: 1.43}
+  output_stats: null             # injected by train.py: the dataset's NormalizeMeshFields stats of the targets
   interior: true                 # predict at prediction_points, which join the encoder as tokens
   boundary_tokens: 200000        # boundary tokens drawn per case inside the model, water-filled over the four roles (equal to the class default)
   hidden: 512                  # the reference configuration (REF-80 verdict, 2026-10-04): most accurate under 80 GiB per GPU on DrivAerML Surface and the 210-wing rung; equal to the class defaults

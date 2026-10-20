@@ -347,3 +347,97 @@ def test_cli_override_still_wins_over_the_pinned_rate():
     """Explicit learning-rate overrides take precedence over model defaults."""
     cfg = _compose("isla_surface", "drivaer_ml_surface", "training.optimizer.lr=5e-4")
     assert cfg.training.optimizer.lr == pytest.approx(5e-4)
+
+
+def _airfrans_case(s: float = 1.0, c: float = 1.0) -> DomainMesh:
+    """The synthetic AirfRANS case under x -> s x, U_inf -> c U_inf: velocity times c, kinematic pressure c^2,
+    nut s c, the airfoil's lengths s."""
+    from test_airfrans_configs import make_airfrans_case
+
+    d = make_airfrans_case()
+    pd = d.interior.point_data.clone()
+    for name, k in (("velocity", c), ("pressure", c * c), ("nut", s * c)):
+        pd[name] = pd[name] * k
+    foil = d.boundaries["airfoil"]
+    cd = foil.cell_data.clone()
+    cd["quadrature_measure"] = cd["quadrature_measure"] * s
+    gd = d.global_data.clone()
+    for name in ("U_inf", "U_inf_mag", "U_inf_freestream_mean"):
+        gd[name] = gd[name] * c
+    return DomainMesh(
+        interior=Mesh(points=d.interior.points * s, point_data=pd),
+        boundaries={"airfoil": Mesh(points=foil.points * s, cells=foil.cells, cell_data=cd)},
+        global_data=gd,
+    )
+
+
+def _airfrans_chain(cfg) -> list:
+    from datasets import (
+        _apply_dataset_transform_appends,
+        _apply_dataset_transform_drops,
+        load_dataset_config,
+    )
+
+    ds = OmegaConf.merge(
+        load_dataset_config(_RECIPE_ROOT / "datasets" / "airfrans_volume_2d.yaml"), {"sampling_resolution": 64}
+    )
+    ds = _apply_dataset_transform_appends(_apply_dataset_transform_drops(ds, cfg), cfg)
+    return [hydra.utils.instantiate(t, _convert_="all") for t in ds.pipeline.transforms]
+
+
+def test_isla_airfrans_scales_follow_the_dataset_s_nondimensionalization():
+    """The guard that keeps the two from drifting apart: AirfRANS's NonDimensionalizeByMetadata divides the
+    velocity and pressure targets by the global ``U_inf`` (and q_inf), so ISLA's one velocity source is that
+    same leaf and those two outputs are declared dimensionless; nut, which the dataset leaves physical, has
+    the units U L. nu is the constant the config sets, not a raw input."""
+    cfg = _compose("isla_volume_airfrans", "airfrans_volume_2d")
+    gs = OmegaConf.to_container(cfg.model.global_schema)
+    assert [k for k, v in gs.items() if v.get("velocity_scale")] == ["U_inf"]
+    assert gs["nu"]["role"] == "viscosity" and "U_inf_mag" not in gs and "U_inf_dir" not in gs
+    ds = OmegaConf.load(_RECIPE_ROOT / "datasets" / "airfrans_volume_2d.yaml")
+    raw = OmegaConf.to_container(ds.pipeline.transforms, resolve=False)
+    nondim = [t for t in raw if "NonDimensionalizeByMetadata" in t["_target_"]]
+    outs = OmegaConf.to_container(cfg.model.output_schema)
+    divided = {name for t in nondim for name, kind in t["fields"].items() if kind in ("velocity", "pressure")}
+    assert divided == {"velocity", "pressure"}
+    assert all("units" not in outs[name] for name in divided)
+    assert outs["nut"]["units"] == {"U": 1, "L": 1}
+
+
+def test_isla_airfrans_similarity_end_to_end():
+    """One synthetic AirfRANS case through the dataset's chain and ISLA: x -> s x, U_inf -> c U_inf and
+    nu -> s c nu leave the dataset's velocity and Cp targets and ISLA's velocity and pressure outputs
+    unchanged, and scale nut (the target and the output, in physical units) by s c."""
+    from output_normalize import check_model_output_stats, model_output_stats
+
+    cfg = _compose("isla_volume_airfrans", "airfrans_volume_2d", *SMALL)
+    targets = _targets("airfrans_volume_2d")
+    spec = OmegaConf.to_container(cfg.forward_kwargs, resolve=True)
+    chain = _airfrans_chain(cfg)
+    (normalizer,) = [t for t in chain if type(t).__name__ == "NormalizeMeshFields"]
+    torch.manual_seed(0)
+    model = hydra.utils.instantiate(cfg.model, _convert_="partial", **model_output_stats(cfg.model, normalizer))
+    check_model_output_stats(model, normalizer)
+    model.eval()
+    s, c = 0.3, 2.5
+    runs = []
+    for k, (si, ci) in enumerate(((1.0, 1.0), (s, c))):
+        d = _airfrans_case(si, ci)
+        for t in chain:
+            d = t.apply_to_domain(d)
+        gd = d.global_data.clone()
+        gd["nu"] = gd["nu"] * (si * ci)
+        d = DomainMesh(interior=d.interior, boundaries=d.boundaries, global_data=gd)
+        batch = build_collate_fn(cfg.input_type, spec, targets)([(d, {})])
+        with torch.no_grad():
+            out = model(**batch["forward_kwargs"])
+        runs.append((batch["targets"], normalize_output_to_tensordict(out, targets, cfg.output_type)))
+    (t0, y0), (t1, y1) = runs
+    stats = normalizer.stats["nut"]
+    for name in ("velocity", "pressure"):
+        torch.testing.assert_close(t1[name], t0[name], atol=1e-5, rtol=1e-5)
+        torch.testing.assert_close(y1[name], y0[name], atol=1e-5, rtol=1e-4)
+    for td in (t0, t1, y0, y1):
+        td["nut"] = td["nut"] * stats["std"] + stats["mean"]
+    torch.testing.assert_close(t1["nut"], s * c * t0["nut"], atol=1e-9, rtol=1e-4)
+    torch.testing.assert_close(y1["nut"], s * c * y0["nut"], atol=1e-9, rtol=1e-4)

@@ -91,7 +91,9 @@ from nondim import NonDimensionalizeByMetadata, NondimFieldType, freestream_scal
 from omegaconf import DictConfig, OmegaConf
 from output_normalize import (
     IOType,
+    check_model_output_stats,
     explode_tensor_targets,
+    model_output_stats,
     normalize_output_to_tensordict,
     require_output_type,
 )
@@ -509,7 +511,9 @@ def main(cfg: DictConfig) -> None:
     )
 
     # -- Model + checkpoint -----------------------------------------------------
-    model = hydra.utils.instantiate(cfg.model, _convert_="partial").to(device)
+    model = hydra.utils.instantiate(
+        cfg.model, _convert_="partial", **model_output_stats(cfg.model, normalizer)
+    ).to(device)
     num_params = sum(p.numel() for p in model.parameters())
     logger.info(f"Model: {model.__class__.__name__} ({num_params:,} params)")
 
@@ -552,6 +556,9 @@ def main(cfg: DictConfig) -> None:
                 ### ``stats`` returns a copy; the setter replaces the live
                 ### statistics (re-keying dotted names to nested keys).
                 live.stats = saved_stats
+    ### A model that standardizes its own outputs was built with the dataset YAML's
+    ### stats: it must match the training-time stats the scoring now uses.
+    check_model_output_stats(model, normalizer)
 
     model = compile_model(model, cfg)
     model.eval()

@@ -36,6 +36,7 @@ the slicing logic without paying the cost of importing tensorboard.
 
 from __future__ import annotations
 
+import math
 from typing import Any, Literal, TypeAlias
 
 import torch
@@ -74,6 +75,45 @@ def require_output_type(cfg: DictConfig) -> IOType:
             f"'tensors'; got {output_type!r}."
         )
     return output_type
+
+
+def model_output_stats(model_cfg: DictConfig, normalizer: Any | None) -> dict:
+    """The ``output_stats`` keyword of a model config that declares the key (ISLA's own
+    scales: the model standardizes its physical outputs itself) left null: the
+    dataset's ``NormalizeMeshFields`` stats as plain numbers, to inject; ``{}`` for a
+    model config without the key or with its own stats, which must be the dataset's
+    (:func:`check_model_output_stats`)."""
+    if "output_stats" not in model_cfg or model_cfg.get("output_stats") is not None:
+        return {}
+    if normalizer is None:
+        raise ValueError(
+            "the model config declares output_stats, but the dataset pipeline has no NormalizeMeshFields"
+        )
+    return {
+        "output_stats": {
+            name: {"mean": torch.as_tensor(s["mean"]).tolist(), "std": float(s["std"])}
+            for name, s in normalizer.stats.items()
+        }
+    }
+
+
+def check_model_output_stats(model: torch.nn.Module, normalizer: Any | None) -> None:
+    """Refuse a model whose ``output_stats`` are not the dataset normalizer's: the
+    model's standardized outputs and the targets must be in one space."""
+    model = getattr(model, "module", model)
+    stats = getattr(model, "output_stats", None)
+    if stats is None:
+        return
+    live = normalizer.stats if normalizer is not None else {}
+    same = stats.keys() == live.keys() and all(
+        torch.allclose(torch.as_tensor(stats[k]["mean"], dtype=torch.float64), torch.as_tensor(live[k]["mean"]).double())
+        and math.isclose(stats[k]["std"], float(live[k]["std"]), rel_tol=1e-6)
+        for k in stats
+    )
+    if not same:
+        raise ValueError(
+            f"the model's output_stats {stats!r} are not the dataset's NormalizeMeshFields stats {live!r}"
+        )
 
 
 def split_concat_by_target(
