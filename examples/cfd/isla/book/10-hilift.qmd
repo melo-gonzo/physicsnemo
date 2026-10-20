@@ -119,7 +119,8 @@ RATIO = {k: mean(v[3]) / mean(v[2]) for k, v in RUNGS.items()}
 #| label: para-hilift-lede
 #| output: asis
 print(f"The three architectures are {S.CONFIG['ISLA']}, {S.CONFIG['GeoTransolver']} and {S.CONFIG['Transolver']}, each at its reference configuration (@sec-selection). "
-      + f"In one paragraph: at the 510-case rung on the native mesh {both(HL, HL_F)}. "
+      + f"In one paragraph: at the 510-case rung on the native mesh {both(HL, HL_F)}; GeoTransolver's lead sits in a handful of cases at "
+        "stall, on the leading-edge suction peaks, and Transolver's is a broad offset on the attached cases (@sec-hilift-deficit). "
       + "Only ISLA keeps its error on a uniform point cloud of the aircraft and under rotation and translation, so under those two scorings ISLA leads "
       f"both baselines by a factor of {S.fmt_ratio(min(HL.ratio(b, f, 'area') for b in S.BASELINES for f in HL_F))} or more (@sec-de-result). On the data-efficiency "
       "ladders, run on a smaller ISLA against unit-direction baselines, GeoTransolver is ahead or level on every rung, its lead largest "
