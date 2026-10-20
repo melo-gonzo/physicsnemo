@@ -396,7 +396,8 @@ symmetry planes are real boundaries and belong among the boundary meshes.
 far-field speed is a physical law for every output (a pressure coefficient
 is of degree zero in it, a dimensional pressure of degree two), so the model
 learns the dependence as it learns any other parameter. The AirfRANS
-configuration passes the inlet speed this way.
+configuration passes the inlet speed this way (@tbl-using-configs lists every
+configuration's global inputs, @tbl-airfrans-inputs AirfRANS's whole input).
 
 ### The interior task: exact geometry and the in-model draw {#sec-using-interior}
 
@@ -409,7 +410,7 @@ three dimensions and a brute force over the segments in two). The signed
 distance $d_q = \pm|x_q - p_q|$ takes the sign of the pseudo-normal of the
 closest feature, positive on the side the normals point to; the direction
 $u_q$ is the cell's normal turned toward the query when $p_q$ lies inside a
-cell, else $(x_q - p_q)/|x_q - p_q|$. The point reads $s_q = d_q / L$ and
+cell, else $(x_q - p_q)/|x_q - p_q|$. The point reads $s_q = d_q / L$, in the length unit $L$ (@sec-arch-frame), and
 $\operatorname{asinh}(s_q / 10^{-6})$ as its two distance channels and
 $\hat\nu_q = \operatorname{sign}(d_q)\, u_q$, with $\operatorname{sign}(0) =
 +1$, as its direction (@sec-arch-interior-geometry). Both are continuous
@@ -702,20 +703,17 @@ the orientation of an interior task's boundaries).
 #| output: asis
 def decl(d):
     return ", ".join(f"`{k}` ({v['rank']})" for k, v in (d or {}).items()) or "none"
-def kS(d):
-    d = d or {}
-    return f"{sum(v['rank'] == 1 for v in d.values())} / {sum(v['rank'] == 0 for v in d.values())}"
-o = "| configuration | task | dim | outputs (rank) | global directions $K$ / scalars $S$ | boundary inputs | compile |\n|---|---|--:|---|--:|--:|---|\n"
+o = "| configuration | task | dim | outputs (rank) | global inputs (rank) | boundary inputs | compile |\n|---|---|--:|---|---|--:|---|\n"
 for n, c in ISLA_CFGS.items():
     m = c["model"]
     task = ("interior, read-only" if m.get("query_independent") else "interior") if m.get("interior") else "surface"
     comp = "whole model" if c.get("compile") else ("per block" if m.get("compile_blocks") else "none")
-    o += (f"| `{n}` | {task} | {m.get('dim', DEFAULTS['dim'])} | {decl(m.get('output_schema'))} | {kS(m.get('global_schema'))} "
+    o += (f"| `{n}` | {task} | {m.get('dim', DEFAULTS['dim'])} | {decl(m.get('output_schema'))} | {decl(m.get('global_schema'))} "
           f"| {sum(len(s or {}) for s in (m.get('boundary_schemas') or {}).values())} | {comp} |\n")
 print(o)
 print(": The recipe's ISLA model configurations (`conf/model/isla_*.yaml`, a parent's `defaults` merged in), read as the page "
       "renders. Every one is the reference configuration at the same learning rate. How to read this: \"boundary inputs\" counts "
-      "the declared per-cell fields, and the global inputs are counted by rank; \"compile\" is the whole-model `torch.compile` or the per-block `compile_blocks` (the "
+      "the declared per-cell fields; a rank-1 global input is a direction and a rank-0 one a scalar; \"compile\" is the whole-model `torch.compile` or the per-block `compile_blocks` (the "
       "AeroZoo configuration, whose four boundaries recompile the whole-model graph). It does not say which dataset file each "
       "configuration was paired with in a standing; the dataset chapters do.")
 ```

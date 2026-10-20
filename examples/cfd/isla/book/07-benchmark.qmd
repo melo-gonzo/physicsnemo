@@ -701,7 +701,8 @@ are held out per checkpoint but do not confirm a result across the whole set of 
 **Every ISLA checkpoint in Part IV, the standing's and every trained ISLA the book draws, is of one earlier form of ISLA's
 inputs, the *nearest-token form*. It has the reference configuration's width, depth, slices and learning rate and, except on
 HiLiftAeroML, the normalized slice reads, and it differs from the class of Part II in how the boundary and the prediction points enter the
-model.** @tbl-checkpoint-form lists the differences item by item. The class refuses checkpoints of any other version
+model.** The standings come from the checkpoints that the program's ledger (@sec-program-status) names the A2 reference.
+@tbl-checkpoint-form lists the differences item by item. The class refuses checkpoints of any other version
 (@sec-using-checkpoint), so these checkpoints are records of the form, not models the class loads.
 
 | item | the nearest-token form (the standing's checkpoints) | ISLA as Part II defines it |

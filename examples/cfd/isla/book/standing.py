@@ -71,6 +71,9 @@ class Dataset:
     drive_note: str = ""  # what the baselines read instead, for the one sentence the chapters print (results/drive_audit_2026-10-18/)
     provisional: dict = field(default_factory=dict)  # field -> why its ratios are given without a verdict although the inputs are fair
     notes: dict = field(default_factory=dict)
+    # the artifact (file under results/char/) or arm of ISLA at the current class on this task, None until it is scored; a standing
+    # table then shows its one ISLA row (native, area and posed seed means and per-seed values) beside the nearest-token-form row
+    current: str | None = None
 
     @property
     def short(self) -> str:

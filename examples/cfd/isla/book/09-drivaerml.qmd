@@ -412,7 +412,7 @@ plt.show()
 
 #### ISLA's interior prediction points {#sec-interior-query-tokens}
 
-**ISLA admits the interior points into its encoder as tokens, so the twelve slice layers run over the surface and the air together.** Each interior point has its own input layer, over its direction's products with the global direction and its distance channels, followed by the embedding the boundary tokens share; in every slice layer it reads the relational invariants of its position against the slice anchors as a boundary token does (@sec-isla-relational). It has no normal of its own, so the unit direction $\hat\nu_q$ from the closest point of the surface plays that part in every invariant, and its distance $d_q$ to that point, signed by the surface's pseudo-normal, enters as the channels $[s_q,\ \operatorname{asinh}(s_q / 10^{-6})]$ with $s_q \equiv d_q / L$ in the length unit $L$, continuous through the wall. Both are computed inside the model by a closest-point query against the full-resolution surface, the same for every draw of the boundary tokens (@sec-exact-geometry-draw); the dataset's stored distance field is not an input. In the standing's checkpoints, of the nearest-token form, $d_q$ and $\hat\nu_q$ came from the nearest sampled boundary token, as the channels $[d_q / L,\ \mathrm{sign}(d_q) \log(|d_q| / L + 10^{-12})]$ (@sec-checkpoint-form). The interior points take part in the measure-weighted routing with a learned total weight, a multiple of the whole boundary's measure split equally over them (@sec-interior-companion measures it), so their share of each slice does not depend on how many are requested. Every input is a function of relative geometry, so the rigid-motion contract holds exactly (@sec-isla-contracts). One property is given up: an interior point's prediction depends on the other interior points of the request, because they write into the same slices. ISLA-DTT keeps query independence instead (@sec-arch-modes); @sec-interior-read-only measures what that costs.
+**ISLA admits the interior points into its encoder as tokens, so the twelve slice layers run over the surface and the air together.** Each interior point has its own input layer, over its direction's products with the global direction and its distance channels, followed by the embedding the boundary tokens share; in every slice layer it reads the relational invariants of its position against the slice anchors as a boundary token does (@sec-isla-relational). It has no normal of its own, so the unit direction $\hat\nu_q$ from the closest point of the surface plays that part in every invariant, and its distance $d_q$ to that point, signed by the surface's pseudo-normal, enters as the channels $[s_q,\ \operatorname{asinh}(s_q / 10^{-6})]$ with $s_q \equiv d_q / L$ in the length unit $L$ (@sec-arch-frame), continuous through the wall. Both are computed inside the model by a closest-point query against the full-resolution surface, the same for every draw of the boundary tokens (@sec-exact-geometry-draw); the dataset's stored distance field is not an input. In the standing's checkpoints, of the nearest-token form, $d_q$ and $\hat\nu_q$ came from the nearest sampled boundary token, as the channels $[d_q / L,\ \mathrm{sign}(d_q) \log(|d_q| / L + 10^{-12})]$ (@sec-checkpoint-form). The interior points take part in the measure-weighted routing with a learned total weight, a multiple of the whole boundary's measure split equally over them (@sec-interior-companion measures it), so their share of each slice does not depend on how many are requested. Every input is a function of relative geometry, so the rigid-motion contract holds exactly (@sec-isla-contracts). One property is given up: an interior point's prediction depends on the other interior points of the request, because they write into the same slices. ISLA-DTT keeps query independence instead (@sec-arch-modes); @sec-interior-read-only measures what that costs.
 
 #### Why the Volume task is harder {#sec-interior-harder}
 
@@ -425,6 +425,8 @@ plt.show()
 ## The standing {#sec-drivaerml-standing}
 
 ### The Surface task {#sec-scoreboard-200k}
+
+<!-- SLOT: ISLA at the current class: one row beside the nearest-token-form row; native/area/posed seed means and per-seed values (standing.DATASETS["drivaerml_surface"].current) -->
 
 ```{python}
 #| label: para-surface-lede
@@ -507,6 +509,8 @@ rendering_figure("fig-drivaerml-prediction", [("figures/renderings/drivaerml_sur
 ```
 
 ### The Volume task {#sec-interior-results}
+
+<!-- SLOT: ISLA at the current class: one row beside the nearest-token-form row; native/area/posed seed means and per-seed values (standing.DATASETS["drivaerml_volume"].current) -->
 
 ```{python}
 #| label: para-interior-results-lead

@@ -170,6 +170,8 @@ print("\n: The cost of training on the GINOT bracket lug at the three reference 
 
 ## The standing {#sec-interior-lug}
 
+<!-- SLOT: ISLA at the current class: one row beside the nearest-token-form row; native/area/posed seed means and per-seed values (standing.DATASETS["lug"].current) -->
+
 ```{python}
 #| label: lug-lede
 #| output: asis
@@ -320,9 +322,9 @@ print(f"**Higher precision does not remove the effect, because the trained model
       f"and raises the native error from {100 * T32['native_rel_err']:.2f}% to {100 * T64['native_rel_err']:.2f}%: another arithmetic breaks the "
       "ties differently, and the model's output follows. The remedy is an input that is continuous at ties, not more bits.")
 print()
-print(f"**The class's exact geometry removes most of the shift.** Trained at the reference configuration with each node's distance and "
+print(f"**The exact built-in geometry removes most of the shift.** Trained at the reference configuration with each node's distance and "
       f"direction taken from the exact closest point of the surface, and otherwise of the nearest-token form (the stored signed distance still "
-      f"among its inputs), ISLA's rotated and translated error on the lug is {pon_rng('ctl')} times "
+      f"read as a prediction-point input), ISLA's rotated and translated error on the lug is {pon_rng('ctl')} times "
       f"its native error per seed, and {pon_rng('cont')} with the continuous distance channel of the class, against {pon_rng('a2')} for the "
       f"standing's checkpoints. Natively the continuous form is level with the standing's (ratio {GC['cont_over_a2']['native'][F]:.2f}), "
       "so the gain is in the pose and not in accuracy. What is left of the shift is the ties of the direction on the medial surface "
@@ -386,7 +388,7 @@ print(f"\n: ISLA's von Mises error on the {N_TEST} test lugs with each lug's sur
 
 **The lug standing is one scalar field on one bracket family, three shape parameters and one load; its posed column measures the nearest-sample construction of the standing's checkpoints on a structured mesh, not a frame-dependent input.**
 
-- **The standing's pose contract does not hold on this mesh.** The posed error of its checkpoints is several times their native one through tied nearest samples, a property of the nearest-token form's interior geometry on structured meshes with nodes on boundaries and symmetry planes (@sec-checkpoint-form). With the class's exact geometry the shift falls to a few percent, and what is left is the direction ties on the medial surface (@sec-medial-ties); the class's own standing on the lug is open (@sec-oq-class-standing).
+- **The standing's pose contract does not hold on this mesh.** The posed error of its checkpoints is several times their native one through tied nearest samples, a property of the nearest-token form's interior geometry on structured meshes with nodes on boundaries and symmetry planes (@sec-checkpoint-form). Trained with the exact built-in geometry, the stored signed distance still read as a prediction-point input, the same configuration's shift falls to a few percent, and what is left is the direction ties on the medial surface (@sec-medial-ties); the class's own standing on the lug is open (@sec-oq-class-standing).
 - **The native lead is a float32 reading.** The standing's checkpoints were scored in float32 only. On a study model a float64 forward pass raises ISLA's native error several-fold through the same ties (@sec-lug-ties), so how the ordering responds to another scoring precision is not known.
 - **No tensor target and no geometry class change.** Tensile2d measures a tensor target (@sec-interior-tensile2d); the lug's shapes are one topology.
 - **The surface sampling law is measured only at a reduced budget**, and only for ISLA (@sec-lug-boundary-law).

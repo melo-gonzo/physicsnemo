@@ -208,6 +208,8 @@ print(": The reference configurations on SHIFT-SUV: parameters, peak device memo
 
 ## The standing {#sec-shift-suv-standing}
 
+<!-- SLOT: ISLA at the current class: one row beside the nearest-token-form row; native/area/posed seed means and per-seed values (standing.DATASETS["shift_suv"].current) -->
+
 ```{python}
 #| label: para-shift-suv-lede
 #| output: asis
