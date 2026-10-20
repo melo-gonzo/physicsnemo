@@ -1053,12 +1053,21 @@ print(f"- **The geometry kernel is chosen for you.** At the first forward pass t
       "before the first forward pass.")
 _whole = [n for n, c in ISLA_CFGS.items() if c.get("compile")]; _rest = [n for n in ISLA_CFGS if n not in _whole]
 assert all(c.get("compile_options") == opts for c in ISLA_CFGS.values())   # one set of options in every configuration
+yv = lambda v: str(v).lower() if isinstance(v, bool) else v
+_ind = opts["options"]   # Inductor's options
+assert _ind == {"max_autotune": True, "coordinate_descent_tuning": True, "triton.mix_order_reduction": False}
 print(f"- **Compile the whole model.** The recipe's ISLA configurations do, all but {', '.join(f'`{n}`' for n in _rest)}: "
       "`compile: true` with `compile_options` "
-      + ", ".join(f"`{k}: {str(v).lower() if isinstance(v, bool) else v}`" for k, v in opts.items())
-      + ", the same options in every configuration. The forward, `Mesh` in and out, traces to one graph and compiles once with dynamic shapes, so the case-to-case "
+      + ", ".join(f"`{k}: {yv(v)}`" for k, v in opts.items() if k != "options")
+      + " and the Inductor `options` " + ", ".join(f"`{k}: {yv(v)}`" for k, v in _ind.items())
+      + ", the same options in every configuration. The first two Inductor options are those of the mode "
+      "`max-autotune-no-cudagraphs`, written out so that the third can turn off Inductor's mix-order reduction, a fusion of a "
+      "per-point sum with a sum over the points: torch 2.12 returns that sum at the wrong rank on the AirfRANS graph, and torch 2.12 "
+      "and 2.13 add padded rows to its column sums (pytorch/pytorch#195845; the comment in `isla_volume_airfrans.yaml`). The "
+      "standing's training runs compiled block by block (below), which the setting does not touch. The forward, `Mesh` in and out, "
+      "traces to one graph and compiles once with dynamic shapes, so the case-to-case "
       "change in mesh size does not recompile; validation, in eval mode, compiles a second graph. The first compile is "
-      "long, so keep `TORCHINDUCTOR_CACHE_DIR` and `TRITON_CACHE_DIR` across the links of a chained run. The mode leaves "
+      "long, so keep `TORCHINDUCTOR_CACHE_DIR` and `TRITON_CACHE_DIR` across the links of a chained run. The options leave "
       "out CUDA graphs on purpose: they are static-shape and would record a graph for every case size.")
 P3 = json.load(open(RES / "perf3_neutrality_2026-10-01.json"))
 rat = {ds: P3["datasets"][ds]["ratio"] for ds in ("drivaerml_surface", "drivaerml_volume") if ds in P3["datasets"]}
