@@ -29,7 +29,7 @@ REMOVED = f"{N_REMOVED:,} of the {N_BRACKETS:,} brackets ({N_REMOVED / N_BRACKET
 
 ## The problem: generated brackets under four load cases {#sec-deepjeb-problem}
 
-**DeepJEB++ is 15,360 generated jet-engine brackets in the SimJEB design space, each solved by linear static finite elements under four load cases applied at the lug bore with the bolt holes clamped.** ISLA receives the surface triangles with the fixed and loaded labels and the applied traction as boundary inputs. The load direction is its one global vector $\hat g_1$, and a force-or-torque one-hot enters as two global scalars. It predicts the von Mises stress and the displacement at the surface cells, so this is a surface task: the boundary tokens are also the prediction points.
+**DeepJEB++ is 15,360 generated jet-engine brackets in the SimJEB design space, each solved by linear static finite elements under four load cases applied at the lug bore with the bolt holes clamped.** ISLA receives the surface triangles as three named boundary conditions, the fixed bolt holes, the loaded lug bore with its applied traction and the free rest. The load direction is its one global vector $\hat g_1$, and a force-or-torque one-hot enters as two global scalars. It predicts the von Mises stress and the displacement at the surface cells, so this is a surface task: the boundary tokens are also the prediction points.
 
 The one-hot is there because a direction does not say what kind of load it carries. A force along $\hat g_1$ and a torque about $\hat g_1$ are different loads with the same unit vector, and a moment axis is a pseudovector: under a proper rotation it transforms as a vector does, under a reflection it does not. The model is told which one it has, and still takes the axis as an ordinary global vector, the only kind of global vector ISLA accepts (@sec-isla-inputs). The one-hot does not restore the mirror behavior, so on DeepJEB++ ISLA's covariance contract covers proper rotations and translations only. The rotated and translated scoring uses proper rotations, so the standing is unaffected.
 
@@ -97,7 +97,7 @@ plt.show()
 **15,360 jet-engine brackets generated with TRELLIS, a generative model of 3-D shapes, in the design space of SimJEB, the simulated jet-engine bracket dataset (Yoo et al., KAIST; Hugging Face `KAIST-SmartDesignLab/DeepJEB-PP`; ODC-By 1.0), each under four static linear-elastic load cases (Ti-6Al-4V): vertical, horizontal and diagonal forces and a torsion about $z$, with the bolt holes clamped and the load shared over the lug bore.** The surface is decimated to 25,000 vertices, with per-vertex displacement (mm) and von Mises stress (MPa) for each load case and explicit index sets for the clamped bolt and loaded lug vertices.
 
 - **Conversion** (`deepjebpp_convert.py`). One file per bracket and load: the surface triangles wound outward, their areas, the `bc_fixed` and `bc_loaded` labels, the traction `bc_load` (for a force $F\,\hat d / A_{\text{loaded}}$; for the torsion the rigid-twist traction about the lug axis), cell-mean targets, and global data with `load_dir` (the force direction or the moment axis), the `load_type` one-hot [force, torque], the magnitude and the bracket's mass and volume.
-- **What each model receives.** A surface task in the DrivAerML layout (`deepjebpp_surface.yaml`), with coordinates scaled from mm to 0.1 m so that a bracket spans about one unit. ISLA (`isla_surface_deepjebpp.yaml`) takes `load_dir` as the one global vector ($K = 1$), the one-hot as two global scalars, the two labels as boundary scalars and the traction as a boundary vector, which it reads through invariants against each cell's normal and $\hat g_1$ (@sec-isla-inputs). It predicts the von Mises stress as a scalar and the displacement as a vector. GeoTransolver and Transolver read each cell's coordinates, normal, labels and traction as raw feature columns, each vector as its components along the dataset's axes, and the load direction and the one-hot as global features.
+- **What each model receives.** A surface task in the DrivAerML layout (`deepjebpp_surface.yaml`), with coordinates scaled from mm to 0.1 m so that a bracket spans about one unit. ISLA (`isla_surface_deepjebpp.yaml`) takes `load_dir` as the one global vector ($K = 1$) and the one-hot as two global scalars. `SplitBoundaryByLabels` cuts the surface into three named boundary conditions by its labels, `loaded` before `fixed`, with the unlabeled cells `free`, and orders the scored cells as ISLA predicts them; the traction is a boundary vector of `loaded` alone, which ISLA reads through invariants against each cell's normal and $\hat g_1$ (@sec-isla-inputs). The standing's checkpoints, of the nearest-token form, read the surface as one boundary with the two labels as cell scalars (@sec-checkpoint-form). It predicts the von Mises stress as a scalar and the displacement as a vector. GeoTransolver and Transolver read each cell's coordinates, normal, labels and traction as raw feature columns, each vector as its components along the dataset's axes, and the load direction and the one-hot as global features.
 - **Splits.** Grouped by SimJEB seed pair, because the brackets of one pair are a smooth family and must not straddle a split: a seed-0 draw of 10% of the pairs is the test set and the rest train. The authors' pair-grouped and random splits are kept under `official_*`.
 - **Pitfalls.** The label census removed `{python} REMOVED` for unphysical stress maxima, a bracket going with all four of its load cases; every number in this chapter is on the clean split. Published stress errors for Transolver, GNOT (the General Neural Operator Transformer) and GI-FNO (a geometry-informed Fourier neural operator) are 30 to 37% (`results/book_audit_2026-09-22/datasets_scout.md`), comparable in kind but not in split.
 
@@ -125,6 +125,8 @@ print("\n: The cost of training on DeepJEB++ at the three reference configuratio
 **On this dataset the three cost about the same to train** (@tbl-deepjeb-cost). ISLA has `{python} f"{COST['ISLA']['n_parameters'] / COST['GeoTransolver']['n_parameters']:.1f}"` times GeoTransolver's parameters, and its epoch takes `{python} f"{COST['ISLA']['epoch_seconds'] / COST['GeoTransolver']['epoch_seconds']:.2f}"` times GeoTransolver's and `{python} f"{COST['ISLA']['epoch_seconds'] / COST['Transolver']['epoch_seconds']:.2f}"` times Transolver's. The comparison is close to matched in memory and time, not in parameters.
 
 ## The standing {#sec-surface-deepjeb}
+
+<!-- SLOT: ISLA at the current class: one row beside the nearest-token-form row; native/area/posed seed means and per-seed values (standing.DATASETS["deepjeb"].current) -->
 
 ```{python}
 #| label: para-deepjeb-lede
@@ -154,7 +156,7 @@ import json as _json
 _R = _json.load(open(RENDER_DIR / "render_cloud_deepjebpp.json"))
 rendering_figure("fig-deepjeb-prediction", [("figures/renderings/deepjebpp_von_mises.png", "von Mises stress"), ("figures/renderings/deepjebpp_displacement.png", "Displacement magnitude")],
     f"The three reference configurations on one DeepJEB++ test bracket under its horizontal load case, {_R['sample_id'].split('_')[0]}. Relative L2 on this case: {case_errors(_R['per_sample_rel_l2'])}. " + "Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one "
-      "symmetric scale. How to read this: one case, chosen as the case of median ISLA error (seed 42 of each reference configuration), "
+      f"symmetric scale. ISLA checkpoints of the {S.FORM_TAG} (@sec-checkpoint-form). How to read this: one case, chosen as the case of median ISLA error (seed 42 of each reference configuration), "
       "not a standing; the standing is the table above. "
     + "Data: results/renderings_2026-10-18/arrays/render_cloud_deepjebpp.json.", nrow=2)
 ```
@@ -176,7 +178,7 @@ same_txt = ("equal its native ones to every digit the record keeps" if max(pz) <
 print(f"**Rotated and translated, ISLA reproduces its native numbers; the baselines lose the field.** ISLA's posed errors "
       f"{same_txt}. GeoTransolver reads {bp['GeoTransolver'][0]:.2f} on von Mises stress and "
       f"{bp['GeoTransolver'][1]:.2f} on displacement, Transolver {bp['Transolver'][0]:.2f} and {bp['Transolver'][1]:.2f}: errors above one, "
-      "worse than predicting zero everywhere. This is a surface task, so ISLA builds no nearest-sample input for its prediction points, "
+      "worse than predicting zero everywhere. This is a surface task, so the checkpoints build no nearest-sample input for their prediction points, "
       "which are the boundary tokens themselves, and the tie mechanism that bends the contract on the other two solids "
       "(@sec-tensile2d-ties, @sec-lug-ties) has nothing to act on.")
 ```

@@ -92,15 +92,22 @@ print(f"- **Not that ISLA is more accurate in distribution in general.** Across 
   exactly pose-invariant, and one trained with rotation augmentation approximately so. ISLA's pose lead is
   against GeoTransolver and Transolver as released, trained in the dataset's frame without
   augmentation and scored in random poses (@sec-pose).
-- **Not that ISLA's pose invariance is exact on every mesh.** It is exact to roundoff where each
-  prediction point has one nearest boundary sample, and it is not where the mesh puts points
-  equidistant from two: the lug's structured hexahedral mesh and the nodes on Tensile2d's polyline
-  (@sec-limits-ties). ISLA-DTT's far-field read adds no such limit: a tie of its forest's
-  frame moves the read only by the tree's error (@sec-oq-dtt-frame).
+- **Not that the standing measures ISLA as Part II defines it.** Its ISLA checkpoints are of the
+  nearest-token form, which differs from the class in how the boundary and the prediction points
+  enter the model (@sec-checkpoint-form); the class's own standing is @sec-oq-class-standing.
+- **Not that the standing's pose invariance is exact on every mesh.** In its checkpoints it is exact
+  to roundoff where each prediction point has one nearest boundary sample, and it is not where the
+  mesh puts points equidistant from two: the lug's structured hexahedral mesh and the nodes on
+  Tensile2d's polyline (@sec-limits-ties). The class's exact wall geometry has no such selection;
+  what it leaves is the direction ties on the medial surface of the lug (@sec-oq-ties). ISLA-DTT's
+  far-field read adds no such limit: a tie of its forest's frame moves the read only by the tree's
+  error (@sec-oq-dtt-frame).
 - **Not that discretization consistency is an exact invariance.** It is a fine-mesh-limit
   property: under a change of sampling law ISLA's residual is quadrature variance that shrinks
-  with the cell count (@sec-principle). On the interior tasks one input, the wall distance from
-  the nearest sampled boundary token, still reads the sample (@sec-limits-boundary-law).
+  with the cell count (@sec-principle). In the standing's checkpoints one input of the interior
+  tasks, the wall distance from the nearest sampled boundary token, reads the sample as well
+  (@sec-limits-boundary-law); the class computes it from the full-resolution surface
+  (@sec-exact-geometry-draw).
 - **Not that the interior lead is unconditional** (@sec-limits-interior).
 - **Not that either architecture extrapolates across a flow regime or transfers zero-shot to a
   new geometry family** (@sec-limits-regime, @sec-limits-transfer).
@@ -234,10 +241,10 @@ print(f"**On the interior standings that compare the architectures, the reading 
       + (unfair_sentence(INT_UNFAIR) + " No comparison is drawn from " + ("that record" if len(INT_UNFAIR) == 1 else "those records")
          + " (@sec-oq-unit-direction). " if INT_UNFAIR else "")
       + "Three limits bound the comparison. The architectures do not receive the same inputs: GeoTransolver and Transolver read every prediction point "
-        "with the stored signed-distance field, computed by the dataset from the full-resolution surface, while ISLA computes its wall distance "
-        "and direction from the nearest sampled boundary token (@sec-limits-boundary-law). The interacting configuration's prediction at a point "
-        "depends on the other points in the request (@sec-limits-query-independence). And each configuration has two seeds. What would move this: "
-        "@sec-oq-geometry and @sec-oq-dtt.")
+        "with the stored signed-distance field, computed by the dataset from the full-resolution surface, while the standing's ISLA checkpoints, "
+        "of the nearest-token form, compute their wall distance and direction from the nearest sampled boundary token (@sec-limits-boundary-law). "
+        "The interacting configuration's prediction at a point depends on the other points in the request (@sec-limits-query-independence). And "
+        "each configuration has two seeds. What would move this: @sec-oq-class-standing and @sec-oq-dtt.")
 ```
 
 ### The interior model and the boundary token law {#sec-limits-boundary-law}
@@ -248,15 +255,16 @@ print(f"**On the interior standings that compare the architectures, the reading 
 V = ST["drivaerml_volume"]; SF = ST["drivaerml_surface"]
 vol = [V.shift("ISLA", f, "area") for f in V.ds.headline]
 surf = max(abs(SF.shift("ISLA", f, "area") - 1) for f in SF.ds.headline)
-print(f"**ISLA's interior prediction on the DrivAerML Volume task depends on the law that places its boundary tokens: redrawing the "
-      f"car's surface in proportion to area raises its errors to {fmt_ratio(min(vol))} to {fmt_ratio(max(vol))} times native, while the "
+print(f"**The interior prediction of the standing's ISLA checkpoints on the DrivAerML Volume task depends on the law that places their "
+      f"boundary tokens: redrawing the car's surface in proportion to area raises their errors to {fmt_ratio(min(vol))} to {fmt_ratio(max(vol))} times native, while the "
       f"Surface model's errors under the same redraw stay within {100 * surf:.0f}% of native.** The comparison is ISLA against itself: "
       "the baselines never read the boundary sample on this task, so the redraw leaves them untouched. The cause is the one "
-      "discretization-dependent input of the interior task. A prediction point takes its wall distance and direction from the nearest "
-      "sampled boundary token (@sec-isla-inputs); the nearest token of a sparse sample sits up to one sample spacing from the true "
+      "discretization-dependent input of the nearest-token form. A prediction point takes its wall distance and direction from the nearest "
+      "sampled boundary token (@sec-checkpoint-form); the nearest token of a sparse sample sits up to one sample spacing from the true "
       "closest point, so the distance overestimates the true wall distance near the wall and moves when the sampling law moves the "
       "tokens. With the native-draw geometry and every other input from the redraw, the error returns to native (@sec-interior-results). "
-      "The slices, anchors and routing carry none of the sensitivity. What would move this: @sec-oq-geometry.")
+      "The slices, anchors and routing carry none of the sensitivity. The class computes the wall geometry from the full-resolution surface, "
+      "the same for every draw (@sec-exact-geometry-draw); what a model of it does under the redraw is part of @sec-oq-class-standing.")
 ```
 
 ### Pose invariance where boundary samples tie {#sec-limits-ties}
@@ -270,16 +278,16 @@ exact = [k for k in ST if all(abs(ST[k].shift("ISLA", f, "posed") - 1) < 0.02 fo
 worst = max(abs(ST[k].shift("ISLA", f, "posed") - 1) for k in exact for f in ST[k].ds.headline)
 lug = ST["lug"].shift("ISLA", "von_mises_l2", "posed"); t2 = max(ST["tensile2d"].shift("ISLA", f, "posed") for f in ("stress_l2", "displacement_l2"))
 dl = ST["lug"].err("ISLA", "von_mises_l2", "posed") - ST["lug"].err("ISLA", "von_mises_l2")
-print(f"**Under a rotation and translation ISLA's error stays within {100 * worst:.1f}% of native on {len(exact)} of the {len(ST)} "
-      f"standings, and it does not on the two finite-element meshes whose nodes tie for their nearest boundary sample: {lug:.2f} times "
-      f"native on the GINOT bracket lug and up to {t2:.2f} times on PLAID Tensile2d, both in the seed mean.** Where two boundary tokens are equally near a "
-      "prediction point, float32 rounding of the moved coordinates picks between them, and the point's direction input can turn by order "
+print(f"**Under a rotation and translation the error of the standing's ISLA checkpoints stays within {100 * worst:.1f}% of native on "
+      f"{len(exact)} of the {len(ST)} standings, and it does not on the two finite-element meshes whose nodes tie for their nearest boundary sample: {lug:.2f} times "
+      f"native on the GINOT bracket lug and up to {t2:.2f} times on PLAID Tensile2d, both in the seed mean.** In the nearest-token form "
+      "(@sec-checkpoint-form), where two boundary tokens are equally near a prediction point, float32 rounding of the moved coordinates picks between them, and the point's direction input can turn by order "
       f"one; on one test lug's structured hexahedral mesh {100 * tied:.0f}% of the nodes tie to a relative gap of 1e-7, inside float32 "
       f"rounding, and one rigid motion moves the nearest sample of "
       f"{100 * moved:.0f}% (@sec-lug-ties), while on Tensile2d only the nodes on the polyline tie (@sec-tensile2d-ties). The lug's factor is "
       f"large because its native error is small: the posed-minus-native difference is {100 * dl:.2f}% of the field. The same nearest-sample "
       "selection is behind the boundary-law dependence of @sec-limits-boundary-law. Data: results/char/solids_ties_2026-10-18.json. "
-      "What would move this: @sec-oq-ties.")
+      "The class's exact geometry makes no such selection (@sec-medial-ties); what it leaves on the lug is @sec-oq-ties.")
 ```
 
 ### The prediction depends on the query set {#sec-limits-query-independence}
@@ -321,9 +329,8 @@ AZ_SPLITS = ("family_non_box", "reynolds", "bank_blobs", "bank_zero_to_cad", "pr
 AZ_HELDOUT = len(AZ_SPLITS)
 AZ_COST = "not priced (no cost record holds an AeroZoo run)"
 SEEDS = 2
-# (i) exact geometry: ISLA with the exact construction on the interior datasets of the cost record (and, unpriced, the AeroZoo held-out splits)
-q1_lanes = {"DrivAerML Volume": SEEDS * lane_gpuh("drivaerml_volume"), "AirfRANS": SEEDS * lane_gpuh("airfrans")}
-q1 = sum(q1_lanes.values())
+# (o) the class's standing: no cost record holds a run of the class as Part II defines it, so its lanes are not priced
+CLASS_COST = "not priced (no cost record holds a run of the class)"
 # (iv) the flagged standings with unit-direction baselines: both baselines, two seeds; the record of tasks the cost record holds
 UD = {k: SEEDS * sum(lane_gpuh(k, b) for b in S.BASELINES) if k in TASK else None for k in UNFAIR}
 # (ix) the constant-drive standings with unit-direction baselines: GeoTransolver on each, Transolver where it has not read it yet
@@ -339,8 +346,8 @@ q5_cells = SEEDS * sum(ref_lane * c / 200 for c in CELLS)
 q5 = q5_ladder + q5_cells
 # (vi) Tensile2d: the per-node error of the standing's checkpoints (scoring only) and GeoTransolver + ISLA's measure-weighted pooling
 q6 = SEEDS * lane_gpuh("tensile2d", "GeoTransolver")
-# (vii) pose on tied meshes: ISLA with a continuous geometry construction on the lug and Tensile2d, two seeds
-q7 = SEEDS * (lane_gpuh("lug") + lane_gpuh("tensile2d"))
+# (vii) the medial-surface direction ties: the lug with a continuous direction input, and its native cost on AirfRANS and Tensile2d, two seeds
+q7 = SEEDS * (lane_gpuh("lug") + lane_gpuh("airfrans") + lane_gpuh("tensile2d"))
 fmt_h = lambda h: f"{h:,.0f}" if h < 1000 else f"{h / 1000:.1f} thousand"
 ```
 
@@ -348,9 +355,9 @@ fmt_h = lambda h: f"{h:,.0f}" if h < 1000 else f"{h / 1000:.1f} thousand"
 #| label: tbl-open-questions
 #| output: asis
 rows = [
-    ("Should a prediction point's wall geometry come from the exact full-resolution surface, with the boundary drawn inside the model, rather than from the nearest sampled token?",
-     "the exact construction against the nearest-token form at equal size on DrivAerML Volume, AirfRANS and the AeroZoo held-out splits; native error and the boundary-law shift",
-     f"{fmt_h(q1)}, the AeroZoo splits not priced"),
+    ("Do the standing's verdicts hold for ISLA as Part II defines it?",
+     "the ISLA lanes of AirfRANS, the DrivAerML Surface and Volume tasks, SHIFT-SUV, Tensile2d, the lug and DeepJEB++ retrained at the reference configuration with the class (each condition's own input layer, the exact wall geometry with the continuous encoding, the boundary drawn inside the model, no stored signed distance), two seeds, scored under the scoring protocol against the same baseline checkpoints; per dataset, the seed rule's verdicts and the pose and resampling shifts; HiLiftAeroML first needs a decimated geometry asset",
+     CLASS_COST),
     ("Should ISLA-DTT be ISLA's only interior form?", "ISLA-DTT ÷ ISLA on velocity and pressure on `full` and each AeroZoo held-out split under the benchmark protocol, at equal size", AZ_COST),
     ("How large is ISLA-DTT's tree error at θ = 1 where its forest's frame ties?", "ISLA-DTT scored rotated and translated, and under boundary redraws, on cases whose boundary has near-equal principal variances", "scoring only"),
     ("Where does ISLA stand on AeroZoo, in distribution and with a family held out?",
@@ -374,7 +381,7 @@ rows += [
      "not priced (the wing rung is not in the cost record)"),
     ("Do the scaling law, the cell-count saturation and the capacity floor hold at the reference configuration?", "the case ladder at three sizes around the reference and a cell ladder at 435 cars, on the DrivAerML Surface task", fmt_h(q5)),
     ("What causes ISLA's stress and displacement deficit on Tensile2d?", "ISLA's error per node on the polyline against the interior, beside the baselines'; GeoTransolver + ISLA's measure-weighted pooling", fmt_h(q6)),
-    ("Can pose invariance be exact on meshes with tied boundary samples?", "a continuous geometry construction, retrained on the lug and Tensile2d and scored posed", fmt_h(q7)),
+    ("Can the class's pose invariance be exact on the lug, whose nodes tie on the medial surface?", "a direction input that is continuous at a medial tie, retrained on the lug and scored posed against the exact-geometry control, same seeds; its native cost on AirfRANS and Tensile2d", fmt_h(q7)),
 ]
 out = "| question | what would settle it | cost [GPU-hours] |\n|---|---|---|\n" + "".join(f"| {a} | {b} | {c} |\n" for a, b, c in rows)
 print(out)
@@ -386,36 +393,25 @@ print(": The open questions, the measurement that would settle each, and its cos
       "results/char/char_lanes_cost_2026-10-04.json.")
 ```
 
-### Exact wall geometry for prediction points {#sec-oq-geometry}
+### The standing of the class {#sec-oq-class-standing}
 
 ```{python}
-#| label: para-oq-geometry-af
+#| label: para-oq-class-standing
 #| output: asis
-AG = json.load(open(RES / "char" / "airfrans_area2_a2.json"))["runs"]
-def ag(arm, f, key):
-    return [r["fields"][f][key] for r in AG.values() if r["arm"] == arm]
-def ag_native(arm, f):
-    return statistics.mean(r["fields"][f]["mean"]["native"] for r in AG.values() if r["arm"] == arm)
-ex_p = ag_native("exact-geometry variant", "pressure_l2") / ag_native("ISLA", "pressure_l2")
-law_isla = [x for f in ("pressure_l2", "velocity_l2") for x in ag("ISLA", f, "r")]
-law_ex = [x for f in ("pressure_l2", "velocity_l2") for x in ag("exact-geometry variant", f, "r")]
-cnt_ex = [x for f in ("pressure_l2", "velocity_l2") for x in ag("exact-geometry variant", f, "count_effect")]
-print("**The open question is whether an interior prediction point should take its wall distance and direction from the exact "
-      "full-resolution surface, with the boundary tokens drawn inside the model, instead of from the nearest sampled token.** The "
-      "nearest-token form is the one input of the interior task that reads the discretization (@sec-limits-boundary-law, @sec-limits-ties). "
-      "The alternative computes, for every prediction point, the signed distance and direction to the closest point of the full-resolution "
-      "boundary meshes, and lets the model draw its boundary tokens from those meshes itself, by a systematic sample in proportion to area "
-      "with exact Horvitz–Thompson weights. The interior ISLA would then take whole boundary meshes as input rather than a sample, a change "
-      f"of its input contract. On the AirfRANS interior task, a variant with the exact closest point, trained at the reference configuration, "
-      f"has {100 * (1 - ex_p):.0f}% lower pressure error than ISLA on the native mesh. Under a redraw of the airfoil at 400 segments its "
-      f"length ÷ uniform ratio, its error with the segments kept in proportion to their length over its error with a uniform draw, is "
-      f"{min(law_ex):.2f} to {max(law_ex):.2f} on pressure and velocity, against {min(law_isla):.2f} to {max(law_isla):.2f} for ISLA: the "
-      f"length-proportional draw lowers the variant's error and raises ISLA's, while thinning the airfoil still multiplies its error by {min(cnt_ex):.0f} to {max(cnt_ex):.0f} "
-      "(results/char/airfrans_area2_a2.json). What would settle the question: the exact form against the nearest-token form at equal size, "
-      "two seeds each, on DrivAerML Volume, AirfRANS and the AeroZoo held-out splits, read on native error and on the boundary-law shift.")
-print()
-print("Cost: " + "; ".join(f"{k} {fmt_h(v)} GPU-hours" for k, v in q1_lanes.items()) + f"; {fmt_h(q1)} in all; the AeroZoo held-out "
-      "splits are not priced, because no cost record holds an AeroZoo run.")
+print("**The open question is whether the standing's verdicts hold for ISLA as Part II defines it.** Every ISLA checkpoint of the "
+      "standing is of the nearest-token form (@sec-checkpoint-form), and the class differs from it in four inputs: each boundary condition "
+      "has its own input layer rather than a one-hot label in one shared schema; each prediction point's wall distance and direction are "
+      "exact against the full-resolution boundary, with the continuous encoding, rather than from the nearest sampled token; the boundary "
+      "tokens are drawn inside the model rather than by the datapipe; and no stored signed distance is read, where the form read it on "
+      "AirfRANS, Tensile2d and the lug. The baselines' inputs are the same in both. The evidence of chapter 04 bears on single properties "
+      "of the class (@sec-exact-geometry-draw, @sec-medial-ties), not on its standing. What would settle it: on AirfRANS, the "
+      "DrivAerML Surface and Volume tasks, SHIFT-SUV, Tensile2d, the lug and DeepJEB++, the ISLA lanes retrained at the reference "
+      "configuration with the class as it is, two seeds (42 and 43), scored under the scoring protocol of @sec-protocol on the same scoring sets and against the same baseline checkpoints; per dataset, the seed rule "
+      "applied to every headline field, read on whether each verdict of @tbl-thesis holds, with the rotated and translated and the "
+      "resampled shifts beside it. HiLiftAeroML's row at the class is open for a reason of its own: the class reads each boundary "
+      "condition whole, as one full-resolution mesh with its exact geometry, and a HiLiftAeroML case is the largest surface of the "
+      "book (@sec-hilift), so that input needs a decimated geometry asset of each wing first. "
+      f"Cost: {CLASS_COST}.")
 ```
 
 ### ISLA or ISLA-DTT as the interior form {#sec-oq-dtt}
@@ -427,7 +423,9 @@ print("**The open question is whether the read-only form, whose prediction at a 
       "should be ISLA's only interior model.** The interacting form lets prediction points inform one another through the slices, and pays "
       "for it with a prediction that depends on the request (@sec-limits-query-independence). The read-only form gives that up and reads "
       "every boundary cell through a Barnes–Hut forest at every depth, at a longer training step (@sec-arch-tree-read). On "
-      "the two interior standings ISLA-DTT is not part of the reference set. The decisive data are AeroZoo's held-out splits, where "
+      "the two interior standings ISLA-DTT is not part of the reference set. At the reference configuration on AirfRANS, in the "
+      "nearest-token form, ISLA-DTT is ahead of interacting ISLA on pressure and velocity and level on eddy viscosity "
+      "(@sec-airfrans-dtt-reference); one planar dataset in distribution does not settle the question. The decisive data are AeroZoo's held-out splits, where "
       "generalization rather than in-distribution accuracy is at stake. What would settle it: both forms at equal size under the "
       f"benchmark protocol (@sec-aerozoo-allowed), on `full` and on each of the {AZ_HELDOUT} held-out splits, two seeds each, with the "
       "ratio ISLA-DTT ÷ ISLA on velocity and pressure as the readout, read by the seed rule. If the two are level on every split, the "
@@ -599,27 +597,34 @@ print(f"**The open question is what causes ISLA's deficit on PLAID Tensile2d.** 
       f"and {r('tensile2d', 'Transolver', 'displacement_l2'):.2f}, and Transolver ÷ ISLA on plastic strain "
       f"{r('tensile2d', 'Transolver', 'q_l2'):.2f}, on a metric dominated by specimens that never yield. The smallest ratio of the "
       f"{n_all} comparisons is {worst[0]:.2f}, {worst[3]} on {WD.get(worst[2], worst[2])}; on displacement it is "
-      f"{disp_worst[0]:.2f}, against {disp_worst[1]}. Two candidate causes are testable. One is the interior geometry: ISLA reads the "
-      "stored distance field as the baselines do, and on top of it the distance and direction to its nearest boundary sample, which tie "
-      "at the nodes on the polyline (@sec-tensile2d-ties). ISLA's error per node on the polyline against its error in the interior, set "
+      f"{disp_worst[0]:.2f}, against {disp_worst[1]}. Two candidate causes are testable. One is the interior geometry: the standing's ISLA "
+      "checkpoints read the stored distance field as the baselines do, and on top of it the distance and direction to their nearest "
+      "boundary sample, which tie at the nodes on the polyline (@sec-tensile2d-ties). ISLA's error per node on the polyline against its error in the interior, set "
       "beside the baselines', tests it on the standing's checkpoints, at the cost of scoring only. The other is the aggregation: "
       "GeoTransolver + ISLA's measure-weighted pooling (ablation) isolates whether the quadrature weighting costs accuracy on a mesh "
       "whose boundary segments are nearly equal. What would settle it: the per-node comparison, and the ablation at two seeds on the "
       f"reference protocol. Cost: {fmt_h(q6)} GPU-hours.")
 ```
 
-### Pose on tied meshes {#sec-oq-ties}
+### The direction ties on the lug's medial surface {#sec-oq-ties}
 
 ```{python}
 #| label: para-oq-ties
 #| output: asis
+GC = json.load(open(RES / "campaigns_2026-10-19" / "geo_evidence" / "geo_evidence.json"))["geo_cont"]["lug"]["posed_over_native_per_seed"]
+rng = lambda arm: " and ".join(f"{v:.2f}" for v in GC[arm]["von_mises_l2"].values())
 n_pose = sum(all(abs(ST[k].shift("ISLA", f, "posed") - 1) <= 0.002 for f in ST[k].ds.headline) for k in ST)
-print("**The open question is whether ISLA's pose invariance can be exact on meshes whose nodes tie for their nearest boundary sample.** "
-      "The break comes from one discontinuous selection, the nearest boundary token (@sec-limits-ties). A construction that is continuous "
-      "in the sample removes it: a measure-weighted soft minimum over the near-tied tokens, or the exact closest point of @sec-oq-geometry, "
-      "which is continuous wherever the closest point is unique. The bar is the one the other standings set: posed ÷ native within 0.002 "
-      f"of one on every headline field, which {n_pose} of the {len(ST)} standings meet. What would settle it: the lug and Tensile2d "
-      f"retrained with the continuous construction, two seeds each, scored native and posed. Cost: {fmt_h(q7)} GPU-hours.")
+print("**The open question is whether ISLA's pose invariance can be exact on the lug, where the class's exact wall geometry still leaves "
+      "a tie.** The exact closest point removes the nearest-token selection, and with it most of the lug's pose shift: trained with it, "
+      f"and otherwise in the nearest-token form (the stored signed distance still read as a prediction-point input), the posed ÷ native "
+      f"error is {rng('ctl')} per seed, and {rng('cont')} with the continuous "
+      f"distance channel, against {rng('a2')} for the standing's checkpoints (results/campaigns_2026-10-19/geo_evidence/geo_evidence.json). "
+      "What is left is the direction on the medial surface: a node on the plate's mid-thickness plane is equally far from the top and the "
+      "bottom face, so its direction is up or down by rounding, and no encoding of the distance, which is continuous there, removes it "
+      "(@sec-medial-ties). The bar is the one the other standings set: posed ÷ native within 0.002 of one on every headline field, which "
+      f"{n_pose} of the {len(ST)} standings meet. What would settle it: a direction input that is continuous at a medial tie, such as the "
+      "sign-invariant $u \\otimes u$, retrained on the lug and scored posed against the exact-geometry control at the same seeds, with "
+      f"its cost to native accuracy measured on AirfRANS and Tensile2d, where no such tie occurs. Cost: {fmt_h(q7)} GPU-hours.")
 ```
 
 ## Datasets beyond external aerodynamics {#sec-limits-datasets}
@@ -664,12 +669,12 @@ print("**ISLA is the choice where the deployment mesh or sampling law may differ
       "arbitrary poses, and where a surrogate must be a function of the physics rather than of the dataset's frame; on in-distribution "
       f"accuracy at matched memory it leads in {len(TAL['leads'])}{LUGC}, is level in {len(TAL['is level with'])} and trails in "
       f"{len(TAL['trails'])} of the {n_all} comparisons of the standing (@sec-standing).** The recommendation rests on the contracts, which "
-      "hold on every standing up to the two limits of this chapter (tied samples, the interior's nearest-token geometry), and not on an "
-      "accuracy lead. GeoTransolver and Transolver are released, in use and not modified; measure weighting and origin-free positions reach "
+      "hold on every standing up to the two limits of its checkpoints' nearest-token geometry (tied samples, the interior's dependence on "
+      "the boundary draw), and not on an accuracy lead. GeoTransolver and Transolver are released, in use and not modified; measure weighting and origin-free positions reach "
       "users through ISLA (@sec-principled-ledger). Three outcomes would change the recommendation.")
 print()
-print("- **The interior recommendation becomes unconditional** if the exact wall geometry (@sec-oq-geometry) removes the boundary-law "
-      "dependence without costing velocity, and the eddy-viscosity deficit against GeoTransolver on the DrivAerML Volume task closes.")
+print("- **The interior recommendation becomes unconditional** if the class's own standing (@sec-oq-class-standing) keeps the interior "
+      "verdicts without the boundary-law dependence, and the eddy-viscosity deficit against GeoTransolver on the DrivAerML Volume task closes.")
 print("- **The interior model changes form** if ISLA-DTT is level with ISLA on every AeroZoo held-out split (@sec-oq-dtt): the "
       "recommendation is then a read-only model whose prediction at a point depends on that point and the boundary alone.")
 print("- **ISLA gains a generalization claim** if its held-out penalty on AeroZoo, measured under the benchmark protocol, is "

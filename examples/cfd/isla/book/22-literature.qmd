@@ -56,8 +56,9 @@ are @sec-isla-contracts.
 
 **In distribution, ISLA leads on some datasets and fields and trails on
 others. Rotated and translated, or resampled, its error barely moves except
-on the two solid meshes whose nearest boundary samples tie, while the
-baselines' errors grow by factors.**
+on the two solid meshes whose nearest boundary samples tie in the
+nearest-token form of the standing's checkpoints (@sec-checkpoint-form),
+while the baselines' errors grow by factors.**
 
 ```{python}
 #| label: para-vs-standing
@@ -106,7 +107,7 @@ print(f"At the reference configurations on the native mesh, over {len(keys) - le
       f"Rotated and translated, ISLA's error moves by at most "
       f"{100 * max(abs(r - 1) for *_, r in posed_isla):.1f}% on every headline field except on "
       + " and ".join(f"{ds} (up to ×{r:.2f})" for ds, r in bent_ds.items())
-      + f", the two solid meshes where tied nearest samples move the prediction (@sec-nearest-ties); "
+      + f", the two solid meshes where tied nearest samples move the nearest-token form's prediction (@sec-medial-ties); "
       f"the baselines' errors grow by factors of {min(posed_base):.1f} to {max(posed_base):.0f}.")
 notes = [S.DATASETS[k] for k in keys if not S.DATASETS[k].reference]
 if notes:
@@ -185,10 +186,11 @@ the biased draw too (@sec-robustness-density).
 
 *Caveat.* Measure-weighted boundary sums are adopted from GLOBE, and
 quadrature-weighted attention from the neural-operator literature; the routing form, the instruments and the
-factors are what is new. The interior task has one discretization-dependent
-input: an interior prediction point takes its wall distance and direction
-from the nearest sampled boundary token, and an exact full-resolution form
-is an open question (@sec-open-questions).
+factors are what is new. An interior prediction point takes its wall
+distance and direction from the exact closest point of the full-resolution
+surface, the same for every draw of the boundary tokens; the standing's
+checkpoints read the nearest sampled token instead
+(@sec-exact-geometry-draw).
 
 ### An origin-free frame with an integral length unit {#sec-vs-novel-frame}
 
@@ -413,11 +415,14 @@ regroups clusters and moves the read only by the tree's error.
 ### The general boundary interface {#sec-vs-novel-interface}
 
 *What ISLA does.* One class reads $K$ global unit directions, $S$ global
-scalars, per-cell boundary fields of declared rank (scalar, vector,
-second-order tensor) and interior prediction points, and predicts fields of
+scalars, the boundary as named conditions, each with its own per-cell fields
+of declared rank (scalar, vector, second-order tensor) and its own input
+layer, and interior prediction points, and predicts fields of
 any of those ranks. The same class trains on cars, wings, airfoils, a
 tensile specimen, a lug and a family of brackets (@sec-isla-inputs,
-@sec-arch-modes).
+@sec-isla-conditions, @sec-arch-modes). GLOBE keys its boundary conditions
+by name the same way, with a kernel per condition in every layer; ISLA
+gives each condition its own input layer and shares its slice layers.
 
 *Prior work.* GNOT's heterogeneous normalized attention takes several
 input functions, geometries and parameters (Hao et al., 2023). BENO embeds
@@ -434,7 +439,7 @@ tensor output, every input is a datum of the PDE problem, and every channel
 keeps the covariance contracts under test.
 
 *Evidence.* The contract tests (@sec-isla-contracts); the structural
-datasets, whose loads and labels enter through this interface alone
+datasets, whose loads and conditions enter through this interface alone
 (@sec-tensile2d, @sec-lug, @sec-deepjeb).
 
 *Caveat.* Interface design, not a mechanism.

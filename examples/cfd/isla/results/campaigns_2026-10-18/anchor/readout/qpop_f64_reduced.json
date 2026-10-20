@@ -1,0 +1,966 @@
+{
+ "root": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/kernel/anchor_af/qpop/out_f64",
+ "tolerance": 0.0001,
+ "runs": {
+  "anc_anchor_seed42": {
+   "epoch": 500,
+   "n_cases": 20,
+   "query_independent": true,
+   "n_anchors": 50000,
+   "native_h": {
+    "pressure_l2": 0.030745534552261235,
+    "velocity_l2": 0.019095530128106476,
+    "nut_l2": 0.04130056938156486
+   },
+   "conditions": {
+    "repeat": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0,
+      "velocity_l2": 0.0,
+      "nut_l2": 0.0
+     }
+    },
+    "half": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 5.628206336416878e-12,
+      "velocity_l2": 6.602420486665408e-13,
+      "nut_l2": 1.2812053967532906e-12
+     }
+    },
+    "far": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 6.886827931625941e-12,
+      "velocity_l2": 6.737877421751712e-13,
+      "nut_l2": 1.6569952224538494e-12
+     }
+    },
+    "wall": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 6.886827931625941e-12,
+      "velocity_l2": 6.737877421751712e-13,
+      "nut_l2": 1.6569952224538494e-12
+     }
+    },
+    "chunks": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 6.895887418686572e-12,
+      "velocity_l2": 7.741763800791729e-13,
+      "nut_l2": 1.5499134380184863e-12
+     }
+    }
+   },
+   "geometry_check": {
+    "sdf_absdiff_max": 1.1920405640353238e-07,
+    "sdf_absdiff_median": 2.2342966712884937e-10,
+    "normals_dot_min": 0.7576033810997661,
+    "normals_dot_median": 0.9999688010724451,
+    "native_on_wall": 579,
+    "native_inside_airfoil": 0,
+    "far_inside_fraction": 0.0066,
+    "far_sdf_min": 4.2689183703058105e-06,
+    "wall_sdf_median": 2.1232776816759724e-06,
+    "wall_distinct": 14085,
+    "wall_on_wall": 37701
+   },
+   "validity": {
+    "reference": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/evals_anc/anc_anchor_seed42/native/anc_anchor_seed42/metrics.jsonl",
+    "epoch": 500,
+    "n_cases": 20,
+    "of": 20,
+    "max_rel_diff": 1.3312668402226717,
+    "ok": false
+   },
+   "worst_abs_ratio_minus_1_or_change": 6.895887418686572e-12,
+   "qi_ok": true
+  },
+  "anc_anchor_seed43": {
+   "epoch": 500,
+   "n_cases": 20,
+   "query_independent": true,
+   "n_anchors": 50000,
+   "native_h": {
+    "pressure_l2": 0.020530334440991282,
+    "velocity_l2": 0.014478485751897096,
+    "nut_l2": 0.030105161340907217
+   },
+   "conditions": {
+    "repeat": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0,
+      "velocity_l2": 0.0,
+      "nut_l2": 0.0
+     }
+    },
+    "half": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 8.335211961260463e-13,
+      "velocity_l2": 2.5589344414453456e-13,
+      "nut_l2": 1.1399536225796912e-12
+     }
+    },
+    "far": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 1.8586718633871803e-12,
+      "velocity_l2": 4.053272151747527e-13,
+      "nut_l2": 9.681792487168031e-13
+     }
+    },
+    "wall": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 1.8586718633871803e-12,
+      "velocity_l2": 4.053272151747527e-13,
+      "nut_l2": 9.681792487168031e-13
+     }
+    },
+    "chunks": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 7.779084475099194e-13,
+      "velocity_l2": 2.7835495907717424e-13,
+      "nut_l2": 5.731946277817796e-13
+     }
+    }
+   },
+   "geometry_check": {
+    "sdf_absdiff_max": 1.1920405640353238e-07,
+    "sdf_absdiff_median": 2.2342966712884937e-10,
+    "normals_dot_min": 0.7576033810997661,
+    "normals_dot_median": 0.9999688010724451,
+    "native_on_wall": 579,
+    "native_inside_airfoil": 0,
+    "far_inside_fraction": 0.0066,
+    "far_sdf_min": 4.2689183703058105e-06,
+    "wall_sdf_median": 2.1232776816759724e-06,
+    "wall_distinct": 14085,
+    "wall_on_wall": 37701
+   },
+   "validity": {
+    "reference": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/evals_anc/anc_anchor_seed43/native/anc_anchor_seed43/metrics.jsonl",
+    "epoch": 500,
+    "n_cases": 20,
+    "of": 20,
+    "max_rel_diff": 0.46065073421716196,
+    "ok": false
+   },
+   "worst_abs_ratio_minus_1_or_change": 1.8586718633871803e-12,
+   "qi_ok": true
+  },
+  "anc_dtt_seed42": {
+   "epoch": 500,
+   "n_cases": 20,
+   "query_independent": true,
+   "n_anchors": null,
+   "native_h": {
+    "pressure_l2": 0.012379815778695047,
+    "velocity_l2": 0.010185623704455794,
+    "nut_l2": 0.03196521745994687
+   },
+   "conditions": {
+    "repeat": {
+     "ratio": {
+      "pressure_l2": 0.9999999605047151,
+      "velocity_l2": 1.0000000045717503,
+      "nut_l2": 0.9999999781483755
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 7.025113419733665e-08,
+      "velocity_l2": 6.853409143803813e-08,
+      "nut_l2": 1.0199343202876767e-06
+     }
+    },
+    "half": {
+     "ratio": {
+      "pressure_l2": 0.9999999623854429,
+      "velocity_l2": 1.000000002285875,
+      "nut_l2": 1.0000000713819737
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 8.226855993914955e-08,
+      "velocity_l2": 7.102868710324636e-08,
+      "nut_l2": 1.1207400405368132e-06
+     }
+    },
+    "far": {
+     "ratio": {
+      "pressure_l2": 1.0000000037614558,
+      "velocity_l2": 1.000000002285875,
+      "nut_l2": 0.9999999694077257
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 7.56550822419937e-08,
+      "velocity_l2": 6.472420320080045e-08,
+      "nut_l2": 1.5673779526189592e-06
+     }
+    },
+    "wall": {
+     "ratio": {
+      "pressure_l2": 0.9999999924770886,
+      "velocity_l2": 1.000000027430502,
+      "nut_l2": 1.0000000407896992
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 6.711577784821913e-08,
+      "velocity_l2": 5.297203938247775e-08,
+      "nut_l2": 9.88399924577098e-07
+     }
+    },
+    "chunks": {
+     "ratio": {
+      "pressure_l2": 0.999999975550538,
+      "velocity_l2": 1.000000013715251,
+      "nut_l2": 0.9999999956296751
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 8.185651467403912e-08,
+      "velocity_l2": 8.117683273903733e-08,
+      "nut_l2": 1.2055950460202928e-06
+     }
+    }
+   },
+   "geometry_check": {
+    "sdf_absdiff_max": 1.1920405640353238e-07,
+    "sdf_absdiff_median": 2.2342966712884937e-10,
+    "normals_dot_min": 0.7576033810997661,
+    "normals_dot_median": 0.9999688010724451,
+    "native_on_wall": 579,
+    "native_inside_airfoil": 0,
+    "far_inside_fraction": 0.0066,
+    "far_sdf_min": 4.2689183703058105e-06,
+    "wall_sdf_median": 2.1232776816759724e-06,
+    "wall_distinct": 14085,
+    "wall_on_wall": 37701
+   },
+   "validity": {
+    "reference": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/evals_anc/anc_dtt_seed42/native/anc_dtt_seed42/metrics.jsonl",
+    "epoch": 500,
+    "n_cases": 20,
+    "of": 20,
+    "max_rel_diff": 0.4535067122824362,
+    "ok": false
+   },
+   "worst_abs_ratio_minus_1_or_change": 1.5673779526189592e-06,
+   "qi_ok": true
+  },
+  "anc_dtt_seed43": {
+   "epoch": 500,
+   "n_cases": 20,
+   "query_independent": true,
+   "n_anchors": null,
+   "native_h": {
+    "pressure_l2": 0.013697401992976666,
+    "velocity_l2": 0.010775714297778904,
+    "nut_l2": 0.03313724491745233
+   },
+   "conditions": {
+    "repeat": {
+     "ratio": {
+      "pressure_l2": 0.9999999711031263,
+      "velocity_l2": 0.9999999870358119,
+      "nut_l2": 0.9999998650959557
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 1.2842328076910665e-07,
+      "velocity_l2": 1.0499512333576601e-07,
+      "nut_l2": 1.0571309282580856e-06
+     }
+    },
+    "half": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 0.9999999913572081,
+      "nut_l2": 1.0000000112420038
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 1.2667259923180593e-07,
+      "velocity_l2": 7.456578472646096e-08,
+      "nut_l2": 2.0231983039504043e-06
+     }
+    },
+    "far": {
+     "ratio": {
+      "pressure_l2": 0.9999999983001839,
+      "velocity_l2": 1.000000008642792,
+      "nut_l2": 1.0000000899360297
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 1.1665156385005591e-07,
+      "velocity_l2": 1.3154922514996314e-07,
+      "nut_l2": 1.0330149656787464e-06
+     }
+    },
+    "wall": {
+     "ratio": {
+      "pressure_l2": 0.9999999932007356,
+      "velocity_l2": 0.9999999870358119,
+      "nut_l2": 1.0000000098367532
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 1.1917221205797549e-07,
+      "velocity_l2": 5.1053521597931825e-08,
+      "nut_l2": 1.140455477832229e-06
+     }
+    },
+    "chunks": {
+     "ratio": {
+      "pressure_l2": 0.9999999847016552,
+      "velocity_l2": 0.999999965428832,
+      "nut_l2": 1.00000006042577
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 1.4151138788095178e-07,
+      "velocity_l2": 1.2596124311554343e-07,
+      "nut_l2": 1.994435009450348e-06
+     }
+    }
+   },
+   "geometry_check": {
+    "sdf_absdiff_max": 1.1920405640353238e-07,
+    "sdf_absdiff_median": 2.2342966712884937e-10,
+    "normals_dot_min": 0.7576033810997661,
+    "normals_dot_median": 0.9999688010724451,
+    "native_on_wall": 579,
+    "native_inside_airfoil": 0,
+    "far_inside_fraction": 0.0066,
+    "far_sdf_min": 4.2689183703058105e-06,
+    "wall_sdf_median": 2.1232776816759724e-06,
+    "wall_distinct": 14085,
+    "wall_on_wall": 37701
+   },
+   "validity": {
+    "reference": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/evals_anc/anc_dtt_seed43/native/anc_dtt_seed43/metrics.jsonl",
+    "epoch": 500,
+    "n_cases": 20,
+    "of": 20,
+    "max_rel_diff": 0.3154140826397761,
+    "ok": false
+   },
+   "worst_abs_ratio_minus_1_or_change": 2.0231983039504043e-06,
+   "qi_ok": true
+  },
+  "anc_isla_seed42": {
+   "epoch": 500,
+   "n_cases": 20,
+   "query_independent": false,
+   "n_anchors": null,
+   "native_h": {
+    "pressure_l2": 0.020578807662241162,
+    "velocity_l2": 0.01201965375803411,
+    "nut_l2": 0.02831037240102887
+   },
+   "conditions": {
+    "repeat": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0,
+      "velocity_l2": 0.0,
+      "nut_l2": 0.0
+     }
+    },
+    "half": {
+     "ratio": {
+      "pressure_l2": 1.266273182633178,
+      "velocity_l2": 1.0775824493233286,
+      "nut_l2": 1.093120332672601
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.13522733767542305,
+      "velocity_l2": 0.04566253129642303,
+      "nut_l2": 0.47271470575465585
+     }
+    },
+    "far": {
+     "ratio": {
+      "pressure_l2": 51.51719862973286,
+      "velocity_l2": 24.45671493408191,
+      "nut_l2": 39.27830196396044
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 8.13273050764241,
+      "velocity_l2": 2.1480557446068933,
+      "nut_l2": 14.376969663108643
+     }
+    },
+    "wall": {
+     "ratio": {
+      "pressure_l2": 15.089088241759425,
+      "velocity_l2": 16.05742331595805,
+      "nut_l2": 8.530967997667245
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 2.9603898607829557,
+      "velocity_l2": 1.679692392064619,
+      "nut_l2": 4.575618139544083
+     }
+    },
+    "chunks": {
+     "ratio": {
+      "pressure_l2": 1.430376372097842,
+      "velocity_l2": 1.1746669987136493,
+      "nut_l2": 1.2686418448242318
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.42764989013726057,
+      "velocity_l2": 0.10024689995944935,
+      "nut_l2": 0.8955732484344701
+     }
+    }
+   },
+   "geometry_check": {
+    "sdf_absdiff_max": 1.1920405640353238e-07,
+    "sdf_absdiff_median": 2.2342966712884937e-10,
+    "normals_dot_min": 0.7576033810997661,
+    "normals_dot_median": 0.9999688010724451,
+    "native_on_wall": 579,
+    "native_inside_airfoil": 0,
+    "far_inside_fraction": 0.0066,
+    "far_sdf_min": 4.2689183703058105e-06,
+    "wall_sdf_median": 2.1232776816759724e-06,
+    "wall_distinct": 14085,
+    "wall_on_wall": 37701
+   },
+   "validity": {
+    "reference": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/evals_anc/anc_isla_seed42/native/anc_isla_seed42/metrics.jsonl",
+    "epoch": 500,
+    "n_cases": 20,
+    "of": 20,
+    "max_rel_diff": 0.30442397082527306,
+    "ok": false
+   },
+   "worst_abs_ratio_minus_1_or_change": 50.51719862973286,
+   "qi_ok": false
+  },
+  "anc_isla_seed43": {
+   "epoch": 500,
+   "n_cases": 20,
+   "query_independent": false,
+   "n_anchors": null,
+   "native_h": {
+    "pressure_l2": 0.020466761989519,
+    "velocity_l2": 0.012425470375455916,
+    "nut_l2": 0.03369682743214071
+   },
+   "conditions": {
+    "repeat": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0,
+      "velocity_l2": 0.0,
+      "nut_l2": 0.0
+     }
+    },
+    "half": {
+     "ratio": {
+      "pressure_l2": 1.3678407421788488,
+      "velocity_l2": 1.0896269435205104,
+      "nut_l2": 1.052558467969642
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.29530031161424336,
+      "velocity_l2": 0.058404071249893955,
+      "nut_l2": 0.4087369827671041
+     }
+    },
+    "far": {
+     "ratio": {
+      "pressure_l2": 26.136908718043546,
+      "velocity_l2": 21.084518126148204,
+      "nut_l2": 36.717854154472334
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 6.1029274504014,
+      "velocity_l2": 1.7257576686549931,
+      "nut_l2": 22.542680244014853
+     }
+    },
+    "wall": {
+     "ratio": {
+      "pressure_l2": 15.74905612508282,
+      "velocity_l2": 13.941332095654362,
+      "nut_l2": 5.365471225137905
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 2.329363727332017,
+      "velocity_l2": 1.094803869001661,
+      "nut_l2": 3.5575071714431705
+     }
+    },
+    "chunks": {
+     "ratio": {
+      "pressure_l2": 1.4798304170509575,
+      "velocity_l2": 1.175090236353957,
+      "nut_l2": 1.2736126682540982
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.34100640963208384,
+      "velocity_l2": 0.1498433427134519,
+      "nut_l2": 1.087000798605726
+     }
+    }
+   },
+   "geometry_check": {
+    "sdf_absdiff_max": 1.1920405640353238e-07,
+    "sdf_absdiff_median": 2.2342966712884937e-10,
+    "normals_dot_min": 0.7576033810997661,
+    "normals_dot_median": 0.9999688010724451,
+    "native_on_wall": 579,
+    "native_inside_airfoil": 0,
+    "far_inside_fraction": 0.0066,
+    "far_sdf_min": 4.2689183703058105e-06,
+    "wall_sdf_median": 2.1232776816759724e-06,
+    "wall_distinct": 14085,
+    "wall_on_wall": 37701
+   },
+   "validity": {
+    "reference": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/evals_anc/anc_isla_seed43/native/anc_isla_seed43/metrics.jsonl",
+    "epoch": 500,
+    "n_cases": 20,
+    "of": 20,
+    "max_rel_diff": 0.2828164061228108,
+    "ok": false
+   },
+   "worst_abs_ratio_minus_1_or_change": 35.717854154472334,
+   "qi_ok": false
+  },
+  "anc_mesh_seed42": {
+   "epoch": 500,
+   "n_cases": 20,
+   "query_independent": true,
+   "n_anchors": 50000,
+   "native_h": {
+    "pressure_l2": 0.021605259762145577,
+    "velocity_l2": 0.013091945042833685,
+    "nut_l2": 0.0318784742616117
+   },
+   "conditions": {
+    "repeat": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0,
+      "velocity_l2": 0.0,
+      "nut_l2": 0.0
+     }
+    },
+    "half": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 1.0057107991500873e-12,
+      "velocity_l2": 2.758846401746602e-13,
+      "nut_l2": 7.620391435913813e-13
+     }
+    },
+    "far": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 2.0573179584120132e-12,
+      "velocity_l2": 6.466773812765558e-13,
+      "nut_l2": 1.6906131919137948e-12
+     }
+    },
+    "wall": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 2.0573179584120132e-12,
+      "velocity_l2": 6.466773812765558e-13,
+      "nut_l2": 1.6906131919137948e-12
+     }
+    },
+    "chunks": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 1.1017642796435302e-12,
+      "velocity_l2": 5.437050742961423e-13,
+      "nut_l2": 6.779907086364496e-13
+     }
+    }
+   },
+   "geometry_check": {
+    "sdf_absdiff_max": 1.1920503650841852e-07,
+    "sdf_absdiff_median": 2.2433284223299932e-10,
+    "normals_dot_min": 0.7576033810997661,
+    "normals_dot_median": 0.9999679059628186,
+    "native_on_wall": 586,
+    "native_inside_airfoil": 0,
+    "far_inside_fraction": 0.006595,
+    "far_sdf_min": 4.048003472826846e-06,
+    "wall_sdf_median": 2.128437017745455e-06,
+    "wall_distinct": 13993,
+    "wall_on_wall": 37584
+   },
+   "validity": {
+    "reference": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/evals_anc/anc_mesh_seed42/native/anc_mesh_seed42/metrics.jsonl",
+    "epoch": 500,
+    "n_cases": 20,
+    "of": 20,
+    "max_rel_diff": 0.22484740796793065,
+    "ok": false
+   },
+   "worst_abs_ratio_minus_1_or_change": 2.0573179584120132e-12,
+   "qi_ok": true
+  },
+  "anc_mesh_seed43": {
+   "epoch": 500,
+   "n_cases": 20,
+   "query_independent": true,
+   "n_anchors": 50000,
+   "native_h": {
+    "pressure_l2": 0.0192803252954036,
+    "velocity_l2": 0.01303328676149249,
+    "nut_l2": 0.033294740691781045
+   },
+   "conditions": {
+    "repeat": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0,
+      "velocity_l2": 0.0,
+      "nut_l2": 0.0
+     }
+    },
+    "half": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 1.9281250137962863e-12,
+      "velocity_l2": 3.06188074930571e-13,
+      "nut_l2": 1.0477082929334328e-12
+     }
+    },
+    "far": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 4.938327814233491e-12,
+      "velocity_l2": 4.84226281705485e-13,
+      "nut_l2": 3.1129399744499857e-12
+     }
+    },
+    "wall": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 4.938327814233491e-12,
+      "velocity_l2": 4.84226281705485e-13,
+      "nut_l2": 3.1129399744499857e-12
+     }
+    },
+    "chunks": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 1.8779195935893627e-12,
+      "velocity_l2": 3.6289504328978205e-13,
+      "nut_l2": 4.936692421164037e-13
+     }
+    }
+   },
+   "geometry_check": {
+    "sdf_absdiff_max": 1.1920503650841852e-07,
+    "sdf_absdiff_median": 2.2433284223299932e-10,
+    "normals_dot_min": 0.7576033810997661,
+    "normals_dot_median": 0.9999679059628186,
+    "native_on_wall": 586,
+    "native_inside_airfoil": 0,
+    "far_inside_fraction": 0.006595,
+    "far_sdf_min": 4.048003472826846e-06,
+    "wall_sdf_median": 2.128437017745455e-06,
+    "wall_distinct": 13993,
+    "wall_on_wall": 37584
+   },
+   "validity": {
+    "reference": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/evals_anc/anc_mesh_seed43/native/anc_mesh_seed43/metrics.jsonl",
+    "epoch": 500,
+    "n_cases": 20,
+    "of": 20,
+    "max_rel_diff": 0.313757542708036,
+    "ok": false
+   },
+   "worst_abs_ratio_minus_1_or_change": 4.938327814233491e-12,
+   "qi_ok": true
+  },
+  "anc_passive_seed42": {
+   "epoch": 500,
+   "n_cases": 20,
+   "query_independent": true,
+   "n_anchors": 0,
+   "native_h": {
+    "pressure_l2": 0.017989038722589612,
+    "velocity_l2": 0.013144480693154038,
+    "nut_l2": 0.03405929417349398
+   },
+   "conditions": {
+    "repeat": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0,
+      "velocity_l2": 0.0,
+      "nut_l2": 0.0
+     }
+    },
+    "half": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0,
+      "velocity_l2": 0.0,
+      "nut_l2": 0.0
+     }
+    },
+    "far": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 2.2141672355405644e-13,
+      "velocity_l2": 2.455808164229624e-14,
+      "nut_l2": 1.3809502505474914e-13
+     }
+    },
+    "wall": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 2.2141672355405644e-13,
+      "velocity_l2": 2.455808164229624e-14,
+      "nut_l2": 1.3809502505474914e-13
+     }
+    },
+    "chunks": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 1.5329844374495677e-13,
+      "velocity_l2": 1.602695597981068e-14,
+      "nut_l2": 1.8710703750015755e-13
+     }
+    }
+   },
+   "geometry_check": {
+    "sdf_absdiff_max": 1.1920405640353238e-07,
+    "sdf_absdiff_median": 2.2342966712884937e-10,
+    "normals_dot_min": 0.7576033810997661,
+    "normals_dot_median": 0.9999688010724451,
+    "native_on_wall": 579,
+    "native_inside_airfoil": 0,
+    "far_inside_fraction": 0.0066,
+    "far_sdf_min": 4.2689183703058105e-06,
+    "wall_sdf_median": 2.1232776816759724e-06,
+    "wall_distinct": 14085,
+    "wall_on_wall": 37701
+   },
+   "validity": {
+    "reference": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/evals_anc/anc_passive_seed42/native/anc_passive_seed42/metrics.jsonl",
+    "epoch": 500,
+    "n_cases": 20,
+    "of": 20,
+    "max_rel_diff": 0.23589329607158202,
+    "ok": false
+   },
+   "worst_abs_ratio_minus_1_or_change": 2.2141672355405644e-13,
+   "qi_ok": true
+  },
+  "anc_passive_seed43": {
+   "epoch": 500,
+   "n_cases": 20,
+   "query_independent": true,
+   "n_anchors": 0,
+   "native_h": {
+    "pressure_l2": 0.014331634482368827,
+    "velocity_l2": 0.012501039123162628,
+    "nut_l2": 0.03395700086839497
+   },
+   "conditions": {
+    "repeat": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0,
+      "velocity_l2": 0.0,
+      "nut_l2": 0.0
+     }
+    },
+    "half": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 0.0,
+      "velocity_l2": 0.0,
+      "nut_l2": 0.0
+     }
+    },
+    "far": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 3.580410532660457e-14,
+      "velocity_l2": 3.4609029584589787e-14,
+      "nut_l2": 1.03911443801679e-13
+     }
+    },
+    "wall": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 3.580410532660457e-14,
+      "velocity_l2": 3.4609029584589787e-14,
+      "nut_l2": 1.03911443801679e-13
+     }
+    },
+    "chunks": {
+     "ratio": {
+      "pressure_l2": 1.0,
+      "velocity_l2": 1.0,
+      "nut_l2": 1.0
+     },
+     "max_change_over_rms": {
+      "pressure_l2": 1.2718859076310072e-13,
+      "velocity_l2": 1.0434944533944047e-13,
+      "nut_l2": 1.169227760272603e-13
+     }
+    }
+   },
+   "geometry_check": {
+    "sdf_absdiff_max": 1.1920405640353238e-07,
+    "sdf_absdiff_median": 2.2342966712884937e-10,
+    "normals_dot_min": 0.7576033810997661,
+    "normals_dot_median": 0.9999688010724451,
+    "native_on_wall": 579,
+    "native_inside_airfoil": 0,
+    "far_inside_fraction": 0.0066,
+    "far_sdf_min": 4.2689183703058105e-06,
+    "wall_sdf_median": 2.1232776816759724e-06,
+    "wall_distinct": 14085,
+    "wall_on_wall": 37701
+   },
+   "validity": {
+    "reference": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/evals_anc/anc_passive_seed43/native/anc_passive_seed43/metrics.jsonl",
+    "epoch": 500,
+    "n_cases": 20,
+    "of": 20,
+    "max_rel_diff": 0.4013621488773152,
+    "ok": false
+   },
+   "worst_abs_ratio_minus_1_or_change": 1.2718859076310072e-13,
+   "qi_ok": true
+  }
+ }
+}

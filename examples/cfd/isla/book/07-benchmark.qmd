@@ -83,9 +83,11 @@ recipe's shipped configuration. On the DrivAerML Volume task the recipe's volume
 coordinates and the normal, and the global vector is concatenated to every point's features.
 :::
 
-**ISLA** receives each boundary cell's position, unit normal and measure weight, and each global direction as a unit
-vector. It reads positions only through differences to its anchors (@sec-isla). On the interior tasks the prediction points
-join as tokens, and each one reads its distance and direction to the nearest sampled boundary token (@sec-nearest-token).
+**ISLA** receives one full-resolution boundary mesh per named boundary condition, from which it reads each cell's position,
+unit normal and measure weight, and each global direction as a unit vector. It reads positions only through differences to
+its anchors (@sec-isla). On the interior tasks the prediction points join as tokens, and each one reads its exact distance and
+direction to the boundary meshes (@sec-exact-geometry-draw). The standing's ISLA checkpoints are of an earlier form of these
+inputs, the nearest-token form (@sec-checkpoint-form).
 
 @tbl-architectures gives the three reference configurations side by side, with the parameter count and the training memory
 the selection read. @tbl-model-inputs lists, per dataset, what each model's forward call receives; the dataset chapters point to it.
@@ -116,19 +118,19 @@ print(": The three reference configurations. *Slices*: $M$, the number of soft s
 # One row per dataset, from section 1 of the drive audit (results/drive_audit_2026-10-18/REPORT.md): what each model's
 # forward call receives as global or drive input, boundary conditions and per-point geometry.
 BC = "boundary cells: position, normal, measure weight"
-NT = "prediction points as tokens, with their nearest-token wall distance and direction"
+NT = "prediction points as tokens, with their exact wall distance and direction to the boundary meshes"
 GP = "per point: coordinates centered on the case, unit normal"
 GV = "per point: coordinates, the stored `sdf` and `sdf_normals`; no boundary mesh"
 MI = [
     ("drivaerml_surface", f"{BC}; `U_inf_dir`, $(1, 0, 0)$ on every car", f"{GP}; `U_inf` = $(38.9, 0, 0)$ m/s on every car",
      "the same, with `U_inf` concatenated to every point", "the same: a constant vector carries no case information"),
     ("drivaerml_volume", f"{BC}; {NT}; `U_inf_dir`, constant", f"{GV}; `U_inf` = $(38.9, 0, 0)$ m/s on every car (GeoTransolver-volume)",
-     "the same per-point fields, with `U_inf` concatenated", "the same globals; the baselines' wall distance is the full-resolution field, ISLA's is from its sampled tokens"),
+     "the same per-point fields, with `U_inf` concatenated", "the same globals; the baselines read the stored distance field, ISLA computes the exact distance to the full-resolution surface"),
     ("hilift", f"{BC}; `U_inf_dir`, angle of attack 4 to 22°", f"{GP}; `U_inf` in inch/s, magnitude 2,680 on every case, turning with the angle of attack",
      "the same, with `U_inf` concatenated", "the same information at 2,680 times the scale"),
     ("shift_suv", f"{BC}; `U_inf_dir`, constant", f"{GP}; `U_inf` = $(30, 0, 0)$ m/s on every case",
      "the same, with `U_inf` concatenated", "the same: a constant vector"),
-    ("airfrans", f"{BC}; {NT}, plus `sdf` and `sdf_normals`; `U_inf_dir` and the raw inlet speed `U_inf_mag` (31 to 94 m/s) as a scalar",
+    ("airfrans", f"{BC}; {NT}; `U_inf_dir` and the raw inlet speed `U_inf_mag` (31 to 94 m/s) as a scalar",
      f"{GV}; `U_inf_dir` and the inlet speed standardized over the training airfoils, read by the context projector",
      "the same per-point fields, with the same two globals concatenated",
      "the same information; the baselines also predict an out-of-plane velocity component, which leaves their velocity error "
@@ -142,20 +144,19 @@ MI = [
      "per point: coordinates in meters, the signed distance and normal to the `no_slip` faces, the log-standardized kinematic viscosity",
      "the same boundary data for GeoTransolver; less for Transolver, which receives no inlet or outlet value and so cannot see the "
      "speed or direction of the flow (@sec-aerozoo-allowed)"),
-    ("tensile2d", "boundary segments with the loaded, fixed and pinned labels and the applied pressure; nodes as prediction-point tokens "
-     "with their nearest-token wall distance and direction, plus `sdf` and `sdf_normals`; "
-     "the pressure and five material parameters as six standardized scalars",
+    ("tensile2d", "boundary segments as four named conditions (loaded, with the applied pressure; fixed; pinned; free); nodes as "
+     f"prediction-point tokens with their exact wall distance and direction; the pressure and five material parameters as six standardized scalars",
      "per node: coordinates, `sdf`, `sdf_normals` and the top, bottom and pinned-corner tags; the same six scalars", "the same",
      "the same"),
-    ("lug", "boundary faces labeled clamped, hole and loaded half of the hole, with the pressure on them; nodes as prediction-point tokens "
-     "with their nearest-token wall distance and direction, plus `sdf` and `sdf_normals`; "
+    ("lug", "boundary faces as four named conditions (fixed, the clamped face; hole; loaded, the pressed half of the hole, with its "
+     "pressure; free); nodes as prediction-point tokens with their exact wall distance and direction; "
      "four standardized scalars (hole radius, length, thickness, pressure)",
      "per node: coordinates, `sdf`, `sdf_normals`; the same four scalars; as geometry context, the surface triangles with their "
-     "normals and ISLA's four labels", "per node: coordinates, `sdf`, `sdf_normals`; the same four scalars; no boundary-condition label",
+     "normals and the dataset's clamped, hole and loaded labels and pressure", "per node: coordinates, `sdf`, `sdf_normals`; the same four scalars; no boundary-condition label",
      "the same for GeoTransolver; less as explicit input for Transolver, which knows the clamp and the load only through the shape, "
      "in its fixed pose"),
-    ("deepjeb", "boundary cells with the fixed and loaded labels and the load as a rank-1 field; the load direction; force or "
-     "torque as two scalars", "per point: coordinates, normal, the same labels and load; global: the load direction and type",
+    ("deepjeb", "boundary cells as three named conditions (fixed; loaded, with the load as a rank-1 field; free); the load "
+     "direction; force or torque as two scalars", "per point: coordinates, normal, the same labels and load; global: the load direction and type",
      "the same", "the same"),
 ]
 out = "| dataset | ISLA | GeoTransolver | Transolver | against ISLA's input |\n|---|---|---|---|---|\n"
@@ -166,7 +167,10 @@ for key, i, g, t, info in MI:
     out += f"| {d.name} | {i} | {g} | {t} | {info}{flag} |\n"
 print(out)
 print(": What each model receives, per dataset: the global inputs with their units and range across cases, the boundary "
-      "conditions, and the per-point geometry, read from the configurations of the standing's training runs. `U_inf` is the "
+      "conditions, and the per-point geometry. The ISLA column is ISLA as the recipe configures it (`conf/model/isla_*.yaml`); the "
+      "standing's ISLA checkpoints are of the nearest-token form, which read one boundary with label fields, took the wall distance "
+      "and direction from the nearest sampled boundary token and, on AirfRANS, Tensile2d and the lug, also read `sdf` and "
+      "`sdf_normals` (@sec-checkpoint-form). The baselines' columns are the configurations of the standing's training runs. `U_inf` is the "
       "freestream velocity as the dataset stores it; `U_inf_dir` is the same vector normalized; `sdf` and `sdf_normals` are "
       "the stored signed distance to the full-resolution boundary and its gradient. How to read this: the last column says "
       "whether the baselines receive the same information as ISLA; a row marked *no standing comparison* is one whose "
@@ -678,7 +682,7 @@ things:
 - on the DrivAerML Surface task, HiLiftAeroML and SHIFT-SUV, whose surfaces hold millions of cells, it resamples the scored
   cells for every architecture;
 - on the DrivAerML Volume task it redraws ISLA's boundary tokens only: the scored interior points are a point cloud, and
-  the baselines do not load the boundary (@sec-nearest-token);
+  the baselines do not load the boundary (@sec-interior-boundary-law);
 - on AirfRANS, Tensile2d, the lug and DeepJEB++ it returns the native mesh, and the column repeats the native error.
 
 Only the first group appears as a point-cloud standing (@fig-contract-shifts).
@@ -691,6 +695,39 @@ extrapolation, with an ISLA study configuration against baselines that read the 
 reference configuration is scored on them. Because those test sets cover every geometry, the remaining test manifests
 are held out per checkpoint but do not confirm a result across the whole set of experiments (@sec-limits).
 :::
+
+## The checkpoints behind the standing {#sec-checkpoint-form}
+
+**Every ISLA checkpoint in Part IV, the standing's and every trained ISLA the book draws, is of one earlier form of ISLA's
+inputs, the *nearest-token form*. It has the reference configuration's width, depth, slices and learning rate and, except on
+HiLiftAeroML, the normalized slice reads, and it differs from the class of Part II in how the boundary and the prediction points enter the
+model.** The standings come from the checkpoints that the program's ledger (@sec-program-status) names the A2 reference.
+@tbl-checkpoint-form lists the differences item by item. The class refuses checkpoints of any other version
+(@sec-using-checkpoint), so these checkpoints are records of the form, not models the class loads.
+
+| item | the nearest-token form (the standing's checkpoints) | ISLA as Part II defines it |
+|---|---|---|
+| slice reads | the normalized slice reads; on HiLiftAeroML the raw slice reads, marked † where they appear | the normalized slice reads (@sec-isla-normalized-reads) |
+| boundary conditions | one boundary schema shared by every condition: a labelled boundary is one mesh, its condition a one-hot label among each cell's fields | one boundary mesh per named condition, each with its own input layer and a learned offset, so a condition's identity is in the parameters; no label is read (@sec-isla-inputs) |
+| boundary tokens | drawn by the datapipe before the forward call; the model reads the sample it is given | drawn inside the forward call from the full-resolution meshes: in proportion to measure, water-filled across the conditions, systematic along a space-filling order, each kept cell carrying its Horvitz–Thompson measure; a fixed start at evaluation |
+| a prediction point's wall geometry | the distance and direction to the nearest *sampled* boundary token, signed by that token's normal | the exact closest point on the full-resolution boundary meshes, signed by the pseudo-normal, encoded continuously through the surface; the same for every draw of the boundary tokens (@sec-exact-geometry-draw) |
+| stored signed distance | on AirfRANS, Tensile2d and the lug, the dataset's `sdf` and `sdf_normals` read as a prediction-point input | none read |
+
+: The nearest-token form of the standing's ISLA checkpoints against ISLA as the class defines it. On a surface task the
+prediction points are the boundary cells, so the last two rows do not arise there. How to read this: the rows are the
+whole difference in what enters the model; the baselines' inputs are the same in both columns (@tbl-model-inputs). Sources:
+the class, `physicsnemo/experimental/models/isla/`; the standing's ISLA arm as the reduction of the geometry evidence describes it,
+results/campaigns_2026-10-19/geo_evidence/geo_evidence.json (`doc`).
+{#tbl-checkpoint-form}
+
+**The standing measures the nearest-token form against the baselines.** Its ratios, its verdicts and its pose and
+resampling shifts are those of these checkpoints, and every standing caption names them "ISLA checkpoints of the
+nearest-token form". Two of the measured limits belong to the form's wall geometry rather than to the class: the pose
+shifts on the lug and Tensile2d, where nodes tie for their nearest boundary token, and the interior error's dependence
+on the boundary draw on the DrivAerML Volume task and AirfRANS. Chapter 04 measures what the exact geometry does to
+both (@sec-exact-geometry-draw, @sec-medial-ties). Whether the class's own standing reads the same is an open question, with
+what would settle it (@sec-oq-class-standing). Unless a caption says otherwise, the study runs of the next section are of
+the same form, with the raw slice reads.
 
 ## Study configurations {#sec-study-configurations}
 
@@ -710,8 +747,8 @@ score, has the variant "Instrument: ISLA at ⟨width⟩ wide, ⟨slices⟩ slice
 |---|--:|--:|--:|--:|---|---|---|
 | ISLA at 384 wide, 256 slices, 5e-4, raw slice reads | 12 | 384 | 256 | $5 \times 10^{-4}$ | cosine | 200,000 | the biased-draw probe, the slice territories, the rotation-augmented comparison (@sec-contract-studies, @sec-pose-contract); the 384-wide points of the capacity ladders (@sec-capacity) |
 | ISLA at 192 wide, 256 slices, 1e-3, linear routing, raw slice reads | 12 | 192 | 256 | $10^{-3}$ | linear | 100,000 (cars), 200,000 (wings) | the training-law swap (@sec-training-law) |
-| ISLA at 512 wide, 512 slices, 3.75e-4, raw slice reads | 12 | 512 | 512 | $3.75 \times 10^{-4}$ | cosine | 200,000 | the nearest-token geometry swap on the DrivAerML Volume task (@sec-nearest-token); the HiLiftAeroML standing, noted where it appears |
-| ISLA at 768 wide, 256 slices, 2.5e-4, raw slice reads | 12 | 768 | 256 | $2.5 \times 10^{-4}$ | cosine | 20,000 | the tie diagnostic on the lug (@sec-nearest-ties) |
+| ISLA at 512 wide, 512 slices, 3.75e-4, raw slice reads | 12 | 512 | 512 | $3.75 \times 10^{-4}$ | cosine | 200,000 | the nearest-token geometry swap on the DrivAerML Volume task (@sec-interior-boundary-law); the HiLiftAeroML standing, noted where it appears |
+| ISLA at 768 wide, 256 slices, 2.5e-4, raw slice reads | 12 | 768 | 256 | $2.5 \times 10^{-4}$ | cosine | 20,000 | the tie diagnostic on the lug (@sec-medial-ties) |
 | capacity ladders | 12 to 48 | 192 to 1,536 | 256 | named per point | cosine or linear, named per point | 10,000 to 200,000, named per point | the scaling fits and the cells ladder (@sec-capacity); each point names its own configuration |
 
 : The study configurations of ISLA and where the book uses them. Every configuration other than the reference one uses

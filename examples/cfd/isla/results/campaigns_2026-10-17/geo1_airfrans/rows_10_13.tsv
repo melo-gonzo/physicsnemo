@@ -1,0 +1,4 @@
+10	afu	afu_a2s_isla_seed42	airfrans_uvolume_2d	isla_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10 model.hidden=512 model.n_slices=512 model.compile_blocks=true	3.75e-4	42	100000	code_a2s	500
+11	afu	afu_a2s_isla_seed43	airfrans_uvolume_2d	isla_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10 model.hidden=512 model.n_slices=512 model.compile_blocks=true	3.75e-4	43	100000	code_a2s	500
+12	afu	afu_geo1_isla_seed42	airfrans_uvolume_2d	isla_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10 model.hidden=512 model.n_slices=512 model.compile_blocks=true	3.75e-4	42	100000	code_geo1	500
+13	afu	afu_geo1_isla_seed43	airfrans_uvolume_2d	isla_volume_airfrans	train_split=full_train val_split=full_test +training.val_interval=10 model.hidden=512 model.n_slices=512 model.compile_blocks=true	3.75e-4	43	100000	code_geo1	500
