@@ -220,8 +220,8 @@ class Standing:
                            + " | ".join(" / ".join(fmt_ratio(self.ratio(arch, f, p)) + ("§" if f in self.ds.provisional else "")
                                                    for f in fields) for p in protocols) + " |")
         cap = (f": {setting}: the architectures at their reference configurations, {flab}, "
-               f"relative L2 error (@sec-metrics), seed means over two seeds, float32; ISLA checkpoints of the {FORM_TAG} "
-               "(@sec-checkpoint-form); "
+               f"relative L2 error (@sec-metrics), seed means over two seeds, float32; ISLA checkpoints of the {FORM_TAG}"
+               + ("" if self.ds.reference else ", with the raw slice reads") + " (@sec-checkpoint-form); "
                + "each column scores the same checkpoint of each seed on the test cases as presented: "
                + ", ".join(f"*{PROTOCOL[p]}*" for p in protocols)
                + ". How to read this: lower is better; "
