@@ -539,8 +539,8 @@ by up to the radius of the largest gap between tokens), and the overestimate dep
 model trained under the native law learns to read the native law's distances. Under the area law, which thins the samples
 where the mesher refined and adds them where it did not, its near-wall points read distances from a distribution it has not
 seen. The exact distance is the blue line at one, whatever the draw (`test_builtin_geometry_is_the_surface_s_for_every_draw_of_the_tokens`).
-The scaled distance $s_q = d_q / L$ moves with the draw through $L$, a quadrature over the drawn tokens, but only by $L$'s
-quadrature error (@sec-arch-frame).
+The scaled distance $s_q = d_q / L$ is the same for every draw too, since $L$ is computed from the full-resolution boundary
+before the draw (@sec-arch-frame).
 
 ```{python}
 #| label: fig-nearest-token

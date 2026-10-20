@@ -325,7 +325,10 @@ are then laid end to end along a line, the conditions in sorted order and
 each condition's cells in the Morton (Z-order, a space-filling curve) order
 of their centroids, each cell an interval as long as its probability, and
 the cells under the points $u, u + 1, u + 2, \dots$ are kept: *systematic
-sampling*, a single random start $u$ for the whole case. @fig-arch-boundary-draw
+sampling*, a single random start $u$ for the whole case. The Morton order is
+taken along the dataset's axes, so once a boundary is subsampled a rotated
+case draws other cells; @sec-isla-contracts states what that does to the pose
+contract. @fig-arch-boundary-draw
 runs the class's own draw on the airfoil.
 
 ```{python}

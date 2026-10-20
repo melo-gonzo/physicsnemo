@@ -1413,8 +1413,9 @@ convergent as $O(h^2)$ under refinement of the surface, as a stored
 signed-distance field computed from the same surface would be, which is why
 ISLA reads none. They are built from differences of positions, so the
 distance is invariant and the direction covariant under every rigid motion
-and reflection. The scaled distance $s_q$ inherits from $L$ the quadrature
-error of the drawn tokens. One place is left where the direction is not
+and reflection. The scaled distance $s_q$ divides by $L$, which is computed
+from the same full-resolution surface, so it too is the same for every draw.
+One place is left where the direction is not
 defined: a point equally far from two parts of the surface, on the medial
 surface of a thin plate, where rounding picks the side (@sec-medial-ties).
 @sec-exact-geometry-draw measures what exact geometry changes against
