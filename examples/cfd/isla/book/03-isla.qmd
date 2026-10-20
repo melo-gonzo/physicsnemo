@@ -542,7 +542,8 @@ pressure of degree two, a skin-friction coefficient depends on it through
 the Reynolds number. A model that read $g_k$ with its magnitude would have
 to learn which power applies. ISLA reads the direction $\hat g_k$ and takes
 any magnitude that matters as a global scalar, where the network learns its
-role. In code: `gauge` is $L$, `r` is $r_i$, `n_hat` and `g_hat` are the
+role, or, when the fields declare their units, as the velocity scale by
+which the model makes its inputs and outputs dimensionless (@sec-using-scales). In code: `gauge` is $L$, `r` is $r_i$, `n_hat` and `g_hat` are the
 unit normal and directions, `log_w` is $\ell_i$, and `_seed_invariants` in
 `model.py` builds the seed.
 :::

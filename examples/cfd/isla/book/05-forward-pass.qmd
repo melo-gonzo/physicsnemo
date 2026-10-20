@@ -288,7 +288,11 @@ tokens a quadrature rule (@sec-isla-quadrature). A boundary mesh without a
 stored `_effective_measure` contributes its cells' geometric measures, so
 $\ell_i$ is always defined. $L$ is computed in `forward` from the given
 meshes before the interior task draws its tokens (`ISLA._gauge`), so on both
-tasks it is the same for every draw of the boundary tokens.
+tasks it is the same for every draw of the boundary tokens. A model with
+declared scales computes the case's velocity, density and Reynolds number at
+the same point, in float64 (`ISLA._case_scales`), divides the declared inputs
+by them before stage 2, and multiplies the outputs by them after stage 5
+(@sec-using-scales).
 
 ::: {.callout-note collapse="true" title="Stage 1 in the code"}
 Each condition's cells become rows of one token set in `forward`; the length unit is one function of the full-resolution cells, and the frame is a few lines of `_forward_tokens` (the token state then stores `r = points / gauge`): no center survives either.

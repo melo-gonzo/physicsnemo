@@ -965,8 +965,9 @@ print(f"**A checkpoint of any version other than {ISLA.__model_checkpoint_versio
       "and `load_state_dict` itself) go through a pre-hook that refuses a state dict with the parameter layout of a "
       "checkpoint before 0.7.0, or with torch's state-dict version of the module other than the class's "
       f"`_version = {ISLA._version}`. The second mark tells apart a state dict of 0.7.0 or 0.8.0, whose layout is the current "
-      "one but whose weights were trained on another forward: another geometry encoding of the prediction points, and on the "
-      "interior task a length unit measured on the drawn tokens instead of the full-resolution boundary. The cell above marks "
+      "one but whose weights were trained on another forward: in 0.7.0 another geometry encoding of the prediction points, and in both a length "
+      "unit from the given or drawn cells' centroids alone instead of the full-resolution boundary with each cell's own second "
+      "moment. The cell above marks "
       "the example's file as written by 0.8.0 and its state dict with 0.8.0's version mark; both are refused:")
 print()
 for label, msg in refusals.items():
