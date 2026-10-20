@@ -168,3 +168,52 @@ def test_one_compiled_graph_for_every_cell_count():
         ref, ref_kept = draw(*args)
         assert torch.equal(kept, ref_kept)
         torch.testing.assert_close(out, ref, atol=1e-4, rtol=1e-4)
+
+
+def test_the_length_unit_is_the_full_boundary_s_for_every_draw():
+    """An interior model without declared scales takes its length unit from every
+    cell of the full-resolution boundary before the draw: two training draws of 60
+    of 300 cells (different starts, different tokens) read the same unit, the
+    measure-weighted RMS pairwise distance of all the cells, each with its own second
+    moment."""
+    from physicsnemo.experimental.models import ISLA
+    from physicsnemo.experimental.models.isla.geometry import (
+        cell_second_moments,
+        rms_pairwise_distance,
+    )
+    from test.experimental.models.isla._meshes import cloud, soup
+
+    torch.manual_seed(0)
+    m = ISLA(
+        output_schema={"p": {"rank": 0}},
+        boundary_schemas={"a": {}, "b": {}},
+        interior=True,
+        boundary_tokens=60,
+        hidden=16,
+        n_layers=1,
+        n_slices=4,
+    ).double()
+    assert not m._scaled
+    seen, forward_tokens = [], m._forward_tokens
+
+    def spy(boundary, *a, **k):
+        seen.append((k["gauge"], boundary["points"].clone()))
+        return forward_tokens(boundary, *a, **k)
+
+    m._forward_tokens = spy
+    meshes = {k: soup(*cloud(150, seed=i)[:3]) for i, k in enumerate("ab")}
+    q = torch.randn(10, 3, dtype=D, generator=torch.Generator().manual_seed(5))
+    for seed in (0, 1):
+        torch.manual_seed(seed)
+        with torch.no_grad():
+            m(boundary_meshes=meshes, prediction_points=q)
+    full = rms_pairwise_distance(
+        torch.cat([meshes[k].cell_centroids for k in "ab"])[None],
+        torch.cat([meshes[k].cell_data["_effective_measure"] for k in "ab"])[None],
+        1e-12,
+        torch.cat([cell_second_moments(meshes[k]) for k in "ab"])[None],
+    )
+    (g0, p0), (g1, p1) = seen
+    assert p0.shape[1] == 60 and not torch.equal(p0, p1)  # two different draws
+    assert torch.equal(g0, g1)
+    torch.testing.assert_close(g0, full, atol=0, rtol=1e-14)

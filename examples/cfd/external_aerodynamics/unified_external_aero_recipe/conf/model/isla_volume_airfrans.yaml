@@ -16,7 +16,17 @@
 # limitations under the License.
 
 # ISLA, interior task, on AirfRANS (airfrans_volume_2d): the reference configuration of isla_volume.yaml in two
-# dimensions, with the airfoil boundary and the inlet direction and speed as global inputs.
+# dimensions, with the airfoil boundary and the farfield velocity U_inf as the global input.
+#
+# ISLA brings its own scales (the model's docstring, *Scales*): the length L is the airfoil's RMS pairwise
+# distance (about 0.41 chord), the velocity U = |U_inf| (the farfield Dirichlet value, the global
+# velocity_scale source, whose direction is the one global direction, K = 1) and nu the air's kinematic
+# viscosity, the constant 1.56e-5 m^2/s (SetGlobalField below; AirfRANS varies Re through U_inf alone), so the
+# standardized log10(U L / nu) is a global scalar in place of the raw speed in m/s. The velocity and pressure
+# outputs are dimensionless because the dataset's NonDimensionalizeByMetadata divides the targets by the same
+# |U_inf| that ISLA takes as its U (v / |U_inf| and Cp = p / (0.5 |U_inf|^2)); nut (m^2/s) has the units U L
+# and is standardized by the dataset's NormalizeMeshFields stats (output_stats, injected by train.py). The
+# targets and the loss are every arm's.
 
 # The mesh contract is that of isla_volume.yaml: no query_schema, so the dataset's
 # stored sdf and sdf_normals (the baselines' inputs) are not read; each prediction
@@ -27,6 +37,13 @@
 # own length.
 input_type: mesh
 output_type: mesh
+
+# The kinematic viscosity of air, a physical constant (the files carry none), as the global leaf nu; run after
+# the dataset's own chain.
+dataset_append_transforms:
+  - _target_: ${dp:SetGlobalField}
+    fields:
+      nu: 1.56e-5
 
 # Learning rate pinned at the reference configuration's rate, 3.75e-4 (REF-80
 # verdict, 2026-10-04; the width rule 1e-3 x 192 / hidden at 512): the recipe
@@ -51,15 +68,18 @@ forward_kwargs:
 
 model:
   _target_: physicsnemo.experimental.models.isla.ISLA
-  output_schema:                 # the dataset's targets, by name and tensor rank
-    velocity: {rank: 1}
-    pressure: {rank: 0}
-    nut: {rank: 0}
+  output_schema:                 # the dataset's targets, by name and tensor rank, with their units
+    velocity: {rank: 1}          # v / |U_inf|: dimensionless (NonDimensionalizeByMetadata divides by ISLA's U)
+    pressure: {rank: 0}          # Cp: dimensionless, likewise
+    nut: {rank: 0, units: {U: 1, L: 1}, scale: null}   # m^2/s; c from the dataset file's isla_constants (train.py)
   boundary_schemas:              # the boundary conditions by name, each with its own per-cell fields
     airfoil: {}                  # the airfoil, a no-slip wall: no per-cell fields
   global_schema:
-    U_inf_dir: {rank: 1}         # the unit inlet direction, read from global_data.U_inf_dir
-    U_inf_mag: {rank: 0}         # the inlet speed, a rank-0 global input (the Reynolds number varies across cases)
+    U_inf: {rank: 1, units: {U: 1}, velocity_scale: true}   # the farfield velocity (m/s): U = |U_inf|, g its direction
+    nu: {rank: 0, units: {U: 1, L: 1}, role: viscosity}       # m^2/s, set above; consumed for Re
+  # z = (log10(U L / nu) - mean) / std over the train cases: the dataset file's isla_constants.reynolds (train.py).
+  reynolds: null
+  output_stats: null             # injected by train.py: the dataset's NormalizeMeshFields stats (nut)
   dim: 2                         # the problem is planar: pair with datasets/airfrans_volume_2d.yaml (RestrictToPlane first in its pipeline)
   interior: true                 # predict at prediction_points, which join the encoder as tokens
   boundary_tokens: 200000        # boundary tokens drawn per case inside the model (equal to the class default; the airfoil is kept whole)

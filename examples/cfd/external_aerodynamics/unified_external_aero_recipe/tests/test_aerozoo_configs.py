@@ -18,7 +18,7 @@
 2026-10-19) run on a synthetic release-shaped case (four boundaries, one case without slip faces) by the real
 reader and by their transform chain, and the GeoTransolver and Transolver configs composed and driven through
 collate -> forward -> loss on the output. The label check: every label perturbed or deleted leaves every model
-input bitwise equal. The ISLA config waits for ISLA's own scales (its TODO) and is pinned to refuse the files."""
+input bitwise equal. The ISLA config brings its own scales and runs on the files' physical data."""
 
 import sys
 from pathlib import Path
@@ -42,7 +42,12 @@ from datasets import (  # noqa: E402
 from forward_kwargs import extract_target_measure  # noqa: E402
 from loss import LossCalculator  # noqa: E402
 from metrics import MetricCalculator  # noqa: E402
-from output_normalize import normalize_output_to_tensordict  # noqa: E402
+from output_normalize import (  # noqa: E402
+    check_model_output_stats,
+    model_dataset_constants,
+    model_output_stats,
+    normalize_output_to_tensordict,
+)
 from utils import field_dim  # noqa: E402
 
 from physicsnemo.datapipes.protocols import DatasetBase  # noqa: E402
@@ -402,7 +407,13 @@ def test_dataset_files_read_no_label_and_derive_no_case_scale(dataset):
         f"# Statistics filled by aerozoo_pstats.py fill from pstats_{split}.train.json: split part {split}.train, "
     )
     ds = OmegaConf.load(path)
-    assert set(ds.keys()) == {"train_datadir", "manifest", "pipeline", "targets"}
+    assert set(ds.keys()) == {
+        "train_datadir",
+        "manifest",
+        "pipeline",
+        "targets",
+        "isla_constants",
+    }
     reader = OmegaConf.to_container(ds.pipeline.reader, resolve=False)
     assert "subsample_n_cells" not in reader and reader["boundary_subsample"] == "cells"
     assert reader["subsample_n_points"] == "${sampling_resolution}"
@@ -718,10 +729,13 @@ def test_scale_only_standardization_makes_the_metric_physical():
     assert not torch.isclose(shifted["pressure_l2"], physical["pressure_l2"], rtol=1e-2)
 
 
-def test_isla_config_drops_the_baselines_steps_and_refuses_the_files():
-    """ISLA declares the four conditions by name with the values each prescribes and drops the steps only the
-    baselines read. Until step 2 (ISLA's own scales, its TODO) it still declares label-derived globals the
-    files no longer write, so it refuses a case at its first forward instead of running on it silently."""
+def test_isla_config_brings_its_own_scales_and_runs():
+    """ISLA declares the four conditions by name with the values each prescribes (in SI units, with their
+    units), drops the steps only the baselines read, consumes rho and nu by their roles and derives its own
+    scales: U and the direction g from the inlet's velocity (K = 1, no label-derived global), L from the four
+    boundaries. Its outputs are standardized by the dataset's own NormalizeMeshFields stats (injected as
+    output_stats), so the per-case relative loss with velocity weighed 3 (the baselines') compares them with
+    the same targets."""
     cfg = _compose(
         "isla_volume_aerozoo",
         "model.hidden=16",
@@ -734,6 +748,8 @@ def test_isla_config_drops_the_baselines_steps_and_refuses_the_files():
         name: {k: v["rank"] for k, v in schema.items()}
         for name, schema in OmegaConf.to_container(cfg.model.boundary_schemas).items()
     } == ISLA_CONDITIONS
+    assert cfg.training.loss_type == "case_relative_l2"
+    assert OmegaConf.to_container(cfg.training.field_weights) == {"velocity": 3}
     ds = load_dataset_config(_RECIPE_ROOT / "datasets" / f"{DATASET}.yaml")
     kept = [
         str(t["_target_"])
@@ -747,9 +763,39 @@ def test_isla_config_drops_the_baselines_steps_and_refuses_the_files():
     )
     assert not any(t.endswith(dropped) for t in kept)
     assert len(kept) == len(ds.pipeline.transforms) - len(dropped)
-    d = _run(_chain(DATASET, cfg), make_aerozoo_case(True))
+    chain = _chain(DATASET, cfg)
+    (normalizer,) = [t for t in chain if type(t).__name__ == "NormalizeMeshFields"]
+    d = _run(chain, make_aerozoo_case(True))
     spec = OmegaConf.to_container(cfg.forward_kwargs, resolve=True)
     batch = build_collate_fn("mesh", spec, TARGETS)([(d, {})])
-    model = hydra.utils.instantiate(cfg.model, _convert_="partial")
-    with pytest.raises(ValueError, match="U_inf_dir"), torch.no_grad():
-        model(**batch["forward_kwargs"])
+    model = hydra.utils.instantiate(
+        cfg.model,
+        _convert_="partial",
+        **model_output_stats(cfg.model, normalizer),
+        **model_dataset_constants(cfg.model, ds),
+    )
+    check_model_output_stats(model, normalizer)
+    assert model.n_global_vectors == 1 and model.n_global_scalars == 1  # g; z
+    assert model.output_stats["pressure"] == {
+        "mean": 0.0,
+        "std": pytest.approx(1129.26),
+    }
+    seen = []
+    scales = model._case_scales
+    model._case_scales = lambda *a: seen.append(scales(*a)) or seen[-1]
+    with torch.no_grad():
+        out = model(**batch["forward_kwargs"])
+    torch.testing.assert_close(seen[0]["U"], torch.tensor(U_INF, dtype=torch.float64))
+    torch.testing.assert_close(
+        seen[0]["g"][0, 0], torch.tensor([1.0, 0.0, 0.0], dtype=torch.float64)
+    )
+    pred = normalize_output_to_tensordict(out, TARGETS, "mesh")
+    total, _ = LossCalculator(
+        TARGETS,
+        loss_type=cfg.training.loss_type,
+        field_weights=OmegaConf.to_container(cfg.training.field_weights),
+    )(pred, batch["targets"])
+    assert torch.isfinite(total)
+    model.output_stats = {**model.output_stats, "nut": {"mean": 0.0, "std": 1.0}}
+    with pytest.raises(ValueError, match="not the dataset's NormalizeMeshFields stats"):
+        check_model_output_stats(model, normalizer)

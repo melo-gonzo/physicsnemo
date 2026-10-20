@@ -95,6 +95,25 @@ def test_rotation_equivariance(setup):
     _assert_rotated(_run(m, transform(mesh, q), drv @ q.T), base, q)
 
 
+def test_rotation_equivariance_with_scales():
+    """With ISLA's own scales (a global velocity source, a vector output in its
+    units) the output still rotates with the geometry and the source."""
+    torch.manual_seed(0)
+    m = ISLA(
+        output_schema={"p": {"rank": 0, "units": {"U": 2}}, "v": {"rank": 1, "units": {"U": 1}}},
+        boundary_schemas=WALL,
+        global_schema={"g": {"rank": 1, "units": {"U": 1}, "velocity_scale": True}},
+        hidden=32,
+        n_layers=2,
+        n_slices=8,
+    ).double().eval()
+    pts, nrm, w, drv = cloud(200)
+    mesh = soup(pts, nrm, w)
+    q = _rotation()
+    base = _run(m, mesh, 7.0 * drv)
+    _assert_rotated(_run(m, transform(mesh, q), 7.0 * drv @ q.T), base, q, atol=1e-9)
+
+
 def test_translation_invariance(setup):
     m, mesh, drv, base = setup
     shift = torch.tensor([3.0, -7.0, 11.0], dtype=D)
@@ -304,13 +323,16 @@ def test_query_mass_refinement_invariance():
 
 @pytest.mark.parametrize("interior", [False, True], ids=["surface", "interior"])
 def test_geometric_scale_equivariance(interior):
-    """A similarity of the geometry (points x k + shift, areas x k^2) leaves the
-    output exactly unchanged, for the boundary alone and with prediction points
-    that are moved along."""
+    """For a model without scales: a similarity of the geometry (points x k + shift,
+    areas x k^2) leaves the output exactly unchanged, for the boundary alone and with
+    prediction points that are moved along. (With declared scales a geometry scale
+    at a fixed viscosity changes the Reynolds number, as it should: the similarity
+    with every scale is test_isla_scales.py's.)"""
     torch.manual_seed(0)
     pts, nrm, w, drv = cloud(400)
     mesh = soup(pts, nrm, w)
     m = _isla(hidden=64, n_layers=2, n_slices=16, interior=interior).double().eval()
+    assert not m._scaled
     k = 2.7
     shift = torch.tensor([3.0, -7.0, 11.0], dtype=D)
     q = pts[:50] * 1.5 if interior else None

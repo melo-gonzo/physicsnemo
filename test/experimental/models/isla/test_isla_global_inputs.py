@@ -118,6 +118,28 @@ def test_two_global_vectors():
     assert torch.equal(base.global_data["g1"], gv[0])
 
 
+@pytest.mark.parametrize("declared", [0, 2])
+def test_a_derived_direction_counts_among_the_global_vectors(declared):
+    """A boundary velocity source derives the direction g, the last of the K global
+    directions: K = 1 with none declared, K = 3 after two declared ones; the seed,
+    the head basis and every covariance contract count it, and it rotates with the
+    source."""
+    gs = {f"g{k}": {"rank": 1} for k in range(declared)}
+    m = _model(gs, boundary_schemas={"wall": {"u": {"rank": 1, "units": {"U": 1}, "velocity_scale": True}}})
+    K = declared + 1
+    assert m.n_global_vectors == K and m.n_true_basis == 3 + 2 * K
+    assert m.boundary_conditions["wall"].seed.in_features == 1 + K + (K + 1) + 1  # 1, n.g_k, u.(n, g_k), |u|
+    pts, nrm, w, _ = cloud(200, seed=0, scale=(1.0, 1.0, 1.0))
+    u = torch.randn(200, 3, dtype=D, generator=torch.Generator().manual_seed(3)) + torch.tensor([4.0, 0, 0], dtype=D)
+    mesh = soup(pts, nrm, w, cell_data={"u": u})
+    gd = {f"g{k}": torch.randn(3, dtype=D, generator=torch.Generator().manual_seed(k)) for k in range(declared)}
+    R, t = orthogonal(3, 5), torch.tensor([2.0, -5.0, 1.0], dtype=D)
+    base = _run(m, mesh, gd)
+    moved = _run(m, transform(mesh, R, t, specs=m.boundary_schemas["wall"]), _rotate_globals(m, gd, R))
+    assert torch.allclose(moved.point_data["p"], base.point_data["p"], atol=1e-10)
+    assert torch.allclose(moved.point_data["v"], base.point_data["v"] @ R.T, atol=1e-10)
+
+
 def test_two_vectors_interior_path():
     """The interior task carries the K directions to the prediction-point side as well."""
     mesh = _boundary()

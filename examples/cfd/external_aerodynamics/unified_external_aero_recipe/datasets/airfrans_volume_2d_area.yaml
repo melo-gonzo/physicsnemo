@@ -65,3 +65,15 @@ targets:
   pressure: scalar
   nut: scalar
   velocity: vector
+
+# ISLA's own constants: conf/model/isla_volume_airfrans.yaml leaves them null and train.py / infer.py inject them.
+# Fitted on full_train (800 of its 800 cases) with the implemented scale functions (ISLA._gauge and
+# ISLA._case_scales on the airfoil restricted to its plane, U = |U_inf|, nu = 1.56e-5): reynolds is the mean and the
+# population std over the train cases of log10(U L / nu); output_scale.nut is the median over the train cases of the
+# per-case RMS of nut / (U L) (a seeded 20,000-point interior sample per case). LHR cpu-short job 295777
+# (examples/cfd/isla/results/aerozoo_dataset/isla_constants_fit.py, code 6c3aac5a8), 2026-10-20.
+# The same as airfrans_volume_2d.yaml's: the same train cases, and L, U and nut / (U L) do not depend on the pose or
+# on the boundary or interior draw (the airfoil is kept whole).
+isla_constants:
+  reynolds: {mean: 6.205, std: 0.1347}
+  output_scale: {nut: 7.511e-05}

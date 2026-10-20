@@ -466,10 +466,10 @@ def _captured(m, **kw):
     seen = {}
     inner = m._forward_tokens
 
-    def spy(boundary, query, *args):
+    def spy(boundary, query, *args, **kwargs):
         seen["tokens"] = boundary[0].clone()
         seen["d"], seen["u"] = query["wall_distance"][0].clone(), query["wall_direction"][0].clone()
-        return inner(boundary, query, *args)
+        return inner(boundary, query, *args, **kwargs)
 
     m._forward_tokens = spy
     try:

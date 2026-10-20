@@ -37,17 +37,25 @@ import os
 import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager, nullcontext
+from pathlib import Path
 from typing import Any, Literal
 
 import hydra
 import torch
 import torch.distributed as dist
-from datasets import build_dataloaders
+from datasets import build_dataloaders, load_dataset_config
 from jaxtyping import Float
 from loss import LossCalculator
 from metrics import MetricCalculator, resolve_metrics
 from omegaconf import DictConfig, OmegaConf
-from output_normalize import IOType, normalize_output_to_tensordict, require_output_type
+from output_normalize import (
+    IOType,
+    check_model_output_stats,
+    model_dataset_constants,
+    model_output_stats,
+    normalize_output_to_tensordict,
+    require_output_type,
+)
 from tabulate import tabulate
 from tensordict import TensorDict
 from torch.amp import GradScaler
@@ -908,7 +916,19 @@ def main(cfg: DictConfig) -> None:
         return
 
     # -- Normal training path ---------------------------------------------------
-    model = hydra.utils.instantiate(cfg.model, _convert_="partial")
+    ### A model that standardizes its own outputs (ISLA's scales: output_stats) takes the
+    ### dataset's NormalizeMeshFields stats, so its outputs and the targets are one space,
+    ### and the constants it leaves to the dataset (its split's isla_constants).
+    ds_cfg = load_dataset_config(
+        Path(__file__).resolve().parent.parent / "datasets" / f"{cfg.dataset}.yaml"
+    )
+    model = hydra.utils.instantiate(
+        cfg.model,
+        _convert_="partial",
+        **model_output_stats(cfg.model, normalizer),
+        **model_dataset_constants(cfg.model, ds_cfg),
+    )
+    check_model_output_stats(model, normalizer)
     logger.info(f"Model: {model.__class__.__name__}")
     num_params = sum(p.numel() for p in model.parameters())
     logger.info(f"Parameters: {num_params:,}")

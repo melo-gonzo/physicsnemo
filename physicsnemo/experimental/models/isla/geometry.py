@@ -69,14 +69,21 @@ def soft_log_length(s: torch.Tensor, eps: float = LENGTH_SOFTENING) -> torch.Ten
 
 
 def rms_pairwise_distance(
-    points: torch.Tensor, measure_weights: torch.Tensor | None, eps: float = 1e-8
+    points: torch.Tensor,
+    measure_weights: torch.Tensor | None,
+    eps: float = 1e-8,
+    second_moments: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """Measure-weighted RMS pairwise distance of a sampled boundary, shape (B, 1, 1).
 
     ``L^2 = sum_ij w~_i w~_j |x_i - x_j|^2`` with ``w~ = w / sum(w)`` (uniform
     weights when ``measure_weights`` is ``None``), evaluated in O(N) through the
-    variance identity ``L^2 = 2 sum_i w~_i |x_i - c|^2`` with ``c`` the weighted
-    mean. A normalized two-point statistic: it converges under refinement of any
+    variance identity ``L^2 = 2 sum_i w~_i (|x_i - c|^2 + J_i)`` with ``c`` the weighted
+    mean and ``J_i`` each point's own second moment about itself, per unit measure
+    (``second_moments`` ``(B, N)``, :func:`cell_second_moments`; ``None``: points).
+    With the cells' centroids, measures and second moments it is the exact RMS
+    distance between two points of the piecewise-flat surface, the same for every
+    subdivision of its cells. A normalized two-point statistic: it converges under refinement of any
     boundary whose normalized measure converges (including fractal boundaries
     whose total measure diverges), is invariant to a uniform rescale of the
     weights, and is covariant under a geometric rescale. The mean ``c`` is an
@@ -89,8 +96,23 @@ def rms_pairwise_distance(
         w = measure_weights.reshape(b, n, 1).to(points.dtype)
     w_n = w / w.sum(dim=1, keepdim=True).clamp_min(eps)
     c = (w_n * points).sum(dim=1, keepdim=True)
-    var = (w_n * (points - c).square().sum(-1, keepdim=True)).sum(dim=1, keepdim=True)
+    sq = (points - c).square().sum(-1, keepdim=True)
+    if second_moments is not None:
+        sq = sq + second_moments.reshape(b, n, 1).to(points.dtype)
+    var = (w_n * sq).sum(dim=1, keepdim=True)
     return (2.0 * var).sqrt().clamp_min(eps)
+
+
+def cell_second_moments(mesh) -> torch.Tensor:
+    r"""Each simplex cell's second moment about its centroid per unit measure,
+    :math:`\frac{1}{|K|}\int_K |x - g|^2 = \frac{1}{(n+1)(n+2)} \sum_k |v_k - g|^2` for an
+    :math:`n`-simplex with vertices :math:`v_k` and centroid :math:`g` (a segment's
+    :math:`\ell^2 / 12`), shape ``(n_cells,)``: the parallel-axis term that makes
+    :func:`rms_pairwise_distance` exact for the piecewise-flat surface."""
+    verts = mesh.points[mesh.cells]  # (C, n + 1, d)
+    k = verts.shape[1]
+    g = verts.mean(1, keepdim=True)
+    return (verts - g).square().sum((1, 2)) / (k * (k + 1))
 
 
 def _weld(

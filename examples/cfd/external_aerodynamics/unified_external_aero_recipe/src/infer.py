@@ -91,7 +91,10 @@ from nondim import NonDimensionalizeByMetadata, NondimFieldType, freestream_scal
 from omegaconf import DictConfig, OmegaConf
 from output_normalize import (
     IOType,
+    check_model_output_stats,
     explode_tensor_targets,
+    model_dataset_constants,
+    model_output_stats,
     normalize_output_to_tensordict,
     require_output_type,
 )
@@ -508,25 +511,6 @@ def main(cfg: DictConfig) -> None:
         / ("metrics.jsonl" if is_rank0 else f"metrics.rank{dist_manager.rank}.jsonl")
     )
 
-    # -- Model + checkpoint -----------------------------------------------------
-    model = hydra.utils.instantiate(cfg.model, _convert_="partial").to(device)
-    num_params = sum(p.numel() for p in model.parameters())
-    logger.info(f"Model: {model.__class__.__name__} ({num_params:,} params)")
-
-    loaded_epoch = load_checkpoint(path=ckpt_path, models=model, device=device)
-    ### The trainer always saves with epoch >= 1, so 0 here means nothing
-    ### was restored (`load_checkpoint` only logs in that case) -- e.g.
-    ### `checkpoint_path` pointing at the run directory instead of its
-    ### `checkpoints/` subdirectory. Without this check, inference would
-    ### proceed on randomly initialized weights.
-    if loaded_epoch == 0:
-        raise FileNotFoundError(
-            f"No checkpoint restored from {ckpt_path!r}: the directory exists "
-            f"but holds no checkpoint for this model. Check `run_id` / "
-            f"`checkpoint_dir` (or `checkpoint_path`)."
-        )
-    logger.info(f"Loaded checkpoint from {ckpt_path!r} (epoch {loaded_epoch}).")
-
     ### The trainer persists the normalizer's stats next to the weights
     ### (norm_stats.pt) so inference applies the exact training-time
     ### normalization even if the dataset YAML's stats are edited later.
@@ -552,6 +536,39 @@ def main(cfg: DictConfig) -> None:
                 ### ``stats`` returns a copy; the setter replaces the live
                 ### statistics (re-keying dotted names to nested keys).
                 live.stats = saved_stats
+
+    # -- Model + checkpoint -----------------------------------------------------
+    model = hydra.utils.instantiate(
+        cfg.model,
+        _convert_="partial",
+        **model_output_stats(cfg.model, normalizer),
+        **model_dataset_constants(
+            cfg.model,
+            load_dataset_config(
+                Path(__file__).resolve().parent.parent
+                / "datasets"
+                / f"{cfg.dataset}.yaml"
+            ),
+        ),
+    ).to(device)
+    num_params = sum(p.numel() for p in model.parameters())
+    logger.info(f"Model: {model.__class__.__name__} ({num_params:,} params)")
+
+    loaded_epoch = load_checkpoint(path=ckpt_path, models=model, device=device)
+    ### The trainer always saves with epoch >= 1, so 0 here means nothing
+    ### was restored (`load_checkpoint` only logs in that case) -- e.g.
+    ### `checkpoint_path` pointing at the run directory instead of its
+    ### `checkpoints/` subdirectory. Without this check, inference would
+    ### proceed on randomly initialized weights.
+    if loaded_epoch == 0:
+        raise FileNotFoundError(
+            f"No checkpoint restored from {ckpt_path!r}: the directory exists "
+            f"but holds no checkpoint for this model. Check `run_id` / "
+            f"`checkpoint_dir` (or `checkpoint_path`)."
+        )
+    logger.info(f"Loaded checkpoint from {ckpt_path!r} (epoch {loaded_epoch}).")
+    ### A model that standardizes its own outputs was built with those (training-time) stats.
+    check_model_output_stats(model, normalizer)
 
     model = compile_model(model, cfg)
     model.eval()
