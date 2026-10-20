@@ -403,10 +403,11 @@ than clumped. In training $u$ is drawn uniform on $[0, 1)$ from the global
 torch random-number generator at every step (`torch.manual_seed` reproduces
 a run), so the model sees a new quadrature of the same surface each time;
 in evaluation (`model.eval()`) $u = 1/2$ (`EVAL_START`), so inference is
-deterministic. The draw runs without gradient, in float64 and outside
-autocast; it selects rows of the token set whose seeds stage 2 has already
-computed for every cell, and returns them in the cells' own order, so a
-condition kept whole is its mesh as given.
+deterministic. The selection runs without gradient, in float64 and outside
+autocast, and the kept cells' measures keep their gradient. It selects rows
+of the token set whose seeds stage 2 has already computed for every cell,
+and returns them in the cells' own order, so a condition kept whole is its
+mesh as given.
 
 ::: {.column-margin}
 Why proportional to measure: an uncapped kept cell then stands for
