@@ -78,7 +78,7 @@ print(f"The three architectures are {S.CONFIG['ISLA']}, {S.CONFIG['GeoTransolver
 
 ## The problem: two sport-utility families {#sec-shift-suv-problem}
 
-**SHIFT-SUV is about a thousand morphed bodies in each of two rear-end families, estate and fastback, in one far-field condition.** An *estate* (squareback) ends in a near-vertical tailgate, so the air leaves the body at the roof's trailing edge and the whole rear face sits in the wake. A *fastback* slopes from the roof to the tail, so the pressure recovers along the sloping rear window, and where the flow leaves the body depends on the slope. Both families are taller than the DrivAerML notchback. Each model receives what it receives on DrivAerML (@tbl-model-inputs): ISLA the surface cells with positions, outward normals and areas, and the unit far-field direction; GeoTransolver and Transolver the cells' centered coordinates and normals and the freestream as the physical vector, 30 m/s along $x$ on every body, which carries no information beyond the direction. @fig-problem-shift-suv shows one estate, a body of the family on which every model trains and is scored.
+**SHIFT-SUV is about a thousand morphed bodies in each of two rear-end families, estate and fastback, in one far-field condition.** An *estate* (squareback) ends in a near-vertical tailgate, so the air leaves the body at the roof's trailing edge and the whole rear face sits in the wake. A *fastback* slopes from the roof to the tail, so the pressure recovers along the sloping rear window, and where the flow leaves the body depends on the slope. Both families are taller than the DrivAerML notchback. Each model receives what it receives on DrivAerML (@tbl-model-inputs): ISLA the surface cells with positions, outward normals and areas, and the unit far-field direction; GeoTransolver and Transolver the cells' centered coordinates and normals and the same unit direction. @fig-problem-shift-suv shows one estate, a body of the family on which every model trains and is scored.
 
 ```{python}
 #| label: fig-problem-shift-suv
@@ -214,7 +214,7 @@ print(": The reference configurations on SHIFT-SUV: parameters, peak device memo
 #| label: para-shift-suv-lede
 #| output: asis
 print(f"**On the native mesh {clause(SUV, 'pressure_l2')} on surface pressure, and {clause(SUV, 'wss_l2')} on wall shear.** "
-      + SUV.drive_sentence() +
+      +
       f"{'Every Transolver seed sits below both ISLA seeds on both fields. ' if all(SUV.verdict('Transolver', f) == 'trails' for f in SUV_F) else ''}On the uniform point cloud and rotated and translated, ISLA's "
       "error is its native error and the baselines' is not. @tbl-shift-suv-protocols is the standing and @fig-shift-suv-shifts draws it.")
 ```
@@ -247,7 +247,8 @@ protocol_dots(SUV, SUV_F); plt.show()
 #| output: asis
 posed_floor = min(SUV.err(a, f, "posed") for a in S.BASELINES for f in SUV_F)
 gts = SUV.seeds("GeoTransolver", "pressure_l2", "area")
-print(f"Three readings. **First, of the three aerodynamic Surface standings in the book this is the one where a baseline leads.** Transolver's "
+assert all(S.Standing(k).verdict("Transolver", f) == "trails" for k in ("shift_suv", "drivaerml_surface", "hilift") for f in S.DATASETS[k].headline)
+print(f"Three readings. **First, Transolver leads on the native mesh, as it does on the DrivAerML Surface task and on HiLiftAeroML.** Transolver's "
       f"pressure seeds are {seeds_txt('Transolver', 'pressure_l2')} against ISLA's {seeds_txt('ISLA', 'pressure_l2')}, a gap of "
       f"{pct(SUV.ratio('Transolver', 'pressure_l2'))} on pressure and {pct(SUV.ratio('Transolver', 'wss_l2'))} on wall shear; GeoTransolver's "
       f"seeds ({seeds_txt('GeoTransolver', 'pressure_l2')}) interleave with ISLA's. "
@@ -274,7 +275,8 @@ _R = _json.load(open(RENDER_DIR / "render_cloud_shift_suv.json"))
 rendering_figure("fig-shift-suv-prediction", [("figures/renderings/shift_suv_cp.png", "Pressure coefficient")],
     f"The three reference configurations on one SHIFT-SUV case, {_R['sample_id'].split('_')[0]}, left side. Relative L2 on this case: {case_errors(_R['per_sample_rel_l2'])}. " + "Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one "
       f"symmetric scale. ISLA checkpoints of the {S.FORM_TAG} (@sec-checkpoint-form). How to read this: one case, chosen as the case of median ISLA error (seed 42 of each reference configuration), "
-      "not a standing; the standing is the table above. "
+      "not a standing; the standing is the table above. The baselines drawn are their checkpoints that read the freestream as the "
+      "constant physical vector, kept on record beside the standing's unit-direction arms (@sec-unit-direction-rule). "
     + "Data: results/renderings_2026-10-18/arrays/render_cloud_shift_suv.json.", nrow=None)
 ```
 

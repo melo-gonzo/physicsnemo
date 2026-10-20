@@ -50,8 +50,6 @@ def star(ax, x, y, key, label=None, ms=15, **kw):
     """A reference configuration: the architecture's color, a black-edged star."""
     return ax.plot([x], [y], marker="*", ms=ms, mfc=STYLE[key]["color"], mec=INK, mew=0.9, ls="none",
                    label=label, zorder=6, **kw)
-HL_NOTE = ("" if S.DATASETS["hilift"].reference or not S.DATASETS["hilift"].fair_drive else
-           " HiLiftAeroML's ISLA star is from checkpoints of the raw-read variant (@sec-isla-layer), not of the reference configuration.")
 ```
 
 ## Cells per case saturate above 100,000 {#sec-equal-budget}
@@ -391,7 +389,7 @@ for task, key in TASKS:
     for i, (arch, _) in enumerate(REF_KEYS):
         c = COST[task][arch]
         name = st_.ds.name if i == 0 else ""
-        rel = "" if arch == "ISLA" else (f"{st_.ratio(arch, f):.2f}" if st_.ds.fair_drive else "not compared‡")
+        rel = "" if arch == "ISLA" else f"{st_.ratio(arch, f):.2f}"
         out += (f"| {name} | {arch} | {c['n_parameters'] / 1e6:.1f}M | {c['peak_gib']:.1f} | {c['epoch_seconds']:.0f} | {lane_gpuh(task, arch):.0f} | "
                 f"{st_.err(arch, f):.4f} | {rel} |\n")
 print(out)
@@ -449,9 +447,9 @@ toward a floor at the large ones, on both datasets.
 #|   floor. *Instrument:* ISLA at 192, 384 and 768 wide, 256 slices, 1e-3 / 5e-4 / 5e-4, raw slice
 #|   reads (@sec-study-configurations); GeoTransolver at 256, 512 and 1,024 wide, 3e-3 / 3e-3 /
 #|   1e-3. Black-edged stars: the three reference configurations at the full training set of 435
-#|   cars, a different instrument (results/char/drivaerml_surface_a2.json), offset sideways for
-#|   legibility; the HiLiftAeroML panel carries none while its standing is not compared
-#|   (@sec-oq-unit-direction). How to read this: the
+#|   cars and of 210 wings, a different instrument (results/char/drivaerml_surface_a2.json,
+#|   results/char/hilift_surface_a2.json; every baseline reading the unit direction), offset
+#|   sideways for legibility. How to read this: the
 #|   vertical spread between shades is what parameters buy at one training-set size; the slope is
 #|   what cases buy. Both axes are logarithmic. Data: results/scalelaw_2026-10-08.json.
 #| fig-alt: "Two stacked log-log scatters of pressure error against training cases, DrivAerML above and HiLiftAeroML below; three blue shades for ISLA widths and three red shades for GeoTransolver widths, dotted fitted curves bending toward a floor, and stars for the reference configurations."
@@ -483,10 +481,9 @@ for ax, (ds, title, ticks, xlim, ylim, yticks, stand, nref) in zip(axes, PANELS)
         if m == "isla" and accepted:
             ax.axhline(f["eps_inf"], color=BASELINE, ls="--", lw=0.8, zorder=0)
             ax.text(xlim[0] * 1.15, f["eps_inf"] * 0.985, f"ISLA's fitted floor {f['eps_inf']:.4f}", fontsize=7.5, color=INK2, va="top", ha="left")
-    if stand.ds.fair_drive:
-        for (a, key), dx in zip(REF_KEYS, (1.0, 1.12, 0.89)):
-            star(ax, nref * dx, stand.err(a, "pressure_l2"), key, ms=13)
-        ax.plot([], [], marker="*", ms=12, mfc="white", mec=INK, ls="none", label="reference configurations")
+    for (a, key), dx in zip(REF_KEYS, (1.0, 1.12, 0.89)):
+        star(ax, nref * dx, stand.err(a, "pressure_l2"), key, ms=13)
+    ax.plot([], [], marker="*", ms=12, mfc="white", mec=INK, ls="none", label="reference configurations")
     ax.set_xscale("log"); ax.set_yscale("log"); ax.set_xticks(ticks); ax.set_xticklabels([f"{t:,}" for t in ticks])
     ax.set_yticks(yticks); ax.set_yticklabels([f"{t:.2f}" for t in yticks]); ax.yaxis.set_minor_formatter(mpl.ticker.NullFormatter()); ax.xaxis.set_minor_formatter(mpl.ticker.NullFormatter())
     ax.set_xlim(*xlim); ax.set_ylim(*ylim)
@@ -494,12 +491,6 @@ for ax, (ds, title, ticks, xlim, ylim, yticks, stand, nref) in zip(axes, PANELS)
     ax.set_xlabel("training cases [count]"); ax.set_ylabel("surface-pressure error,\narea-weighted relative L2 [–]")
     ax.legend(fontsize=7.4, ncol=2, loc="upper right")
 plt.tight_layout(); plt.show()
-```
-
-```{python}
-#| label: para-hl-note
-#| output: asis
-print(HL_NOTE.strip())
 ```
 
 ```{python}

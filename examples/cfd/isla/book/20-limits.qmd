@@ -47,23 +47,17 @@ LUGC = f" ({_nl} of them on the lug against Transolver, which reads no boundary-
 def r(key, b, f, p="native"):
     return ST[key].ratio(b, f, p)
 PR = json.load(open(RES / "precres_2026-09-18.json"))["reduction"]
-HL_REF = S.DATASETS["hilift"].reference
 AZ = S.DATASETS["aerozoo"]
-FAIR = [k for k in ST if S.DATASETS[k].fair_drive]          # the standings that compare the architectures
-UNFAIR = [k for k in ST if not S.DATASETS[k].fair_drive]     # the standings whose baselines read the freestream as a physical vector
 def nm(k):
     n = ST[k].ds.name.replace(", ", " ")
     return ("the " + n) if n.endswith(("task", "rung")) else n
 def names(keys):
     n = [nm(k) for k in keys]
     return n[0] if len(n) == 1 else ", ".join(n[:-1]) + " and " + n[-1]
-HELD = [(k, f) for k in ST for f in ST[k].ds.headline if ST[k].ds.fair_drive and f in ST[k].ds.provisional]  # ratios without a verdict
+HELD = [(k, f) for k in ST for f in ST[k].ds.headline if f in ST[k].ds.provisional]  # ratios without a verdict
 def held_clause():
     """The fields of compared standings that are given without a verdict, as one clause."""
     return "".join(f"; {nm(k)} {ST[k].fields[f]} is not counted, because {ST[k].ds.provisional[f]} (@{ST[k].ds.section})" for k, f in HELD)
-def unfair_sentence(keys):
-    """What the baselines of each flagged standing read, from the registry's note, as one sentence."""
-    return " ".join(f"In the record of {nm(k)} the baselines read {ST[k].ds.drive_note} (@{ST[k].ds.section})." for k in keys)
 ```
 
 ## What this book does not claim {#sec-not-claimed}
@@ -75,12 +69,9 @@ follow give each item its numbers.
 #| label: para-not-claimed
 #| output: asis
 n_all = sum(len(v) for k, v in TAL.items() if k != "is not compared with")
-HL_FAIR = S.DATASETS["hilift"].fair_drive
-print(f"- **Not that ISLA is more accurate in distribution in general.** Across the {len(FAIR)} standings that compare the architectures "
+print(f"- **Not that ISLA is more accurate in distribution in general.** Across the {len(ST)} standings "
       f"and their headline fields, ISLA leads a baseline in {len(TAL['leads'])} of {n_all} comparisons{LUGC}, is level in "
       f"{len(TAL['is level with'])} and trails in {len(TAL['trails'])}"
-      + (f"; {names(UNFAIR)} {'is' if len(UNFAIR) == 1 else 'are'} not counted, because the baselines of {'its record' if len(UNFAIR) == 1 else 'their records'} "
-         "read the freestream as a physical vector, not as a unit direction (@sec-oq-unit-direction)" if UNFAIR else "")
       + held_clause() + ". The readings are in @sec-limits-in-distribution.")
 ```
 
@@ -125,16 +116,13 @@ print(f"- **Not that ISLA is more accurate in distribution in general.** Across 
 ```{python}
 #| label: para-limits-in-distribution
 #| output: asis
-SURF_KEYS = [k for k in ("drivaerml_surface", "hilift", "shift_suv", "deepjeb") if k in FAIR]
-SURF_UNFAIR = [k for k in ("drivaerml_surface", "hilift", "shift_suv", "deepjeb") if k in UNFAIR]
+SURF_KEYS = [k for k in ("drivaerml_surface", "hilift", "shift_suv", "deepjeb") if k in ST]
 def reading(k):
     s = ST[k]; f = s.ds.headline[0]
     return (f"{s.ds.name}: ISLA {s.verdict('GeoTransolver', f)} GeoTransolver ({r(k, 'GeoTransolver', f):.2f}) and "
             f"{s.verdict('Transolver', f)} Transolver ({r(k, 'Transolver', f):.2f}) on {field_name(s, f)}")
 cs = COST["DrivAerML Surface"]
 print("**On the surface tasks the standing is mixed and depends on the dataset.** " + "; ".join(reading(k) for k in SURF_KEYS) + ". "
-      + (unfair_sentence(SURF_UNFAIR) + " No comparison is drawn from " + ("that record" if len(SURF_UNFAIR) == 1 else "those records") + ". " if SURF_UNFAIR else "")
-      + ("" if HL_REF else "HiLiftAeroML's ISLA checkpoints are checkpoints of the raw-read variant, not of the reference configuration. ")
       + "No mechanism is claimed for any of these orderings. The three configurations are matched on the memory budget per GPU they were "
       f"selected under and on nothing else: on the DrivAerML Surface task GeoTransolver's reference has {cs['GeoTransolver']['n_parameters'] / cs['ISLA']['n_parameters']:.2f} "
       f"of ISLA's parameters and Transolver's {cs['Transolver']['n_parameters'] / cs['ISLA']['n_parameters']:.2f}, and Transolver trains at half the cells "
@@ -219,8 +207,7 @@ families and enclosures (@sec-oq-aerozoo).
 ```{python}
 #| label: para-limits-interior
 #| output: asis
-INT = [k for k in ("drivaerml_volume", "airfrans") if k in FAIR]
-INT_UNFAIR = [k for k in ("drivaerml_volume", "airfrans") if k in UNFAIR]
+INT = [k for k in ("drivaerml_volume", "airfrans") if k in ST]
 def line(k):
     s = ST[k]
     return f"{s.ds.name}: " + ", ".join(f"{field_name(s, f)} ISLA {s.verdict('GeoTransolver', f)} GeoTransolver ({fmt_ratio(r(k, 'GeoTransolver', f))}) and "
@@ -238,8 +225,6 @@ print(f"**On the interior standings that compare the architectures, the reading 
       + "; ".join(summary(k) for k in INT) + ".** " + "; ".join(line(k) for k in INT) + ". "
       + "".join(f"On {nm(k)} {ST[k].fields[f]} carries no verdict, because {ST[k].ds.provisional[f]} (@sec-oq-planar-velocity). "
                 for k, f in HELD if k in INT)
-      + (unfair_sentence(INT_UNFAIR) + " No comparison is drawn from " + ("that record" if len(INT_UNFAIR) == 1 else "those records")
-         + " (@sec-oq-unit-direction). " if INT_UNFAIR else "")
       + "Three limits bound the comparison. The architectures do not receive the same inputs: GeoTransolver and Transolver read every prediction point "
         "with the stored signed-distance field, computed by the dataset from the full-resolution surface, while the standing's ISLA checkpoints, "
         "of the nearest-token form, compute their wall distance and direction from the nearest sampled boundary token (@sec-limits-boundary-law). "
@@ -331,11 +316,6 @@ AZ_COST = "not priced (no cost record holds an AeroZoo run)"
 SEEDS = 2
 # (o) the class's standing: no cost record holds a run of the class as Part II defines it, so its lanes are not priced
 CLASS_COST = "not priced (no cost record holds a run of the class)"
-# (iv) the flagged standings with unit-direction baselines: both baselines, two seeds; the record of tasks the cost record holds
-UD = {k: SEEDS * sum(lane_gpuh(k, b) for b in S.BASELINES) if k in TASK else None for k in UNFAIR}
-# (ix) the constant-drive standings with unit-direction baselines: GeoTransolver on each, Transolver where it has not read it yet
-CD_ARMS = [(k, b) for k in S.CONSTANT_DRIVE for b in S.BASELINES if not (k == "drivaerml_surface" and b == "Transolver")]
-q9 = SEEDS * sum(lane_gpuh(k, b) for k, b in CD_ARMS)
 # (v) the scaling ladder at the reference configuration on the DrivAerML Surface task:
 # five case rungs x three sizes x two seeds, each run's epoch proportional to its cases, every size priced at the reference's cost
 RUNGS = (27, 54, 109, 218, 435); SIZES = 3
@@ -363,18 +343,9 @@ rows = [
     ("Where does ISLA stand on AeroZoo, in distribution and with a family held out?",
      "ISLA, ISLA-DTT, GeoTransolver and Transolver at their reference configurations under the benchmark protocol, on `full` and each held-out split; each one's error and held-out penalty", AZ_COST),
 ]
-if UNFAIR:
-    rows.append((f"How do the reference configurations compare on {names(UNFAIR)} when every model reads the unit direction?",
-                 "GeoTransolver and Transolver reading the unit direction" + ("" if HL_REF else ", and on HiLiftAeroML the reference ISLA") + ", two seeds each, scored under the dataset's protocols",
-                 (lambda t: t[:1].upper() + t[1:])("; ".join((f"{nm(k)} {fmt_h(v)}" if v is not None else f"{nm(k)}: not in the cost record")
-                                                         for k, v in UD.items()))))
 if HELD:
     rows.append((f"How do the architectures compare on {names(sorted({k for k, _ in HELD}))} {' and '.join(ST[k].fields[f] for k, f in HELD)} measured alike?",
                  "the baselines' velocity error scored on its two in-plane components, on the standing's checkpoints", "scoring only"))
-if S.CONSTANT_DRIVE:
-    rows.append((f"Where do the baselines stand on {names(S.CONSTANT_DRIVE)} when they read the unit direction?",
-                 "; ".join(f"{b} on {' and '.join(nm(k) for k, bb in CD_ARMS if bb == b)}" for b in S.BASELINES)
-                 + ", reading the unit direction, two seeds each, scored under each dataset's protocols", fmt_h(q9)))
 rows += [
     ("Do GeoTransolver and Transolver keep their reference configurations when the selection's wings read the unit direction?",
      "the baselines' candidates retrained on the 210 wings with the unit direction, two seeds each, and the selection rule applied again",
@@ -475,34 +446,6 @@ print("**The open question is where ISLA stands on AeroZoo, in distribution and 
 ```
 
 ```{python}
-#| label: para-oq-unit-direction
-#| output: asis
-if not HL_REF:
-    a2_effect = []
-    for k, st_ in ST.items():
-        rr = st_.raw.get("raw_read_isla")
-        if rr:
-            f = st_.ds.headline[0]
-            a2_effect.append((st_.ds.name, st_.err("ISLA", f) / rr["native"][f]["mean"]))
-if UNFAIR:
-    print("### The baselines with the unit direction {#sec-oq-unit-direction}")
-    print()
-    print(f"**The open question is how the reference configurations compare on {names(UNFAIR)} when every model reads the freestream as a "
-          "unit direction.** " + unfair_sentence(UNFAIR) + " A baseline's input projection that reads a raw vector of that size is badly "
-          "conditioned from initialization (results/drive_audit_2026-10-18/), and no ratio of these records is read as a comparison"
-          + ("" if HL_REF else "; on HiLiftAeroML ISLA's checkpoints are also of the raw-read variant (@sec-isla-normalized-reads), and on the "
-             f"{len(a2_effect)} standings where both ISLA variants are scored, the normalized reads change ISLA's first headline error by a "
-             f"factor of {min(v for _, v in a2_effect):.2f} to {max(v for _, v in a2_effect):.2f} (normalized ÷ raw)") + ". What would settle it: GeoTransolver and "
-          "Transolver at their reference configurations reading the unit direction" + ("" if "airfrans" not in UNFAIR else
-          " (and on AirfRANS the speed in m/s as a scalar, the form ISLA reads it in)") + ("" if HL_REF else ", with the reference ISLA on HiLiftAeroML")
-          + ", two seeds each, scored under each dataset's protocols. Cost: "
-          + "; ".join(f"{nm(k)} {fmt_h(v)} GPU-hours" if v is not None else f"{nm(k)} not priced (the wing rung is not in the cost record)"
-                      for k, v in UD.items()) + ".")
-    print()
-    print("<!-- SLOT: unit-direction baseline pair (registry swap when scored) -->")
-```
-
-```{python}
 #| label: para-oq-planar-velocity
 #| output: asis
 for k, f in HELD:
@@ -516,26 +459,6 @@ for k, f in HELD:
           f"{fmt_ratio(r(k, 'Transolver', f))}, and no verdict is drawn from them. What would settle it: the baselines' {s_.fields[f]} "
           "error scored on its two in-plane components, on the standing's checkpoints. Cost: scoring only.")
     print()
-```
-
-```{python}
-#| label: para-oq-constant-drive
-#| output: asis
-if S.CONSTANT_DRIVE:
-    UDC = S.unit_drive_control()
-    near = [(k, f, b) for k in S.CONSTANT_DRIVE for f in ST[k].ds.headline for b in S.BASELINES if ST[k].near_drive(b, f)]
-    print("### The constant freestream vector {#sec-oq-constant-drive}")
-    print()
-    print(f"**The open question is where GeoTransolver and Transolver stand on {names(S.CONSTANT_DRIVE)} when they read the unit "
-          "direction.** On these datasets the baselines read `U_inf`, one constant vector in m/s per dataset. Transolver retrained "
-          f"reading the unit direction on the DrivAerML Surface task scores {UDC['pressure_l2']:.3f} times its error on pressure and "
-          f"{UDC['wss_l2']:.3f} times it on wall shear (@sec-unit-direction-rule), so a verdict within "
-          f"{S.fmt_pct(1 + S.drive_bias())} of the level band may move. Of the "
-          f"{sum(1 for k in S.CONSTANT_DRIVE for f in ST[k].ds.headline for b in S.BASELINES)} comparisons on these datasets, {len(near)} "
-          "are that close: " + "; ".join(f"{field_name(ST[k], f)} on {nm(k)} against {b} ({fmt_ratio(r(k, b, f))}, ISLA {ST[k].verdict(b, f)} it)"
-                               for k, f, b in near)
-          + ". What would settle it: " + "; ".join(f"{b} on {' and '.join(nm(k) for k, bb in CD_ARMS if bb == b)}" for b in S.BASELINES)
-          + f", reading the unit direction, two seeds each, scored under each dataset's protocols. Cost: {fmt_h(q9)} GPU-hours.")
 ```
 
 ### The baselines' reference configurations with unit-direction wings {#sec-oq-reference-selection}
@@ -552,7 +475,7 @@ assert SEL["drivaer_surface"]["GeoTransolver"]["winner"] == GT_BIG and SEL["hili
 assert SEL["drivaer_surface"]["Transolver"]["winner"] == T_CAR and SEL["hilift_210"]["Transolver"]["winner"] == T_REF
 print("**The open question is whether GeoTransolver and Transolver keep their reference configurations when the selection's wings give "
       "them the unit direction.** The selection scored every candidate on the DrivAerML Surface task and on HiLiftAeroML at 210 training "
-      "wings (@sec-selection), and on the wings the baselines read the freestream in inch/s (@tbl-model-inputs). Under the 80 GiB budget, "
+      "wings (@sec-selection), and on the wings the baselines read the freestream in inch/s, which costs them on this rung (@tbl-hilift-unit-drive). Under the 80 GiB budget, "
       f"GeoTransolver at width 1,024 trained on 100,000 cells has a surface pressure error of {sel('GeoTransolver', GT_BIG, 'drivaer_surface'):.4f} "
       f"on the DrivAerML Surface task against {sel('GeoTransolver', GT_REF, 'drivaer_surface'):.4f} for the reference width 256, and "
       f"{sel('GeoTransolver', GT_BIG, 'hilift_210'):.3f} against {sel('GeoTransolver', GT_REF, 'hilift_210'):.3f} on the wings, which cost it "
@@ -589,7 +512,7 @@ print("**The open question is whether the cell-count saturation, the capacity fl
 #| output: asis
 t = ST["tensile2d"]
 WD = {"stress_l2": "stress", "displacement_l2": "displacement", "q_l2": "plastic strain"}
-worst = min(((ST[k].ratio(b, f), k, f, b) for k in FAIR for f in ST[k].ds.headline for b in S.BASELINES if ST[k].compared(b, f)))
+worst = min(((ST[k].ratio(b, f), k, f, b) for k in ST for f in ST[k].ds.headline for b in S.BASELINES if ST[k].compared(b, f)))
 disp_worst = min((t.ratio(b, "displacement_l2"), b) for b in S.BASELINES)
 trails = [f"{b} on {' and '.join(WD[f] for f in t.ds.headline if t.verdict(b, f) == 'trails')}"
           for b in S.BASELINES if any(t.verdict(b, f) == "trails" for f in t.ds.headline)]

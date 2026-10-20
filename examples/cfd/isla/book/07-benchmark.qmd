@@ -122,14 +122,14 @@ NT = "prediction points as tokens, with their exact wall distance and direction 
 GP = "per point: coordinates centered on the case, unit normal"
 GV = "per point: coordinates, the stored `sdf` and `sdf_normals`; no boundary mesh"
 MI = [
-    ("drivaerml_surface", f"{BC}; `U_inf_dir`, $(1, 0, 0)$ on every car", f"{GP}; `U_inf` = $(38.9, 0, 0)$ m/s on every car",
-     "the same, with `U_inf` concatenated to every point", "the same: a constant vector carries no case information"),
-    ("drivaerml_volume", f"{BC}; {NT}; `U_inf_dir`, constant", f"{GV}; `U_inf` = $(38.9, 0, 0)$ m/s on every car (GeoTransolver-volume)",
-     "the same per-point fields, with `U_inf` concatenated", "the same globals; the baselines read the stored distance field, ISLA computes the exact distance to the full-resolution surface"),
-    ("hilift", f"{BC}; `U_inf_dir`, angle of attack 4 to 22°", f"{GP}; `U_inf` in inch/s, magnitude 2,680 on every case, turning with the angle of attack",
-     "the same, with `U_inf` concatenated", "the same information at 2,680 times the scale"),
-    ("shift_suv", f"{BC}; `U_inf_dir`, constant", f"{GP}; `U_inf` = $(30, 0, 0)$ m/s on every case",
-     "the same, with `U_inf` concatenated", "the same: a constant vector"),
+    ("drivaerml_surface", f"{BC}; `U_inf_dir`, $(1, 0, 0)$ on every car", f"{GP}; `U_inf_dir`, $(1, 0, 0)$ on every car",
+     "the same, with `U_inf_dir` concatenated to every point", "the same"),
+    ("drivaerml_volume", f"{BC}; {NT}; `U_inf_dir`, constant", f"{GV}; `U_inf_dir`, constant (GeoTransolver-volume)",
+     "the same per-point fields, with `U_inf_dir` concatenated", "the same globals; the baselines read the stored distance field, ISLA computes the exact distance to the full-resolution surface"),
+    ("hilift", f"{BC}; `U_inf_dir`, angle of attack 4 to 22°", f"{GP}; `U_inf_dir`, angle of attack 4 to 22°",
+     "the same, with `U_inf_dir` concatenated", "the same"),
+    ("shift_suv", f"{BC}; `U_inf_dir`, constant", f"{GP}; `U_inf_dir`, constant",
+     "the same, with `U_inf_dir` concatenated", "the same"),
     ("airfrans", f"{BC}; {NT}; the inlet velocity `U_inf` as the velocity source of its declared scales: its direction, and as the one "
      "scalar the Reynolds number from its magnitude, the airfoil's length unit and the configuration's constant kinematic viscosity, "
      "log-standardized by dataset constants",
@@ -164,7 +164,7 @@ MI = [
 out = "| dataset | ISLA | GeoTransolver | Transolver | against ISLA's input |\n|---|---|---|---|---|\n"
 for key, i, g, t, info in MI:
     d = S.DATASETS[key]
-    flag = ("" if d.fair_drive else ". **No standing comparison is drawn.**") + "".join(
+    flag = "".join(
         f". **{d.short} {S.Standing(key).fields[f]} is given without a verdict**" for f in d.provisional)
     out += f"| {d.name} | {i} | {g} | {t} | {info}{flag} |\n"
 print(out)
@@ -176,52 +176,51 @@ print(": What each model receives, per dataset: the global inputs with their uni
       "scales (@sec-checkpoint-form). The baselines' columns are the configurations of the standing's training runs. `U_inf` is the "
       "freestream velocity as the dataset stores it; `U_inf_dir` is the same vector normalized; `sdf` and `sdf_normals` are "
       "the stored signed distance to the full-resolution boundary and its gradient. How to read this: the last column says "
-      "whether the baselines receive the same information as ISLA; a row marked *no standing comparison* is one whose "
-      "baselines read the freestream as a raw physical vector of varying direction, so its ratios are printed and not "
-      "read as a verdict. AeroZoo's row is its benchmark protocol (@sec-aerozoo-allowed), which reads no label of the dataset; "
+      "whether the baselines receive the same information as ISLA. AeroZoo's row is its benchmark protocol (@sec-aerozoo-allowed), which reads no label of the dataset; "
       "the book holds no model comparison on AeroZoo. "
       "The table does not say how much a difference in input costs a model. Source: "
       "results/drive_audit_2026-10-18/REPORT.md, section 1; for the AirfRANS and lug baselines, "
-      "results/campaigns_2026-10-19/drive_fix/PREREG.md; for AeroZoo, results/campaigns_2026-10-19/aerozoo_protocol/protocol_design.md. {#tbl-model-inputs tbl-colwidths=\"[11,27,25,14,23]\"}")
+      "results/campaigns_2026-10-19/drive_fix/PREREG.md; for the DrivAerML and SHIFT-SUV baselines, "
+      "results/campaigns_2026-10-20/drive_fix2/README.md; for the HiLiftAeroML baselines, results/campaigns_2026-10-20/hilift/PREREG.md; for AeroZoo, results/campaigns_2026-10-19/aerozoo_protocol/protocol_design.md. {#tbl-model-inputs tbl-colwidths=\"[11,27,25,14,23]\"}")
 ```
 
 ### Global directions as unit vectors, magnitudes as scalars {#sec-unit-direction-rule}
 
 **A problem's global conditions enter ISLA in one form: directions as unit vectors, magnitudes as scalars. ISLA enforces
-the rule by construction. The baselines read the freestream vector as the dataset stores it, except on AirfRANS, where
-they read its unit direction and the standardized inlet speed.** A direction carries no
+the rule by construction, and every standing's baselines read their global conditions in the same form: the unit direction
+alone on HiLiftAeroML, the DrivAerML tasks and SHIFT-SUV, and on AirfRANS the unit direction and the inlet speed
+standardized over the training airfoils.** A direction carries no
 scale. Whatever scale a pipeline attaches to it, the units the solver ran in, is an accident of the dataset, and a model
 would have to learn to ignore it. A magnitude that matters physically, a far-field speed or a Reynolds number, is a scalar
 with its own place in the input. ISLA normalizes every global vector it receives and takes magnitudes only as global
 scalars (@sec-isla-inputs).
 
-GeoTransolver and Transolver consume whatever vector the pipeline hands them. In the recipe, and in the training runs of
-every flow standing except AirfRANS, that vector is `U_inf`, in solver units (@tbl-model-inputs). On HiLiftAeroML it
-carries the angle of attack, in inches per second, at a magnitude of 2,680. On AirfRANS the baselines read `U_inf_dir`
-and the inlet speed standardized over the training airfoils, the information ISLA reads, at a scale of one. The scale
-matters before training: GeoTransolver's context projector applies linear maps and a slice softmax to the raw vector,
+GeoTransolver and Transolver consume whatever vector the pipeline hands them. In the recipe's configurations of the two
+models that vector is `U_inf`, in solver units; on HiLiftAeroML it carries the angle of attack, in inches per second, at a
+magnitude of 2,680. The standing's baselines are trained with one override that hands them `U_inf_dir` in its place, and on
+AirfRANS the standardized inlet speed beside it, the information ISLA reads, at a scale of one (@tbl-model-inputs). The
+scale matters before training: GeoTransolver's context projector applies linear maps and a slice softmax to the raw vector,
 so its conditioning depends on the magnitude (@tbl-projector).
 
 ```{python}
 #| label: para-constant-drive
 #| output: asis
 UDC = S.unit_drive_control(); UDI = S.unit_drive_control("isla")
+CD = ("drivaerml_surface", "drivaerml_volume", "shift_suv")   # the datasets whose freestream is one constant vector
+UDR = {b: [v for k in CD for v in S.unit_drive(k, b).values()] for b in S.BASELINES}   # unit ÷ physical vector, native, headline fields
 print("On the DrivAerML tasks and on SHIFT-SUV every case has the same freestream, so `U_inf` is one constant vector per "
-      "dataset and holds no case information. Its scale still reaches the trained model. Transolver at its reference "
-      "configuration on the DrivAerML Surface task, retrained reading `U_inf_dir` in place of `U_inf`, scores "
-      f"{UDC['pressure_l2']:.3f} times its error on pressure and {UDC['wss_l2']:.3f} times it on wall shear, seed means on the "
-      f"same {S.Standing('drivaerml_surface').cell('Transolver', 'pressure_l2')['n_cases']} validation cars, each arm scored on its "
-      "own draw of 100,000 cells. The band of ±3% registered for this control before it ran, on those draws, holds on wall shear and "
-      "not on pressure. Re-scored on the 200,000 cells of ISLA's scored set, the same checkpoints read "
-      f"{UDI['pressure_l2']:.3f} on pressure and {UDI['wss_l2']:.3f} on wall shear"
-      + (", inside the band on both. " if max(abs(v - 1) for v in UDI.values()) <= 0.03 else ". ")
-      + (f"The baselines' ratios on {', '.join(S.DATASETS[k].in_sentence for k in S.CONSTANT_DRIVE[:-1])} and "
-         f"{S.DATASETS[S.CONSTANT_DRIVE[-1]].in_sentence} therefore carry an uncertainty of about "
-         f"{S.fmt_pct(1 + S.drive_bias())} from the scale of the constant vector, and a verdict that close to the level band says so in "
-         "its chapter (@sec-oq-constant-drive). " if S.CONSTANT_DRIVE else "")
-      + "Data: "
+      "dataset and holds no case information. Its scale still reaches the trained model. Retrained reading `U_inf_dir` in place of "
+      f"`U_inf`, each baseline at its reference configuration, GeoTransolver's native error moves by at most "
+      f"{S.fmt_pct(max(UDR['GeoTransolver'], key=lambda v: abs(v - 1)))} on the headline fields of the three tasks, and Transolver's falls "
+      f"by {S.fmt_pct(max(UDR['Transolver']))} to {S.fmt_pct(min(UDR['Transolver']))}, seed means, each against its "
+      "physical-vector twin. For Transolver on the DrivAerML Surface task this was registered as a control before it ran: on each arm's "
+      f"own draw of 100,000 cells it scores {UDC['pressure_l2']:.3f} times its physical-vector error on pressure and {UDC['wss_l2']:.3f} "
+      "times it on wall shear, so the registered band of ±3% holds on wall shear and not on pressure; on the 200,000 cells of ISLA's "
+      f"scored set it reads {UDI['pressure_l2']:.3f} and {UDI['wss_l2']:.3f}. The standing's baselines are the unit-direction "
+      "checkpoints, and each physical-vector twin stays in its standing artifact as a record. Data: "
       "results/campaigns_2026-10-19/drive_fix/drivefix_scores_2026-10-19.json (the band: PREREG.md beside it), "
-      "results/campaigns_2026-10-19/drive_fix2/scoreset/tset200k_scores.json, results/char/drivaerml_surface_a2.json.")
+      "results/campaigns_2026-10-20/drive_fix2/ud2_scores_2026-10-20.json, "
+      "results/campaigns_2026-10-19/drive_fix2/scoreset/tset200k_scores.json, results/char/<dataset>_a2.json (`raw_drive_*`).")
 ```
 
 ```{python}
@@ -273,10 +272,14 @@ print(f": The input-scale control at 35 HiLiftAeroML training cases (256 wide, 1
 ```
 :::
 
-What the physical vector costs the baselines at the reference configurations on HiLiftAeroML, where it varies per case,
-is an open question (@sec-open-questions); that standing is printed without a verdict.
-
-<!-- SLOT: unit-direction baseline pair (registry swap when scored) -->
+```{python}
+#| label: para-hilift-drive-cost
+#| output: asis
+HLU = {b: S.unit_drive("hilift", b)["pressure_l2"] for b in S.BASELINES}
+print("At the reference configurations on HiLiftAeroML, where the vector varies per case, the physical vector in inch/s "
+      f"multiplies GeoTransolver's native pressure error by {1 / HLU['GeoTransolver']:.2f} and Transolver's by "
+      f"{1 / HLU['Transolver']:.2f} over their unit-direction twins (@tbl-hilift-unit-drive).")
+```
 
 ## The fair-comparison rules {#sec-fair-comparison}
 
@@ -702,15 +705,15 @@ are held out per checkpoint but do not confirm a result across the whole set of 
 ## The checkpoints behind the standing {#sec-checkpoint-form}
 
 **Every ISLA checkpoint in Part IV, the standing's and every trained ISLA the book draws, is of one earlier form of ISLA's
-inputs, the *nearest-token form*. It has the reference configuration's width, depth, slices and learning rate and, except on
-HiLiftAeroML, the normalized slice reads, and it differs from the class of Part II in how the boundary and the prediction points enter the
+inputs, the *nearest-token form*. It has the reference configuration's width, depth, slices and learning rate and the
+normalized slice reads, and it differs from the class of Part II in how the boundary and the prediction points enter the
 model, in its length unit and in its scales.** The standings come from the checkpoints that the program's ledger (@sec-program-status) names the A2 reference.
 @tbl-checkpoint-form lists the differences item by item. The class refuses checkpoints of any other version
 (@sec-using-checkpoint), so these checkpoints are records of the form, not models the class loads.
 
 | item | the nearest-token form (the standing's checkpoints) | ISLA as Part II defines it |
 |---|---|---|
-| slice reads | the normalized slice reads; on HiLiftAeroML the raw slice reads, marked † where they appear | the normalized slice reads (@sec-isla-normalized-reads) |
+| slice reads | the normalized slice reads | the normalized slice reads (@sec-isla-normalized-reads) |
 | boundary conditions | one boundary schema shared by every condition: a labelled boundary is one mesh, its condition a one-hot label among each cell's fields | one boundary mesh per named condition, each with its own input layer and a learned offset, so a condition's identity is in the parameters; no label is read (@sec-isla-inputs) |
 | boundary tokens | drawn by the datapipe before the forward call; the model reads the sample it is given | drawn inside the forward call from the full-resolution meshes: in proportion to measure, water-filled across the conditions, systematic along a space-filling order, each kept cell carrying its Horvitz–Thompson measure; a fixed start at evaluation |
 | a prediction point's wall geometry | the distance and direction to the nearest *sampled* boundary token, signed by that token's normal | the exact closest point on the full-resolution boundary meshes, signed by the pseudo-normal, encoded continuously through the surface; the same for every draw of the boundary tokens (@sec-exact-geometry-draw) |
@@ -752,7 +755,7 @@ score, has the variant "Instrument: ISLA at ⟨width⟩ wide, ⟨slices⟩ slice
 |---|--:|--:|--:|--:|---|---|---|
 | ISLA at 384 wide, 256 slices, 5e-4, raw slice reads | 12 | 384 | 256 | $5 \times 10^{-4}$ | cosine | 200,000 | the biased-draw probe, the slice territories, the rotation-augmented comparison (@sec-contract-studies, @sec-pose-contract); the 384-wide points of the capacity ladders (@sec-capacity) |
 | ISLA at 192 wide, 256 slices, 1e-3, linear routing, raw slice reads | 12 | 192 | 256 | $10^{-3}$ | linear | 100,000 (cars), 200,000 (wings) | the training-law swap (@sec-training-law) |
-| ISLA at 512 wide, 512 slices, 3.75e-4, raw slice reads | 12 | 512 | 512 | $3.75 \times 10^{-4}$ | cosine | 200,000 | the nearest-token geometry swap on the DrivAerML Volume task (@sec-interior-boundary-law); the HiLiftAeroML standing, noted where it appears |
+| ISLA at 512 wide, 512 slices, 3.75e-4, raw slice reads | 12 | 512 | 512 | $3.75 \times 10^{-4}$ | cosine | 200,000 | the nearest-token geometry swap on the DrivAerML Volume task (@sec-interior-boundary-law) |
 | ISLA at 768 wide, 256 slices, 2.5e-4, raw slice reads | 12 | 768 | 256 | $2.5 \times 10^{-4}$ | cosine | 20,000 | the tie diagnostic on the lug (@sec-medial-ties) |
 | capacity ladders | 12 to 48 | 192 to 1,536 | 256 | named per point | cosine or linear, named per point | 10,000 to 200,000, named per point | the scaling fits and the cells ladder (@sec-capacity); each point names its own configuration |
 

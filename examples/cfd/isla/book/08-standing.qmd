@@ -9,7 +9,7 @@ metric). The chapters after this one give each row its context.
 #| output: asis
 import sys; sys.path.insert(0, ".")
 import standing as S
-print(f"**On the {sum(S.DATASETS[k].fair_drive for k in S.available())} tasks it is compared on ({len(S.available())} with a standing), ISLA at its reference configuration leads on some fields, is "
+print(f"**On the {len(S.available())} tasks with a standing, ISLA at its reference configuration leads on some fields, is "
       "level on others and trails on a few, and on every flow task it is the only one of the three architectures whose error "
       "does not change when the test geometry is moved or resampled.** This chapter is the evidence of Part IV on one page: one "
       "table with every headline number, one figure for each of the two invariances, and a reading of where ISLA leads and "
@@ -39,11 +39,9 @@ for k, f, lab in ROWS:
     cells = []
     for a in S.BASELINES:
         v = s.verdict(a, f)
-        word = {"leads": "ISLA leads", "trails": "ISLA trails", "is level with": "level", "is not compared with": "not compared‡"}[v]
-        if s.ds.fair_drive and f in s.ds.provisional:
-            word = "no verdict§"
-        cells.append(("not compared‡" if word == "not compared‡" else f"{S.fmt_ratio(s.ratio(a, f))} ({word})") if s.has(a) else "—")
-    name = s.ds.name + ("†" if not s.ds.reference else "")
+        word = {"leads": "ISLA leads", "trails": "ISLA trails", "is level with": "level", "is not compared with": "no verdict§"}[v]
+        cells.append(f"{S.fmt_ratio(s.ratio(a, f))} ({word})" if s.has(a) else "—")
+    name = s.ds.name
     out.append(f"| {name} | {s.fields[f]} | {s.err('ISLA', f):.4f} | {cells[0]} | {cells[1]} | {s.shift('ISLA', f, 'posed'):.3f} | @{s.ds.section} |")
 print("\n".join(out) + "\n")
 print(f": The standing of the three reference configurations on every dataset with a standing artifact, ISLA checkpoints of the {S.FORM_TAG} "
@@ -52,10 +50,8 @@ print(f": The standing of the three reference configurations on every dataset wi
       "is rotated and translated, over its native error. Seed means over two seeds, float32, the validation or test split of "
       "each dataset (@sec-splits). The words apply the book's seed rule: a lead needs every seed of one architecture below every "
       "seed of the other and the seed means at least 3% apart. How to read this: a ratio above one favors ISLA; rows are "
-      "different problems and are not comparable with one another; † marks a row whose ISLA checkpoints are of the raw-read "
-      "variant rather than the reference configuration (@sec-isla-normalized-reads); ‡ marks a row whose baselines read the "
-      "freestream as a physical vector rather than a unit direction, so no comparison is drawn from it (@sec-de-result). "
-      "Data: results/char/ (the artifact of each row is named in its chapter).")
+      "different problems and are not comparable with one another; every baseline reads the freestream as a unit direction "
+      "(@tbl-model-inputs). Data: results/char/ (the artifact of each row is named in its chapter).")
 ```
 
 ## The two invariances, measured {#sec-standing-invariances}
@@ -129,15 +125,8 @@ print(f"Over every headline field of the {len(FLOW)} flow tasks, the rigid motio
 GROUPS = (("External aerodynamics, surface fields", ("drivaerml_surface", "shift_suv", "hilift")),
           ("Flow fields in the volume", ("drivaerml_volume", "airfrans")),
           ("Solid mechanics", ("lug", "deepjeb", "tensile2d")))
-_ud = __import__("json").load(open(S.RES / "udrvl_210_reduction_2026-09-10.json"))["arms_fp32"]
-UD = {"GeoTransolver": _ud["gt_physical_lr1e3"]["pressure_l2"] / _ud["gt_unit_lr1e3"]["pressure_l2"],
-      "Transolver": _ud["transolver_physical_lr3e3"]["pressure_l2"] / _ud["transolver_unit_lr3e3"]["pressure_l2"]}
 def reading(k):
     s = S.Standing(k)
-    if not s.ds.fair_drive:
-        return (f"{s.ds.short} is not compared: in its record the baselines read {s.ds.drive_note}"
-                + (f"; in a control on this dataset at 10,000 cells (Transolver at learning rate 3e-3), the unit direction lowers "
-                   f"GeoTransolver's own pressure error {UD['GeoTransolver']:.1f}-fold and Transolver's {UD['Transolver']:.1f}-fold (@sec-de-result)" if k == "hilift" else f" (@{s.ds.section})"))
     parts = []
     for word, label in (("leads", "ISLA leads"), ("is level with", "is level"), ("trails", "trails")):
         items = [f"{s.fields[f]} against {a} ({S.fmt_ratio(s.ratio(a, f))})" for f in s.ds.headline for a in S.BASELINES

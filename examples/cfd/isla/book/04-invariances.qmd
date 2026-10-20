@@ -130,9 +130,9 @@ so none of them moves with it.
   checkpoints read the nearest sampled token instead (the nearest-token form, @sec-checkpoint-form), the tie is between two
   samples. ISLA's rotated-and-translated error there stays within `{python} f"{POSED_DEV:.1%}"` of its native error on every
   headline field of the tasks without such ties and moves on the lug and on Tensile2d (@tbl-contract-shifts). On
-  HiLiftAeroML, a surface task with no nearest-sample input whose
-  standing is of the raw-read variant, it is `{python} S.fmt_ratio(ST['hilift'].shift('ISLA', HEAD['hilift'], 'posed'))`
-  times native; the cause of that move has not been measured. Under *bfloat16 autocast* (matrix products
+  HiLiftAeroML, a surface task with no nearest-sample input, it is
+  `{python} f"{ST['hilift'].shift('ISLA', HEAD['hilift'], 'posed'):.3f}"` times native, outside the 0.2% registered for it;
+  what produces that move is not located (@sec-de-limits). Under *bfloat16 autocast* (matrix products
   run in the 16-bit bfloat16 format, with an 8-bit significand of which 7 bits are stored) the rounding is larger still:
   `{python} f"{PRB['scalar_residual']['per_seed_mean'][0]:.1%}"` and `{python} f"{PRB['scalar_residual']['per_seed_mean'][1]:.1%}"`
   of the pressure prediction under a rigid motion on two trained checkpoints, against
