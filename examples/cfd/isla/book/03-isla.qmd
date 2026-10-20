@@ -477,8 +477,9 @@ for _ in range(4):
     _cent.append(float(rms_pairwise_distance(_mesh.cell_centroids[None], _a[None])))
     _mesh = _mesh.subdivide(levels=1, filter="linear")
 _dev = max(abs(e / _exact[0] - 1) for e in _exact[1:]); _dcen = abs(_cent[0] / _exact[0] - 1)
+_m, _x = f"{_dev:.0e}".split("e")
 print(f"On the airfoil at {_cells[0]} segments, splitting every segment into 2, 4 and 8 moves $L$ (the class's `ISLA._gauge`) "
-      + (f"by at most {_dev:.0e} relative, which is roundoff;" if _dev else "not at all, to the last bit;") + f" the centroids alone, without the cells' own moments, give an $L$ "
+      + (f"by at most ${_m} \\times 10^{{{int(_x)}}}$ relative, which is roundoff;" if _dev else "not at all, to the last bit;") + f" the centroids alone, without the cells' own moments, give an $L$ "
       f"{_dcen:.2%} smaller at {_cells[0]} segments, which closes only as the segments shrink.")
 ```
 
