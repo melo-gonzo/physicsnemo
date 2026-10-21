@@ -38866,7 +38866,7 @@ until DrivAerML is scored.
 
 **ISLA 0.9.0.** The ISLA 0.9.0 AirfRANS lanes (REF-090) read 0.01186 /
 0.00644 / 0.01581 on pressure / velocity / eddy viscosity. GLOBE ÷ ISLA
-0.9.0 is therefore 2.006 / 3.328 / 2.408
+0.9.0 is therefore 2.007 / 3.327 / 2.408
 (scratch/isla-ref090-2026-10-20/RESULTS_partial.md).
 
 **Next.** The GLOBE DrivAerML lanes finish about 2026-10-24.
@@ -38893,7 +38893,9 @@ Native relative L2, seed means; seeds 42 and 43 in parentheses.
 **Verdict: level.** G is 0.989 on pressure (seeds 0.981 and 0.998) and
 1.022 on wall shear (seeds 1.019 and 1.026), both inside 0.95 to 1.05. Under
 the registered rule, the 0.9.0 rows become HiLift's ISLA standing, and the
-A2 rows stay in the record as the partner.
+A2 rows stay in the record as the partner. The wall-shear increase is small
+but consistent: both 0.9.0 seeds lie above both A2 seeds, and the 2 percent
+shift is about 10 times A2's 0.2 percent seed gap.
 
 **Predictions.**
 
@@ -38921,9 +38923,17 @@ A2 rows stay in the record as the partner.
 - The seed means agree to 0.07 percent on pressure, but single post-stall
   cases flip between seeds: LHC002_18 reads 0.081 and 0.193, and LHC132_22
   reads 0.250 and 0.146.
-- The registered consequence applies. 0.9.0 replaces A2, and the HiLift gap
-  to the baselines stays a stall-onset problem, to be studied separately
-  (scratch/isla-hilift090-2026-10-20/RESULTS_HL090.md).
+- The registered consequence applies: 0.9.0 replaces A2. The gap to the
+  baselines differs by baseline and field, per case at 0.9.0 with seed means
+  (scratch/isla-hilift090-2026-10-20/RESULTS_HL090.md):
+  - Against GeoTransolver on pressure, the gap sits mostly in post-stall
+    cases. Without its 10 largest-gap cases, ISLA's mean error is 1.016
+    times GeoTransolver's.
+  - Against Transolver on pressure, the deficit is broad. ISLA is worse on
+    158 of 180 cases, with a median per-case ratio of 1.18 at 4 to 12
+    degrees and 1.13 at 14 to 22 degrees.
+  - On wall shear the deficit is broad against both baselines: ISLA is worse
+    on 159 (GeoTransolver) and 165 (Transolver) of 180 cases.
 
 **Next.** The capacity audit's phase-1 case geo_LHC002_AoA_18 reads tonight.
 It shows whether ISLA can fit a post-stall case at all, which separates a
@@ -38950,7 +38960,9 @@ float32).
 Native relative L2, seed means. Posed and area equal native to the digits
 shown, since the pose is exact and DeepJEB++ is read whole.
 
-**The instrument.** On DeepJEB++, CONTROL's head frame collapses to an argmax
+**The instrument** (a read-only probe of the head frame on the first 4
+validation cases, bf16 autocast forward). On DeepJEB++, CONTROL's head frame
+collapses to an argmax
 on both seeds from epochs 13 to 19: the smallest seed support is one point,
 with a largest weight of 0.64. Its seed-logit p99.9 grows 1,335 and 1,516
 times, to about 5,200. HEADNORM never collapses: its smallest support is
