@@ -38864,9 +38864,12 @@ until DrivAerML is scored.
   GLOBE under the shared protocol, not the paper's own AirfRANS numbers
   (scratch/isla-globe-2026-10-19/RESULTS_AF.md).
 
-**Next.** The GLOBE DrivAerML lanes finish about 2026-10-24. The ISLA 0.9.0
-AirfRANS lanes (REF-090) are at epoch 300, and GLOBE ÷ ISLA 0.9.0 is
-reported beside this table when they are scored.
+**ISLA 0.9.0.** The ISLA 0.9.0 AirfRANS lanes (REF-090) read 0.01186 /
+0.00644 / 0.01581 on pressure / velocity / eddy viscosity. GLOBE ÷ ISLA
+0.9.0 is therefore 2.006 / 3.328 / 2.408
+(scratch/isla-ref090-2026-10-20/RESULTS_partial.md).
+
+**Next.** The GLOBE DrivAerML lanes finish about 2026-10-24.
 
 ## 2026-10-20 — HiLift at 0.9.0: level with A2 ISLA, so 0.9.0 becomes HiLift's ISLA standing, and the unit-drive baselines still lead it natively by about 8 percent {#sec-nb-hilift-090-scored}
 
