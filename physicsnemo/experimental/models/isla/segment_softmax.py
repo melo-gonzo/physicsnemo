@@ -52,10 +52,14 @@ import torch
 from physicsnemo.core.version_check import is_package_available
 from physicsnemo.mesh.spatial._ragged import _ragged_arange
 
+### Triton is an optional dependency, loaded through importlib (as in geo_kernel.py)
+### so that the package's external-import contract sees no hard dependency; the
+### @triton.jit kernels below are only defined when it is present.
 HAS_TRITON = is_package_available("triton")
 if HAS_TRITON:
     try:
-        importlib.import_module("triton")
+        triton = importlib.import_module("triton")
+        tl = importlib.import_module("triton.language")
     except Exception:  # pragma: no cover - a broken triton install is treated as absent
         HAS_TRITON = False
 
@@ -104,8 +108,6 @@ NUM_WARPS = 4
 SOURCE_CHUNK = 2048
 
 if HAS_TRITON:
-    import triton
-    import triton.language as tl
 
     @triton.jit
     def _ssr_fwd_kernel(
