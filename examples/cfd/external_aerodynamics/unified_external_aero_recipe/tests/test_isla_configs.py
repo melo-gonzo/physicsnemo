@@ -478,7 +478,9 @@ def test_isla_airfrans_similarity_end_to_end():
     "model, dataset",
     [("isla_volume_aerozoo", f"aerozoo_uvolume{suffix}") for suffix in
      ("", "_nonbox", "_reynolds", "_blobs", "_bank_zero_to_cad", "_profile_crossflow", "_profile_dual_inlet")]
-    + [("isla_volume_airfrans", f"airfrans_volume_2d{suffix}") for suffix in ("", "_area", "_posed")],
+    + [("isla_volume_airfrans", f"airfrans_volume_2d{suffix}") for suffix in ("", "_area", "_posed")]
+    + [("isla_volume_airfrans", f"airfrans_uvolume_2d_{task}{posed}") for task in ("reynolds", "aoa")
+       for posed in ("", "_posed")],
 )
 def test_isla_takes_its_split_s_constants_from_the_dataset_file(model, dataset):
     """ISLA's AeroZoo and AirfRANS configs leave reynolds and each output's scale to the dataset file, whose
