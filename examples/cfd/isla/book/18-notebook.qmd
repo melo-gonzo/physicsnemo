@@ -38870,7 +38870,10 @@ until DrivAerML is scored.
 **ISLA 0.9.0.** The ISLA 0.9.0 AirfRANS lanes (REF-090) read 0.01186 /
 0.00644 / 0.01581 on pressure / velocity / eddy viscosity. GLOBE ÷ ISLA
 0.9.0 is therefore 2.007 / 3.327 / 2.408
-(scratch/isla-ref090-2026-10-20/RESULTS_partial.md).
+(scratch/isla-ref090-2026-10-20/RESULTS_partial.md). These ISLA values are
+compiled-path scores. Scored eager, ISLA 0.9.0 reads 0.01194 / 0.00642 /
+0.01559, and GLOBE ÷ ISLA 0.9.0 is 1.992 / 3.335 / 2.442
+(@sec-nb-compiled-path-defect).
 
 **Next.** The GLOBE DrivAerML lanes finish about 2026-10-24.
 
@@ -38961,7 +38964,9 @@ float32).
 | DeepJEB++ | displacement | 0.16868 | 0.16245 | 0.963 (0.951, 0.975) |
 
 Native relative L2, seed means. Posed and area equal native to the digits
-shown, since the pose is exact and DeepJEB++ is read whole.
+shown, since the pose is exact and DeepJEB++ is read whole. The AirfRANS
+rows are compiled-path scores. Scored eager, HEADNORM ÷ CONTROL is 0.978 /
+1.009 / 0.957 (@sec-nb-compiled-path-defect).
 
 **The instrument** (a read-only probe of the head frame on the first 4
 validation cases, bf16 autocast forward). On DeepJEB++, CONTROL's head frame
@@ -39038,12 +39043,16 @@ eager; seed means):
 | AirfRANS, GLOBE ÷ ISLA 0.9.0 | 2.007 / 3.327 / 2.408 | 1.992 / 3.335 / 2.442 |
 | AirfRANS (A2 era), ISLA-DTT ÷ interacting ISLA (E3b) | 0.742 / 0.887 / 0.988 | 0.754 / 0.889 / 0.995 |
 | AirfRANS (A2 era), anchored ÷ interacting (E3b) | 1.417 / 1.481 / 1.104 | 1.402 / 1.485 / 1.100 |
+| AirfRANS (A2 era), head-frame normalization ÷ control (E1) | 0.989 / 1.008 / 0.952 | 0.978 / 1.009 / 0.957 |
+| AirfRANS (A2 era), earlier ISLA-DTT build (code_dtt16) ÷ A2 ISLA | 1.109 / 1.258 / 1.213 | 0.971 / 1.210 / 1.146 |
 | GEO-CONT decision G | 0.941 | 0.943 |
 | Tensile2d displacement, ISLA 0.9.0 ÷ A2 ISLA | 1.041 | 1.045 |
 | Lug von Mises, ISLA 0.9.0 ÷ A2 ISLA | 1.104 | 1.099 |
 
-No registered verdict changes. One claim was wrong and is relabelled in
-place: @sec-nb-anchor-verdict gave the anchored arm's posed ÷ native on eddy
+No registered verdict changes. The largest single move is the earlier
+ISLA-DTT build's pressure, 12 percent lower eager, which puts that build 3
+percent ahead of A2 ISLA on pressure instead of 11 percent behind. One claim
+was wrong and is relabelled in place: @sec-nb-anchor-verdict gave the anchored arm's posed ÷ native on eddy
 viscosity as 1.185 for seed 43. Eager, it is 0.971 and 1.011 for the two
 seeds.
 
