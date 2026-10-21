@@ -355,18 +355,12 @@ BOUNDARY_TOKENS = 200_000
 EVAL_START = 0.5
 
 
-### Inductor options of the compiled slice blocks (compile_blocks). Mix-order reduction
-### is off. In the eager geometry region (the 2-D models, and those without a global
-### direction or with rank-2 token inputs; the fused kernel is a leaf of the graph) it
-### fuses the softmax over the slices of each token with a sum over the tokens of each
-### slice and, in torch 2.12 and 2.13, adds the padded rows of the last tile of tokens
-### to that sum after the prologue has made them nonzero, whenever the token count is
-### not a multiple of the tile height (pytorch/pytorch#195845, fixed on main on
-### 2026-09-29). With 512 slices the tile is 4 tokens, so every case of 10k tokens or
-### more whose token count is not a multiple of 4 got a different function, in
-### training and in inference: on AirfRANS 15 of 20 cases, up to 53% in a case's
-### relative L2, each block wrong by 3-8%. With it off the compiled blocks match the
-### eager model to float32 roundoff on every case, at the same step time. The recipe's
+### Inductor options of the compiled slice blocks (compile_blocks). Mix-order
+### reduction must stay off until the installed torch contains the fix for
+### pytorch/pytorch#195845 (on main since 2026-09-29, not in 2.12 or 2.13). With it
+### on, blocks in the eager geometry region add the padded rows of the last token
+### tile to the per-slice sums whenever the token count is not a multiple of the tile
+### height, and so compute a different function from the eager model. The recipe's
 ### whole-model compile options turn it off for the same reason.
 _BLOCK_COMPILE_OPTIONS = {"triton.mix_order_reduction": False}
 
@@ -1209,7 +1203,8 @@ class ISLA(Module):
             return self.blocks
         if self._block_forwards is None:
             self._block_forwards = [
-                torch.compile(block.forward, options=_BLOCK_COMPILE_OPTIONS) for block in self.blocks
+                torch.compile(block.forward, options=_BLOCK_COMPILE_OPTIONS)
+                for block in self.blocks
             ]
         return self._block_forwards
 
