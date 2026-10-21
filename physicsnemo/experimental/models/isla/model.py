@@ -355,6 +355,16 @@ BOUNDARY_TOKENS = 200_000
 EVAL_START = 0.5
 
 
+### Inductor options of the compiled slice blocks (compile_blocks). Mix-order
+### reduction must stay off until the installed torch contains the fix for
+### pytorch/pytorch#195845 (on main since 2026-09-29, not in 2.12 or 2.13). With it
+### on, blocks in the eager geometry region add the padded rows of the last token
+### tile to the per-slice sums whenever the token count is not a multiple of the tile
+### height, and so compute a different function from the eager model. The recipe's
+### whole-model compile options turn it off for the same reason.
+_BLOCK_COMPILE_OPTIONS = {"triton.mix_order_reduction": False}
+
+
 def _hint_token_axis(n, widths) -> None:
     """Tell torch.compile that ``k * n`` is a multiple of the token count ``n``.
 
@@ -1192,7 +1202,10 @@ class ISLA(Module):
         if not self.compile_blocks or torch.compiler.is_compiling():
             return self.blocks
         if self._block_forwards is None:
-            self._block_forwards = [torch.compile(block.forward) for block in self.blocks]
+            self._block_forwards = [
+                torch.compile(block.forward, options=_BLOCK_COMPILE_OPTIONS)
+                for block in self.blocks
+            ]
         return self._block_forwards
 
     def _apply_geo_kernel(self, points: torch.Tensor) -> str | None:

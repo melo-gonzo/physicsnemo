@@ -279,3 +279,61 @@ def test_query_independent_interior_fused_and_compiled_blocks_match_eager():
     with torch.no_grad():
         head = _flat(outputs(opt(**inputs, prediction_points=q[:40])))
     assert _rel(head, o_opt[:40]) < tree_tol
+
+
+### Mix-order reduction (pytorch/pytorch#195845): Inductor fuses a block's softmax over the
+### slices of each token with a sum over the tokens of each slice once tokens x slices >=
+### 5 * 2**20 (and tokens >= 4096), and in torch 2.12 and 2.13 adds the padded rows of the
+### last tile of tokens to that sum when the token count is not a multiple of the tile
+### height (4 with 512 slices). The pair exists only in the eager geometry region (the
+### fused kernel is a leaf of the graph); the 2-D models and those without a global
+### direction run that region. The compiled blocks turn mix-order reduction off. These
+### tests run the eager region at a size where it would fuse, in float32 (it never fuses
+### float64), at token counts that are and are not multiples of 4.
+MIX = {**REF, "n_layers": 1, "n_slices": 512}
+
+
+def _mix_pair(**kw):
+    import torch._inductor.metrics
+
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch._dynamo.reset()
+    torch._inductor.metrics.reset()
+    torch.manual_seed(0)
+    ref = ISLA(**{**MIX, **kw}).to("cuda")
+    opt = ISLA(**{**MIX, **kw}, compile_blocks=True).to("cuda")
+    opt.load_state_dict(ref.state_dict())
+    ref.geo_kernel = opt.geo_kernel = "eager"
+    return ref, opt
+
+
+@cuda_only
+@pytest.mark.parametrize("n", [12000, 12001, 12002, 12003])
+def test_compile_blocks_float32_matches_eager_at_every_token_count(n):
+    """compile_blocks reproduces the eager model in float32 (outputs and gradients) at
+    every token count, at a size where Inductor's mix-order reduction would fuse, and
+    builds no mix-order kernel."""
+    ref, opt = _mix_pair()
+    ### Without the fix on GB300 (torch 2.12): output error 5.7e-5 at n = 12001 and one
+    ### mix-order kernel; with it, 2.7e-7 and none.
+    _assert_same(ref, opt, torch.float32, 5e-6, 5e-5, n=n)
+    assert torch._inductor.metrics.codegen_mix_order_reduction == 0
+
+
+@cuda_only
+@pytest.mark.parametrize("nq", [6001, 6002])
+def test_compile_blocks_query_independent_float32_at_every_token_count(nq):
+    """ISLA-DTT under compile_blocks in float32, at a size where mix-order reduction would
+    fuse and a total token count (6000 boundary cells + nq queries) that is not a multiple
+    of 4: the compiled model reproduces the eager one, and its prediction at a fixed set of
+    queries does not depend on the other queries of the request."""
+    ref, opt = _mix_pair(interior=True, query_independent=True)
+    inputs, _ = _boundary(6000)
+    q = torch.randn(nq, 3, generator=torch.Generator().manual_seed(5)).cuda() * 3.0
+    with torch.no_grad():
+        o_ref = _flat(outputs(ref(**inputs, prediction_points=q)))
+        o_opt = _flat(outputs(opt(**inputs, prediction_points=q)))
+        alone = _flat(outputs(opt(**inputs, prediction_points=q[:1000])))
+    assert _rel(o_opt, o_ref) < 5e-6, _rel(o_opt, o_ref)
+    assert _rel(alone, o_opt[:1000]) < 5e-6, _rel(alone, o_opt[:1000])
+    assert torch._inductor.metrics.codegen_mix_order_reduction == 0
