@@ -38647,9 +38647,12 @@ go on to AeroZoo.
 - Interior writers hurt pressure whatever their law. The mesh-node
   anchors read 1.32 of the passive arm on pressure, and the boundary-drawn
   ones 1.66.
-- C is not pose-exact as built. Its posed ÷ native reaches 1.185 on eddy
-  viscosity for seed 43, while every other run stays within 0.23 percent.
-  A pose changes which anchors the fixed evaluation stream draws.
+- C is not pose-exact as built. Scored fully eager, its posed ÷ native on
+  eddy viscosity is 0.971 (seed 42) and 1.011 (seed 43), while every other
+  run stays within 0.23 percent. A pose changes which anchors the fixed
+  evaluation stream draws. (Corrected 2026-10-21: this entry first gave
+  1.185 for seed 43, a value produced by the compiled-path fault of
+  @sec-nb-compiled-path-defect.)
 - The query-population probe confirms that A depends on its companions:
   far-field companions raise its error 26 to 63 times. In float64, B and
   E move by at most 5e-12 of the RMS target. D first moved by 2e-6, above
@@ -38993,3 +38996,71 @@ instrument tests to AeroZoo, and it is pre-registered before submission as
 E1-AZ. HEADNORM then enters the next reference version. The 0.9.0 standings
 stay until that version is rerun
 (scratch/isla-headnorm-2026-10-18/RESULTS_JB_2026-10-20.txt).
+
+## 2026-10-21 — Correction: on AirfRANS, Tensile2d and the lug, ISLA's per-block compiled path computed a different function from the model, through a PyTorch compiler bug {#sec-nb-compiled-path-defect}
+
+**What happened.** The recipe trains and scores ISLA with `compile_blocks`,
+which compiled each slice block with Inductor's default options. In torch
+2.12 and 2.13, one of them, mix-order reduction, adds the padded rows of the
+last tile of tokens to the per-slice sums (pytorch/pytorch#195845, fixed on
+PyTorch main on 2026-09-29). The fault needs three conditions:
+
+- the eager geometry region (two-dimensional models, and models without a
+  global direction such as the lug);
+- at least 10,240 tokens;
+- a token count that is not a multiple of 4.
+
+When all three hold, every block is 3 to 8 percent wrong. The AirfRANS,
+Tensile2d and lug ISLA lanes behind every standing and decision trained and
+were scored in this path. The other datasets use the fused geometry kernel
+and match the eager model to float32 roundoff on every case: SHIFT-SUV,
+DrivAerML Surface and Volume, DeepJEB++, HiLift and AeroZoo. The capacity
+audit ran eager. The query-population probe found the fault, because its
+eager validity check disagreed with the scorer case by case
+(scratch/isla-compile-af-2026-10-21/RESULTS.md).
+
+**Per case.** About 153 of 200 AirfRANS cases moved by more than 1e-3 in
+relative L2, by up to 53 percent. On the lug, 278 and 428 of 600 cases moved,
+by up to 63 percent; on Tensile2d, 37 to 42 of 100, by up to 8 percent on
+stress. In this path ISLA-DTT was not query-independent: a fixed query's
+prediction moved by up to 5e-2 when the other queries changed, against
+1.2e-6 eager.
+
+**Case means and the ratios built on them** (the same cases re-scored fully
+eager; seed means):
+
+| Quantity | Recorded (compiled path) | Eager |
+|---|---|---|
+| AirfRANS, ISLA 0.9.0 ÷ A2 ISLA, p / v / nut (pooled G) | 0.659 / 0.681 / 0.709 (0.683) | 0.662 / 0.675 / 0.698 (0.678) |
+| AirfRANS, ISLA-DTT ÷ ISLA at 0.9.0 | 1.163 / 1.147 / 1.396 | 1.181 / 1.154 / 1.433 |
+| AirfRANS, fair-drive GeoTransolver ÷ ISLA 0.9.0 | 0.919 / 6.211 / 1.080 | 0.913 / 6.225 / 1.096 |
+| AirfRANS, fair-drive Transolver ÷ ISLA 0.9.0 | 0.919 / 4.610 / 1.127 | 0.913 / 4.619 / 1.143 |
+| AirfRANS, GLOBE ÷ ISLA 0.9.0 | 2.007 / 3.327 / 2.408 | 1.992 / 3.335 / 2.442 |
+| AirfRANS (A2 era), ISLA-DTT ÷ interacting ISLA (E3b) | 0.742 / 0.887 / 0.988 | 0.754 / 0.889 / 0.995 |
+| AirfRANS (A2 era), anchored ÷ interacting (E3b) | 1.417 / 1.481 / 1.104 | 1.402 / 1.485 / 1.100 |
+| GEO-CONT decision G | 0.941 | 0.943 |
+| Tensile2d displacement, ISLA 0.9.0 ÷ A2 ISLA | 1.041 | 1.045 |
+| Lug von Mises, ISLA 0.9.0 ÷ A2 ISLA | 1.104 | 1.099 |
+
+No registered verdict changes. One claim was wrong and is relabelled in
+place: @sec-nb-anchor-verdict gave the anchored arm's posed ÷ native on eddy
+viscosity as 1.185 for seed 43. Eager, it is 0.971 and 1.011 for the two
+seeds.
+
+**The fix** (merged as 6e2f247e9). The blocks compile with mix-order
+reduction off. Compiled then equals eager to float32 roundoff on every case
+tested: AirfRANS ISLA and ISLA-DTT, the lug and Tensile2d. ISLA-DTT is
+query-independent again. The step time is unchanged: 0.387 s on AirfRANS
+against 0.379 s, where fully eager takes 0.751 s. Two regression tests run
+at sizes where the fusion fires, and both fail without the fix. The
+existing tests ran below those sizes.
+
+**What these numbers are.** The eager re-scores give each trained model's
+own function. They do not measure training: about three quarters of every
+affected lane's steps ran the perturbed forward and backward, and ISLA-DTT
+trained without its query independence. So the AirfRANS, Tensile2d and lug
+reference lanes are retrained under the fix, and the retrained rows become
+the standings. The 22 lanes that were training under the fault were
+cancelled on 2026-10-21 and relaunch under the fix: AF-EXTRAP's ISLA and
+ISLA-DTT arms, ATTRIB-090's AirfRANS and lug arms, and REF-090's lug
+ISLA-DTT.
