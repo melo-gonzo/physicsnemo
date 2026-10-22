@@ -495,6 +495,22 @@ def rendering_figure(label: str, images, caption: str, nrow=None) -> None:
     print(":::")
 
 
+def rendering_in_flight(
+    baselines: str | None = None,
+    isla: str = "ISLA checkpoints of the nearest-token form (@sec-checkpoint-form)",
+) -> str:
+    """STYLE's "In flight" callout for a figure drawn from superseded checkpoints, as markdown for an ``output: asis`` cell.
+
+    ``isla`` names ISLA's checkpoints; ``baselines``, when the baseline panels are superseded too, names theirs (for example
+    "baseline checkpoints that read the freestream as a physical vector, not the standing's unit direction")."""
+    what = isla + (f", and {baselines}" if baselines else "")
+    return (
+        '::: {.callout-note title="In flight"}\n'
+        f"This figure shows predictions of {what}. Renderings of the same case from the standing's checkpoints are "
+        "being made, and the ledger (@sec-ledger) tracks them.\n:::\n"
+    )
+
+
 __all__ = [
     n
     for n in dir()
