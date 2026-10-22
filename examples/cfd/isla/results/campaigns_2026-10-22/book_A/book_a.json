@@ -1,0 +1,110 @@
+{
+ "sources": {
+  "theta": "scratch/isla-probes090-2026-10-21/results/remesh_theta/summary.md",
+  "stl_offset": "scratch/isla-probes090-2026-10-21/diag_stl/STL_OFFSET.md",
+  "lug_ties": "examples/cfd/isla/results/campaigns_2026-10-22/attrib090/RESULTS.md"
+ },
+ "theta": {
+  "1.0": {
+   "native_s42": {
+    "pressure": 0.0144,
+    "velocity": 0.00746,
+    "nut": 0.02305
+   },
+   "refine2": {
+    "pressure": 1.0109,
+    "velocity": 1.0037,
+    "nut": 1.0023
+   },
+   "refine4": {
+    "pressure": 1.0362,
+    "velocity": 1.0132,
+    "nut": 1.0072
+   },
+   "refine31": {
+    "pressure": 1.0595,
+    "velocity": 1.0189,
+    "nut": 1.0362
+   }
+  },
+  "0.5": {
+   "native_s42": {
+    "pressure": 0.01948,
+    "velocity": 0.00872,
+    "nut": 0.02829
+   },
+   "refine2": {
+    "pressure": 1.0142,
+    "velocity": 1.0044,
+    "nut": 1.0121
+   },
+   "refine4": {
+    "pressure": 1.0265,
+    "velocity": 1.0084,
+    "nut": 1.0204
+   },
+   "refine31": {
+    "pressure": 1.0317,
+    "velocity": 1.0139,
+    "nut": 1.0284
+   }
+  },
+  "0.25": {
+   "native_s42": {
+    "pressure": 0.02594,
+    "velocity": 0.01091,
+    "nut": 0.08483
+   },
+   "refine2": {
+    "pressure": 1.0029,
+    "velocity": 0.9998,
+    "nut": 1.0
+   },
+   "refine4": {
+    "pressure": 1.0067,
+    "velocity": 1.0012,
+    "nut": 0.9995
+   },
+   "refine31": {
+    "pressure": 1.0013,
+    "velocity": 1.0003,
+    "nut": 1.0014
+   }
+  },
+  "0.0": {
+   "native_s42": {
+    "pressure": 0.03158,
+    "velocity": 0.01213,
+    "nut": 0.09596
+   },
+   "refine2": {
+    "pressure": 1.0006,
+    "velocity": 1.0001,
+    "nut": 1.0
+   },
+   "refine4": {
+    "pressure": 1.0029,
+    "velocity": 1.0009,
+    "nut": 1.0001
+   },
+   "refine31": {
+    "pressure": 1.0008,
+    "velocity": 1.0004,
+    "nut": 1.0001
+   }
+  }
+ },
+ "stl_offset": {
+  "median_L": 1.29e-05,
+  "max_L": 0.00779,
+  "frac_above_1e-2_L": 0.0
+ },
+ "lug_ties": {
+  "nodes": 8428,
+  "interior_fraction": 0.022000000000000002,
+  "all_fraction": 0.015,
+  "per_case_min": 78,
+  "per_case_max": 147,
+  "n_cases": 60
+ }
+}
