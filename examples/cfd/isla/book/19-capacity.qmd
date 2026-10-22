@@ -27,7 +27,7 @@ validation cars or the 180 HiLiftAeroML validation wings; every ratio is baselin
 import sys; sys.path.insert(0, ".")
 from palette import *
 import standing as S
-import json, statistics
+import json, re, statistics
 from pathlib import Path
 RES = Path("..") / "results"
 J = lambda p: json.load(open(RES / p))
@@ -37,15 +37,14 @@ QV = J("quadvar_reduction_2026-09-17.json")["arms"]          # stratified and un
 P2 = J("p200k_trio_reduction_2026-09-19.json")                 # the same three architectures trained at 200,000 cells
 SHL = J("scalehl_2026-09-26.json")
 SLD = J("scalelaw_2026-10-08.json"); SL = SLD["configurations"]; SLF = SLD["fits"]
-COST = J("char/char_lanes_cost_2026-10-04.json")["cost"]       # the reference configurations' training cost, four GB300 ranks
 import statistics as st
 CS = J("cost_sweep_ref_gb300_bf16_2026-09-22.json")["runs"]    # the one-GPU cost sweep
 at = lambda arm, tok: next(r for r in CS if r["arm"] == arm and r["tokens"] == tok and r["status"] == "ok")
 SURF = S.Standing("drivaerml_surface"); HLS = S.Standing("hilift")
 REF_KEYS = (("ISLA", "isla_ref"), ("GeoTransolver", "gt"), ("Transolver", "t"))
-def ref_point(stand, task, arch, f="pressure_l2"):
+def ref_point(stand, arch, f="pressure_l2"):
     """(parameters, seed-mean error) of one reference configuration on one task."""
-    return COST[task][arch]["n_parameters"], stand.err(arch, f)
+    return S.cost(stand.ds.key, arch)["n_parameters"], stand.err(arch, f)
 def star(ax, x, y, key, label=None, ms=15, **kw):
     """A reference configuration: the architecture's color, a black-edged star."""
     return ax.plot([x], [y], marker="*", ms=ms, mfc=STYLE[key]["color"], mec=INK, mew=0.9, ls="none",
@@ -218,7 +217,7 @@ p200 = RP["cars|cos|w384|d24|lr5e-4|c200k"]
 isla_200k = (EXT["isla|cos|w384|d24|lr5e-4"]["params"], p200["pressure_l2_mean"], p200["pressure_l2_seeds"])
 FLOOR = sorted(s[1] for s in isla_width + isla_depth)[:2] + sorted(s[1] for s in gt_width + gt_depth)[:2]
 floor_lo, floor_hi = min(FLOOR), max(FLOOR)
-REFP = {a: ref_point(SURF, "DrivAerML Surface", a) for a, _ in REF_KEYS}
+REFP = {a: ref_point(SURF, a) for a, _ in REF_KEYS}
 ```
 
 ```{python}
@@ -234,8 +233,9 @@ REFP = {a: ref_point(SURF, "DrivAerML Surface", a) for a, _ in REF_KEYS}
 #|   *Instrument:* ISLA at 192 to 1,536 wide, 256 slices, 1e-3 to 2.5e-4, raw slice reads
 #|   (@sec-study-configurations). Large black-edged stars: the three reference configurations on the
 #|   same validation cars, a different instrument (200,000 training cells, 100,000 for Transolver;
-#|   the normalized slice reads and 512 slices for ISLA; results/char/drivaerml_surface_a2.json,
-#|   parameters from results/char/char_lanes_cost_2026-10-04.json). The gray band spans the best two
+#|   for ISLA 512 slices, the normalized slice reads, exact wall geometry, its own scales and
+#|   boundary conditions by name; results/char/drivaerml_surface_090.json,
+#|   parameters from results/char/cost_090.json). The gray band spans the best two
 #|   ladder runs of each architecture. How to read this: the x axis is parameters, not memory or
 #|   time (those are @tbl-ref-cost and @fig-cost-sweep); GeoTransolver-2,048's count is extrapolated
 #|   from its measured 256 to 1,024 ladder; the y axis starts below the floor. Data:
@@ -290,7 +290,8 @@ print(f"3. **Both reach one floor at similar parameter counts.** GeoTransolver a
       f"1,024 wide ÷ ISLA at 384 × 48 = {gt_width[2][1] / isla_depth[2][1]:.3f}.")
 print(f"4. **The reference configurations sit above the band.** Their errors are "
       + ", ".join(f"{a} {REFP[a][1]:.4f} at {REFP[a][0] / 1e6:.0f}M parameters ({ref_over[a]:.2f}× the band's upper edge)" for a, _ in REF_KEYS)
-      + ". They are a different instrument (more training cells and, for ISLA, 512 slices and the normalized reads), "
+      + ". They are a different instrument (more training cells and, for ISLA, 512 slices, the normalized reads, exact wall "
+        "geometry, its own scales and boundary conditions by name), "
         "chosen under a memory budget of 80 GiB per GPU rather than for capacity. Whether the reference ISLA reaches the band is "
         "an open question (@sec-oq-scaling).")
 ```
@@ -363,61 +364,163 @@ print(": The capacity readings on the 510-wing HiLiftAeroML rung: surface-pressu
       "Data: results/scalehl_2026-09-26.json.")
 ```
 
+### One case at a time: what a single field costs to fit {#sec-single-case-floor}
+
+```{python}
+#| label: setup-single-case
+#| include: false
+# CAP-AUDIT (results/campaigns_2026-10-22/cap_audit/): the three reference configurations, and ISLA-DTT on AirfRANS, each trained on one
+# case until its error stops falling, eager, float32. Phase 1 trains on one fixed draw of the case's points, phase 1b on a fresh draw
+# every step; both score a held-out draw of the same case. Ratios in the record are ISLA ÷ the better baseline.
+import records as R
+P1 = R.load("cap_audit", "tables/phase1_floors.json"); P1B = R.load("cap_audit", "tables/phase1b_floors.json")
+V1 = P1["verdicts"]
+CASE = {"drs": "DrivAerML Surface, one car", "hl18": "HiLiftAeroML, one post-stall case", "af": "AirfRANS, one airfoil"}
+FNAME = {"pressure_l2": "pressure", "wss_l2": "wall shear stress", "tau_wall_l2": "wall shear stress", "velocity_l2": "velocity",
+         "nut_l2": "eddy viscosity", "nu_t": "eddy viscosity"}
+# phase 1, every run on the cases scored on a separate draw of the same case (AeroZoo's baselines fit nothing there, and ISLA's DrivAerML
+# Volume held-out values are invalid: the held-out points were paired with another draw's boundary)
+G1 = [r["fields"][f]["G"] for k, r in P1["runs"].items() if r["mode"] == "separate" and "_az_" not in k and not k.startswith("cap_drv_isla")
+      for c, f in (v.split(":") for v in V1) if k.startswith(f"cap_{c}_")]
+n_def = sum(v["verdict"] == "deficit" for v in V1.values())
+n_steps = P1["runs"]["cap_drs_isla_s42"]["n_steps"]
+fho = lambda c, f, a, s: next(x["F_ho"] for x in P1B["rows"] if (x["case"], x["field"], x["arch"], x["seed"]) == (c, f, a, s))
+P1B_CELLS = list(dict.fromkeys((x["case"], x["field"]) for x in P1B["rows"]))
+has = lambda c, f, a: any((x["case"], x["field"], x["arch"]) == (c, f, a) for x in P1B["rows"])
+best_over = lambda c, f, a, s: min(fho(c, f, b, s) for b in ("gt", "t")) / fho(c, f, a, s)
+LIM = P1B["representation_limited"]
+limited = [(c, f, a) for c, f in P1B_CELLS for a in ("isla", "dtt") if LIM.get(f"{c}:{f}:{a}", {}).get("limited")]
+GB = [x["G"] for x in P1B["rows"]]
+PB = R.md_table("cap_audit", "RESULTS.md", "Part B")
+AF_ST = S.Standing("airfrans")
+xcase = {"drs": SURF.err("ISLA", "pressure_l2"), "hl18": HLS.err("ISLA", "pressure_l2"), "af": AF_ST.err("ISLA", "pressure_l2")}
+floor1b = lambda c: mean(fho(c, "pressure_l2", "isla", s) for s in (42, 43))
+```
+
+```{python}
+#| label: para-single-case
+#| output: asis
+isla_cells = [(c, f) for c, f in P1B_CELLS if (c, f, "isla") not in limited]
+ok = [best_over(c, f, "isla", s) for c, f in isla_cells for s in (42, 43)]
+lim_txt = "; ".join(f"{'ISLA-DTT' if a == 'dtt' else 'ISLA'} on {CASE[c].split(',')[0]} {FNAME[f]} "
+                    + " / ".join(f"{best_over(c, f, a, s):.2f}" for s in (42, 43)) for c, f, a in limited)
+pb_def = [FNAME.get(r["field"], r["field"]) for r in PB if r["verdict"] == "deficit"]
+print(f"**Trained on one case with a fresh draw of points every step, ISLA fits the field to within a factor {1 / min(ok):.1f} of the "
+      "better baseline on one DrivAerML Surface car, one HiLiftAeroML case and AirfRANS "
+      + " and ".join(FNAME[f] for c, f in isla_cells if c == "af")
+      + "; the registered rules call AirfRANS pressure and DrivAerML Volume " + " and ".join(pb_def) + " deficits of "
+      "representation. On the first three datasets the single-case floor lies far below ISLA's error across cases.** The capacity audit trains each reference "
+      f"configuration on a single case for {n_steps:,} steps, until its error stops falling, and scores a held-out draw of points of the "
+      "same case. It asks whether an architecture can represent one field at all, apart from generalizing across cases. Every model is ISLA, "
+      "GeoTransolver or Transolver at its reference configuration, run eager in float32, with ISLA-DTT beside ISLA on AirfRANS.")
+print()
+print(f"A first phase trains on one fixed draw of the case's points, and its floors measure how tightly a model memorizes that point set, "
+      f"not the field: on DrivAerML, HiLiftAeroML and AirfRANS every model's held-out error is {min(G1):.0f} to {max(G1):,.0f} times its "
+      f"training floor (median {statistics.median(G1):.0f}, {len(G1)} pairs of run and field). On that fixed set ISLA's floor is above the "
+      f"better baseline's on {n_def} of the {len(V1)} headline fields, as registered, so ISLA memorizes a fixed point set less tightly. "
+      "Its DrivAerML Volume held-out values are not shown: the held-out points were paired with another draw's boundary, and ISLA, "
+      "which computes its wall geometry from the boundary, read it shifted.")
+print()
+print(f"With a fresh draw every step the held-out and training errors agree (held-out ÷ training {min(GB):.2f} to {max(GB):.2f}), so the "
+      f"floor is the field's. @tbl-single-case gives them as best baseline ÷ ISLA, which the registered rule reads as representation-limited "
+      f"at or below 0.5 on both seeds: {lim_txt}. The single-case pressure floors lie well below ISLA's errors across cases (seed means over "
+      "the test sets of the standings, not this case's error): "
+      + "; ".join(f"{CASE[c].split(',')[0]} {floor1b(c):.4f} against {xcase[c]:.4f}" for c in CASE) + ".")
+print()
+pb = lambda r: " / ".join(f"{1 / R.num(r['R_drv (registered)'], k):.2f}" for k in (0, 1))
+print("A fresh-draw run on one DrivAerML Volume case reads, as registered, "
+      + "; ".join(f"{FNAME.get(r['field'], r['field'])} {pb(r)} ({r['verdict']})" for r in PB)
+      + " (best baseline ÷ ISLA, seeds 42 / 43). "
+      f"Data: {R.source('cap_audit', 'tables/phase1_floors.json')}, {R.source('cap_audit', 'tables/phase1b_floors.json')}, "
+      f"{R.source('cap_audit', 'RESULTS.md')} (Part B).")
+```
+
+```{python}
+#| label: out-tbl-single-case
+#| output: asis
+ARCH = (("isla", "ISLA"), ("dtt", "ISLA-DTT"), ("gt", "GeoTransolver"), ("t", "Transolver"))
+out = ("| case | field | " + " | ".join(n for _, n in ARCH) + " | best baseline ÷ ISLA | best baseline ÷ ISLA-DTT |\n"
+       "|---|---|" + "--:|" * len(ARCH) + "--:|--:|\n")
+for c, f in P1B_CELLS:
+    cells = [(" / ".join(f"{fho(c, f, a, s):.2g}" for s in (42, 43)) if has(c, f, a) else "") for a, _ in ARCH]
+    rr = [(" / ".join(f"{best_over(c, f, a, s):.2f}" for s in (42, 43)) if has(c, f, a) else "") for a in ("isla", "dtt")]
+    out += f"| {CASE[c]} | {FNAME[f]} | " + " | ".join(cells) + " | " + " | ".join(rr) + " |\n"
+print(out)
+print(f": Single-case floors with a fresh draw of points every step: relative L2 on a held-out draw of the same case after {n_steps:,} "
+      "training steps, seeds 42 / 43, float32, eager; the three reference configurations, and ISLA-DTT on AirfRANS. How to read this: a "
+      "ratio below one means ISLA's floor is above the better baseline's, and the registered rule calls a cell representation-limited at "
+      "0.5 or below on both seeds; each floor is one case's, not a dataset's. "
+      f"Data: {R.source('cap_audit', 'tables/phase1b_floors.json')}. {{#tbl-single-case}}")
+print()
+print(S.in_flight_callout({"what": "the reference configurations alone on one AirfRANS case",
+                           "replacement": "A ladder of ISLA's width, depth and slice count on that case"}))
+```
+
 ## What the reference configurations spend {#sec-review-frontier}
 
 **At their reference configurations the three architectures spend different resources, and a
 comparison between them is resource-matched only on the memory budget they were chosen under.**
 ISLA's reference has several times GeoTransolver's parameters, and Transolver's trains at half
-the cells. @tbl-ref-cost lists, for every task with a cost record, what one training epoch costs
-each architecture on four GB300 GPUs, the GPU-hours of a 500-epoch training run, and the headline error
-of its standing. Two terms need a line each. The *allocator peak* is the largest amount of GPU
-memory the training process held in live tensors at once (PyTorch's `max_memory_allocated`);
+the cells. @tbl-ref-cost lists, for every dataset with a standing, what one training step costs
+each architecture in the lanes behind the standing, beside the headline error of that standing.
+Two terms need a line each. The *allocator peak* is the largest amount of GPU memory the training
+process held in live tensors at once (PyTorch's `max_memory_allocated`), the maximum over ranks;
 the allocator reserves somewhat more in cached blocks, so the peak is a lower bound on the card a
-run needs. The *epoch time* is wall clock and includes data loading, so it is the cost a user
-pays, not the network's arithmetic alone.
+run needs. The *step time* is the median wall time of one training step in the training log,
+with the compile steps left out.
 
 ```{python}
 #| label: tbl-ref-cost
 #| output: asis
-TASKS = [("DrivAerML Surface", "drivaerml_surface"), ("DrivAerML Volume", "drivaerml_volume"), ("Shift-SUV", "shift_suv"),
-         ("AirfRANS", "airfrans"), ("Tensile2D", "tensile2d"), ("lug", "lug"), ("DeepJEB++", "deepjeb")]
-EPOCHS = {"DeepJEB++": 40}  # every other task trains for 500 epochs (@sec-protocol)
-lane_gpuh = lambda task, arch: COST[task][arch]["epoch_seconds"] * EPOCHS.get(task, 500) * 4 / 3600
-out = "| dataset and task | architecture | parameters | allocator peak per GPU [GiB] | epoch [s] | GPU-hours per run | error, first headline field | ÷ ISLA |\n|---|---|--:|--:|--:|--:|--:|--:|\n"
-for task, key in TASKS:
+TASKS = ("drivaerml_surface", "drivaerml_volume", "hilift", "shift_suv", "airfrans", "tensile2d", "lug", "deepjeb")
+COST_ROWS = [("ISLA", "ISLA"), ("ISLA-DTT", "ISLA-DTT"), ("GeoTransolver", "GeoTransolver"), ("Transolver", "Transolver")]
+SMOKE = re.compile(r"one-epoch smoke lane of the same configuration, one seed \((\d+)\), ([\d,]+) steps")
+mark = lambda c: (" †" if SMOKE.search(c["note"]) else "") + (" ‡" if "compiled_before_fix" in c["note"] else "")
+out = ("| dataset and task | architecture | parameters | allocator peak per GPU [GiB] | training step [s] | precision | "
+       "error, first headline field | baseline ÷ ISLA |\n|---|---|--:|--:|--:|---|--:|--:|\n")
+flight = []
+for key in TASKS:
     st_ = S.Standing(key); f = st_.ds.headline[0]
-    for i, (arch, _) in enumerate(REF_KEYS):
-        c = COST[task][arch]
-        name = st_.ds.name if i == 0 else ""
-        rel = "" if arch == "ISLA" else f"{st_.ratio(arch, f):.2f}"
-        out += (f"| {name} | {arch} | {c['n_parameters'] / 1e6:.1f}M | {c['peak_gib']:.1f} | {c['epoch_seconds']:.0f} | {lane_gpuh(task, arch):.0f} | "
-                f"{st_.err(arch, f):.4f} | {rel} |\n")
+    if st_.in_flight:
+        flight.append(st_.ds.short)
+    rows = [a for a, _ in COST_ROWS if st_.has(a) and S.cost(key, a)]
+    for i, arch in enumerate(rows):
+        c = S.cost(key, arch)
+        rel = f"{st_.ratio(arch, f):.2f}" if arch in S.BASELINES else ""
+        out += (f"| {st_.ds.name if i == 0 else ''} | {arch}{mark(c)} | {c['n_parameters'] / 1e6:.1f}M | {c['peak_gib']:.1f} | "
+                f"{c['step_seconds']:.2f} | {c['precision']} | {st_.err(arch, f):.4f} | {rel} |\n")
+GPUS = {(c["gpus"], c["ranks"]) for k in TASKS for a, _ in COST_ROWS if (c := S.cost(k, a))}
+smoke = [(S.DATASETS[k].short, a, *SMOKE.search(c["note"]).groups()) for k in TASKS for a, _ in COST_ROWS
+         if (c := S.cost(k, a)) and SMOKE.search(c["note"])]
+fixed = list(dict.fromkeys(S.DATASETS[k].short for k in TASKS for a in S.ISLA_FORMS
+                           if (c := S.cost(k, a)) and "compiled_before_fix" in c["note"]))
 print(out)
-print(": What the three reference configurations spend, per dataset and task: trainable parameters, the training allocator peak per GPU (the "
-      "maximum over four GB300 ranks, bfloat16, one case per GPU), the wall time of one training epoch, and the GPU-hours of one training run "
-      "(epoch time × epochs × four GPUs; 500 epochs, 40 on DeepJEB++), beside the seed-mean error of the dataset's first headline field from its "
-      f"standing and the ratio baseline ÷ ISLA, ISLA checkpoints of the {S.FORM_TAG} (@sec-checkpoint-form). The one-epoch cost runs used "
-      "the raw slice reads, which have the same parameters and the "
-      "same tensors as the normalized reads, so the counts are exact for the standing's checkpoints and the costs representative. The AirfRANS baselines and the lug's "
-      "GeoTransolver were costed with the inputs of their earlier runs; their standing checkpoints' parameter counts agree with the "
-      "table's to the printed precision. How to read this: the cost columns come "
-      "from one-epoch runs of each configuration and the error "
-      "column from the 500-epoch standing, so the table pairs a price with a result; it does not say what each architecture would score at "
-      "another architecture's budget. Data: results/char/char_lanes_cost_2026-10-04.json and the standing artifacts of @sec-standing.")
+print(": What the reference configurations spend, per dataset and task, in the training lanes behind each standing: trainable parameters, "
+      "the allocator peak per GPU (the maximum over ranks), the median training step and the training precision, "
+      + " and ".join(f"{g} GB300 GPUs as {r} ranks" for g, r in sorted(GPUS)) + " for every lane, seed means; beside them the seed-mean "
+      "error of the dataset's first headline field from its standing, and baseline ÷ ISLA. ISLA's lanes compile its blocks one by one; "
+      "the baselines run uncompiled, as released. † The standing lane's training log is gone, so the cell is priced from the one-epoch "
+      "lane of the same configuration, one seed: " + ", ".join(f"{d} {a} (seed {s}, {int(n.replace(',', '')):,} steps)" for d, a, s, n in smoke) + ". "
+      "‡ The lane trained on the compiled training path after its fault was fixed (" + ", ".join(fixed) + "); the eager-trained lanes "
+      "behind those standings are not priced, and eager training takes longer per step. "
+      + (f"The {' and '.join(flight)} errors are the in-flight rows of their dataset chapters. " if flight else "")
+      + "How to read this: the table pairs a price with a result; it does not say what each architecture would score at another "
+      "architecture's budget, and a step is not an epoch, since the step counts per epoch differ between datasets. "
+      f"Data: results/char/{S.COST_FILE} (the notes per lane) and the standing artifacts of @sec-standing.")
 ```
 
 ```{python}
 #| label: para-ref-cost
 #| output: asis
-d = COST["DrivAerML Surface"]
-small = [COST[t]["ISLA"]["epoch_seconds"] / COST[t][b]["epoch_seconds"] for t in ("Tensile2D", "lug") for b in S.BASELINES]
+d = {a: S.cost("drivaerml_surface", a) for a in S.ARCHS}
+small = [S.cost(k, "ISLA")["step_seconds"] / S.cost(k, b)["step_seconds"] for k in ("tensile2d", "lug") for b in S.BASELINES]
 print(f"On the DrivAerML Surface task the reference ISLA holds {d['ISLA']['n_parameters'] / d['GeoTransolver']['n_parameters']:.1f}× "
       f"GeoTransolver's parameters in {d['ISLA']['peak_gib'] / d['GeoTransolver']['peak_gib']:.2f}× its memory and "
-      f"{d['ISLA']['epoch_seconds'] / d['GeoTransolver']['epoch_seconds']:.2f}× its epoch time. Its parameters are cheap because ISLA's memory "
+      f"{d['ISLA']['step_seconds'] / d['GeoTransolver']['step_seconds']:.2f}× its step time. Its parameters are cheap because ISLA's memory "
       "goes to the per-token, per-slice geometry rather than to weights (@sec-architecture). On the small finite-element meshes "
-      f"(PLAID Tensile2d, the GINOT bracket lug) the same ISLA spends {min(small):.1f} to {max(small):.1f} times the baselines' epoch time. The one-GPU sweep of "
-      "@sec-cost-sweep, in which ISLA's and GeoTransolver's steps are level at the smallest count measured, does not account for that gap, and "
-      "its cause is not measured.")
+      f"(PLAID Tensile2d, the GINOT bracket lug) the same ISLA spends {min(small):.1f} to {max(small):.1f} times the baselines' step time. The "
+      "one-GPU sweep of @sec-cost-sweep, in which ISLA's and GeoTransolver's steps are level at the smallest count measured, does not "
+      "account for that gap, and its cause is not measured.")
 ```
 
 ## What compute should buy: cases, parameters, epochs {#sec-compute-allocation}
@@ -447,8 +550,8 @@ toward a floor at the large ones, on both datasets.
 #|   floor. *Instrument:* ISLA at 192, 384 and 768 wide, 256 slices, 1e-3 / 5e-4 / 5e-4, raw slice
 #|   reads (@sec-study-configurations); GeoTransolver at 256, 512 and 1,024 wide, 3e-3 / 3e-3 /
 #|   1e-3. Black-edged stars: the three reference configurations at the full training set of 435
-#|   cars and of 510 wing cases, a different instrument (results/char/drivaerml_surface_a2.json,
-#|   results/char/hilift_surface_a2.json; every baseline reading the unit direction), offset
+#|   cars and of 510 wing cases, a different instrument (results/char/drivaerml_surface_090.json,
+#|   results/char/hilift_surface_090.json; every baseline reading the unit direction), offset
 #|   sideways for legibility. How to read this: the
 #|   vertical spread between shades is what parameters buy at one training-set size; the slope is
 #|   what cases buy. Both axes are logarithmic. Data: results/scalelaw_2026-10-08.json.
@@ -614,7 +717,7 @@ a_, al_, b_, be_, e_ = FI["a"], FI["alpha"], FI["b"], FI["beta"], FI["eps_inf"]
 law = lambda n, P: e_ + a_ * n ** (-al_) + b_ * P ** (-be_)
 Kp = (be_ * b_ / (al_ * a_)) ** (1 / be_)                        # optimal path: P = Kp * n**(alpha/beta)
 path_P = lambda n: Kp * n ** (al_ / be_)
-P_REF, N_REF = COST["DrivAerML Surface"]["ISLA"]["n_parameters"], 435
+P_REF, N_REF = S.cost("drivaerml_surface", "ISLA")["n_parameters"], 435
 C_REF = P_REF * N_REF
 n_opt = (C_REF / Kp) ** (be_ / (al_ + be_)); P_opt = C_REF / n_opt
 pts_sl, params_sl = grid("drivaerml")
@@ -911,6 +1014,14 @@ ax1.set_xticks([25000, 50000, 100000, 200000, 400000, 800000]); ax1.set_xticklab
 ax1.set_xlabel("tokens per case [count]")
 ax0.legend(loc="upper left", fontsize=7.8)
 plt.show()
+```
+
+```{python}
+#| label: para-cost-sweep-flight
+#| output: asis
+print(S.in_flight_callout({"what": f"training steps of ISLA of the {S.FORM_TAG} (@sec-checkpoint-form), without the boundary draw inside "
+                                   "the model or the exact wall geometry, and of the baselines measured beside it",
+                           "replacement": "A GB300 sweep of ISLA, ISLA-DTT, GeoTransolver and Transolver at their reference configurations"}))
 ```
 
 ```{python}
