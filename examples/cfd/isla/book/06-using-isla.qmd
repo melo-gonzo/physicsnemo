@@ -136,8 +136,28 @@ point at a time or in chunks, is built with `query_independent=True`:
 ISLA-DTT, whose read-only prediction points never write into the slices and
 read the boundary cells through a Barnes–Hut forest instead
 (@sec-arch-passive-decoder). Its prediction at a point depends on that
-point and the boundary alone. What the two forms measure on the same
-datasets is in @sec-interior-read-only and @sec-airfrans-read-only.
+point and the boundary alone.
+
+```{python}
+#| label: para-using-query-population
+#| output: asis
+import records as R
+from physicsnemo.experimental.models.isla.tree_read import TREE_READ_THETA
+QP = R.load("probes090", "results/qpop/reduced.json")
+QV = [QP[f"r090_vol_isla_seed{s}"]["ratio_to_native_h"] for s in (42, 43)]
+qv = lambda mode: [sum(v[mode][f] for v in QV) / len(QV) for f in ("pressure_l2", "velocity_l2")]
+qd = max(abs(x - 1) for s in (42, 43) for mode in QP[f"r090_af_dtt_seed{s}"]["ratio_to_native_h"].values() for x in mode.values())
+print(f"On the DrivAerML Volume task, the standing's ISLA asked for its scored points in four "
+      f"chunks moves its pressure and velocity error by at most {100 * (max(qv('chunks4')) - 1):.0f}%, but 1,000 of those points "
+      f"asked for on their own raise it {min(qv('sub1000')):.1f} to {max(qv('sub1000')):.1f} times, and points asked for one at a "
+      f"time {min(qv('sub1')):.0f} to {max(qv('sub1')):.0f} times (seed means). On AirfRANS, ISLA-DTT's error moves by at most "
+      f"{sci(float(f'{qd:.1g}'))} relative under every such change of the request, float32 roundoff (weights trained on the compiled path before "
+      f"its fault was fixed, @sec-using-cost). Its tree read is a Barnes–Hut approximation at opening angle $\\theta = "
+      f"{TREE_READ_THETA:g}$, whose error vanishes as $\\theta \\to 0$. Data: {R.source('probes090', 'results/qpop/reduced.json')}.")
+```
+
+What the two forms measure on the same datasets is in
+@sec-interior-read-only and @sec-airfrans-read-only.
 :::
 
 ## What the model needs from your data {#sec-using-inputs}
@@ -867,7 +887,8 @@ INFER = yaml.safe_load((RECIPE / "conf" / "infer.yaml").read_text())
 PR = json.load(open(RES / "precres_2026-09-18.json"))["reduction"]; PRB, PRF = PR["bfloat16"], PR["float32"]
 print(f"The recipe trains under {BASE['precision']} autocast (`conf/base.yaml`), and `conf/infer.yaml` reads the whole mesh "
       f"by default (`sampling_resolution: {INFER['sampling_resolution']:,}`), hence the two overrides. Every number in this "
-      "book is a float32 inference on the final-epoch checkpoint (@sec-metrics). A bfloat16 inference rounds the learned maps' "
+      "book is a float32 inference on the final-epoch checkpoint (@sec-metrics), on the eager path or on compiled blocks "
+      "that compute the same function (@tbl-protocol). A bfloat16 inference rounds the learned maps' "
       f"arithmetic. On two trained DrivAerML Surface checkpoints, the bfloat16 pressure prediction differs from the float32 one "
       f"by {PRB['scalar_vs_fp32_unrotated']['mean_over_seeds']:.1%} on average, and a rigid motion of the input moves the "
       f"bfloat16 prediction by {min(PRB['scalar_residual']['per_seed_mean']):.1%} to {max(PRB['scalar_residual']['per_seed_mean']):.1%} "
@@ -1051,6 +1072,7 @@ print(f"- **The geometry kernel is chosen for you.** At the first forward pass t
       "function. It logs the choice once. A planar model, a model with no global direction (the lug) and a model with "
       "rank-2 inputs run eager. To force one path, set the model's `geo_kernel` attribute to `\"eager\"` or `\"fused\"` "
       "before the first forward pass.")
+from physicsnemo.experimental.models.isla import model as IM
 _whole = [n for n, c in ISLA_CFGS.items() if c.get("compile")]; _rest = [n for n in ISLA_CFGS if n not in _whole]
 assert all(c.get("compile_options") == opts for c in ISLA_CFGS.values())   # one set of options in every configuration
 yv = lambda v: str(v).lower() if isinstance(v, bool) else v
@@ -1064,7 +1086,8 @@ print(f"- **Compile the whole model.** The recipe's ISLA configurations do, all 
       "`max-autotune-no-cudagraphs`, written out so that the third can turn off Inductor's mix-order reduction, a fusion of a "
       "per-point sum with a sum over the points: torch 2.12 returns that sum at the wrong rank on the AirfRANS graph, and torch 2.12 "
       "and 2.13 add padded rows to its column sums (pytorch/pytorch#195845; the comment in `isla_volume_airfrans.yaml`). The "
-      "standing's training runs compiled block by block (below), which the setting does not touch. The forward, `Mesh` in and out, "
+      "block-by-block compile below sets the same option itself (`_BLOCK_COMPILE_OPTIONS` in `model.py`: "
+      + ", ".join(f"`{k}: {yv(v)}`" for k, v in IM._BLOCK_COMPILE_OPTIONS.items()) + "). The forward, `Mesh` in and out, "
       "traces to one graph and compiles once with dynamic shapes, so the case-to-case "
       "change in mesh size does not recompile; validation, in eval mode, compiles a second graph. The first compile is "
       "long, so keep `TORCHINDUCTOR_CACHE_DIR` and `TRITON_CACHE_DIR` across the links of a chained run. The options leave "
@@ -1072,12 +1095,19 @@ print(f"- **Compile the whole model.** The recipe's ISLA configurations do, all 
 P3 = json.load(open(RES / "perf3_neutrality_2026-10-01.json"))
 rat = {ds: P3["datasets"][ds]["ratio"] for ds in ("drivaerml_surface", "drivaerml_volume") if ds in P3["datasets"]}
 lo = min(v for r in rat.values() for v in r.values()); hi = max(v for r in rat.values() for v in r.values())
+LUGT = R.md_table("ref090", "r090_final_tables.md", "REF-090-FIX GINOT lug")[0]
+lug_t = R.num(LUGT["T = retrained ÷ original (s42, s43 paired)"])
 print(f"- **Compile block by block where the whole graph breaks.** `compile_blocks: true` runs each slice block's forward "
       "under `torch.compile` instead, with parameter names, the state dict and the eager path unchanged. It is the way to "
       "compile ISLA-DTT (`compile=false model.compile_blocks=true`), whose boundary read breaks the whole-model graph, and "
-      "the AeroZoo configuration uses it because that dataset's four boundaries recompile the whole graph. Models trained "
-      f"with it score as models trained eagerly do: compiled ÷ eager error between {lo:.3f} and {hi:.3f} on every field of "
-      "both DrivAerML tasks, seed means of two seeds (results/perf3_neutrality_2026-10-01.json).")
+      "the AeroZoo configuration uses it because that dataset's four boundaries recompile the whole graph. The standing's "
+      "training runs use it on every dataset but Tensile2d (@tbl-protocol). On the DrivAerML tasks, whose geometry runs in the "
+      f"fused kernel, models trained with it score as models trained eagerly do: compiled ÷ eager error between {lo:.3f} and "
+      f"{hi:.3f} on every field, seed means of two seeds (results/perf3_neutrality_2026-10-01.json). Without the mix-order "
+      "setting, under torch 2.12, the compiled blocks compute another function on AirfRANS, Tensile2d and the lug, whose "
+      "geometry runs in the eager region, and on the lug that changed what training found: retrained with the setting, "
+      f"ISLA's von Mises error is {lug_t:.3f} times that of the same run without it, both scored eagerly "
+      f"({R.source('ref090', 'r090_final_tables.md')}).")
 ```
 
 ## Contracts you can check on your own data {#sec-using-contracts}
