@@ -469,19 +469,32 @@ def test_cube_edges_and_corners_and_torus_saddles():
 
 
 @pytest.mark.parametrize("dim", [2, 3])
-def test_on_wall_queries_take_the_feature_pseudo_normal(dim):
+def test_on_wall_queries_take_the_least_norm_normal(dim):
     """Queries exactly at the vertices (and at cell centroids) of a circle / sphere:
-    d = 0 and u is the feature's unit pseudo-normal, radial outward to O(h^2)."""
+    d = 0 and u is the least-norm point of the hull of the unit normals of the cells
+    holding the query, radial outward: the cell's normal at a centroid, the
+    midpoint of the two segments' normals at a polygon's vertex (|u| = cos(pi / n))."""
     mesh = _circle(64) if dim == 2 else _sphere(3)
     for q in (mesh.points, mesh.cell_centroids):
         d, u = _geometry(q, mesh)
         assert (d.abs() <= 1e-15).all()
         radial = (u * torch.nn.functional.normalize(q, dim=-1)).sum(-1)
-        assert (radial > 0.99).all() and torch.allclose(
-            u.norm(dim=-1), torch.ones_like(d)
-        )
+        assert (radial > 0.99).all() and (u.norm(dim=-1) <= 1 + 1e-15).all()
     d, u = _geometry(mesh.points, mesh)
     assert torch.equal(d, torch.zeros_like(d))
+    assert (u.norm(dim=-1) < 1 - 1e-6).all()  # the hull of distinct normals
+    _, u = _geometry(mesh.cell_centroids, mesh)
+    assert torch.allclose(u, mesh.cell_normals, atol=1e-15, rtol=0)
+    if dim == 2:
+        _, u = _geometry(mesh.points, mesh)
+        n = mesh.cell_normals
+        at = torch.zeros_like(u).index_add(
+            0, mesh.cells.reshape(-1), n.repeat_interleave(2, 0)
+        )
+        assert torch.allclose(u, 0.5 * at, atol=1e-15, rtol=0)
+        assert torch.allclose(
+            u.norm(dim=-1), torch.full_like(d, math.cos(math.pi / 64)), atol=1e-15
+        )
 
 
 @pytest.mark.parametrize("dim", [2, 3])
@@ -916,3 +929,66 @@ def test_tie_direction_is_covariant_under_rigid_motions(dim):
                 seed,
                 improper,
             )
+
+
+def _box_wall(dim: int):
+    """The unit square / the cube [-1/2, 1/2]^3 (outward normals), its sides split
+    once, and points exactly on it: its vertices, its cells' edge midpoints and
+    centroids, with the least-norm normal at each: the mean of the outward unit
+    normals of the box's sides holding it (one inside a side, two on an edge of
+    the box, three at a corner of the cube)."""
+    if dim == 2:
+        h = torch.tensor([-0.5, 0.0, 0.5, 0.5, 0.5, 0.0, -0.5, -0.5], dtype=D)
+        mesh = _polygon(torch.stack([h, h.roll(-2)], -1))
+        pairs = ((0, 1),)
+    else:
+        cube = cube_surface.load()
+        mesh = Mesh(points=cube.points.double(), cells=cube.cells).subdivide(
+            levels=1, filter="linear"
+        )
+        pairs = ((0, 1), (1, 2), (0, 2))
+    edges = [mesh.points[mesh.cells[:, [a, b]]].mean(1) for a, b in pairs]
+    q = torch.cat([mesh.points, mesh.cell_centroids, *edges])
+    on = q.abs() == 0.5
+    return mesh, q, torch.sign(q) * on / on.sum(-1, keepdim=True)
+
+
+@pytest.mark.parametrize("dim", [2, 3])
+def test_on_wall_direction_is_the_least_norm_normal_and_independent_of_the_order(dim):
+    """On the surface, u is the least-norm point of the hull of the unit normals of
+    the cells holding the query (the generalized gradient's rule with the normals
+    for the directions): the cell's normal inside a side, the midpoint of two on an
+    edge, the centroid of three at a cube's corner; it is bitwise the same under
+    every renumbering of the vertices, shuffle of the cells and cyclic rotation of
+    a triangle's vertices (a first-found feature's pseudo-normal would follow
+    them)."""
+    mesh, q, nu = _box_wall(dim)
+    d, u = _geometry(q, mesh)
+    assert torch.equal(d, torch.zeros_like(d))
+    assert torch.allclose(u, nu, atol=1e-15, rtol=0)
+    g = torch.Generator().manual_seed(dim)
+    for _ in range(3):
+        perm = torch.randperm(mesh.n_points, generator=g)
+        inv = torch.empty_like(perm)
+        inv[perm] = torch.arange(mesh.n_points)
+        cells = inv[mesh.cells][torch.randperm(mesh.n_cells, generator=g)]
+        if dim == 3:
+            cells = cells.roll(1, -1)
+        d2, u2 = exact_boundary_geometry(q, mesh.points[perm], cells)
+        assert torch.equal(d2, d) and torch.equal(u2, u)
+
+
+@pytest.mark.parametrize("dim", [2, 3])
+def test_on_wall_direction_flips_exactly_with_the_winding(dim):
+    """A box in a generic pose, with points on it to rounding (at its vertices, on
+    its cells' edges and inside them): reversing every cell negates u bitwise, the
+    same cells holding each point read with the other orientation, and u is the
+    posed least-norm normal."""
+    mesh, q, nu = _box_wall(dim)
+    R, t = orthogonal(dim, 7), torch.arange(1, dim + 1, dtype=D) / 3
+    moved, q = transform(mesh, R, t), q @ R.T + t
+    d, u = _geometry(q, moved)
+    d2, u2 = _geometry(q, _flipped(moved))
+    assert torch.equal(d, torch.zeros_like(d)) and torch.equal(d2, d)
+    assert torch.equal(u2, -u)
+    assert torch.allclose(u, nu @ R.T, atol=1e-12, rtol=0)
