@@ -39002,6 +39002,8 @@ E1-AZ. HEADNORM then enters the next reference version. The 0.9.0 standings
 stay until that version is rerun
 (scratch/isla-headnorm-2026-10-18/RESULTS_JB_2026-10-20.txt).
 
+**Later (2026-10-22).** E1-AZ read REJECT under this rule. On the held-out AeroZoo family, HEADNORM ÷ CONTROL is 1.287 on pressure, with both seed-matched ratios at least 1.10 (1.339 / 1.178), and 1.047 on velocity. So HEADNORM does not enter the next reference, and 0.9.0 stays the reference (scratch/isla-az-decide-2026-10-21/RESULTS_E1AZ_raw.txt).
+
 ## 2026-10-21 — Correction: on AirfRANS, Tensile2d and the lug, ISLA's per-block compiled path computed a different function from the model, through a PyTorch compiler bug {#sec-nb-compiled-path-defect}
 
 **What happened.** The recipe trains and scores ISLA with `compile_blocks`,
@@ -39073,3 +39075,515 @@ the standings. The 22 lanes that were training under the fault were
 cancelled on 2026-10-21 and relaunch under the fix: AF-EXTRAP's ISLA and
 ISLA-DTT arms, ATTRIB-090's AirfRANS and lug arms, and REF-090's lug
 ISLA-DTT.
+
+## 2026-10-21 — ISLA's residual stream grows without bound while the learning rate is constant, and only the head frame reads its scale {#sec-nb-stream-audit}
+
+**Question** (STREAM-AUDIT, a read-only measurement with no rule). Does
+ISLA 0.9.0's residual stream grow without bound, and does the growth harm
+anything? Probes on the REF-090 and AeroZoo checkpoints read the mean token
+norm of the stream after the last block at every saved epoch.
+
+| Dataset | Epoch 1 | Epoch 99 | Last (epoch) |
+|---|---|---|---|
+| AirfRANS ISLA | 127 / 109 | 1,011 / 985 | 1,025 / 981 (500) |
+| AirfRANS ISLA-DTT | 141 / 134 | 1,238 / 1,208 | 1,317 / 1,243 (500) |
+| DrivAerML Surface | 106 / 114 | 203 / 205 | 201 / 204 (500) |
+| DrivAerML Volume | 111 / 114 | 276 / 267 | 270 / 260 (500) |
+| SHIFT-SUV | 106 / 117 | 506 / 503 | 531 / 527 (500) |
+| Tensile2d | 83 / 85 | 439 / 430 | 444 / 440 (500) |
+| Lug ISLA | 123 / 134 | 995 / 1,139 | 1,091 / 1,213 (500) |
+| DeepJEB++ | 749 / 751 | – | 20,200 / 18,870 (39 / 37) |
+| AeroZoo `full` (seed 42) | 292 | 8,350 | 8,161 (149) |
+
+Mean token norm of the stream after the last block; seeds 42 / 43. The
+AirfRANS and lug checkpoints were trained under the compiled-path fault
+(@sec-nb-compiled-path-defect).
+
+**Findings.**
+
+- The norm grows linearly in optimizer steps while the rate is constant
+  (R² 0.92 to 1.00), so dataset size sets its growth per epoch. It stops at
+  the StepLR cut: over the next 400 epochs it moves by −6 to +10 percent,
+  while the training loss falls another 2 to 40 times. DeepJEB++, whose
+  schedule never cuts the rate, still grows linearly at epoch 39.
+- The cause is the weights that write into the stream, which grow 1.4 to 8.8
+  times. Under Muon the recipe's weight decay is effectively off: weights
+  shrink by 0.1 to 1.3 percent per run in total. The lug, which has no head
+  frame, still grows 9 times, so the growth needs no raw read of the stream.
+- No harm was measured outside the head frame. No block update comes near
+  bf16 resolution of the stream: the smallest is 3 to 30 percent of its norm
+  at the end of training. Doubling the whole stream moves scalar outputs by
+  at most 1.5e-4 and vector outputs by 0.08 to 2.7 percent. With the head
+  frame's input normalized, vector outputs move by at most 5.8e-4.
+- ISLA 0.9.0's head frame collapses on DeepJEB++ from epoch 13 on both seeds,
+  as A2's did. Its largest weight passes 0.5 at epochs 31 and 35. E1's
+  head-frame normalization (@sec-nb-headnorm-jb) removes the one read that
+  scales with the stream.
+- The probe's hooks-on and hooks-off forwards differ by 1.8e-3 in velocity
+  on AeroZoo, as much as two forwards without hooks. That is GPU
+  nondeterminism, as E1-AZ assumed.
+
+**What it leaves.** An implicit learning-rate decay: over the full-rate
+phase, the relative step on the stream-writing weights shrinks 2 to 9
+times, as reported for Muon without weight decay (arXiv 2502.16982). A
+decoupled weight decay on the Muon matrices would bound the stream. It is
+drafted (scratch/isla-stream-audit-2026-10-21/PREREG_E5.md, about 480
+GPU-h) but not run, because no harm was measured and its most likely result
+is an accuracy null (scratch/isla-stream-audit-2026-10-21/REPORT.md).
+
+**Later.** E1-AZ (2026-10-22) rejected head-frame normalization under its registered AeroZoo rule. On the held-out AeroZoo family it raised pressure error by 29 percent, with both seed-matched ratios above 1.10. ISLA 0.9.0's head frame still reads the raw stream (scratch/isla-headnorm-2026-10-18/).
+
+*Read by the supervisor on 2026-10-22. The reviewer's second read is pending.*
+
+## 2026-10-21 — ATTRIB-090 on Tensile2d: with four seeds the CONT-to-0.9.0 step is not real, and the BC-NAMES query embedding beats the 0.6.0 one {#sec-nb-attrib090-t2d}
+
+**Question** (ATTRIB-090, pre-registered 2026-10-20 in scratch/isla-attrib090-2026-10-21/PREREG.md, amended before
+results in its §9). REF-090 put ISLA 0.9.0's Tensile2d displacement at 1.041 of A2 (scratch/isla-ref090-2026-10-20/RESULTS_partial.md). Against E2's CONT arm
+(@sec-nb-geo-cont-verdict), the last rung before 0.9.0, the two-seed reading was 1.115. Which piece of the bundle between them
+causes it? The candidates were one input layer per named condition (COND), the new prediction-point embedding of BC-NAMES
+(QEMB), and the removal of the stored-SDF query input (SDF). Each arm is 0.9.0 with one piece put back. ALL puts back all three.
+Every arm runs four seeds (42-45), as do the base (0.9.0) and CONT, which gained two new seeds here.
+
+**Rule.** For each arm, take Δ = the mean log error minus the base's. σ is pooled over the six arms (18 degrees of freedom).
+An arm moves a field if |Δ| ≥ 2 SE and the effect is at least 5 %. The step itself counts as real only if CONT against the
+base passes the same test (R4). Scores are fully eager float32: the per-block compiled scorer computes a slightly different
+function on 37-42 of the 100 cases (@sec-nb-compiled-path-defect). The scorer-path verdicts are the same. Every arm and the base trained under that defect, so the comparison is like for like and describes defect-trained models.
+
+| arm (what it puts back) | displacement, seeds 42 / 43 / 44 / 45 | mean | ÷ 0.9.0 | verdict |
+|---|---|---|---|---|
+| 0.9.0 (base) | 0.00729, 0.00697, 0.00737, 0.00708 | 0.00717 | 1 | – |
+| CONT (E2, 0.6.0) | 0.00662, 0.00626, 0.00711, 0.00716 | 0.00679 | 0.945 | not real (R4) |
+| COND (one labelled boundary) | 0.00683, 0.00723, 0.01001, 0.00849 | 0.00814 | 1.122 | no measurable effect |
+| SDF (stored SDF query input) | 0.00995, 0.00704, 0.00752, 0.00810 | 0.00815 | 1.127 | no measurable effect |
+| QEMB (0.6.0 query embedding) | 0.00987, 0.00823, 0.00877, 0.00830 | 0.00879 | 1.223 | moves, away from CONT |
+| ALL (all three) | 0.00720, 0.00518, 0.00724, 0.00700 | 0.00666 | 0.919 | no measurable effect |
+
+Native relative L2, 100 validation cases, epoch 500, float32 eager. Pooled σ(log) is 0.12, so 2 SE = 0.17. Stress and plastic
+strain show no measurable effect in any arm. Posed equals native.
+
+**Verdict: the step is not real.** With four seeds each, CONT reads 0.945 of 0.9.0 (Δ = −0.057), well inside the 2 SE bar.
+The two new CONT seeds land inside 0.9.0's range (0.00697-0.00737); E2's two seeds were the low ones. So no cause is named,
+and no mirror arm runs on the lug. REF-090's Tensile2d flag (1.041 of A2, 1.045 eager) also lies within the spread of the
+four 0.9.0 seeds.
+
+**Beside the rule.**
+- The one solid effect is QEMB. All four QEMB seeds lie above all four 0.9.0 seeds. On Tensile2d displacement, the BC-NAMES
+  embedding beats the 0.6.0 one by about 18 percent. In the BC-NAMES embedding, the distance channels enter the prediction
+  points' own seed layer, as a condition's fields enter its own layer. The 0.6.0 embedding added a type offset and a separate
+  feature MLP to a shared seed embedding.
+- ALL also uses the 0.6.0 embedding, with the stored-SDF features in its MLP and one labelled boundary, and it does not show
+  the cost (0.919). The pieces interact, and one arm cannot say how.
+- 0.9.0 is the most reproducible arm: its four seeds lie within 5.7 percent. Each other arm has at least one seed 15 to 40
+  percent away from the rest.
+
+**Next.** AirfRANS and the lug run their arms again under the compile fix (@sec-nb-compiled-path-defect), against the retrained 0.9.0
+bases. Their verdicts follow in a separate entry.
+
+**Later.** The Tensile2d training-path control (@sec-nb-ref090-t2d-control) read (b), so the Tensile2d standing is now the eager-trained rows. These arms stay defect-trained, like their base. On AirfRANS, the arms rerun under the fix find that ISLA's own scales carry the CONT-to-0.9.0 gain (2026-10-22, scratch/isla-attrib090-2026-10-21/RESULTS.md). Their entry follows.
+
+*Read by the supervisor on 2026-10-22. The reviewer's second read is pending.*
+
+## 2026-10-21 — REF-090 R1: ISLA 0.9.0 against A2 on six datasets, pooled G 0.891, confirmed; Tensile2d displacement is the one field that regresses {#sec-nb-ref090-r1}
+
+**Question** (REF-090 R1, pre-registered 2026-10-20 before submission in
+scratch/isla-ref090-2026-10-20/PREREG.md, §11 amended before submission).
+How does ISLA 0.9.0 compare with its A2 partner on each partner's own
+protocol? 0.9.0 adds boundary conditions by name, exact query geometry
+with the continuous encoding, its own scales, and upstream/main. Each 0.9.0
+lane is its A2 partner's row with only the code and recipe replaced. Two
+seeds were scored in float32 on the partner's scored set. The registered
+verdict is pooled: confirmed if the geometric mean of 0.9.0 ÷ A2 over the
+13 low-noise headline fields is at most 1.03, and no field reaches 1.10 on
+both seeds. R1 cannot un-adopt 0.9.0, so "confirmed" says that the
+standings move. It is not a test of the adoption.
+
+| Dataset | Field | 0.9.0 ÷ A2 | Seeds (q) | G_d |
+|---|---|---|---|---|
+| SHIFT-SUV | pressure / wall shear | 0.975 / 0.983 | 0.999, 0.952 / 0.992, 0.975 | 0.979 |
+| DrivAerML Surface | pressure / wall shear | 0.924 / 0.946 | 0.925, 0.923 / 0.945, 0.946 | 0.935 |
+| DrivAerML Volume | pressure / velocity / eddy viscosity | 0.939 / 0.875 / 0.961 | 0.929, 0.950 / 0.869, 0.881 / 0.954, 0.969 | 0.924 |
+| DeepJEB++ | von Mises / displacement | 1.014 / 1.001 | 1.001, 1.027 / 0.958, 1.044 | 1.008 |
+| Tensile2d (compiled path) | displacement | 1.041 | 1.053, 1.030 | 1.041 |
+| AirfRANS (compiled path) | pressure / velocity / eddy viscosity | 0.659 / 0.681 / 0.709 | 0.695, 0.623 / 0.691, 0.670 / 0.728, 0.690 | 0.683 |
+| lug (compiled path; noisy, no verdict) | von Mises | 1.104 | 1.053, 1.155 | – |
+
+Native relative L2, seed means of seeds 42 and 43; q is one new seed ÷ the
+A2 seed mean. "Compiled path" marks the datasets where ISLA's per-block
+compile hit pytorch#195845 in training and scoring, on both sides
+(@sec-nb-compiled-path-defect). Tables: scratch/isla-ref090-2026-10-20/r090_final_tables.md.
+
+**Verdict: confirmed.** The pooled G over the 13 fields is 0.891. No
+low-noise field reaches 1.10 on both seeds: the largest q is 1.053, on
+Tensile2d displacement. No dataset has G_d above 1.05, so none is listed for
+Peter. The largest is Tensile2d at 1.041, whose registered false-alarm rate
+at G_d > 1.03 is 0.045.
+
+**The fields that move up.** Two fields read above 1.03 with both 0.9.0
+seeds above both A2 seeds: Tensile2d displacement (1.041) and Tensile2d
+stress (1.135, noisy, outside the verdict). The lug's von Mises reads 1.104,
+but its seeds overlap A2's: 0.9.0's 0.001816 sits below A2's 0.001850.
+HiLift's wall shear (R-HL090, @sec-nb-hilift-090-scored) is the reverse case:
+1.022, under 1.03, with both seeds above both A2 seeds. Its gap is about
+10 times A2's 0.2 percent seed gap.
+
+**R3, posed ÷ native** (seeds 42, 43, every headline field):
+
+- SHIFT-SUV, DrivAerML Surface and DeepJEB++: 1.0000 to 1.0001.
+- Tensile2d: 1.0000 on stress, displacement and plastic strain. A2 read
+  1.06 to 1.12.
+- AirfRANS: 1.0015 to 1.0028 on pressure and velocity, 1.0000 on eddy
+  viscosity.
+- DrivAerML Volume: 1.0027 to 1.0040 on pressure and velocity, 0.9998 to
+  1.0001 on eddy viscosity. The lab-axis Morton draw of the vehicle tokens
+  changes under the pose.
+- lug: 1.141 / 1.107, from the medial ties. A2 read 4.14 / 2.87.
+
+The area protocol is degenerate on DrivAerML Volume at 0.9.0. ISLA draws its
+vehicle tokens by area inside the model, so area equals native by
+construction. Its comparison with A2's area figures measures no robustness.
+
+**Predictions.**
+
+- P1 to P4 held: R1 per dataset on SHIFT-SUV, DrivAerML Surface and Volume
+  (G ≤ 1.00 too), and DeepJEB++.
+- P5 failed: Tensile2d displacement reads 1.041, against r ≤ 1.03.
+- P6 to P8 held: AirfRANS G is 0.683, the lug's 1.104 is inside
+  [0.85, 1.20], and the pooled G of 0.891 is at most 1.00.
+- P9 and P10 held: the surface tasks are within 1 ± 0.002, and AirfRANS and
+  Tensile2d are within 1 ± 0.005.
+- P11 held at 1 ± 0.01 and failed at 1 ± 0.002 (Volume velocity, 1.0040).
+- P12 held: 1.141 / 1.107 on the lug.
+
+**Beside the rules.**
+
+- With eager re-scores of both sides on the three affected datasets
+  (COMPILE-AF), the pooled G is 0.890. Tensile2d moves to 1.045, AirfRANS
+  to 0.678, and the lug to 1.099. No verdict, flag or band changes.
+- Comparability: the scored points and targets are identical, per case, for
+  the 0.9.0 and A2 loaders on DrivAerML Volume, DrivAerML Surface and
+  SHIFT-SUV (job 312826). On Volume, the vehicle boundary input differs
+  because 0.9.0 reads it whole, which is the 0.9.0 change itself.
+- Against the baselines (baseline ÷ ISLA 0.9.0): DeepJEB++ GeoTransolver
+  1.251 / 1.394 and Transolver 1.098 / 1.175. ISLA leads both on every seed,
+  as A2 did.
+- The lug ISLA-DTT arm is incomplete as registered. It was cancelled
+  because of the compiled-path defect, and its retrained lanes are running.
+
+**Standings (R2).** Final now: SHIFT-SUV, DrivAerML Surface and Volume, and
+DeepJEB++ take their 0.9.0 rows. HiLift took its 0.9.0 rows under R-HL090.
+Pending the training-path control: AirfRANS, Tensile2d and the lug. There,
+the standings will be the rows trained by the model's own (eager) function
+(PREREG §13): the retrained `r090fix` rows if the eager-trained control
+matches them, or eager-trained rows if it matches the bug-trained ones. They
+will be recorded in their own entry. The registered training-path trigger
+§12(c) fired on Tensile2d displacement (T = 0.966 against a 2.5 percent gap),
+and the Tensile2d A2 partner was retrained on the fixed path. On four seeds
+against four, the fix-trained Tensile2d models differ from the bug-trained ones
+field by field: displacement 1.099 and stress 1.075 (worse), plastic strain
+0.778 (better). That is what the control tests.
+
+**Later.** The Tensile2d training-path control read (b) (@sec-nb-ref090-t2d-control), so the AirfRANS, Tensile2d and lug standings are the eager-trained rows. The AirfRANS and lug eager-trained lanes train until about 2026-10-23. On 2026-10-22, models retrained on the fixed path, divided by the bug-trained originals (both scored eager), read 1.024 / 0.985 / 0.998 for AirfRANS ISLA, 0.898 / 0.961 / 0.962 for AirfRANS ISLA-DTT and 0.768 for the lug's von Mises. On the lug both fixed-path seeds lie below both bug-trained seeds. So the defect changed lug training. Fix-trained 0.9.0 reads 0.843 of A2, but A2's lug rows are still bug-trained, so a like-for-like lug ratio needs A2 trained on the same path (scratch/isla-ref090-2026-10-20/r090_final_tables.md).
+
+*Read by the supervisor on 2026-10-22. The reviewer's second read is pending.*
+
+## 2026-10-21 — Capacity audit, phases 1 and 1b: trained on one case with fresh point draws, ISLA fits the field to within 1.2-1.7 times the best baseline everywhere except AirfRANS pressure (2.6-2.7 times), whose excess sits 1e-3 to 0.1 chords from the wall {#sec-nb-cap-audit-p1}
+
+**Question.** Peter asked whether ISLA can overfit a single sample. If it can, the architecture can represent that
+sample's variation. If it cannot, the residuals show where capacity is missing. Each arm trains on one case, over and
+over, until its error stops falling. ISLA 0.9.0 (width 512, 12 layers, 512 slices) runs against GeoTransolver 256 and
+Transolver 512 x 16 at their standing configurations, on the same case, points and budget. An ISLA floor far above the
+best baseline's is a deficit of ISLA's architecture. A floor shared by all three is a limit of the optimizer or the
+precision. Pre-registration: scratch/isla-cap-audit-2026-10-20/PREREG.md (phase 1 approved 2026-10-20 10:30 EDT;
+phase 1b, section 13, before any of its numbers; the section 14 amendment before the readout, with a disclosure).
+
+**Instruments.** The cases are fixed by a rule set before any run: per dataset, the case at the lower median of
+ISLA's per-case error, plus the named post-stall HiLift case and its low-angle control.
+
+| Key | Case | ISLA's cross-case error on it |
+|---|---|---|
+| drs / drv | DrivAerML run_171, surface / volume | 0.040 / 0.040 |
+| hl18 / hl6 | HiLift LHC002 at 18° / 6° | 0.137 (0.9.0) / 0.024 |
+| af | AirfRANS case 76.343_0.584_… | 0.015 |
+| lug | lug_1581 | 0.0015 |
+| t2d | Tensile2d sample_000071 (yields) | 0.0080 |
+| az | AeroZoo case …3751 (random) | - |
+
+The case's own measures normalize the loss: each field's squared error over the case's sum of squared standardized
+targets, with the fields weighted equally. Training is float32 with TF32 off, the recipe's Muon + AdamW at each arm's
+reference rate, cosine decay to 0 over 20,000 steps, and no regularization. Every ISLA run is eager: compile_blocks false
+throughout, so the compiled-path defect (@sec-nb-compiled-path-defect) does not reach these numbers. Checks: a
+40,000-step run on the lug, Tensile2d and AirfRANS, and bf16 on drs. A floor F is the median of the last five logged
+relative L2 values, steps 19,600-20,000.
+- **Phase 1** trains on one fixed draw of the case: the scorer's 200,000 cells (AirfRANS 100,000 points; the whole
+  lug and Tensile2d mesh). ISLA's boundary tokens stay fixed (eval mode). The held-out set is the dataset's next draw
+  of the same case; on the lug and Tensile2d, a seeded fifth of the nodes is held out of the loss.
+- **Phase 1b** trains drs, hl18 and af on a fresh datapipe draw at every step. ISLA runs in train mode, so its tokens
+  are redrawn too. ISLA-DTT is added on AirfRANS. The scores are on phase 1's two fixed draws, so a model succeeds only
+  by representing the field.
+
+LHR jobs: 302616 and 302617 (60 runs, about 333 GPU-h) and 303992 (20 runs, about 126 GPU-h).
+
+**What we saw: phase 1, fixed point-set fitting.** Every arm fits its fixed draw closely: relative L2 from 3e-5 to 0.013.
+ISLA's floors are:
+
+| Case and field | ISLA floor |
+|---|---|
+| drs pressure | 0.0019 / 0.0020 |
+| hl18 pressure | 0.0022 / 0.0020 |
+| hl6 pressure | 0.0016 / 0.0017 |
+| af pressure | 0.0009 / 0.0008 |
+| drv pressure | 0.0007 / 0.0007 |
+| lug von Mises | 2.0e-4 / 1.8e-4 |
+| t2d stress | 0.0013 / 0.0012 |
+
+Against the better baseline, usually Transolver, ISLA is 2.2-24 times higher on 15 of 18 headline fields: drs, hl18 and
+hl6 2.2-11; af 2.4-4.9; the lug 6; t2d stress and q 4.6-6.4; drv 11-24. That is a deficit by the registered rule. ISLA is
+level on Tensile2d displacement. It leads on AeroZoo by 17-330 times, because the baselines, which get no per-case scale,
+cannot learn this slow case's magnitude.
+
+These floors measure how well a model fits a fixed point set, not how well it represents the field. On the
+separate-draw cases, every arm's held-out error is 9 to 15,000 times its training floor (median 40). On drs pressure, for
+example, ISLA's held-out error is 0.39, GeoTransolver's 0.14 and Transolver's 0.13. Doubling the budget lowers every
+arm's floor on AirfRANS, the lug and Tensile2d (ISLA's AirfRANS pressure by 3.2 times), but ISLA's ratios stay at 2.7
+or more. bf16 raises every arm's drs pressure floor more than 2 times: ISLA's by 2.8, the baselines' by 4.5-5.5.
+
+**What we saw: phase 1b, with fresh draws.** Held-out floors, seeds 42 / 43:
+
+| Case and field | ISLA | ISLA-DTT | GeoTransolver | Transolver | ISLA ÷ best baseline |
+|---|---|---|---|---|---|
+| drs pressure | 0.0166 / 0.0174 | - | 0.0149 / 0.0150 | 0.0119 / 0.0118 | 1.40 / 1.48 |
+| drs wall shear | 0.0353 / 0.0366 | - | 0.0293 / 0.0293 | 0.0229 / 0.0228 | 1.54 / 1.61 |
+| hl18 pressure | 0.0082 / 0.0076 | - | 0.0055 / 0.0055 | 0.0049 / 0.0048 | 1.69 / 1.60 |
+| hl18 wall shear | 0.0409 / 0.0408 | - | 0.0345 / 0.0349 | 0.0332 / 0.0323 | 1.23 / 1.26 |
+| af pressure | 0.00165 / 0.00168 | 0.00148 / 0.00219 | 0.00061 / 0.00064 | 0.00097 / 0.00077 | **2.71 / 2.61** |
+| af velocity | 0.00112 / 0.00119 | 0.00125 / 0.00137 | 0.00072 / 0.00086 | 0.00088 / 0.00087 | 1.55 / 1.39 |
+| af eddy viscosity | 0.00165 / 0.00157 | 0.00123 / 0.00121 | 0.00104 / 0.00121 | 0.00129 / 0.00115 | 1.59 / 1.30 |
+
+- With a fresh draw every step, held-out and training errors agree: G = 0.91-2.19, against a phase-1 median of 38.
+  Every arm's held-out error falls 3-90 times below its phase-1 value.
+- Only AirfRANS pressure is representation-limited, meaning at least 2 times the best arm on both seeds: ISLA 2.71 /
+  2.61 and ISLA-DTT 2.43 / 3.40 against GeoTransolver. Every other arm, case and field is under 2 times.
+- **The single-case field floors sit far below ISLA's cross-case test errors on the same cases:** drs pressure 0.017
+  against 0.040, hl18 pressure 0.008 against 0.137, af pressure 0.0017 against 0.015. Fitting one case is not what
+  limits ISLA's generalization on these datasets.
+
+**Where the AirfRANS excess sits.** By wall distance in chords, on the phase-1b held-out points:
+- **The band from 1e-3 to 0.1 chords** holds 39 percent of the points and **71 percent of ISLA's excess** squared error
+  over GeoTransolver's. There ISLA's local error is 3.0-3.7 times GeoTransolver's.
+- Below 1e-4 chords the ratio is 2.0, and beyond 0.1 chords it is 1.7.
+- Velocity's excess sits in the same band, and inside 1e-4 chords ISLA's velocity error is the lowest of the four arms.
+- ISLA's error is the most concentrated: half of its squared error lies on 2.6 percent of the points, against 9.5
+  percent for GeoTransolver.
+- The fixed-draw maps show the same band (81 percent of the excess between 1e-4 and 1e-2 chords).
+
+On HiLift the excess is not regional. ISLA's error is a near-uniform multiple of Transolver's on the slat, main element,
+flap and the rest (1.4-1.8 times, fresh draws). HiLift's suction peaks hold 12 percent (fixed draw) and 27 percent (fresh
+draws) of ISLA's area-weighted pressure error on 2 percent of the area: 6-13 times concentrated, but under the
+registered 40 percent bar.
+
+**Predictions.**
+
+- Phase 1 (section 8):
+  - H1 (drs pressure floor at most 1e-3, 0.15) failed.
+  - H1b (at most 1e-2, 0.65) held.
+  - H2 (40 percent of the error at the suction peaks, 0.6) failed.
+  - H3 (no deficit, 0.45) failed.
+  - H4 (a deficit falls on AirfRANS or Tensile2d, 0.6) held as worded, but the deficits are not specific to those two.
+  - H5 (in-case interpolation, 0.6) failed: 7 of 93 pairs.
+  - H6 (2x budget lowers some arm's floor on each check case, 0.7), H7 (bf16 doubles ISLA's floor, 0.4), H8 (hl18
+    within 1.5 times hl6, 0.6) and H9 (all finite, 0.85) held.
+- Phase 1b (section 13):
+  - P1 (the gap shrinks, 0.6), P3 (DTT's gap is smaller, 0.6), P4 (the training-draw floor rises, 0.85), P5 (G at
+    most 1.5 on 80 percent of pairs, 0.7) and P6 (drs pressure Q < 1, 0.8) held.
+  - P2 (ISLA within 2 times everywhere, 0.6) failed, on AirfRANS pressure.
+  - P7 (Transolver moves little, 0.5) failed: fresh draws also remove most of Transolver's held-out error (Q 0.09-0.34).
+
+**Beside the rules.**
+
+- **An instrument defect, found in phase 2's DrivAerML Volume control (PREREG 15.8).** On volume tasks the held-out set
+  joined the next draw's points to the training draw's boundary. On DrivAerML Volume the datapipe centers each draw
+  on its own mean (CenterMesh), so those held-out points sat 1.16 mm off the wall they were scored against, 1.4 times
+  the median wall distance. ISLA, which computes its wall geometry from the boundary, read shifted geometry there.
+  - ISLA's phase-1 held-out values on DrivAerML Volume are invalid, and are left out of the gap statistics above.
+  - Its AeroZoo held-out values are valid. AeroZoo runs no CenterMesh, and its two draws read identical boundaries
+    in raw coordinates. There ISLA's held-out error is 3.3-4.1 times its training floor on velocity and 33-38 times on
+    pressure.
+  - The registered floors, which are training-point floors, are unaffected.
+  - AirfRANS (no centering), the surface tasks (whole next draw) and the lug and Tensile2d (held-out nodes of the
+    same forward pass) are unaffected.
+- An interim note had explained Transolver's better interpolation by its not reading point-set context. That
+  explanation is withdrawn: its physics-attention slices pool all N points too.
+- The observation itself holds only in part:
+  - Transolver has the lowest held-out error on drs and drv.
+  - It splits with GeoTransolver on hl18 and AirfRANS.
+  - ISLA has the lowest on the lug and on Tensile2d q.
+
+**What it means.** The plain answer to Peter's question:
+- With fresh draws, ISLA fits one case to within 1.2-1.7 times the best baseline everywhere tested, except AirfRANS
+  pressure. There it is 2.6-2.7 times GeoTransolver, and the excess sits 1e-3 to 0.1 chords from the airfoil, in and
+  just outside the boundary layer.
+- Its single-case floors are 2 to 17 times below its cross-case errors. So on DrivAerML and HiLift the error budget lies
+  in generalization across cases, not in representing one case.
+- On a fixed point set, ISLA memorizes less tightly than the baselines (2-24 times), but every arm's fixed-set floor is
+  memorization, not field fitting.
+
+**Next.** Phase 2 (PREREG section 15) asks whether width (256 / 512 / 1024), depth (6 / 12 / 24) or slices
+(128 / 512 / 2048) close the AirfRANS pressure gap, with fresh seeds, two seeds on each top rung and a 40,000-step
+check on each. It also runs the DrivAerML Volume fresh-draw control with the corrected held-out set. The runs paused
+for the LHR maintenance of 2026-10-21 and resumed at 21:00 EDT that day.
+
+*Read by the supervisor on 2026-10-22. The reviewer's second read is pending.*
+
+## 2026-10-21 — Training path on Tensile2d: the registered reading is that the fixed compiled path trains differently from eager, but on weak evidence, and the eager-trained rows become the standing {#sec-nb-ref090-t2d-control}
+
+**Question** (PREREG §13, written 2026-10-21 after the fix-trained Tensile2d result was seen; a deviation for
+Tensile2d, fixed before any eager-trained result existed). ISLA's per-block compile hit pytorch#195845
+(@sec-nb-compiled-path-defect). Its fix turns Inductor's mix-order reduction off. Models trained on the
+fixed path differ from those trained under the bug, by field. On four seeds each, 0.9.0's displacement is
+1.099× and its stress 1.075× the bug-trained value, while its plastic strain is 0.778×. A2's
+displacement is 1.216× and its plastic strain 0.525×. Two readings were possible: (a) the bug's
+perturbation changed training, and the fixed path trains the model's eager function; or (b) the fixed
+path itself trains differently from eager. The control trains with eager blocks: 0.9.0 on seeds 42-45
+and A2 on seeds 42/43. Every row was scored fully eager in float32 on Tensile2d's 100 validation cases.
+
+| Model | Field | Eager-trained | ÷ fix-trained (\|d\| / 2SE) | ÷ bug-trained (\|d\| / 2SE) | Reading |
+|---|---|---|---|---|---|
+| A2 | displacement | 0.00707 (0.00760, 0.00655) | 0.853 (1.06) | 1.037 (0.24) | (b) |
+| A2 | stress | 0.00815 | 0.874 (1.53) | 1.044 (0.21) | (b) |
+| A2 | plastic strain | 0.309 | 1.446 (0.42) | 0.760 (0.32) | (c) |
+| 0.9.0 | displacement | 0.00849 (0.00783, 0.00629, 0.00891, 0.01092) | 1.077 (0.26) | 1.183 (0.72) | (c) |
+| 0.9.0 | stress | 0.01113 | 1.130 (0.34) | 1.215 (0.59) | (c) |
+| 0.9.0 | plastic strain | 0.273 | 1.362 (0.92) | 1.060 (0.15) | (c) |
+
+Native relative L2, seed means; SE from each set's σ(log) over its seeds. "Matches" means
+|d| ≤ 2 SE. Tables: scratch/isla-ref090-2026-10-20/t2d_control.md.
+
+**Verdict: (b), as registered, on weak evidence.** The overall reading follows displacement, and the
+pre-registered weighing lets A2 decide when the two models disagree. They do: A2 reads (b) on
+displacement and stress, and 0.9.0 reads (c) on every field, its point estimates leaning toward (a).
+A2's (b) rests on two seeds. Its eager seeds lie below both fix-trained seeds, at a margin of only
+1.06 × 2 SE. Under the registered consequence, the Tensile2d standing becomes the eager-trained rows,
+and AirfRANS and the lug are retrained eager (PREREG §14).
+
+**The mechanism check finds nothing behind (b).** One-step training gradients were compared against
+eager float32 gradients, on 8 batches at three checkpoints and one fix-trained checkpoint:
+
+- In float32, the fixed path's gradient equals eager's: medians 4e-6 to 3e-5 for both models, and
+  2.7e-4 on the A2 fix-trained checkpoint. The bug's gradient is off by 7 to 106 percent.
+- In bfloat16, as the lanes train, eager's own gradient sits 0.12 (early) to about 1.2 (late) from the
+  float32 one. The fixed path and the bug path sit at the same distance.
+- Late in training, the per-step bf16 gradient is dominated by roundoff for every path. The bug's
+  per-step error is inside that noise, so any effect it had on training came from its bias summed over
+  many steps.
+- A2's fix used Inductor's environment switch. It reaches only the compiled blocks, since every lane
+  builds its optimizer uncompiled (`compile=false`).
+
+This analysis sits beside the verdict and does not change it.
+
+**Beside the rules.**
+
+- 0.9.0 trains far less reproducibly on Tensile2d without the bug: σ(log) of displacement is 0.23
+  eager, 0.16 fix-trained and 0.025 bug-trained. The eager seed 45 ended in a late spike (validation
+  0.01196 against its best 0.01012). The bug's case-dependent extra term in the routing softmax, the
+  padded rows of the last token tile, which reach about 40 percent of cases, may have acted like a
+  stabilizing sink. That is a hypothesis. An explicit null term in the routing softmax would test it, as
+  a later design experiment.
+- R1 on Tensile2d under one function (eager-trained both sides, eager-scored): 0.9.0 ÷ A2 displacement is
+  1.200 on all four 0.9.0 seeds and 0.998 on seeds 42/43; stress 1.366 and 1.079; plastic strain 0.885
+  and 1.069. The registered R1 (0.891 pooled, @sec-nb-ref090-r1) stands; it read the original rows.
+- The Tensile2d standing moves against ISLA: GeoTransolver ÷ ISLA displacement 0.473 (was 0.584
+  against A2), stress 0.478 (0.682), plastic strain 1.684 (1.111); Transolver 0.649 (0.800), 0.619
+  (0.883), 0.843 (0.556). Posed equals native for the eager rows (0.9997 to 1.0023).
+
+**Next.** The eager-trained AirfRANS ISLA, AirfRANS ISLA-DTT and lug ISLA lanes run from 2026-10-21 22:44
+EDT. AirfRANS has 5 to 9 percent seed gaps, against Tensile2d's σ(log) of 0.16 to 0.23. Its training-path
+reading is pre-registered with the same rule (PREREG §14), and it is the cleaner test.
+
+**Later.** On 2026-10-22, AirfRANS ISLA retrained on the fixed path matched its bug-trained original (1.024 / 0.985 / 0.998, both scored eager), so the AirfRANS read cannot tell (a) from (b). On the lug the fixed path trained a better model (0.768 of the bug-trained von Mises, both seeds below both bug-trained seeds). The eager-trained lug read is therefore registered as the decisive test of the fixed path (PREREG §15, written before any eager-trained lug result).
+
+*Read by the supervisor on 2026-10-22. The reviewer's second read is pending.*
+
+## 2026-10-21 — QUERY-POP-090 and REMESH-090: at 0.9.0, interacting ISLA's prediction at a point depends strongly on the other queried points (4 chunks raise AirfRANS error 33-40 percent, a single point 85-118 times; ISLA-DTT stays at float32 roundoff), while re-meshing the same boundary leaves it unchanged (AirfRANS re-panelization d 3e-5, DrivAerML Volume 4x subdivision within 0.5 percent) {#sec-nb-probes090}
+
+**Setting.** ISLA claims two invariances: its prediction at a point should not depend on which other points are
+queried, and it should not depend on how the boundary is meshed. Neither had been measured at 0.9.0. Query
+independence was last probed on A2-era AirfRANS (E3b) and pre-A2 DrivAerML Volume (@sec-nb-query-pop). The area
+protocol that stood for boundary robustness is degenerate at 0.9.0, because the model draws its own tokens. The
+pre-registration (scratch/isla-probes090-2026-10-21/PREREG.md, approved 2026-10-20 23:59 EDT) set readouts, labels and
+predictions before any number. Both probes are inference only, on the final checkpoints, fully eager in float32. While
+the query probe was being ported it found the compiled-path defect (@sec-nb-compiled-path-defect). So every AirfRANS row
+below is labelled **defect-trained weights; the fix-trained re-read repeats every label (below), the eager-trained re-read is pending**: the eager function of weights
+trained under that defect. Registered re-reads follow on the fix-trained weights (the training-path measurement) and
+on the eager-trained weights behind the AirfRANS standing.
+
+**Instruments.** QUERY-POP-090 keeps a fixed scored set per case, a seeded random half of the native points. It changes
+only the rest of the query population: the scored half alone; 4 chunks; 1,000 scored points queried in groups of 1,000,
+100, 10 or 1; 50 percent more points at the native law; as many far-field points (uniform in the bounding box, outside
+the body); or as many wall-heavy points (resampled with probability proportional to 1/|sdf|). Readouts: the error ratio
+r against the native population on the same points, and the prediction move d = RMS(Δpred) / RMS(target).
+REMESH-090 scores the native points while it changes the boundary the model is given:
+- AirfRANS: exact re-panelization (every segment split in 2 or 4, or front-loaded 3/1); in-model token budgets of 800
+  to 200, with a redraw of the same budget as the noise floor; a decimated polyline (new geometry);
+- DrivAerML Volume: token budgets of 100k and 400k; one level of subdivision (4x cells, exact geometry); two redraws at
+  200k as the floor; the watertight STL in place of the CFD wall (new geometry).
+Validity, read first: eager float32 against float64-eager references on AirfRANS (≤ 2.3e-4) and against the scorer on
+DrivAerML Volume (≤ 1.9e-5). Every mode and variant changed the input on every case. LHR jobs 310635, 310636 and 310637
+(about 20 GPU-h).
+
+**What we saw: query population** (error ratio, seed means, pressure / velocity / eddy viscosity; both seeds agree on
+every label):
+
+| Arm | half | 4 chunks | 1,000 points | 1 point | +50% same law | far-field | wall-heavy |
+|---|---|---|---|---|---|---|---|
+| AirfRANS ISLA 0.9.0 (defect-trained) | 1.11 / 1.12 / 1.14 | 1.33 / 1.36 / 1.40 | 4.7 / 5.0 / 5.7 | 85 / 91 / 118 | 0.95 / 0.95 / 0.95 | 136 / 62 / 133 | 20 / 30 / 22 |
+| AirfRANS ISLA-DTT 0.9.0 (defect-trained) | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 |
+| AirfRANS GEO1 (defect-trained) | 1.14 / 1.09 / 1.15 | 1.44 / 1.30 / 1.40 | 5.6 / 4.6 / 5.4 | 237 / 74 / 87 | 0.93 / 0.96 / 0.95 | 30 / 30 / 50 | 52 / 21 / 59 |
+| DrivAerML Volume ISLA 0.9.0 | 1.01 / 1.01 / 1.02 | 1.03 / 1.03 / 1.15 | 4.5 / 4.0 / 5.5 | 21 / 13 / 18 | 1.00 / 1.00 / 1.00 | 20 / 16 / 14 | 6.2 / 4.5 / 4.5 |
+| AeroZoo `full` ISLA 0.9.0 (179 of 716 test cases) | 1.00 / 1.01 / 1.00 | 1.00 / 1.01 / 1.00 | 1.09 / 1.05 / 1.04 | 4.0 / 2.9 / 2.3 | 1.00 / 1.00 / 1.00 | 1.04 / 1.05 / 1.03 | 1.44 / 1.24 / 1.30 |
+
+ISLA-DTT's largest |r − 1| over the ten modes is 4.3e-6, and its median d is below 1e-6. Labels as registered: on
+AirfRANS, half and 4 chunks are "material" (above 1.10 on both seeds); far-field, wall-heavy and every small subset are
+"severe" (above 2) on both datasets; on DrivAerML Volume, half, 4 chunks and the same-law addition are not material on
+pressure or velocity. The A2 rung is incomplete as registered. Its validity gate failed because A2's signed distance has
+an ill-posed sign at on-wall points, which float32 and float64 resolve differently.
+
+**What we saw: re-meshing** (error ratio, seed means, pressure / velocity / eddy viscosity):
+
+| Arm and variant | ratio | d (median) | label |
+|---|---|---|---|
+| AirfRANS ISLA, split x2 / x4 / front-loaded | 1.000 / 1.000 / 1.000 | 3e-5 | invariant |
+| AirfRANS ISLA-DTT, split x2 / x4 / front-loaded (pressure) | 1.011 / 1.036 / 1.060 | 2-3e-3 | invariant / small / small |
+| AirfRANS ISLA, 800 / 600 / 400 / 200 tokens (pressure) | 1.02 / 1.37 / 2.39 / 5.21 | 400: 0.018 | small / sensitive ×3 |
+| DrivAerML Volume, 100k / 400k tokens | 1.001 / 1.000 | 1-3e-3 | invariant |
+| DrivAerML Volume, 4x subdivision | 1.002 / 1.005 / 1.000 | 2-9e-3 | invariant (d 1.2-3.4x the redraw floor) |
+| DrivAerML Volume, watertight STL | 2.95 / 1.84 / 1.48 | 0.06-0.12 | sensitive |
+
+Beside the registered reading, labelled post hoc:
+- **The STL rise is all near the wall.** Beyond 0.01 L the STL changes the error by at most 1.1 percent. Within 1e-3 L it
+  raises it 2.4 to 5.2 times, and on the 1.6 percent of points inside the STL 10 to 120 times. The two surfaces coincide at
+  0.01 L: their largest separation is 2.2e-3 L. But they differ everywhere by a median 1.3e-5 L, the chord error of the
+  coarser STL, which is ten times the softening of ISLA's log-distance channel. That offset moves the 5.5 percent of
+  interior nodes that sit on the CFD wall off it.
+- **ISLA-DTT's refinement sensitivity is its tree read.** Rerun at a smaller opening angle, the pressure ratios of the
+  three refinements fall from 1.011 / 1.036 / 1.060 (θ = 1, as trained) to 1.0006 / 1.003 / 1.0008 (θ = 0, the exact
+  read). The weights were trained at θ = 1, so the native error at θ = 0 is 2.2 times higher; pricing a small θ needs a
+  model trained at it.
+
+**Reading.** At 0.9.0 the two invariances come apart. Re-meshing invariance holds for interacting ISLA wherever the
+geometry is kept exact: the slice reads are measure-weighted and the gauge is exact, and that is now measured, not
+assumed. Query independence does not hold for interacting ISLA, and the dependence is no smaller than before 0.9.0.
+Far-field companions raise AirfRANS error 136 times, against GEO1's 30 times and E3b's 26 to 63 times. The forms that
+matter to a user are measured too. On AirfRANS, chunking a query raises the error by a third, and querying a few points
+returns predictions off by factors of 5 to 100. On DrivAerML Volume, chunking and halving are benign, but small queries
+are not. ISLA-DTT pays for its exact query independence with a 1 to 6 percent re-meshing sensitivity from its θ = 1 tree
+read. That sensitivity vanishes as θ → 0, which the knob rule credits. On AeroZoo `full` the interacting form's error is nearly indifferent to chunking, halving and far-field
+companions (at most 6 percent). Its predictions still move (median d 0.10 on pressure with far-field companions), and
+single points cost 2.3 to 4.4 times; its native errors there are large (pressure 0.30), which compresses the ratios.
+On the fix-trained AirfRANS weights (the training-path measurement, PREREG §8) every label of both forms repeats:
+interacting ISLA half 1.11, 4 chunks 1.33, far-field 98, exact re-panelization invariant (d 3e-5); ISLA-DTT at roundoff
+in every mode and 1.0-7.0 percent under refinement. So the training-path defect did not create or hide these
+properties. The eager-trained rows behind the AirfRANS standing are read when they finish training, about 2026-10-23.
+These numbers enter the §13 cross-dataset table
+beside the AeroZoo verdict (QUERYPOP090_FOR_12F.md); the AeroZoo ISLA-DTT probe follows when its checkpoints finish.
+
+*Read by the supervisor on 2026-10-22. The reviewer's second read is pending.*
