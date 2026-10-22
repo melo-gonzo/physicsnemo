@@ -753,7 +753,7 @@ score, has the variant "Instrument: ISLA at ⟨width⟩ wide, ⟨slices⟩ slice
 |---|--:|--:|--:|--:|---|---|---|
 | ISLA at 384 wide, 256 slices, 5e-4, raw slice reads | 12 | 384 | 256 | $5 \times 10^{-4}$ | cosine | 200,000 | the biased-draw probe, the slice territories, the rotation-augmented comparison (@sec-contract-studies, @sec-pose-contract); the 384-wide points of the capacity ladders (@sec-capacity) |
 | ISLA at 192 wide, 256 slices, 1e-3, linear routing, raw slice reads | 12 | 192 | 256 | $10^{-3}$ | linear | 100,000 (cars), 200,000 (wings) | the training-law swap (@sec-training-law) |
-| ISLA at 512 wide, 512 slices, 3.75e-4, raw slice reads | 12 | 512 | 512 | $3.75 \times 10^{-4}$ | cosine | 200,000 | the nearest-token geometry swap on the DrivAerML Volume task (@sec-interior-boundary-law) |
+| ISLA at 512 wide, 512 slices, 3.75e-4, raw slice reads | 12 | 512 | 512 | $3.75 \times 10^{-4}$ | cosine | 200,000 | the study that swaps the nearest-token wall geometry for the exact one on the DrivAerML Volume task, an instrument of the nearest-token form (@sec-checkpoint-form) |
 | ISLA at 768 wide, 256 slices, 2.5e-4, raw slice reads | 12 | 768 | 256 | $2.5 \times 10^{-4}$ | cosine | 20,000 | the tie diagnostic on the lug (@sec-medial-ties) |
 | capacity ladders | 12 to 48 | 192 to 1,536 | 256 | named per point | cosine or linear, named per point | 10,000 to 200,000, named per point | the scaling fits and the cells ladder (@sec-capacity); each point names its own configuration |
 

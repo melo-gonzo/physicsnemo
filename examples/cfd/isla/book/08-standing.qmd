@@ -256,25 +256,31 @@ has several times GeoTransolver's parameters.
 ```{python}
 #| label: tbl-standing-cost
 #| output: asis
-import json
+import json, re
 COST_RAW = json.load(open(S.CHAR / S.COST_FILE))
 COST_NOTE = COST_RAW["note"]
-BEFORE = [S.DATASETS[k].short for k in S.available() + ["aerozoo"] if "before the compile fix" in (S.cost(k, "ISLA") or {}).get("note", "")]
+CKEYS = [k for k in S.available() + ["aerozoo"] if S.cost(k, "ISLA")]
+and_ = lambda xs: ", ".join(xs[:-1]) + " and " + xs[-1] if len(xs) > 1 else "".join(xs)
+BEFORE = [S.DATASETS[k].short for k in CKEYS if "before the compile fix" in S.cost(k, "ISLA")["note"]]
+FIXED = [S.DATASETS[k].short for k in CKEYS if "r090fix_" in S.cost(k, "ISLA")["source"]]
+TIMED = [S.DATASETS[k].short for k in COST_RAW["compiled_before_fix"]]
 FIXMOVE = max(abs(S.cost(k, a)["step_seconds"] / c["step_seconds"] - 1)
               for k, v in COST_RAW["compiled_before_fix"].items() for a, c in v.items())
 CARCHS = ("ISLA", "ISLA-DTT") + S.BASELINES
-FLAGS = {"¹": (lambda c: "smoke lane" in c["note"], "the standing lane's training log is gone, so the one-epoch smoke lane of "
-                "the same configuration stands in, one seed"),
-         "‡": (lambda c: "in flight" in c["note"], "the lane is still training; the epochs logged so far"),
-         "²": (lambda c: c["precision"] != "bfloat16", "trained in float32, as logged")}
-flag = lambda c: "".join(f for f, (test, _) in FLAGS.items() if test(c))
-used = set()
+# a cell's reason, from its note: the clause that names the smoke lane, without run identifiers or step counts
+why = lambda c, word: re.sub(r" \([a-z0-9_]+\)|, \d[\d,]* steps", "", next(p for p in c["note"].split("; ") if word in p))
+FLAGS = {"¹": lambda c: "smoke lane" in c["note"], "‡": lambda c: "in flight" in c["note"],
+         "²": lambda c: c["precision"] != "bfloat16"}
+flag = lambda c: "".join(f for f, test in FLAGS.items() if test(c))
+marked = {f: [] for f in FLAGS}
 out = ["| dataset and task | | " + " | ".join(CARCHS) + " |", "|---|---|" + "---:|" * len(CARCHS)]
-for k in S.available() + ["aerozoo"]:
+for k in CKEYS:
     c = {a: S.cost(k, a) for a in CARCHS}
     if not all(c[a] for a in S.ARCHS):
         continue
-    used |= {f for a in CARCHS if c[a] for f in flag(c[a])}
+    for a in CARCHS:
+        for f in flag(c[a]) if c[a] else "":
+            marked[f].append((k, a, c[a]))
     cells = lambda fmt: " | ".join(fmt(c[a]) + flag(c[a]) if c[a] else "—" for a in CARCHS)
     out.append(f"| {S.DATASETS[k].name} | parameters [millions] | " + cells(lambda x: f"{x['n_parameters'] / 1e6:.1f}") + " |")
     out.append("| | training peak memory [GiB per GPU] | " + cells(lambda x: f"{x['peak_gib']:.0f}") + " |")
@@ -283,9 +289,16 @@ print("\n".join(out) + "\n")
 print(": The resources of the reference configurations on each task, from the training logs of the standing's own lanes: "
       "trainable parameters, the training peak device memory per GPU (the maximum over the ranks) and the median training step, "
       f"leaving out the compile steps, seed means; AeroZoo's lanes are those of its `full` split. {COST_NOTE} "
-      f"ISLA's lanes on {', '.join(BEFORE[:-1])} and {BEFORE[-1]} trained before the mix-order setting; where both were "
-      f"timed, on AirfRANS, Tensile2d and the lug, the setting moves the median step by at most {100 * FIXMOVE:.0f}%. "
-      + "".join(f"{f} {FLAGS[f][1]}. " for f in FLAGS if f in used)
+      f"On {and_(FIXED)} the ISLA rows are the lanes trained on the compiled path with the mix-order setting, not the "
+      "eagerly trained lanes of the training-path control. "
+      f"ISLA's lanes on {and_(BEFORE)} trained before the mix-order setting; where both were "
+      f"timed, on {and_(TIMED)}, the setting moves the median step by at most {100 * FIXMOVE:.0f}%. "
+      + (f"¹ {and_([f'{S.DATASETS[k].short} {a}' for k, a, _ in marked['¹']])}: "
+         + "; ".join(sorted({why(c, "smoke lane") for *_, c in marked["¹"]})) + ". " if marked["¹"] else "")
+      + (f"‡ {and_([f'{S.DATASETS[k].short} {a}' for k, a, _ in marked['‡']])}: the lane is still training, "
+         "priced on the epochs logged so far. " if marked["‡"] else "")
+      + (f"² {and_([f'{S.DATASETS[k].short} {a}' for k, a, _ in marked['²']])}: trained in float32, as logged. "
+         if marked["²"] else "")
       + "How to read this: the three architectures are matched by the memory ceiling of the selection rule, not by parameter "
       "count; ISLA has several times GeoTransolver's parameters at similar memory; a step trains on one case per rank. "
       f"Data: results/char/{S.COST_FILE}.")

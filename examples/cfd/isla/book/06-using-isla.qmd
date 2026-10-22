@@ -1034,20 +1034,36 @@ print(f"**In the reference configuration ISLA trains one case per GPU in under t
 ```{python}
 #| label: tbl-isla-cost
 #| output: asis
+import re
 archs = ("ISLA", "ISLA-DTT", "GeoTransolver", "Transolver")
+and_ = lambda xs: ", ".join(xs[:-1]) + " and " + xs[-1] if len(xs) > 1 else "".join(xs)
+# a cell's reason, from its note: the clause that names the smoke lane, without run identifiers or step counts
+why = lambda c: re.sub(r" \([a-z0-9_]+\)|, \d[\d,]* steps", "", next(p for p in c["note"].split("; ") if "smoke lane" in p))
+FLAGS = {"¹": lambda c: "smoke lane" in c["note"], "‡": lambda c: "in flight" in c["note"],
+         "²": lambda c: c["precision"] != "bfloat16"}
+marked = {f: [] for f in FLAGS}
 o = ("| dataset task | " + " | ".join(archs) + " |\n|---|" + "--:|" * len(archs) + "\n")
 for k in CL:
     row = {a: S.cost(k, a) for a in archs}
+    marks = {a: "".join(f for f, test in FLAGS.items() if row[a] and test(row[a])) for a in archs}
+    for a in archs:
+        for f in marks[a]:
+            marked[f].append((k, a, row[a]))
     o += f"| {S.DATASETS[k].name} | " + " | ".join(
-        (f"{row[a]['n_parameters'] / 1e6:.1f}M / {row[a]['peak_gib']:.1f} / {row[a]['step_seconds']:.3f}" if row[a] else "–")
+        (f"{row[a]['n_parameters'] / 1e6:.1f}M / {row[a]['peak_gib']:.1f} / {row[a]['step_seconds']:.3f}{marks[a]}" if row[a] else "–")
         for a in archs) + " |\n"
 print(o)
+named = lambda f: and_([f"{S.DATASETS[k].short} {a}" for k, a, _ in marked[f]])
+FIXED = [S.DATASETS[k].short for k in CL if "r090fix_" in CL[k]["source"]]
 print(": Training footprint of the reference configurations (ISLA and ISLA-DTT width 512, 12 layers, 512 slices; GeoTransolver "
       "width 256; Transolver width 512, 16 layers), per dataset task: parameters / peak device memory [GiB] as the maximum over "
       "the ranks / the median training step [s] leaving out the compile steps, one case per rank, seed means from the training "
-      f"logs of the standing's lanes. {json.load(open(S.CHAR / S.COST_FILE))['note']} Where a cell's lane differs from that "
-      "configuration (a lane still training, a one-epoch smoke lane standing in for a lost log), @tbl-standing-cost marks it. "
-      "How to read this: memory is the budget the configurations were selected under (80 GiB on DrivAerML Surface); a step time "
+      f"logs of the standing's lanes. {json.load(open(S.CHAR / S.COST_FILE))['note']} On {and_(FIXED)} the ISLA rows are the "
+      "lanes trained on the compiled path with the mix-order setting, not the eagerly trained lanes of the training-path control. "
+      + (f"¹ {named('¹')}: " + "; ".join(sorted({why(c) for *_, c in marked["¹"]})) + ". " if marked["¹"] else "")
+      + (f"‡ {named('‡')}: the lane is still training, priced on the epochs logged so far. " if marked["‡"] else "")
+      + (f"² {named('²')}: trained in float32, as logged. " if marked["²"] else "")
+      + "How to read this: memory is the budget the configurations were selected under (80 GiB on DrivAerML Surface); a step time "
       "is a cost on this hardware, and parameters are not a measure of capacity across architectures. Data: "
       f"results/char/{S.COST_FILE}.")
 ```
