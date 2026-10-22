@@ -32,6 +32,7 @@ from physicsnemo.core.function_spec import FunctionSpec
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.geometry._cell_normals import compute_cell_normals
 from physicsnemo.mesh.spatial import BVH, signed_distance_field
+from physicsnemo.mesh.spatial.bvh import _compute_morton_codes
 from physicsnemo.nn.functional.geometry.sdf import _closest_point_weights
 
 ### (Query, cell) pairs per chunk of the two-dimensional search, and (point,
@@ -268,15 +269,17 @@ def _min_norm_points(c: torch.Tensor) -> torch.Tensor:
             if sub.shape[1] == 2:
                 xs.append(0.5 * (p[:, :, 0] + p[:, :, 1]))
                 continue
-            lam, info = torch.linalg.solve_ex(p @ p.transpose(-1, -2), p.new_ones(p.shape[:-1]))
+            ### (elementwise products, not matmuls: the matrices are 3 x 3)
+            gram = (p[..., :, None, :] * p[..., None, :, :]).sum(-1)
+            lam, info = torch.linalg.solve_ex(gram, p.new_ones(p.shape[:-1]))
             ok = (info == 0) & torch.isfinite(lam).all(-1) & (lam >= 0).all(-1)
-            x = ((lam / lam.sum(-1, keepdim=True))[..., None, :] @ p)[..., 0, :]
+            x = ((lam / lam.sum(-1, keepdim=True))[..., None] * p).sum(-2)
             xs.append(torch.where(ok[..., None], x, torch.inf))
         x = torch.cat(xs, 1)
         best = x.gather(1, x.norm(dim=-1).argmin(1)[:, None, None].expand(-1, 1, d))[:, 0]
         ### Rounding of a d-term dot product of unit vectors, on each side.
         slack = 2 * d * torch.finfo(c.dtype).eps
-        inside = ((cc @ best[..., None])[..., 0] < (best * best).sum(-1, keepdim=True) - slack).any(-1)
+        inside = ((cc * best[:, None]).sum(-1) < (best * best).sum(-1, keepdim=True) - slack).any(-1)
         out.append(torch.where(inside[:, None], 0.0, best))
     return torch.cat(out)
 
@@ -299,6 +302,45 @@ def _grouped_min_norm(group: torch.Tensor, c: torch.Tensor, n_groups: int) -> to
     return out
 
 
+@wp.func
+def _triangle_distance2(p: wp.vec3d, a: wp.vec3d, b: wp.vec3d, c: wp.vec3d) -> wp.float64:
+    """The squared distance from ``p`` to the triangle ``abc`` (Ericson 2005, Sec.
+    5.1.5); NaN on a degenerate triangle, which the caller keeps."""
+    zero = wp.float64(0.0)
+    ab = b - a
+    ac = c - a
+    ap = p - a
+    d1 = wp.dot(ab, ap)
+    d2 = wp.dot(ac, ap)
+    if d1 <= zero and d2 <= zero:
+        return wp.dot(ap, ap)
+    bp = p - b
+    d3 = wp.dot(ab, bp)
+    d4 = wp.dot(ac, bp)
+    if d3 >= zero and d4 <= d3:
+        return wp.dot(bp, bp)
+    vc = d1 * d4 - d3 * d2
+    if vc <= zero and d1 >= zero and d3 <= zero:
+        r = ap - ab * (d1 / (d1 - d3))
+        return wp.dot(r, r)
+    cp = p - c
+    d5 = wp.dot(ab, cp)
+    d6 = wp.dot(ac, cp)
+    if d6 >= zero and d5 <= d6:
+        return wp.dot(cp, cp)
+    vb = d5 * d2 - d1 * d6
+    if vb <= zero and d2 >= zero and d6 <= zero:
+        r = ap - ac * (d2 / (d2 - d6))
+        return wp.dot(r, r)
+    va = d3 * d6 - d5 * d4
+    if va <= zero and d4 - d3 >= zero and d5 - d6 >= zero:
+        r = bp - (c - b) * ((d4 - d3) / ((d4 - d3) + (d5 - d6)))
+        return wp.dot(r, r)
+    denom = va + vb + vc
+    r = ap - ab * (vb / denom) - ac * (vc / denom)
+    return wp.dot(r, r)
+
+
 @wp.kernel
 def _ball_candidates_kernel(
     node_lo: wp.array(dtype=wp.vec3d),
@@ -306,6 +348,7 @@ def _ball_candidates_kernel(
     left: wp.array(dtype=wp.int32),
     escape: wp.array(dtype=wp.int32),
     leaf_cell: wp.array(dtype=wp.int64),
+    corners: wp.array(dtype=wp.vec3d),
     query: wp.array(dtype=wp.vec3d),
     radius: wp.array(dtype=wp.float64),
     offsets: wp.array(dtype=wp.int64),
@@ -313,10 +356,11 @@ def _ball_candidates_kernel(
     cells_out: wp.array(dtype=wp.int64),
     fill: wp.int32,
 ):
-    """Every cell whose bounding box meets the ball of radius ``radius`` about its
-    query: a stackless depth-first traversal of the BVH (``escape`` is the node
-    after a node's subtree), pruning the nodes whose boxes lie farther than the
-    radius. Counts them (``fill = 0``) or writes them from ``offsets`` on."""
+    """Every cell within ``radius`` of its query: a stackless depth-first traversal
+    of the BVH (``escape`` is the node after a node's subtree), pruning the nodes
+    whose boxes lie farther than the radius, then the cells farther than it
+    (``corners`` holds each cell's three vertices). Counts them (``fill = 0``) or
+    writes them from ``offsets`` on."""
     tid = wp.tid()
     x = query[tid]
     r2 = radius[tid] * radius[tid]
@@ -332,9 +376,12 @@ def _ball_candidates_kernel(
         if g0 * g0 + g1 * g1 + g2 * g2 <= r2:
             c = leaf_cell[node]
             if c >= wp.int64(0):
-                if fill != 0:
-                    cells_out[offsets[tid] + k] = c
-                k += wp.int64(1)
+                ### (not ``<=``: a NaN distance keeps the cell)
+                i = c * wp.int64(3)
+                if not (_triangle_distance2(x, corners[i], corners[i + wp.int64(1)], corners[i + wp.int64(2)]) > r2):
+                    if fill != 0:
+                        cells_out[offsets[tid] + k] = c
+                    k += wp.int64(1)
                 node = escape[node]
             else:
                 node = left[node]
@@ -346,11 +393,14 @@ def _ball_candidates_kernel(
 
 def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.Tensor):
     """The (query, cell) pairs ``(P,)``, ``(P,)`` of every cell of ``simplex`` ``(F,
-    3, 3)`` whose bounding box meets the ball of radius ``radius`` ``(Q,)`` about
-    its query ``(Q, 3)``, all float64: a Warp traversal of a BVH over the cells
-    (:class:`physicsnemo.mesh.spatial.BVH`, its boxes exact in float64), counted,
-    scanned and filled, so it needs no capacity."""
+    3, 3)`` within ``radius`` ``(Q,)`` of its query ``(Q, 3)``, all float64: a Warp
+    traversal of a BVH over the cells (:class:`physicsnemo.mesh.spatial.BVH`, its
+    boxes exact in float64), counted, scanned and filled, so it needs no capacity.
+    The queries are traversed in Morton order, so neighbouring threads visit
+    neighbouring nodes."""
     f, dev = simplex.shape[0], query.device
+    order = _compute_morton_codes(query).argsort()
+    query, radius = query[order], radius[order]
     bvh = BVH.from_mesh(Mesh(points=simplex.reshape(-1, 3), cells=torch.arange(3 * f, device=dev).reshape(f, 3)))
     left, right = bvh.node_left_child, bvh.node_right_child
     escape = torch.full_like(left, -1)
@@ -372,6 +422,7 @@ def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.T
         wp.from_torch(left.int().contiguous(), dtype=wp.int32),
         wp.from_torch(escape.int().contiguous(), dtype=wp.int32),
         wp.from_torch(leaf_cell.contiguous(), dtype=wp.int64),
+        wp.from_torch(simplex.reshape(-1, 3).contiguous(), dtype=wp.vec3d),
         wp.from_torch(query.contiguous(), dtype=wp.vec3d),
         wp.from_torch(radius.contiguous(), dtype=wp.float64),
     ]
@@ -394,7 +445,7 @@ def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.T
                 device=device,
                 stream=stream,
             )
-    return torch.repeat_interleave(torch.arange(nq, device=dev), count), out
+    return torch.repeat_interleave(order, count), out
 
 
 def _segment_candidates(query: torch.Tensor, points: torch.Tensor, cells: torch.Tensor, margin: torch.Tensor):
@@ -451,7 +502,7 @@ def _closest_candidates(
     ``D_k - max_j E_j`` within that bound. In three dimensions the float32 Warp
     closest-point query gives an upper bound on the closest distance (the exact
     distance to its cell plus the error bound), and a Warp traversal of a BVH
-    over the cells returns those whose boxes meet the ball of that radius; in two
+    over the cells returns those within that radius; in two
     a brute force in the queries' precision keeps the segments within its own
     rounding (``32 u (|x| + max |v|)`` on each side) of the least."""
     nq, dim = query_points.shape
@@ -466,8 +517,9 @@ def _closest_candidates(
         seed = signed_distance_field(Mesh(points=points, cells=cells), query_points)[2]
         w0 = _closest_weights(q64, simplex[seed])
         bound = (q64 - (w0[..., None] * simplex[seed]).sum(1)).norm(dim=-1) + coef * (q_norm + reach[seed])
-        ### (padded by the rounding of the box test's float64 arithmetic)
-        li, pk = _ball_candidates(q64, (bound + err_max) * (1 + 1e-12), simplex)
+        ### (padded by twice the bound, the kernel's float64 distances against these,
+        ### and by the rounding of its box test)
+        li, pk = _ball_candidates(q64, (bound + 3 * err_max) * (1 + 1e-12), simplex)
     else:
         rounding = 32 * torch.finfo(query_points.dtype).eps / 2 * (q_norm + reach.max())
         li, pk = _segment_candidates(query_points, points, cells, (2 * (rounding + err_max)).to(query_points.dtype))
