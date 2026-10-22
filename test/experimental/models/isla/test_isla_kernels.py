@@ -359,12 +359,46 @@ def _mix_pair(**kw):
     return ref, opt
 
 
+def _forced_on_error(run, **kw):
+    """The positive control: ``run(ref, opt)``'s output error with the same blocks compiled
+    with mix-order reduction forced on. Skips the calling test where Inductor then builds
+    no mix-order kernel, since the test cannot see the bug there. Inductor's caches are
+    off because a cache hit skips the codegen that counts the kernels."""
+    import torch._inductor.config
+
+    from physicsnemo.experimental.models.isla import model
+
+    with (
+        pytest.MonkeyPatch.context() as mp,
+        torch._inductor.config.patch(force_disable_caches=True),
+    ):
+        mp.setattr(
+            model, "_BLOCK_COMPILE_OPTIONS", {"triton.mix_order_reduction": True}
+        )
+        ref, opt = _mix_pair(**kw)
+        err = run(ref, opt)
+    if torch._inductor.metrics.codegen_mix_order_reduction == 0:
+        pytest.skip(
+            "mix-order reduction does not fire on this device, so this test cannot detect pytorch/pytorch#195845"
+        )
+    return err
+
+
 @cuda_only
 @pytest.mark.parametrize("n", [12000, 12001, 12002, 12003])
 def test_compile_blocks_float32_matches_eager_at_every_token_count(n):
     """compile_blocks reproduces the eager model in float32 (outputs and gradients) at
     every token count, at a size where Inductor's mix-order reduction would fuse, and
     builds no mix-order kernel."""
+    inputs, tgt = _boundary(n)
+
+    def forced_on(ref, opt):
+        o_ref = _run(ref, inputs, tgt)[0]
+        return _rel(_run(opt, inputs, tgt)[0], o_ref)
+
+    err = _forced_on_error(forced_on)
+    if n % 4:
+        assert err > 5e-6, err  # forced on, the bug shows at this size
     ref, opt = _mix_pair()
     ### Without the fix on GB300 (torch 2.12): output error 5.7e-5 at n = 12001 and one
     ### mix-order kernel; with it, 2.7e-7 and none.
@@ -379,9 +413,17 @@ def test_compile_blocks_query_independent_float32_at_every_token_count(nq):
     fuse and a total token count (6000 boundary cells + nq queries) that is not a multiple
     of 4: the compiled model reproduces the eager one, and its prediction at a fixed set of
     queries does not depend on the other queries of the request."""
-    ref, opt = _mix_pair(interior=True, query_independent=True)
     inputs, _ = _boundary(6000)
     q = torch.randn(nq, 3, generator=torch.Generator().manual_seed(5)).cuda() * 3.0
+
+    def forced_on(ref, opt):
+        with torch.no_grad():
+            o_ref = _flat(outputs(ref(**inputs, prediction_points=q)))
+            return _rel(_flat(outputs(opt(**inputs, prediction_points=q))), o_ref)
+
+    err = _forced_on_error(forced_on, interior=True, query_independent=True)
+    assert err > 5e-6, err  # forced on, the bug shows at this size
+    ref, opt = _mix_pair(interior=True, query_independent=True)
     with torch.no_grad():
         o_ref = _flat(outputs(ref(**inputs, prediction_points=q)))
         o_opt = _flat(outputs(opt(**inputs, prediction_points=q)))
