@@ -192,18 +192,25 @@ print(f"**The Surface task of @sec-surface within the estate family: 794 trainin
 ```{python}
 #| label: make-tbl-shift-suv-configs
 #| output: asis
-COST = J("char/char_lanes_cost_2026-10-04.json")["cost"]["Shift-SUV"]
-print("| | parameters | peak memory per GPU | one epoch |")
+import re as _re
+COST = {a: S.cost("shift_suv", a) for a in S.ARCHS}
+print("| | parameters | peak memory per GPU | median training step |")
 print("|---|--:|--:|--:|")
 for a in S.ARCHS:
     v = COST[a]
-    print(f"| {S.CONFIG[a]} | {v['n_parameters'] / 1e6:.1f}M | {v['peak_gib']:.0f} GiB | {v['epoch_seconds']:.0f} s |")
+    print(f"| {S.CONFIG[a]} | {v['n_parameters'] / 1e6:.1f}M | {v['peak_gib']:.0f} GiB | {v['step_seconds']:.3f} s |")
 print()
-print(": The reference configurations on SHIFT-SUV: parameters, peak device memory (maximum over four GB300 ranks, bfloat16 training) "
-      "and the wall time of one training epoch over the 794 training bodies. How to read this: the three are matched in none of the "
-      "columns; ISLA has the most parameters and GeoTransolver the highest peak memory. Instrument (parameters, memory and time): ISLA at 512 wide, "
-      "512 slices, 3.75e-4, raw slice reads (@sec-study-configurations); ISLA at its reference configuration adds an input layer per "
-      "boundary condition and the token draw inside the model, which this table does not include. Data: results/char/char_lanes_cost_2026-10-04.json. {#tbl-shift-suv-configs}")
+ci, cb = COST["ISLA"], COST["Transolver"]
+most = lambda k: max(S.ARCHS, key=lambda a: COST[a][k])
+src = sorted({"results/" + p for v in COST.values() for p in _re.findall(r"campaigns_[^\s;:]+", v["source"])})
+print(": The reference configurations on SHIFT-SUV as the standing's lanes trained them: parameters, peak allocated device memory per GPU "
+      "(the maximum over ranks) and the median wall time of one training step without the compile steps, seed means. "
+      f"Every architecture trains on {ci['gpus']} GB300 GPUs and {ci['ranks']} ranks; the configuration that trains ISLA is {ci['precision']} autocast with its blocks compiled one "
+      f"by one and Inductor's mix-order reduction off; the baselines train in {cb['precision']} autocast and uncompiled, as released. "
+      + ("The ISLA lanes priced here trained before that setting, with the mix-order reduction on in the compiled blocks. "
+         if "before the compile fix" in ci["note"] else "")
+      + f"How to read this: the three are matched in none of the columns; {most('n_parameters')} has the most parameters and "
+      f"{most('peak_gib')} the highest peak memory. Data: results/char/{S.COST_FILE}, from {'; '.join(src)}. {{#tbl-shift-suv-configs}}")
 ```
 
 ## The standing {#sec-shift-suv-standing}
@@ -348,8 +355,8 @@ est = {a: XA[a]["est_test"]["wss_l2"]["mean"] for a in S.ARCHS}; fb = {a: XA[a][
 add = {a: fb[a] - est[a] for a in S.ARCHS}
 CI = XF["case_level"]
 ci = lambda k: " to ".join(f"{v:.3f}" for v in CI[k]["R2_ci95"])
-print(f"**ISLA degrades less on fastback wall shear.** Its wall-shear error is {est['ISLA'] / est['Transolver']:.3f} times Transolver's on "
-      f"the estate test set and {fb['ISLA'] / fb['Transolver']:.3f} times on the fastbacks. The difference is not an artifact of the "
+print(f"**ISLA degrades less on fastback wall shear.** Transolver ÷ ISLA on wall shear is {est['Transolver'] / est['ISLA']:.3f} on "
+      f"the estate test set and {fb['Transolver'] / fb['ISLA']:.3f} on the fastbacks. The difference is not an artifact of the "
       f"different in-family errors: the extra fastback error is {add['ISLA']:.3f} for ISLA against {add['GeoTransolver']:.3f} and "
       f"{add['Transolver']:.3f} for the baselines. Across cases, with the seeds held fixed, the penalty ratio's 95% bootstrap interval is "
       f"{ci('fb_test/gt/wss_l2')} against GeoTransolver and {ci('fb_test/t/wss_l2')} against Transolver, which says the advantage is "
