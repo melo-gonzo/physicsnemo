@@ -68,7 +68,7 @@ print("AirfRANS is the book's two-dimensional flow dataset, and its one global i
       "that belong to this dataset (on smaller instruments, the training-airfoil ladder and the read-only prediction points; at the "
       "reference configuration, extrapolation in Reynolds number and angle of attack, which of ISLA's components carry its accuracy here, "
       "the dependence on the query population and on the boundary's discretization), and ends with what the "
-      "dataset does not say. Every ratio is baseline ÷ ISLA.")
+      "dataset does not say. Every ratio between ISLA's and a baseline's test error is baseline ÷ ISLA.")
 ```
 
 ## The problem: NACA airfoils across Reynolds number and incidence {#sec-dataset-airfrans}
@@ -584,11 +584,15 @@ for t in TASK:
         out += (f"| {t} | {lab} | " + " | ".join(f"{PH[t]["E"][a][f]:.4f} ({AXT[t]["penalty"][a][f]:.2f})" for a in XARM) + " | "
                 + " | ".join(f"{r2(t, b, f)['rho']:.2f}, {r2(t, b, f)['verdict']}" for b in ("gt", "t")) + " |\n")
 print(out)
+assert all(AXT["reynolds"]["R3"]["R2"][f]["verdict"] == "no difference" for f in FK)
 print(": The AirfRANS extrapolation splits at the reference configurations: relative L2 on each split's test airfoils, seed means of two seeds, "
       "float32, 100,000 interior points, final checkpoints; $g$ = the split's test error ÷ the same model's `full`-split test error; "
       "$\\rho = g_\\text{baseline} / g_\\text{ISLA}$ with its registered verdict. ISLA and ISLA-DTT trained on the compiled training path "
       "after its fault was fixed. How to read this: $\\rho$ below one means ISLA's error grows more than that baseline's; ISLA-DTT is beside "
-      "the registered cells, not in them. The `reynolds` split trains on fewer airfoils than `full`, so part of each penalty is training-set "
+      "the registered cells, not in them: its penalty ÷ ISLA's on `reynolds` is "
+      + " / ".join(f"{AXT['reynolds']['R3']['R2'][f]['rho']:.2f}" for f in FK)
+      + " (pressure / velocity / eddy viscosity), point estimates inside the band (no difference on each)"
+      + ". The `reynolds` split trains on fewer airfoils than `full`, so part of each penalty is training-set "
       f"size. Data: {R.source('af_extrap', 'afx_results.json')}. {{#tbl-interior-airfrans-extrap}}")
 ```
 
@@ -613,7 +617,9 @@ print(f"- **On `reynolds`, pressure is the evidence that holds under every measu
       "The matched-case penalty still compares models trained on different numbers of airfoils.")
 print(f"- **The velocity cells depend on the measure.** The baselines' in-distribution velocity error is {rng(floor_v, 1)} times ISLA's, which "
       f"caps their penalty. Measured as $\\sqrt{{E^2 - I^2}}$, ISLA's velocity excess is {rng(exr('reynolds', 'quadrature', 'velocity_l2'))} "
-      f"of the baselines' on `reynolds`, and {PH['aoa']['excess_ratios']['isla/t']['quadrature']['velocity_l2']:.2f} of Transolver's on `aoa`, "
+      f"of the baselines' on `reynolds`, and measured as test minus in-distribution error it is "
+      f"{rng(exr('reynolds', 'additive', 'velocity_l2'))} of theirs (ISLA ÷ baseline); on `aoa` the quadrature excess is "
+      f"{PH['aoa']['excess_ratios']['isla/t']['quadrature']['velocity_l2']:.2f} of Transolver's, "
       "the one `aoa` cell registered against ISLA.")
 print(f"- **Training-set size explains one `reynolds` cell.** The control registered beside the verdict divides by an in-distribution error "
       f"trained on as many airfoils as the split. With it Transolver's pressure cell reads {sre['t']['pressure_l2']['rho_504']:.3f} "
@@ -621,12 +627,14 @@ print(f"- **Training-set size explains one `reynolds` cell.** The control regist
       f"{sre['gt']['pressure_l2']['rho_504']:.3f} ({sre['gt']['pressure_l2']['verdict']}). The control matches the count of airfoils, not "
       "how densely they cover the Reynolds range.")
 print(f"- **ISLA's growth comes mostly from below the band.** Per decade of Reynolds number below the band, ISLA's pressure error grows "
-      f"{slope('isla', 'pressure_l2'):.2f}, GeoTransolver's {slope('gt', 'pressure_l2'):.2f} and Transolver's {slope('t', 'pressure_l2'):.2f} "
+      f"{slope('isla', 'pressure_l2'):.2f} in relative L2, against "
+      f"{PH['reynolds']['slopes']['above']['arms']['isla']['pressure_l2'][0]:.2f} per decade above it; below the band GeoTransolver's "
+      f"grows {slope('gt', 'pressure_l2'):.2f} and Transolver's {slope('t', 'pressure_l2'):.2f} "
       "(least-squares slopes over the per-case errors).")
 print(f"- **On `aoa` ISLA's error grows {rng(rho('aoa', 'pressure_l2'), 1)} times less on pressure and {rng(rho('aoa', 'nut_l2'), 1)} times "
       f"less on eddy viscosity**, and its test error leads both baselines on every field (baseline ÷ ISLA "
       f"{rng([AO['R1'][b][f]['ratio'] for b in ('gt', 't') for f in FK], 1)}).")
-print(f"- **ISLA-DTT extrapolates like ISLA:** ISLA-DTT's penalty against ISLA's is registered beside the cells and reads no difference on "
+print(f"- **ISLA-DTT reads no difference from ISLA:** ISLA-DTT's penalty against ISLA's is registered beside the cells and reads no difference on "
       f"{'all six' if r3n == 6 else f'{r3n} of the six'}.")
 print()
 print(f"Data: {R.source('af_extrap', 'posthoc.json')} and {R.source('af_extrap', 'afx_results.json')}.")
@@ -641,7 +649,8 @@ clamp_nut_b = [ca[a]["ratio"]["nut_l2"] for a in BASE]
 print(f"**A post hoc diagnostic, not a fix: holding ISLA's Reynolds input at the edge of its training range at inference halves its "
       f"below-band pressure error.** ISLA reads the standardized log Reynolds number its declared scales form (@sec-using-scales), and the "
       f"baselines read the standardized inlet speed. Clamping each model's input to its training range, on the {CLC['n_cases']} `reynolds` test "
-      f"airfoils below the band, takes ISLA's pressure error from {ca['ISLA']['native']['pressure_l2']:.4f} to {cp['ISLA']:.4f} "
+      f"airfoils below the band ({CLC['n_cases'] - CLJ['isla']['sides']['below']['n']} of them already lie inside ISLA's range and are "
+      f"unchanged), takes ISLA's pressure error from {ca['ISLA']['native']['pressure_l2']:.4f} to {cp['ISLA']:.4f} "
       f"({ca['ISLA']['ratio']['pressure_l2']:.2f} times) and ISLA-DTT's from {ca['ISLA-DTT']['native']['pressure_l2']:.4f} to "
       f"{cp['ISLA-DTT']:.4f}. Clamped, the four models meet: " + ", ".join(f"{a} {cp[a]:.4f}" for a in ca) + ". The clamp also lowers "
       f"Transolver's pressure error ({ca['Transolver']['ratio']['pressure_l2']:.2f} times), and it costs the baselines "
@@ -650,7 +659,8 @@ print(f"**A post hoc diagnostic, not a fix: holding ISLA's Reynolds input at the
       "extrapolates worse than holding it at the band's edge, is a hypothesis. Data: "
       f"results/campaigns_2026-10-22/book_D1/afx_clamp_common.json (from the scorer's per-case rows), {R.source('af_extrap', 'clamp.json')}.")
 print()
-print(S.in_flight_callout({"what": "models trained with the standardized log Reynolds number of ISLA's declared scales, clamped at inference",
+print(S.in_flight_callout({"what": "ISLA and ISLA-DTT trained with the standardized log Reynolds number of ISLA's declared scales, and "
+                                   "the baselines, all clamped at inference",
                            "replacement": "ISLA trained on the `reynolds` split with a fixed log Reynolds scale, and with a standardized Reynolds "
                                           "number linear in Re,"}))
 ```
