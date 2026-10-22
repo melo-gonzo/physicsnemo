@@ -233,7 +233,7 @@ pose_base = min(SURF.shift(b, f, "posed") for b in S.BASELINES for f in SURF.ds.
 LEDGER = [
     ("Quadrature weights", "measure weights enter the routing as a log-space bias, so every slice state is a measure-weighted mean",
      "a slice aggregate is an integral, not a point population", "unweighted means, which count the cells the mesher placed",
-     f"on the DrivAerML Surface task's uniform point cloud ISLA's error changes by a factor of at most {area_isla:.3f}, the baselines' by at least {area_base:.1f} (@sec-invariances)"),
+     f"on the DrivAerML Surface task's uniform point cloud ISLA's error changes by a factor of at most {area_isla:.3f}, the baselines' by at least {area_base:.2f} (@sec-invariances)"),
     ("Origin-free position", "positions enter only as point-to-anchor differences; no centroid or frame origin reaches a learned map (ISLA-DTT's far-field forest groups cells, for speed alone, in a frame the boundary carries; @sec-oq-dtt-frame)",
      "no statistic of the sample in the frame; rigid motions act exactly", "absolute coordinates, or a frame centered on the sample's mean",
      f"rotated and translated, ISLA's error changes by a factor of at most {pose_isla:.4f}, the baselines' by at least {pose_base:.0f} (@sec-invariances)"),

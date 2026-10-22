@@ -300,6 +300,16 @@
    }
   },
   "airfrans_fix_isla_refine_d_max_median": 3.920977504417781e-05,
+  "airfrans_fix_isla_redraw400_d_pressure_median": {
+   "to_tok400": [
+    0.029255388015675607,
+    0.03174312098214761
+   ],
+   "tok400_to_native": [
+    0.015767269171565724,
+    0.018758260588752757
+   ]
+  },
   "drivaerml_volume": {
    "repeat": {
     "pressure_l2": 1.0000000325389236,
@@ -440,8 +450,12 @@
    427
   ],
   "draw_changes": [
-   5,
+   34,
    5794
+  ],
+  "isla_gap": [
+   0.013,
+   0.28
   ]
  },
  "lane_gpuh": {

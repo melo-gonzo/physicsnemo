@@ -1731,8 +1731,11 @@ print("**On the AirfRANS interior task at the reference configuration, interacti
       + f"; {AFS.source}). Which form is the reference is decided on AeroZoo's held-out splits (@sec-oq-dtt).\n")
 if AFS.in_flight:
     print(S.in_flight_callout({"what": "the AirfRANS pair of " + AFS.in_flight["what"],
-                               "replacement": "The pair trained without compilation, with ISLA-DTT on AeroZoo's seven splits "
-                                              "beside it,"}))
+                               "replacement": "The pair trained without compilation"}))
+_azd = S.aerozoo()["arms"]["ISLA-DTT 512 with 512 slices"].get("in_flight")
+if _azd:
+    print(S.in_flight_callout({"what": "ISLA against ISLA-DTT on AirfRANS alone",
+                               "replacement": "ISLA-DTT on AeroZoo's seven splits, which decides the interior form,"}))
 ```
 
 One pre-registered comparison, on checkpoints of the nearest-token form

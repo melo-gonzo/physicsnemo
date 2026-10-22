@@ -21,11 +21,11 @@ Sources, all unmodified copies under results/campaigns_2026-10-22/ (RECORDS.md t
 
 * probes090/results/qpop_afix/reduced.json: QUERY-POP on the AirfRANS ISLA and ISLA-DTT pairs trained on the compiled
   path after its fault was fixed (r090fix_af_*), PROBES-090 section 7;
-* probes090/results/qpop/reduced.json: QUERY-POP on DrivAerML Volume (r090_vol_isla) and on the AirfRANS pairs trained
-  under the fault (r090_af_*, ISLA-DTT's roundoff check only);
+* probes090/results/qpop/reduced.json: QUERY-POP on DrivAerML Volume (r090_vol_isla);
 * probes090/results/qpop_az/reduced.json: QUERY-POP on AeroZoo `full` (azc_full_isla), every fourth test case;
 * probes090/results/remesh_afix/reduced_full.json and remesh_afix_dtt/reduced_full.json: REMESH on the fix-trained
-  AirfRANS pairs; probes090/results/remesh/reduced_full.json: REMESH on DrivAerML Volume;
+  AirfRANS pairs, with the distance d between the two 400-token draws (`d_ref`); probes090/results/remesh/reduced_full.json:
+  REMESH on DrivAerML Volume;
 * probes090/RESULTS.md: the STL ratios by distance to the wall (section 4a, its table), the separation of the two
   surfaces (section 4a and the erratum) and the ISLA-DTT refinement ratios against the opening angle (section 4b);
 * az_diag/f32floor/README.md: the sign flips and the draw changes between float32 and float64 (section 3, its table);
@@ -136,16 +136,14 @@ def query_population() -> dict:
             qaz["azc_full_isla_seed42"]["coverage"][k]
             for k in ("n_cases", "n_cases_split")
         ],
-        "dtt_max_abs_dev": max(
-            max_dev(afix, "r090fix_af_dtt", blk, QUERY_MODES),
-            max_dev(qpop, "r090_af_dtt", blk, QUERY_MODES),
-        ),
+        "dtt_max_abs_dev": max_dev(afix, "r090fix_af_dtt", blk, QUERY_MODES),
         "n_modes": len(QUERY_MODES),
     }
 
 
 def remesh() -> dict:
-    """REMESH seed means per variant and field."""
+    """REMESH seed means per variant and field, and per seed the median pressure distance of the 400-token redraw from the
+    400-token draw and of that draw from native."""
     af = load(P / "results/remesh_afix/reduced_full.json")["seed_mean_ratio"]
     afd = load(P / "results/remesh_afix_dtt/reduced_full.json")["seed_mean_ratio"]
     vol = load(P / "results/remesh/reduced_full.json")
@@ -160,6 +158,14 @@ def remesh() -> dict:
         "airfrans_fix_isla": af["r090fix_af_isla"],
         "airfrans_fix_dtt": afd["r090fix_af_dtt"],
         "airfrans_fix_isla_refine_d_max_median": d_refine,
+        "airfrans_fix_isla_redraw400_d_pressure_median": {
+            "to_tok400": [
+                r["d_ref"]["redraw400"]["pressure"]["median"] for r in af_runs.values()
+            ],
+            "tok400_to_native": [
+                r["d"]["tok400"]["pressure"]["median"] for r in af_runs.values()
+            ],
+        },
         "drivaerml_volume": vol["seed_mean_ratio"]["r090_vol_isla"],
     }
 
@@ -185,7 +191,8 @@ def stl() -> dict:
 
 def theta() -> dict:
     """ISLA-DTT's pressure ratio under refine2 / refine4 / refine31 at each opening angle, and its native errors (pressure /
-    velocity / eddy viscosity, seed 42) at the trained angle and at zero (RESULTS.md section 4b)."""
+    velocity / eddy viscosity, seed 42) at the trained angle and at zero (RESULTS.md section 4b), on the ISLA-DTT pair trained
+    with the compiled path before its fault was fixed."""
     text = (P / "RESULTS.md").read_text()
     sec = text[text.index("**(b) ISLA-DTT refinement") :]
     sweep = sec[sec.index("refine31:") : sec.index("Velocity and nut")]
@@ -206,20 +213,27 @@ def theta() -> dict:
 
 
 def f32floor() -> dict:
-    """The ranges of wall-distance sign flips and of changed drawn cells between float32 and float64 (section 3)."""
+    """The ranges of wall-distance sign flips and of changed drawn cells between float32 and float64 over the high-error
+    cases (section 3, without its controls row), and the range of ISLA's float32-to-float64 gap."""
     text = (REC / "az_diag/f32floor/README.md").read_text()
     sec = text[text.index("## 3. Results") : text.index("## 4.")]
     lines = [ln for ln in sec.splitlines() if ln.startswith("|")]
     head = [c.strip() for c in lines[0].strip("|").split("|")]
     i_cells, i_flip = head.index("cells D32≠D64"), head.index("sign flips (CPU)")
-    cells, flips = [], []
+    i_gap = head.index("gap")
+    cells, flips, gaps = [], [], []
     for ln in lines[2:]:
         c = [x.strip() for x in ln.strip("|").split("|")]
+        if c[0] == "controls":
+            continue
         cells += [int(x) for x in re.findall(r"\d+", c[i_cells])]
         flips += [int(x) for x in re.findall(r"\d+", c[i_flip]) if int(x) > 0]
+        if c[0] == "ISLA":
+            gaps.append(float(c[i_gap]))
     return {
         "sign_flips": [min(flips), max(flips)],
         "draw_changes": [min(cells), max(cells)],
+        "isla_gap": [min(gaps), max(gaps)],
     }
 
 

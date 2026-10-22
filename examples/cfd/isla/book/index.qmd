@@ -96,7 +96,8 @@ print(
 )
 print()
 _az = S.aerozoo()["in_flight"]
-print(S.in_flight_callout({"what": f"AeroZoo's standing of {_az['what']}", "replacement": _az["replacement"]}))
+if _az:
+    print(S.in_flight_callout({"what": f"AeroZoo's standing of {_az['what']}", "replacement": _az["replacement"]}))
 ```
 
 ```{python}

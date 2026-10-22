@@ -265,7 +265,7 @@ has several times GeoTransolver's parameters.
 #| output: asis
 import json, re
 COST_RAW = json.load(open(S.CHAR / S.COST_FILE))
-COST_NOTE = COST_RAW["note"]
+COST_NOTE = re.sub(r" \([a-z0-9_*]+\)", "", COST_RAW["note"])
 CKEYS = [k for k in S.available() + ["aerozoo"] if S.cost(k, "ISLA")]
 and_ = lambda xs: ", ".join(xs[:-1]) + " and " + xs[-1] if len(xs) > 1 else "".join(xs)
 BEFORE = [S.DATASETS[k].short for k in CKEYS if "before the compile fix" in S.cost(k, "ISLA")["note"]]
