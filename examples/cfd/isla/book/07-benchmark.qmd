@@ -4,8 +4,8 @@
 area-weighted relative L2 error) and @sec-invariances (the three scorings: native mesh, uniform point cloud, rotated and
 translated).
 
-**ISLA is measured against two public slice-attention transformers, GeoTransolver and Transolver, on seven datasets and
-eight tasks; an eighth dataset, AeroZoo, has its benchmark protocol and no model comparison. The protocol fixes everything except the architecture, and every number in the book is scored by it.** The
+**ISLA is measured against two public slice-attention transformers, GeoTransolver and Transolver, on eight datasets and
+nine tasks. The protocol fixes everything except the architecture, and every number in the book is scored by it.** The
 baselines are the public model classes, run unmodified from the PhysicsNeMo recipe. Each architecture is scored at one
 reference configuration, chosen once on two selection datasets (@sec-selection). This chapter says what each baseline computes and what it is given, states
 the rules of the comparison and how the reference configurations were chosen, shows every dataset on one page, and defines
@@ -45,8 +45,9 @@ geometry and on the global inputs. ISLA keeps the factorization and changes what
 %%| fig-cap: >
 %%|   What each architecture is given, and where they differ. Gray boxes are data, solid blue boxes are learned maps,
 %%|   the dashed box is a fixed map with no parameters. GeoTransolver and Transolver receive coordinates in the dataset's
-%%|   frame and the stored freestream vector; ISLA receives positions, normals and measure weights, consumed only through
-%%|   invariants, and each global direction as a unit vector. How to read this: the diagram shows inputs and structure
+%%|   frame and the stored freestream vector; ISLA receives one full-resolution boundary mesh per named condition, draws its
+%%|   boundary tokens from them, consumes their positions, normals and measure weights only through invariants, and reads
+%%|   each global direction as a unit vector. How to read this: the diagram shows inputs and structure
 %%|   on the surface tasks, not accuracy; the interior inputs are in @tbl-model-inputs.
 flowchart TB
     classDef data fill:#f4f3ee,stroke:#898781,color:#0b0b0b
@@ -63,8 +64,8 @@ flowchart TB
     end
     subgraph I["ISLA"]
         direction LR
-        I1["per cell: position, unit normal, measure weight<br/>global: unit direction(s), scalars"]:::data
-        I2["invariant seed; length unit L"]:::fixed
+        I1["one full-resolution mesh per named boundary condition<br/>per cell: position, unit normal, measure weight<br/>global: unit direction(s), scalars"]:::data
+        I2["length unit L and declared scales;<br/>boundary-token draw; invariant seed"]:::fixed
         I3["slice layers × 12:<br/>measure-weighted routing, anchors,<br/>relational invariants, read-back"]:::learned
         I4["heads: learned invariant coefficients<br/>× a basis that rotates with the body"]:::learned
         I1 --> I2 --> I3 --> I4
@@ -86,8 +87,7 @@ coordinates and the normal, and the global vector is concatenated to every point
 **ISLA** receives one full-resolution boundary mesh per named boundary condition, from which it reads each cell's position,
 unit normal and measure weight, and each global direction as a unit vector. It reads positions only through differences to
 its anchors (@sec-isla). On the interior tasks the prediction points join as tokens, and each one reads its exact distance and
-direction to the boundary meshes (@sec-exact-geometry-draw). The standing's ISLA checkpoints are of an earlier form of these
-inputs, the nearest-token form (@sec-checkpoint-form).
+direction to the boundary meshes (@sec-exact-geometry-draw).
 
 @tbl-architectures gives the three reference configurations side by side, with the parameter count and the training memory
 the selection read. @tbl-model-inputs lists, per dataset, what each model's forward call receives; the dataset chapters point to it.
@@ -169,15 +169,12 @@ for key, i, g, t, info in MI:
     out += f"| {d.name} | {i} | {g} | {t} | {info}{flag} |\n"
 print(out)
 print(": What each model receives, per dataset: the global inputs with their units and range across cases, the boundary "
-      "conditions, and the per-point geometry. The ISLA column is ISLA as the recipe configures it (`conf/model/isla_*.yaml`); the "
-      "standing's ISLA checkpoints are of the nearest-token form, which read one boundary with label fields, took the wall distance "
-      "and direction from the nearest sampled boundary token and, on AirfRANS, Tensile2d and the lug, also read `sdf` and "
-      "`sdf_normals`, and on AirfRANS read `U_inf_dir` and the raw inlet speed `U_inf_mag` in m/s in place of the declared "
-      "scales (@sec-checkpoint-form). The baselines' columns are the configurations of the standing's training runs. `U_inf` is the "
+      "conditions, and the per-point geometry. The ISLA column is ISLA as the recipe configures it (`conf/model/isla_*.yaml`), "
+      "which the standing's ISLA checkpoints read. The baselines' columns are the configurations of the standing's training runs. `U_inf` is the "
       "freestream velocity as the dataset stores it; `U_inf_dir` is the same vector normalized; `sdf` and `sdf_normals` are "
       "the stored signed distance to the full-resolution boundary and its gradient. How to read this: the last column says "
       "whether the baselines receive the same information as ISLA. AeroZoo's row is its benchmark protocol (@sec-aerozoo-allowed), which reads no label of the dataset; "
-      "the book holds no model comparison on AeroZoo. "
+      "under it both baselines end about a zero predictor on pressure (@sec-aerozoo). "
       "The table does not say how much a difference in input costs a model. Source: "
       "results/drive_audit_2026-10-18/REPORT.md, section 1; for the AirfRANS and lug baselines, "
       "results/campaigns_2026-10-19/drive_fix/PREREG.md; for the DrivAerML and SHIFT-SUV baselines, "
@@ -220,7 +217,7 @@ print("On the DrivAerML tasks and on SHIFT-SUV every case has the same freestrea
       "checkpoints, and each physical-vector twin stays in its standing artifact as a record. Data: "
       "results/campaigns_2026-10-19/drive_fix/drivefix_scores_2026-10-19.json (the band: PREREG.md beside it), "
       "results/campaigns_2026-10-20/drive_fix2/ud2_scores_2026-10-20.json, "
-      "results/campaigns_2026-10-19/drive_fix2/scoreset/tset200k_scores.json, results/char/*_a2.json (`raw_drive_*`).")
+      "results/campaigns_2026-10-19/drive_fix2/scoreset/tset200k_scores.json, results/char/*_090.json (`raw_drive_*`).")
 ```
 
 ```{python}
@@ -295,8 +292,8 @@ difference is read.
    condition type each names, the values prescribed on them and the kinematic viscosity, with the density only to
    convert pressure and shear to pascals. Every other global datum is a label, among them the reference length, speed
    and direction and any Reynolds number built on them. On AeroZoo every model reads only those data, in physical units,
-   and a model that wants a length, a velocity scale or a Reynolds number computes it from them (@sec-aerozoo-allowed); the
-   book holds no model comparison on AeroZoo. On every other dataset a reference length,
+   and a model that wants a length, a velocity scale or a Reynolds number computes it from them (@sec-aerozoo-allowed).
+   On every other dataset a reference length,
    where one is used, is one constant for the whole set.
 2. No reference configuration trains with augmentation. The rotation-augmented baselines of @sec-pose-contract are a labeled
    control.
@@ -319,8 +316,8 @@ difference is read.
 **Reading.**
 
 7. Every number is scored by one protocol (@sec-protocol): float32, final checkpoints, the same cells per case for every
-   architecture.
-8. Two random seeds per configuration, both reported. One model *leads* another on a field only when every seed of the
+   architecture, and ISLA's function as its eager path computes it.
+8. Two random seeds per configuration (four for ISLA on Tensile2d), all reported. One model *leads* another on a field only when every seed of the
    one lies below every seed of the other and the seed means differ by at least 3%; otherwise the two are *level*.
 9. A ratio is always baseline ÷ ISLA, so a value above one favors ISLA.
 10. A sealed test split is evaluated once per checkpoint, with the checkpoint and configuration declared beforehand
@@ -455,7 +452,7 @@ print(": Every candidate of the selection, by architecture: its seed-mean surfac
 
 ## The datasets {#sec-datasets}
 
-**Seven datasets carry the evidence and an eighth, AeroZoo, has its benchmark protocol and no model result; all eight supply one input schema: boundary cells with positions, outward
+**Eight datasets carry the evidence, and all eight supply one input schema: boundary cells with positions, outward
 normals and measures, the problem's global conditions, and per-cell boundary data where the problem has them.** One model
 implementation therefore runs on all of them. The aerodynamic datasets are external flows with one global direction, the
 flow direction ($K = 1$). The solids and brackets exercise the global scalars, the per-cell boundary data and, on the lug and
@@ -464,7 +461,9 @@ Tensile2d, the case with no global direction ($K = 0$). @tbl-datasets is the ros
 ```{python}
 #| label: cell-tbl-datasets
 #| output: asis
-nc = lambda k: f"{S.Standing(k).cell('ISLA', S.DATASETS[k].headline[0])['n_cases']:,}" if k in S.available() else "—"
+AZN = S.aerozoo()["n_cases"]
+nc = lambda k: (f"{S.Standing(k).cell('ISLA', S.DATASETS[k].headline[0])['n_cases']:,}" if k in S.available()
+                else f"{min(AZN.values()):,} to {max(AZN.values()):,} per split" if k == "aerozoo" else "—")
 rows = [
     ("DrivAerML", "parametric DrivAer notchback cars; time-averaged RANS-LES surface and volume fields", "the geometry only", "1", "0",
      "the Surface task", "drivaerml_surface", "@sec-drivaerml"),
@@ -491,7 +490,7 @@ print(out)
 print(": The datasets of the book. $K$: global unit directions; $S$: global scalars, as ISLA's reference configurations declare them "
       "(@sec-isla-inputs). *Scored cases*: the validation or test cases of the standing. How to read this: a row names what "
       "varies within the set, which fixes what a model trained on it must learn; the per-cell boundary data of the solids and "
-      "brackets are listed in their chapters. AeroZoo has no standing: the book holds no model comparison on it (@sec-oq-aerozoo). Data: the "
+      "brackets are listed in their chapters. AeroZoo is scored on the test cases of each of its splits (@sec-aerozoo). Data: the "
       "standing artifacts through standing.py. {#tbl-datasets tbl-colwidths=\"[12,26,18,4,4,13,9,14]\"}")
 ```
 
@@ -505,7 +504,8 @@ print(": The datasets of the book. $K$: global unit directions; $S$: global scal
 #|   Mises stress at the nodes, projected along the thickness. DeepJEB++: the von Mises stress on one bracket's surface. How
 #|   to read this: colors are reference CFD and FEM fields, not predictions; each panel has its own color scale and its own
 #|   length scale, and surfaces are drawn from a random subset of their cells, so dot density follows the mesh, not the
-#|   field. The SHIFT-SUV panel is an estate, the family on which every model trains and is scored (@sec-shift-suv). Data:
+#|   field. The SHIFT-SUV panel is an estate, the family on which every standing model trains; the fastbacks are scored
+#|   zero-shot (@sec-shift-suv). Data:
 #|   results/problem_figures_2026-09-22/*.npz (SHIFT-SUV and DeepJEB++: results/sample_figures_2026-10-02/shift_suv.npz, deepjeb.npz).
 #| code-fold: true
 #| fig-height: 11
@@ -664,7 +664,8 @@ dataset chapter gives its splits in full.
 ## The scoring protocol {#sec-protocol}
 
 **Every standing scores the final checkpoint of each seed in float32 on 200,000 sampled cells per case, as the area-weighted
-relative L2 error averaged over cases, and scores it three ways.** @tbl-protocol gives the settings. The metric is the
+relative L2 error averaged over cases, and scores it three ways; AeroZoo is scored on the native mesh only.** @tbl-protocol
+gives the settings. The metric is the
 area-weighted relative L2 error of @sec-metrics, computed per case and averaged over the cases with equal weight.
 
 | item | setting |
@@ -672,10 +673,12 @@ area-weighted relative L2 error of @sec-metrics, computed per case and averaged 
 | cells per case at scoring | 200,000 sampled cells, the same for every architecture; a mesh smaller than that is scored whole (the lug, Tensile2d, DeepJEB++, the AirfRANS airfoil); 100,000 interior points on AirfRANS |
 | cells per case in training | ISLA and GeoTransolver 200,000 and Transolver 100,000 (its reference configuration) on the DrivAerML tasks, HiLiftAeroML and SHIFT-SUV; every architecture alike on the other tasks: 200,000 on DeepJEB++, 100,000 on AirfRANS, 20,000 on the lug and Tensile2d |
 | precision | bfloat16 autocast in training, float32 at scoring |
+| ISLA's compiled path | in training, each slice block compiled on its own (`model.compile_blocks=true`) on every dataset but Tensile2d, whose standing trains eagerly. On AirfRANS and the lug, where the compiled blocks compute another function unless Inductor's mix-order reduction is off (@sec-using-cost), the rows shown trained with it off, and their eagerly trained standing is in flight (@sec-standing-table); on the other datasets but Tensile2d (eagerly trained and scored) the geometry runs in the fused kernel, which that fault does not reach. Scoring runs fully eager (`compile=false model.compile_blocks=false`) on AirfRANS, Tensile2d and the lug and keeps the compiled blocks elsewhere |
 | checkpoint | the final epoch of each seed; no selection on validation error |
-| seeds | 42 and 43, both reported; the standing quotes the seed mean and applies the seed rule of @sec-fair-comparison |
+| seeds | 42 and 43, both reported (42 to 45 for ISLA on Tensile2d); the standing quotes the seed mean and applies the seed rule of @sec-fair-comparison |
 | metric | area-weighted relative L2 per case, averaged over the scored cases (@sec-metrics) |
 | scorings | the *native mesh*; the *uniform point cloud*, the area-proportional law with exact Horvitz–Thompson weights; *rotated and translated*, a random rotation and a translation of one RMS radius per case (the root-mean-square distance of the case's points from their centroid; in-plane on the planar datasets) |
+| AeroZoo | the native mesh only, 200,000 interior points of each split's test cases, the relative L2 error per field and case in physical units averaged over cases, the checkpoint of epoch 250 (@sec-aerozoo-allowed) |
 
 : The scoring protocol of every standing. How to read this: the three scorings rescore one checkpoint and train nothing; a
 number outside this protocol says so in its caption. {#tbl-protocol}
@@ -687,8 +690,10 @@ things:
 
 - on the DrivAerML Surface task, HiLiftAeroML and SHIFT-SUV, whose surfaces hold millions of cells, it resamples the scored
   cells for every architecture;
-- on the DrivAerML Volume task it redraws ISLA's boundary tokens only: the scored interior points are a point cloud, and
-  the baselines do not load the boundary (@sec-interior-boundary-law);
+- on the DrivAerML Volume task it changes no model's input: the scored interior points are a point cloud, ISLA reads the
+  whole vehicle surface and draws its boundary tokens by area itself, and the baselines do not load the boundary, so the
+  column is not applicable; what exact re-meshing of that boundary, and a watertight surface in place of the CFD wall, do
+  to ISLA is measured in @sec-interior-boundary-law;
 - on AirfRANS, Tensile2d, the lug and DeepJEB++ it returns the native mesh, and the column repeats the native error.
 
 Only the first group appears as a point-cloud standing (@fig-contract-shifts).
@@ -702,16 +707,17 @@ reference configuration is scored on them. Because those test sets cover every g
 are held out per checkpoint but do not confirm a result across the whole set of experiments (@sec-limits).
 :::
 
-## The checkpoints behind the standing {#sec-checkpoint-form}
+## The nearest-token form {#sec-checkpoint-form}
 
-**Every ISLA checkpoint in Part IV, the standing's and every trained ISLA the book draws, is of one earlier form of ISLA's
-inputs, the *nearest-token form*. It has the reference configuration's width, depth, slices and learning rate and the
-normalized slice reads, and it differs from the class of Part II in how the boundary and the prediction points enter the
-model, in its length unit and in its scales.** The standings come from the checkpoints that the program's ledger (@sec-program-status) names the A2 reference.
-@tbl-checkpoint-form lists the differences item by item. The class refuses checkpoints of any other version
-(@sec-using-checkpoint), so these checkpoints are records of the form, not models the class loads.
+**Some figures of trained ISLA (renderings of predictions, trained routing) and some study instruments are of an earlier
+form of ISLA's inputs, the *nearest-token form*, and their captions name it.** The form has the reference configuration's
+width, depth, slices and learning rate and the normalized slice reads. It differs from ISLA in how the boundary and the
+prediction points enter the model, in its length unit and in its scales; @tbl-checkpoint-form lists the differences item
+by item. The class refuses checkpoints of any other version (@sec-using-checkpoint), so these checkpoints are records of
+the form, not models the class loads. A figure of the form that checkpoints of ISLA replace carries an In-flight callout
+beside it.
 
-| item | the nearest-token form (the standing's checkpoints) | ISLA as Part II defines it |
+| item | the nearest-token form | ISLA as Part II defines it |
 |---|---|---|
 | slice reads | the normalized slice reads | the normalized slice reads (@sec-isla-normalized-reads) |
 | boundary conditions | one boundary schema shared by every condition: a labelled boundary is one mesh, its condition a one-hot label among each cell's fields | one boundary mesh per named condition, each with its own input layer and a learned offset, so a condition's identity is in the parameters; no label is read (@sec-isla-inputs) |
@@ -721,21 +727,14 @@ model, in its length unit and in its scales.** The standings come from the check
 | length unit $L$ | the RMS pairwise distance of the boundary cells the model is given, each cell at its centroid; on the interior task, of the datapipe's sample | the RMS pairwise distance of the full-resolution boundary, computed before the draw, each cell with its own second moment: exact for the meshed boundary and the same for every draw (@sec-isla-frame) |
 | scales | none declared; on AirfRANS the inlet direction and the raw inlet speed in m/s as a global scalar | the scales the AirfRANS and AeroZoo configurations declare, computed per case from the boundary and the global inputs; none declared elsewhere (@sec-using-scales) |
 
-: The nearest-token form of the standing's ISLA checkpoints against ISLA as the class defines it. On a surface task the
+: The nearest-token form against ISLA as the class defines it. On a surface task the
 prediction points are the boundary cells, so the last two rows do not arise there. How to read this: the rows are the
 whole difference in what enters the model; the baselines' inputs are the same in both columns (@tbl-model-inputs). Sources:
-the class, `physicsnemo/experimental/models/isla/`; the standing's ISLA arm as the reduction of the geometry evidence describes it,
+the class, `physicsnemo/experimental/models/isla/`; the form's checkpoints as the reduction of the geometry evidence describes them,
 results/campaigns_2026-10-19/geo_evidence/geo_evidence.json (`doc`).
 {#tbl-checkpoint-form}
 
-**The standing measures the nearest-token form against the baselines.** Its ratios, its verdicts and its pose and
-resampling shifts are those of these checkpoints, and every standing caption names them "ISLA checkpoints of the
-nearest-token form". Two of the measured limits belong to the form's wall geometry rather than to the class: the pose
-shifts on the lug and Tensile2d, where nodes tie for their nearest boundary token, and the interior error's dependence
-on the boundary draw on the DrivAerML Volume task and AirfRANS. Chapter 04 measures what the exact geometry does to
-both (@sec-exact-geometry-draw, @sec-medial-ties). Whether the class's own standing reads the same is an open question, with
-what would settle it (@sec-oq-class-standing). Unless a caption says otherwise, the study runs of the next section are of
-the same form, with the raw slice reads.
+Unless a caption says otherwise, the study runs of the next section are of the same form, with the raw slice reads.
 
 ## Study configurations {#sec-study-configurations}
 
@@ -755,7 +754,7 @@ score, has the variant "Instrument: ISLA at ⟨width⟩ wide, ⟨slices⟩ slice
 |---|--:|--:|--:|--:|---|---|---|
 | ISLA at 384 wide, 256 slices, 5e-4, raw slice reads | 12 | 384 | 256 | $5 \times 10^{-4}$ | cosine | 200,000 | the biased-draw probe, the slice territories, the rotation-augmented comparison (@sec-contract-studies, @sec-pose-contract); the 384-wide points of the capacity ladders (@sec-capacity) |
 | ISLA at 192 wide, 256 slices, 1e-3, linear routing, raw slice reads | 12 | 192 | 256 | $10^{-3}$ | linear | 100,000 (cars), 200,000 (wings) | the training-law swap (@sec-training-law) |
-| ISLA at 512 wide, 512 slices, 3.75e-4, raw slice reads | 12 | 512 | 512 | $3.75 \times 10^{-4}$ | cosine | 200,000 | the nearest-token geometry swap on the DrivAerML Volume task (@sec-interior-boundary-law) |
+| ISLA at 512 wide, 512 slices, 3.75e-4, raw slice reads | 12 | 512 | 512 | $3.75 \times 10^{-4}$ | cosine | 200,000 | the study that swaps the nearest-token wall geometry for the exact one on the DrivAerML Volume task, an instrument of the nearest-token form (@sec-checkpoint-form) |
 | ISLA at 768 wide, 256 slices, 2.5e-4, raw slice reads | 12 | 768 | 256 | $2.5 \times 10^{-4}$ | cosine | 20,000 | the tie diagnostic on the lug (@sec-medial-ties) |
 | capacity ladders | 12 to 48 | 192 to 1,536 | 256 | named per point | cosine or linear, named per point | 10,000 to 200,000, named per point | the scaling fits and the cells ladder (@sec-capacity); each point names its own configuration |
 
