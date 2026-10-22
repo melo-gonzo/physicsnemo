@@ -516,14 +516,28 @@ print("The verdict is that of GeoTransolver's reference configuration, which is 
 #| output: asis
 #| column: page
 import json as _json
-_R = _json.load(open(RENDER_DIR / "render_car.json"))
-rendering_figure("fig-drivaerml-prediction", [("figures/renderings/drivaerml_surface_cp.png", "Pressure coefficient"), ("figures/renderings/drivaerml_surface_cf.png", "Wall shear")],
-    f"The three reference configurations on one validation car of the DrivAerML Surface task, {_R['sample_id'].split('_')[0]}, left side; Transolver is scored and drawn on its own 100,000 cells, the other two on 200,000. Relative L2 on this case: {case_errors(_R['per_sample_rel_l2'])}. " + "Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one "
-      f"symmetric scale. ISLA checkpoints of the {S.FORM_TAG} (@sec-checkpoint-form). How to read this: one case, chosen as the case of median ISLA error (seed 42 of each reference configuration), "
-      "not a standing, and drawn from checkpoints other than the standing's; the standing is the table above. The baselines drawn are their checkpoints that read the freestream as the "
-      "constant physical vector, kept on record beside the standing's unit-direction checkpoints (@sec-unit-direction-rule). "
-    + "Data: results/renderings_2026-10-18/arrays/render_car.json.", nrow=2)
-print(rendering_in_flight(baselines="baseline checkpoints that read the freestream as a physical vector, not the standing's unit direction"))
+
+
+def isla_rank(R, field):
+    """(rank, n) of the rendered case by ISLA's per-case error among its scorer record's cases."""
+    src = next(v for k, v in R["source"].items() if k.endswith("_isla/native"))
+    rec = RES / "campaigns_2026-10-22/standing_090/scores" / src["scorer_record"].removeprefix("$T/")
+    e = {r["sample_id"]: r["metrics"][field] for r in map(_json.loads, open(rec)) if r.get("phase") == "infer_step"}
+    return sorted(e, key=e.get).index(R["sample_id"]) + 1, len(e)
+
+
+_R = _json.load(open(RENDER_DIR_090 / "render_car.json"))
+_rk, _n = isla_rank(_R, "pressure_l2")
+_cells = {_R["source"][f"{k}/native"]["cells"] for k in ("dr_isla", "dr_gt", "dr_t")}
+assert len(_cells) == 1 and _R["gt_points_same_as_isla"] and _R["t_points_same_as_isla"]
+rendering_figure("fig-drivaerml-prediction", [("figures/renderings/drivaerml_surface_cp_090.png", "Pressure coefficient"), ("figures/renderings/drivaerml_surface_cf_090.png", "Wall shear")],
+    f"The three reference configurations on one validation car of the DrivAerML Surface task, {_R['sample_id'].split('_')[0]}, left side, "
+    "from the standing's checkpoints (seed 42): ISLA at its reference configuration, and the baselines reading the freestream as the "
+    f"unit direction (@sec-unit-direction-rule). All three are scored and drawn on the same {_cells.pop():,} cells. Relative L2 on this "
+    f"case: {case_errors(_R['per_sample_rel_l2'])}; the car ranks {_rk} of {_n} by ISLA's pressure error over the validation cars. "
+    "Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one "
+    "symmetric scale. How to read this: one case, not a standing; the standing is the table above. "
+    "Data: results/renderings_2026-10-22/arrays/render_car.json.", nrow=2)
 ```
 
 ### The Volume task {#sec-interior-results}
@@ -582,14 +596,17 @@ print(f"**The lead is largest on velocity**, where GeoTransolver's error is {S.f
 #| output: asis
 #| column: page
 import json as _json
-_R = _json.load(open(RENDER_DIR / "render_2d_drivaerml_volume.json"))["drivaerml_volume"]
-rendering_figure("fig-drivaerml-volume-prediction", [("figures/renderings/drivaerml_volume_pressure.png", "Pressure"), ("figures/renderings/drivaerml_volume_velocity.png", "Velocity magnitude")],
-    f"The three reference configurations on one validation car of the DrivAerML Volume task, {_R['sample_id'].split('_')[0]}: the {_R['n_points_in_slab_window']:,} scored prediction points within {100 * _R['slab_half_width_m']:.0f} cm of the symmetry plane, side view. Relative L2 on this case: {case_errors(_R['per_sample_rel_l2'])}. " + "Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one "
-      f"symmetric scale. ISLA checkpoints of the {S.FORM_TAG} (@sec-checkpoint-form). How to read this: one case, chosen as the case of median ISLA error (seed 42 of each reference configuration), "
-      "not a standing, and drawn from checkpoints other than the standing's; the standing is the table above. The baselines drawn are their checkpoints that read the freestream as the "
-      "constant physical vector, kept on record beside the standing's unit-direction checkpoints (@sec-unit-direction-rule). "
-    + "Data: results/renderings_2026-10-18/arrays/render_2d_drivaerml_volume.json.", nrow=2)
-print(rendering_in_flight(baselines="baseline checkpoints that read the freestream as a physical vector, not the standing's unit direction"))
+_R = _json.load(open(RENDER_DIR_090 / "render_2d_drivaerml_volume.json"))["drivaerml_volume"]
+_rk, _n = isla_rank(_R, "pressure_l2")
+rendering_figure("fig-drivaerml-volume-prediction", [("figures/renderings/drivaerml_volume_pressure_090.png", "Pressure"), ("figures/renderings/drivaerml_volume_velocity_090.png", "Velocity magnitude")],
+    f"The three reference configurations on one validation car of the DrivAerML Volume task, {_R['sample_id'].split('_')[0]}, from the "
+    "standing's checkpoints (seed 42): ISLA at its reference configuration, and the baselines reading the freestream as the unit "
+    f"direction (@sec-unit-direction-rule). Shown are the {_R['n_points_in_slab_window']:,} scored prediction points within "
+    f"{100 * _R['slab_half_width_m']:.0f} cm of the symmetry plane, side view. Relative L2 on this case: {case_errors(_R['per_sample_rel_l2'])}; "
+    f"the car ranks {_rk} of {_n} by ISLA's pressure error over the validation cars. "
+    "Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one "
+    "symmetric scale. How to read this: one case, not a standing; the standing is the table above. "
+    "Data: results/renderings_2026-10-22/arrays/render_2d_drivaerml_volume.json.", nrow=2)
 ```
 
 ## Studies on this dataset {#sec-drivaerml-ladders}
