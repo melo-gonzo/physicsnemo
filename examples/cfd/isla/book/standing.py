@@ -539,6 +539,25 @@ def available():
     ]
 
 
+def final():
+    """The datasets whose standing is final, in registry order: the ones a cross-dataset count or tally reads."""
+    return [k for k in available() if Standing(k).status == "final"]
+
+
+def in_flight():
+    """The datasets whose standing is in flight, in registry order: name them beside a tally that leaves them out."""
+    return [k for k in available() if Standing(k).status == "in_flight"]
+
+
+def tally_note() -> str:
+    """The sentence a cross-dataset tally of ``final()`` carries: which standings it leaves out, and why."""
+    left = in_flight()
+    if not left:
+        return ""
+    names = " and ".join(", ".join(DATASETS[k].short for k in left).rsplit(", ", 1))
+    return f"The count leaves out {names}, whose standings are in flight (@sec-ledger)."
+
+
 # --- The standing as figures (index, 08-standing) -------------------------------------------------
 
 
@@ -683,26 +702,29 @@ def plot_shifts(ax, protocol="posed", keys=None, field=None):
 
 
 # --- Cost of the reference configurations ------------------------------------------------------------
-#: Per task and architecture: training peak memory (GiB, max over four GB300 ranks), epoch wall time (s) and parameter
-#: count, from the one-epoch lanes of the reference configurations. ISLA's lanes are of the nearest-token form with the
-#: raw slice reads; ISLA at its reference configuration adds an input layer per boundary condition, so its parameter
-#: count differs from these and the cost is representative.
-COST_FILE = "char_lanes_cost_2026-10-04.json"
-_COST_KEY = {
-    "drivaerml_surface": "DrivAerML Surface",
-    "drivaerml_volume": "DrivAerML Volume",
-    "shift_suv": "Shift-SUV",
-    "airfrans": "AirfRANS",
-    "tensile2d": "Tensile2D",
-    "lug": "lug",
-    "deepjeb": "DeepJEB++",
-}
+#: Per DATASETS key and architecture ("ISLA", "ISLA-DTT", "GeoTransolver", "Transolver"), from the training logs of the
+#: standing's lanes (results/char/cost_090_2026-10-22.py), as seed means: the median training step in seconds, leaving out
+#: the compile steps; the peak allocated device memory in GiB, the maximum over ranks; the parameter count; the GPUs, ranks
+#: and precision. ISLA trains on four GB300 ranks in bfloat16 with its blocks compiled one by one; "note" says where a
+#: lane differs from that (an uncompiled baseline, a lane in flight, a smoke lane standing in for a lost log).
+COST_FILE = "cost_090.json"
+_COST_FIELDS = (
+    "peak_gib",
+    "step_seconds",
+    "n_parameters",
+    "gpus",
+    "ranks",
+    "precision",
+    "source",
+    "note",
+)
 
 
 def cost(key: str, arch: str):
-    """{peak_gib, epoch_seconds, n_parameters, source} of one reference configuration on one task, or None."""
-    c = json.load(open(CHAR / COST_FILE))["cost"].get(_COST_KEY.get(key, ""), {})
-    return c.get(arch)
+    """{peak_gib, step_seconds, n_parameters, gpus, ranks, precision, source, note} of one reference configuration on one
+    dataset, or None."""
+    c = json.load(open(CHAR / COST_FILE))["cost"].get(key, {}).get(arch)
+    return None if c is None else {k: c[k] for k in _COST_FIELDS}
 
 
 # --- The recipe's ISLA configurations -----------------------------------------------------------------
