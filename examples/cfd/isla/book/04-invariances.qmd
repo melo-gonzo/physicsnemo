@@ -43,6 +43,8 @@ SEEDS_TXT = f"{S._COUNT[min(ST[k].n_seeds(a) for k in KEYS for a in S.ARCHS if S
     f" ({S._COUNT[ST[k].n_seeds('ISLA')]} for ISLA on {S.DATASETS[k].in_sentence})" for k in KEYS if ST[k].n_seeds("ISLA") != 2)
 import records as R, re
 P = "probes090"
+#: The AirfRANS checkpoints PROBES-090 probes (its remesh_afix and qpop_afix records).
+PROBE_CKPT = "ISLA and ISLA-DTT trained with the compiled training path after its fault was fixed"
 RA, RD, RV = "results/remesh_afix/reduced_full.json", "results/remesh_afix_dtt/reduced_full.json", "results/remesh/reduced_full.json"
 QA, QV, QZ = "results/qpop_afix/reduced.json", "results/qpop/reduced.json", "results/qpop_az/reduced.json"
 AF_I = [f"r090fix_af_isla_seed{s}" for s in (42, 43)]; AF_D = [f"r090fix_af_dtt_seed{s}" for s in (42, 43)]
@@ -692,7 +694,7 @@ print("\n: Re-meshing the boundary of trained checkpoints: each arm's error with
       "cars. *exact*: the same surface, meshed or drawn differently; *budget*: fewer tokens than the airfoil has panels; "
       "*new surface*: a different geometry, a test of robustness rather than of invariance; *draw floor*: a second draw at the "
       "native budget, the noise against which the car's rows are read. The AirfRANS checkpoints are "
-      + ST["airfrans"].raw["in_flight"]["what"] + " (In flight, below). How to read this: 1 is no change; a ratio compares a "
+      + PROBE_CKPT + " (In flight, below). How to read this: 1 is no change; a ratio compares a "
       "checkpoint with itself. Data: " + "; ".join(R.source(P, n) for n in (RA, RD, RV)) + ". {#tbl-remesh}")
 ```
 
@@ -759,7 +761,7 @@ print("\n: Interacting ISLA's error under a change of the request, divided by it
       f"the native points; the grouped queries read a probe set of {ND['sub1000']['probe_points'][0]:,} of them, and the "
       f"single-point query its first {ND['sub1']['groups'][0]} ({NZ['nondegeneracy_ranges']['sub1']['groups'][0]} on AeroZoo). "
       f"AeroZoo: every {NZ['coverage']['case_stride']}th test case of the `full` split ({NZ['coverage']['n_cases']} cases). "
-      "The AirfRANS column reads " + ST["airfrans"].raw["in_flight"]["what"].replace("ISLA and ISLA-DTT", "ISLA") + ". How to "
+      "The AirfRANS column reads " + PROBE_CKPT.replace("ISLA and ISLA-DTT", "ISLA") + ". How to "
       "read this: 1 is no dependence on the request; ISLA-DTT reads 1 to float32 roundoff in every mode. Data: "
       + "; ".join(R.source(P, n) for n, _, _ in COLS) + "; the modes are defined in PROBES-090's registration, "
       "section 2. {#tbl-query-population}")
@@ -769,8 +771,8 @@ print("\n: Interacting ISLA's error under a change of the request, divided by it
 #| label: callout-probes-in-flight
 #| output: asis
 AFS = ST["airfrans"]
-print(S.in_flight_callout({"what": "the AirfRANS rows of @tbl-remesh and @tbl-query-population, which probe " + AFS.in_flight["what"],
-                           "replacement": "The same probe of the AirfRANS checkpoints trained without compilation"} if AFS.in_flight else None))
+print(S.in_flight_callout({"what": "the AirfRANS rows of @tbl-remesh and @tbl-query-population, which probe " + PROBE_CKPT,
+                           "replacement": "The same probe of the AirfRANS checkpoints trained without compilation"}))
 ```
 
 ### Ties in the geometry {#sec-medial-ties}

@@ -1579,8 +1579,11 @@ print("Read-only points give up the coupling that lets the interior shape the pa
       "of Part IV are of the interacting form.\n")
 if _AF.in_flight:
     print(S.in_flight_callout({"what": "the AirfRANS pair of " + _AF.in_flight["what"],
-                               "replacement": "The pair trained without compilation, with ISLA-DTT on AeroZoo's seven splits "
-                                              "beside it,"}))
+                               "replacement": "The pair trained without compilation"}))
+_azd = S.aerozoo()["arms"]["ISLA-DTT 512 with 512 slices"].get("in_flight")
+if _azd:
+    print(S.in_flight_callout({"what": "ISLA against ISLA-DTT on AirfRANS alone",
+                               "replacement": "ISLA-DTT on AeroZoo's seven splits, which decides the interior form,"}))
 ```
 
 ## Why ISLA has no center {#sec-isla-variants}
