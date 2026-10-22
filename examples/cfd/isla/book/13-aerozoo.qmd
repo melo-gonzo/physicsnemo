@@ -426,7 +426,12 @@ print("- **ISLA-DTT**: the same configuration with read-only prediction points (
       "token at every layer through a Barnes–Hut cluster forest (@sec-arch-modes).")
 print("- **GeoTransolver-volume**, the GeoTransolver of the interior tasks, here with its ball-query local features off "
       "(@sec-aerozoo-allowed): width 256, learning rate 1e-3; called GeoTransolver below.")
-print("- **Transolver**: width 512, 16 layers, learning rate 1e-3.")
+import re as _re
+_AZ = S.aerozoo()
+_t_arm = next(n for n in _AZ["arms"] if n.startswith("Transolver"))
+_t_cfg = _re.search(r"Transolver \d+ x \d+ \(.*?: (width \d+, \d+ layers, \d+ slices)", _AZ["protocol"]).group(1)
+print(f"- **{_t_arm}**, the Transolver of this dataset, not the reference configuration of the other chapters: {_t_cfg} "
+      "(`transolver_volume_aerozoo`); called Transolver below.")
 ```
 
 ```{python}
