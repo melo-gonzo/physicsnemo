@@ -357,3 +357,28 @@ def test_the_draw_is_independent_of_the_numbering():
         order = old_index[k1].argsort()
         assert torch.equal(old_index[k1][order], k0)
         assert torch.equal(w1[order], w0)
+
+
+def test_the_draw_is_the_same_in_every_pose():
+    """A rotation, reflection and translation of the case keep the same cells with the
+    same weights: the Morton grid lies in the boundary's canonical frame, not in the
+    dataset's axes, so the line along which the cells are drawn moves with the case."""
+    from physicsnemo.experimental.models.isla.sampling import draw_inputs
+    from test.experimental.models.isla._meshes import cloud, orthogonal, soup, transform
+
+    meshes = [soup(*cloud(n, seed=i)[:3]) for i, n in enumerate((900, 2500))]
+    start = torch.tensor(0.5, dtype=D)
+
+    def draw(ms):
+        inputs = [draw_inputs(m) for m in ms]
+        return sample_boundary_cells(
+            [a for a, _ in inputs], [x for _, x in inputs], 700, start
+        )
+
+    k0, w0 = draw(meshes)
+    for seed, improper in ((1, False), (2, True)):
+        R = orthogonal(3, seed, improper)
+        shift = torch.tensor([3.0, -1.0, 2.0], dtype=D)
+        k1, w1 = draw([transform(m, R, shift) for m in meshes])
+        assert torch.equal(k1, k0)
+        torch.testing.assert_close(w1, w0, atol=0, rtol=1e-12)

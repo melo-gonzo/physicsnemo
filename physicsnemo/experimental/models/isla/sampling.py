@@ -30,7 +30,8 @@ the forward pass from the full-resolution surfaces (:func:`sample_boundary_cells
   found exactly from the sorted measures: :func:`pps_inclusion_probabilities`);
   a condition kept whole has every :math:`\pi_i = 1`.
 - **Draw.** Systematic sampling: the cells are laid along a line, each
-  condition's cells in the Morton (Z-order) order of their centroids, each
+  condition's cells in the Morton (Z-order) order of their centroids in the
+  boundary's canonical frame (``tree_read.canonical_frame`` over every cell), each
   cell an interval of length :math:`\pi_i`, and the cells hit by the points
   :math:`u + m`, :math:`m = 0, \dots, k - 1`, are kept. The count is exactly
   :math:`k = \min(\sum_c N_c, \text{budget})`, a function of the cell counts
@@ -55,6 +56,7 @@ data-dependent shape, so the draw traces into one graph under
 import torch
 from jaxtyping import Float, Int
 
+from physicsnemo.experimental.models.isla.tree_read import canonical_frame
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
 from physicsnemo.mesh.geometry._cell_areas import compute_cell_areas
@@ -162,6 +164,10 @@ def sample_boundary_cells(
     with torch.no_grad():
         counts = torch.stack([m.new_full((), m.shape[0], dtype=torch.float64) for m in measures])
         shares = water_fill(counts, budget)
+        ### The Morton grid lies in the boundary's own frame over all its cells, so a
+        ### rigid motion of the case leaves the line, and the draw, unchanged (up to
+        ### roundoff and the frame's ties).
+        frame = canonical_frame(torch.cat(centroids).detach(), torch.cat(measures).detach())
         pis, orders, offset = [], [], 0
         for i, (a, x) in enumerate(zip(measures, centroids)):
             n_i = a.shape[0]
@@ -169,7 +175,7 @@ def sample_boundary_cells(
                 continue
             pis.append(pps_inclusion_probabilities(a.detach().double(), shares[i]))
             ### Morton order of the centroids on cubic cells, ties broken by index.
-            code = _compute_morton_codes(x.detach(), isotropic=True)
+            code = _compute_morton_codes(x.detach() @ frame, isotropic=True)
             orders.append(code.argsort(stable=True) + offset)
             offset = offset + n_i
         pi = torch.cat(pis)
