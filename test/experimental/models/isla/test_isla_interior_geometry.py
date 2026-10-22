@@ -992,3 +992,28 @@ def test_on_wall_direction_flips_exactly_with_the_winding(dim):
     assert torch.equal(d, torch.zeros_like(d)) and torch.equal(d2, d)
     assert torch.equal(u2, -u)
     assert torch.allclose(u, nu @ R.T, atol=1e-12, rtol=0)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="compares CUDA with CPU")
+@pytest.mark.parametrize("dim", [2, 3])
+def test_tie_search_on_cuda_matches_cpu(dim):
+    """The search on CUDA (the Warp traversal in three dimensions) finds the same
+    tie sets as on CPU: at the box's tie points (posed, so the ties hold to
+    rounding), on the box (vertices, edges, cells) and near a sphere / circle in
+    float32, d and u agree to rounding and the same points have a short u."""
+    R, t = orthogonal(dim, 7), torch.arange(1, dim + 1, dtype=D) / 3
+    for mesh, q in (_box_ties(dim)[:2], _box_wall(dim)[:2]):
+        moved, q = transform(mesh, R, t), q @ R.T + t
+        d, u = _geometry(q, moved)
+        d2, u2 = exact_boundary_geometry(
+            q.cuda(), moved.points.cuda(), moved.cells.cuda()
+        )
+        assert torch.allclose(d2.cpu(), d, atol=1e-12, rtol=0)
+        assert torch.allclose(u2.cpu(), u, atol=1e-12, rtol=0)
+    mesh = _circle(2000) if dim == 2 else _sphere(4)
+    pts, q = mesh.points.float(), _near_wall(dim, 4000, 11, band=0.3).float()
+    d, u = exact_boundary_geometry(q, pts, mesh.cells)
+    d2, u2 = exact_boundary_geometry(q.cuda(), pts.cuda(), mesh.cells.cuda())
+    assert torch.allclose(d2.cpu(), d, atol=1e-6, rtol=0)
+    assert torch.allclose(u2.cpu(), u, atol=1e-5, rtol=0)
+    assert torch.equal(u2.cpu().norm(dim=-1) < 1 - 1e-5, u.norm(dim=-1) < 1 - 1e-5)
