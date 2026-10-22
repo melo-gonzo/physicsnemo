@@ -119,6 +119,7 @@ def make_airfrans_case(seed: int = 0) -> DomainMesh:
 
 @pytest.fixture(scope="module")
 def case_root(tmp_path_factory) -> Path:
+    """A dataset root holding one synthetic AirfRANS case, shared by the module's tests."""
     root = tmp_path_factory.mktemp("airfrans")
     name = "airFoil2D_SST_29.2_5.9_2.0_4.0_12.0"
     (root / name).mkdir()
