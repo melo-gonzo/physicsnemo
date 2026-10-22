@@ -146,7 +146,7 @@ QV = [QP[f"r090_vol_isla_seed{s}"]["ratio_to_native_h"] for s in (42, 43)]
 qv = lambda mode: [sum(v[mode][f] for v in QV) / len(QV) for f in ("pressure_l2", "velocity_l2")]
 qd = max(abs(x - 1) for s in (42, 43) for mode in QP[f"r090_af_dtt_seed{s}"]["ratio_to_native_h"].values() for x in mode.values())
 print(f"On the DrivAerML Volume task, the standing's ISLA asked for its scored points in four "
-      f"chunks moves its pressure and velocity error by at most {100 * (max(qv('chunks4')) - 1):.0f}%, but 1,000 of those points "
+      f"chunks moves its pressure and velocity error by at most {100 * (max(qv('chunks4')) - 1):.1f}%, but 1,000 of those points "
       f"asked for on their own raise it {min(qv('sub1000')):.1f} to {max(qv('sub1000')):.1f} times, and points asked for one at a "
       f"time {min(qv('sub1')):.0f} to {max(qv('sub1')):.0f} times (seed means). On AirfRANS, ISLA-DTT's error moves by at most "
       f"{sci(float(f'{qd:.1g}'))} relative under every such change of the request, float32 roundoff (weights trained on the compiled path before "
@@ -1054,12 +1054,21 @@ for k in CL:
         for a in archs) + " |\n"
 print(o)
 named = lambda f: and_([f"{S.DATASETS[k].short} {a}" for k, a, _ in marked[f]])
+COST_RAW = json.load(open(S.CHAR / S.COST_FILE))
 FIXED = [S.DATASETS[k].short for k in CL if "r090fix_" in CL[k]["source"]]
+BEFORE = [S.DATASETS[k].short for k in CL if "before the compile fix" in CL[k]["note"]]
+TIMED = [S.DATASETS[k].short for k in COST_RAW["compiled_before_fix"]]
+FIXMOVE = max(abs(S.cost(k, a)["step_seconds"] / c["step_seconds"] - 1)
+              for k, v in COST_RAW["compiled_before_fix"].items() for a, c in v.items())
+AZ_T = next(n for n in S.aerozoo()["arms"] if n.split()[0] == "Transolver")
 print(": Training footprint of the reference configurations (ISLA and ISLA-DTT width 512, 12 layers, 512 slices; GeoTransolver "
-      "width 256; Transolver width 512, 16 layers), per dataset task: parameters / peak device memory [GiB] as the maximum over "
+      f"width 256; Transolver width 512, 16 layers, and on AeroZoo its own configuration, {AZ_T}), per dataset task: parameters / "
+      "peak device memory [GiB] as the maximum over "
       "the ranks / the median training step [s] leaving out the compile steps, one case per rank, seed means from the training "
-      f"logs of the standing's lanes. {json.load(open(S.CHAR / S.COST_FILE))['note']} On {and_(FIXED)} the ISLA rows are the "
+      f"logs of the standing's lanes. {COST_RAW['note']} On {and_(FIXED)} the ISLA rows are the "
       "lanes trained on the compiled path with the mix-order setting, not the eagerly trained lanes of the training-path control. "
+      f"ISLA's lanes on {and_(BEFORE)} trained before the mix-order setting; where both were "
+      f"timed, on {and_(TIMED)}, the setting moves the median step by at most {100 * FIXMOVE:.1f}%. "
       + (f"¹ {named('¹')}: " + "; ".join(sorted({why(c) for *_, c in marked["¹"]})) + ". " if marked["¹"] else "")
       + (f"‡ {named('‡')}: the lane is still training, priced on the epochs logged so far. " if marked["‡"] else "")
       + (f"² {named('²')}: trained in float32, as logged. " if marked["²"] else "")
