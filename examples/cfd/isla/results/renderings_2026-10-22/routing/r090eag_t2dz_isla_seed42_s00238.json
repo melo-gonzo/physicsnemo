@@ -1,0 +1,196 @@
+{
+  "run": "r090eag_t2dz_isla_seed42",
+  "epoch": 500,
+  "checkpoint": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/runs/r090eag_t2dz_isla_seed42/checkpoints",
+  "model_yaml": "physicsnemo.experimental.models.isla.ISLA",
+  "dataset_yaml": "plaid_tensile2d_2d",
+  "overrides": [
+    "--config-path",
+    "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/recipe_r090/conf",
+    "--config-name",
+    "infer",
+    "model=isla_tensile2d",
+    "train_split=train_400",
+    "val_split=val_100",
+    "+training.val_interval=10",
+    "model.hidden=512",
+    "model.n_slices=512",
+    "model.compile_blocks=true",
+    "compile=false",
+    "model.compile_blocks=false",
+    "model.compile_blocks=false",
+    "compile=false",
+    "dataset=plaid_tensile2d_2d",
+    "run_id=r090eag_t2dz_isla_seed42",
+    "infer_split=val",
+    "+save_predictions=true",
+    "sampling_resolution=200000",
+    "precision=float32",
+    "checkpoint_dir=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/runs",
+    "output_dir=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/book_figs_2026-10-22/routing/r090eag_t2dz_isla_seed42_s00238"
+  ],
+  "sampling_resolution": 200000,
+  "precision": "float32",
+  "sample_id": "00238_sample_000238_sample_000238",
+  "probe_metrics": {
+    "phase": "infer_step",
+    "step": 0,
+    "sample_id": "00238_sample_000238_sample_000238",
+    "metrics": {
+      "q_l2": 0.4070601463317871,
+      "displacement_x_l2": 0.010926226153969765,
+      "displacement_y_l2": 0.003918412607163191,
+      "displacement_l2": 0.005125811789184809,
+      "sig11_l2": 0.012144290842115879,
+      "sig22_l2": 0.005041216965764761,
+      "sig12_l2": 0.019987154752016068,
+      "stress_l2": 0.00817165244370699
+    },
+    "ts": "2026-10-22T17:28:10.735930+00:00"
+  },
+  "geo_kernel": "eager",
+  "query_independent": false,
+  "n_tokens": 10009,
+  "n_boundary": 462,
+  "n_query": 9547,
+  "n_active": 10009,
+  "n_stored": 10009,
+  "n_layers": 12,
+  "n_slices": 512,
+  "gauge": 1.5057777166366577,
+  "layers": [
+    {
+      "n_eff": 261.107177734375,
+      "n_eff_w": 315.6505432128906,
+      "H_slices": 0.8794627785682678,
+      "H_points": 0.9062204360961914,
+      "anchor_spread": 0.19130103290081024,
+      "pi_max_mean": 0.0814465805888176
+    },
+    {
+      "n_eff": 13.351325035095215,
+      "n_eff_w": 35.429073333740234,
+      "H_slices": 0.4062105417251587,
+      "H_points": 0.9042966365814209,
+      "anchor_spread": 0.14517922699451447,
+      "pi_max_mean": 0.1688377857208252
+    },
+    {
+      "n_eff": 385.6314697265625,
+      "n_eff_w": 426.0583801269531,
+      "H_slices": 0.9252473711967468,
+      "H_points": 0.7858645915985107,
+      "anchor_spread": 0.7395381331443787,
+      "pi_max_mean": 0.013207064010202885
+    },
+    {
+      "n_eff": 34.974220275878906,
+      "n_eff_w": 92.75605773925781,
+      "H_slices": 0.5444812774658203,
+      "H_points": 0.8678136467933655,
+      "anchor_spread": 0.13109257817268372,
+      "pi_max_mean": 0.12866154313087463
+    },
+    {
+      "n_eff": 286.3040466308594,
+      "n_eff_w": 369.2367248535156,
+      "H_slices": 0.8911438584327698,
+      "H_points": 0.8799148797988892,
+      "anchor_spread": 0.2476673573255539,
+      "pi_max_mean": 0.06913742423057556
+    },
+    {
+      "n_eff": 407.5848693847656,
+      "n_eff_w": 301.2938537597656,
+      "H_slices": 0.9362037181854248,
+      "H_points": 0.9049612283706665,
+      "anchor_spread": 0.0973823145031929,
+      "pi_max_mean": 0.04925386607646942
+    },
+    {
+      "n_eff": 213.11941528320312,
+      "n_eff_w": 296.36767578125,
+      "H_slices": 0.8094425797462463,
+      "H_points": 0.9067603945732117,
+      "anchor_spread": 0.17981716990470886,
+      "pi_max_mean": 0.07346091419458389
+    },
+    {
+      "n_eff": 270.9402160644531,
+      "n_eff_w": 360.6985168457031,
+      "H_slices": 0.8178892731666565,
+      "H_points": 0.8864842653274536,
+      "anchor_spread": 0.3059391379356384,
+      "pi_max_mean": 0.09023291617631912
+    },
+    {
+      "n_eff": 292.20843505859375,
+      "n_eff_w": 380.2303771972656,
+      "H_slices": 0.8694036602973938,
+      "H_points": 0.8746817111968994,
+      "anchor_spread": 0.11233639717102051,
+      "pi_max_mean": 0.11506868153810501
+    },
+    {
+      "n_eff": 238.68218994140625,
+      "n_eff_w": 338.11700439453125,
+      "H_slices": 0.8039510846138,
+      "H_points": 0.865624189376831,
+      "anchor_spread": 0.21888196468353271,
+      "pi_max_mean": 0.11460552364587784
+    },
+    {
+      "n_eff": 480.309814453125,
+      "n_eff_w": 489.6037292480469,
+      "H_slices": 0.9721110463142395,
+      "H_points": 0.9014527201652527,
+      "anchor_spread": 0.2168058305978775,
+      "pi_max_mean": 0.01437130942940712
+    },
+    {
+      "n_eff": 166.3920135498047,
+      "n_eff_w": 232.13609313964844,
+      "H_slices": 0.7457981109619141,
+      "H_points": 0.8967610597610474,
+      "anchor_spread": 0.22000250220298767,
+      "pi_max_mean": 0.23970144987106323
+    }
+  ],
+  "top_layers": [
+    0,
+    5,
+    11
+  ],
+  "top_slices": [
+    [
+      337,
+      135,
+      18,
+      74,
+      27,
+      22,
+      124,
+      15
+    ],
+    [
+      44,
+      360,
+      432,
+      487,
+      279,
+      436,
+      200,
+      0
+    ],
+    [
+      195,
+      103,
+      211,
+      326,
+      243,
+      336,
+      470,
+      415
+    ]
+  ]
+}

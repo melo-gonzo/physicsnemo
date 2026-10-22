@@ -453,11 +453,20 @@ def bc_legend(ax, kinds, loc="lower right", extra=()):
     )
 
 
+#: Renderings of nearest-token-form checkpoints (AirfRANS and the lug, until their standings' checkpoints are rendered).
 RENDER_DIR = (
     _Path(__file__).resolve().parent
     / ".."
     / "results"
     / "renderings_2026-10-18"
+    / "arrays"
+)
+#: Renderings of the standings' checkpoints (results/renderings_2026-10-22/README.md).
+RENDER_DIR_090 = (
+    _Path(__file__).resolve().parent
+    / ".."
+    / "results"
+    / "renderings_2026-10-22"
     / "arrays"
 )
 FIELD_WORDS = {

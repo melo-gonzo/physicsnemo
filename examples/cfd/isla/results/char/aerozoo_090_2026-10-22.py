@@ -15,13 +15,13 @@
 # limitations under the License.
 
 """AeroZoo standing under the compliant protocol (2026-10-22): ISLA 0.9.0 at its reference configuration on the seven splits,
-GeoTransolver 256 on the seven splits, Transolver 512 x 16 on `full`; test side, final checkpoint (epoch 250), float32, 200,000
+GeoTransolver 256 on the seven splits, Transolver 256 x 12 (its AeroZoo floor configuration, transolver_volume_aerozoo: width 256, 12 layers, 256 slices; PREREG_v2 section 12(d)) on `full`; test side, final checkpoint (epoch 250), float32, 200,000
 interior points, seeds 42 and 43 (scratch/isla-az-compliant-2026-10-19/PREREG_v2.md, sections 7 and 11; reduction as
 scratch/isla-az-decide-2026-10-21/reduce_azdecide.py). The relative L2 is the recipe's physical one per field and case, so
 predicting zero scores 1.0 on every field and case.
 
-Scores: results/campaigns_2026-10-22/aerozoo/scores/p200k_fp32_test_azc/<run>/<run>/metrics.jsonl (with .done and
-SNAPSHOT_USED), copied unmodified from scratch/isla-az-decide-2026-10-21/scores/ (originals on LHR, $T/p200k_fp32_test_azc/).
+Scores: results/campaigns_2026-10-22/aerozoo/scores/p200k_fp32_test_azc/<run>/<run>/metrics.jsonl (the .done and
+SNAPSHOT_USED markers, which results/.gitignore drops, in scores/p200k_fp32_test_azc/markers.json), copied unmodified from scratch/isla-az-decide-2026-10-21/scores/ (originals on LHR, $T/p200k_fp32_test_azc/).
 Per split, arm and field: the seed mean of the per-seed means over cases (the rows after the last config row, checked equal to
 the infer_summary row), the per-seed values, the median over cases of the per-case seed mean, and the case count. Checks: epoch
 250, the test side, the snapshot (code_r090 for ISLA, code_azv2 for the baselines), the manifest's test-side case count.
@@ -77,7 +77,7 @@ ARMS = {
         "about zero at the final epoch, so its median per-case pressure error is about 1.0, the zero predictor's; "
         "its velocity is learned in part",
     ),
-    "Transolver 512 x 16": (
+    "Transolver 256 x 12": (
         "t",
         ("full",),
         "code_azv2",
@@ -94,6 +94,9 @@ DTT = {
 }
 
 
+MARKERS = json.load(open(f"{SRC}/scores/p200k_fp32_test_azc/markers.json"))["runs"]
+
+
 def score(run, snap):
     """{case: metrics} of one scoring after its last config row, with its checks."""
     d = f"{SRC}/scores/p200k_fp32_test_azc/{run}"
@@ -108,8 +111,9 @@ def score(run, snap):
             summ = r
     split = run[4:].rsplit("_", 2)[0]
     assert cfg["epoch"] == 250 and cfg["infer_split"] == "test", run
-    assert open(f"{d}/SNAPSHOT_USED").read().strip().endswith(snap), run
-    assert not open(f"{d}/.done").read().strip(), run
+    mark = MARKERS[run]
+    assert mark["SNAPSHOT_USED"].endswith(snap), run
+    assert not mark[".done"].strip(), run
     assert len(cases) == N_CASES[split] == summ["num_samples"], run
     for f in FIELDS:
         m = st.fmean(c[f] for c in cases.values())

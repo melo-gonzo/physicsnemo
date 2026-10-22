@@ -62,13 +62,14 @@ velocity "worse" and the aoa Transolver velocity "worse" are floor-driven: under
 grows fastest: p 0.62, v 0.32, nut 0.76 per decade (Spearman 0.84 / 0.90 / 0.88), against GeoTransolver 0.16 / 0.020 / 0.44 and
 Transolver 0.32 / 0.062 / 0.45. Above the band the slopes are small for all: ISLA 0.21 / 0.14 / 0.30, GeoTransolver 0.11 / 0.065 /
 0.38, Transolver 0.042 / 0.062 / 0.50 (ISLA's nut grows less than both). In the farthest below-band quartile ISLA's pressure error
-is 0.100 against 0.045 / 0.054. On aoa the baselines' error climbs steeply with distance on both sides (Spearman 0.82-0.97), ISLA's
+is 0.100 against 0.045 / 0.054. On aoa the baselines' error rises steadily with distance on both sides (Spearman 0.68-0.97; corrected 2026-10-22, see the note at the end), ISLA's
 much less (0.19-0.66; slope below the band 0.067 / 0.016 / 0.031 per degree against 0.24 / 0.063 / 0.21 for GeoTransolver).
 
 **3d. Matched cases (reynolds).** On the 103 full_test cases outside 3e6-5e6 (all inside reynolds_test), reynolds-trained ÷
 full-trained on the same cases: g = ISLA 2.59 / 2.63 / 2.75, ISLA-DTT 2.05 / 2.12 / 2.61, GeoTransolver 1.78 / 1.17 / 2.37,
-Transolver 1.81 / 1.26 / 2.35; ρ_matched GeoTransolver ÷ ISLA 0.69 / 0.44 / 0.86, Transolver ÷ ISLA 0.70 / 0.48 / 0.86. The
-same picture as the registered ρ.
+Transolver 1.81 / 1.26 / 2.35; ρ_matched = g_baseline ÷ g_ISLA (below 1: ISLA's error grows more; the opposite direction to the excess ratios of 3b) GeoTransolver ÷ ISLA
+0.69 / 0.44 / 0.86, Transolver ÷ ISLA 0.70 / 0.48 / 0.86. The same picture as the registered ρ (the matched g still compares a
+504-case model with an 800-case model).
 
 **3e. S-RE, the data-size control (registered §11; triggered by the four reynolds "worse" cells).** 504-case in-distribution
 error (full_test): ISLA 0.0168 / 0.0082 / 0.0203, GeoTransolver 0.0148 / 0.0446 / 0.0206, Transolver 0.0132 / 0.0326 / 0.0203.
@@ -91,16 +92,19 @@ speed u: train −1.80 to 1.75, test −3.57 to 3.54. Below the band ISLA reache
 | GeoTransolver | 0.860 / 1.019 / 2.93 | 0.811 / 1.005 / 2.42 | no case inside; all changed |
 | Transolver | 0.654 / 0.994 / 3.25 | 0.927 / 1.013 / 2.17 | no case inside; all changed |
 
-Below the band, clamped, the pressure errors meet: ISLA 0.0265, ISLA-DTT 0.0269, GeoTransolver 0.0261, Transolver 0.0248 (native
-0.0564 / 0.0461 / 0.0303 / 0.0379). Reading as registered: **ISLA's extrapolation in z is actively harmful for pressure** (and
+Below the band, clamped, the pressure errors meet. On the common 254 below-band cases (corrected 2026-10-22: the table's ISLA-family
+rows average the 241 cases outside z's range) they are ISLA 0.0260, ISLA-DTT 0.0262, GeoTransolver 0.0261, Transolver 0.0248
+(0.0248-0.0262; native 0.0544 / 0.0444 / 0.0303 / 0.0379), so clamped ÷ native is 0.477 for ISLA and 0.590 for ISLA-DTT on those cases. Reading as registered: **ISLA's extrapolation in z is actively harmful for pressure** (and
 velocity below the band; both seeds, beyond 2σ). The baselines' pressure also improves when their speed is clamped (Transolver
-0.65 below), less so. Nut needs the true scale: clamping costs every model on nut, the baselines 2-3× (their nut is in m²/s, so
-the speed carries its magnitude), ISLA 1.1-1.35× (its nut is in units of U L, so the clamp only removes the shape's Re
-dependence). Hypothesis, not a finding: ISLA's reynolds pressure penalty is input-space amplification, from reading log Re
+0.65 below), less so. On ν_t the clamp costs the baselines 2.2-3.3× (their ν_t is in m²/s, so the speed holds its magnitude) and ISLA 1.10-1.35× (within
+noise below the band; its ν_t is in units of U L, so the clamp only removes the shape's Re dependence); ISLA-DTT's ν_t improves
+below the band (0.87×, within noise) and worsens above it (1.50× over the 210 cases outside z's range; 1.40× over all 242). Hypothesis, not a finding: ISLA's reynolds pressure penalty is input-space amplification, from reading log Re
 standardized by a narrow train-split scale far outside its training range (the narrow s alone is harmless, since a linear first
-layer absorbs any fixed affine scale; what matters is that low-Re test cases sit 2.8 training ranges beyond the edge in z, but
-only 1.8 in the baselines' linear speed). A training control (a split-independent log Re scale, about 57 GPU-h) waits for the
-supervisor's approval.
+layer absorbs any fixed affine scale; what matters is that the lowest-Re test case sits 2.8 training standard deviations beyond the edge in z, but only 1.8 in
+the baselines' linear speed; in training ranges 0.73 against 0.50). Two training controls were approved on 2026-10-22 and run:
+LRE, a fixed log scale z = log10(Re_ISLA / 1e6), which tests only whether the scale changes what training learns (a fixed affine
+map cannot change the reach in units of the training spread), and LIN, a linear training-standardized Re, which tests the reach
+(PREREG §14, §14b).
 
 **3g. Other checks.** Posed ÷ native: ISLA and ISLA-DTT within 1 ± 0.0008 on both tasks; the baselines 4.5-91 (not equivariant).
 nut scoring-space factor (train-split μ against 7.9e-4): reynolds 0.9997-1.0053 (mean 1.0007), aoa 0.957-1.0033 (mean 0.9961).
@@ -126,3 +130,10 @@ compiled-path defect (not a failure of the lanes).
   against 3.18 / 3.08 / 2.94) and a lower clamp sensitivity.
 - Confidence: the reynolds pressure and aoa pressure / nut results are large against the bands (σ-pooled 2σ) and hold under the
   additive, quadrature and matched-case readings; the velocity cells depend on the measure. Two seeds per arm.
+
+**Corrections, 2026-10-22 (from the reviewer's second read, scratch/isla-review-2026-10-21/second-read-2026-10-22/afx.md).**
+"2.8 training ranges" was 2.8 training standard deviations (0.73 against 0.50 in ranges); the aoa Spearman range is 0.68-0.97 (it
+measures monotonicity, the slopes measure steepness); the matched-case ρ is g_baseline ÷ g_ISLA, the reverse direction of the excess
+ratios; the clamp on the common 254 below-band cases reads ISLA 0.477 and ISLA-DTT 0.590 and all four meet at 0.0248-0.0262; the
+clamp's ν_t cost is 2.2-3.3× for the baselines, 1.10-1.35× for ISLA, 0.87× below and 1.50× above for ISLA-DTT; the training control
+is approved and running (LRE and LIN). Registered verdicts and numbers otherwise unchanged.
