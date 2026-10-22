@@ -105,7 +105,9 @@ def _volume_domain() -> DomainMesh:
     vehicle = ComposeQuadratureMeasure()(domain.boundaries["vehicle"])
     gd = domain.global_data.clone()
     gd["U_inf_dir"] = torch.tensor([1.0, 0.0, 0.0])
-    return DomainMesh(interior=domain.interior, boundaries={"vehicle": vehicle}, global_data=gd)
+    return DomainMesh(
+        interior=domain.interior, boundaries={"vehicle": vehicle}, global_data=gd
+    )
 
 
 def _targets(dataset: str) -> dict:
@@ -217,8 +219,14 @@ def test_isla_volume_composes_and_runs():
     }
     ### One boundary input: the full-resolution vehicle, the surface of the prediction
     ### points' geometry and the source of the tokens the model draws.
-    assert set(cfg.forward_kwargs) == {"boundary_meshes", "prediction_points", "global_data"}
-    assert OmegaConf.to_container(cfg.forward_kwargs.boundary_meshes) == {"vehicle": "boundaries.vehicle"}
+    assert set(cfg.forward_kwargs) == {
+        "boundary_meshes",
+        "prediction_points",
+        "global_data",
+    }
+    assert OmegaConf.to_container(cfg.forward_kwargs.boundary_meshes) == {
+        "vehicle": "boundaries.vehicle"
+    }
     domain = _volume_domain()
     batch, out, pred = _run(cfg, domain, _targets("drivaer_ml_volume_reference"))
     assert batch["forward_kwargs"]["prediction_points"] is domain.interior
@@ -228,7 +236,13 @@ def test_isla_volume_composes_and_runs():
 
 @pytest.mark.parametrize(
     "model",
-    ["isla_volume", "isla_volume_aerozoo", "isla_volume_airfrans", "isla_tensile2d", "isla_lug"],
+    [
+        "isla_volume",
+        "isla_volume_aerozoo",
+        "isla_volume_airfrans",
+        "isla_tensile2d",
+        "isla_lug",
+    ],
 )
 def test_the_interior_configs_build_their_model(model):
     """One input contract: an interior ISLA reads its prediction points' positions
@@ -238,11 +252,19 @@ def test_the_interior_configs_build_their_model(model):
     from datasets import load_dataset_config
     from output_normalize import model_dataset_constants
 
-    paired = {"isla_volume_aerozoo": "aerozoo_uvolume", "isla_volume_airfrans": "airfrans_volume_2d"}
+    paired = {
+        "isla_volume_aerozoo": "aerozoo_uvolume",
+        "isla_volume_airfrans": "airfrans_volume_2d",
+    }
     dataset = paired.get(model, "drivaer_ml_volume_reference")
     cfg = _compose(model, dataset, *SMALL)
     ds = load_dataset_config(_RECIPE_ROOT / "datasets" / f"{dataset}.yaml")
-    assert hydra.utils.instantiate(cfg.model, **model_dataset_constants(cfg.model, ds)).interior is True
+    assert (
+        hydra.utils.instantiate(
+            cfg.model, **model_dataset_constants(cfg.model, ds)
+        ).interior
+        is True
+    )
 
 
 def test_isla_volume_composes_with_the_corrected_measure_dataset():
@@ -277,7 +299,10 @@ def test_reference_volume_datasets_read_the_vehicle_whole_into_the_fluid(suffix)
     assert sdf < targets.index("${dp:DropBoundary}")
 
 
-@pytest.mark.parametrize("model", sorted(p.stem for p in (_RECIPE_ROOT / "conf" / "model").glob("isla_*.yaml")))
+@pytest.mark.parametrize(
+    "model",
+    sorted(p.stem for p in (_RECIPE_ROOT / "conf" / "model").glob("isla_*.yaml")),
+)
 def test_interior_isla_configs_use_the_class_default_boundary_budget(model):
     """Every interior ISLA config draws the class default of boundary tokens (no config
     overrides it); the surface configs, which sample nothing, do not set it."""
@@ -339,7 +364,8 @@ def test_isla_configs_pin_the_protocol_learning_rate(model, dataset):
 
 
 @pytest.mark.parametrize(
-    "model", sorted(p.stem for p in (_RECIPE_ROOT / "conf" / "model").glob("isla_*.yaml"))
+    "model",
+    sorted(p.stem for p in (_RECIPE_ROOT / "conf" / "model").glob("isla_*.yaml")),
 )
 def test_every_isla_model_config_pins_the_reference_rate(model):
     """Every ISLA model config, whatever its dataset, trains at the reference rate
@@ -372,7 +398,9 @@ def _airfrans_case(s: float = 1.0, c: float = 1.0) -> DomainMesh:
         gd[name] = gd[name] * c
     return DomainMesh(
         interior=Mesh(points=d.interior.points * s, point_data=pd),
-        boundaries={"airfoil": Mesh(points=foil.points * s, cells=foil.cells, cell_data=cd)},
+        boundaries={
+            "airfoil": Mesh(points=foil.points * s, cells=foil.cells, cell_data=cd)
+        },
         global_data=gd,
     )
 
@@ -385,7 +413,8 @@ def _airfrans_chain(cfg) -> list:
     )
 
     ds = OmegaConf.merge(
-        load_dataset_config(_RECIPE_ROOT / "datasets" / "airfrans_volume_2d.yaml"), {"sampling_resolution": 64}
+        load_dataset_config(_RECIPE_ROOT / "datasets" / "airfrans_volume_2d.yaml"),
+        {"sampling_resolution": 64},
     )
     ds = _apply_dataset_transform_appends(_apply_dataset_transform_drops(ds, cfg), cfg)
     return [hydra.utils.instantiate(t, _convert_="all") for t in ds.pipeline.transforms]
@@ -400,14 +429,22 @@ def test_isla_airfrans_scales_follow_the_dataset_s_nondimensionalization():
     cfg = _compose("isla_volume_airfrans", "airfrans_volume_2d")
     gs = OmegaConf.to_container(cfg.model.global_schema)
     (source,) = [k for k, v in gs.items() if v.get("velocity_scale")]
-    assert gs["nu"]["role"] == "viscosity" and not any(v["rank"] == 0 and "role" not in v for v in gs.values())
+    assert gs["nu"]["role"] == "viscosity" and not any(
+        v["rank"] == 0 and "role" not in v for v in gs.values()
+    )
     ds = OmegaConf.load(_RECIPE_ROOT / "datasets" / "airfrans_volume_2d.yaml")
     raw = OmegaConf.to_container(ds.pipeline.transforms, resolve=False)
     (nondim_cfg,) = [t for t in raw if "NonDimensionalizeByMetadata" in t["_target_"]]
     nondim = hydra.utils.instantiate(nondim_cfg, _convert_="all")
     outs = OmegaConf.to_container(cfg.model.output_schema)
-    divided = {name for name, kind in nondim_cfg["fields"].items() if kind in ("velocity", "pressure")}
-    assert divided == {"velocity", "pressure"} and all("units" not in outs[n] for n in divided)
+    divided = {
+        name
+        for name, kind in nondim_cfg["fields"].items()
+        if kind in ("velocity", "pressure")
+    }
+    assert divided == {"velocity", "pressure"} and all(
+        "units" not in outs[n] for n in divided
+    )
     assert outs["nut"]["units"] == {"U": 1, "L": 1}
     n = 5
     pd = {"velocity": torch.ones(n, 2), "pressure": torch.ones(n), "nut": torch.ones(n)}
@@ -415,8 +452,11 @@ def test_isla_airfrans_scales_follow_the_dataset_s_nondimensionalization():
         mesh = Mesh(
             points=torch.zeros(n, 2),
             point_data=dict(pd),
-            global_data={source: torch.tensor([0.6, 0.8]) * speed, "rho_inf": torch.tensor(1.0),
-                         "p_inf": torch.tensor(0.0)},
+            global_data={
+                source: torch.tensor([0.6, 0.8]) * speed,
+                "rho_inf": torch.tensor(1.0),
+                "p_inf": torch.tensor(0.0),
+            },
         )
         out = nondim(mesh).point_data
         torch.testing.assert_close(out["velocity"], pd["velocity"] / speed)
@@ -462,7 +502,12 @@ def test_isla_airfrans_similarity_end_to_end():
         batch = build_collate_fn(cfg.input_type, spec, targets)([(d, {})])
         with torch.no_grad():
             out = model(**batch["forward_kwargs"])
-        runs.append((batch["targets"], normalize_output_to_tensordict(out, targets, cfg.output_type)))
+        runs.append(
+            (
+                batch["targets"],
+                normalize_output_to_tensordict(out, targets, cfg.output_type),
+            )
+        )
     (t0, y0), (t1, y1) = runs
     stats = normalizer.stats["nut"]
     for name in ("velocity", "pressure"):
@@ -476,11 +521,28 @@ def test_isla_airfrans_similarity_end_to_end():
 
 @pytest.mark.parametrize(
     "model, dataset",
-    [("isla_volume_aerozoo", f"aerozoo_uvolume{suffix}") for suffix in
-     ("", "_nonbox", "_reynolds", "_blobs", "_bank_zero_to_cad", "_profile_crossflow", "_profile_dual_inlet")]
-    + [("isla_volume_airfrans", f"airfrans_volume_2d{suffix}") for suffix in ("", "_area", "_posed")]
-    + [("isla_volume_airfrans", f"airfrans_uvolume_2d_{task}{posed}") for task in ("reynolds", "aoa")
-       for posed in ("", "_posed")],
+    [
+        ("isla_volume_aerozoo", f"aerozoo_uvolume{suffix}")
+        for suffix in (
+            "",
+            "_nonbox",
+            "_reynolds",
+            "_blobs",
+            "_bank_zero_to_cad",
+            "_profile_crossflow",
+            "_profile_dual_inlet",
+        )
+    ]
+    + [
+        ("isla_volume_airfrans", f"airfrans_volume_2d{suffix}")
+        for suffix in ("", "_area", "_posed")
+    ]
+    + [
+        ("isla_volume_airfrans", f"airfrans_uvolume_2d_{task}{posed}")
+        for task in ("reynolds", "aoa")
+        for posed in ("", "_posed")
+    ]
+    + [("isla_volume_airfrans", "airfrans_uvolume_2d_s504")],
 )
 def test_isla_takes_its_split_s_constants_from_the_dataset_file(model, dataset):
     """ISLA's AeroZoo and AirfRANS configs leave reynolds and each output's scale to the dataset file, whose
