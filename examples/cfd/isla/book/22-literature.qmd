@@ -126,7 +126,7 @@ print(f"At the reference configurations on the native mesh, over {len(keys)} dat
       + "".join(f"{d} {fl} is not counted: the baselines' error on it includes an out-of-plane component that ISLA's "
                 "planar prediction does not have (@sec-interior-airfrans). " for d, fl in held) +
       f"Rotated and translated, ISLA's error moves by at most "
-      f"{100 * max(abs(r - 1) for *_, r in posed_isla):.1f}% on every headline field"
+      f"{100 * max(abs(r - 1) for *_, r in posed_isla):.1f}% on every headline field of the final standings"
       + (" except on " + " and ".join(f"the {ds} (up to ×{r:.2f})" for ds, r in bent_ds.items()) if bent_ds else "")
       + "; on the GINOT bracket lug ISLA's error is "
       f"×{S.Standing('lug').shift('ISLA', 'von_mises_l2', 'posed'):.2f} rotated and translated, where its structured mesh ties interior "
