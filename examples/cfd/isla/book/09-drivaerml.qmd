@@ -321,24 +321,30 @@ They are not matched in parameters, memory or time; @tbl-drivaerml-configs state
 ```{python}
 #| label: make-tbl-drivaerml-configs
 #| output: asis
-FRONT = J("char/ref80_frontier_2026-10-02.json")["candidates"]
-SURF_COST = {a: FRONT[t] for a, t in {"ISLA": "isla_w512_s512", "GeoTransolver": "gt_h256", "Transolver": "t_h512_l16_c100k"}.items()}
-VOL_COST = J("char/char_lanes_cost_2026-10-04.json")["cost"]["DrivAerML Volume"]
-print("| | Surface: parameters | Surface: peak memory per GPU | Surface: one epoch | Volume: parameters | Volume: peak memory per GPU | Volume: one epoch |")
+import re as _re
+SURF_COST = {a: S.cost("drivaerml_surface", a) for a in S.ARCHS}
+VOL_COST = {a: S.cost("drivaerml_volume", a) for a in S.ARCHS}
+print("| | Surface: parameters | Surface: peak memory per GPU | Surface: median training step | Volume: parameters | Volume: peak memory per GPU | Volume: median training step |")
 print("|---|--:|--:|--:|--:|--:|--:|")
 for a in S.ARCHS:
     s, v = SURF_COST[a], VOL_COST[a]
-    print(f"| {S.CONFIG[a]} | {s['n_parameters'] / 1e6:.1f}M | {s['train_peak_gib']:.0f} GiB | {s['epoch_seconds']:.0f} s "
-          f"| {v['n_parameters'] / 1e6:.1f}M | {v['peak_gib']:.0f} GiB | {v['epoch_seconds']:.0f} s |")
+    print(f"| {S.CONFIG[a]} | {s['n_parameters'] / 1e6:.1f}M | {s['peak_gib']:.0f} GiB | {s['step_seconds']:.3f} s "
+          f"| {v['n_parameters'] / 1e6:.1f}M | {v['peak_gib']:.0f} GiB | {v['step_seconds']:.3f} s |")
 print()
-print(": The reference configurations on the two DrivAerML tasks: parameters, peak device memory (maximum over four GB300 ranks, "
-      "bfloat16 training) and the wall time of one training epoch over the 435 cars. GeoTransolver's Volume configuration adds "
-      "ball-query features over neighboring interior points, hence its larger parameter count there. How to read this: the configurations "
-      "were selected under an 80 GiB budget on the Surface task; on the Volume task a step holds the interior points as well, and two "
-      "of them exceed that budget. Instrument (parameters, memory and time): ISLA at 512 wide, 512 slices, 3.75e-4, raw slice reads "
-      "(@sec-study-configurations); ISLA at its reference configuration adds an input layer per boundary condition, the exact "
-      "closest-point query of its interior points and the token draw inside the model, which this table does not include. Data: "
-      "results/char/ref80_frontier_2026-10-02.json (Surface); results/char/char_lanes_cost_2026-10-04.json (Volume). {#tbl-drivaerml-configs}")
+ci, cb = SURF_COST["ISLA"], SURF_COST["Transolver"]
+n_over = sum(v["peak_gib"] > 80 for v in VOL_COST.values())
+src = sorted({"results/" + p for c in (SURF_COST, VOL_COST) for v in c.values() for p in _re.findall(r"campaigns_[^\s;:]+", v["source"])})
+print(": The reference configurations on the two DrivAerML tasks as the standing's lanes trained them: parameters, peak allocated device "
+      "memory per GPU (the maximum over ranks) and the median wall time of one training step without the compile steps, seed means. "
+      f"Every architecture trains on {ci['gpus']} GB300 GPUs and {ci['ranks']} ranks; the configuration that trains ISLA is {ci['precision']} autocast with its "
+      f"blocks compiled one by one and Inductor's mix-order reduction off; the baselines train in {cb['precision']} autocast and uncompiled, as "
+      "released. "
+      + ("The ISLA lanes priced here trained before that setting, with the mix-order reduction on in the compiled blocks. "
+         if all("before the compile fix" in c["ISLA"]["note"] for c in (SURF_COST, VOL_COST)) else "")
+      + "GeoTransolver's Volume configuration adds ball-query features over neighboring interior points, hence its larger parameter "
+      "count there. How to read this: the configurations were selected under an 80 GiB budget on the Surface task; on the Volume task a "
+      f"step holds the interior points as well, and {['none', 'one', 'two', 'all three'][n_over]} of them exceed that budget. "
+      f"Data: results/char/{S.COST_FILE}, from {'; '.join(src)}. {{#tbl-drivaerml-configs}}")
 ```
 
 ### Three scorings of one checkpoint {#sec-drivaerml-scorings}
@@ -420,7 +426,7 @@ plt.show()
 **The information an interior point needs lives on the body, often a car length upstream, and the Volume task makes the model carry it there.** On the Surface task a prediction point is a boundary token: its position, normal and neighborhood sit exactly where its pressure is. A point in the wake has none of this. Its velocity deficit was set by the separated shear layers shed at the trunk's edge, its eddy viscosity by turbulence produced there and advected downstream, and its pressure by the whole body through an elliptic constraint. The model must route that information from the surface tokens through the slices to a point that has no surface of its own. Two further things make it harder.
 
 - **Three fields of different character.** Pressure is smooth away from the body. Velocity has the wake deficit and thin shear layers at its edges. The eddy viscosity is a closure quantity that is near zero in most of the domain and large in the wake and the boundary layer.
-- **Twice the tokens.** A step holds 200,000 boundary cells and 200,000 interior points, and ISLA's peak memory is `{python} f"{VOL_COST['ISLA']['peak_gib'] / SURF_COST['ISLA']['train_peak_gib']:.1f}"` times its Surface-task peak (@tbl-drivaerml-configs).
+- **Twice the tokens.** A step holds 200,000 boundary cells and 200,000 interior points, and ISLA's peak memory is `{python} f"{VOL_COST['ISLA']['peak_gib'] / SURF_COST['ISLA']['peak_gib']:.1f}"` times its Surface-task peak (@tbl-drivaerml-configs).
 
 ## The standing {#sec-drivaerml-standing}
 
@@ -451,8 +457,8 @@ print(SURF.table("tbl-drivaerml-surface-protocols", "The DrivAerML Surface task,
 #|   GeoTransolver red circles, Transolver amber triangles. The dashed line at
 #|   one is the error of predicting zero everywhere. How to read this: within
 #|   the native row the three markers sit close together; moving down,
-#|   ISLA's marker stays where it is and the baselines' move right by five to
-#|   thirty times. It does not show why the native errors are what they are.
+#|   ISLA's marker stays where it is and the baselines' move far to the
+#|   right. It does not show why the native errors are what they are.
 #|   Data: results/char/drivaerml_surface_090.json.
 protocol_dots(SURF, SURF_F); plt.show()
 ```
@@ -689,6 +695,9 @@ RM = R.load("probes090", "results/remesh/reduced_full.json")
 RMS = RM["seed_mean_ratio"]["r090_vol_isla"]
 RMR = {s: RM["runs"][f"r090_vol_isla_seed{s}"] for s in (42, 43)}
 assert all(r["epoch"] == 500 and r["n_cases"] == 48 for r in RMR.values())
+RM_EXACT = ("redraw_u0", "tok100k", "tok400k", "subdiv4")
+RM_CHECK = max(abs(r["nondegen"][k][q][m] - 1) for r in RMR.values() for k in RM_EXACT
+               for q in ("measure_ratio", "L_ratio") for m in ("min", "max"))   # the probe's validity check
 rm_rows = [("redraw_u0", "another seed of the 200,000-token draw"), ("tok100k", "100,000 boundary tokens"),
            ("tok400k", "400,000 boundary tokens"), ("subdiv4", "every triangle subdivided into four"),
            ("stl", "the watertight STL in place of the CFD wall")]
@@ -700,8 +709,8 @@ for k, lab in rm_rows:
 print()
 print(": ISLA's interior error on the DrivAerML Volume task when its boundary is presented differently, divided by the same "
       "checkpoint's native error: seed mean [seed 42, seed 43], 48 validation cars, final checkpoints, float32. The interior points, "
-      "the targets and the length unit are the same in every row; the first four rows keep the surface exactly (measure and $L$ within "
-      "1e-7), the last replaces it. How to read this: one is no change; the first row is the floor that any redraw of the tokens "
+      "the targets and the length unit are the same in every row; the first four rows keep the surface exactly (the probe's validity "
+      f"check: measure and $L$ within {RM_CHECK:.0e} of the native surface's on every car), the last replaces it. How to read this: one is no change; the first row is the floor that any redraw of the tokens "
       "sets. It does not show the baselines, which read no boundary sample. "
       f"Data: {R.source('probes090', 'results/remesh/reduced_full.json')}. {{#tbl-vol-remesh}}")
 ```
@@ -709,13 +718,13 @@ print(": ISLA's interior error on the DrivAerML Volume task when its boundary is
 ```{python}
 #| label: para-vol-remesh
 #| output: asis
-exact = [RMS[k][f] for k in ("tok100k", "tok400k", "subdiv4") for f in VOL_F]
+exact = [RMR[s]["ratio_to_native"][k][f] for s in (42, 43) for k in ("tok100k", "tok400k", "subdiv4") for f in VOL_F]
 BAND = R.md_table("probes090", "RESULTS.md", "Analyses beside the registered reading")
 far_b = next(b for b in BAND if b["points"].startswith("≥")); near_b = next(b for b in BAND if b["points"].startswith("native wall"))
 far_r = [R.num(far_b[c], k) for c in ("pressure r", "velocity r", "nut r") for k in (0, 1)]
 near_p = [R.num(near_b["pressure r"], k) for k in (0, 1)]
 SO = json.load(open(RES / "campaigns_2026-10-22" / "book_C" / "drivaerml_volume_studies.json"))["stl_offset"]
-print(f"Under the three exact presentations the error moves by at most {max(abs(r - 1) for r in exact) * 100:.1f}% on any field: ISLA's "
+print(f"Under the three exact presentations the error moves by at most {max(abs(r - 1) for r in exact) * 100:.1f}% on any field and seed: ISLA's "
       "interior points read the wall through the full-resolution surface, and every slice read is a measure-weighted quadrature, so a "
       "finer mesh of the same surface and a different count of tokens drawn from it give the same inputs up to the draw. The STL costs "
       f"{min(RMS['stl'][f] for f in VOL_F):.1f} to {max(RMS['stl'][f] for f in VOL_F):.1f} times the native error. Split by each "

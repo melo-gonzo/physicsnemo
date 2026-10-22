@@ -23,7 +23,8 @@
 2. ``dtt_instrument``: ISLA against ISLA-DTT on the Volume task at the study configuration of research/dtt/REPORT.md
    (512 wide, 512 slices, 3.75e-4, raw slice reads): per-seed native errors of the interacting reference (I), the read-only
    points without a boundary read (P), the exact read of 256 and 1,024 cells, and ISLA-DTT (the forest in the boundary's own
-   frame, theta 1), and ISLA-DTT's request probe. Parsed from the tables and sentences of research/dtt/REPORT.md.
+   frame, theta 1), and ISLA-DTT's request probe. Parsed from the tables and sentences of research/dtt/REPORT.md; the seed
+   means are the tables' own seed-mean column, and the mean of the two seeds for the 256- and 1,024-cell reads.
 
 usage: python drivaerml_volume_studies_2026-10-22.py [scratch root, default ~/gh/physicsnemo/scratch]
 """
@@ -100,7 +101,11 @@ def dtt_instrument():
         return [c.strip() for c in ln.strip().strip("|").split("|")]
 
     def seeds(cells):
-        return {"42": triple(cells[1]), "43": triple(cells[2])}
+        return {
+            "42": triple(cells[1]),
+            "43": triple(cells[2]),
+            "mean": triple(cells[3]),
+        }
 
     arms = {
         "I": seeds(
@@ -121,7 +126,7 @@ def dtt_instrument():
         m = re.search(r"\(seeds ([0-9. /]+) and ([0-9. /]+)\)", sec)
         arms[key] = {"42": triple(m.group(1)), "43": triple(m.group(2))}
     for a in arms.values():
-        a["mean"] = {f: (a["42"][f] + a["43"][f]) / 2 for f in FIELDS}
+        a.setdefault("mean", {f: (a["42"][f] + a["43"][f]) / 2 for f in FIELDS})
     pf = " ".join(
         rep[rep.index("### Pose-free parity on the car") :].split("\n### ")[0].split()
     )
