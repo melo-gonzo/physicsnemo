@@ -539,6 +539,25 @@ def available():
     ]
 
 
+def final():
+    """The datasets whose standing is final, in registry order: the ones a cross-dataset count or tally reads."""
+    return [k for k in available() if Standing(k).status == "final"]
+
+
+def in_flight():
+    """The datasets whose standing is in flight, in registry order: name them beside a tally that leaves them out."""
+    return [k for k in available() if Standing(k).status == "in_flight"]
+
+
+def tally_note() -> str:
+    """The sentence a cross-dataset tally of ``final()`` carries: which standings it leaves out, and why."""
+    left = in_flight()
+    if not left:
+        return ""
+    names = " and ".join(", ".join(DATASETS[k].short for k in left).rsplit(", ", 1))
+    return f"The count leaves out {names}, whose standings are in flight (@sec-ledger)."
+
+
 # --- The standing as figures (index, 08-standing) -------------------------------------------------
 
 
