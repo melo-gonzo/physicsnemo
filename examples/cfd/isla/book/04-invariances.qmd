@@ -761,7 +761,7 @@ print("\n: Interacting ISLA's error under a change of the request, divided by it
       f"AeroZoo: every {NZ['coverage']['case_stride']}th test case of the `full` split ({NZ['coverage']['n_cases']} cases). "
       "The AirfRANS column reads " + ST["airfrans"].raw["in_flight"]["what"].replace("ISLA and ISLA-DTT", "ISLA") + ". How to "
       "read this: 1 is no dependence on the request; ISLA-DTT reads 1 to float32 roundoff in every mode. Data: "
-      + "; ".join(R.source(P, n) for n, _, _ in COLS) + "; the modes are defined in scratch/isla-probes090-2026-10-21/PREREG.md, "
+      + "; ".join(R.source(P, n) for n, _, _ in COLS) + "; the modes are defined in PROBES-090's registration, "
       "section 2. {#tbl-query-population}")
 ```
 
