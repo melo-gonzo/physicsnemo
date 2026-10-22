@@ -314,3 +314,120 @@ records.
 - Probes: `probe_base_vs_branch.py` (the base numbers in section c) and `probe_timing.py` (section d), in this
   folder.
 - The optional LHR measurement (task item 4) was not run, to stay in the time budget. It is pre-step (i) above.
+
+## i. Proposed, not implemented: the fold sign and the token draw (GEO-ROBUST phase 1, 2026-10-22)
+
+Both defects come from f32floor (scratch/isla-az-decide-2026-10-21/f32floor/README.md). Neither proposal is
+implemented; each needs the supervisor's go-ahead and a pre-registered rerun of f32floor's A32-A64 arms.
+
+### i.1 The fold sign: a generalized winding number
+
+**The defect.** `d` is signed by the pseudo-normal of the closest feature. At a fold (a zero-thickness fin,
+coincident cells of opposite orientation, two roles welded back to back) the closest edge's or vertex's normals
+cancel: the angle-weighted sum is exactly 0 in float64, so the sign is undefined in exact arithmetic and roundoff
+picks it. f32floor found 12-427 such points per AeroZoo case, 0.002-0.32 L from the wall. Float64 only makes the
+arbitrary choice reproducible. Separately, 51-118 fluid points per case carry a negative `d` in both precisions,
+which points at open or non-manifold walls, where a local pseudo-normal does not decide inside from outside anyway.
+
+**Proposal.** Sign `d` by the generalized winding number (Jacobson, Kavan and Sorkine-Hornung 2013), a global
+quantity that does not divide by a local sum:
+
+    w(x) = (1 / 4 pi) sum_f Omega_f(x)     (2-D: (1 / 2 pi) sum_s theta_s(x)),
+    sign(d) = sign(sigma / 2 - w(x)),       sigma = sign(V),  V = (1/3) sum_f a_f n_f . (c_f - g),
+
+with `Omega_f` the signed solid angle of cell `f` seen from `x` (Van Oosterom and Strackee 1983; in 2-D the
+signed angle a segment subtends), `a_f, n_f, c_f` its measure, oriented unit normal and centroid, and `g` the
+gauge centroid (so `V` is the enclosed signed volume of a closed surface and frame-free for an open one).
+
+- **Why it is the right sign.** For a closed oriented surface `w` is 0 on the side the normals point to and
+  `sigma` (+1 with outward normals) on the other, so `sign(sigma/2 - w)` is "positive on the side the normals
+  point to", the current convention, and equals the pseudo-normal sign everywhere off the surface in exact
+  arithmetic. Existing behaviour on watertight meshes is unchanged.
+- **Folds.** Two coincident sheets of opposite orientation contribute `+Omega` and `-Omega`: the fold drops out of
+  `w`, and both sides of a zero-thickness fin take the sign of the region around it (fluid: positive). That is the
+  physical answer, and it no longer depends on which side roundoff picks.
+- **Open and non-manifold walls.** `w` is harmonic off the surface and jumps by exactly 1 across it; with holes it
+  is fractional and `1/2` is the standard inside threshold (Jacobson 2013). The sign is ambiguous only where
+  `|w - sigma/2|` is below the evaluation error, a thin set spanning the holes, instead of on every fold.
+- **Robust to precision.** Away from the surface `w` is a sum of smooth terms; rounding moves it by about
+  `u sum_f |Omega_f| / 4 pi`, which is far below `1/2` (float32: about 1e-6 for well-shaped meshes). A sign flip
+  needs `w` within that of `sigma/2`.
+- **Exactly antisymmetric under a winding flip.** Every `Omega_f`, `n_f` and so `V` and `w` negate exactly (IEEE
+  negation, same summation order), `sigma -> -sigma`, so `sign(sigma/2 - w)` negates bitwise. This also removes
+  open question g.2 (the vote sum 0 at ties takes +1): ties take the same `w` sign as everything else.
+- **Translation.** `w` uses only differences `x - v`; `V` uses `c_f - g`. Invariant.
+
+**Fast evaluation (Barill, Dickson, Schmidt, Levin and Jacobson 2018, "Fast winding numbers for soups and clouds").**
+The BVH that the tie search already builds (`_ball_candidates`) carries, per node, the dipole moment
+`m = sum a_f n_f`, its area-weighted centre `p` and radius `r`, from one bottom-up pass over the levels. A query
+uses the far-field term `m . (p - x) / (4 pi |p - x|^3)` when `|p - x| > beta r` (Barill's `beta = 2`, a
+second-order expansion if more accuracy is needed) and descends otherwise, with the exact `Omega_f` in float64 at
+the leaves: the same stackless Warp traversal as `_ball_candidates_kernel`, with a different prune test and an
+accumulator instead of a list. Error: Barill report about 1e-3 at `beta = 2` with first-order terms; the sign only
+needs `|w - sigma/2|` above it.
+
+**Cost at AeroZoo size (F = 1M triangles, Q = 200k).** About `O(log F + near field)` node visits per query,
+several hundred at `beta = 2`; at about 40 flops per visit that is 2e4 flops per query, 4e9 per call. On a GB300
+that is milliseconds in float32 (about 5-20 ms, bound by gathers), roughly 4-10 ms more in float64 for the near
+field. The moments pass is `O(F)`, about 5 ms. Memory: 7 floats per node, 2M nodes, 56 MB (float32). The same
+traversal on CPU: about 1-3 s per call at this size (Barill's CPU numbers), acceptable for tests only.
+
+**How it fits `exact_boundary_geometry`.** `_closest_candidates` returns a per-query sign from `w` next to the tie
+outputs (it already has the BVH, the float64 simplices and the query norms). `exact_boundary_geometry` uses it for
+every off-wall query: `d = sign_w * dist` for untied and tied queries alike; on-wall nodes keep `d = 0`. The
+face-interior shortcut `d = plane` stays (its sign is the cell's own normal, which agrees with `w` off folds); at a
+fold cell's interior the plane sign is also local, so the cleanest rule is `d = sign_w * |plane|` there too. The
+vertex and edge pseudo-normals are then no longer needed for the sign and can be dropped (`_vertex_pseudo_normals`,
+`_edge_pseudo_normals`, `_feature_normals` for the sign), which pays for part of the cost. `u` is unchanged.
+Tests to add: the fin (two coincident opposite sheets) gives positive `d` on both sides in float32 and float64; a
+winding flip negates `d` bitwise everywhere; a cube with one face removed signs the far field consistently; and
+f32floor's sign-flip count (12-427) goes to 0 in the rerun.
+
+### i.2 The token draw: a combinatorial order, cached per mesh
+
+**The defect.** `sample_boundary_cells` orders each condition's cells by the Morton code of their centroids on a
+21-bit grid over the bounding box, in the dataset's axes, and draws a systematic PPS sample along that line (start
+0.5 at evaluation). Two things in it move with roundoff and pose: a centroid near a grid line changes cell when its
+coordinates are rounded differently (5-5,794 of 200,000 drawn cells change between float32 and float64), and the
+grid follows the dataset's axes, so a rotation reorders the line and redraws the sample. The draw is the larger
+noise source on AeroZoo (S32: 2-15 % per case).
+
+**Proposal.** Keep the systematic PPS draw (its stratification along a local order is what keeps the draw noise
+low) and replace the Morton line by an order built from the mesh's connectivity only:
+
+- `pi` = a breadth-first (or reverse Cuthill-McKee) order of the welded cell-adjacency graph of each condition, from
+  its lowest-index cell, ties within a level broken by cell index, components concatenated by lowest index. It is a
+  function of the connectivity and the numbering, not of coordinates: exactly invariant to rotation, reflection,
+  translation and scale, and to the precision of the coordinates. Consecutive cells along `pi` are geodesic
+  neighbours (BFS levels are rings), so systematic sampling along it stratifies the sample over the surface, as
+  the Morton line did.
+- The PPS line is the float64 cumulative sum of the inclusion probabilities along `pi` (as now). The only remaining
+  coordinate dependence is the measures: rounding of posed float32 coordinates moves each measure by about `u`
+  relative, independently, so the cumulative sum moves by about `u A / sqrt(F)` and a hit changes cell with
+  probability about `u n / sqrt(F)` per token: 0.01 % at `n = 2e5`, `F = 1e6`, so about 2 of 200,000 tokens per
+  draw under a rotation, and none between float32 and float64 compute on the same inputs (the line is computed in
+  float64 from the same float32 data). Quantizing the probabilities to a fixed grid (for example `2^-40` of the
+  share) before the sum would make even that a measure-zero event.
+- The draw still depends on the mesh's numbering, like any draw from a stored mesh. It does not depend on how the
+  case is posed, which is the invariance the model claims.
+
+**Cost.** The order depends on the mesh only, and poses move coordinates, not connectivity, so it is computed once
+per mesh and cached with the case (or in the datapipe's per-case cache): a BFS over the cell graph, `O(F)` work,
+about 0.1 s per 1M cells on CPU (scipy `breadth_first_order` on the CSR adjacency, which the weld already gives),
+4 MB of int32 per 1M cells. Per forward pass it replaces the Morton encode and the argsort (`O(F log F)`) by a
+gather, so the step gets slightly cheaper. In-model without the cache, a GPU level-synchronous BFS needs about one
+launch per level (the graph diameter, about `sqrt(F)`, 1-3k levels at 1M cells), 0.1-0.5 s per mesh: too slow per
+step, so the cache is part of the proposal.
+
+**Alternatives considered.** (1) Morton in float64 (f32floor's cheap fix): removes the float32-against-float64
+flips, but not the rotation dependence or the flips from rounding of posed coordinates. (2) Morton in the
+boundary's canonical frame (`tree_read.canonical_frame`): rotation-covariant, but the frame and the grid lines both
+move with rounding, so posed draws still change near grid lines, about as often as now. (3) Priority sampling with
+hashed cell indices (key `U_c^(1/pi_c)`, `U_c` = hash(cell index, seed); Efraimidis-Spirakis): exactly invariant,
+no per-mesh cost, but it is a Poisson-type sample with no stratification, so it would raise the draw-to-draw noise
+that S32 already measures at percent level; measure before choosing it.
+
+**Tests to add.** The kept cells and weights are bitwise equal under a rotation and reflection of the case in
+float64, equal between float32 and float64 compute on the same float32 inputs, and differ under rotation in float32
+by at most a handful of cells; the draw's stratification (the spread of kept-cell counts over equal-measure patches)
+is no worse than the Morton draw's on the sphere and the lug.
