@@ -75,7 +75,13 @@ cuda_only = pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA")
 
 def _model(dim=3, theta=TREE_READ_THETA, randomize=True, seed=0, **kw):
     torch.manual_seed(seed)
-    kw = {"hidden": 32, "n_layers": 2, "n_slices": 8, "boundary_schemas": {"wall": {}}, **kw}
+    kw = {
+        "hidden": 32,
+        "n_layers": 2,
+        "n_slices": 8,
+        "boundary_schemas": {"wall": {}},
+        **kw,
+    }
     m = ISLA(
         output_schema=PV,
         global_schema=G,
@@ -134,16 +140,25 @@ def _exact_read(model, read, h_b, h_q, tok):
     ]
     if "vecs" in bnd.keys() and nb:
         u = bnd["vecs"][0][:, :nb]
-        cols += [torch.einsum("qnd,npd->qnp", rho, u), torch.einsum("qd,npd->qnp", n_q, u)]
+        cols += [
+            torch.einsum("qnd,npd->qnp", rho, u),
+            torch.einsum("qd,npd->qnp", n_q, u),
+        ]
     phi = model.kernel_basis(torch.cat(cols, -1))  # (Q, N, BASIS)
-    nh, c, kc = KERNEL_READ_HEADS, KERNEL_READ_WIDTH // KERNEL_READ_HEADS, KERNEL_READ_KEY
+    nh, c, kc = (
+        KERNEL_READ_HEADS,
+        KERNEL_READ_WIDTH // KERNEL_READ_HEADS,
+        KERNEL_READ_KEY,
+    )
     hb = read.norm_b(h_b)
     v = read.value(hb).view(nb_, nh, c)
     k = read.key(hb).view(nb_, nh, kc)
     q = read.query(read.norm_q(h_q)).view(nq_, nh, kc)
     log_w = bnd["log_w"][0, :, 0]
     log_frac = log_w - torch.logsumexp(log_w, 0)
-    logit = phi @ read.kernel.weight.t() + torch.einsum("qhc,nhc->qnh", q, k) / math.sqrt(kc)
+    logit = phi @ read.kernel.weight.t() + torch.einsum(
+        "qhc,nhc->qnh", q, k
+    ) / math.sqrt(kc)
     att = torch.softmax(logit + log_frac[None, :, None], dim=1)
     return read.out(torch.einsum("qnh,nhc->qhc", att, v).reshape(nq_, nh * c))
 
@@ -172,12 +187,21 @@ def _sphere_case(n=4000, nq=200, seed=0):
     """A smooth boundary: a sphere of radius 2 with outward normals and areas, and
     points at radii 2.05 to 6 plus a few far away."""
     g = torch.Generator().manual_seed(seed)
-    dirs = torch.nn.functional.normalize(torch.randn(n, 3, dtype=D, generator=g), dim=-1)
+    dirs = torch.nn.functional.normalize(
+        torch.randn(n, 3, dtype=D, generator=g), dim=-1
+    )
     pts, nrm = 2.0 * dirs, dirs
     w = torch.full((n,), 4 * math.pi * 4.0 / n, dtype=D)
     drv = torch.tensor([0.3, 1.0, 0.2], dtype=D)
-    q_dirs = torch.nn.functional.normalize(torch.randn(nq, 3, dtype=D, generator=g), dim=-1)
-    radii = torch.cat([2.05 + 3.95 * torch.rand(nq - 10, dtype=D, generator=g), torch.full((10,), 40.0, dtype=D)])
+    q_dirs = torch.nn.functional.normalize(
+        torch.randn(nq, 3, dtype=D, generator=g), dim=-1
+    )
+    radii = torch.cat(
+        [
+            2.05 + 3.95 * torch.rand(nq - 10, dtype=D, generator=g),
+            torch.full((10,), 40.0, dtype=D),
+        ]
+    )
     q = q_dirs * radii[:, None]
     return soup(pts, nrm, w), drv, q
 
@@ -197,9 +221,7 @@ def _rows(out, idx):
 
 
 def _rel(a, b):
-    return max(
-        float((a[k] - b[k]).norm() / b[k].norm().clamp_min(1e-30)) for k in b
-    )
+    return max(float((a[k] - b[k]).norm() / b[k].norm().clamp_min(1e-30)) for k in b)
 
 
 @pytest.mark.parametrize("vectors", [False, True], ids=["plain", "boundary_vectors"])
@@ -209,11 +231,21 @@ def test_tree_read_at_theta_zero_is_the_exact_read(dim, vectors):
     above), with and without rank-1 boundary inputs; at the model's angle it is not."""
     extra = {"boundary_schemas": {"wall": {"tr": {"rank": 1}}}} if vectors else {}
     tree = _tree(dim, 0.0, **extra)
-    assert isinstance(tree.kernel_reads[0], _TreeKernelRead) and len(tree.kernel_reads) == 2
+    assert (
+        isinstance(tree.kernel_reads[0], _TreeKernelRead)
+        and len(tree.kernel_reads) == 2
+    )
     mesh, drv, q = _case(dim)
     if vectors:
-        tr = torch.randn(mesh.n_cells, dim, generator=torch.Generator().manual_seed(5), dtype=D)
-        mesh = mesh.with_data(cell_data={EFFECTIVE_MEASURE_KEY: mesh.cell_data[EFFECTIVE_MEASURE_KEY], "tr": tr})
+        tr = torch.randn(
+            mesh.n_cells, dim, generator=torch.Generator().manual_seed(5), dtype=D
+        )
+        mesh = mesh.with_data(
+            cell_data={
+                EFFECTIVE_MEASURE_KEY: mesh.cell_data[EFFECTIVE_MEASURE_KEY],
+                "tr": tr,
+            }
+        )
     ref = outputs(_run(_with_exact_read(tree), mesh, drv, q))
     assert _rel(outputs(_run(tree, mesh, drv, q)), ref) < 1e-10
     tree._tree_read_theta = TREE_READ_THETA
@@ -270,7 +302,10 @@ def test_boundary_forest_splits_by_normal_octant_and_its_nodes_are_tight(dim):
     theta = 0.5
     f = BoundaryForest.build(pts, w, nrm, vecs, theta=theta, leaf_size=8, eps=1e-12)
     n, m = f.n_cells, f.n_nodes
-    assert n == 1000 and len(f.trees) == len(f.tree_cells) == int(f.node_offset.shape[0]) - 1
+    assert (
+        n == 1000
+        and len(f.trees) == len(f.tree_cells) == int(f.node_offset.shape[0]) - 1
+    )
     assert len(f.trees) == 2**dim
     assert sum(t.n_nodes for t in f.trees) == m
     assert torch.equal(torch.sort(torch.cat(f.tree_cells)).values, torch.arange(n))
@@ -286,7 +321,9 @@ def test_boundary_forest_splits_by_normal_octant_and_its_nodes_are_tight(dim):
         assert bool((pts_f[cells] >= f.aabb_min[i] - 1e-9).all())
         assert bool((pts_f[cells] <= f.aabb_max[i] + 1e-9).all())
         assert torch.allclose(f.measure[i], w[cells].sum())
-        assert torch.allclose(f.center[i], (pts[cells] * w[cells, None]).sum(0) / w[cells].sum())
+        assert torch.allclose(
+            f.center[i], (pts[cells] * w[cells, None]).sum(0) / w[cells].sum()
+        )
         mean_n = (nrm[cells] * w[cells, None]).sum(0) / w[cells].sum()
         assert torch.allclose(f.normal[i], mean_n / mean_n.norm(), atol=1e-9)
         mean_u = (vecs[cells] * w[cells, None, None]).sum(0) / w[cells].sum()
@@ -319,7 +356,15 @@ def test_boundary_forest_never_mixes_opposite_normals():
     down = torch.cat([xy, torch.full((400, 1), -1e-3, dtype=D)], -1)
     R = orthogonal(3, 5, False)
     pts = torch.cat([up, down]) @ R.T
-    nrm = torch.cat([torch.tensor([[0.0, 0.0, 1.0]] * 400, dtype=D), torch.tensor([[0.0, 0.0, -1.0]] * 400, dtype=D)]) @ R.T
+    nrm = (
+        torch.cat(
+            [
+                torch.tensor([[0.0, 0.0, 1.0]] * 400, dtype=D),
+                torch.tensor([[0.0, 0.0, -1.0]] * 400, dtype=D),
+            ]
+        )
+        @ R.T
+    )
     w = torch.ones(800, dtype=D)
     f = BoundaryForest.build(pts, w, nrm, None, theta=0.5, leaf_size=8, eps=1e-12)
     assert len(f.trees) == 2
@@ -371,9 +416,13 @@ def test_point_pairs_admit_only_separated_coherent_nodes_and_cover_every_cell(th
     assert bool(f.coherent[node].all())
     ### Coverage: a cell is counted through itself or through exactly one node.
     counts = torch.zeros(q.shape[0], n, dtype=torch.long)
-    counts.index_put_((qi[~is_node], si[~is_node]), torch.ones_like(qi[~is_node]), accumulate=True)
+    counts.index_put_(
+        (qi[~is_node], si[~is_node]), torch.ones_like(qi[~is_node]), accumulate=True
+    )
     cells, which = f.node_cells(node)
-    counts.index_put_((qi[is_node][which], cells), torch.ones_like(cells), accumulate=True)
+    counts.index_put_(
+        (qi[is_node][which], cells), torch.ones_like(cells), accumulate=True
+    )
     assert torch.equal(counts, torch.ones_like(counts))
     if theta == 0.0:
         assert n_node == 0
@@ -398,7 +447,9 @@ def test_forest_and_every_list_are_the_same_in_every_pose_at_finite_theta(improp
     f1 = BoundaryForest.build(k * pts @ R.T + t, 3.0 * w, nrm @ R.T, None, theta=1.0)
     assert torch.allclose(f1.frame, R @ f0.frame, atol=1e-9)
     assert torch.equal(f1.cells, f0.cells)
-    assert torch.equal(f1.range_start, f0.range_start) and torch.equal(f1.range_count, f0.range_count)
+    assert torch.equal(f1.range_start, f0.range_start) and torch.equal(
+        f1.range_count, f0.range_count
+    )
     assert torch.equal(f1.coherent, f0.coherent)
     assert torch.allclose(f1.center, k * f0.center @ R.T + t, atol=1e-9)
     assert torch.allclose(f1.normal, f0.normal @ R.T, atol=1e-9)
@@ -537,10 +588,22 @@ def test_tree_pair_invariants_are_scale_free_and_the_near_wall_invariant():
     d = torch.cdist(x, y).min(-1).values
     nq = torch.nn.functional.normalize(x - y[torch.cdist(x, y).argmin(-1)], dim=-1)
     gu = torch.nn.functional.normalize(torch.randn(1, 3, generator=g, dtype=D), dim=-1)
-    qi, si = (t.reshape(-1) for t in torch.meshgrid(torch.arange(21), torch.arange(50), indexing="ij"))
+    qi, si = (
+        t.reshape(-1)
+        for t in torch.meshgrid(torch.arange(21), torch.arange(50), indexing="ij")
+    )
 
     def inv_at(k):
-        geo = dict(query_r=k * x, query_n=nq, query_wall=k * d, src_r=k * y, src_n=n, src_vecs=None, g_unit=gu, eps=1e-12)
+        geo = dict(
+            query_r=k * x,
+            query_n=nq,
+            query_wall=k * d,
+            src_r=k * y,
+            src_n=n,
+            src_vecs=None,
+            g_unit=gu,
+            eps=1e-12,
+        )
         return tree_pair_invariants(qi, si, **geo).reshape(21, 50, -1)
 
     inv = inv_at(1.0)
@@ -548,7 +611,9 @@ def test_tree_pair_invariants_are_scale_free_and_the_near_wall_invariant():
     r = torch.cdist(x, y)
     assert torch.allclose(inv[..., 0], r) and torch.allclose(inv[1:, :, 1], r[1:].log())
     near = inv[1:, :, 2]
-    assert near.min() > -1e-12 and torch.allclose(near.min(-1).values, torch.zeros(20, dtype=D), atol=1e-12)
+    assert near.min() > -1e-12 and torch.allclose(
+        near.min(-1).values, torch.zeros(20, dtype=D), atol=1e-12
+    )
     assert torch.allclose(inv_at(3.1)[1:, :, 2:], inv[1:, :, 2:], atol=1e-12)
 
 
@@ -557,7 +622,13 @@ def test_tree_read_bf16_autocast_is_finite():
     mesh, drv, q = _case()
     q = torch.cat([q, mesh.cell_centroids[:2]])  # points on a cell centroid: d_q = 0
     f = lambda t: t.float()  # noqa: E731
-    bm = {"wall": soup(f(mesh.cell_centroids), f(mesh.cell_normals), f(mesh.cell_data[EFFECTIVE_MEASURE_KEY]))}
+    bm = {
+        "wall": soup(
+            f(mesh.cell_centroids),
+            f(mesh.cell_normals),
+            f(mesh.cell_data[EFFECTIVE_MEASURE_KEY]),
+        )
+    }
     with torch.autocast("cpu", dtype=torch.bfloat16):
         out = m(
             boundary_meshes=bm,
@@ -566,7 +637,9 @@ def test_tree_read_bf16_autocast_is_finite():
         )
     sum(o.float().sum() for o in outputs(out).values()).backward()
     assert all(torch.isfinite(o.float()).all() for o in outputs(out).values())
-    assert all(torch.isfinite(p.grad).all() for p in m.parameters() if p.grad is not None)
+    assert all(
+        torch.isfinite(p.grad).all() for p in m.parameters() if p.grad is not None
+    )
 
 
 def test_tree_read_rank2_inputs_are_refused():
@@ -588,14 +661,18 @@ def test_tree_read_cuda_fused_and_compiled_training_path():
     f = lambda t: t.float().to(dev)  # noqa: E731
     bm = {
         "wall": soup(
-            mesh.cell_centroids.float(), mesh.cell_normals.float(), mesh.cell_data[EFFECTIVE_MEASURE_KEY].float()
+            mesh.cell_centroids.float(),
+            mesh.cell_normals.float(),
+            mesh.cell_data[EFFECTIVE_MEASURE_KEY].float(),
         ).to(dev)
     }
     pp = points_mesh(f(q))
     outs = []
     for m in (m_e, m_c):
         with torch.autocast("cuda", dtype=torch.bfloat16):
-            out = outputs(m(boundary_meshes=bm, prediction_points=pp, global_data={"g": f(drv)}))
+            out = outputs(
+                m(boundary_meshes=bm, prediction_points=pp, global_data={"g": f(drv)})
+            )
         sum(o.float().square().mean() for o in out.values()).backward()
         assert all(torch.isfinite(o.float()).all() for o in out.values())
         missing = [n for n, p in m.named_parameters() if p.grad is None]
@@ -606,7 +683,9 @@ def test_tree_read_cuda_fused_and_compiled_training_path():
         a, b = outs[0][k].float(), outs[1][k].float()
         assert (a - b).norm() <= 3e-2 * a.norm() + 1e-6, k
     with torch.no_grad():
-        full = outputs(m_e(boundary_meshes=bm, prediction_points=pp, global_data={"g": f(drv)}))
+        full = outputs(
+            m_e(boundary_meshes=bm, prediction_points=pp, global_data={"g": f(drv)})
+        )
         part = outputs(
             m_e(
                 boundary_meshes=bm,
@@ -614,7 +693,9 @@ def test_tree_read_cuda_fused_and_compiled_training_path():
                 global_data={"g": f(drv)},
             )
         )
-    assert all(torch.allclose(part[k], full[k][:50], atol=1e-4, rtol=1e-4) for k in part)
+    assert all(
+        torch.allclose(part[k], full[k][:50], atol=1e-4, rtol=1e-4) for k in part
+    )
 
 
 @cuda_only
@@ -631,10 +712,16 @@ def test_fused_segment_softmax_read_matches_eager(dtype):
     dev = torch.device("cuda")
     g = torch.Generator().manual_seed(3)
     n_q, n_b, h, kc, c = 37, 50, 8, 4, 8
-    counts = torch.randint(0, 5000, (n_q,), generator=g)  # segments longer than a source chunk too
+    counts = torch.randint(
+        0, 5000, (n_q,), generator=g
+    )  # segments longer than a source chunk too
     qi = torch.repeat_interleave(torch.arange(n_q), counts)
-    bj = torch.randint(0, n_b - 5, (int(counts.sum()),), generator=g)  # sources 45..49 get no pairs
-    bj[: int(counts.sum()) // 2] = 0  # one source read by half of all pairs (many chunks)
+    bj = torch.randint(
+        0, n_b - 5, (int(counts.sum()),), generator=g
+    )  # sources 45..49 get no pairs
+    bj[: int(counts.sum()) // 2] = (
+        0  # one source read by half of all pairs (many chunks)
+    )
     plan = PairPlan.build(qi.to(dev), bj.to(dev), n_q, n_b)
     ker = torch.randn(int(counts.sum()), h, generator=g, dtype=D)
     logm = -torch.rand(int(counts.sum()), generator=g, dtype=D) * 8
@@ -643,11 +730,21 @@ def test_fused_segment_softmax_read_matches_eager(dtype):
     v = torch.randn(n_b, h, c, generator=g, dtype=D)
     plan_cpu = PairPlan.build(qi, bj, n_q, n_b)
     ref_in = [t.clone().requires_grad_(True) for t in (ker, q, k, v)]
-    ref = _eager_segment_softmax_read(ref_in[0], logm, ref_in[1], ref_in[2], ref_in[3], plan_cpu, 0.5)
+    ref = _eager_segment_softmax_read(
+        ref_in[0], logm, ref_in[1], ref_in[2], ref_in[3], plan_cpu, 0.5
+    )
     seed = torch.randn_like(ref)
     (ref * seed).sum().backward()
     dev_in = [t.to(dev, dtype).requires_grad_(True) for t in (ker, q, k, v)]
-    out = segment_softmax_read(dev_in[0], logm.to(dev, torch.float32), dev_in[1], dev_in[2], dev_in[3], plan, 0.5)
+    out = segment_softmax_read(
+        dev_in[0],
+        logm.to(dev, torch.float32),
+        dev_in[1],
+        dev_in[2],
+        dev_in[3],
+        plan,
+        0.5,
+    )
     (out * seed.to(dev, out.dtype)).sum().backward()
     tol = 1e-4 if dtype == torch.float32 else 5e-2
     rows = counts > 0
@@ -667,9 +764,7 @@ def test_tree_read_cuda_float32_matches_cpu_float64():
     dev = torch.device("cuda")
     tree_c = tree.to(dev).float()
     mesh_c = mesh.to(dev).apply(lambda t: t.float() if t.is_floating_point() else t)
-    gpu = outputs(
-        _run(tree_c, mesh_c, drv.to(dev).float(), q.to(dev).float())
-    )
+    gpu = outputs(_run(tree_c, mesh_c, drv.to(dev).float(), q.to(dev).float()))
     assert _rel({k: v.cpu().double() for k, v in gpu.items()}, cpu) < 1e-3
 
 
@@ -695,12 +790,12 @@ def test_tree_read_cuda_matches_cpu_float64(theta, monkeypatch):
     cpu = outputs(_run(tree, mesh, drv, q))
     dev = torch.device("cuda")
     tree_c = tree.to(dev)
-    gpu = outputs(
-        _run(tree_c, mesh.to(dev), drv.to(dev), q.to(dev))
-    )
+    gpu = outputs(_run(tree_c, mesh.to(dev), drv.to(dev), q.to(dev)))
     assert len(plans) == 2 and plans[0] == plans[1]  # the same opening decisions
     gpu = {k: v.cpu() for k, v in gpu.items()}
     for k in cpu:
         d = (gpu[k] - cpu[k]).abs()
-        print(f"{k}: max abs {d.max().item():.3e}, of the allclose bound {(d / (1e-9 + 1e-5 * cpu[k].abs())).max().item():.3e}")
+        print(
+            f"{k}: max abs {d.max().item():.3e}, of the allclose bound {(d / (1e-9 + 1e-5 * cpu[k].abs())).max().item():.3e}"
+        )
     assert same(gpu, cpu, atol=1e-9)
