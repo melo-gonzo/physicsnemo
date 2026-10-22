@@ -27,7 +27,7 @@ validation cars or the 180 HiLiftAeroML validation wings; every ratio is baselin
 import sys; sys.path.insert(0, ".")
 from palette import *
 import standing as S
-import json, statistics
+import json, re, statistics
 from pathlib import Path
 RES = Path("..") / "results"
 J = lambda p: json.load(open(RES / p))
@@ -474,7 +474,8 @@ with the compile steps left out.
 #| output: asis
 TASKS = ("drivaerml_surface", "drivaerml_volume", "hilift", "shift_suv", "airfrans", "tensile2d", "lug", "deepjeb")
 COST_ROWS = [("ISLA", "ISLA"), ("ISLA-DTT", "ISLA-DTT"), ("GeoTransolver", "GeoTransolver"), ("Transolver", "Transolver")]
-mark = lambda c: (" †" if "smoke lane" in c["note"] else "") + (" ‡" if "trained eager" in c["note"] else "")
+SMOKE = re.compile(r"one-epoch smoke lane of the same configuration, one seed \((\d+)\), ([\d,]+) steps")
+mark = lambda c: (" †" if SMOKE.search(c["note"]) else "") + (" ‡" if "compiled_before_fix" in c["note"] else "")
 out = ("| dataset and task | architecture | parameters | allocator peak per GPU [GiB] | training step [s] | precision | "
        "error, first headline field | baseline ÷ ISLA |\n|---|---|--:|--:|--:|---|--:|--:|\n")
 flight = []
@@ -489,14 +490,19 @@ for key in TASKS:
         out += (f"| {st_.ds.name if i == 0 else ''} | {arch}{mark(c)} | {c['n_parameters'] / 1e6:.1f}M | {c['peak_gib']:.1f} | "
                 f"{c['step_seconds']:.2f} | {c['precision']} | {st_.err(arch, f):.4f} | {rel} |\n")
 GPUS = {(c["gpus"], c["ranks"]) for k in TASKS for a, _ in COST_ROWS if (c := S.cost(k, a))}
+smoke = [(S.DATASETS[k].short, a, *SMOKE.search(c["note"]).groups()) for k in TASKS for a, _ in COST_ROWS
+         if (c := S.cost(k, a)) and SMOKE.search(c["note"])]
+fixed = list(dict.fromkeys(S.DATASETS[k].short for k in TASKS for a in S.ISLA_FORMS
+                           if (c := S.cost(k, a)) and "compiled_before_fix" in c["note"]))
 print(out)
 print(": What the reference configurations spend, per dataset and task, in the training lanes behind each standing: trainable parameters, "
       "the allocator peak per GPU (the maximum over ranks), the median training step and the training precision, "
       + " and ".join(f"{g} GB300 GPUs as {r} ranks" for g, r in sorted(GPUS)) + " for every lane, seed means; beside them the seed-mean "
       "error of the dataset's first headline field from its standing, and baseline ÷ ISLA. ISLA's lanes compile its blocks one by one; "
-      "the baselines run uncompiled, as released. † Priced from a one-epoch lane of the same configuration, because the standing lane's "
-      "training log is gone. ‡ The standing's ISLA checkpoints trained without compilation, which takes longer per step; the row prices "
-      "the compiled lane of the same configuration. "
+      "the baselines run uncompiled, as released. † The standing lane's training log is gone, so the cell is priced from the one-epoch "
+      "lane of the same configuration, one seed: " + ", ".join(f"{d} {a} (seed {s}, {int(n.replace(',', '')):,} steps)" for d, a, s, n in smoke) + ". "
+      "‡ The lane trained on the compiled training path after its fault was fixed (" + ", ".join(fixed) + "); the eager-trained lanes "
+      "behind those standings are not priced, and eager training takes longer per step. "
       + (f"The {' and '.join(flight)} errors are the in-flight rows of their dataset chapters. " if flight else "")
       + "How to read this: the table pairs a price with a result; it does not say what each architecture would score at another "
       "architecture's budget, and a step is not an epoch, since the step counts per epoch differ between datasets. "

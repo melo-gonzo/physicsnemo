@@ -215,7 +215,8 @@ print("**Each checkpoint is scored twice on the same test cases**: on the native
       "it returns the native mesh. The boundary's discretization is measured directly instead (@sec-airfrans-discretization).")
 print()
 g = {(c["gpus"], c["precision"]) for c in COST.values()}
-print("**Cost.** One training step of the lanes behind the standing, " + " and ".join(f"on {n} GB300 GPUs in {pr}" for n, pr in sorted(g))
+print("**Cost.** One training step of the lanes behind the standing rows shown, ISLA's and ISLA-DTT's on the compiled training "
+      "path after its fault was fixed, " + " and ".join(f"on {n} GB300 GPUs in {pr}" for n, pr in sorted(g))
       + " (allocator peak per GPU, the maximum over ranks; median step): "
       + "; ".join(f"{a} {v['peak_gib']:.0f} GiB and {v['step_seconds']:.2f} s" for a, v in COST.items())
       + f". ISLA's step is {step_ratio:.1f} times the baselines' mean on this planar task. ISLA's lanes compile its blocks one by one, and "
@@ -635,6 +636,7 @@ print(f"Data: {R.source('af_extrap', 'posthoc.json')} and {R.source('af_extrap',
 #| label: para-airfrans-clamp
 #| output: asis
 ca = CLC["arms"]; cp = {a: ca[a]["clamped"]["pressure_l2"] for a in ca}
+CLJ = R.load("af_extrap", "clamp.json")   # the registered reading per arm and side (2-sigma band, both seeds)
 clamp_nut_b = [ca[a]["ratio"]["nut_l2"] for a in BASE]
 print(f"**A post hoc diagnostic, not a fix: holding ISLA's Reynolds input at the edge of its training range at inference halves its "
       f"below-band pressure error.** ISLA reads the standardized log Reynolds number its declared scales form (@sec-using-scales), and the "
@@ -644,7 +646,7 @@ print(f"**A post hoc diagnostic, not a fix: holding ISLA's Reynolds input at the
       f"{cp['ISLA-DTT']:.4f}. Clamped, the four models meet: " + ", ".join(f"{a} {cp[a]:.4f}" for a in ca) + ". The clamp also lowers "
       f"Transolver's pressure error ({ca['Transolver']['ratio']['pressure_l2']:.2f} times), and it costs the baselines "
       f"{rng(clamp_nut_b, 1)} times on eddy viscosity, whose units carry the inlet speed, and ISLA, whose eddy viscosity is in units of $U L$, "
-      f"{ca['ISLA']['ratio']['nut_l2']:.2f} times. The reading it suggests, that ISLA's learned dependence on the log Reynolds number "
+      f"{ca['ISLA']['ratio']['nut_l2']:.2f} times ({CLJ['isla']['sides']['below']['reading']['nut_l2']}). The reading it suggests, that ISLA's learned dependence on the log Reynolds number "
       "extrapolates worse than holding it at the band's edge, is a hypothesis. Data: "
       f"results/campaigns_2026-10-22/book_D1/afx_clamp_common.json (from the scorer's per-case rows), {R.source('af_extrap', 'clamp.json')}.")
 print()
