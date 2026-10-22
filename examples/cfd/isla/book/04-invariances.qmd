@@ -19,6 +19,7 @@ from palette import *
 import standing as S
 import json, statistics
 from pathlib import Path
+from IPython.display import Markdown
 RES = Path("..") / "results"
 J = lambda p: json.load(open(RES / p))
 mean = statistics.mean
@@ -33,9 +34,11 @@ HEAD = {k: ST[k].ds.headline[0] for k in KEYS}                # the field each d
 NONREF = [S.DATASETS[k].name for k in KEYS if not S.DATASETS[k].reference]
 PR = J("precres_2026-09-18.json")["reduction"]; PRB, PRF = PR["bfloat16"], PR["float32"]
 pose_dev = lambda k: max(abs(ST[k].shift("ISLA", f, "posed") - 1) for f in ST[k].ds.headline)
-POSE_MOVED = [k for k in KEYS if pose_dev(k) >= 0.01]        # where ISLA's posed error leaves 1% of its native error
-POSED_DEV = max(pose_dev(k) for k in KEYS if k not in POSE_MOVED)
-MOVED_TXT = " and ".join("the " + S.DATASETS[k].short if k == "lug" else S.DATASETS[k].in_sentence for k in POSE_MOVED)
+FIN = S.final()                                              # the datasets a cross-dataset tally reads
+POSE_MOVED = [k for k in FIN if pose_dev(k) >= 0.01]         # where ISLA's posed error leaves 1% of its native error
+POSED_DEV = max(pose_dev(k) for k in FIN if k not in POSE_MOVED)
+EXCEPT_TXT = (" except " + " and ".join("the " + S.DATASETS[k].short if k == "lug" else S.DATASETS[k].in_sentence
+                                       for k in POSE_MOVED)) if POSE_MOVED else ""
 SEEDS_TXT = f"{S._COUNT[min(ST[k].n_seeds(a) for k in KEYS for a in S.ARCHS if ST[k].has(a))]} seeds" + "".join(
     f" ({S._COUNT[ST[k].n_seeds('ISLA')]} for ISLA on {S.DATASETS[k].in_sentence})" for k in KEYS if ST[k].n_seeds("ISLA") != 2)
 import records as R, re
@@ -148,8 +151,8 @@ so none of them moves with it.
   roundoff, but the geometry of the interior task has three discrete steps that roundoff can decide: the closest surface
   feature of a point equally far from two, which sets its direction; the sign of the distance at a fold of the surface;
   and the cells the token draw keeps (@sec-medial-ties). ISLA's rotated-and-translated error stays within
-  `{python} f"{POSED_DEV:.1%}"` of its native error on every headline field of every task with a standing except
-  `{python} MOVED_TXT` (@tbl-contract-shifts). On HiLiftAeroML, a surface task, it is
+  `{python} f"{POSED_DEV:.1%}"` of its native error on every headline field of every task with a final
+  `{python} Markdown(f"standing{EXCEPT_TXT} (@tbl-contract-shifts). {S.tally_note()}")` On HiLiftAeroML, a surface task, it is
   `{python} f"{ST['hilift'].shift('ISLA', HEAD['hilift'], 'posed'):.3f}"` times native, outside the 0.2% registered for it;
   what produces that move is not located (@sec-de-limits). Under *bfloat16 autocast* (matrix products
   run in the 16-bit bfloat16 format, with an 8-bit significand of which 7 bits are stored) the rounding is larger still:
@@ -353,15 +356,16 @@ The book reads consistency with three instruments. The standing artifacts rescor
 #| label: para-measure-lede
 #| output: asis
 near1 = lambda k: abs(ST[k].shift("ISLA", HEAD[k], "posed") - 1) < 0.02
-held = [k for k in KEYS if near1(k)]
-bpose = [ST[k].shift(a, HEAD[k], "posed") for k in KEYS for a in S.BASELINES if ST[k].has(a)]
-barea = [ST[k].shift(a, f, "area") for k in AREA_KEYS for a in S.BASELINES for f in ST[k].ds.headline]
-iarea = [ST[k].shift("ISLA", f, "area") for k in AREA_KEYS for f in ST[k].ds.headline]
+held = [k for k in FIN if near1(k)]
+area_fin = [k for k in AREA_KEYS if k in FIN]
+bpose = [ST[k].shift(a, HEAD[k], "posed") for k in FIN for a in S.BASELINES if ST[k].has(a)]
+barea = [ST[k].shift(a, f, "area") for k in area_fin for a in S.BASELINES for f in ST[k].ds.headline]
+iarea = [ST[k].shift("ISLA", f, "area") for k in area_fin for f in ST[k].ds.headline]
 print(f"**At the reference configurations, rotating and translating every case leaves ISLA's error within 2% of its native "
-      f"error on {len(held)} of the {len(KEYS)} tasks with a standing, and the uniform point cloud leaves it within "
-      f"{max(abs(r - 1) for r in iarea) * 100:.1f}% on all {len(AREA_KEYS)} tasks where that cloud resamples the scored cells. "
-      f"The same rotation multiplies GeoTransolver's and Transolver's errors by {min(bpose):.1f} to {max(bpose):.0f}, and the "
-      f"point cloud by {min(barea):.1f} to {max(barea):.1f}.** "
+      f"error on {'all ' if len(held) == len(FIN) else f'{len(held)} of the '}{len(FIN)} tasks with a final standing, and the "
+      f"uniform point cloud leaves it within {max(abs(r - 1) for r in iarea) * 100:.1f}% on all {len(area_fin)} of them where "
+      f"that cloud resamples the scored cells. The same rotation multiplies GeoTransolver's and Transolver's errors by "
+      f"{min(bpose):.1f} to {max(bpose):.0f}, and the point cloud by {min(barea):.1f} to {max(barea):.1f}.** {S.tally_note()} "
       "Every standing artifact scores each final checkpoint three times on the same validation cases: on the *native mesh*, on "
       "the *uniform point cloud* (the area-proportional law with exact Horvitz–Thompson weights), and *rotated and translated* "
       "(a random rotation and a translation of one RMS radius, the root-mean-square distance of the case's points from their "
@@ -454,14 +458,14 @@ The two protocols ask different questions, and the figure answers each.
 ```{python}
 #| label: para-pose-reading
 #| output: asis
-bpe = [ST[k].err(a, HEAD[k], "posed") for k in KEYS for a in S.BASELINES if ST[k].has(a)]
+bpe = [ST[k].err(a, HEAD[k], "posed") for k in FIN for a in S.BASELINES if ST[k].has(a)]
 H = ST["hilift"]
 print("**The pose protocol tests the contract.** No reference configuration trains with augmentation, so every model meets the rotated "
       "validation set without having seen a rotated case. GeoTransolver and Transolver read coordinates in the dataset's frame, "
       "so for them a rotated case is an input outside the training distribution, and their posed errors run from "
       f"{min(bpe):.2f} to {max(bpe):.1f}, the order of the field itself. ISLA has no frame to be out of (the frame in which "
       "ISLA-DTT builds its forest is computed from the boundary and turns with it, @sec-arch-modes). Its markers sit within 1% of one "
-      f"except on {MOVED_TXT} (@sec-medial-ties).")
+      f"on every task with a final standing{EXCEPT_TXT} (@sec-medial-ties). {S.tally_note()}")
 ```
 
 **The point-cloud protocol tests consistency.** The same checkpoint, trained under the native law, is scored on a sample of
@@ -484,20 +488,19 @@ mechanism, and the factors it gives are not a standing.
 #| output: asis
 #| column: page
 import json as _json
-_C = _json.load(open(RENDER_DIR / "render_car.json")); _P = _C["pose"]
+_C = _json.load(open(RENDER_DIR_090 / "render_car.json")); _P = _C["pose"]
 _ang = _P["rotation_angle_deg"]; _t = np.linalg.norm(_P["ISLA"]["pose_t"])   # the translation is in meters
-rendering_figure("fig-pose-rendering", [("figures/renderings/pose_geometry.png", "The car in its native pose and in the scored pose"),
-                                        ("figures/renderings/pose_cp.png", "Each model's prediction, native and posed")],
+rendering_figure("fig-pose-rendering", [("figures/renderings/pose_geometry_090.png", "The car in its native pose and in the scored pose"),
+                                        ("figures/renderings/pose_cp_090.png", "Each model's prediction, native and posed")],
     f"The posed protocol on one DrivAerML Surface validation car ({_C['sample_id'].split('_')[0]}), rotated by {_ang:.0f}° about one "
     f"axis and translated by {_t:.2f} m. Top: the car in the dataset's frame (gray) and in the scored pose, colored by ISLA's posed "
     "prediction. Bottom: each reference configuration's pressure coefficient on the native car (left), its prediction on the posed "
-    "car mapped back to the body frame (middle) and the difference (right). Native and posed relative L2: "
+    "car mapped back to the body frame (middle) and the difference (right). ISLA at its reference configuration and the "
+    "baselines' standing checkpoints (fair drive), seed 42; the car of @fig-drivaerml-prediction. Native and posed relative L2: "
     + ", ".join(f"{a} {_P[a]['rel_l2_native']:.4f} and {_P[a]['rel_l2_posed']:.4f}" for a in ("ISLA", "GeoTransolver", "Transolver"))
     + f"; the root-mean-square difference between ISLA's two predictions is {_P['ISLA']['posed_minus_native_rms_cp']:.5f} in $C_p$. "
     "How to read this: a model that is covariant draws the same middle panel as its left one; one case, seed 42. "
-    f"ISLA checkpoints of the {S.FORM_TAG} (@sec-checkpoint-form). "
-    "Data: results/renderings_2026-10-18/arrays/render_car.json.", nrow=2)
-print(rendering_in_flight(baselines="baseline checkpoints that read the freestream as a physical vector, not the standing's unit direction"))
+    "Data: results/renderings_2026-10-22/arrays/render_car.json.", nrow=2)
 ```
 
 ```{python}
@@ -644,7 +647,8 @@ print(f"**Re-mesh the boundary exactly, and ISLA's error does not move: splittin
       "quadrature error. Two things do move the error, and neither is an exact re-meshing. A token budget below the "
       f"boundary's own cell count (a median of {n_af:,.0f} panels on the airfoil) raises the AirfRANS pressure error "
       f"{min(budget):.2f}-fold to {max(budget):.2f}-fold as the budget falls from 600 to 200 tokens; at 400 tokens the loss is "
-      "the variance of the draw, since two draws of that budget differ from each other more than either differs from native. "
+      "the variance of the draw: on seed 42, two draws of that budget differ from each other more than either differs from "
+      "native. "
       "A different surface is a different "
       f"input: the watertight STL of the car in place of its CFD wall raises the DrivAerML Volume error {min(stl):.2f}-fold to "
       f"{max(stl):.2f}-fold, almost all of it within {near_L:g} L of the wall; farther out the error moves by at most "
@@ -732,7 +736,7 @@ print("**Interacting ISLA's prediction at a point depends on the other points of
       f"halving the request stay within {vol_pv:.1%} on pressure and velocity, while small queries cost {min(vol_small):.1f}-fold "
       f"to {max(vol_small):.0f}-fold. On AeroZoo's `full` split, chunking, halving and far-field companions move the error by "
       f"at most {az_mild:.0%}, and single points cost {min(az_one):.1f}-fold to {max(az_one):.1f}-fold. ISLA-DTT's prediction "
-      f"points are read-only, and its error moves by at most {sci(dtt_dev)} in every mode, float32 roundoff "
+      f"points are read-only, and on AirfRANS its error moves by at most {sci(dtt_dev)} in every mode, float32 roundoff "
       "(@sec-arch-passive-decoder). Interacting ISLA is therefore queried with the whole field's prediction points at once, "
       "drawn by the law it was trained on; ISLA-DTT needs no such condition.")
 ```
@@ -801,15 +805,17 @@ print("A prediction point's direction is the unit gradient of its distance to th
       "is not isolated. A tie rule that reads every feature within float32 resolution of the minimum would settle it "
       "(@sec-oq-ties).\n")
 F32 = R.md_table("az_diag", "f32floor/README.md", "3. Results")
-flips = [int(r["sign flips (CPU)"]) for r in F32 if r["run"] != "controls" and int(r["sign flips (CPU)"]) > 0]
-cells = [int(x.replace(",", "")) for r in F32 for x in re.findall(r"\d[\d,]*", r["cells D32≠D64"])]
+F32_HI = [r for r in F32 if r["run"] != "controls"]           # the cases chosen for their large float32 error
+flips = [int(r["sign flips (CPU)"]) for r in F32_HI if int(r["sign flips (CPU)"]) > 0]
+cells = [int(x.replace(",", "")) for r in F32_HI for x in re.findall(r"\d[\d,]*", r["cells D32≠D64"])]
 N_PTS = int(re.search(r"\(of ([\d,]+)\)", R.load("az_diag", "f32floor/README.md")).group(1).replace(",", ""))
 print("At a fold of the surface, where cells meet back to back, the pseudo-normal that signs the distance cancels exactly, "
       "so roundoff picks the sign; the sign is ill-posed there in exact arithmetic, and float64 would make it reproducible "
       "without making it right. The third step is the token draw: it orders the cells along a quantized Morton curve, "
       "and rounding moves cells across the quantization. On AeroZoo cases chosen for their large float32 error, "
-      f"{min(flips)} to {max(flips):,} of {N_PTS:,} prediction points per case flip the sign of their wall distance between "
-      f"float32 and float64, and {min(cells)} to {max(cells):,} of the {N_PTS:,} drawn boundary cells change "
+      f"up to {max(flips):,} of {N_PTS:,} prediction points per case flip the sign of their wall distance between float32 and "
+      f"float64, on {len(flips)} of the {len(F32_HI)} cases, and {min(cells)} to {max(cells):,} of the {N_PTS:,} drawn boundary "
+      "cells change "
       f"({R.source('az_diag', 'f32floor/README.md')}). On every one of those cases, computing the geometry in float64 removes "
       "nearly all of the difference between ISLA's float32 and float64 predictions, and computing the network's blocks in "
       "float64 removes none of it.")
