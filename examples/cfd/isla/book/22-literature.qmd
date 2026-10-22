@@ -67,7 +67,8 @@ are @sec-isla-contracts.
 **In distribution, ISLA leads on some datasets and fields and trails on
 others. Rotated and translated, or resampled, its error barely moves except
 on the lug's structured mesh, whose nodes tie for their closest feature of
-the exact geometry (@sec-limits-ties), while the baselines' errors grow by
+the exact geometry, a candidate cause whose link is not isolated
+(@sec-limits-ties), while the baselines' errors grow by
 factors.**
 
 ```{python}
@@ -118,7 +119,8 @@ print(f"At the reference configurations on the native mesh, over {len(keys)} dat
       + (f" ({nl} of them on the lug against Transolver, which reads no boundary-condition labels there)"
          if (nl := sum("lug" in c[0] and c[2] == "Transolver" for c in lead)) else "")
       + f", "
-      f"is level in {level} and trails in {len(trail)}. It trails on: {group(trail)}. AeroZoo counts on velocity only: on its "
+      f"is level in {level} and trails in {len(trail)}. It trails on: {group(trail)}. " + (S.tally_note() + " " if S.tally_note() else "")
+      + "AeroZoo counts on velocity only: on its "
       "pressure both baselines are about a zero predictor, so " + " and ".join(f"{b} ÷ ISLA {S.fmt_ratio(r)}" for b, r in az_p.items())
       + " there compare ISLA with predicting zero (@sec-aerozoo-baselines). "
       + "".join(f"{d} {fl} is not counted: the baselines' error on it includes an out-of-plane component that ISLA's "
@@ -126,9 +128,9 @@ print(f"At the reference configurations on the native mesh, over {len(keys)} dat
       f"Rotated and translated, ISLA's error moves by at most "
       f"{100 * max(abs(r - 1) for *_, r in posed_isla):.1f}% on every headline field"
       + (" except on " + " and ".join(f"the {ds} (up to ×{r:.2f})" for ds, r in bent_ds.items()) if bent_ds else "")
-      + "; " + S.tally_note()[0].lower() + S.tally_note()[1:-1] + ", and on the GINOT bracket lug ISLA's error is "
+      + "; on the GINOT bracket lug ISLA's error is "
       f"×{S.Standing('lug').shift('ISLA', 'von_mises_l2', 'posed'):.2f} rotated and translated, where its structured mesh ties interior "
-      "nodes for their closest feature of the exact geometry (@sec-limits-ties); "
+      "nodes for their closest feature of the exact geometry, a candidate cause whose link is not isolated (@sec-limits-ties); "
       f"the baselines' errors grow by factors of {min(posed_base):.1f} to {max(posed_base):.0f}.")
 notes = [S.DATASETS[k] for k in keys if not S.DATASETS[k].reference]
 if notes:
@@ -439,8 +441,9 @@ cell, beside read-only access to the slices.
 error moves by at most
 `{python} f"{LIM['query_population']['dtt_max_abs_dev']:.0e}"`, float32
 roundoff, where the interacting form's moves by factors
-(@sec-limits-query-independence). Refining the airfoil moves its pressure
-error by up to `{python} f"{100 * (max(TH['1.0']) - 1):.0f}"`% at its
+(@sec-limits-query-independence). Refining the airfoil moves the pressure
+error of the ISLA-DTT pair trained with the compiled path before its fault
+was fixed by up to `{python} f"{100 * (max(TH['1.0']) - 1):.0f}"`% at its
 trained opening angle $\theta = 1$ and by
 `{python} f"{100 * (max(TH['0']) - 1):.1f}"`% at $\theta = 0$, the size of
 the tree's approximation (@sec-oq-dtt-frame). The interior chapters measure
@@ -531,7 +534,7 @@ geometry run at 200,000 cells per case (@sec-architecture).
 
 ## Ideas from the literature worth trying {#sec-vs-ideas}
 
-**The comparison turns up experiments worth running, each aimed at a named
+**The comparison turns up experiments worth doing, each aimed at a named
 weakness.** None of them is run in this book; the open questions they bear
 on are in @sec-open-questions.
 
