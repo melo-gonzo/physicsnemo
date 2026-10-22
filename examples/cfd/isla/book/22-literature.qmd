@@ -73,7 +73,8 @@ factors.**
 ```{python}
 #| label: para-vs-standing
 #| output: asis
-keys = S.available()
+keys = S.final()        # a cross-dataset count reads the final standings; S.tally_note() names the ones it leaves out
+flight = S.in_flight()
 cells = []          # (dataset, field label, baseline, verdict)
 for k in keys:
     s = S.Standing(k)
@@ -123,21 +124,19 @@ print(f"At the reference configurations on the native mesh, over {len(keys)} dat
       + "".join(f"{d} {fl} is not counted: the baselines' error on it includes an out-of-plane component that ISLA's "
                 "planar prediction does not have (@sec-interior-airfrans). " for d, fl in held) +
       f"Rotated and translated, ISLA's error moves by at most "
-      f"{100 * max(abs(r - 1) for *_, r in posed_isla):.1f}% on every headline field except on "
-      + " and ".join(f"the {ds} (up to ×{r:.2f})" for ds, r in bent_ds.items())
-      + f", {'whose structured mesh ties' if len(bent_ds) == 1 else 'whose meshes tie'} interior nodes for their closest feature of the exact geometry "
-      "(@sec-limits-ties); "
+      f"{100 * max(abs(r - 1) for *_, r in posed_isla):.1f}% on every headline field"
+      + (" except on " + " and ".join(f"the {ds} (up to ×{r:.2f})" for ds, r in bent_ds.items()) if bent_ds else "")
+      + "; " + S.tally_note()[0].lower() + S.tally_note()[1:-1] + ", and on the GINOT bracket lug ISLA's error is "
+      f"×{S.Standing('lug').shift('ISLA', 'von_mises_l2', 'posed'):.2f} rotated and translated, where its structured mesh ties interior "
+      "nodes for their closest feature of the exact geometry (@sec-limits-ties); "
       f"the baselines' errors grow by factors of {min(posed_base):.1f} to {max(posed_base):.0f}.")
 notes = [S.DATASETS[k] for k in keys if not S.DATASETS[k].reference]
 if notes:
     print("\n\n" + " ".join(f"On {d.name}, ISLA's checkpoints are of the raw-read variant: its slice pooling "
                              f"and broadcast read the raw stream." for d in notes))
-print("\n\nData: " + ", ".join(S.Standing(k).source for k in keys) + ", results/char/aerozoo_090.json. The standing row by row is @sec-standing.")
+print("\n\nData: " + ", ".join(S.Standing(k).source for k in keys + flight) + ", results/char/aerozoo_090.json. The standing row by row is @sec-standing.")
 print()
-INF = [S.Standing(k) for k in keys if S.Standing(k).in_flight]
-if INF:
-    print(S.in_flight_callout({"what": "the " + " and ".join(s.ds.short for s in INF) + " rows: " + "; ".join(f"on {s.ds.short}, {s.in_flight['what']}" for s in INF),
-                               "replacement": "ISLA trained without compilation on " + " and ".join(s.ds.in_sentence for s in INF)}))
+print(S.in_flight_callout("lug"))
 ```
 
 ## Ideas, one at a time {#sec-vs-novel}
@@ -287,7 +286,7 @@ equivariance inside every layer.
 *What is new.* The choice to keep the entire trunk an ordinary scalar
 transformer and pay for equivariance once, at the edges, in an
 industrial-scale slice transformer, and the measurement of what that costs
-against two non-equivariant baselines on `{python} len(S.available())` datasets (@sec-standing). The
+against two non-equivariant baselines on every dataset of the standing (@sec-standing). The
 contrast in the literature is the price of the per-layer route: Rygiel et
 al. (2026) report AB-GATr at 2 to 11 times the training time of AB-UPT. A
 second element is small and sharp. Scalar heads on invariants are
@@ -519,7 +518,7 @@ geometry run at 200,000 cells per case (@sec-architecture).
    edges** (@sec-vs-novel-frame, @sec-vs-novel-invariants,
    @sec-vs-novel-anchors together): the anchor-relative invariant
    construction, its contracts, and its cost measured as the
-   in-distribution standing on `{python} len(S.available())` datasets, with the component clause of
+   in-distribution standing on every dataset, with the component clause of
    the scalar heads as a corollary.
 3. **Read-only prediction points with a tree-evaluated boundary read**
    (@sec-vs-novel-tree): a query-independent interior form whose evidence

@@ -34,10 +34,14 @@ def lane_gpuh(key, arch="ISLA", scale=1.0):
     return GPUH[key][arch]["gpuh"] * scale
 def field_name(s, f):
     return s.fields[f]
+FIN = S.final()        # the standings a cross-dataset count reads; S.tally_note() names the ones it leaves out
+NOTE = S.tally_note()
+of_fin = lambda ks: f"all {len(FIN)}" if len(ks) == len(FIN) else f"{len(ks)} of the {len(FIN)}"
 def tally():
-    """Counts of (dataset, headline field, baseline) pairs by verdict, native mesh."""
+    """Counts of (dataset, headline field, baseline) pairs by verdict, native mesh, over the final standings."""
     out = {"leads": [], "is level with": [], "trails": [], "is not compared with": []}
-    for k, s in ST.items():
+    for k in FIN:
+        s = ST[k]
         for f in s.ds.headline:
             for b in S.BASELINES:
                 out[s.verdict(b, f)].append((k, f, b))
@@ -78,17 +82,10 @@ def nm(k):
 def names(keys):
     n = [nm(k) for k in keys]
     return n[0] if len(n) == 1 else ", ".join(n[:-1]) + " and " + n[-1]
-HELD = [(k, f) for k in ST for f in ST[k].ds.headline if f in ST[k].ds.provisional]  # ratios without a verdict
+HELD = [(k, f) for k in FIN for f in ST[k].ds.headline if f in ST[k].ds.provisional]  # ratios without a verdict
 def held_clause():
     """The fields of compared standings that are given without a verdict, as one clause."""
     return "".join(f"; {nm(k)} {ST[k].fields[f]} is not counted, because {ST[k].ds.provisional[f]} (@{ST[k].ds.section})" for k, f in HELD)
-INF = [k for k in ST if ST[k].in_flight]   # standings whose ISLA rows an experiment in flight replaces
-def tally_callout():
-    """STYLE's In-flight callout for the tally, built from the in-flight files' own text."""
-    if not INF:
-        return ""
-    return S.in_flight_callout({"what": names(INF) + " rows of the tally: " + "; ".join(f"on {nm(k)}, {ST[k].in_flight['what']}" for k in INF),
-                                "replacement": "ISLA trained without compilation on " + names(INF)})
 AFX = R.load("af_extrap", "afx_results.json")["tasks"]
 CLAMP = R.load("af_extrap", "clamp.json")
 QP, RM, STL, TH, F32 = LIM["query_population"], LIM["remesh"], LIM["stl"], LIM["theta"], LIM["f32floor"]
@@ -108,12 +105,12 @@ follow give each item its numbers.
 #| label: para-not-claimed
 #| output: asis
 lug = ST["lug"].shift("ISLA", "von_mises_l2", "posed")
-exact = [k for k in ST if k != "lug" and all(abs(ST[k].shift("ISLA", f, "posed") - 1) < 0.02 for f in ST[k].ds.headline)]
+exact = [k for k in FIN if all(abs(ST[k].shift("ISLA", f, "posed") - 1) < 0.02 for f in ST[k].ds.headline)]
 worst = max(abs(ST[k].shift("ISLA", f, "posed") - 1) for k in exact for f in ST[k].ds.headline)
-print(f"- **Not that ISLA is more accurate in distribution in general.** Across the {len(ST)} standings with a native-mesh comparison "
-      f"and AeroZoo's `{AZ_IN}` split, ISLA leads a baseline in {len(TAL['leads'])} of {n_all} comparisons{LUGC}, is level in "
+print(f"- **Not that ISLA is more accurate in distribution in general.** Across the {len(FIN)} final standings with a native-mesh "
+      f"comparison and AeroZoo's `{AZ_IN}` split, ISLA leads a baseline in {len(TAL['leads'])} of {n_all} comparisons{LUGC}, is level in "
       f"{len(TAL['is level with'])} and trails in {len(TAL['trails'])}" + held_clause() + az_pressure_clause()
-      + ". The readings are in @sec-limits-in-distribution.")
+      + ". " + NOTE + " The readings are in @sec-limits-in-distribution.")
 print("- **Not that ISLA converts training cases into accuracy faster than GeoTransolver.** Where both fits pass their bar the "
       "fitted data exponents agree (@sec-scaling-law); a steeper learning curve of the total error is a larger coefficient, not a "
       "faster rate (@sec-exponents-datasets).")
@@ -121,7 +118,8 @@ print("- **Not that equivariance is an accuracy edge in general.** A baseline gi
       "one trained with rotation augmentation approximately so. ISLA's pose lead is against GeoTransolver and Transolver as released, "
       "trained in the dataset's frame without augmentation and scored in random poses (@sec-pose).")
 print(f"- **Not that ISLA's pose invariance is exact on every mesh.** Rotated and translated, its error stays within {100 * worst:.1f}% "
-      f"of native on {len(exact)} of the {len(ST)} standings, and it is {lug:.2f} times native on the GINOT bracket lug, whose structured "
+      f"of native on {of_fin(exact)} final standings, and it is {lug:.2f} times native on the GINOT bracket lug, whose standing "
+      "is in flight and whose structured "
       "mesh puts interior nodes equally far from two boundary features, where float32 rounding picks the direction (@sec-limits-ties). "
       "ISLA-DTT's far-field read adds no such limit: a tie of its forest's frame moves the read only by the tree's error "
       "(@sec-oq-dtt-frame).")
@@ -138,8 +136,6 @@ print("- **Not that the scaling law, the cell-count saturation or the capacity f
       "They are measured on smaller ISLAs and read for slopes and floors (@sec-capacity, @sec-oq-scaling).")
 print("- **Not that the three reference configurations are matched in capacity.** They are matched on one memory budget per GPU and "
       "differ in parameters and cells (@sec-review-frontier).")
-print()
-print(tally_callout())
 ```
 
 ## Limits of each headline claim {#sec-review-honesty}
@@ -343,8 +339,8 @@ LG = ST["lug"]
 per_seed = [p / n for p, n in zip(LG.seeds("ISLA", "von_mises_l2", "posed"), LG.seeds("ISLA", "von_mises_l2"))]
 ATT = " ".join(R.load("attrib090", "RESULTS.md").split())
 n_tie, pct_tie = re.search(r"on \*\*([\d,]+) interior nodes \(([\d.]+) % of the interior", ATT).groups()
-print(f"**Rotated and translated, ISLA's error stays within {100 * worst:.1f}% of native on {len(exact)} of the {len(ST)} standings, "
-      f"and on the GINOT bracket lug it is {lug:.2f} times native ({f3(per_seed)} per seed).** On the lug's structured mesh {n_tie} "
+print(f"**Rotated and translated, ISLA's error stays within {100 * worst:.1f}% of native on {of_fin(exact)} final "
+      f"standings, and on the GINOT bracket lug it is {lug:.2f} times native ({f3(per_seed)} per seed).** On the lug's structured mesh {n_tie} "
       f"interior nodes of the probed test lugs, {pct_tie}% of the interior, are equally far, to float32 resolution, from two or more "
       "surface features: nodes on the plate's mid-thickness plane, and rows of nodes on corner bisectors. The exact closest-point search "
       "keeps the feature it meets first, so the direction input at those nodes follows the order of the search, which rounding of the "
@@ -635,7 +631,7 @@ print("**The open question is why ISLA does not hold the outlet at its prescribe
 ```{python}
 #| label: para-oq-ties
 #| output: asis
-n_pose = sum(all(abs(ST[k].shift("ISLA", f, "posed") - 1) <= 0.002 for f in ST[k].ds.headline) for k in ST)
+n_pose = sum(all(abs(ST[k].shift("ISLA", f, "posed") - 1) <= 0.002 for f in ST[k].ds.headline) for k in FIN)
 print("**The open question is whether the closest-feature ties of the lug's mesh carry its posed growth, and whether a tie rule that "
       f"does not depend on the search removes it.** On the lug posed ÷ native is {lug:.2f}, and {n_tie} interior nodes of the probed "
       "test lugs are equally far, to float32 resolution, from two or more surface features; the search keeps the feature it meets first "
@@ -646,7 +642,7 @@ print("**The open question is whether the closest-feature ties of the lug's mesh
       "scored native and posed against the same base, read on three questions by a rule written before any score: whether the flip "
       "residual falls to float32 roundoff, whether native accuracy is unchanged within the seed spread, and how much of the excess of "
       f"posed ÷ native over one is left. The bar the other standings set is posed ÷ native within 0.002 of one on every headline field, which {n_pose} of "
-      f"the {len(ST)} standings meet. Nodes on the surface itself keep the found feature's direction under this rule, and a rule for "
+      f"the {len(FIN)} final standings meet. Nodes on the surface itself keep the found feature's direction under this rule, and a rule for "
       f"them is open too. Cost: {q_ties} GPU-hours, as the design prices it. Data: {R.source('medial_tie', 'DESIGN.md')}.")
 ```
 
@@ -783,7 +779,7 @@ print("**The open question is whether the cell-count saturation, the capacity fl
 #| output: asis
 t = ST["tensile2d"]
 WD = {"stress_l2": "stress", "displacement_l2": "displacement", "q_l2": "plastic strain"}
-worst_r = min(((ST[k].ratio(b, f), k, f, b) for k in ST for f in ST[k].ds.headline for b in S.BASELINES if ST[k].compared(b, f)))
+worst_r = min(((ST[k].ratio(b, f), k, f, b) for k in FIN for f in ST[k].ds.headline for b in S.BASELINES if ST[k].compared(b, f)))
 trails = [f"{b} on {' and '.join(WD[f] for f in t.ds.headline if t.verdict(b, f) == 'trails')}"
           for b in S.BASELINES if any(t.verdict(b, f) == "trails" for f in t.ds.headline)]
 print(f"**The open question is what causes ISLA's deficit on PLAID Tensile2d.** ISLA trails {' and '.join(trails)} (@sec-tensile2d): "
@@ -791,7 +787,7 @@ print(f"**The open question is what causes ISLA's deficit on PLAID Tensile2d.** 
       f"{r('tensile2d', 'GeoTransolver', 'displacement_l2'):.2f} on displacement, Transolver ÷ ISLA {r('tensile2d', 'Transolver', 'stress_l2'):.2f} "
       f"and {r('tensile2d', 'Transolver', 'displacement_l2'):.2f}, on a metric dominated by specimens that never yield, with ISLA's "
       f"{SEEDW[t.n_seeds('ISLA')]} seeds far apart. The smallest ratio of the {n_all} comparisons is {worst_r[0]:.2f}, {worst_r[3]} on "
-      f"{WD.get(worst_r[2], worst_r[2])}. Its interior geometry is exact here and its pose contract holds (@sec-limits-ties), and an "
+      f"{WD.get(worst_r[2], worst_r[2])}; {NOTE[0].lower() + NOTE[1:] if NOTE else ''} Its interior geometry is exact here and its pose contract holds (@sec-limits-ties), and an "
       "ablation of ISLA against itself finds no accuracy cost in any of the changes from an earlier form of its code, with its "
       "prediction-point embedding the better design on this dataset (@tbl-tensile2d-attrib). Two candidate causes remain. One is the "
       "aggregation: GeoTransolver + ISLA's measure-weighted pooling (ablation) isolates whether the quadrature weighting costs accuracy "
@@ -810,7 +806,8 @@ SOL = [k for k in ("tensile2d", "lug", "deepjeb") if k in ST]
 def sline(k):
     s = ST[k]
     cav = " (Transolver reads no boundary-condition labels there)" if k == "lug" else ""
-    return f"{s.ds.name}: " + ", ".join(f"{field_name(s, f)} ISLA {s.verdict('GeoTransolver', f)} GeoTransolver and {s.verdict('Transolver', f)} Transolver"
+    flight = " (in flight, @sec-ledger)" if s.in_flight else ""
+    return f"{s.ds.name}{flight}: " + ", ".join(f"{field_name(s, f)} ISLA {s.verdict('GeoTransolver', f)} GeoTransolver and {s.verdict('Transolver', f)} Transolver"
                                         for f in s.ds.headline) + cav
 print("**Three structural-mechanics problems carry standings beside the aerodynamic ones, and they read in both directions.** "
       + "; ".join(sline(k) for k in SOL) + " (@sec-tensile2d, @sec-lug, @sec-deepjeb). These sets were chosen for varying boundary "
@@ -857,7 +854,7 @@ print(": The engineering directions: what is in place for each and what remains.
 print("**ISLA is the choice where the deployment mesh or sampling law may differ from the training one, where geometries arrive in "
       "arbitrary poses, and where a surrogate must be a function of the physics rather than of the dataset's frame; on in-distribution "
       f"accuracy at matched memory it leads in {len(TAL['leads'])}{LUGC}, is level in {len(TAL['is level with'])} and trails in "
-      f"{len(TAL['trails'])} of the {n_all} comparisons of the standing (@sec-standing).** The recommendation rests on the contracts, "
+      f"{len(TAL['trails'])} of the {n_all} comparisons of the final standings (@sec-standing).** " + NOTE + " The recommendation rests on the contracts, "
       "not on an accuracy lead. They hold on every standing up to three measured limits: the closest-feature ties of the lug's mesh "
       "(@sec-limits-ties), the interacting form's dependence on the request (@sec-limits-query-independence), and the precision of the "
       "wall the interior model is given (@sec-limits-boundary-law, @sec-oq-precision). GeoTransolver and Transolver are released, in "
