@@ -39311,7 +39311,7 @@ construction. Its comparison with A2's area figures measures no robustness.
 DeepJEB++ take their 0.9.0 rows. HiLift took its 0.9.0 rows under R-HL090.
 Pending the training-path control: AirfRANS, Tensile2d and the lug. There,
 the standings will be the rows trained by the model's own (eager) function
-(PREREG §13): the retrained `r090fix` rows under (a), eager-trained rows
+(PREREG §13; readings (a), (b) and (c) as defined in @sec-nb-ref090-t2d-control): the retrained `r090fix` rows under (a), eager-trained rows
 under (b), and the supervisor's choice under (c). For Tensile2d, §13 is a
 deviation made after the retrained result was seen. For AirfRANS and the lug
 it was registered before results. They will be recorded in their own entry. The registered training-path trigger
@@ -39334,7 +39334,7 @@ sample's variation. If it cannot, the residuals show where capacity is missing. 
 over, until its error stops falling. ISLA 0.9.0 (width 512, 12 layers, 512 slices) runs against GeoTransolver 256 and
 Transolver 512 x 16 at their standing configurations (on AeroZoo the Transolver arm runs its own config's width, 9.0 M
 parameters), on the same case, points and budget. An ISLA floor far above the
-best baseline's is a deficit of ISLA's architecture. A floor shared by all three is a limit of the optimizer or the
+best baseline's, and not limited by the training budget, is a deficit of ISLA's architecture (PREREG section 7). A floor shared by all three is a limit of the optimizer or the
 precision. Pre-registration: scratch/isla-cap-audit-2026-10-20/PREREG.md (phase 1 approved 2026-10-20 10:30 EDT;
 phase 1b, section 13, before any of its numbers; the section 14 amendment before the readout, with a disclosure).
 
