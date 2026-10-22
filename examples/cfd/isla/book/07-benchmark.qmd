@@ -755,7 +755,6 @@ score, has the variant "Instrument: ISLA at ⟨width⟩ wide, ⟨slices⟩ slice
 | ISLA at 384 wide, 256 slices, 5e-4, raw slice reads | 12 | 384 | 256 | $5 \times 10^{-4}$ | cosine | 200,000 | the biased-draw probe, the slice territories, the rotation-augmented comparison (@sec-contract-studies, @sec-pose-contract); the 384-wide points of the capacity ladders (@sec-capacity) |
 | ISLA at 192 wide, 256 slices, 1e-3, linear routing, raw slice reads | 12 | 192 | 256 | $10^{-3}$ | linear | 100,000 (cars), 200,000 (wings) | the training-law swap (@sec-training-law) |
 | ISLA at 512 wide, 512 slices, 3.75e-4, raw slice reads | 12 | 512 | 512 | $3.75 \times 10^{-4}$ | cosine | 200,000 | the study that swaps the nearest-token wall geometry for the exact one on the DrivAerML Volume task, an instrument of the nearest-token form (@sec-checkpoint-form) |
-| ISLA at 768 wide, 256 slices, 2.5e-4, raw slice reads | 12 | 768 | 256 | $2.5 \times 10^{-4}$ | cosine | 20,000 | the tie diagnostic on the lug (@sec-medial-ties) |
 | capacity ladders | 12 to 48 | 192 to 1,536 | 256 | named per point | cosine or linear, named per point | 10,000 to 200,000, named per point | the scaling fits and the cells ladder (@sec-capacity); each point names its own configuration |
 
 : The study configurations of ISLA and where the book uses them. Every configuration other than the reference one uses
@@ -763,8 +762,7 @@ the raw slice reads. *Learning rate*: the width rule $10^{-3} \times 192 / \text
 routing (@sec-isla-slices); *linear* is an unbounded affine score of the token state, which the class does not have, and a
 tag names it. How to read this: a caption that has a tag reads its numbers against other numbers with the same tag, never
 against a standing. Sources: the training-run configurations recorded in
-`results/campaigns_2026-10-02/char/rf1/rf1_isla_ref/metrics.jsonl` (384 wide, 256 slices, $5 \times 10^{-4}$) and
-`cs/cs_t2dz_isla/metrics.jsonl` (768 wide, 256 slices, $2.5 \times 10^{-4}$); the protocol strings of
+`results/campaigns_2026-10-02/char/rf1/rf1_isla_ref/metrics.jsonl` (384 wide, 256 slices, $5 \times 10^{-4}$); the protocol strings of
 `results/consistency_r1_2026-09-23.json`, `results/trainarea_dr_r1_2026-09-23.json` and
 `results/char/vol_geo_2026-10-05.json`. {#tbl-study-configurations}
 
