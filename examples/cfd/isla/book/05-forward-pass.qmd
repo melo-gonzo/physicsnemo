@@ -33,6 +33,18 @@ DEFAULTS = {k: v.default for k, v in inspect.signature(ISLA.__init__).parameters
 torch.manual_seed(0)
 REF = ISLA(output_schema={"pressure": {"rank": 0}, "wss": {"rank": 1}}, boundary_schemas={"vehicle": {}}, global_schema={"U_inf_dir": {"rank": 1}})
 cnt = lambda mod: sum(p.numel() for p in mod.parameters())
+import standing as S, records as R
+from IPython.display import Markdown
+_QD = R.load("probes090", "results/qpop_afix/reduced.json")
+DTT_QDEV = max(abs(v - 1) for s in (42, 43) for m in _QD[f"r090fix_af_dtt_seed{s}"]["ratio_to_native_h"].values() for v in m.values())
+_RD = R.load("probes090", "results/remesh_afix_dtt/reduced_full.json")["seed_mean_ratio"]["r090fix_af_dtt"]
+DTT_REFINE = [_RD[v]["pressure_l2"] for v in ("refine2", "refine4", "refine31")]   # refined ÷ native, ISLA-DTT at theta = 1
+_TH = json.load(open(RES / "campaigns_2026-10-22" / "book_A" / "book_a.json"))["theta"]
+DTT_THETA0 = max(abs(_TH["0.0"][v][f] - 1) for v in ("refine2", "refine4", "refine31") for f in ("pressure", "velocity", "nut"))
+def sci(x):
+    """A small number as $a \\times 10^{b}$."""
+    m, e = f"{x:.1e}".split("e")
+    return f"${m} \\times 10^{{{int(e)}}}$"
 ```
 
 ```{python}
@@ -1280,8 +1292,8 @@ a stored signed-distance field computed from the same surface. Both are
 built from a difference of positions, so $\delta_q$ is invariant and $u_q$
 covariant under every rigid motion and reflection (with the cells
 re-oriented so that their normals follow the map), and $\delta_q$ scales
-with the geometry. $s_q = \delta_q / L$ inherits the draw only through
-$L$, a factor common to every point of the case, by $L$'s quadrature error
+with the geometry. $s_q = \delta_q / L$ is the same for every draw too,
+since $L$ is computed from the full-resolution boundary before the draw
 (stage 1).
 
 The search runs in `forward`, where the meshes are, before the draw, at the
@@ -1295,6 +1307,17 @@ the closest point is then rebuilt from its cell's vertices with the
 barycentric weights of its region of the cell (computed in float64), so
 $\delta_q$ and $u_q$ are differentiable in the points and the vertex
 positions.
+
+**Two choices in this geometry are made by rounding.** At a point equally
+far from two or more features of the surface, such as a node on the
+mid-thickness plane of a plate, the search keeps the first closest feature
+it meets, so the order of the mesh's vertices picks $u_q$. At a fold of the
+surface, where cells meet back to back, the pseudo-normal that signs
+$\delta_q$ is a sum of unit normals that cancels exactly, so roundoff picks
+the sign, which is ill-posed even in exact arithmetic. Neither has a
+convergent knob; @sec-medial-ties measures both, and a tie rule that reads
+every feature within float32 resolution of the minimum is an open question
+(@sec-oq-ties).
 
 ```{python}
 #| label: para-arch-sdf-configs
@@ -1328,8 +1351,10 @@ and every arm is otherwise of the nearest-token form: it still reads the
 stored signed distance and its direction as a prediction-point input on all
 three datasets (the second comparison's variant encodes that channel as it
 encodes $s_q$). The class reads no stored field, so neither comparison is a
-measurement of the class. Chapter 4 gives what the exact geometry does to the
-contracts (@sec-exact-geometry-draw, @sec-medial-ties).
+measurement of the class; they are the registered tests that chose the
+design, and @tbl-arch-attrib, below, measures the class. Chapter 4 gives what
+the exact geometry does to the contracts (@sec-exact-geometry-draw,
+@sec-medial-ties).
 
 ```{python}
 #| label: tbl-arch-geo-evidence
@@ -1390,6 +1415,48 @@ print(f"On the AirfRANS interior task, with the stored signed distance read in b
       f"(results/campaigns_2026-10-18/geo_cont/PREREG.md).")
 ```
 
+**On the class itself, putting back one earlier piece at a time measures
+what this stage's choices buy.** Each arm of @tbl-arch-attrib is ISLA at the
+reference configuration with one piece reverted: the stored signed distance
+read again as a prediction-point input, or the earlier prediction-point
+embedding (a type offset and a separate feature MLP added to the seed
+embedding, where ISLA puts the distance channels in the point's own input
+layer).
+
+```{python}
+#| label: tbl-arch-attrib
+#| output: asis
+AT_AF = {r["arm"].split()[0]: r for r in R.md_table("attrib090", "RESULTS.md", "2. AirfRANS")}
+AT_T2 = {r["arm"].split()[0]: r for r in R.md_table("attrib090", "RESULTS.md", "1. Tensile2d")}
+AT_ARMS = (("SDF", "the stored signed distance as a prediction-point input"), ("QEMB", "the earlier prediction-point embedding"))
+out = ("| put back into ISLA | AirfRANS: ÷ ISLA, pressure / velocity / eddy viscosity | registered reading | "
+       "PLAID Tensile2d: ÷ ISLA, displacement | registered reading |\n|---|---|---|--:|---|\n")
+for k, lab in AT_ARMS:
+    a, t = AT_AF[k], AT_T2[k]
+    out += f"| {lab} | {a['÷ B (p / v / nut)']} | {a['R2']} | {t['÷ B']} | {t['R1 / R2']} |\n"
+print(out)
+print(": Single-piece ablations of ISLA at the reference configuration, each arm's error over ISLA's, native meshes, float32, "
+      "scored eager, final checkpoints. AirfRANS interior task: 200 test cases, two seeds, every arm and ISLA trained with "
+      "the compiled training path after its fault was fixed, ratio of seed means. PLAID Tensile2d: 100 validation cases, four "
+      "seeds, every arm and ISLA trained under the compiled-path fault, ratio of geometric seed means; an ISLA-against-ISLA "
+      "ablation, not the Tensile2d standing. The readings are the registered labels: *no measurable effect*, and *moves, "
+      "opposes*, where putting the piece back moves the error against the step the study set out to explain. How to read "
+      "this: above one means ISLA's own piece is the more accurate; the table compares ISLA with itself. Data: "
+      + R.source("attrib090", "RESULTS.md") + ", sections 1 and 2.")
+```
+
+```{python}
+#| label: para-arch-attrib
+#| output: asis
+_seeds = lambda r: [float(x) for x in r["per seed"].split(",")]
+_q, _b = _seeds(AT_T2["QEMB"]), _seeds(AT_T2["B"])
+_qr = R.num(AT_T2["QEMB"]["÷ B"])
+print("Putting the stored signed distance back has no measurable effect on either task, so ISLA reads none. The earlier "
+      "embedding is level on AirfRANS; on Tensile2d ISLA's own embedding gives a displacement error about "
+      f"{1 - 1 / _qr:.0%} lower" + (", with all four of the earlier embedding's seeds above all four of ISLA's" if min(_q) > max(_b) else "")
+      + ". The ablation does not isolate why.")
+```
+
 ::: {.callout-note collapse="true" title="The geometry in the code"}
 `forward` concatenates the given meshes into one surface and calls the exact geometry before the draw; the closest cell comes from the BVH in three dimensions and from the brute force in two; the soft logarithm is one line.
 
@@ -1422,7 +1489,10 @@ $\pi_{qs}$, and it reads $b_q = \sum_s \pi_{qs} Z_s$ (step h). The boundary
 tokens therefore compute what they compute in the surface task whatever
 points are requested, and a request split into chunks, permuted, or reduced
 to one point returns the same predictions to $10^{-12}$ in float64
-(`test_query_independent_interior_contracts`). ISLA-DTT has no routing-mass
+(`test_query_independent_interior_contracts`). On trained AirfRANS
+checkpoints in float32 every change of the request of
+@tbl-query-population moves ISLA-DTT's error by at most
+`{python} Markdown(sci(DTT_QDEV))`, float32 roundoff. ISLA-DTT has no routing-mass
 parameter.
 
 A read-only point reads at matched depth: at layer $\ell$ it reads the
@@ -1593,7 +1663,14 @@ whichever of the dataset's axes it overlaps most. There a rigid motion can regro
 clusters, and the read moves only at the size of the tree's error, which
 vanishes as $\theta \to 0$. $\theta$ is a constant of the class (`TREE_READ_THETA`), not
 an argument: ISLA-DTT trains and is scored at $\theta = 1$, so its kernel,
-keys and values are learned as the forest groups the cells.
+keys and values are learned as the forest groups the cells. The tree's error
+is also what moves ISLA-DTT under an exact refinement of the boundary: on
+the AirfRANS interior task, splitting the airfoil's panels raises its
+pressure error by `{python} f"{min(DTT_REFINE) - 1:.1%}"` to
+`{python} f"{max(DTT_REFINE) - 1:.1%}"` at $\theta = 1$, and on an ISLA-DTT
+pair trained under the compiled-path fault, read at $\theta = 0$, the same
+refinements move its error by at most `{python} f"{DTT_THETA0:.1%}"`
+(@sec-remesh-measured).
 
 ```{python}
 #| label: para-arch-tree-cost
@@ -1627,18 +1704,33 @@ listing("tree_read.py", "node_means")
 
 #### Read-only against interacting prediction points on AirfRANS {#sec-arch-dtt-evidence}
 
-**On the AirfRANS interior task ISLA-DTT is more accurate than interacting
-ISLA on pressure and velocity, at a higher cost per step; that is one
-dataset, and it does not settle which of the two forms is the reference.**
-One pre-registered comparison trained four interior designs alike on the
-AirfRANS uniform interior task: interacting ISLA; *passive* prediction
-points, read-only points without the boundary read, so that the boundary
-tokens are the only writers into the slices; ISLA-DTT, the passive points
-with the boundary read; and *ANCHOR*, passive points with 50,000 further
-interior points, placed by a law derived from the boundary alone, that
-write into the slices in the prediction points' place. The last three are
-query-independent. @tbl-arch-dtt-evidence gives each against interacting
-ISLA.
+```{python}
+#| label: para-arch-dtt-standing
+#| output: asis
+AFS = S.Standing("airfrans")
+_vd = {}
+for f in AFS.ds.headline:
+    _vd.setdefault(AFS.verdict("ISLA-DTT", f), []).append(AFS.fields[f])
+print("**On the AirfRANS interior task at the reference configuration, interacting ISLA "
+      + ", and ".join(f"{v} ISLA-DTT on {' and '.join(fs)}" for v, fs in _vd.items())
+      + "; that is one dataset, and it does not settle which of the two forms is the reference.** "
+      "ISLA-DTT \u00f7 ISLA is " + " / ".join(f"{AFS.ratio('ISLA-DTT', f):.3f}" for f in AFS.ds.headline) + " on "
+      + " / ".join(AFS.fields[f] for f in AFS.ds.headline) + " (seed means; ISLA-DTT's seeds "
+      + "; ".join(" / ".join(f"{x:.5f}" for x in AFS.seeds("ISLA-DTT", f)) + " against ISLA's "
+                  + " / ".join(f"{x:.5f}" for x in AFS.seeds("ISLA", f)) for f in AFS.ds.headline)
+      + f"; {AFS.source}). Which form is the reference is decided on AeroZoo's held-out splits (@sec-oq-dtt).\n")
+if AFS.in_flight:
+    print(S.in_flight_callout({"what": "the AirfRANS pair of " + AFS.in_flight["what"],
+                               "replacement": "The pair trained without compilation, with ISLA-DTT on AeroZoo's seven splits "
+                                              "beside it,"}))
+```
+
+One pre-registered comparison, on checkpoints of the nearest-token form
+(@sec-checkpoint-form), tested a further query-independent design,
+*ANCHOR*: read-only prediction points with 50,000 further interior points,
+placed by a law derived from the boundary alone, that write into the slices
+in the prediction points' place. @tbl-arch-dtt-evidence gives it against
+interacting ISLA of the same form.
 
 ```{python}
 #| label: tbl-arch-dtt-evidence
@@ -1646,7 +1738,7 @@ ISLA.
 ANC = RES / "campaigns_2026-10-18" / "anchor" / "readout"
 SC = json.load(open(ANC / "scores.json"))
 COST = json.load(open(ANC / "cost_partial.json"))
-ARMS = (("isla", "interacting ISLA (control)"), ("passive", "passive prediction points"), ("dtt", "ISLA-DTT"), ("anchor", "ANCHOR"))
+ARMS = (("isla", "interacting ISLA (control)"), ("anchor", "ANCHOR"))
 FLD = (("pressure_l2", "p"), ("velocity_l2", "v"), ("nut_l2", "nut"))
 err = lambda a, s, prot, f: SC[f"anc_{a}_seed{s}/{prot}"][f]
 sm = lambda a, prot, f: np.mean([err(a, s, prot, f) for s in (42, 43)])
@@ -1664,7 +1756,7 @@ for a, lab in ARMS:
     out += (f"| {lab} | {' / '.join(f'{x:.5f}' for x in vals)} | {'–' if a == 'isla' else ' / '.join(f'{x:.3f}' for x in rat)} | "
             f"{'–' if a == 'isla' else (', '.join(below) or 'none')} | {100 * DA[a]['dev']:.2f}% | {DA[a]['step']:.2f} | {DA[a]['peak']:.1f} |\n")
 print(out)
-print(": Interior designs against interacting ISLA on the AirfRANS uniform interior task: area-weighted relative L2 of "
+print(": ANCHOR against interacting ISLA on the AirfRANS uniform interior task: area-weighted relative L2 of "
       "pressure / velocity / eddy viscosity (p / v / nut), seed means of two seeds (42, 43), native meshes, float32, final "
       "checkpoints, 200 test cases, 100,000 prediction points per case. Instrument: ISLA at the reference configuration "
       "with the normalized slice reads, 500 epochs, every design trained alike; checkpoints of the nearest-token form "
@@ -1680,16 +1772,11 @@ print(": Interior designs against interacting ISLA on the AirfRANS uniform inter
 ```{python}
 #| label: para-arch-dtt-evidence
 #| output: asis
-d, b, c = DA["dtt"], DA["passive"], DA["anchor"]
-print(f"ISLA-DTT's errors are {d['rat'][0]:.3f} / {d['rat'][1]:.3f} / {d['rat'][2]:.3f} times interacting ISLA's on pressure / "
-      f"velocity / eddy viscosity, with both seeds below on {' and '.join({'p': 'pressure', 'v': 'velocity', 'nut': 'eddy viscosity'}[x] for x in d['below'])}, "
-      f"at {d['step']:.2f} times its step time at mid-run and a peak of {d['peak']:.1f} against {DA['isla']['peak']:.1f} GB. The "
-      f"passive points, which have no boundary read, are at {b['rat'][0]:.3f} on pressure and {b['rat'][1]:.3f} on velocity: "
-      f"the boundary read is what puts ISLA-DTT ahead on velocity. Interacting ISLA, the passive points and ISLA-DTT keep "
-      f"posed equal to native within {100 * max(DA[a]['dev'] for a in ('isla', 'passive', 'dtt')):.2f}%. ANCHOR does not "
-      f"replace interacting ISLA under its registered rule ({c['rat'][0]:.3f} / {c['rat'][1]:.3f} / {c['rat'][2]:.3f}), and it "
-      f"is not pose-exact (a change of up to {100 * c['dev']:.0f}% under the posed scoring). This is AirfRANS evidence on "
-      "checkpoints of the nearest-token form, and it does not decide between ISLA and ISLA-DTT as the reference choice.")
+c = DA["anchor"]
+print(f"ANCHOR does not replace interacting ISLA under its registered rule ({c['rat'][0]:.3f} / {c['rat'][1]:.3f} / "
+      f"{c['rat'][2]:.3f} on pressure / velocity / eddy viscosity), and it is not pose-exact (a change of up to "
+      f"{100 * c['dev']:.0f}% under the posed scoring, against {100 * DA['isla']['dev']:.2f}% for interacting ISLA). It was "
+      "tested and not adopted.")
 ```
 
 ## What the pass never does {#sec-arch-never}
