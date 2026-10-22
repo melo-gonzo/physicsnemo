@@ -24,9 +24,10 @@ import standing as S
 from matplotlib.colors import TwoSlopeNorm
 
 ROWS = S.headline_rows()
+TALLY = [r for r in ROWS if r[0] in S.final()]   # the rows a count reads; the figure keeps every row
 def verdicts():
     out = {"leads": [], "is level with": [], "trails": [], "is not compared with": []}
-    for k, f, lab in ROWS:
+    for k, f, lab in TALLY:
         s = S.Standing(k)
         for a in S.BASELINES:
             if s.has(a):
@@ -34,10 +35,10 @@ def verdicts():
     return out
 V = verdicts()
 n_pairs = sum(len(v) for k, v in V.items() if k != "is not compared with")
-HELD = [(S.DATASETS[k].short, S.Standing(k).fields[f]) for k, f, _ in ROWS if f in S.DATASETS[k].provisional]
-SURF = [k for k in S.available() if "area" in S.DATASETS[k].protocols]
-FLOW = [k for k in S.available() if k not in ("tensile2d", "lug", "deepjeb")]
-SOLID = [k for k in S.available() if k in ("tensile2d", "lug", "deepjeb")]
+HELD = [(S.DATASETS[k].short, S.Standing(k).fields[f]) for k, f, _ in TALLY if f in S.DATASETS[k].provisional]
+SURF = [k for k in S.final() if "area" in S.DATASETS[k].protocols]
+FLOW = [k for k in S.final() if k not in ("tensile2d", "lug", "deepjeb")]
+SOLID = [k for k in S.final() if k in ("tensile2d", "lug", "deepjeb")]
 def shifts(ks, archs, protocol):
     """Every headline field's error under a protocol over its native error, for the given datasets and architectures."""
     return [S.Standing(k).shift(a, f, protocol) for k in ks for f in S.DATASETS[k].headline for a in archs]
@@ -49,7 +50,7 @@ base_posed_solid = (min(shifts(SOLID, S.BASELINES, "posed")), max(shifts(SOLID, 
 solid_dev = {k: max(abs(x - 1) for x in shifts([k], ["ISLA"], "posed")) for k in SOLID}
 SOLID_STILL = [k for k in SOLID if solid_dev[k] < 0.01]     # pose-exact to float32 on every headline field
 SOLID_MOVED = {k: max(shifts([k], ["ISLA"], "posed")) for k in SOLID if k not in SOLID_STILL}
-FLIGHT = [k for k in S.available() if S.Standing(k).in_flight]
+FLIGHT = S.in_flight()
 _n = {k: S.Standing(k).n_seeds("ISLA") for k in S.available()}
 _n0 = S.Standing("drivaerml_surface").n_seeds("ISLA")
 SEEDS_TXT = f"{S._COUNT[_n0]} seeds" + "".join(f" ({S._COUNT[n]} for ISLA on {S.DATASETS[k].name})" for k, n in _n.items() if n != _n0)
@@ -68,20 +69,20 @@ print(
     "case, so its training data are spent on the physics rather than on frames, resolutions and units. "
     "AeroZoo, whose held-out splits take a whole enclosure family, geometry bank, inflow layout or Reynolds range out of training, "
     "is the book's test of generalization; @sec-aerozoo-why makes the case for it, and @sec-aerozoo gives ISLA's standing there. "
-    "On AeroZoo both baselines end as about a zero predictor on pressure, so ISLA's pressure lead there is a lead over predicting "
-    "zero, and whether ISLA-DTT is the better interior form is the open question of @sec-oq-dtt. "
+    "On AeroZoo both baselines end as about a zero predictor on pressure, so a pressure comparison there is a comparison with "
+    "predicting zero, and whether ISLA-DTT is the better interior form is the open question of @sec-oq-dtt. "
     "The other benchmarks, DrivAerML, HiLiftAeroML, SHIFT-SUV, AirfRANS, Tensile2d, the lug and DeepJEB++, are here because the "
     "community measures surrogates on them. Each covers one narrow family, so its native score measures interpolation within that "
     "family. There ISLA leads the strongest models of its family, Transolver and its geometry-aware successor GeoTransolver, each at "
     f"its reference configuration and scored the same way, in {len(V['leads'])} of {n_pairs} comparisons, is level in "
-    f"{len(V['is level with'])} and trails in {len(V['trails'])}. A comparison in @fig-standing is one headline field of one dataset "
-    "against one baseline"
+    f"{len(V['is level with'])} and trails in {len(V['trails'])}. {S.tally_note()} A comparison in @fig-standing is one headline "
+    "field of one dataset against one baseline"
     + "".join(f"; {d} {fl} is left out, because the baselines predict it with an out-of-plane component ISLA's planar "
               "prediction does not have" for d, fl in HELD)
     + (f"; {n_lug} of ISLA's leads {'is' if n_lug == 1 else 'are'} on the lug against Transolver, which reads no "
        "boundary-condition labels there" if n_lug else "")
     + ". "
-    "The same benchmarks measure what the invariances buy. "
+    "On the same tasks, the benchmarks measure what the invariances buy. "
     f"Rotate and translate the test geometry, and on the {len(FLOW)} flow tasks ISLA's error stays within "
     f"{100 * isla_posed:.1f}% of its native value while every baseline's grows {base_posed_flow[0]:.0f}-fold to "
     f"{base_posed_flow[1]:.0f}-fold; on the {len(SOLID)} solid-mechanics tasks the baselines' errors grow {base_posed_solid[0]:.1f}-fold "
@@ -199,8 +200,8 @@ for k, f, a in V["trails"]:
     by.setdefault(k, []).append(f"{S.Standing(k).fields[f]} against {a}")
 print(f"**Where ISLA trails** ({len(V['trails'])} of {n_pairs}): "
       + "; ".join(f"on {S.DATASETS[k].name}, {', '.join(v)}" for k, v in by.items())
-      + ". Each dataset chapter shows where on the body or in the field the difference sits; the full table, with every seed, "
-        "is @tbl-thesis.")
+      + f". {S.tally_note()} Each dataset chapter shows where on the body or in the field the difference sits; the full table, "
+        "with every seed, is @tbl-thesis.")
 ```
 
 The same picture, with every seed, the scoring under a uniform point cloud
