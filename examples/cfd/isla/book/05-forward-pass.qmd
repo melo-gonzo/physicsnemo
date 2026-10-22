@@ -898,7 +898,7 @@ concentrates on so few tokens that the frame degenerates (@sec-deepjeb
 measures it). Reading the normalized state there is a candidate fix for that
 logit growth that was tested and not adopted: in its registered test, on
 AeroZoo's held-out non-box family, it made the pressure error worse on both
-seeds.
+seeds, on a field where neither arm beats predicting zero.
 
 ::: {.callout-note collapse="true" title="Stage 4 in the code"}
 The head frame is the tail of `_forward_tokens`: one more routing map, read both ways, and a difference of positions.
@@ -1459,7 +1459,7 @@ print(": Single-piece ablations of ISLA at the reference configuration, each arm
 _seeds = lambda r: [float(x) for x in r["per seed"].split(",")]
 _q, _b = _seeds(AT_T2["QEMB"]), _seeds(AT_T2["B"])
 _qr = R.num(AT_T2["QEMB"]["÷ B"])
-print("Putting the stored signed distance back has no measurable effect on either task, so ISLA reads none. The earlier "
+print("ISLA reads no stored signed distance, and putting it back has no measurable effect on either task. The earlier "
       "embedding is level on AirfRANS; on Tensile2d ISLA's own embedding gives a displacement error about "
       f"{1 - 1 / _qr:.0%} lower" + (", with all four of the earlier embedding's seeds above all four of ISLA's" if min(_q) > max(_b) else "")
       + ". The ablation does not isolate why.")
@@ -1497,8 +1497,9 @@ $\pi_{qs}$, and it reads $b_q = \sum_s \pi_{qs} Z_s$ (step h). The boundary
 tokens therefore compute what they compute in the surface task whatever
 points are requested, and a request split into chunks, permuted, or reduced
 to one point returns the same predictions to $10^{-12}$ in float64
-(`test_query_independent_interior_contracts`). On trained AirfRANS
-checkpoints in float32 every change of the request of
+(`test_query_independent_interior_contracts`). On AirfRANS checkpoints
+trained with the compiled path after its fault was fixed (their In-flight
+note is in @sec-query-population), in float32 every change of the request of
 @tbl-query-population moves ISLA-DTT's error by at most
 `{python} Markdown(sci(DTT_QDEV))`, float32 roundoff. ISLA-DTT has no routing-mass
 parameter.
@@ -1673,7 +1674,8 @@ vanishes as $\theta \to 0$. $\theta$ is a constant of the class (`TREE_READ_THET
 an argument: ISLA-DTT trains and is scored at $\theta = 1$, so its kernel,
 keys and values are learned as the forest groups the cells. The tree's error
 is also what moves ISLA-DTT under an exact refinement of the boundary: on
-the AirfRANS interior task, splitting the airfoil's panels raises its
+the AirfRANS interior task, with the pair trained with the compiled path
+after its fault was fixed, splitting the airfoil's panels raises its
 pressure error by `{python} f"{min(DTT_REFINE) - 1:.1%}"` to
 `{python} f"{max(DTT_REFINE) - 1:.1%}"` at $\theta = 1$, and on an ISLA-DTT
 pair trained under the compiled-path fault, read at $\theta = 0$, the same
