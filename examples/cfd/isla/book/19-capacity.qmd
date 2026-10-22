@@ -234,7 +234,8 @@ REFP = {a: ref_point(SURF, "DrivAerML Surface", a) for a, _ in REF_KEYS}
 #|   *Instrument:* ISLA at 192 to 1,536 wide, 256 slices, 1e-3 to 2.5e-4, raw slice reads
 #|   (@sec-study-configurations). Large black-edged stars: the three reference configurations on the
 #|   same validation cars, a different instrument (200,000 training cells, 100,000 for Transolver;
-#|   the normalized slice reads and 512 slices for ISLA; results/char/drivaerml_surface_a2.json,
+#|   for ISLA 512 slices, the normalized slice reads, exact wall geometry, its own scales and
+#|   boundary conditions by name; results/char/drivaerml_surface_090.json,
 #|   parameters from results/char/char_lanes_cost_2026-10-04.json). The gray band spans the best two
 #|   ladder runs of each architecture. How to read this: the x axis is parameters, not memory or
 #|   time (those are @tbl-ref-cost and @fig-cost-sweep); GeoTransolver-2,048's count is extrapolated
@@ -290,7 +291,8 @@ print(f"3. **Both reach one floor at similar parameter counts.** GeoTransolver a
       f"1,024 wide ÷ ISLA at 384 × 48 = {gt_width[2][1] / isla_depth[2][1]:.3f}.")
 print(f"4. **The reference configurations sit above the band.** Their errors are "
       + ", ".join(f"{a} {REFP[a][1]:.4f} at {REFP[a][0] / 1e6:.0f}M parameters ({ref_over[a]:.2f}× the band's upper edge)" for a, _ in REF_KEYS)
-      + ". They are a different instrument (more training cells and, for ISLA, 512 slices and the normalized reads), "
+      + ". They are a different instrument (more training cells and, for ISLA, 512 slices, the normalized reads, exact wall "
+        "geometry, its own scales and boundary conditions by name), "
         "chosen under a memory budget of 80 GiB per GPU rather than for capacity. Whether the reference ISLA reaches the band is "
         "an open question (@sec-oq-scaling).")
 ```
@@ -361,6 +363,98 @@ print(": The capacity readings on the 510-wing HiLiftAeroML rung: surface-pressu
       "GeoTransolver at 256 and 512 wide and Transolver at 256 wide, 3e-3, both reading the freestream as a unit direction. How to read this: each row restates a reading of this chapter and says "
       "whether the wing rung reproduces it; a ratio below one in the last row means ISLA trails GeoTransolver at that pair. "
       "Data: results/scalehl_2026-09-26.json.")
+```
+
+### One case at a time: what a single field costs to fit {#sec-single-case-floor}
+
+```{python}
+#| label: setup-single-case
+#| include: false
+# CAP-AUDIT (results/campaigns_2026-10-22/cap_audit/): the three reference configurations, and ISLA-DTT on AirfRANS, each trained on one
+# case until its error stops falling, eager, float32. Phase 1 trains on one fixed draw of the case's points, phase 1b on a fresh draw
+# every step; both score a held-out draw of the same case. Ratios in the record are ISLA ÷ the better baseline.
+import records as R
+P1 = R.load("cap_audit", "tables/phase1_floors.json"); P1B = R.load("cap_audit", "tables/phase1b_floors.json")
+V1 = P1["verdicts"]
+CASE = {"drs": "DrivAerML Surface, one car", "hl18": "HiLiftAeroML, one post-stall case", "af": "AirfRANS, one airfoil"}
+FNAME = {"pressure_l2": "pressure", "wss_l2": "wall shear stress", "tau_wall_l2": "wall shear stress", "velocity_l2": "velocity",
+         "nut_l2": "eddy viscosity", "nu_t": "eddy viscosity"}
+# phase 1, every run on the cases scored on a separate draw of the same case (AeroZoo's baselines fit nothing there, and ISLA's DrivAerML
+# Volume held-out values are invalid: the held-out points were paired with another draw's boundary)
+G1 = [r["fields"][f]["G"] for k, r in P1["runs"].items() if r["mode"] == "separate" and "_az_" not in k and not k.startswith("cap_drv_isla")
+      for c, f in (v.split(":") for v in V1) if k.startswith(f"cap_{c}_")]
+n_def = sum(v["verdict"] == "deficit" for v in V1.values())
+n_steps = P1["runs"]["cap_drs_isla_s42"]["n_steps"]
+fho = lambda c, f, a, s: next(x["F_ho"] for x in P1B["rows"] if (x["case"], x["field"], x["arch"], x["seed"]) == (c, f, a, s))
+P1B_CELLS = list(dict.fromkeys((x["case"], x["field"]) for x in P1B["rows"]))
+has = lambda c, f, a: any((x["case"], x["field"], x["arch"]) == (c, f, a) for x in P1B["rows"])
+best_over = lambda c, f, a, s: min(fho(c, f, b, s) for b in ("gt", "t")) / fho(c, f, a, s)
+LIM = P1B["representation_limited"]
+limited = [(c, f, a) for c, f in P1B_CELLS for a in ("isla", "dtt") if LIM.get(f"{c}:{f}:{a}", {}).get("limited")]
+GB = [x["G"] for x in P1B["rows"]]
+PB = R.md_table("cap_audit", "RESULTS.md", "Part B")
+AF_ST = S.Standing("airfrans")
+xcase = {"drs": SURF.err("ISLA", "pressure_l2"), "hl18": HLS.err("ISLA", "pressure_l2"), "af": AF_ST.err("ISLA", "pressure_l2")}
+floor1b = lambda c: mean(fho(c, "pressure_l2", "isla", s) for s in (42, 43))
+```
+
+```{python}
+#| label: para-single-case
+#| output: asis
+isla_cells = [(c, f) for c, f in P1B_CELLS if (c, f, "isla") not in limited]
+ok = [best_over(c, f, "isla", s) for c, f in isla_cells for s in (42, 43)]
+lim_txt = "; ".join(f"{'ISLA-DTT' if a == 'dtt' else 'ISLA'} on {CASE[c].split(',')[0]} {FNAME[f]} "
+                    + " / ".join(f"{best_over(c, f, a, s):.2f}" for s in (42, 43)) for c, f, a in limited)
+pb_def = [FNAME.get(r["field"], r["field"]) for r in PB if r["verdict"] == "deficit"]
+print(f"**Trained on one case with a fresh draw of points every step, ISLA fits the field to within a factor {1 / min(ok):.1f} of the "
+      "better baseline on one DrivAerML Surface car, one HiLiftAeroML case and AirfRANS "
+      + " and ".join(FNAME[f] for c, f in isla_cells if c == "af")
+      + "; the registered rules call AirfRANS pressure and DrivAerML Volume " + " and ".join(pb_def) + " deficits of "
+      "representation. On the first three datasets the single-case floor lies far below ISLA's error across cases.** The capacity audit trains each reference "
+      f"configuration on a single case for {n_steps:,} steps, until its error stops falling, and scores a held-out draw of points of the "
+      "same case. It asks whether an architecture can represent one field at all, apart from generalizing across cases. Every model is ISLA, "
+      "GeoTransolver or Transolver at its reference configuration, run eager in float32, with ISLA-DTT beside ISLA on AirfRANS.")
+print()
+print(f"A first phase trains on one fixed draw of the case's points, and its floors measure how tightly a model memorizes that point set, "
+      f"not the field: on DrivAerML, HiLiftAeroML and AirfRANS every model's held-out error is {min(G1):.0f} to {max(G1):,.0f} times its "
+      f"training floor (median {statistics.median(G1):.0f}, {len(G1)} pairs of run and field). On that fixed set ISLA's floor is above the "
+      f"better baseline's on {n_def} of the {len(V1)} headline fields, as registered, so ISLA memorizes a fixed point set less tightly. "
+      "Its DrivAerML Volume held-out values are not shown: the held-out points were paired with another draw's boundary, and ISLA, "
+      "which computes its wall geometry from the boundary, read it shifted.")
+print()
+print(f"With a fresh draw every step the held-out and training errors agree (held-out ÷ training {min(GB):.2f} to {max(GB):.2f}), so the "
+      f"floor is the field's. @tbl-single-case gives them as best baseline ÷ ISLA, which the registered rule reads as representation-limited "
+      f"at or below 0.5 on both seeds: {lim_txt}. The single-case pressure floors lie well below ISLA's errors across cases (seed means over "
+      "the test sets of the standings, not this case's error): "
+      + "; ".join(f"{CASE[c].split(',')[0]} {floor1b(c):.4f} against {xcase[c]:.4f}" for c in CASE) + ".")
+print()
+pb = lambda r: " / ".join(f"{1 / R.num(r['R_drv (registered)'], k):.2f}" for k in (0, 1))
+print("A fresh-draw run on one DrivAerML Volume case reads, as registered, "
+      + "; ".join(f"{FNAME.get(r['field'], r['field'])} {pb(r)} ({r['verdict']})" for r in PB)
+      + " (best baseline ÷ ISLA, seeds 42 / 43). "
+      f"Data: {R.source('cap_audit', 'tables/phase1_floors.json')}, {R.source('cap_audit', 'tables/phase1b_floors.json')}, "
+      f"{R.source('cap_audit', 'RESULTS.md')} (Part B).")
+```
+
+```{python}
+#| label: out-tbl-single-case
+#| output: asis
+ARCH = (("isla", "ISLA"), ("dtt", "ISLA-DTT"), ("gt", "GeoTransolver"), ("t", "Transolver"))
+out = ("| case | field | " + " | ".join(n for _, n in ARCH) + " | best baseline ÷ ISLA | best baseline ÷ ISLA-DTT |\n"
+       "|---|---|" + "--:|" * len(ARCH) + "--:|--:|\n")
+for c, f in P1B_CELLS:
+    cells = [(" / ".join(f"{fho(c, f, a, s):.2g}" for s in (42, 43)) if has(c, f, a) else "") for a, _ in ARCH]
+    rr = [(" / ".join(f"{best_over(c, f, a, s):.2f}" for s in (42, 43)) if has(c, f, a) else "") for a in ("isla", "dtt")]
+    out += f"| {CASE[c]} | {FNAME[f]} | " + " | ".join(cells) + " | " + " | ".join(rr) + " |\n"
+print(out)
+print(f": Single-case floors with a fresh draw of points every step: relative L2 on a held-out draw of the same case after {n_steps:,} "
+      "training steps, seeds 42 / 43, float32, eager; the three reference configurations, and ISLA-DTT on AirfRANS. How to read this: a "
+      "ratio below one means ISLA's floor is above the better baseline's, and the registered rule calls a cell representation-limited at "
+      "0.5 or below on both seeds; each floor is one case's, not a dataset's. "
+      f"Data: {R.source('cap_audit', 'tables/phase1b_floors.json')}. {{#tbl-single-case}}")
+print()
+print(S.in_flight_callout({"what": "the reference configurations alone on one AirfRANS case",
+                           "replacement": "A ladder of ISLA's width, depth and slice count on that case"}))
 ```
 
 ## What the reference configurations spend {#sec-review-frontier}
@@ -447,8 +541,8 @@ toward a floor at the large ones, on both datasets.
 #|   floor. *Instrument:* ISLA at 192, 384 and 768 wide, 256 slices, 1e-3 / 5e-4 / 5e-4, raw slice
 #|   reads (@sec-study-configurations); GeoTransolver at 256, 512 and 1,024 wide, 3e-3 / 3e-3 /
 #|   1e-3. Black-edged stars: the three reference configurations at the full training set of 435
-#|   cars and of 510 wing cases, a different instrument (results/char/drivaerml_surface_a2.json,
-#|   results/char/hilift_surface_a2.json; every baseline reading the unit direction), offset
+#|   cars and of 510 wing cases, a different instrument (results/char/drivaerml_surface_090.json,
+#|   results/char/hilift_surface_090.json; every baseline reading the unit direction), offset
 #|   sideways for legibility. How to read this: the
 #|   vertical spread between shades is what parameters buy at one training-set size; the slope is
 #|   what cases buy. Both axes are logarithmic. Data: results/scalelaw_2026-10-08.json.
@@ -911,6 +1005,14 @@ ax1.set_xticks([25000, 50000, 100000, 200000, 400000, 800000]); ax1.set_xticklab
 ax1.set_xlabel("tokens per case [count]")
 ax0.legend(loc="upper left", fontsize=7.8)
 plt.show()
+```
+
+```{python}
+#| label: para-cost-sweep-flight
+#| output: asis
+print(S.in_flight_callout({"what": f"training steps of ISLA of the {S.FORM_TAG} (@sec-checkpoint-form), without the boundary draw inside "
+                                   "the model or the exact wall geometry, and of the baselines measured beside it",
+                           "replacement": "A GB300 sweep of ISLA, ISLA-DTT, GeoTransolver and Transolver at their reference configurations"}))
 ```
 
 ```{python}
