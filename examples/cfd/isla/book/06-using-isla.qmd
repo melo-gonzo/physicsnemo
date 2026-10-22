@@ -1065,7 +1065,7 @@ print(": Training footprint of the reference configurations (ISLA and ISLA-DTT w
       f"width 256; Transolver width 512, 16 layers, and on AeroZoo its own configuration, {AZ_T}), per dataset task: parameters / "
       "peak device memory [GiB] as the maximum over "
       "the ranks / the median training step [s] leaving out the compile steps, one case per rank, seed means from the training "
-      f"logs of the standing's lanes. {COST_RAW['note']} On {and_(FIXED)} the ISLA rows are the "
+      f"logs of the standing's lanes. {re.sub(r' \([a-z0-9_*]+\)', '', COST_RAW['note'])} On {and_(FIXED)} the ISLA rows are the "
       "lanes trained on the compiled path with the mix-order setting, not the eagerly trained lanes of the training-path control. "
       f"ISLA's lanes on {and_(BEFORE)} trained before the mix-order setting; where both were "
       f"timed, on {and_(TIMED)}, the setting moves the median step by at most {100 * FIXMOVE:.1f}%. "
