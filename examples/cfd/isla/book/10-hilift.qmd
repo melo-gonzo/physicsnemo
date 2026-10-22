@@ -20,6 +20,7 @@ POSED_DEV = [p / n - 1 for f in HL_F for p, n in zip(HL.seeds("ISLA", f, "posed"
 RAWD = {b: HL.raw[f"raw_drive_{b.lower()}"] for b in S.BASELINES}   # the same baselines reading the physical freestream vector
 KEY = {"ISLA": "isla_ref", "GeoTransolver": "gt", "Transolver": "t"}
 seeds_txt = lambda a, f, p="native": " and ".join(f"{v:.4f}" for v in HL.seeds(a, f, p))
+SEALED = J("hilift_sealed_test_2026-09-04.json")["per_arch_axis"]   # test ÷ validation pressure error of the sealed-test runs
 
 
 def both(st, fields, p="native"):
@@ -420,8 +421,8 @@ print(f"Three readings. **First, the native verdicts are firm by the seed rule:*
       f"seed, while every baseline error is at least {posed_floor:.2f}, near or above the score of predicting zero, even though the far-field "
       "direction is rotated with the case. On the DrivAerML Surface task and SHIFT-SUV ISLA's posed error is within "
       f"{100 * max(abs(S.Standing(k).shift('ISLA', f, 'posed') - 1) for k in ('drivaerml_surface', 'shift_suv') for f in S.DATASETS[k].headline):.3f}% "
-      "of its native error. A check registered on the checkpoints of the nearest-token form put ISLA's posed error within 0.2% of its native "
-      "error on this dataset and failed by the same offset; at the reference configuration the offset persists on both seeds, as the "
+      "of its native error. A check registered on the checkpoints of the nearest-token form required ISLA's posed error to be within 0.2% of "
+      "its native error on this dataset (the registered threshold) and failed by the same offset; at the reference configuration the offset persists on both seeds, as the "
       "prediction registered before scoring expected. What produces it on this dataset is not located (@sec-de-limits).")
 ```
 
@@ -505,9 +506,9 @@ _m = _re.search(r"and ([0-9.]+) and ([0-9.]+) without the 10 largest-gap cases\.
 wo["GeoTransolver wall shear"], wo["Transolver wall shear"] = _m.group(1), _m.group(2)
 flips = _re.search(r"The post-stall cases flip between seeds: (.*?\d)\.\s", HLR).group(1)
 print("**ISLA's pressure deficit to GeoTransolver is a few cases at stall; its deficit to Transolver, and on wall shear to both, is an "
-      "offset spread over the set.** Remove the ten cases with the largest gap, and ISLA's mean error is "
-      f"{wo['GeoTransolver pressure']} times GeoTransolver's on pressure, within the level band, against {wo['Transolver pressure']} times "
-      f"Transolver's; on wall shear it stays {wo['GeoTransolver wall shear']} and {wo['Transolver wall shear']} times theirs. On a case "
+      "offset spread over the set.** Remove the ten cases with the largest gap, and GeoTransolver ÷ ISLA on pressure is "
+      f"{1 / float(wo['GeoTransolver pressure']):.3f}, within the level band, against Transolver ÷ ISLA {1 / float(wo['Transolver pressure']):.3f}; "
+      f"on wall shear the two ratios are {1 / float(wo['GeoTransolver wall shear']):.3f} and {1 / float(wo['Transolver wall shear']):.3f}. On a case "
       "at stall the error is close to all or nothing, and which of ISLA's seeds gets it right changes from case to case (seed 42 / seed "
       f"43 pressure error: {flips.replace(' / ', ' and ')}), so with two seeds a side any one of these cases moves the mean ratio by a few "
       "percent, and the deficit is read for its concentration, not for its size to the percent. Every number here is the native "
@@ -762,5 +763,5 @@ print("**Across a boundary in the geometry parameters ISLA does not generalize b
 Questions this dataset raises and leaves open:
 
 - **What moves ISLA's error under rotation and translation on this dataset?** On the DrivAerML Surface task and SHIFT-SUV ISLA's rotated-and-translated error equals its native error to float32 roundoff; here it is `{python} f"{100 * min(POSED_DEV):.1f}"`% to `{python} f"{100 * max(POSED_DEV):.1f}"`% above it on every field and seed (@sec-de-result). Candidates are float32 arithmetic on coordinates in inches after the translation and how the far-field direction follows the rotation; scoring the standing's checkpoints rotated only, translated only, and in float64 settles which.
-- **How does ISLA's reference configuration extrapolate in flow regime?** The angle-of-attack and stall test sets of @tbl-hilift-splits hold out the high angles and the post-stall flow. No checkpoint of the reference configuration is scored on them; a smaller ISLA and a GeoTransolver reading the physical freestream vector, scored once on them, both lose about a factor of ten from their validation error (results/hilift_sealed_test_2026-09-04.json).
+- **How does ISLA's reference configuration extrapolate in flow regime?** The angle-of-attack and stall test sets of @tbl-hilift-splits hold out the high angles and the post-stall flow. No checkpoint of the reference configuration is scored on them; a smaller ISLA and a GeoTransolver reading the physical freestream vector, scored once on them, have a pressure error `{python} f"{min(v['d_min'] for v in SEALED.values()):.1f}"` to `{python} f"{max(v['d_max'] for v in SEALED.values()):.1f}"` times their validation error on every seed and test set (results/hilift_sealed_test_2026-09-04.json).
 - **Why does ISLA take the wrong flow state on a few cases at stall, and what sets the broad offset?** The pressure deficit to GeoTransolver is a few post-stall cases, where the seed that gets the flow state right changes from case to case; the deficit to Transolver, and on wall shear to both, is an offset spread over the cases (@sec-hilift-deficit); the fitted law gives ISLA and GeoTransolver the same exponent for the reducible error (@sec-scaling-law). What would settle the first: the sign of the error at the suction peaks and the lift of each case, from saved predictions, and more seeds on the cases at stall, which separate the cases a model gets wrong every time from those that change with the seed. What sets the second is open (@sec-open-questions).
