@@ -338,14 +338,19 @@ print(ST.table("tbl-tensile2d-protocols", f"PLAID Tensile2d, 400 training specim
 #| output: asis
 #| column: page
 import json as _json
-_R = _json.load(open(RENDER_DIR / "render_2d_tensile2d.json"))["tensile2d"]
-rendering_figure("fig-tensile2d-prediction", [("figures/renderings/tensile2d_stress.png", "von Mises stress of the in-plane components")],
-    f"The three reference configurations on one PLAID Tensile2d validation specimen, {_R['sample_id'].split('_')[0]}. Relative L2 on this case: {case_errors(_R['per_sample_rel_l2'])}. " + "Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one "
-      f"symmetric scale. ISLA checkpoints of the {S.FORM_TAG} (@sec-checkpoint-form). How to read this: one case, chosen as the case of median ISLA error (seed 42 of each reference configuration), "
-      "not a standing; the standing is the table above, whose ISLA rows are of other checkpoints. "
-    + "Data: results/renderings_2026-10-18/arrays/render_2d_tensile2d.json.", nrow=None)
-print()
-print(rendering_in_flight())
+_R = _json.load(open(RENDER_DIR_090 / "render_2d_tensile2d.json"))["tensile2d"]
+_src = next(v for k, v in _R["source"].items() if k.endswith("_isla/native"))
+_rec = RES / "campaigns_2026-10-22/standing_090/scores" / _src["scorer_record"].removeprefix("$T/")
+_e = {r["sample_id"]: r["metrics"]["stress_l2"] for r in map(_json.loads, open(_rec)) if r.get("phase") == "infer_step"}
+_rk = sorted(_e, key=_e.get).index(_R["sample_id"]) + 1
+rendering_figure("fig-tensile2d-prediction", [("figures/renderings/tensile2d_stress_090.png", "von Mises stress of the in-plane components")],
+    f"The three reference configurations on one PLAID Tensile2d validation specimen, {_R['sample_id'].split('_')[0]}, from the "
+    "standing's checkpoints (seed 42): ISLA at its reference configuration, trained eagerly as in the standing, and the baselines' "
+    f"standing checkpoints. Relative L2 on this case: {case_errors(_R['per_sample_rel_l2'])}; the specimen ranks {_rk} of {len(_e)} "
+    "by ISLA's stress error over the validation specimens. "
+    "Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one "
+    "symmetric scale. How to read this: one case, not a standing; the standing is the table above. "
+    "Data: results/renderings_2026-10-22/arrays/render_2d_tensile2d.json.", nrow=None)
 ```
 
 ```{python}
