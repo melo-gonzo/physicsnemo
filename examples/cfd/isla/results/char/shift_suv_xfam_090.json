@@ -1,0 +1,916 @@
+{
+ "protocol": "SHIFT-SUV across families (2026-10-22): the estate-trained standing checkpoints (ISLA 0.9.0 r090_suv_isla, GeoTransolver\n256 clud_suv_gt, Transolver 512 x 16 clud_suv_t; seeds 42 and 43, epoch 500, float32, ISLA's 200,000-cell set) scored\nzero-shot on unseen fastbacks (fastback test 99 cases, fastback val 99) and in family on estate test (100); estate val is the\nstanding's own split. Registered rules: scratch/isla-suv-xfam-2026-10-22/PREREG.md (md5 c0d0caef).\n\nSources, copied unmodified into results/campaigns_2026-10-22/suv_xfam/ from scratch/isla-suv-xfam-2026-10-22/: reduce_out.json\n(reduce.py, the registered rules, run on LHR over $T/evals_suvx/<run>/<split>/<run>/metrics.jsonl: E = the infer_summary row,\nthe mean over cases of the per-case relative L2) and percase_out.json (percase.py, beside the rules: case bootstrap).\n\nWrites results/char/shift_suv_xfam_090.json:\n  arms[arm][split][field]  {mean, per_seed, n_cases, n_seeds}: seed means of E\n  R1[split][cell]          r = baseline / ISLA (seed means), its band b1, verdict as registered ('baseline leads' / 'trails' / 'level')\n  R2[split]                penalties P = E(fastback) / E(estate test) per arm and field (P_geo: geometric seed mean, P_seeds),\n                           cells D = ln(P_B / P_ISLA) with SE, z and verdict, and the summary as registered\n  B_trigger, predictions   as registered\n  case_level               percase_out.json (fraction of cases ISLA is lower on, case-bootstrap intervals; no verdict)\n  part_b                   {status: in_flight, in_flight: {what, replacement}}: the fastback-trained comparison\nPart A is final; the file's own status is final, with part B's status inside part_b.\nusage: python shift_suv_xfam_090_2026-10-22.py",
+ "status": "final",
+ "in_flight": null,
+ "splits": {
+  "fb_test": "fastback test",
+  "fb_val": "fastback val",
+  "est_test": "estate test",
+  "est_val": "estate val"
+ },
+ "fields": {
+  "pressure_l2": "pressure",
+  "wss_l2": "wall shear"
+ },
+ "isla_arm": "ISLA 512 with 512 slices",
+ "arms": {
+  "ISLA 512 with 512 slices": {
+   "fb_test": {
+    "pressure_l2": {
+     "mean": 0.11175289057721996,
+     "per_seed": {
+      "42": 0.10998849194459241,
+      "43": 0.1135172892098475
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    },
+    "wss_l2": {
+     "mean": 0.11680761491409455,
+     "per_seed": {
+      "42": 0.11818561168632122,
+      "43": 0.1154296181418679
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    }
+   },
+   "fb_val": {
+    "pressure_l2": {
+     "mean": 0.11086512575245866,
+     "per_seed": {
+      "42": 0.10923677502256451,
+      "43": 0.11249347648235282
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    },
+    "wss_l2": {
+     "mean": 0.117355495992333,
+     "per_seed": {
+      "42": 0.11808274972318399,
+      "43": 0.11662824226148201
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    }
+   },
+   "est_test": {
+    "pressure_l2": {
+     "mean": 0.043715059757232666,
+     "per_seed": {
+      "42": 0.04447851181030273,
+      "43": 0.0429516077041626
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    },
+    "wss_l2": {
+     "mean": 0.06570926666259766,
+     "per_seed": {
+      "42": 0.06594655513763428,
+      "43": 0.06547197818756104
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    }
+   },
+   "est_val": {
+    "pressure_l2": {
+     "mean": 0.044501485246600525,
+     "per_seed": {
+      "42": 0.04555941109705453,
+      "43": 0.043443559396146525
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    },
+    "wss_l2": {
+     "mean": 0.06653191826560281,
+     "per_seed": {
+      "42": 0.06709038127552379,
+      "43": 0.06597345525568182
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    }
+   }
+  },
+  "GeoTransolver 256": {
+   "fb_test": {
+    "pressure_l2": {
+     "mean": 0.11551460593637794,
+     "per_seed": {
+      "42": 0.12338911884962911,
+      "43": 0.10764009302312677
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    },
+    "wss_l2": {
+     "mean": 0.12673185329244593,
+     "per_seed": {
+      "42": 0.129920487452035,
+      "43": 0.12354321913285689
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    }
+   },
+   "fb_val": {
+    "pressure_l2": {
+     "mean": 0.11499523875689266,
+     "per_seed": {
+      "42": 0.12316383015025746,
+      "43": 0.10682664736352786
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    },
+    "wss_l2": {
+     "mean": 0.1275882383789679,
+     "per_seed": {
+      "42": 0.1310767549456972,
+      "43": 0.12409972181223859
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    }
+   },
+   "est_test": {
+    "pressure_l2": {
+     "mean": 0.04499654531478882,
+     "per_seed": {
+      "42": 0.0449666166305542,
+      "43": 0.04502647399902344
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    },
+    "wss_l2": {
+     "mean": 0.06555866003036499,
+     "per_seed": {
+      "42": 0.06547579288482666,
+      "43": 0.06564152717590332
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    }
+   },
+   "est_val": {
+    "pressure_l2": {
+     "mean": 0.04553434102222173,
+     "per_seed": {
+      "42": 0.04583843789919458,
+      "43": 0.04523024414524888
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    },
+    "wss_l2": {
+     "mean": 0.06649209032155046,
+     "per_seed": {
+      "42": 0.06670436955461598,
+      "43": 0.06627981108848495
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    }
+   }
+  },
+  "Transolver 512 x 16 at 100k cells": {
+   "fb_test": {
+    "pressure_l2": {
+     "mean": 0.10633383375225644,
+     "per_seed": {
+      "42": 0.10665780847722833,
+      "43": 0.10600985902728456
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    },
+    "wss_l2": {
+     "mean": 0.12413610593237058,
+     "per_seed": {
+      "42": 0.1249875540685172,
+      "43": 0.12328465779622395
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    }
+   },
+   "fb_val": {
+    "pressure_l2": {
+     "mean": 0.10612382310809512,
+     "per_seed": {
+      "42": 0.10590382778283322,
+      "43": 0.10634381843335701
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    },
+    "wss_l2": {
+     "mean": 0.12468047575517134,
+     "per_seed": {
+      "42": 0.12561509103486032,
+      "43": 0.12374586047548236
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    }
+   },
+   "est_test": {
+    "pressure_l2": {
+     "mean": 0.041592683792114254,
+     "per_seed": {
+      "42": 0.041792774200439455,
+      "43": 0.04139259338378906
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    },
+    "wss_l2": {
+     "mean": 0.06293950080871583,
+     "per_seed": {
+      "42": 0.06312142372131348,
+      "43": 0.06275757789611816
+     },
+     "n_cases": 100,
+     "n_seeds": 2
+    }
+   },
+   "est_val": {
+    "pressure_l2": {
+     "mean": 0.04192634784814083,
+     "per_seed": {
+      "42": 0.0418757236365116,
+      "43": 0.041976972059770065
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    },
+    "wss_l2": {
+     "mean": 0.06395168737931685,
+     "per_seed": {
+      "42": 0.06385433312618372,
+      "43": 0.06404904163244998
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    }
+   }
+  }
+ },
+ "R1": {
+  "fb_test": {
+   "GeoTransolver/pressure_l2": {
+    "r": 1.0336610117172644,
+    "b1": 0.19311049373640563,
+    "E_B": [
+     0.12338911884962911,
+     0.10764009302312677
+    ],
+    "E_ISLA": [
+     0.10998849194459241,
+     0.1135172892098475
+    ],
+    "verdict": "level"
+   },
+   "GeoTransolver/wss_l2": {
+    "r": 1.0849622551205254,
+    "b1": 0.07117960447230777,
+    "E_B": [
+     0.129920487452035,
+     0.12354321913285689
+    ],
+    "E_ISLA": [
+     0.11818561168632122,
+     0.1154296181418679
+    ],
+    "verdict": "baseline trails"
+   },
+   "Transolver/pressure_l2": {
+    "r": 0.9515085757784582,
+    "b1": 0.04466003207301792,
+    "E_B": [
+     0.10665780847722833,
+     0.10600985902728456
+    ],
+    "E_ISLA": [
+     0.10998849194459241,
+     0.1135172892098475
+    ],
+    "verdict": "baseline leads"
+   },
+   "Transolver/wss_l2": {
+    "r": 1.0627398395529755,
+    "b1": 0.033368922718231865,
+    "E_B": [
+     0.1249875540685172,
+     0.12328465779622395
+    ],
+    "E_ISLA": [
+     0.11818561168632122,
+     0.1154296181418679
+    ],
+    "verdict": "baseline trails"
+   }
+  },
+  "fb_val": {
+   "GeoTransolver/pressure_l2": {
+    "r": 1.037253491360807,
+    "b1": 0.20125393050179846,
+    "E_B": [
+     0.12316383015025746,
+     0.10682664736352786
+    ],
+    "E_ISLA": [
+     0.10923677502256451,
+     0.11249347648235282
+    ],
+    "verdict": "level"
+   },
+   "GeoTransolver/wss_l2": {
+    "r": 1.0871944027853917,
+    "b1": 0.07735411132347526,
+    "E_B": [
+     0.1310767549456972,
+     0.12409972181223859
+    ],
+    "E_ISLA": [
+     0.11808274972318399,
+     0.11662824226148201
+    ],
+    "verdict": "baseline trails"
+   },
+   "Transolver/pressure_l2": {
+    "r": 0.9572335970199503,
+    "b1": 0.041546000827658,
+    "E_B": [
+     0.10590382778283322,
+     0.10634381843335701
+    ],
+    "E_ISLA": [
+     0.10923677502256451,
+     0.11249347648235282
+    ],
+    "verdict": "baseline leads"
+   },
+   "Transolver/wss_l2": {
+    "r": 1.0624170150779892,
+    "b1": 0.03,
+    "E_B": [
+     0.12561509103486032,
+     0.12374586047548236
+    ],
+    "E_ISLA": [
+     0.11808274972318399,
+     0.11662824226148201
+    ],
+    "verdict": "baseline trails"
+   }
+  },
+  "est_test": {
+   "GeoTransolver/pressure_l2": {
+    "r": 1.029314510026356,
+    "b1": 0.04940146677370409,
+    "E_B": [
+     0.0449666166305542,
+     0.04502647399902344
+    ],
+    "E_ISLA": [
+     0.04447851181030273,
+     0.0429516077041626
+    ],
+    "verdict": "level"
+   },
+   "GeoTransolver/wss_l2": {
+    "r": 0.9977079848873371,
+    "b1": 0.03,
+    "E_B": [
+     0.06547579288482666,
+     0.06564152717590332
+    ],
+    "E_ISLA": [
+     0.06594655513763428,
+     0.06547197818756104
+    ],
+    "verdict": "level"
+   },
+   "Transolver/pressure_l2": {
+    "r": 0.9514497755028858,
+    "b1": 0.04940146677370409,
+    "E_B": [
+     0.041792774200439455,
+     0.04139259338378906
+    ],
+    "E_ISLA": [
+     0.04447851181030273,
+     0.0429516077041626
+    ],
+    "verdict": "baseline leads"
+   },
+   "Transolver/wss_l2": {
+    "r": 0.957848169755052,
+    "b1": 0.03,
+    "E_B": [
+     0.06312142372131348,
+     0.06275757789611816
+    ],
+    "E_ISLA": [
+     0.06594655513763428,
+     0.06547197818756104
+    ],
+    "verdict": "baseline leads"
+   }
+  }
+ },
+ "R2": {
+  "fb_test": {
+   "penalties": {
+    "ISLA 512 with 512 slices/pressure_l2": {
+     "P_geo": 2.5564646593344493,
+     "P_seeds": [
+      2.472845593703415,
+      2.6429112966322355
+     ],
+     "SE_lnP": 0.033255761841543885
+    },
+    "ISLA 512 with 512 slices/wss_l2": {
+     "P_geo": 1.7775308404255452,
+     "P_seeds": [
+      1.7921423103854477,
+      1.7630384988703194
+     ],
+     "SE_lnP": 0.008186492682066782
+    },
+    "GeoTransolver 256/pressure_l2": {
+     "P_geo": 2.5612170739933133,
+     "P_seeds": [
+      2.7440160744890885,
+      2.3905956532474946
+     ],
+     "SE_lnP": 0.06894000285238905
+    },
+    "GeoTransolver 256/wss_l2": {
+     "P_geo": 1.9324957879175035,
+     "P_seeds": [
+      1.9842522209783384,
+      1.8820893487409442
+     ],
+     "SE_lnP": 0.026429806417686774
+    },
+    "Transolver 512 x 16 at 100k cells/pressure_l2": {
+     "P_geo": 2.5565691119891487,
+     "P_seeds": [
+      2.552063377408117,
+      2.561082801562323
+     ],
+     "SE_lnP": 0.0017639694218425928
+    },
+    "Transolver 512 x 16 at 100k cells/wss_l2": {
+     "P_geo": 1.9722702406968644,
+     "P_seeds": [
+      1.9801130376961715,
+      1.9644585073103924
+     ],
+     "SE_lnP": 0.0039686471380218635
+    }
+   },
+   "cells": {
+    "GeoTransolver/pressure_l2": {
+     "D": 0.0018572534489562642,
+     "ratio": 1.001858979212371,
+     "SE": 0.07654194725083036,
+     "z": 0.024264517897225512,
+     "verdict": "no difference",
+     "B_trigger_cell": false
+    },
+    "GeoTransolver/wss_l2": {
+     "D": 0.08358708887910182,
+     "ratio": 1.0871798924483693,
+     "SE": 0.027668634402693782,
+     "z": 3.0210052170469206,
+     "verdict": "ISLA transfers better",
+     "B_trigger_cell": true
+    },
+    "Transolver/pressure_l2": {
+     "D": 4.085740849202324e-05,
+     "ratio": 1.0000408582431672,
+     "SE": 0.033302511673786436,
+     "z": 0.001226856667516268,
+     "verdict": "no difference",
+     "B_trigger_cell": false
+    },
+    "Transolver/wss_l2": {
+     "D": 0.10396005268928699,
+     "ratio": 1.1095561302467742,
+     "SE": 0.009097737220851243,
+     "z": 11.427023024034959,
+     "verdict": "ISLA transfers better",
+     "B_trigger_cell": true
+    }
+   },
+   "summary": "mixed / no difference"
+  },
+  "fb_val": {
+   "penalties": {
+    "ISLA 512 with 512 slices/pressure_l2": {
+     "P_geo": 2.5361986559677216,
+     "P_seeds": [
+      2.455944917591905,
+      2.6190748727538473
+     ],
+     "SE_lnP": 0.0321547855363335
+    },
+    "ISLA 512 with 512 slices/wss_l2": {
+     "P_geo": 1.7859582631237934,
+     "P_seeds": [
+      1.7905825327303062,
+      1.781345935926526
+     ],
+     "SE_lnP": 0.0025858909193388624
+    },
+    "GeoTransolver 256/pressure_l2": {
+     "P_geo": 2.549190651475599,
+     "P_seeds": [
+      2.739005942167535,
+      2.3725297114280983
+     ],
+     "SE_lnP": 0.07181914253187555
+    },
+    "GeoTransolver 256/wss_l2": {
+     "P_geo": 1.945443055053573,
+     "P_seeds": [
+      2.0019116862970114,
+      1.8905672544711143
+     ],
+     "SE_lnP": 0.02861282425015843
+    },
+    "Transolver 512 x 16 at 100k cells/pressure_l2": {
+     "P_geo": 2.551526216488394,
+     "P_seeds": [
+      2.534022443088251,
+      2.5691508972956827
+     ],
+     "SE_lnP": 0.00688375775808836
+    },
+    "Transolver 512 x 16 at 100k cells/wss_l2": {
+     "P_geo": 1.980910111237542,
+     "P_seeds": [
+      1.990054780599718,
+      1.971807463320483
+     ],
+     "SE_lnP": 0.004605775058138917
+    }
+   },
+   "cells": {
+    "GeoTransolver/pressure_l2": {
+     "D": 0.005109549333638386,
+     "ratio": 1.0051226253421857,
+     "SE": 0.07868875057402715,
+     "z": 0.06493366963339355,
+     "verdict": "no difference",
+     "B_trigger_cell": false
+    },
+    "GeoTransolver/wss_l2": {
+     "D": 0.08553462966151926,
+     "ratio": 1.089299282756377,
+     "SE": 0.028729436879569595,
+     "z": 2.9772469965238204,
+     "verdict": "ISLA transfers better",
+     "B_trigger_cell": true
+    },
+    "Transolver/pressure_l2": {
+     "D": 0.006025328521732876,
+     "ratio": 1.0060435173264548,
+     "SE": 0.032883375036021525,
+     "z": 0.1832332756334328,
+     "verdict": "no difference",
+     "B_trigger_cell": false
+    },
+    "Transolver/wss_l2": {
+     "D": 0.10360127796933205,
+     "ratio": 1.1091581209589754,
+     "SE": 0.005282044654572104,
+     "z": 19.61385878850067,
+     "verdict": "ISLA transfers better",
+     "B_trigger_cell": true
+    }
+   },
+   "summary": "mixed / no difference"
+  }
+ },
+ "B_trigger": true,
+ "predictions": {
+  "P1 every arm P>1.3 both fields": true,
+  "P2 >=2 of 3 arms P_p > P_wss": true,
+  "P3 both GT R2 cells no difference": false,
+  "P4 both T R2 cells no difference": false,
+  "P5 R2 summary mixed / no difference": true,
+  "P6 B trigger fires": true,
+  "P7 T leads ISLA on fb_test pressure": true,
+  "P8 both GT R1 cells level": false,
+  "P9 fb_val ratios same side of 1 or both within 3%": true,
+  "P10 est_test within 10% of est_val per arm, field, seed mean": true
+ },
+ "case_level": {
+  "fb_test/gt/pressure_l2": {
+   "isla_wins_cases": 0.758,
+   "R1_ratio": 1.0337,
+   "R1_ci95": [
+    1.0246,
+    1.0427
+   ],
+   "R2_ratio": 1.0042,
+   "R2_ci95": [
+    0.9899,
+    1.0184
+   ]
+  },
+  "fb_test/gt/wss_l2": {
+   "isla_wins_cases": 1.0,
+   "R1_ratio": 1.085,
+   "R1_ci95": [
+    1.0774,
+    1.0927
+   ],
+   "R2_ratio": 1.0875,
+   "R2_ci95": [
+    1.0703,
+    1.105
+   ]
+  },
+  "fb_test/gt/wss_x_l2": {
+   "isla_wins_cases": 1.0,
+   "R1_ratio": 1.0797,
+   "R1_ci95": [
+    1.0732,
+    1.0868
+   ],
+   "R2_ratio": 1.0633,
+   "R2_ci95": [
+    1.049,
+    1.0782
+   ]
+  },
+  "fb_test/gt/wss_y_l2": {
+   "isla_wins_cases": 0.98,
+   "R1_ratio": 1.1092,
+   "R1_ci95": [
+    1.098,
+    1.121
+   ],
+   "R2_ratio": 1.1131,
+   "R2_ci95": [
+    1.0933,
+    1.1337
+   ]
+  },
+  "fb_test/gt/wss_z_l2": {
+   "isla_wins_cases": 0.939,
+   "R1_ratio": 1.0835,
+   "R1_ci95": [
+    1.0724,
+    1.0948
+   ],
+   "R2_ratio": 1.111,
+   "R2_ci95": [
+    1.087,
+    1.1352
+   ]
+  },
+  "fb_test/t/pressure_l2": {
+   "isla_wins_cases": 0.162,
+   "R1_ratio": 0.9515,
+   "R1_ci95": [
+    0.9428,
+    0.96
+   ],
+   "R2_ratio": 1.0001,
+   "R2_ci95": [
+    0.9769,
+    1.0224
+   ]
+  },
+  "fb_test/t/wss_l2": {
+   "isla_wins_cases": 0.97,
+   "R1_ratio": 1.0627,
+   "R1_ci95": [
+    1.0563,
+    1.069
+   ],
+   "R2_ratio": 1.1095,
+   "R2_ci95": [
+    1.0929,
+    1.1261
+   ]
+  },
+  "fb_test/t/wss_x_l2": {
+   "isla_wins_cases": 0.99,
+   "R1_ratio": 1.0737,
+   "R1_ci95": [
+    1.0675,
+    1.08
+   ],
+   "R2_ratio": 1.0885,
+   "R2_ci95": [
+    1.0722,
+    1.1052
+   ]
+  },
+  "fb_test/t/wss_y_l2": {
+   "isla_wins_cases": 0.899,
+   "R1_ratio": 1.06,
+   "R1_ci95": [
+    1.0494,
+    1.0704
+   ],
+   "R2_ratio": 1.1339,
+   "R2_ci95": [
+    1.1128,
+    1.1556
+   ]
+  },
+  "fb_test/t/wss_z_l2": {
+   "isla_wins_cases": 0.687,
+   "R1_ratio": 1.0197,
+   "R1_ci95": [
+    1.01,
+    1.029
+   ],
+   "R2_ratio": 1.096,
+   "R2_ci95": [
+    1.0747,
+    1.1173
+   ]
+  },
+  "fb_test/penalty/isla/pressure_l2": 2.5564,
+  "fb_test/penalty/isla/wss_l2": 1.7776,
+  "fb_test/penalty/isla/wss_x_l2": 2.1658,
+  "fb_test/penalty/isla/wss_y_l2": 1.6446,
+  "fb_test/penalty/isla/wss_z_l2": 1.2148,
+  "fb_test/penalty/gt/pressure_l2": 2.5672,
+  "fb_test/penalty/gt/wss_l2": 1.9331,
+  "fb_test/penalty/gt/wss_x_l2": 2.3029,
+  "fb_test/penalty/gt/wss_y_l2": 1.8305,
+  "fb_test/penalty/gt/wss_z_l2": 1.3496,
+  "fb_test/penalty/t/pressure_l2": 2.5566,
+  "fb_test/penalty/t/wss_l2": 1.9723,
+  "fb_test/penalty/t/wss_x_l2": 2.3574,
+  "fb_test/penalty/t/wss_y_l2": 1.8648,
+  "fb_test/penalty/t/wss_z_l2": 1.3314,
+  "fb_val/gt/pressure_l2": {
+   "isla_wins_cases": 0.798,
+   "R1_ratio": 1.0373,
+   "R1_ci95": [
+    1.0284,
+    1.0456
+   ],
+   "R2_ratio": 1.0077,
+   "R2_ci95": [
+    0.9935,
+    1.0215
+   ]
+  },
+  "fb_val/gt/wss_l2": {
+   "isla_wins_cases": 1.0,
+   "R1_ratio": 1.0872,
+   "R1_ci95": [
+    1.0794,
+    1.0954
+   ],
+   "R2_ratio": 1.0897,
+   "R2_ci95": [
+    1.0721,
+    1.1069
+   ]
+  },
+  "fb_val/gt/wss_x_l2": {
+   "isla_wins_cases": 1.0,
+   "R1_ratio": 1.083,
+   "R1_ci95": [
+    1.0761,
+    1.0901
+   ],
+   "R2_ratio": 1.0665,
+   "R2_ci95": [
+    1.0523,
+    1.0809
+   ]
+  },
+  "fb_val/gt/wss_y_l2": {
+   "isla_wins_cases": 0.96,
+   "R1_ratio": 1.1053,
+   "R1_ci95": [
+    1.0931,
+    1.1178
+   ],
+   "R2_ratio": 1.1091,
+   "R2_ci95": [
+    1.0893,
+    1.1298
+   ]
+  },
+  "fb_val/gt/wss_z_l2": {
+   "isla_wins_cases": 0.919,
+   "R1_ratio": 1.0889,
+   "R1_ci95": [
+    1.0755,
+    1.1027
+   ],
+   "R2_ratio": 1.1165,
+   "R2_ci95": [
+    1.0907,
+    1.1424
+   ]
+  },
+  "fb_val/t/pressure_l2": {
+   "isla_wins_cases": 0.152,
+   "R1_ratio": 0.9572,
+   "R1_ci95": [
+    0.949,
+    0.9659
+   ],
+   "R2_ratio": 1.0061,
+   "R2_ci95": [
+    0.9823,
+    1.0286
+   ]
+  },
+  "fb_val/t/wss_l2": {
+   "isla_wins_cases": 0.99,
+   "R1_ratio": 1.0624,
+   "R1_ci95": [
+    1.0563,
+    1.0686
+   ],
+   "R2_ratio": 1.1092,
+   "R2_ci95": [
+    1.093,
+    1.1266
+   ]
+  },
+  "fb_val/t/wss_x_l2": {
+   "isla_wins_cases": 1.0,
+   "R1_ratio": 1.0749,
+   "R1_ci95": [
+    1.0691,
+    1.0809
+   ],
+   "R2_ratio": 1.0897,
+   "R2_ci95": [
+    1.0737,
+    1.1062
+   ]
+  },
+  "fb_val/t/wss_y_l2": {
+   "isla_wins_cases": 0.848,
+   "R1_ratio": 1.0581,
+   "R1_ci95": [
+    1.0477,
+    1.0679
+   ],
+   "R2_ratio": 1.1319,
+   "R2_ci95": [
+    1.1109,
+    1.1536
+   ]
+  },
+  "fb_val/t/wss_z_l2": {
+   "isla_wins_cases": 0.616,
+   "R1_ratio": 1.0182,
+   "R1_ci95": [
+    1.0079,
+    1.0281
+   ],
+   "R2_ratio": 1.0945,
+   "R2_ci95": [
+    1.073,
+    1.1171
+   ]
+  },
+  "fb_val/penalty/isla/pressure_l2": 2.5361,
+  "fb_val/penalty/isla/wss_l2": 1.786,
+  "fb_val/penalty/isla/wss_x_l2": 2.1695,
+  "fb_val/penalty/isla/wss_y_l2": 1.6433,
+  "fb_val/penalty/isla/wss_z_l2": 1.2354,
+  "fb_val/penalty/gt/pressure_l2": 2.5556,
+  "fb_val/penalty/gt/wss_l2": 1.9462,
+  "fb_val/penalty/gt/wss_x_l2": 2.3138,
+  "fb_val/penalty/gt/wss_y_l2": 1.8226,
+  "fb_val/penalty/gt/wss_z_l2": 1.3794,
+  "fb_val/penalty/t/pressure_l2": 2.5515,
+  "fb_val/penalty/t/wss_l2": 1.981,
+  "fb_val/penalty/t/wss_x_l2": 2.3642,
+  "fb_val/penalty/t/wss_y_l2": 1.8601,
+  "fb_val/penalty/t/wss_z_l2": 1.3521
+ },
+ "part_b": {
+  "status": "in_flight",
+  "in_flight": {
+   "what": "models trained on estates only, so the penalty mixes the transfer gap with how hard fastbacks are in themselves",
+   "replacement": "The reverse direction, ISLA and Transolver trained on fastbacks and scored on estates,"
+  }
+ }
+}

@@ -56,8 +56,6 @@ def sci(x):
     """3.75e-4 style: the mantissa to the digits it needs, the exponent as an integer."""
     e = int(math.floor(math.log10(abs(x)))); m = x / 10 ** e
     return f"{m:g}e{e}"
-BOOK_NAME = {"DrivAerML Surface": "DrivAerML Surface", "DrivAerML Volume": "DrivAerML Volume", "Shift-SUV": "SHIFT-SUV",
-             "AirfRANS": "AirfRANS interior", "Tensile2D": "PLAID Tensile2d", "lug": "GINOT bracket lug", "DeepJEB++": "DeepJEB++"}
 ISLA_CFGS = {p.stem: load_cfg(p.stem) for p in sorted(CONF.glob("isla_*.yaml"))}
 TRAIN = yaml.safe_load((RECIPE / "conf" / "train.yaml").read_text())
 BASE = yaml.safe_load((RECIPE / "conf" / "base.yaml").read_text())
@@ -136,8 +134,28 @@ point at a time or in chunks, is built with `query_independent=True`:
 ISLA-DTT, whose read-only prediction points never write into the slices and
 read the boundary cells through a Barnes–Hut forest instead
 (@sec-arch-passive-decoder). Its prediction at a point depends on that
-point and the boundary alone. What the two forms measure on the same
-datasets is in @sec-interior-read-only and @sec-airfrans-read-only.
+point and the boundary alone.
+
+```{python}
+#| label: para-using-query-population
+#| output: asis
+import records as R
+from physicsnemo.experimental.models.isla.tree_read import TREE_READ_THETA
+QP = R.load("probes090", "results/qpop/reduced.json")
+QV = [QP[f"r090_vol_isla_seed{s}"]["ratio_to_native_h"] for s in (42, 43)]
+qv = lambda mode: [sum(v[mode][f] for v in QV) / len(QV) for f in ("pressure_l2", "velocity_l2")]
+qd = max(abs(x - 1) for s in (42, 43) for mode in QP[f"r090_af_dtt_seed{s}"]["ratio_to_native_h"].values() for x in mode.values())
+print(f"On the DrivAerML Volume task, the standing's ISLA asked for its scored points in four "
+      f"chunks moves its pressure and velocity error by at most {100 * (max(qv('chunks4')) - 1):.1f}%, but 1,000 of those points "
+      f"asked for on their own raise it {min(qv('sub1000')):.1f} to {max(qv('sub1000')):.1f} times, and points asked for one at a "
+      f"time {min(qv('sub1')):.0f} to {max(qv('sub1')):.0f} times (seed means). On AirfRANS, ISLA-DTT's error moves by at most "
+      f"{sci(float(f'{qd:.1g}'))} relative under every such change of the request, float32 roundoff (weights trained on the compiled path before "
+      f"its fault was fixed, @sec-using-cost). Its tree read is a Barnes–Hut approximation at opening angle $\\theta = "
+      f"{TREE_READ_THETA:g}$, whose error vanishes as $\\theta \\to 0$. Data: {R.source('probes090', 'results/qpop/reduced.json')}.")
+```
+
+What the two forms measure on the same datasets is in
+@sec-interior-read-only and @sec-airfrans-read-only.
 :::
 
 ## What the model needs from your data {#sec-using-inputs}
@@ -867,7 +885,8 @@ INFER = yaml.safe_load((RECIPE / "conf" / "infer.yaml").read_text())
 PR = json.load(open(RES / "precres_2026-09-18.json"))["reduction"]; PRB, PRF = PR["bfloat16"], PR["float32"]
 print(f"The recipe trains under {BASE['precision']} autocast (`conf/base.yaml`), and `conf/infer.yaml` reads the whole mesh "
       f"by default (`sampling_resolution: {INFER['sampling_resolution']:,}`), hence the two overrides. Every number in this "
-      "book is a float32 inference on the final-epoch checkpoint (@sec-metrics). A bfloat16 inference rounds the learned maps' "
+      "book is a float32 inference on the final-epoch checkpoint (@sec-metrics), on the eager path or on compiled blocks "
+      "that compute the same function (@tbl-protocol). A bfloat16 inference rounds the learned maps' "
       f"arithmetic. On two trained DrivAerML Surface checkpoints, the bfloat16 pressure prediction differs from the float32 one "
       f"by {PRB['scalar_vs_fp32_unrotated']['mean_over_seeds']:.1%} on average, and a rigid motion of the input moves the "
       f"bfloat16 prediction by {min(PRB['scalar_residual']['per_seed_mean']):.1%} to {max(PRB['scalar_residual']['per_seed_mean']):.1%} "
@@ -1004,36 +1023,58 @@ queried at any count, alone or in chunks.
 ```{python}
 #| label: para-using-cost-lede
 #| output: asis
-CL = json.load(open(RES / "char" / "char_lanes_cost_2026-10-04.json"))["cost"]
-over = [t for t, r in CL.items() if r["ISLA"]["peak_gib"] > 80]
-under = [t for t in CL if t not in over]
+CL = {k: c for k in S.DATASETS if (c := S.cost(k, "ISLA"))}
+over = [k for k, c in CL.items() if c["peak_gib"] > 80]
 print(f"**In the reference configuration ISLA trains one case per GPU in under the 80 GiB it was selected under on "
-      f"{len(under)} of the {len(CL)} dataset tasks of @tbl-isla-cost; "
-      + " and ".join(f"the {BOOK_NAME.get(t, t)} task, with 200,000 boundary cells and 200,000 prediction points, peaks at {CL[t]['ISLA']['peak_gib']:.0f} GiB" for t in over)
+      f"{len(CL) - len(over)} of the {len(CL)} dataset tasks of @tbl-isla-cost; "
+      + " and ".join(f"{S.DATASETS[k].in_sentence} peaks at {CL[k]['peak_gib']:.0f} GiB" for k in over)
       + ".** Where the memory and the time of a step go, and why, is @sec-arch-cost.")
 ```
-
-<!-- SLOT: cost table at the reference configurations (tbl-isla-cost) -->
 
 ```{python}
 #| label: tbl-isla-cost
 #| output: asis
-ORDER = ["DrivAerML Surface", "DrivAerML Volume", "Shift-SUV", "AirfRANS", "Tensile2D", "lug", "DeepJEB++"]
-cost = {t: CL[t] for t in ORDER if t in CL} | {t: v for t, v in CL.items() if t not in ORDER}
-archs = ("ISLA", "GeoTransolver", "Transolver")
-o = ("| dataset task | " + " | ".join(f"{a}: parameters | {a}: peak GiB" for a in archs) + " |\n|---|"
-     + "--:|--:|" * len(archs) + "\n")
-for task, row in cost.items():
-    o += f"| {BOOK_NAME.get(task, task)} | " + " | ".join(
-        (f"{row[a]['n_parameters'] / 1e6:.1f}M | {row[a]['peak_gib']:.1f}" if a in row else "– | –") for a in archs) + " |\n"
+import re
+archs = ("ISLA", "ISLA-DTT", "GeoTransolver", "Transolver")
+and_ = lambda xs: ", ".join(xs[:-1]) + " and " + xs[-1] if len(xs) > 1 else "".join(xs)
+# a cell's reason, from its note: the clause that names the smoke lane, without run identifiers or step counts
+why = lambda c: re.sub(r" \([a-z0-9_]+\)|, \d[\d,]* steps", "", next(p for p in c["note"].split("; ") if "smoke lane" in p))
+FLAGS = {"¹": lambda c: "smoke lane" in c["note"], "‡": lambda c: "in flight" in c["note"],
+         "²": lambda c: c["precision"] != "bfloat16"}
+marked = {f: [] for f in FLAGS}
+o = ("| dataset task | " + " | ".join(archs) + " |\n|---|" + "--:|" * len(archs) + "\n")
+for k in CL:
+    row = {a: S.cost(k, a) for a in archs}
+    marks = {a: "".join(f for f, test in FLAGS.items() if row[a] and test(row[a])) for a in archs}
+    for a in archs:
+        for f in marks[a]:
+            marked[f].append((k, a, row[a]))
+    o += f"| {S.DATASETS[k].name} | " + " | ".join(
+        (f"{row[a]['n_parameters'] / 1e6:.1f}M / {row[a]['peak_gib']:.1f} / {row[a]['step_seconds']:.3f}{marks[a]}" if row[a] else "–")
+        for a in archs) + " |\n"
 print(o)
-print(": Training footprint of the three reference configurations (ISLA width 512, 12 layers, 512 slices; GeoTransolver width 256; "
-      "Transolver width 512, 16 layers, at 100,000 cells), per dataset task: parameters, and peak device memory as the maximum over "
-      "four GB300 ranks in bfloat16, one case per rank. Instrument: one-epoch training runs of each reference configuration; ISLA's are of "
-      "the raw-read variant, which has the same parameters and the same operations. How to read this: memory is the budget the "
-      "configurations were selected under (80 GiB on DrivAerML Surface); it is not a step time, which the per-step "
-      "measurements of @sec-arch-cost give, and parameters are not a measure of capacity across architectures. Data: "
-      "results/char/char_lanes_cost_2026-10-04.json.")
+named = lambda f: and_([f"{S.DATASETS[k].short} {a}" for k, a, _ in marked[f]])
+COST_RAW = json.load(open(S.CHAR / S.COST_FILE))
+FIXED = [S.DATASETS[k].short for k in CL if "r090fix_" in CL[k]["source"]]
+BEFORE = [S.DATASETS[k].short for k in CL if "before the compile fix" in CL[k]["note"]]
+TIMED = [S.DATASETS[k].short for k in COST_RAW["compiled_before_fix"]]
+FIXMOVE = max(abs(S.cost(k, a)["step_seconds"] / c["step_seconds"] - 1)
+              for k, v in COST_RAW["compiled_before_fix"].items() for a, c in v.items())
+AZ_T = next(n for n in S.aerozoo()["arms"] if n.split()[0] == "Transolver")
+print(": Training footprint of the reference configurations (ISLA and ISLA-DTT width 512, 12 layers, 512 slices; GeoTransolver "
+      f"width 256; Transolver width 512, 16 layers, and on AeroZoo its own configuration, {AZ_T}), per dataset task: parameters / "
+      "peak device memory [GiB] as the maximum over "
+      "the ranks / the median training step [s] leaving out the compile steps, one case per rank, seed means from the training "
+      f"logs of the standing's lanes. {re.sub(r' \([a-z0-9_*]+\)', '', COST_RAW['note'])} On {and_(FIXED)} the ISLA rows are the "
+      "lanes trained on the compiled path with the mix-order setting, not the eagerly trained lanes of the training-path control. "
+      f"ISLA's lanes on {and_(BEFORE)} trained before the mix-order setting; where both were "
+      f"timed, on {and_(TIMED)}, the setting moves the median step by at most {100 * FIXMOVE:.1f}%. "
+      + (f"¹ {named('¹')}: " + "; ".join(sorted({why(c) for *_, c in marked["¹"]})) + ". " if marked["¹"] else "")
+      + (f"‡ {named('‡')}: the lane is still training, priced on the epochs logged so far. " if marked["‡"] else "")
+      + (f"² {named('²')}: trained in float32, as logged. " if marked["²"] else "")
+      + "How to read this: memory is the budget the configurations were selected under (80 GiB on DrivAerML Surface); a step time "
+      "is a cost on this hardware, and parameters are not a measure of capacity across architectures. Data: "
+      f"results/char/{S.COST_FILE}.")
 ```
 
 Three practical consequences follow.
@@ -1051,6 +1092,7 @@ print(f"- **The geometry kernel is chosen for you.** At the first forward pass t
       "function. It logs the choice once. A planar model, a model with no global direction (the lug) and a model with "
       "rank-2 inputs run eager. To force one path, set the model's `geo_kernel` attribute to `\"eager\"` or `\"fused\"` "
       "before the first forward pass.")
+from physicsnemo.experimental.models.isla import model as IM
 _whole = [n for n, c in ISLA_CFGS.items() if c.get("compile")]; _rest = [n for n in ISLA_CFGS if n not in _whole]
 assert all(c.get("compile_options") == opts for c in ISLA_CFGS.values())   # one set of options in every configuration
 yv = lambda v: str(v).lower() if isinstance(v, bool) else v
@@ -1064,7 +1106,8 @@ print(f"- **Compile the whole model.** The recipe's ISLA configurations do, all 
       "`max-autotune-no-cudagraphs`, written out so that the third can turn off Inductor's mix-order reduction, a fusion of a "
       "per-point sum with a sum over the points: torch 2.12 returns that sum at the wrong rank on the AirfRANS graph, and torch 2.12 "
       "and 2.13 add padded rows to its column sums (pytorch/pytorch#195845; the comment in `isla_volume_airfrans.yaml`). The "
-      "standing's training runs compiled block by block (below), which the setting does not touch. The forward, `Mesh` in and out, "
+      "block-by-block compile below sets the same option itself (`_BLOCK_COMPILE_OPTIONS` in `model.py`: "
+      + ", ".join(f"`{k}: {yv(v)}`" for k, v in IM._BLOCK_COMPILE_OPTIONS.items()) + "). The forward, `Mesh` in and out, "
       "traces to one graph and compiles once with dynamic shapes, so the case-to-case "
       "change in mesh size does not recompile; validation, in eval mode, compiles a second graph. The first compile is "
       "long, so keep `TORCHINDUCTOR_CACHE_DIR` and `TRITON_CACHE_DIR` across the links of a chained run. The options leave "
@@ -1072,12 +1115,19 @@ print(f"- **Compile the whole model.** The recipe's ISLA configurations do, all 
 P3 = json.load(open(RES / "perf3_neutrality_2026-10-01.json"))
 rat = {ds: P3["datasets"][ds]["ratio"] for ds in ("drivaerml_surface", "drivaerml_volume") if ds in P3["datasets"]}
 lo = min(v for r in rat.values() for v in r.values()); hi = max(v for r in rat.values() for v in r.values())
+LUGT = R.md_table("ref090", "r090_final_tables.md", "REF-090-FIX GINOT lug")[0]
+lug_t = R.num(LUGT["T = retrained ÷ original (s42, s43 paired)"])
 print(f"- **Compile block by block where the whole graph breaks.** `compile_blocks: true` runs each slice block's forward "
       "under `torch.compile` instead, with parameter names, the state dict and the eager path unchanged. It is the way to "
       "compile ISLA-DTT (`compile=false model.compile_blocks=true`), whose boundary read breaks the whole-model graph, and "
-      "the AeroZoo configuration uses it because that dataset's four boundaries recompile the whole graph. Models trained "
-      f"with it score as models trained eagerly do: compiled ÷ eager error between {lo:.3f} and {hi:.3f} on every field of "
-      "both DrivAerML tasks, seed means of two seeds (results/perf3_neutrality_2026-10-01.json).")
+      "the AeroZoo configuration uses it because that dataset's four boundaries recompile the whole graph. The standing's "
+      "training runs use it on every dataset but Tensile2d (@tbl-protocol). On the DrivAerML tasks, whose geometry runs in the "
+      f"fused kernel, models trained with it score as models trained eagerly do: compiled ÷ eager error between {lo:.3f} and "
+      f"{hi:.3f} on every field, seed means of two seeds (results/perf3_neutrality_2026-10-01.json). Without the mix-order "
+      "setting, under torch 2.12, the compiled blocks compute another function on AirfRANS, Tensile2d and the lug, whose "
+      "geometry runs in the eager region, and on the lug that changed what training found: retrained with the setting, "
+      f"ISLA's von Mises error is {lug_t:.3f} times that of the same run without it, both scored eagerly "
+      f"({R.source('ref090', 'r090_final_tables.md')}).")
 ```
 
 ## Contracts you can check on your own data {#sec-using-contracts}

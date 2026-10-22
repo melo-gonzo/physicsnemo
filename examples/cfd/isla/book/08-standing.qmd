@@ -9,15 +9,14 @@ metric). The chapters after this one give each row its context.
 #| output: asis
 import sys; sys.path.insert(0, ".")
 import standing as S
-print(f"**On the {len(S.available())} tasks with a standing, ISLA at its reference configuration leads on some fields, is "
+print(f"**On the {len(S.final())} tasks whose standing is final, ISLA at its reference configuration leads on some fields, is "
       "level on others and trails on a few, and on every flow task it is the only one of the three architectures whose error "
-      "does not change when the test geometry is moved or resampled.** This chapter is the evidence of Part IV on one page: one "
-      "table with every headline number, one figure for each of the two invariances, and a reading of where ISLA leads and "
-      "trails. Each dataset chapter then opens up its rows. Every row is scored in distribution, on a dataset that covers one narrow "
-      "family, so the standing measures interpolation within each family, not the generalization to new families that design needs "
-      "and that the book tests on AeroZoo (@sec-aerozoo-why). The ISLA checkpoints of every row are of the nearest-token form, which "
-      "differs from the class of Part II in how the boundary and the prediction points enter the model, in its length unit and in its "
-      "scales (@sec-checkpoint-form).")
+      f"does not change when the test geometry is moved, or, on the surface tasks, resampled.** {S.tally_note()} This chapter is the evidence of "
+      "Part IV on one page: one table with every headline number, one figure for each of the two invariances, and a reading of "
+      "where ISLA leads and trails. Each dataset chapter then opens up its rows. Every row of the table is scored in distribution, "
+      "on a dataset that covers one narrow family, so the table measures interpolation within each family. Two datasets test "
+      "the generalization to new families that design needs: SHIFT-SUV's estate-trained models scored on fastbacks they never saw, "
+      "and AeroZoo's held-out families of bodies and enclosures (@sec-standing-families).")
 ```
 
 ```{python}
@@ -43,17 +42,32 @@ for k, f, lab in ROWS:
         v = s.verdict(a, f)
         word = {"leads": "ISLA leads", "trails": "ISLA trails", "is level with": "level", "is not compared with": "no verdict§"}[v]
         cells.append(f"{S.fmt_ratio(s.ratio(a, f))} ({word})" if s.has(a) else "—")
-    name = s.ds.name
+    name = s.ds.name + (" (trained and tested on estates)" if k == "shift_suv" else "") + (" ‡" if s.in_flight else "")
     out.append(f"| {name} | {s.fields[f]} | {s.err('ISLA', f):.4f} | {cells[0]} | {cells[1]} | {s.shift('ISLA', f, 'posed'):.3f} | @{s.ds.section} |")
 print("\n".join(out) + "\n")
-print(f": The standing of the three reference configurations on every dataset with a standing artifact, ISLA checkpoints of the {S.FORM_TAG} "
-      "(@sec-checkpoint-form): ISLA's "
+KEYS = list(dict.fromkeys(k for k, _, _ in ROWS))
+INS = lambda s: ("the " if s.ds.key == "lug" else "") + s.ds.in_sentence
+MORE = [(S.Standing(k), a) for k in KEYS for a in S.ARCHS if S.Standing(k).n_seeds(a) != 2]
+seed_txt = "Seed means over two seeds" + ("" if not MORE else " (" + "; ".join(
+    f"{S._COUNT[s.n_seeds(a)]} for {a} on {s.ds.short}" for s, a in MORE) + ")")
+print(": The standing of the three reference configurations on every dataset with a standing artifact: ISLA's "
       "relative L2 error (@sec-metrics) on the native mesh, each baseline's error divided by ISLA's, and ISLA's own error when every test case "
-      "is rotated and translated, over its native error. Seed means over two seeds, float32, the validation or test split of "
+      f"is rotated and translated, over its native error. {seed_txt}, float32, the validation or test split of "
       "each dataset (@sec-splits). The words apply the book's seed rule: a lead needs every seed of one architecture below every "
-      "seed of the other and the seed means at least 3% apart. How to read this: a ratio above one favors ISLA; rows are "
-      "different problems and are not comparable with one another; every baseline reads the freestream as a unit direction "
-      "(@tbl-model-inputs). Data: results/char/ (the artifact of each row is named in its chapter).")
+      "seed of the other and the seed means at least 3% apart. ‡: in flight, as the notes below the table say. How to read this: a "
+      "ratio above one favors ISLA; rows are different problems and are not comparable with one another; every baseline reads the "
+      "freestream as a unit direction (@tbl-model-inputs). AeroZoo has its own table (@sec-standing-families). Data: "
+      "results/char/*_090.json (the artifact of each row is named in its chapter).")
+```
+
+```{python}
+#| label: para-standing-in-flight
+#| output: asis
+for k in KEYS:
+    s = S.Standing(k)
+    if s.in_flight:
+        print(S.in_flight_callout({"what": f"{s.in_flight['what']}, on {INS(s)}",
+                                   "replacement": s.in_flight["replacement"]}))
 ```
 
 ## The two invariances, measured {#sec-standing-invariances}
@@ -66,9 +80,9 @@ model for the field on the moved body. *Uniform point cloud* replaces the
 native surface mesh by points drawn uniformly by area, at the same count,
 with exact quadrature weights; it changes the scored set itself on the
 three surface tasks whose meshes exceed the cell budget (DrivAerML
-Surface, HiLiftAeroML, SHIFT-SUV), and nowhere else. @fig-standing-shifts
-shows both, each as an architecture's error under the scoring over its own
-native error.
+Surface, HiLiftAeroML, SHIFT-SUV), and changes no model's input anywhere
+else. @fig-standing-shifts shows both, each as an architecture's error
+under the scoring over its own native error.
 
 ```{python}
 #| label: fig-standing-shifts
@@ -77,15 +91,15 @@ native error.
 #|   test cases, over its native error, on a log scale. Top: every case
 #|   rotated and translated, on every dataset. Bottom: the surface redrawn as
 #|   a uniform point cloud, on the three surface tasks where that changes the
-#|   scored set. ISLA blue squares, GeoTransolver red circles, Transolver
-#|   amber triangles; the vertical line is no change. ISLA checkpoints of the
-#|   nearest-token form (@sec-checkpoint-form). How to read this: these
-#|   are changes of each model's own error, not comparisons between models;
-#|   a baseline mark at 20 means its error is twenty times its native error.
-#|   ISLA's two marks away from one, on the lug and Tensile2d, come from
-#|   boundary samples that tie for nearest on those meshes, a property of the
-#|   form's wall geometry (@sec-medial-ties).
-#|   Data: results/char/.
+#|   scored set. ISLA blue squares, ISLA-DTT light open squares (AirfRANS),
+#|   GeoTransolver red circles, Transolver amber triangles; the vertical line
+#|   is no change. The AirfRANS and lug marks are of the in-flight rows of
+#|   @tbl-thesis. How to read this: these are changes of each model's own
+#|   error, not comparisons between models; a baseline mark at 20 means its
+#|   error is twenty times its native error. ISLA's one mark away from one is
+#|   the lug's; nodes of the lug that lie equally close to two surface
+#|   features of the exact geometry are a candidate cause, not isolated
+#|   (@sec-lug). Data: results/char/*_090.json.
 #| fig-height: 6.4
 #| code-fold: true
 fig, axes = plt.subplots(2, 1, figsize=(8, 6.2), gridspec_kw=dict(hspace=0.35, height_ratios=[2.6, 1.0]))
@@ -105,8 +119,10 @@ plt.show()
 ```{python}
 #| label: para-standing-invariances
 #| output: asis
-FLOW = [k for k in S.available() if k not in ("tensile2d", "lug", "deepjeb")]
-SURF = [k for k in S.available() if "area" in S.DATASETS[k].protocols]
+SOLIDS = ("tensile2d", "lug", "deepjeb")
+FLOW = [k for k in S.final() if k not in SOLIDS]
+SURF = [k for k in S.final() if "area" in S.DATASETS[k].protocols]
+VOL = S.Standing("drivaerml_volume")
 sh = lambda ks, archs, p: [S.Standing(k).shift(a, f, p) for k in ks for f in S.DATASETS[k].headline for a in archs]
 ip = max(abs(x - 1) for x in sh(FLOW, ["ISLA"], "posed"))
 bp = sh(FLOW, S.BASELINES, "posed")
@@ -114,9 +130,19 @@ ia = max(abs(x - 1) for x in sh(SURF, ["ISLA"], "area"))
 ba = sh(SURF, S.BASELINES, "area")
 print(f"Over every headline field of the {len(FLOW)} flow tasks, the rigid motion leaves ISLA's error within {100 * ip:.1f}% of its native value and "
       f"multiplies the baselines' by {min(bp):.0f} to {max(bp):.0f}: rotated, a model that reads coordinates is asked about a "
-      "pose it has never seen, and it answers with something worse than the mean field. On the three surface tasks, every field, the uniform "
+      f"pose it has never seen, and it answers with something worse than the mean field. {S.tally_note()} On the three surface tasks, every field, the uniform "
       f"point cloud moves ISLA's error by at most {100 * ia:.1f}% and multiplies the baselines' by {min(ba):.1f} to {max(ba):.1f}: "
-      "a model that averages over points rather than over area answers a different question when the points move.")
+      "a model that averages over points rather than over area answers a different question when the points move. "
+      f"On the DrivAerML Volume task the uniform point cloud is left out: {VOL.degenerate['area']}. What exact re-meshing "
+      "of that task's boundary does to ISLA is measured in @sec-interior-boundary-law.")
+LUG = S.Standing("lug")
+SOL = [k for k in S.final() if k in SOLIDS]
+is_ = max(abs(x - 1) for x in sh(SOL, ["ISLA"], "posed"))
+bs_ = sh(SOL, S.BASELINES, "posed")
+print()
+print(f"On {' and '.join(S.DATASETS[k].short for k in SOL)} the rigid motion multiplies the baselines' errors by {min(bs_):.1f} "
+      f"to {max(bs_):.0f} and leaves ISLA's within {100 * is_:.2f}%. On the lug it multiplies ISLA's von Mises error by "
+      f"{LUG.shift('ISLA', 'von_mises_l2', 'posed'):.2f}, on the in-flight rows (@tbl-thesis).")
 ```
 
 ## Where ISLA leads, where it is level, where it trails {#sec-standing-reading}
@@ -136,13 +162,88 @@ def reading(k):
         if items:
             parts.append(f"{label} on " + ", ".join(items))
     held = "".join(f"; its {s.fields[f]} ratios are given without a verdict, because {why}" for f, why in s.ds.provisional.items())
-    return f"On {s.ds.in_sentence} ISLA " + "; ".join(p.replace("ISLA leads", "leads") for p in parts) + held + f" (@{s.ds.section})"
+    n = s.n_seeds("ISLA")
+    if n > 2:
+        held += "; ISLA's " + S._COUNT[n] + " seeds span " + ", ".join(
+            f"{min(s.seeds('ISLA', f)):.4f} to {max(s.seeds('ISLA', f)):.4f} on {s.fields[f]}" for f in s.ds.headline)
+    name = INS(s) + (", trained and tested on estates," if k == "shift_suv" else "")
+    rows = ", on the in-flight rows (@tbl-thesis, " if s.in_flight else " ("
+    return f"On {name} ISLA " + "; ".join(p.replace("ISLA leads", "leads") for p in parts) + held + f"{rows}@{s.ds.section})"
 for title, keys in GROUPS:
     txt = ". ".join(reading(k) for k in keys if k in S.available())
     if title == "Solid mechanics":
         txt += (". On the lug, ISLA reads which faces are clamped, which is the hole, which half of it is loaded and the pressure "
                 "on it; GeoTransolver reads the same four labels on the surface triangles, and Transolver reads none (@sec-interior-lug)")
     print(f"**{title}.** {txt}.\n")
+```
+
+## New families of geometry {#sec-standing-families}
+
+```{python}
+#| label: para-standing-families-lede
+#| output: asis
+AZ = S.aerozoo()
+HO = AZ["held_out"]
+AZP = {m: sum(AZ["arms"][AZ["isla_arm"]]["splits"][sp]["pressure_l2"][m] for sp in HO) / len(HO) for m in ("mean", "median")}
+assert min(AZP.values()) >= AZ["zero_predictor"], AZP
+print("**Scored on families they never saw, the three architectures degrade alike on SHIFT-SUV pressure, ISLA degrades "
+      "less on SHIFT-SUV wall shear, and on AeroZoo pressure both baselines are about a zero predictor and ISLA's held-out "
+      f"error, {AZP['mean']:.3f} (median {AZP['median']:.3f}) over the six splits, is at or above the zero predictor's "
+      f"{AZ['zero_predictor']:.1f}.** Two datasets score models outside the family they trained on. SHIFT-SUV's standing "
+      "models, trained on estates, are scored zero-shot on the fastback test cases; the *penalty* of a model is its fastback "
+      "error over its own estate error. AeroZoo trains each model on six splits that each hold one family of bodies or "
+      "enclosures out, and scores it on that family. Both are read in their chapters (@sec-shift-suv, @sec-aerozoo); this "
+      "section gives their headline numbers.")
+```
+
+```{python}
+#| label: para-standing-xfam
+#| output: asis
+XF = S.suv_xfam()
+PEN = XF["R2"]["fb_test"]["penalties"]
+pen = lambda a, f: PEN[f"{next(n for n in XF['arms'] if n.split()[0] == a)}/{f}"]["P_geo"]
+pp = sorted({f"{pen(a, 'pressure_l2'):.2f}" for a in S.ARCHS})
+print(f"On SHIFT-SUV, the fastback pressure error is {' to '.join(pp[::len(pp) - 1] if len(pp) > 1 else pp)} times the estate error for all three "
+      f"architectures. On wall shear it is {pen('ISLA', 'wss_l2'):.2f} times for ISLA, against {pen('GeoTransolver', 'wss_l2'):.2f} "
+      f"for GeoTransolver and {pen('Transolver', 'wss_l2'):.2f} for Transolver, so ISLA degrades less on fastback wall shear "
+      "(geometric means over two seeds, the fastback test split). The registered summary over the four cells, pressure and "
+      f"wall shear against each baseline, is \"{XF['R2']['fb_test']['summary']}\" (@sec-shift-suv). "
+      "Data: results/char/shift_suv_xfam_090.json.")
+print()
+print(S.in_flight_callout(XF["part_b"]["in_flight"]))
+```
+
+```{python}
+#| label: tbl-standing-aerozoo
+#| output: asis
+ARM = {n.split()[0]: n for n in AZ["arms"] if AZ["arms"][n]["splits"]}
+AF = ("velocity_l2", "pressure_l2")
+cell = lambda a, sp, f: AZ["arms"][ARM[a]]["splits"][sp][f]
+out = ["| | " + " | ".join(f"{AZ['fields'][f]}: mean / median" for f in AF) + " |", "|---|" + "---:|" * len(AF)]
+for a in ("ISLA", "GeoTransolver"):
+    out.append(f"| {S.CONFIG[a]}, six-split mean | " + " | ".join(
+        f"{sum(cell(a, sp, f)['mean'] for sp in HO) / len(HO):.3f} / {sum(cell(a, sp, f)['median'] for sp in HO) / len(HO):.3f}"
+        for f in AF) + " |")
+out.append("| the zero predictor | " + " | ".join(f"{AZ['zero_predictor']:.1f}" for f in AF) + " |")
+rat = {f: [cell("GeoTransolver", sp, f)["mean"] / cell("ISLA", sp, f)["mean"] for sp in HO] for f in AF}
+out.append("| GeoTransolver ÷ ISLA: six-split mean (splits above one) | " + " | ".join(
+    f"{S.fmt_ratio(sum(r) / len(r))} ({sum(x > 1 for x in r)} of {len(r)})" for r in rat.values()) + " |")
+print("\n".join(out) + "\n")
+print(f": AeroZoo, the {({**S._COUNT, 6: 'six', 7: 'seven'})[len(HO)]} held-out splits, each model trained without the family it is scored on: the relative L2 error "
+      "per field and case in physical units, seed means over two seeds averaged over the splits (*mean*: the case mean; *median*: "
+      "the median over cases), and the registered readout GeoTransolver ÷ ISLA, its six-split mean and the count of splits on "
+      f"which it exceeds one. GeoTransolver is {AZ['arms'][ARM['GeoTransolver']]['note']}; its velocity error is still falling at "
+      f"the last epoch, so its velocity is not converged. Transolver, at AeroZoo's own configuration ({ARM['Transolver']}), "
+      "which receives no inlet value, is scored on the "
+      f"`full` split only and is {AZ['arms'][ARM['Transolver']]['note']}. How to read this: on pressure the comparison is with "
+      "predicting zero, whose error is 1.0; the per-split numbers, ISLA's failures on two held-out families and the reasons are "
+      "in @sec-aerozoo. Data: results/char/aerozoo_090.json.")
+```
+
+```{python}
+#| label: para-standing-aerozoo-in-flight
+#| output: asis
+print(S.in_flight_callout("aerozoo"))
 ```
 
 ## What the standing compares, and what it does not {#sec-standing-scope}
@@ -157,33 +258,64 @@ single configuration for both datasets, and each pick has the smallest joint sco
 accurate candidate on the car, and for the baselines the wing scores that
 decided it are scores under the freestream in inch/s (@sec-selection). The three spend their
 memory differently, as @tbl-standing-cost shows: at similar memory, ISLA
-carries several times GeoTransolver's parameters.
+has several times GeoTransolver's parameters.
 
 ```{python}
 #| label: tbl-standing-cost
 #| output: asis
-out = ["| dataset and task | | ISLA | GeoTransolver | Transolver |", "|---|---|---:|---:|---:|"]
-for k in S.available():
-    c = {a: S.cost(k, a) for a in S.ARCHS}
-    if not all(c.values()):
+import json, re
+COST_RAW = json.load(open(S.CHAR / S.COST_FILE))
+COST_NOTE = re.sub(r" \([a-z0-9_*]+\)", "", COST_RAW["note"])
+CKEYS = [k for k in S.available() + ["aerozoo"] if S.cost(k, "ISLA")]
+and_ = lambda xs: ", ".join(xs[:-1]) + " and " + xs[-1] if len(xs) > 1 else "".join(xs)
+BEFORE = [S.DATASETS[k].short for k in CKEYS if "before the compile fix" in S.cost(k, "ISLA")["note"]]
+FIXED = [S.DATASETS[k].short for k in CKEYS if "r090fix_" in S.cost(k, "ISLA")["source"]]
+TIMED = [S.DATASETS[k].short for k in COST_RAW["compiled_before_fix"]]
+FIXMOVE = max(abs(S.cost(k, a)["step_seconds"] / c["step_seconds"] - 1)
+              for k, v in COST_RAW["compiled_before_fix"].items() for a, c in v.items())
+CARCHS = ("ISLA", "ISLA-DTT") + S.BASELINES
+# a cell's reason, from its note: the clause that names the smoke lane, without run identifiers or step counts
+why = lambda c, word: re.sub(r" \([a-z0-9_]+\)|, \d[\d,]* steps", "", next(p for p in c["note"].split("; ") if word in p))
+FLAGS = {"¹": lambda c: "smoke lane" in c["note"], "‡": lambda c: "in flight" in c["note"],
+         "²": lambda c: c["precision"] != "bfloat16"}
+flag = lambda c: "".join(f for f, test in FLAGS.items() if test(c))
+marked = {f: [] for f in FLAGS}
+out = ["| dataset and task | | " + " | ".join(CARCHS) + " |", "|---|---|" + "---:|" * len(CARCHS)]
+for k in CKEYS:
+    c = {a: S.cost(k, a) for a in CARCHS}
+    if not all(c[a] for a in S.ARCHS):
         continue
-    out.append(f"| {S.DATASETS[k].name} | parameters [millions] | " + " | ".join(f"{c[a]['n_parameters'] / 1e6:.1f}" for a in S.ARCHS) + " |")
-    out.append(f"| | training peak memory [GiB per GPU] | " + " | ".join(f"{c[a]['peak_gib']:.0f}" for a in S.ARCHS) + " |")
+    for a in CARCHS:
+        for f in flag(c[a]) if c[a] else "":
+            marked[f].append((k, a, c[a]))
+    cells = lambda fmt: " | ".join(fmt(c[a]) + flag(c[a]) if c[a] else "—" for a in CARCHS)
+    out.append(f"| {S.DATASETS[k].name} | parameters [millions] | " + cells(lambda x: f"{x['n_parameters'] / 1e6:.1f}") + " |")
+    out.append("| | training peak memory [GiB per GPU] | " + cells(lambda x: f"{x['peak_gib']:.0f}") + " |")
+    out.append("| | training step [s] | " + cells(lambda x: f"{x['step_seconds']:.2f}") + " |")
 print("\n".join(out) + "\n")
-print(": The resources of the three reference configurations on each task: trainable parameters and the training peak device "
-      "memory per GPU (maximum over four GB300 GPUs, bfloat16 autocast). How to read this: the three are matched by the memory "
-      "ceiling of the selection rule, not by parameter count; ISLA carries several times GeoTransolver's parameters at similar "
-      "memory. Instrument: one-epoch runs of the reference configurations with the raw slice reads, which have the same "
-      "parameters and the same tensors as the standing's checkpoints of the nearest-token form (@sec-checkpoint-form); the time per epoch of each is in its dataset chapter. "
+print(": The resources of the reference configurations on each task, from the training logs of the standing's own lanes: "
+      "trainable parameters, the training peak device memory per GPU (the maximum over the ranks) and the median training step, "
+      "leaving out the compile steps, seed means; AeroZoo's lanes are those of its `full` split, and its Transolver is AeroZoo's "
+      f"own configuration, {ARM['Transolver']}. {COST_NOTE} "
+      f"On {and_(FIXED)} the ISLA rows are the lanes trained on the compiled path with the mix-order setting, not the "
+      "eagerly trained lanes of the training-path control. "
+      f"ISLA's lanes on {and_(BEFORE)} trained before the mix-order setting; where both were "
+      f"timed, on {and_(TIMED)}, the setting moves the median step by at most {100 * FIXMOVE:.1f}%. "
+      + (f"¹ {and_([f'{S.DATASETS[k].short} {a}' for k, a, _ in marked['¹']])}: "
+         + "; ".join(sorted({why(c, "smoke lane") for *_, c in marked["¹"]})) + ". " if marked["¹"] else "")
+      + (f"‡ {and_([f'{S.DATASETS[k].short} {a}' for k, a, _ in marked['‡']])}: the lane is still training, "
+         "priced on the epochs logged so far. " if marked["‡"] else "")
+      + (f"² {and_([f'{S.DATASETS[k].short} {a}' for k, a, _ in marked['²']])}: trained in float32, as logged. "
+         if marked["²"] else "")
+      + "How to read this: the three architectures are matched by the memory ceiling of the selection rule, not by parameter "
+      "count; ISLA has several times GeoTransolver's parameters at similar memory; a step trains on one case per rank. "
       f"Data: results/char/{S.COST_FILE}.")
 ```
 
 The standing is a statement about these three configurations on these
-splits with two seeds each. It does not say that ISLA would lead at equal
-parameter count, nor how the comparison moves with the training set's size
-(@sec-capacity has the scaling evidence, on smaller ISLA configurations).
-It does not cover AeroZoo, the benchmark with held-out families of bodies
-and enclosures: the book holds no model comparison on it, and its standing
-under the benchmark protocol (@sec-aerozoo-allowed) is an open question
-(@sec-oq-aerozoo).
-Every scope statement is collected in @sec-limits.
+splits with the seeds of @tbl-thesis. It does not say that ISLA would lead
+at equal parameter count, nor how the comparison moves with the training
+set's size (@sec-capacity has the scaling evidence, on smaller ISLA
+configurations). On AeroZoo it says nothing about pressure against a
+baseline that has learned pressure (@tbl-standing-aerozoo). Every scope
+statement is collected in @sec-limits.

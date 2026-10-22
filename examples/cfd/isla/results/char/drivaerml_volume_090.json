@@ -1,0 +1,523 @@
+{
+ "protocol": "ISLA 0.9.0 standings (2026-10-22): the results/char/<dataset>_a2.json record of each dataset with ISLA's arm replaced by\nISLA 0.9.0 at its reference configuration (width 512, 12 layers, 512 slices, 3.75e-4), scored in float32 on the final\ncheckpoint by the protocol scorer: native mesh / uniform point cloud / rotated + translated. The baseline arms (GeoTransolver\n256, Transolver 512 x 16, both reading the unit freestream direction) and the keys that document them (fair_input, scored_set,\nraw_drive_<arch>, transolver_100k_scoring, unlabelled_geotransolver, char_baselines) are the _a2 file's, unchanged.\n\nISLA's arm is built from the scorer's rows, copied unmodified into results/campaigns_2026-10-22/standing_090/scores/\n<evals>/<run>/<protocol>/<run>/metrics.jsonl from the record folders (scratch/isla-ref090-2026-10-20/scores/,\nscratch/isla-hilift090-2026-10-20/scores/; originals on LHR under $T/<evals>/): per seed and protocol the mean over cases of\nthe per-case relative L2 (the last infer_step row per sample id, after the last config row), then the mean over seeds. Each\nconfig row must name the final epoch and each protocol must hold the expected case count.\n\nSTANDING below is the one table a later update edits: per dataset the run stem, the evals folder, the seeds, the final epoch,\nthe case count and the status. A status of \"in_flight\" writes the in-flight text beside the numbers (\"in_flight\": {\"what\",\n\"replacement\"}, read by book/standing.py as \"These numbers come from <what>. <replacement> is being measured ...\").\n\"Fix-trained\" rows are trained with the compiled training path after its fault (pytorch/pytorch#195845) was fixed;\n\"eager-trained\" rows are trained without compilation. When the eager-trained AirfRANS and lug rows land: copy their score\nfiles into the scores folder, set the stem, evals folder and status \"final\" here, and rerun.\n\nDEGENERATE marks a protocol that changes no arm's input: its cells keep the scorer's numbers under \"scored\" and carry\n\"mean\": null with the reason, and the file's \"degenerate\" key says why. On the DrivAerML Volume task ISLA draws its boundary\ntokens by area inside the model, and the baselines read only the interior points and the signed distance, so the uniform point\ncloud gives every arm its native input.\n\nHiLift adds \"registered\" (R-HL090 of scratch/isla-hilift090-2026-10-20/PREREG.md: ISLA 0.9.0 against the normalized-read\nnearest-token arm of hilift_surface_a2.json, as registered) and \"case_level\" (the per-case readouts of hilift_a2_2026-10-20.py\nagainst the baselines' per-case rows in results/campaigns_2026-10-20/hilift/scores/). AirfRANS adds the arm\n\"ISLA-DTT 512 with 512 slices\" (query_independent=True, the same configuration).\nusage: python r090_protocol_artifacts_2026-10-22.py",
+ "protocols": {
+  "native": "native mesh",
+  "area": "uniform point cloud",
+  "posed": "rotated + translated"
+ },
+ "fields": {
+  "pressure_l2": "pressure",
+  "velocity_l2": "velocity",
+  "nut_l2": "eddy viscosity"
+ },
+ "isla_arm": "ISLA 512 with 512 slices",
+ "status": "final",
+ "in_flight": null,
+ "arms": {
+  "ISLA 512 with 512 slices": {
+   "native": {
+    "pressure_l2": {
+     "mean": 0.03837745745355885,
+     "per_seed": {
+      "42": 0.03795430448371917,
+      "43": 0.03880061042339852
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.05770486577724417,
+     "per_seed": {
+      "42": 0.05732613530320426,
+      "43": 0.058083596251284085
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.08465485759855558,
+     "per_seed": {
+      "42": 0.0840117836681505,
+      "43": 0.08529793152896066
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "mean": null,
+     "per_seed": {},
+     "n_cases": 48,
+     "n_seeds": 0,
+     "degenerate": "ISLA draws its boundary tokens by area inside the model, and GeoTransolver and Transolver read only the interior points and the signed distance, so the uniform point cloud gives every arm the same input as the native mesh",
+     "scored": {
+      "mean": 0.03837745679387202,
+      "per_seed": {
+       "42": 0.03795430525982132,
+       "43": 0.038800608327922724
+      }
+     }
+    },
+    "velocity_l2": {
+     "mean": null,
+     "per_seed": {},
+     "n_cases": 48,
+     "n_seeds": 0,
+     "degenerate": "ISLA draws its boundary tokens by area inside the model, and GeoTransolver and Transolver read only the interior points and the signed distance, so the uniform point cloud gives every arm the same input as the native mesh",
+     "scored": {
+      "mean": 0.05770486406981945,
+      "per_seed": {
+       "42": 0.05732613708823919,
+       "43": 0.05808359105139971
+      }
+     }
+    },
+    "nut_l2": {
+     "mean": null,
+     "per_seed": {},
+     "n_cases": 48,
+     "n_seeds": 0,
+     "degenerate": "ISLA draws its boundary tokens by area inside the model, and GeoTransolver and Transolver read only the interior points and the signed distance, so the uniform point cloud gives every arm the same input as the native mesh",
+     "scored": {
+      "mean": 0.08465487665186325,
+      "per_seed": {
+       "42": 0.08401181292720139,
+       "43": 0.08529794037652512
+      }
+     }
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "mean": 0.03849629605732237,
+     "per_seed": {
+      "42": 0.03805736161302775,
+      "43": 0.03893523050161699
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.057914548786357045,
+     "per_seed": {
+      "42": 0.05755568784661591,
+      "43": 0.05827340972609818
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.0846502974939843,
+     "per_seed": {
+      "42": 0.08401961259854336,
+      "43": 0.08528098238942523
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    }
+   }
+  },
+  "GeoTransolver 256": {
+   "native": {
+    "pressure_l2": {
+     "mean": 0.04806943486134211,
+     "per_seed": {
+      "42": 0.0482699970404307,
+      "43": 0.04786887268225352
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.09995550910631815,
+     "per_seed": {
+      "42": 0.0989440381526947,
+      "43": 0.1009669800599416
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.0845252126455307,
+     "per_seed": {
+      "42": 0.08402828375498454,
+      "43": 0.08502214153607686
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "mean": null,
+     "per_seed": {},
+     "n_cases": 48,
+     "n_seeds": 0,
+     "degenerate": "ISLA draws its boundary tokens by area inside the model, and GeoTransolver and Transolver read only the interior points and the signed distance, so the uniform point cloud gives every arm the same input as the native mesh",
+     "scored": {
+      "mean": 0.04806943486134211,
+      "per_seed": {
+       "42": 0.0482699970404307,
+       "43": 0.04786887268225352
+      }
+     }
+    },
+    "velocity_l2": {
+     "mean": null,
+     "per_seed": {},
+     "n_cases": 48,
+     "n_seeds": 0,
+     "degenerate": "ISLA draws its boundary tokens by area inside the model, and GeoTransolver and Transolver read only the interior points and the signed distance, so the uniform point cloud gives every arm the same input as the native mesh",
+     "scored": {
+      "mean": 0.09995550910631815,
+      "per_seed": {
+       "42": 0.0989440381526947,
+       "43": 0.1009669800599416
+      }
+     }
+    },
+    "nut_l2": {
+     "mean": null,
+     "per_seed": {},
+     "n_cases": 48,
+     "n_seeds": 0,
+     "degenerate": "ISLA draws its boundary tokens by area inside the model, and GeoTransolver and Transolver read only the interior points and the signed distance, so the uniform point cloud gives every arm the same input as the native mesh",
+     "scored": {
+      "mean": 0.0845252126455307,
+      "per_seed": {
+       "42": 0.08402828375498454,
+       "43": 0.08502214153607686
+      }
+     }
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "mean": 0.8171850840250651,
+     "per_seed": {
+      "42": 0.8237153689066569,
+      "43": 0.8106547991434733
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 1.341294765472412,
+     "per_seed": {
+      "42": 1.3551708857218425,
+      "43": 1.3274186452229817
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 1.0551278193791709,
+     "per_seed": {
+      "42": 1.0428442160288494,
+      "43": 1.0674114227294922
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    }
+   }
+  },
+  "Transolver 512 x 16 at 100k cells": {
+   "native": {
+    "pressure_l2": {
+     "mean": 0.04947526752948761,
+     "per_seed": {
+      "42": 0.049462124705314636,
+      "43": 0.049488410353660583
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.11227308710416159,
+     "per_seed": {
+      "42": 0.11377361416816711,
+      "43": 0.11077256004015605
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.08808592955271402,
+     "per_seed": {
+      "42": 0.08805953462918599,
+      "43": 0.08811232447624207
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "mean": null,
+     "per_seed": {},
+     "n_cases": 48,
+     "n_seeds": 0,
+     "degenerate": "ISLA draws its boundary tokens by area inside the model, and GeoTransolver and Transolver read only the interior points and the signed distance, so the uniform point cloud gives every arm the same input as the native mesh",
+     "scored": {
+      "mean": 0.04947526752948761,
+      "per_seed": {
+       "42": 0.049462124705314636,
+       "43": 0.049488410353660583
+      }
+     }
+    },
+    "velocity_l2": {
+     "mean": null,
+     "per_seed": {},
+     "n_cases": 48,
+     "n_seeds": 0,
+     "degenerate": "ISLA draws its boundary tokens by area inside the model, and GeoTransolver and Transolver read only the interior points and the signed distance, so the uniform point cloud gives every arm the same input as the native mesh",
+     "scored": {
+      "mean": 0.11227308710416159,
+      "per_seed": {
+       "42": 0.11377361416816711,
+       "43": 0.11077256004015605
+      }
+     }
+    },
+    "nut_l2": {
+     "mean": null,
+     "per_seed": {},
+     "n_cases": 48,
+     "n_seeds": 0,
+     "degenerate": "ISLA draws its boundary tokens by area inside the model, and GeoTransolver and Transolver read only the interior points and the signed distance, so the uniform point cloud gives every arm the same input as the native mesh",
+     "scored": {
+      "mean": 0.08808592955271402,
+      "per_seed": {
+       "42": 0.08805953462918599,
+       "43": 0.08811232447624207
+      }
+     }
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "mean": 0.7702643871307373,
+     "per_seed": {
+      "42": 0.7833855152130127,
+      "43": 0.7571432590484619
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 1.272697925567627,
+     "per_seed": {
+      "42": 1.3428173065185547,
+      "43": 1.2025785446166992
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 1.0825478633244834,
+     "per_seed": {
+      "42": 1.096479336420695,
+      "43": 1.0686163902282715
+     },
+     "n_cases": 48,
+     "n_seeds": 2
+    }
+   }
+  }
+ },
+ "complete": true,
+ "degenerate": {
+  "area": "ISLA draws its boundary tokens by area inside the model, and GeoTransolver and Transolver read only the interior points and the signed distance, so the uniform point cloud gives every arm the same input as the native mesh"
+ },
+ "isla_runs": {
+  "scores": "results/campaigns_2026-10-22/standing_090/scores",
+  "epoch": 500,
+  "ISLA 512 with 512 slices": "evals_r090/r090_vol_isla_seed{42,43}"
+ },
+ "raw_drive_geotransolver": {
+  "label": "GeoTransolver 256, the arm it replaces",
+  "native": {
+   "pressure_l2": {
+    "mean": 0.04867631693681081,
+    "per_seed": {
+     "42": 0.04895009100437164,
+     "43": 0.04840254286924998
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   },
+   "velocity_l2": {
+    "mean": 0.10021389027436575,
+    "per_seed": {
+     "42": 0.09985670447349548,
+     "43": 0.10057107607523601
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   },
+   "nut_l2": {
+    "mean": 0.08375356594721475,
+    "per_seed": {
+     "42": 0.08438313007354736,
+     "43": 0.08312400182088216
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   }
+  },
+  "area": {
+   "pressure_l2": {
+    "mean": 0.04867631693681081,
+    "per_seed": {
+     "42": 0.04895009100437164,
+     "43": 0.04840254286924998
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   },
+   "velocity_l2": {
+    "mean": 0.10021389027436575,
+    "per_seed": {
+     "42": 0.09985670447349548,
+     "43": 0.10057107607523601
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   },
+   "nut_l2": {
+    "mean": 0.08375356594721475,
+    "per_seed": {
+     "42": 0.08438313007354736,
+     "43": 0.08312400182088216
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   }
+  },
+  "posed": {
+   "pressure_l2": {
+    "mean": 0.7952865362167358,
+    "per_seed": {
+     "42": 0.7836399078369141,
+     "43": 0.8069331645965576
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   },
+   "velocity_l2": {
+    "mean": 1.3025505940119426,
+    "per_seed": {
+     "42": 1.3047649065653484,
+     "43": 1.3003362814585369
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   },
+   "nut_l2": {
+    "mean": 1.3717615207036338,
+    "per_seed": {
+     "42": 1.096341848373413,
+     "43": 1.6471811930338542
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   }
+  }
+ },
+ "fair_input": {
+  "GeoTransolver 256": "retrained reading the unit freestream direction U_inf_dir (clud_vol_gt); its area rows equal its native rows in this scorer; scores: campaigns_2026-10-20/drive_fix2/ud2_scores_2026-10-20.json; the replaced arm is kept under raw_drive_geotransolver",
+  "Transolver 512 x 16 at 100k cells": "retrained reading the unit freestream direction U_inf_dir (clud_vol_t), scored on ISLA's 200,000-cell set; its area rows equal its native rows in this scorer; scores: campaigns_2026-10-20/drive_fix2/ud2_scores_2026-10-20.json; the replaced arm is kept under raw_drive_transolver"
+ },
+ "raw_drive_transolver": {
+  "label": "Transolver 512 x 16 at 100k cells, the arm it replaces",
+  "native": {
+   "pressure_l2": {
+    "mean": 0.05248650908470154,
+    "per_seed": {
+     "42": 0.0523449977238973,
+     "43": 0.052628020445505776
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   },
+   "velocity_l2": {
+    "mean": 0.12501340607802075,
+    "per_seed": {
+     "42": 0.12463819980621338,
+     "43": 0.1253886123498281
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   },
+   "nut_l2": {
+    "mean": 0.08932746450106302,
+    "per_seed": {
+     "42": 0.08906075358390808,
+     "43": 0.08959417541821797
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   }
+  },
+  "area": {
+   "pressure_l2": {
+    "mean": 0.05248650908470154,
+    "per_seed": {
+     "42": 0.0523449977238973,
+     "43": 0.052628020445505776
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   },
+   "velocity_l2": {
+    "mean": 0.12501340607802075,
+    "per_seed": {
+     "42": 0.12463819980621338,
+     "43": 0.1253886123498281
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   },
+   "nut_l2": {
+    "mean": 0.08932746450106302,
+    "per_seed": {
+     "42": 0.08906075358390808,
+     "43": 0.08959417541821797
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   }
+  },
+  "posed": {
+   "pressure_l2": {
+    "mean": 0.8131156762440999,
+    "per_seed": {
+     "42": 0.8119870821634928,
+     "43": 0.814244270324707
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   },
+   "velocity_l2": {
+    "mean": 1.2467988729476929,
+    "per_seed": {
+     "42": 1.191336949666341,
+     "43": 1.3022607962290447
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   },
+   "nut_l2": {
+    "mean": 1.0875399112701416,
+    "per_seed": {
+     "42": 1.0429192384084065,
+     "43": 1.1321605841318767
+    },
+    "n_cases": 48,
+    "n_seeds": 2
+   }
+  }
+ }
+}

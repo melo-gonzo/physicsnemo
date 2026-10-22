@@ -37734,7 +37734,7 @@ and states the Volume reading; the lug row of the thesis table drops
 its point-cloud ratio. Chapters 11 to 13 drop the area-weighted column
 as chapter 9 does for AirfRANS and say once that its scoring is
 pending. Chapter 7's limits paragraph names the Volume sensitivity's
-measured mechanism (@tbl-vol-geo). The CHAR-PROTOCOLS ledger row and
+measured mechanism (@sec-nb-char-vol-geo-verdict). The CHAR-PROTOCOLS ledger row and
 its tech-tree node record that the three protocols ran in name only on
 five of the eight tasks.
 
