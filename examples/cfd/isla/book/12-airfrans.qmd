@@ -38,7 +38,7 @@ remesh_dev = max(abs(RM_I[v][f] - 1) for v in ("refine2", "refine4", "refine31")
 PL = J("campaigns_2026-10-19/drive_fix2/planar/planar_scores.json")
 PLANAR_DEV = max(abs(xy / v3 - 1) for a in ("gt", "t") for v3, xy in zip(PL[f"afu_ud_{a}/native"]["velocity_l2"],
                                                                           PL[f"afu_ud_{a}/native"]["velocity_xy_l2"]))
-COST = J("char/char_lanes_cost_2026-10-04.json")["cost"]["AirfRANS"]
+COST = {a: S.cost("airfrans", a) for a in ("ISLA", "ISLA-DTT") + BASE}   # the training lanes behind the standing
 def word(arch, f, p="native"):
     """ISLA against a baseline in the book's words: 'leads GeoTransolver 3.9x', 'trails Transolver (ratio 0.75)', 'is level with ...',
     'is not compared with ...'."""
@@ -208,18 +208,18 @@ print("No model trains with rotation or translation augmentation. **The three do
 ```{python}
 #| label: para-airfrans-scorings
 #| output: asis
-epoch_ratio = COST["ISLA"]["epoch_seconds"] / mean(COST[a]["epoch_seconds"] for a in BASE)
+step_ratio = COST["ISLA"]["step_seconds"] / mean(COST[a]["step_seconds"] for a in BASE)
 print("**Each checkpoint is scored twice on the same test cases**: on the native mesh, and with every case rotated in its plane and "
       "translated by one RMS point radius, the inlet direction rotated with it (@sec-pose). The uniform-point-cloud scoring of the surface "
       "datasets is not shown: the airfoil has fewer segments than the scoring budget and the interior points carry no cells, so at that budget "
       "it returns the native mesh. The boundary's discretization is measured directly instead (@sec-airfrans-discretization).")
 print()
-print("**Cost.** One training epoch on four GB300 ranks in bfloat16 (peak device memory over the ranks): "
-      + "; ".join(f"{a} {v['peak_gib']:.0f} GiB and {v['epoch_seconds']:.0f} s" for a, v in COST.items())
-      + f". ISLA's epoch is {epoch_ratio:.1f} times the baselines' mean on this planar task. Instrument (memory and time): ISLA at 512 wide, "
-      "512 slices, 3.75e-4, raw slice reads (@sec-study-configurations), with the wall geometry of the nearest-token form "
-      "(@sec-checkpoint-form); ISLA's boundary draw inside the model and its exact wall geometry are not timed in it. "
-      "Data: results/char/char_lanes_cost_2026-10-04.json.")
+g = {(c["gpus"], c["precision"]) for c in COST.values()}
+print("**Cost.** One training step of the lanes behind the standing, " + " and ".join(f"on {n} GB300 GPUs in {pr}" for n, pr in sorted(g))
+      + " (allocator peak per GPU, the maximum over ranks; median step): "
+      + "; ".join(f"{a} {v['peak_gib']:.0f} GiB and {v['step_seconds']:.2f} s" for a, v in COST.items())
+      + f". ISLA's step is {step_ratio:.1f} times the baselines' mean on this planar task. ISLA's lanes compile its blocks one by one, and "
+      "the baselines run uncompiled, as released (@tbl-ref-cost). Data: results/char/" + S.COST_FILE + ".")
 ```
 
 ## The standing {#sec-interior-airfrans}
