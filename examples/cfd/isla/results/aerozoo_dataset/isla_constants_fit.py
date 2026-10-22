@@ -1,3 +1,19 @@
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """ISLA-SCALES round 2 (2026-10-19): fit ISLA's dataset constants on the train parts with the implemented scale function
 (ISLA._case_scales on the full-resolution boundaries, the model built from the recipe's model config).
 
@@ -116,6 +132,11 @@ def _rms(m, s, name, y):
 
 
 def aerozoo_case(arg):
+    """Fit inputs for one AeroZoo case.
+
+    Returns ISLA's scales (L, U, log10 Re), the dimensionless RMS of each target
+    field and of each boundary input, or an error row.
+    """
     path, yaml = arg
     torch.set_num_threads(1)
     from physicsnemo.mesh import DomainMesh
@@ -169,6 +190,11 @@ def aerozoo_case(arg):
 
 
 def airfrans_case(arg):
+    """Fit inputs for one AirfRANS case.
+
+    Returns ISLA's scales on the in-plane airfoil, the dimensionless RMS of nut,
+    the nut and freestream statistics, or an error row.
+    """
     path, yaml = arg
     torch.set_num_threads(1)
     from physicsnemo.mesh import DomainMesh, Mesh
