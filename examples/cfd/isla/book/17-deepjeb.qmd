@@ -9,6 +9,7 @@ import json, statistics
 import sys; sys.path.insert(0, ".")
 from palette import *
 import standing as S
+import records as R
 
 RES = S.RES
 ST = S.Standing("deepjeb")
@@ -16,7 +17,7 @@ FIELDS = list(ST.fields)                       # von_mises_l2, displacement_l2
 WORD = {"von_mises_l2": "von Mises stress", "displacement_l2": "displacement"}
 N_TEST = ST.cell("ISLA", FIELDS[0])["n_cases"]
 SEP = all(max(ST.seeds("ISLA", f)) < min(ST.seeds(a, f)) for a in S.BASELINES for f in FIELDS)
-COST = json.load(open(RES / "char" / "char_lanes_cost_2026-10-04.json"))["cost"]["DeepJEB++"]
+COST = {a: S.cost("deepjeb", a) for a in S.ARCHS}
 # Split counts: 15,360 brackets on the dataset card; the clean splits of the manifest written by
 # results/campaigns_2026-09-22/datasets/deepjebpp_clean_splits.py (train_clean, test_clean brackets).
 N_BRACKETS, N_TRAIN_CLEAN, N_TEST_CLEAN = 15_360, 12_451, 1_385
@@ -25,7 +26,18 @@ N_REMOVED = N_BRACKETS - N_TRAIN_CLEAN - N_TEST_CLEAN
 REMOVED = f"{N_REMOVED:,} of the {N_BRACKETS:,} brackets ({N_REMOVED / N_BRACKETS:.1%})"
 ```
 
-**On DeepJEB++, generated jet-engine brackets under four load cases, ISLA leads GeoTransolver and Transolver on von Mises stress and on displacement, with every ISLA seed below every baseline seed.** Their errors are `{python} f"{min(ST.ratio(a, f) for a in S.BASELINES for f in FIELDS):.2f}"` to `{python} f"{max(ST.ratio(a, f) for a in S.BASELINES for f in FIELDS):.2f}"` times ISLA's. This is the most varied geometry in the book, and the one dataset where the global vector is a load direction rather than a free stream. Rotated and translated, ISLA reproduces its native numbers, while the baselines lose the field.
+```{python}
+#| label: para-deepjeb-opening
+#| output: asis
+V0 = {ST.verdict(a, f) for a in S.BASELINES for f in FIELDS}
+head = (f"ISLA {next(iter(V0))} GeoTransolver and Transolver on von Mises stress and on displacement" if len(V0) == 1
+        else "ISLA's standing against GeoTransolver and Transolver is mixed")
+print(f"**On DeepJEB++, generated jet-engine brackets under four load cases, scored on the native mesh, {head}"
+      f"{', with every ISLA seed below every baseline seed' if SEP else ''}.** Baseline ÷ ISLA is "
+      f"{min(ST.ratio(a, f) for a in S.BASELINES for f in FIELDS):.2f} to {max(ST.ratio(a, f) for a in S.BASELINES for f in FIELDS):.2f}.")
+```
+
+This is the most varied geometry in the book, and the one dataset where the global vector is a load direction rather than a free stream. Rotated and translated, ISLA reproduces its native numbers, while the baselines lose the field.
 
 ## The problem: generated brackets under four load cases {#sec-deepjeb-problem}
 
@@ -90,14 +102,14 @@ fig.legend(handles=[Line2D([], [], color=BC["value"], marker="o", ls="none", ms=
 plt.show()
 ```
 
-**Diversity.** The geometry is the most varied in the book. The brackets are generated shapes spanning a design space, not morphs of one body; each appears under four loads whose direction is a global input of the problem; and the loading changes kind between force and torque. The price is label quality: a census of the stress fields found unphysical maxima, above 10,000 MPa against a yield stress of 903 MPa, on `{python} REMOVED`, counted from the clean splits of the dataset manifest, which results/campaigns_2026-09-22/datasets/deepjebpp_clean_splits.py writes (its docstring's 4.25% is a different count; the lab notebook records the 1,524). The clean split used here removes those brackets without making the remaining fields smooth.
+**Diversity.** The geometry is the most varied in the book. The brackets are generated shapes spanning a design space, not morphs of one body; each appears under four loads whose direction is a global input of the problem; and the loading changes kind between force and torque. The price is label quality: a census of the stress fields found unphysical maxima, above 10,000 MPa against a yield stress of 903 MPa, on `{python} REMOVED`, counted from the clean splits of the dataset manifest, which results/campaigns_2026-09-22/datasets/deepjebpp_clean_splits.py writes. The clean split used here removes those brackets without making the remaining fields smooth.
 
 ### Files, conversion and normalization {#sec-data-deepjeb}
 
 **15,360 jet-engine brackets generated with TRELLIS, a generative model of 3-D shapes, in the design space of SimJEB, the simulated jet-engine bracket dataset (Yoo et al., KAIST; Hugging Face `KAIST-SmartDesignLab/DeepJEB-PP`; ODC-By 1.0), each under four static linear-elastic load cases (Ti-6Al-4V): vertical, horizontal and diagonal forces and a torsion about $z$, with the bolt holes clamped and the load shared over the lug bore.** The surface is decimated to 25,000 vertices, with per-vertex displacement (mm) and von Mises stress (MPa) for each load case and explicit index sets for the clamped bolt and loaded lug vertices.
 
 - **Conversion** (`deepjebpp_convert.py`). One file per bracket and load: the surface triangles wound outward, their areas, the `bc_fixed` and `bc_loaded` labels, the traction `bc_load` (for a force $F\,\hat d / A_{\text{loaded}}$; for the torsion the rigid-twist traction about the lug axis), cell-mean targets, and global data with `load_dir` (the force direction or the moment axis), the `load_type` one-hot [force, torque], the magnitude and the bracket's mass and volume.
-- **What each model receives.** A surface task in the DrivAerML layout (`deepjebpp_surface.yaml`), with coordinates scaled from mm to 0.1 m so that a bracket spans about one unit. ISLA (`isla_surface_deepjebpp.yaml`) takes `load_dir` as the one global vector ($K = 1$) and the one-hot as two global scalars. `SplitBoundaryByLabels` cuts the surface into three named boundary conditions by its labels, `loaded` before `fixed`, with the unlabeled cells `free`, and orders the scored cells as ISLA predicts them; the traction is a boundary vector of `loaded` alone, which ISLA reads through invariants against each cell's normal and $\hat g_1$ (@sec-isla-inputs). The standing's checkpoints, of the nearest-token form, read the surface as one boundary with the two labels as cell scalars (@sec-checkpoint-form). It predicts the von Mises stress as a scalar and the displacement as a vector. GeoTransolver and Transolver read each cell's coordinates, normal, labels and traction as raw feature columns, each vector as its components along the dataset's axes, and the load direction and the one-hot as global features.
+- **What each model receives.** A surface task in the DrivAerML layout (`deepjebpp_surface.yaml`), with coordinates scaled from mm to 0.1 m so that a bracket spans about one unit. ISLA (`isla_surface_deepjebpp.yaml`) takes `load_dir` as the one global vector ($K = 1$) and the one-hot as two global scalars. `SplitBoundaryByLabels` cuts the surface into three named boundary conditions by its labels, `loaded` before `fixed`, with the unlabeled cells `free`, and orders the scored cells as ISLA predicts them; the traction is a boundary vector of `loaded` alone, which ISLA reads through invariants against each cell's normal and $\hat g_1$ (@sec-isla-inputs). It predicts the von Mises stress as a scalar and the displacement as a vector. GeoTransolver and Transolver read each cell's coordinates, normal, labels and traction as raw feature columns, each vector as its components along the dataset's axes, and the load direction and the one-hot as global features.
 - **Splits.** Grouped by SimJEB seed pair, because the brackets of one pair are a smooth family and must not straddle a split: a seed-0 draw of 10% of the pairs is the test set and the rest train. The authors' pair-grouped and random splits are kept under `official_*`.
 - **Pitfalls.** The label census removed `{python} REMOVED` for unphysical stress maxima, a bracket going with all four of its load cases; every number in this chapter is on the clean split. Published stress errors for Transolver, GNOT (the General Neural Operator Transformer) and GI-FNO (a geometry-informed Fourier neural operator) are 30 to 37% (`results/book_audit_2026-09-22/datasets_scout.md`), comparable in kind but not in split.
 
@@ -108,25 +120,46 @@ plt.show()
 ```{python}
 #| label: tab-deepjeb-cost
 #| output: asis
-print("| | parameters | peak memory per GPU [GiB] | time per epoch [s] |\n|---|--:|--:|--:|")
+import re as _re
+def cost_how(c):
+    """How the rows of a cost table were measured, from the notes of standing.cost."""
+    i, b = c["ISLA"], c["Transolver"]
+    out = ("parameters, peak allocated device memory per GPU (the maximum over ranks) and the median wall time of one training step "
+           "without the compile steps, seed means. "
+           f"Every architecture trains on {i['gpus']} GB300 GPUs and {i['ranks']} ranks; the configuration that trains ISLA is "
+           f"{i['precision']} autocast with its blocks compiled one by one and Inductor's mix-order reduction off; the baselines train "
+           f"in {b['precision']} autocast and uncompiled, as released. ")
+    if "before the compile fix" in i["note"]:
+        out += "The ISLA lanes priced here trained before that setting, with the mix-order reduction on in the compiled blocks. "
+    m = _re.search(r"trained eager\b.*?at about (\w+) this step time", i["note"])
+    if m:
+        out += (f"The standing's ISLA checkpoints trained eager, for a control of the training path, at about {m.group(1)} this step "
+                "time; the row prices the compiled lane of the same configuration. ")
+    smoke = [a for a in S.BASELINES if "smoke lane" in c[a]["note"]]
+    if smoke:
+        out += (f"{' and '.join(smoke)} {'have' if len(smoke) > 1 else 'has'} no training log left from the standing's "
+                f"lane{'s' if len(smoke) > 1 else ''}, so {'their rows price' if len(smoke) > 1 else 'its row prices'} the one-epoch "
+                "smoke lane of the same configuration, one seed; the parameter counts are the standing's. ")
+    return out
+
+
+cost_src = lambda c: "; ".join(sorted({"results/" + p for v in c.values() for p in _re.findall(r"campaigns_[^\s;:]+", v["source"])}))
+print("| | parameters | peak memory per GPU [GiB] | median training step [s] |\n|---|--:|--:|--:|")
 for a in S.ARCHS:
     v = COST[a]
-    print(f"| {S.CONFIG[a]} | {v['n_parameters'] / 1e6:.1f}M | {v['peak_gib']:.1f} | {v['epoch_seconds']:.0f} |")
+    print(f"| {S.CONFIG[a]} | {v['n_parameters'] / 1e6:.1f}M | {v['peak_gib']:.1f} | {v['step_seconds']:.3f} |")
 mem_low = COST["ISLA"]["peak_gib"] < min(COST[a]["peak_gib"] for a in S.BASELINES)
-t_mid = min(COST[a]["epoch_seconds"] for a in S.BASELINES) <= COST["ISLA"]["epoch_seconds"] <= max(COST[a]["epoch_seconds"] for a in S.BASELINES)
-print("\n: The cost of training on DeepJEB++ at the three reference configurations: parameters, peak device memory (maximum over four GB300 "
-      "ranks, bfloat16) and wall time of one epoch over the clean training files. The parameter counts are exact for the standing's "
-      "checkpoints, since the normalized slice reads add no parameters; memory and time are one-epoch measurements. How to read this: ISLA "
-      "has the most parameters" + (" and the lowest memory" if mem_low else "") + (", and its epoch time sits between the baselines'" if t_mid else "")
-      + ". Instrument: ISLA at 512 wide, 512 slices, "
-      "3.75e-4, raw slice reads (@sec-study-configurations). Data: results/char/char_lanes_cost_2026-10-04.json. {#tbl-deepjeb-cost}")
+t_mid = min(COST[a]["step_seconds"] for a in S.BASELINES) <= COST["ISLA"]["step_seconds"] <= max(COST[a]["step_seconds"] for a in S.BASELINES)
+t_low = COST["ISLA"]["step_seconds"] < min(COST[a]["step_seconds"] for a in S.BASELINES)
+print("\n: The cost of training on DeepJEB++ at the three reference configurations, as the standing's lanes trained them: "
+      + cost_how(COST) + "How to read this: ISLA has the most parameters" + (" and the lowest memory" if mem_low else "")
+      + (", and its step time sits between the baselines'" if t_mid else ", and the shortest step" if t_low else "")
+      + f". Data: results/char/{S.COST_FILE}, from {cost_src(COST)}. {{#tbl-deepjeb-cost}}")
 ```
 
-**On this dataset the three cost about the same to train** (@tbl-deepjeb-cost). ISLA has `{python} f"{COST['ISLA']['n_parameters'] / COST['GeoTransolver']['n_parameters']:.1f}"` times GeoTransolver's parameters, and its epoch takes `{python} f"{COST['ISLA']['epoch_seconds'] / COST['GeoTransolver']['epoch_seconds']:.2f}"` times GeoTransolver's and `{python} f"{COST['ISLA']['epoch_seconds'] / COST['Transolver']['epoch_seconds']:.2f}"` times Transolver's. The comparison is close to matched in memory and time, not in parameters.
+**On this dataset the three cost about the same to train** (@tbl-deepjeb-cost). ISLA has `{python} f"{COST['ISLA']['n_parameters'] / COST['GeoTransolver']['n_parameters']:.1f}"` times GeoTransolver's parameters, and its training step takes `{python} f"{COST['ISLA']['step_seconds'] / COST['GeoTransolver']['step_seconds']:.2f}"` times GeoTransolver's and `{python} f"{COST['ISLA']['step_seconds'] / COST['Transolver']['step_seconds']:.2f}"` times Transolver's. The comparison is close to matched in memory and time, not in parameters.
 
 ## The standing {#sec-surface-deepjeb}
-
-<!-- SLOT: ISLA at the current class: one row beside the nearest-token-form row; native/area/posed seed means and per-seed values (standing.DATASETS["deepjeb"].current) -->
 
 ```{python}
 #| label: para-deepjeb-lede
@@ -153,12 +186,20 @@ print(ST.table("tbl-deepjeb-protocols", f"DeepJEB++, 12,451 training brackets, 4
 #| output: asis
 #| column: page
 import json as _json
-_R = _json.load(open(RENDER_DIR / "render_cloud_deepjebpp.json"))
-rendering_figure("fig-deepjeb-prediction", [("figures/renderings/deepjebpp_von_mises.png", "von Mises stress"), ("figures/renderings/deepjebpp_displacement.png", "Displacement magnitude")],
-    f"The three reference configurations on one DeepJEB++ test bracket under its horizontal load case, {_R['sample_id'].split('_')[0]}. Relative L2 on this case: {case_errors(_R['per_sample_rel_l2'])}. " + "Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one "
-      f"symmetric scale. ISLA checkpoints of the {S.FORM_TAG} (@sec-checkpoint-form). How to read this: one case, chosen as the case of median ISLA error (seed 42 of each reference configuration), "
-      "not a standing; the standing is the table above. "
-    + "Data: results/renderings_2026-10-18/arrays/render_cloud_deepjebpp.json.", nrow=2)
+_R = _json.load(open(RENDER_DIR_090 / "render_cloud_deepjebpp.json"))
+_src = next(v for k, v in _R["source"].items() if k.endswith("_isla/native"))
+_rec = RES / "campaigns_2026-10-22/standing_090/scores" / _src["scorer_record"].removeprefix("$T/")
+_e = {r["sample_id"]: r["metrics"]["von_mises_l2"] for r in map(_json.loads, open(_rec)) if r.get("phase") == "infer_step"}
+_rk = sorted(_e, key=_e.get).index(_R["sample_id"]) + 1
+assert _rk > len(_e) / 2
+rendering_figure("fig-deepjeb-prediction", [("figures/renderings/deepjebpp_von_mises_090.png", "von Mises stress"), ("figures/renderings/deepjebpp_displacement_090.png", "Displacement magnitude")],
+    f"The three reference configurations on one DeepJEB++ test bracket under its horizontal load case, {_R['sample_id'].split('_')[0]}, "
+    "from the standing's checkpoints (seed 42): ISLA at its reference configuration and the baselines' standing checkpoints. "
+    f"Relative L2 on this case: {case_errors(_R['per_sample_rel_l2'])}. The case is not ISLA's median: it ranks {_rk:,} of {len(_e):,} "
+    "test files by ISLA's von Mises error, a harder case than the median; it is the case the earlier renderings used. "
+    "Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one "
+    "symmetric scale. How to read this: one case, not a standing; the standing is the table above. "
+    "Data: results/renderings_2026-10-22/arrays/render_cloud_deepjebpp.json.", nrow=2)
 ```
 
 ```{python}
@@ -178,9 +219,9 @@ same_txt = ("equal its native ones to every digit the record keeps" if max(pz) <
 print(f"**Rotated and translated, ISLA reproduces its native numbers; the baselines lose the field.** ISLA's posed errors "
       f"{same_txt}. GeoTransolver reads {bp['GeoTransolver'][0]:.2f} on von Mises stress and "
       f"{bp['GeoTransolver'][1]:.2f} on displacement, Transolver {bp['Transolver'][0]:.2f} and {bp['Transolver'][1]:.2f}: errors above one, "
-      "worse than predicting zero everywhere. This is a surface task, so the checkpoints build no nearest-sample input for their prediction points, "
-      "which are the boundary tokens themselves, and the tie mechanism that bends the contract on the other two solids "
-      "(@sec-tensile2d-ties, @sec-lug-ties) has nothing to act on.")
+      "worse than predicting zero everywhere. This is a surface task: the prediction points are the boundary tokens themselves, "
+      "which need no wall distance or direction, so the closest-feature ties that the lug's interior nodes carry (@sec-lug-ties) "
+      "have nothing to act on.")
 ```
 
 ## Studies on this dataset {#sec-deepjeb-ladders}
@@ -202,12 +243,49 @@ dep = [departs(e) for e in raw]
 last = [e[max(e, key=int)]["von_mises_l2_val"] for e in raw]
 lo, hi = f"{min(d[1] for d in dep):.0f}", f"{max(d[1] for d in dep):.0f}"
 fac = lo if lo == hi else f"{lo} to {hi}"
-print("**One study belongs to this dataset, and it belongs to the mechanism of the slice layer.** The raw-read variant of ISLA, an ablation in "
+print("**Two measurements belong to this dataset, and both are about what reads the raw residual stream**, the token state $h$ to which "
+      "every layer adds its output. The raw-read variant of ISLA, an ablation in "
       "which the slice sublayer pools and broadcasts the raw token state instead of its normalized form, trained here at the same rate, "
       f"has its validation loss rise {fac} times by epoch {max(d[0] for d in dep)} and "
       f"never recovers: its von Mises error at epoch 40 is {min(last):.2f} to {max(last):.2f}, about the error of predicting zero everywhere. Normalizing the slice "
       "sublayer's reads removes this, which is why the reference configuration trains on DeepJEB++ at all (@sec-isla-layer). "
       "Data: results/char/deepjeb_trajectories_2026-10-07.json (trainer-side validation, bfloat16).")
+```
+
+```{python}
+#| label: para-deepjeb-head-frame
+#| output: asis
+HF = R.load("stream_audit", "tables/hframe_jb.tsv")
+GR = {r["run"]: r for r in R.load("stream_audit", "tables/growth_table.tsv") if r["dataset"] == "DeepJEB++"}
+runs = sorted({r["run"] for r in HF})
+by = {k: sorted((r for r in HF if r["run"] == k), key=lambda r: int(r["epoch"])) for k in runs}
+first = lambda rows, ok: next(int(r["epoch"]) for i, r in enumerate(rows) if all(ok(x) for x in rows[i:]))
+col = [first(by[k], lambda r: r["collapse"] == "1") for k in runs]
+one = [first(by[k], lambda r: float(r["seed_supp_min_mean"]) < 1.05) for k in runs]
+half = [first(by[k], lambda r: float(r["seed_maxw"]) >= 0.5) for k in runs]
+col_any = [first(by[k], lambda r: r["collapse_anycase"] == "1") for k in runs]
+seeds = " / ".join(k.rsplit("seed", 1)[1] for k in runs)
+SA = " ".join(R.load("stream_audit", "REPORT.md").split())
+n_cases = _re.search(r"(\d+) validation cases per lane", SA).group(1)
+supp_max, maxw_min = _re.search(r"the rule \(seed_supp_min ≤ ([0-9.]+) or seed_maxw ≥ ([0-9.]+)\)", SA).groups()
+slash = lambda xs: " / ".join(xs)
+ep = lambda xs: (f"epoch {xs[0]}" if len(set(xs)) == 1 else "epochs " + slash(str(x) for x in xs))
+print("**The normalized slice reads do not reach the head frame, and on DeepJEB++ the head frame of the standing's own runs "
+      "concentrates its most concentrated anchor on about one point, and the average anchor's largest weight passes one half.** The head frame builds every vector output's direction from soft anchors, "
+      "softmax-weighted means of the token positions (@sec-arch-head-frame), and its logits read the raw stream. Over training "
+      "the stream's mean token norm grows from "
+      + slash(f"{float(GR[k]['h_e1']):.0f}" for k in runs) + " at epoch 1 to "
+      + slash(f"{float(GR[k]['h_last']):,.0f}" for k in runs) + " at " + ep([GR[k]["last_epoch"] for k in runs])
+      + ", the last read, and the 99.9th percentile of the head frame's logits grows from "
+      + slash(f"{float(by[k][0]['seed_logit_p999']):.1f}" for k in runs) + " to "
+      + slash(f"{float(by[k][-1]['seed_logit_p999']):,.0f}" for k in runs) + f" (seeds {seeds}). A softmax of logits that large is "
+      f"nearly an argmax. Averaged over {n_cases} validation cases, the effective number of points an anchor reads (the exponential of its "
+      f"weights' entropy), smallest over anchors, falls to one point from {ep(one)} on; the largest single weight, averaged over anchors, "
+      f"passes one half from {ep(half)} and reaches " + slash(f"{float(by[k][-1]['seed_maxw']):.2f}" for k in runs) + ". The audit's "
+      f"collapse rule (smallest support at most {supp_max} points or largest weight at least {maxw_min}, on the case mean) fires from "
+      f"{ep(col)} on, and on the worst case alone from {ep(col_any)}. What this costs in accuracy is not "
+      "measured; the standing above is of these runs, so its numbers include whatever it costs. A normalized input for the head frame, a candidate fix for its logit growth, "
+      "was tested and not adopted. Data: " + R.source("stream_audit", "tables/hframe_jb.tsv") + " and growth_table.tsv.")
 ```
 
 ## What this dataset does not say {#sec-deepjeb-limits}
@@ -218,4 +296,5 @@ print("**One study belongs to this dataset, and it belongs to the mechanism of t
 - **It is not a learning curve.** One training-set size and one epoch budget are measured; neither the data exponent nor whether a longer schedule changes the ordering is known.
 - **Absolute errors near `{python} f"{ST.err('ISLA', 'von_mises_l2'):.1f}"` on von Mises stress are a property of the labels**, for every architecture.
 - **No tensor target.** Tensile2d measures one (@sec-interior-tensile2d).
+- **The head frame's concentration is not costed.** Its most concentrated anchor reads about one point by the end of training (@sec-deepjeb-ladders); how much accuracy on displacement that costs is not measured.
 - **Matched in memory and time, not in parameters** (@tbl-deepjeb-cost). The published Transolver, GNOT and GI-FNO errors are on another split.
