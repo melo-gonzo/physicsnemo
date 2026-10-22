@@ -70,10 +70,15 @@ print(f"**AeroZoo is the book's generalization benchmark: {n:,} RANS solutions a
 #| include: false
 _C = LAB_META["counts"]; _dec = sorted(int(k) for k in _C["log10_re_decade"])
 _enc = _C["enclosure"]; _bank = _C["bank"]; _prof = _C["profile"]
-_FLOW = [k for k in S.available() if k not in ("tensile2d", "lug", "deepjeb")]
+_FLOW = [k for k in S.final() if k not in ("tensile2d", "lug", "deepjeb")]
 _bp = [S.Standing(k).shift(a, f, "posed") for k in _FLOW for f in S.DATASETS[k].headline for a in S.BASELINES]
+_left = [S.DATASETS[k].short for k in S.in_flight() if k not in ("tensile2d", "lug", "deepjeb")]
+_flow_note = (f"; the count leaves out {' and '.join(_left)}, whose standing{'s are' if len(_left) > 1 else ' is'} in flight (@sec-ledger)"
+              if _left else "")
 _V = {"leads": 0, "is level with": 0, "trails": 0}
 for _k, _f, _ in S.headline_rows():
+    if _k not in S.final():
+        continue
     _s = S.Standing(_k)
     for _a in S.BASELINES:
         if _s.has(_a) and _s.verdict(_a, _f) in _V:
@@ -95,7 +100,7 @@ print("**What a narrow-family benchmark rewards.** Each in-distribution dataset 
       "not transfer. The first is the dataset's axes: every case is stored in the same frame, with $x$ along the car and $z$ up, so a "
       "model that reads raw coordinates can tie what it learns to absolute position. The book measures how much the baselines lean on it: "
       f"rotate and translate the test cases, and on the {len(_FLOW)} flow tasks every baseline's error grows {min(_bp):.0f}-fold to "
-      f"{max(_bp):.0f}-fold (@sec-standing-invariances). A new design placed in another frame meets that model as an unseen pose. The "
+      f"{max(_bp):.0f}-fold (@sec-standing-invariances){_flow_note}. A new design placed in another frame meets that model as an unseen pose. The "
       "second is the single body family: a feature that says where on a DrivAerML car a point lies encodes the family, and on a bracket "
       "or an airframe it encodes nothing. A third gap is silent: a condition that never varies in training, such as the Reynolds "
       "number on DrivAerML and HiLiftAeroML, is never learned, so the benchmark cannot ask how the field depends on it.")
@@ -140,7 +145,7 @@ print("**This is the aim of the design and the reason for the choice of benchmar
       "much of the pose invariance from the data. What the standing measures, and where ISLA fails, is in @sec-interior-aerozoo. "
       "Nor do the constraints come free in "
       f"distribution: on the native mesh ISLA leads in {_V['leads']}, is level in {_V['is level with']} and trails in {_V['trails']} of "
-      f"{sum(_V.values())} comparisons with the baselines (@sec-standing). The in-distribution benchmarks stay in the book because the "
+      f"{sum(_V.values())} comparisons with the baselines (@sec-standing). {S.tally_note()} The in-distribution benchmarks stay in the book because the "
       "community measures surrogates on them, and because they test each part of the architecture against strong published models on "
       "problems whose difficulty is known. They do not decide what is worth building for design; generalization does.")
 ```
@@ -636,7 +641,8 @@ print(f"ISLA-DTT on the same seven splits decides, with these rows, which interi
       f"it pays least on {', '.join(sn(s) for s in order[:3])} and most on {' and '.join(sn(s) for s in order[-2:])}. No AeroZoo run is "
       "exposed to the compiled-path fault of the other interior chapters: the geometry runs in the fused kernel, which keeps the fault "
       "from firing, and on "
-      f"twenty `full` test cases compiled and eager predictions agree to {_re.search(r'at most ([0-9.e-]+) for ISLA', R.load('az_diag', 'cmpdiag/README.md')).group(1)} "
+      f"the first {_re.search(r'Cases: the first (\d+) of full.test', ' '.join(R.load('az_diag', 'cmpdiag/README.md').split())).group(1)} "
+      f"`full` test cases compiled and eager predictions agree to {_re.search(r'at most ([0-9.e-]+) for ISLA', R.load('az_diag', 'cmpdiag/README.md')).group(1)} "
       f"relative ({R.source('az_diag', 'cmpdiag/README.md')}).")
 ```
 
@@ -667,8 +673,8 @@ print("**Both baselines end near predicting zero on pressure; no pipeline fault 
       "Transolver has no channel for the inlet at all (@tbl-aerozoo-inputs), so neither the speed nor the direction of the flow "
       "reaches it, and its predictions are constants. The optimizer is not the limit: retraining GeoTransolver's output layer with "
       f"AdamW from its last checkpoint, everything else frozen, leaves its median pressure error at {ft_min:.4f} or above, where the "
-      f"registered test asked for a fall below {bar}. ISLA reads each case in its own physical scales (@sec-aerozoo-allowed), so its "
-      "pressure lead comes from those scales.")
+      f"registered test asked for a fall below {bar}. ISLA reads each case in its own physical scales (@sec-aerozoo-allowed), which "
+      "the baselines do not; whether that is what gives it its pressure lead is not isolated.")
 print()
 print(f"**GeoTransolver's velocity is not converged.** On `full` its training velocity loss falls from {gv[42][str(ep[0])]:.2f} at "
       f"epoch {ep[0]} to {gv[42][str(ep[-1])]:.2f} at epoch {ep[-1]} (seed 42; seed 43 {gv[43][str(ep[0])]:.2f} to {gv[43][str(ep[-1])]:.2f}), "
@@ -691,13 +697,16 @@ ducts = [r for r in TE if r["split"] == "nonbox" and r["family"] == "internal_du
 duct_low = sum(float(r["head_rms.velocity"]) < vmin for r in ducts) / len(ducts)
 SC = {r["split (20 worst each)"]: r for r in R.md_table("az_diag", "scales/README.md", "Results")}
 cross_in = all(R.num(SC["profile_crossflow"][c], 0) == 0 for c in ("U", "L", "log10 Re = z"))
+n_worst, n_rand = _re.search(r"the (\d+) worst per split .*? plus (\d+) random", " ".join(R.load("az_diag", "preddiag/README.md").split())).groups()
+n_pd = {len([r for r in PD if r["split"] == "profile_crossflow" and r["seed"] == s]) for s in ("42", "43")}
+assert len(n_pd) == 1; n_pd = n_pd.pop()
 f2 = lambda xs, d=2: " / ".join(f"{x:.{d}f}" for x in xs)
 print(f"**On {sn('profile_crossflow')} ISLA keeps the inlet direction where the flow should turn toward the outlet beside it, and drives "
       f"the flow about twice too fast; on {sn('nonbox')} it gets the shape of the pressure wrong.** No training case has either the "
       f"layout or the enclosures. On crossflow ISLA's velocity error is {mm('ISLA', 'profile_crossflow', 'velocity_l2', 2)} and its pressure error "
-      f"{mm('ISLA', 'profile_crossflow', 'pressure_l2', 2)}. On the diagnosed cases (the 20 worst and 10 random per seed, medians; seed 42 / "
+      f"{mm('ISLA', 'profile_crossflow', 'pressure_l2', 2)}. On the diagnosed cases (the {n_worst} worst and {n_rand} random per seed, medians; seed 42 / "
       f"seed 43) its mean velocity points {f2(vd('profile_crossflow', 'angle_true_pred_means'), 0)} degrees from the true mean, and its "
-      f"RMS speed is {f2(vd('profile_crossflow', 'speed_ratio_rms'))} times the true one. The pressure follows the speed: on 30 random "
+      f"RMS speed is {f2(vd('profile_crossflow', 'speed_ratio_rms'))} times the true one. The pressure follows the speed: on {n_pd} random "
       "cases per seed, dividing each case's predicted pressure by the square of its own speed ratio takes the median pressure error "
       f"from {f2([pdm('profile_crossflow', s, 'pressure_l2') for s in ('42', '43')])} to "
       f"{f2([pdm('profile_crossflow', s, 'l2_rescaled_sr2') for s in ('42', '43')])}. That reading is post hoc: by the reading table "
