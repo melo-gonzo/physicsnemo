@@ -120,7 +120,8 @@ print("- **Not that equivariance is an accuracy edge in general.** A baseline gi
 print(f"- **Not that ISLA's pose invariance is exact on every mesh.** Rotated and translated, its error stays within {100 * worst:.1f}% "
       f"of native on {of_fin(exact)} final standings, and it is {lug:.2f} times native on the GINOT bracket lug, whose standing "
       "is in flight and whose structured "
-      "mesh puts interior nodes equally far from two boundary features, where float32 rounding picks the direction (@sec-limits-ties). "
+      "mesh puts interior nodes equally far from two boundary features, where float32 rounding picks the direction, a candidate cause "
+      "of the growth whose link is not isolated (@sec-limits-ties). "
       "ISLA-DTT's far-field read adds no such limit: a tie of its forest's frame moves the read only by the tree's error "
       "(@sec-oq-dtt-frame).")
 print("- **Not that discretization consistency is an exact invariance at every token count.** Under exact re-meshing of the boundary "
@@ -303,6 +304,7 @@ for k in INT:
 #| label: para-limits-boundary-law
 #| output: asis
 AF, AFD, VOL = RM["airfrans_fix_isla"], RM["airfrans_fix_dtt"], RM["drivaerml_volume"]
+D4 = RM["airfrans_fix_isla_redraw400_d_pressure_median"]
 dev = lambda d, vs: max(abs(d[v][f] - 1) for v in vs for f in FW)
 refine = ("refine2", "refine4", "refine31")
 tok = [AF[v]["pressure_l2"] for v in ("tok600", "tok400", "tok200")]
@@ -314,8 +316,9 @@ print("**Interacting ISLA's interior prediction does not move when the same boun
       f"car's cells and token budgets of 100,000 to 400,000 change it by at most {100 * dev(VOL, ('tok100k', 'tok400k', 'subdiv4')):.1f}%: "
       "the slice reads are measure-weighted, and the length unit and the wall geometry are exact for the given surface. A token budget "
       "far below the boundary's own cell count is not invariant, though it keeps the geometry exact: 600 to 200 tokens on the airfoil "
-      f"raise the pressure error {min(tok):.2f} to {max(tok):.2f} times, and two draws of 400 tokens differ from each other about as "
-      f"much as from native ({AF['redraw400']['pressure_l2']:.2f} against {AF['tok400']['pressure_l2']:.2f}), so the loss is draw "
+      f"raise the pressure error {min(tok):.2f} to {max(tok):.2f} times, and two draws of 400 tokens score alike "
+      f"({AF['redraw400']['pressure_l2']:.2f} against {AF['tok400']['pressure_l2']:.2f}) and lie farther from each other than from "
+      f"native (median pressure distance {f3(D4['to_tok400'], 3)} against {f3(D4['tok400_to_native'], 3)}, per seed), so the loss is draw "
       "variance. A watertight STL in place of the CFD wall of the car is a new surface, not a re-meshing: it raises ISLA's error "
       f"{f3([VOL['stl'][f] for f in FW])} times (pressure / velocity / eddy viscosity), all of it next to the wall. At or beyond "
       f"0.01 $L$ from the wall the error moves by at most {100 * max(abs(x - 1) for f in FW for x in B[far_band][f]):.1f}%, and closer "
@@ -455,7 +458,7 @@ q_ties = int(re.search(r"TIE costs about .*?\*\*(\d+) GPU-h\*\*", DESIGN).group(
 RUNGS = (27, 54, 109, 218, 435); SIZES = 3
 ref_lane = lane_gpuh("drivaerml_surface")
 q5_ladder = SEEDS * SIZES * sum(ref_lane * n / 435 for n in RUNGS)
-CELLS = (100, 200, 400)  # thousand cells per case; the step is linear in tokens (@sec-cost-sweep)
+CELLS = (100, 200, 400)  # thousand cells per case, priced in proportion to cells (@sec-cost-sweep)
 q5_cells = SEEDS * sum(ref_lane * c / 200 for c in CELLS)
 q5 = q5_ladder + q5_cells
 # Tensile2d: GeoTransolver + ISLA's measure-weighted pooling, priced at the GeoTransolver lane
@@ -655,7 +658,8 @@ F32R = " ".join(R.load("az_diag", "f32floor/README.md").split())
 s32 = re.search(r"moves single-case predictions by ([0-9]+)-([0-9]+) %", F32R).groups()
 print("**The open question is whether two discrete steps of ISLA's geometry, the sign of the wall distance at folded surface features "
       "and the draw of boundary tokens, can be made independent of float32 roundoff.** On a few AeroZoo `full` test cases ISLA's float32 "
-      "and float64 predictions differ at the percent level, and computing only the geometry in float64 removes the difference. "
+      f"and float64 predictions differ by {F32['isla_gap'][0]:.0e} to {F32['isla_gap'][1]:.0e} of the target's RMS, and computing "
+      "only the geometry in float64 removes the difference. "
       f"{F32['sign_flips'][0]} to {F32['sign_flips'][1]} of a case's 200,000 prediction points flip the sign of their wall distance "
       "between the two precisions; at each the closest feature is an edge or a vertex whose pseudo-normal cancels, a fold of the "
       "surface, where the sign is ill-posed even in exact arithmetic, so float64 would only make an arbitrary choice reproducible. And "
@@ -688,7 +692,8 @@ print("**The open question is how large ISLA-DTT's tree error is at $\\theta = 1
       "error, an approximation that vanishes as $\\theta \\to 0$, so ISLA-DTT keeps the pose and sampling invariance of the rest of "
       "ISLA. The size of that approximation is measured under refinement of the AirfRANS airfoil: splitting every segment in two or "
       f"four, or refining its front more finely than its rear, changes ISLA-DTT's pressure error by a factor of {f3(t1, 3)} at the trained $\\theta = 1$ and {f3(t0, 4)} at "
-      "$\\theta = 0$, on weights trained at $\\theta = 1$, whose native error rises at $\\theta = 0$ "
+      "$\\theta = 0$, on weights trained at $\\theta = 1$ (the ISLA-DTT pair trained with the compiled path before its fault was "
+      "fixed), whose native error rises at $\\theta = 0$ "
       f"({f3(TH['native_theta1'], 4)} to {f3(TH['native_theta0'], 4)}, pressure / velocity / eddy viscosity, one seed), so pricing a "
       "small $\\theta$ needs a model trained there. Where the frame ties, the error at $\\theta = 1$ is not measured. What would "
       "settle it: ISLA-DTT's checkpoints scored rotated and translated and under boundary redraws on cases whose principal variances "
@@ -768,7 +773,7 @@ print("**The open question is whether the cell-count saturation, the capacity fl
       "Both gaps could be the instrument or the configuration. What would settle it: on the DrivAerML Surface task, the five case rungs "
       f"at three sizes around the reference configuration, two seeds each ({fmt_h(q5_ladder)} GPU-hours, each run's epoch proportional "
       f"to its cases and every size priced at the reference's {ref_lane:.0f} GPU-hours a run, a lower bound for the larger sizes), and a "
-      f"cell ladder of 100,000, 200,000 and 400,000 cells at 435 cars ({fmt_h(q5_cells)} GPU-hours, the step linear in tokens); "
+      f"cell ladder of 100,000, 200,000 and 400,000 cells at 435 cars ({fmt_h(q5_cells)} GPU-hours, priced in proportion to cells); "
       f"{fmt_h(q5)} GPU-hours in all. The same design on the wings needs the wing rung's cost, which the record does not hold.")
 ```
 
@@ -780,8 +785,12 @@ print("**The open question is whether the cell-count saturation, the capacity fl
 t = ST["tensile2d"]
 WD = {"stress_l2": "stress", "displacement_l2": "displacement", "q_l2": "plastic strain"}
 worst_r = min(((ST[k].ratio(b, f), k, f, b) for k in FIN for f in ST[k].ds.headline for b in S.BASELINES if ST[k].compared(b, f)))
-trails = [f"{b} on {' and '.join(WD[f] for f in t.ds.headline if t.verdict(b, f) == 'trails')}"
-          for b in S.BASELINES if any(t.verdict(b, f) == "trails" for f in t.ds.headline)]
+by_fields = {}
+for b in S.BASELINES:
+    fs = " and ".join(WD[f] for f in t.ds.headline if t.verdict(b, f) == "trails")
+    if fs:
+        by_fields.setdefault(fs, []).append(b)
+trails = [f"{' and '.join(bs)} on {fs}" for fs, bs in by_fields.items()]
 print(f"**The open question is what causes ISLA's deficit on PLAID Tensile2d.** ISLA trails {' and '.join(trails)} (@sec-tensile2d): "
       f"GeoTransolver ÷ ISLA reads {r('tensile2d', 'GeoTransolver', 'stress_l2'):.2f} on stress and "
       f"{r('tensile2d', 'GeoTransolver', 'displacement_l2'):.2f} on displacement, Transolver ÷ ISLA {r('tensile2d', 'Transolver', 'stress_l2'):.2f} "
@@ -855,8 +864,8 @@ print("**ISLA is the choice where the deployment mesh or sampling law may differ
       "arbitrary poses, and where a surrogate must be a function of the physics rather than of the dataset's frame; on in-distribution "
       f"accuracy at matched memory it leads in {len(TAL['leads'])}{LUGC}, is level in {len(TAL['is level with'])} and trails in "
       f"{len(TAL['trails'])} of the {n_all} comparisons of the final standings (@sec-standing).** " + NOTE + " The recommendation rests on the contracts, "
-      "not on an accuracy lead. They hold on every standing up to three measured limits: the closest-feature ties of the lug's mesh "
-      "(@sec-limits-ties), the interacting form's dependence on the request (@sec-limits-query-independence), and the precision of the "
+      "not on an accuracy lead. They hold on every standing up to three measured limits: the closest-feature ties of the lug's mesh, "
+      "a candidate cause of its posed growth whose link is not isolated (@sec-limits-ties), the interacting form's dependence on the request (@sec-limits-query-independence), and the precision of the "
       "wall the interior model is given (@sec-limits-boundary-law, @sec-oq-precision). GeoTransolver and Transolver are released, in "
       "use and not modified; measure weighting and origin-free positions reach users through ISLA (@sec-principled-ledger). Three "
       "outcomes would change the recommendation.")
