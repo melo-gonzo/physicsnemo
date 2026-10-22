@@ -185,7 +185,24 @@ direct labels (`label_line`) to legends. Mermaid: data boxes
 - **No dates, no status, no project slang.** No "as of", "wave", "round", "campaign",
   "rerun", "pending", "running"; no node codes (A35b, REF-80, H-RESID) or version tags
   in prose. Say what the experiment measures. A pending decision is written as an open
-  question in 20 (with what would settle it), never as status. Exceptions: 14 and 18.
+  question in 20 (with what would settle it), never as status. Exceptions: 14 and 18,
+  and the in-flight callout below.
+- **The book stays current; in flight is labelled.** Every chapter shows the current
+  reference model's measurements as results land. A result that a newer measurement
+  replaces is cut from the chapter (its history stays in 14 and 18). Where a chapter
+  shows a number that a running experiment will replace, or a question that one will
+  decide, put one callout beside it:
+
+  ```markdown
+  ::: {.callout-note title="In flight"}
+  These numbers come from <what they are>. <What replaces them> is being
+  measured, and the ledger (@sec-ledger) tracks it.
+  :::
+  ```
+
+  Say what is shown and what will replace it, with no dates, run identifiers or node
+  codes. When the result lands, update the numbers and remove the callout. Anything
+  known wrong is cut, not labelled.
 - **No run identifiers** in prose; they appear in code cells and in caption artifact
   paths only.
 - **No numbers from memory.** Every number is computed from a file in `results/` (or
