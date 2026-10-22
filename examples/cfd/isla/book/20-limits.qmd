@@ -313,8 +313,8 @@ tok = [AF[v]["pressure_l2"] for v in ("tok600", "tok400", "tok200")]
 B = STL["bands"]; far_band = next(k for k in B if k.startswith("≥")); near_band = next(k for k in B if "< 1e-3" in k)
 near = [x for f in FW for x in B[near_band][f]]
 print("**Interacting ISLA's interior prediction does not move when the same boundary is re-meshed, and it moves next to the wall when "
-      "it is given a different surface for the same body.** Splitting every segment of the AirfRANS airfoil in two, four or 31 "
-      f"changes ISLA's error by at most {100 * dev(AF, refine):.2f}%, and on the DrivAerML Volume task four-fold subdivision of the "
+      "it is given a different surface for the same body.** Splitting every segment of the AirfRANS airfoil in two or four, or "
+      f"refining its front more finely than its rear, changes ISLA's error by at most {100 * dev(AF, refine):.2f}%, and on the DrivAerML Volume task four-fold subdivision of the "
       f"car's cells and token budgets of 100,000 to 400,000 change it by at most {100 * dev(VOL, ('tok100k', 'tok400k', 'subdiv4')):.1f}%: "
       "the slice reads are measure-weighted, and the length unit and the wall geometry are exact for the given surface. A token budget "
       "far below the boundary's own cell count is not invariant, though it keeps the geometry exact: 600 to 200 tokens on the airfoil "
@@ -545,10 +545,10 @@ phi = [R.num(arm(t, "NOSC")["φ"]) for t in AT]
 print("**The open question is which of two changes carries ISLA's gain on AirfRANS: its own physical scales, or the standardization of "
       "its global input.** Against an earlier form of its code, trained and scored alike, ISLA's error on the AirfRANS interior task is "
       f"lower by a factor of {f3(step)} (pressure / velocity / eddy viscosity). An arm that removes ISLA's scales, the inlet speed "
-      "$U$, the length unit $L$ and the outputs in units, gives back a share "
+      "$U$, the length unit $L$, the Reynolds number built from them and eddy viscosity in units of $U L$, gives back a share "
       f"{f3(phi)} of that step. That arm also reads the raw inlet speed where ISLA reads a standardized log Reynolds number, so the "
       "scales together with the standardized global input carry the gain, and the measurement does not say which one does "
-      "(@sec-airfrans-attribution). What would settle it: the arm without the scales reading a standardized inlet speed, two seeds, "
+      "(@sec-airfrans-attribution); it also changes the precision of the output head. What would settle it: the arm without the scales reading a standardized inlet speed, two seeds, "
       "trained and scored like the others. Every arm of the ablation, the base included, trained on the compiled path after its fault "
       f"was fixed. Cost: {fmt_h(q_scales)} GPU-hours. Data: {R.source('attrib090', 'relaunch_native.md')}.")
 print()
@@ -690,8 +690,8 @@ print("**The open question is how large ISLA-DTT's tree error is at $\\theta = 1
       "the dataset's axes it overlaps most), and a rotation can regroup the clusters. A redraw of the boundary moves the centroid and "
       "the moments by quadrature noise, which regroups clusters near a tie as well. A regrouping moves the read only by the tree's "
       "error, an approximation that vanishes as $\\theta \\to 0$, so ISLA-DTT keeps the pose and sampling invariance of the rest of "
-      "ISLA. The size of that approximation is measured under refinement of the AirfRANS airfoil: splitting every segment in two, four "
-      f"or 31 changes ISLA-DTT's pressure error by a factor of {f3(t1, 3)} at the trained $\\theta = 1$ and {f3(t0, 4)} at "
+      "ISLA. The size of that approximation is measured under refinement of the AirfRANS airfoil: splitting every segment in two or "
+      f"four, or refining its front more finely than its rear, changes ISLA-DTT's pressure error by a factor of {f3(t1, 3)} at the trained $\\theta = 1$ and {f3(t0, 4)} at "
       "$\\theta = 0$, on weights trained at $\\theta = 1$, whose native error rises at $\\theta = 0$ "
       f"({f3(TH['native_theta1'], 4)} to {f3(TH['native_theta0'], 4)}, pressure / velocity / eddy viscosity, one seed), so pricing a "
       "small $\\theta$ needs a model trained there. Where the frame ties, the error at $\\theta = 1$ is not measured. What would "
