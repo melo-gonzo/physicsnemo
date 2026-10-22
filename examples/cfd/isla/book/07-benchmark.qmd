@@ -692,7 +692,8 @@ things:
   cells for every architecture;
 - on the DrivAerML Volume task it changes no model's input: the scored interior points are a point cloud, ISLA reads the
   whole vehicle surface and draws its boundary tokens by area itself, and the baselines do not load the boundary, so the
-  column is not applicable;
+  column is not applicable; what exact re-meshing of that boundary, and a watertight surface in place of the CFD wall, do
+  to ISLA is measured in @sec-interior-boundary-law;
 - on AirfRANS, Tensile2d, the lug and DeepJEB++ it returns the native mesh, and the column repeats the native error.
 
 Only the first group appears as a point-cloud standing (@fig-contract-shifts).

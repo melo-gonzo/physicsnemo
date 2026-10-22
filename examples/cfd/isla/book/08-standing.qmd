@@ -134,7 +134,7 @@ print(f"Over every headline field of the {len(FLOW)} flow tasks, the rigid motio
       f"point cloud moves ISLA's error by at most {100 * ia:.1f}% and multiplies the baselines' by {min(ba):.1f} to {max(ba):.1f}: "
       "a model that averages over points rather than over area answers a different question when the points move. "
       f"On the DrivAerML Volume task the uniform point cloud is left out: {VOL.degenerate['area']}. What exact re-meshing "
-      "of that task's boundary does to ISLA is measured in @sec-drivaerml.")
+      "of that task's boundary does to ISLA is measured in @sec-interior-boundary-law.")
 LUG = S.Standing("lug")
 is_ = max(abs(x - 1) for x in sh(["tensile2d", "deepjeb"], ["ISLA"], "posed"))
 bs_ = sh(SOLIDS, S.BASELINES, "posed")
