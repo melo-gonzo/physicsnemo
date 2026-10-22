@@ -172,10 +172,17 @@ def canonical_frame(points: torch.Tensor, measure: torch.Tensor) -> torch.Tensor
 
 def normal_octants(normals: torch.Tensor) -> torch.Tensor:
     """The sign octant of each normal, ``0`` to ``2**d - 1`` (bit ``k`` set when
-    component ``k`` is positive). Opposite normals never share an octant."""
+    component ``k`` is positive; a zero component takes the sign of the next nonzero
+    one, cyclically). Antipodal: ``-n`` lands in the octant ``2**d - 1`` minus
+    that of ``n``, so opposite normals never share an octant and a winding flip
+    maps every octant's cells to the antipodal octant."""
+    d = normals.shape[1]
     code = torch.zeros(normals.shape[0], dtype=torch.long, device=normals.device)
-    for k in range(normals.shape[1]):
-        code = code * 2 + (normals[:, k] > 0).long()
+    for k in range(d):
+        c = normals[:, k]
+        for j in range(1, d):
+            c = torch.where(c == 0, normals[:, (k + j) % d], c)
+        code = code * 2 + (c > 0).long()
     return code
 
 

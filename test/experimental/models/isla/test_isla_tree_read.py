@@ -34,6 +34,7 @@ starts at zero, so most tests give every read parameter a random value first.
 """
 
 import copy
+import itertools
 import math
 import types
 
@@ -372,6 +373,36 @@ def test_boundary_forest_never_mixes_opposite_normals():
         assert len(set((sel >= 400).tolist())) == 1
     assert bool(f.coherent.all())
     assert torch.allclose(f.normal, nrm[f.cells[f.range_start]], atol=1e-9)
+
+
+@pytest.mark.parametrize("dim", [2, 3])
+def test_normal_octants_are_antipodal_at_zero_components(dim):
+    """Every normal with components in {-1, 0, 1}: -n lands in the octant antipodal
+    to n's (a zero component takes the sign of the next nonzero one, so it is not
+    coded negative for n and -n alike)."""
+    grid = torch.tensor(list(itertools.product((-1.0, 0.0, 1.0), repeat=dim)), dtype=D)
+    nrm = torch.nn.functional.normalize(grid[grid.abs().sum(-1) > 0], dim=-1)
+    assert torch.equal(normal_octants(-nrm), 2**dim - 1 - normal_octants(nrm))
+
+
+def test_boundary_forest_partition_is_the_same_under_a_winding_flip():
+    """A 2 x 1 rectangle, symmetric about both axes, so its own frame is exact and
+    its normals there have zero components: reversing every normal maps each tree's
+    cells to the antipodal octant, so the forest partitions the cells the same way."""
+    s = (torch.arange(8, dtype=D) + 0.5) / 8
+    bottom = torch.stack([2 * s - 1, torch.full_like(s, -0.5)], -1)
+    left = torch.stack([torch.full_like(s, -1.0), s - 0.5], -1)
+    pts = torch.cat([bottom, -bottom, left, -left])
+    axes = torch.tensor([[0.0, -1.0], [0.0, 1.0], [-1.0, 0.0], [1.0, 0.0]], dtype=D)
+    nrm = axes.repeat_interleave(8, 0)
+    w = torch.cat([torch.full((16,), 0.25), torch.full((16,), 0.125)]).to(D)
+    forests = [
+        BoundaryForest.build(pts, w, n, None, theta=0.5, leaf_size=4, eps=1e-12)
+        for n in (nrm, -nrm)
+    ]
+    assert bool(((nrm @ forests[0].frame) == 0).any())
+    blocks = [{frozenset(c.tolist()) for c in f.tree_cells} for f in forests]
+    assert blocks[0] == blocks[1]
 
 
 def test_node_means_are_the_measure_weighted_means_of_every_node():

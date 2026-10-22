@@ -545,7 +545,9 @@ def test_two_dimensional_search_chunks_over_the_queries():
     """More queries than one chunk of the 2-D search: the same answer as one block."""
     verts = _naca(50)
     g = torch.Generator().manual_seed(9)
-    q = torch.randn(2 * geometry._TORCH_SEARCH_CHUNK + 17, 2, dtype=D, generator=g)
+    q = torch.randn(
+        2 * (geometry._SEARCH_PAIRS // verts.shape[0]) + 17, 2, dtype=D, generator=g
+    )
     d, _ = _geometry(q, _polygon(verts))
     assert torch.allclose(d, _polygon_sdf(q, verts), atol=1e-12, rtol=0)
 
@@ -801,3 +803,116 @@ def test_the_sign_follows_the_surface_s_orientation(dim):
     assert torch.allclose(d2, -d, atol=1e-14, rtol=0) and torch.allclose(
         u2, u, atol=1e-14, rtol=0
     )
+
+
+# ---------------------------------------------------------------------------
+# Closest-feature ties (the medial surface)
+# ---------------------------------------------------------------------------
+
+
+def _gradient(d, u):
+    """The token's direction, sign(d) u with sign(0) = +1."""
+    return torch.where((d >= 0)[:, None], u, -u)
+
+
+def _box_ties(dim: int):
+    """The unit square / the cube [-1/2, 1/2]^3 (outward normals) and points
+    inside it equidistant from two of its sides, from three (the cube's corner
+    diagonals) and from all of them (the centre), with the least-norm gradient of
+    the signed distance at each: the mean of the tied sides' outward unit normals,
+    zero at the centre."""
+    a = torch.linspace(0.05, 0.45, 9, dtype=D) - 0.5
+    z = torch.zeros_like(a)
+    if dim == 2:
+        mesh = _polygon(
+            torch.tensor([[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]], dtype=D)
+        )
+        q = torch.cat(
+            [
+                torch.stack([a, a], -1),
+                torch.stack([-a, a], -1),
+                torch.stack([a, -a], -1),
+                torch.stack([-a, -a], -1),
+            ]
+        )
+        nu = 0.5 * torch.sign(q)
+    else:
+        cube = cube_surface.load()
+        mesh = Mesh(points=cube.points.double(), cells=cube.cells)
+        q = torch.cat(
+            [
+                torch.stack([a, a, z], -1),
+                torch.stack([-a, z, a], -1),
+                torch.stack([z, a, -a], -1),
+                torch.stack([a, a, a], -1),
+                torch.stack([-a, a, -a], -1),
+            ]
+        )
+        nu = torch.sign(q) / (q != 0).sum(-1, keepdim=True)
+    return (
+        mesh,
+        torch.cat([q, q.new_zeros(1, dim)]),
+        torch.cat([nu, nu.new_zeros(1, dim)]),
+    )
+
+
+def test_tie_direction_is_the_least_norm_gradient_and_independent_of_the_order():
+    """On a square's diagonals each point is equidistant from two sides: sign(d) u is
+    the least-norm element of the generalized gradient of the signed distance, the
+    midpoint of the two sides' unit gradients, and zero at the centre, where all
+    four cancel; it is bitwise the same under every renumbering of the vertices and
+    every cyclic shift of the cell list (a first-found side would follow them)."""
+    mesh, q, nu = _box_ties(2)
+    d, u = _geometry(q, mesh)
+    assert torch.equal(_gradient(d, u), nu)
+    assert torch.equal(d, -(0.5 - q.abs().amax(-1)))
+    g = torch.Generator().manual_seed(0)
+    for _ in range(4):
+        perm = torch.randperm(4, generator=g)
+        inv = torch.empty_like(perm)
+        inv[perm] = torch.arange(4)
+        d2, u2 = exact_boundary_geometry(q, mesh.points[perm], inv[mesh.cells])
+        assert torch.equal(d2, d) and torch.equal(u2, u), perm
+    for shift in range(1, 4):
+        d2, u2 = exact_boundary_geometry(q, mesh.points, mesh.cells.roll(shift, 0))
+        assert torch.equal(d2, d) and torch.equal(u2, u), shift
+
+
+@pytest.mark.parametrize("dim", [2, 3])
+def test_tie_direction_flips_exactly_with_the_winding(dim):
+    """A box in a generic pose (its ties hold to rounding only): reversing every cell
+    negates d and sign(d) u bitwise at every tie point, the same tie set read with
+    the other orientation (a first-found feature, before, could change with the
+    swapped vertex order)."""
+    mesh, q, _ = _box_ties(dim)
+    R, t = orthogonal(dim, 7), torch.arange(1, dim + 1, dtype=D) / 3
+    moved, q = transform(mesh, R, t), q @ R.T + t
+    d, u = _geometry(q, moved)
+    d2, u2 = _geometry(q, _flipped(moved))
+    assert torch.equal(d2, -d) and torch.equal(_gradient(d2, u2), -_gradient(d, u))
+
+
+@pytest.mark.parametrize("dim", [2, 3])
+def test_tie_direction_is_covariant_under_rigid_motions(dim):
+    """Under random rotations, reflections and translations the tie points keep
+    their tie set (it holds to the error bound of the distance, which covers the
+    rounding of the moved coordinates), so sign(d) u moves with the map, to
+    rounding, and is the least-norm gradient in every pose: the midpoint of two
+    sides, the centroid of three at the cube's corner diagonals, zero at the
+    centre."""
+    mesh, q, nu = _box_ties(dim)
+    d, u = _geometry(q, mesh)
+    assert torch.allclose(_gradient(d, u), nu, atol=1e-12, rtol=0)
+    g = torch.Generator().manual_seed(dim)
+    for seed in range(3):
+        for improper in (False, True):
+            R, t = (
+                orthogonal(dim, 10 + seed, improper),
+                torch.randn(dim, dtype=D, generator=g),
+            )
+            d2, u2 = _geometry(q @ R.T + t, transform(mesh, R, t))
+            assert torch.allclose(d2, d, atol=1e-12, rtol=0), (seed, improper)
+            assert torch.allclose(_gradient(d2, u2), nu @ R.T, atol=1e-12, rtol=0), (
+                seed,
+                improper,
+            )
