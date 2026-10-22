@@ -1,0 +1,188 @@
+{
+ "drivaerml_volume": {
+  "sample_id": "00033_run_129_domain_run_129",
+  "source": {
+   "vol_isla/native": {
+    "row": 21,
+    "run_id": "r090_vol_isla_seed42",
+    "dataset": "drivaer_ml_volume_reference",
+    "model": "isla_volume",
+    "code": "code_r090",
+    "recipe": "recipe_r090",
+    "cells": 200000,
+    "replay": true,
+    "lhr_dump_job": 336069,
+    "dump": "$T/book_figs_2026-10-22/dump/vol_isla/native/ (copy: scratch/isla-render090-2026-10-22/dump/vol_isla/native/)",
+    "reused_2026_10_18_row": null,
+    "scorer_record": "$T/evals_r090/r090_vol_isla_seed42/native/r090_vol_isla_seed42/metrics.jsonl"
+   },
+   "vol_gt/native": {
+    "row": 22,
+    "run_id": "clud_vol_gt_seed42",
+    "dataset": "drivaer_ml_volume_reference",
+    "model": "geotransolver_volume",
+    "code": "code_v20",
+    "recipe": "recipe_v8",
+    "cells": 200000,
+    "replay": true,
+    "lhr_dump_job": 336069,
+    "dump": "$T/book_figs_2026-10-22/dump/vol_gt/native/ (copy: scratch/isla-render090-2026-10-22/dump/vol_gt/native/)",
+    "reused_2026_10_18_row": null,
+    "scorer_record": "$T/evals_ud2/clud_vol_gt_seed42/native/clud_vol_gt_seed42/metrics.jsonl"
+   },
+   "vol_t/native": {
+    "row": 23,
+    "run_id": "clud_vol_t_seed42",
+    "dataset": "drivaer_ml_volume_reference",
+    "model": "transolver_volume",
+    "code": "code_v20",
+    "recipe": "recipe_v8",
+    "cells": 200000,
+    "replay": true,
+    "lhr_dump_job": 336004,
+    "dump": "$T/book_figs_2026-10-22/dump/vol_t/native/ (copy: scratch/isla-render090-2026-10-22/dump/vol_t/native/)",
+    "reused_2026_10_18_row": null,
+    "scorer_record": "$T/evals_ud2/clud_vol_t_seed42/native/clud_vol_t_seed42/metrics.jsonl"
+   }
+  },
+  "n_points_scored": 200000,
+  "slab_half_width_m": 0.15,
+  "n_points_in_slab_window": 11053,
+  "q_inf": 756.1771581264038,
+  "U_inf": 38.888999938964844,
+  "stl": "/home/psharpe/gh/physicsnemo/scratch/isla-render090-2026-10-22/geom/drivaer_129_single_solid.stl.pmsh",
+  "solved_centre_m": [
+   1.988152934252499,
+   0.0010766412596406136,
+   0.15124110010138442
+  ],
+  "stl_fit_abs_sdf_residual_m": {
+   "median": 1.2761104405311448e-06,
+   "p99": 0.00012515948811456573
+  },
+  "per_sample_rel_l2": {
+   "pressure_l2": {
+    "ISLA": 0.03928963840007782,
+    "GeoTransolver": 0.04816775023937225,
+    "Transolver": 0.05273560807108879
+   },
+   "velocity_l2": {
+    "ISLA": 0.061080336570739746,
+    "GeoTransolver": 0.09928915649652481,
+    "Transolver": 0.1135336384177208
+   },
+   "nut_l2": {
+    "ISLA": 0.06369847059249878,
+    "GeoTransolver": 0.06248597428202629,
+    "Transolver": 0.06380311399698257
+   }
+  },
+  "scorer_checks": [
+   {
+    "tag": "vol_isla",
+    "protocol": "native",
+    "run_id": "r090_vol_isla_seed42",
+    "sample_id": "00033_run_129_domain_run_129",
+    "scorer_record": "$T/evals_r090/r090_vol_isla_seed42/native/r090_vol_isla_seed42/metrics.jsonl",
+    "scorer_epoch": 500,
+    "scorer_rows_for_case": 1,
+    "scorer_rows_agree": true,
+    "scorer": {
+     "velocity_x_l2": 0.04579012095928192,
+     "velocity_y_l2": 0.10279825329780579,
+     "velocity_z_l2": 0.11631740629673004,
+     "velocity_l2": 0.061080336570739746,
+     "pressure_l2": 0.03928963840007782,
+     "nut_l2": 0.06369847059249878
+    },
+    "dump": {
+     "velocity_x_l2": 0.04579013213515282,
+     "velocity_y_l2": 0.1027982160449028,
+     "velocity_z_l2": 0.11631743609905243,
+     "velocity_l2": 0.06108033284544945,
+     "pressure_l2": 0.03928964212536812,
+     "nut_l2": 0.06369912624359131
+    },
+    "rel_diff": {
+     "velocity_x_l2": 2.440672935833407e-07,
+     "velocity_y_l2": 3.6238848219237495e-07,
+     "velocity_z_l2": 2.5621549978228086e-07,
+     "velocity_l2": 6.099000934854863e-08,
+     "pressure_l2": 9.481610038066768e-08,
+     "nut_l2": 1.0293042932282071e-05
+    },
+    "max_rel_diff": 1.0293042932282071e-05
+   },
+   {
+    "tag": "vol_gt",
+    "protocol": "native",
+    "run_id": "clud_vol_gt_seed42",
+    "sample_id": "00033_run_129_domain_run_129",
+    "scorer_record": "$T/evals_ud2/clud_vol_gt_seed42/native/clud_vol_gt_seed42/metrics.jsonl",
+    "scorer_epoch": 500,
+    "scorer_rows_for_case": 1,
+    "scorer_rows_agree": true,
+    "scorer": {
+     "velocity_x_l2": 0.08207627385854721,
+     "velocity_y_l2": 0.17681068181991577,
+     "velocity_z_l2": 0.11255141347646713,
+     "velocity_l2": 0.09928915649652481,
+     "pressure_l2": 0.04816775023937225,
+     "nut_l2": 0.06248597428202629
+    },
+    "dump": {
+     "velocity_x_l2": 0.08207627385854721,
+     "velocity_y_l2": 0.17681068181991577,
+     "velocity_z_l2": 0.11255141347646713,
+     "velocity_l2": 0.09928915649652481,
+     "pressure_l2": 0.04816775023937225,
+     "nut_l2": 0.06248597428202629
+    },
+    "rel_diff": {
+     "velocity_x_l2": 0.0,
+     "velocity_y_l2": 0.0,
+     "velocity_z_l2": 0.0,
+     "velocity_l2": 0.0,
+     "pressure_l2": 0.0,
+     "nut_l2": 0.0
+    },
+    "max_rel_diff": 0.0
+   },
+   {
+    "tag": "vol_t",
+    "protocol": "native",
+    "run_id": "clud_vol_t_seed42",
+    "sample_id": "00033_run_129_domain_run_129",
+    "scorer_record": "$T/evals_ud2/clud_vol_t_seed42/native/clud_vol_t_seed42/metrics.jsonl",
+    "scorer_epoch": 500,
+    "scorer_rows_for_case": 1,
+    "scorer_rows_agree": true,
+    "scorer": {
+     "velocity_x_l2": 0.09510791301727295,
+     "velocity_y_l2": 0.19112811982631683,
+     "velocity_z_l2": 0.14673957228660583,
+     "velocity_l2": 0.1135336384177208,
+     "pressure_l2": 0.05273560807108879,
+     "nut_l2": 0.06380311399698257
+    },
+    "dump": {
+     "velocity_x_l2": 0.09510791301727295,
+     "velocity_y_l2": 0.19112811982631683,
+     "velocity_z_l2": 0.14673957228660583,
+     "velocity_l2": 0.1135336384177208,
+     "pressure_l2": 0.05273560807108879,
+     "nut_l2": 0.06380311399698257
+    },
+    "rel_diff": {
+     "velocity_x_l2": 0.0,
+     "velocity_y_l2": 0.0,
+     "velocity_z_l2": 0.0,
+     "velocity_l2": 0.0,
+     "pressure_l2": 0.0,
+     "nut_l2": 0.0
+    },
+    "max_rel_diff": 0.0
+   }
+  ]
+ }
+}
