@@ -18,10 +18,7 @@ POSE_SEED = [p / n for p, n in zip(ST.seeds("ISLA", F, "posed"), ST.seeds("ISLA"
 B_POSED = [ST.err(a, F, "posed") for a in S.BASELINES]
 # closest-feature ties of ISLA's exact query geometry on 60 test lugs (book_D2_2026-10-22.py, from ATTRIB-090's geometry probe)
 TIE = json.load(open(RES / "campaigns_2026-10-22" / "book_D2" / "book_D2.json"))["lug_closest_feature_ties"]
-COST = json.load(open(RES / "char" / "char_lanes_cost_2026-10-04.json"))["cost"]["lug"]
-# GeoTransolver's standing arm reads the labeled surface triangles as its geometry context: its parameter count is its own scoring record's
-_df = RES / "campaigns_2026-10-19/drive_fix/scores/evals_lugbc/lugbc_gt_seed42/native/lugbc_gt_seed42/metrics.jsonl"
-COST = {**COST, "GeoTransolver": {**COST["GeoTransolver"], "n_parameters": json.loads(open(_df).readline())["num_parameters"]}}
+COST = {a: S.cost("lug", a) for a in S.ARCHS}
 
 from matplotlib.collections import PolyCollection
 def lug_conditions(ax, bp, bc, fixed, loaded, hole, lw=4.0, fill="#e4e3dc"):
@@ -46,7 +43,7 @@ def lug_conditions(ax, bp, bc, fixed, loaded, hole, lw=4.0, fill="#e4e3dc"):
 V = {a: ST.verdict(a, F) for a in S.BASELINES}
 head = (f"ISLA {V['GeoTransolver']} GeoTransolver and Transolver" if V["GeoTransolver"] == V["Transolver"] else
         f"ISLA {V['GeoTransolver']} GeoTransolver and {V['Transolver']} Transolver")
-print(f"**On the GINOT bracket lug {head} on the von Mises stress: GeoTransolver ÷ ISLA is {ST.ratio('GeoTransolver', F):.2f} and "
+print(f"**On the GINOT bracket lug, scored on the native mesh, {head} on the von Mises stress: GeoTransolver ÷ ISLA is {ST.ratio('GeoTransolver', F):.2f} and "
       f"Transolver ÷ ISLA {ST.ratio('Transolver', F):.2f}.** Rotated and translated, ISLA's error grows to "
       f"{ST.shift('ISLA', F, 'posed'):.2f} times its native value and stays {min(B_POSED) / ST.err('ISLA', F, 'posed'):.0f} times below "
       "the baselines', which rise to about one, the error of predicting zero everywhere. ISLA reads, face by face, which faces are "
@@ -168,20 +165,42 @@ plt.show()
 ```{python}
 #| label: tab-lug-cost
 #| output: asis
-print("| | parameters | peak memory per GPU [GiB] | time per epoch [s] |\n|---|--:|--:|--:|")
+import re as _re
+def cost_how(c):
+    """How the rows of a cost table were measured, from the notes of standing.cost."""
+    i, b = c["ISLA"], c["Transolver"]
+    out = ("parameters, peak allocated device memory per GPU (the maximum over ranks) and the median wall time of one training step "
+           "without the compile steps, seed means. "
+           f"Every architecture trains on {i['gpus']} GB300 GPUs and {i['ranks']} ranks; the configuration that trains ISLA is "
+           f"{i['precision']} autocast with its blocks compiled one by one and Inductor's mix-order reduction off; the baselines train "
+           f"in {b['precision']} autocast and uncompiled, as released. ")
+    if "before the compile fix" in i["note"]:
+        out += "The ISLA lanes priced here trained before that setting, with the mix-order reduction on in the compiled blocks. "
+    m = _re.search(r"trained eager\b.*?at about (\w+) this step time", i["note"])
+    if m:
+        out += (f"The standing's ISLA checkpoints trained eager, for a control of the training path, at about {m.group(1)} this step "
+                "time; the row prices the compiled lane of the same configuration. ")
+    smoke = [a for a in S.BASELINES if "smoke lane" in c[a]["note"]]
+    if smoke:
+        out += (f"{' and '.join(smoke)} {'have' if len(smoke) > 1 else 'has'} no training log left from the standing's "
+                f"lane{'s' if len(smoke) > 1 else ''}, so {'their rows price' if len(smoke) > 1 else 'its row prices'} the one-epoch "
+                "smoke lane of the same configuration, one seed; the parameter counts are the standing's. ")
+    return out
+
+
+cost_src = lambda c: "; ".join(sorted({"results/" + p for v in c.values() for p in _re.findall(r"campaigns_[^\s;:]+", v["source"])}))
+print("| | parameters | peak memory per GPU [GiB] | median training step [s] |\n|---|--:|--:|--:|")
 for a in S.ARCHS:
     v = COST[a]
-    print(f"| {S.CONFIG[a]} | {v['n_parameters'] / 1e6:.1f}M | {v['peak_gib']:.1f} | {v['epoch_seconds']:.0f} |")
-print("\n: The cost of training on the GINOT bracket lug at the three reference configurations: parameters, peak device memory (maximum over "
-      "four GB300 ranks, bfloat16) and wall time of one epoch of 2,400 lugs. ISLA's row is a one-epoch lane of the raw-read variant; ISLA at its "
-      "reference configuration adds one input layer per named boundary condition, so its parameter count differs from the row's and "
-      "the cost is representative. GeoTransolver's parameter count is read from its own scoring record; memory and time are "
-      "one-epoch measurements, GeoTransolver's in its configuration without the labeled surface context. How to read this: the comparison "
-      "of @tbl-lug-protocols is not resource-matched; ISLA has the most parameters and the longest epoch. Instrument: ISLA at 512 wide, "
-      "512 slices, 3.75e-4, raw slice reads (@sec-study-configurations). Data: results/char/char_lanes_cost_2026-10-04.json. {#tbl-lug-cost}")
+    print(f"| {S.CONFIG[a]} | {v['n_parameters'] / 1e6:.1f}M | {v['peak_gib']:.1f} | {v['step_seconds']:.3f} |")
+longest = max(S.ARCHS, key=lambda a: COST[a]["step_seconds"]); most = max(S.ARCHS, key=lambda a: COST[a]["n_parameters"])
+print("\n: The cost of training on the GINOT bracket lug at the three reference configurations, as the standing's lanes trained "
+      "them: " + cost_how(COST) + "How to read this: the comparison of @tbl-lug-protocols is not resource-matched; "
+      + (f"{most} has the most parameters and the longest step" if most == longest else f"{most} has the most parameters")
+      + f". Data: results/char/{S.COST_FILE}, from {cost_src(COST)}. {{#tbl-lug-cost}}")
 ```
 
-**The comparison is not matched in cost** (@tbl-lug-cost). ISLA has `{python} f"{COST['ISLA']['n_parameters'] / COST['GeoTransolver']['n_parameters']:.1f}"` times GeoTransolver's parameters, and its epoch is `{python} f"{COST['ISLA']['epoch_seconds'] / statistics.mean(COST[a]['epoch_seconds'] for a in S.BASELINES):.1f}"` times the baselines' mean on this task of 5 to 15 thousand nodes per case.
+**The comparison is not matched in cost** (@tbl-lug-cost). ISLA has `{python} f"{COST['ISLA']['n_parameters'] / COST['GeoTransolver']['n_parameters']:.1f}"` times GeoTransolver's parameters, and its training step is `{python} f"{COST['ISLA']['step_seconds'] / statistics.mean(COST[a]['step_seconds'] for a in S.BASELINES):.1f}"` times the baselines' mean on this task of 5 to 15 thousand nodes per case.
 
 ## The standing {#sec-interior-lug}
 
@@ -285,7 +304,7 @@ print(f"\n: ISLA's exact query geometry on {TIE['n_cases']} GINOT bracket lugs f
 print(f"**Everywhere else the geometry is exact, and at the ties it is not.** @tbl-lug-ties reverses every triangle of the surface, "
       "which should negate every distance and direction. The distance does so on every node to float32 resolution, and every surface "
       "node keeps $s = 0$ with its direction flipped. At the tied interior nodes the distance flips and the direction does not: it turns "
-      f"by up to {TIE['max_angle_interior_rad']:.2f} rad, a reversal on the mid-thickness layer. A rigid motion in float32 changes the "
+      f"by up to {TIE['max_angle_interior_rad']:.2f} rad, a reversal on the mid-thickness layer. A rigid motion in float32 can change the "
       "rounding and with it the order in which the search meets the tied features, so the same nodes are a candidate cause of ISLA's "
       f"posed growth of {ST.shift('ISLA', F, 'posed'):.2f} (@tbl-lug-protocols). The link is not isolated: the measurement counts ties "
       "of the geometry, not their effect on the prediction under a pose. A tie rule that does not depend on the search, such as the "
