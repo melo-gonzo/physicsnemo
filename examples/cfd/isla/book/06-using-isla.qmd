@@ -56,8 +56,6 @@ def sci(x):
     """3.75e-4 style: the mantissa to the digits it needs, the exponent as an integer."""
     e = int(math.floor(math.log10(abs(x)))); m = x / 10 ** e
     return f"{m:g}e{e}"
-BOOK_NAME = {"DrivAerML Surface": "DrivAerML Surface", "DrivAerML Volume": "DrivAerML Volume", "Shift-SUV": "SHIFT-SUV",
-             "AirfRANS": "AirfRANS interior", "Tensile2D": "PLAID Tensile2d", "lug": "GINOT bracket lug", "DeepJEB++": "DeepJEB++"}
 ISLA_CFGS = {p.stem: load_cfg(p.stem) for p in sorted(CONF.glob("isla_*.yaml"))}
 TRAIN = yaml.safe_load((RECIPE / "conf" / "train.yaml").read_text())
 BASE = yaml.safe_load((RECIPE / "conf" / "base.yaml").read_text())
@@ -1025,36 +1023,33 @@ queried at any count, alone or in chunks.
 ```{python}
 #| label: para-using-cost-lede
 #| output: asis
-CL = json.load(open(RES / "char" / "char_lanes_cost_2026-10-04.json"))["cost"]
-over = [t for t, r in CL.items() if r["ISLA"]["peak_gib"] > 80]
-under = [t for t in CL if t not in over]
+CL = {k: c for k in S.DATASETS if (c := S.cost(k, "ISLA"))}
+over = [k for k, c in CL.items() if c["peak_gib"] > 80]
 print(f"**In the reference configuration ISLA trains one case per GPU in under the 80 GiB it was selected under on "
-      f"{len(under)} of the {len(CL)} dataset tasks of @tbl-isla-cost; "
-      + " and ".join(f"the {BOOK_NAME.get(t, t)} task, with 200,000 boundary cells and 200,000 prediction points, peaks at {CL[t]['ISLA']['peak_gib']:.0f} GiB" for t in over)
+      f"{len(CL) - len(over)} of the {len(CL)} dataset tasks of @tbl-isla-cost; "
+      + " and ".join(f"{S.DATASETS[k].in_sentence} peaks at {CL[k]['peak_gib']:.0f} GiB" for k in over)
       + ".** Where the memory and the time of a step go, and why, is @sec-arch-cost.")
 ```
-
-<!-- SLOT: cost table at the reference configurations (tbl-isla-cost) -->
 
 ```{python}
 #| label: tbl-isla-cost
 #| output: asis
-ORDER = ["DrivAerML Surface", "DrivAerML Volume", "Shift-SUV", "AirfRANS", "Tensile2D", "lug", "DeepJEB++"]
-cost = {t: CL[t] for t in ORDER if t in CL} | {t: v for t, v in CL.items() if t not in ORDER}
-archs = ("ISLA", "GeoTransolver", "Transolver")
-o = ("| dataset task | " + " | ".join(f"{a}: parameters | {a}: peak GiB" for a in archs) + " |\n|---|"
-     + "--:|--:|" * len(archs) + "\n")
-for task, row in cost.items():
-    o += f"| {BOOK_NAME.get(task, task)} | " + " | ".join(
-        (f"{row[a]['n_parameters'] / 1e6:.1f}M | {row[a]['peak_gib']:.1f}" if a in row else "– | –") for a in archs) + " |\n"
+archs = ("ISLA", "ISLA-DTT", "GeoTransolver", "Transolver")
+o = ("| dataset task | " + " | ".join(archs) + " |\n|---|" + "--:|" * len(archs) + "\n")
+for k in CL:
+    row = {a: S.cost(k, a) for a in archs}
+    o += f"| {S.DATASETS[k].name} | " + " | ".join(
+        (f"{row[a]['n_parameters'] / 1e6:.1f}M / {row[a]['peak_gib']:.1f} / {row[a]['step_seconds']:.3f}" if row[a] else "–")
+        for a in archs) + " |\n"
 print(o)
-print(": Training footprint of the three reference configurations (ISLA width 512, 12 layers, 512 slices; GeoTransolver width 256; "
-      "Transolver width 512, 16 layers, at 100,000 cells), per dataset task: parameters, and peak device memory as the maximum over "
-      "four GB300 ranks in bfloat16, one case per rank. Instrument: one-epoch training runs of each reference configuration; ISLA's are of "
-      "the raw-read variant, which has the same parameters and the same operations. How to read this: memory is the budget the "
-      "configurations were selected under (80 GiB on DrivAerML Surface); it is not a step time, which the per-step "
-      "measurements of @sec-arch-cost give, and parameters are not a measure of capacity across architectures. Data: "
-      "results/char/char_lanes_cost_2026-10-04.json.")
+print(": Training footprint of the reference configurations (ISLA and ISLA-DTT width 512, 12 layers, 512 slices; GeoTransolver "
+      "width 256; Transolver width 512, 16 layers), per dataset task: parameters / peak device memory [GiB] as the maximum over "
+      "the ranks / the median training step [s] leaving out the compile steps, one case per rank, seed means from the training "
+      f"logs of the standing's lanes. {json.load(open(S.CHAR / S.COST_FILE))['note']} Where a cell's lane differs from that "
+      "configuration (a lane still training, a one-epoch smoke lane standing in for a lost log), @tbl-standing-cost marks it. "
+      "How to read this: memory is the budget the configurations were selected under (80 GiB on DrivAerML Surface); a step time "
+      "is a cost on this hardware, and parameters are not a measure of capacity across architectures. Data: "
+      f"results/char/{S.COST_FILE}.")
 ```
 
 Three practical consequences follow.
