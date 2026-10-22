@@ -20,7 +20,17 @@ favoring ISLA, and the metric is the area-weighted relative L2 in float32
 #| label: setup-literature
 #| include: false
 import sys; sys.path.insert(0, ".")
+import json
+from pathlib import Path
 import standing as S
+LIM = json.load(open(Path("..") / "results" / "campaigns_2026-10-22" / "book_E" / "limits_090.json"))
+T2 = S.Standing("tensile2d")
+T2_GT = [T2.fields[f].split(" (")[0] for f in T2.ds.headline if T2.verdict("GeoTransolver", f) == "trails"]
+AZS = S.aerozoo()
+AZA = {n.split()[0]: a for n, a in AZS["arms"].items()}
+C_I, C_D = S.cost("aerozoo", "ISLA"), S.cost("aerozoo", "ISLA-DTT")
+STL = LIM["remesh"]["drivaerml_volume"]["stl"]
+TH = LIM["theta"]["pressure_ratio"]
 ```
 
 ## What each is {#sec-vs-what}
@@ -56,14 +66,15 @@ are @sec-isla-contracts.
 
 **In distribution, ISLA leads on some datasets and fields and trails on
 others. Rotated and translated, or resampled, its error barely moves except
-on the two solid meshes whose nearest boundary samples tie in the
-nearest-token form of the standing's checkpoints (@sec-checkpoint-form),
-while the baselines' errors grow by factors.**
+on the lug's structured mesh, whose nodes tie for their closest feature of
+the exact geometry (@sec-limits-ties), while the baselines' errors grow by
+factors.**
 
 ```{python}
 #| label: para-vs-standing
 #| output: asis
-keys = S.available()
+keys = S.final()        # a cross-dataset count reads the final standings; S.tally_note() names the ones it leaves out
+flight = S.in_flight()
 cells = []          # (dataset, field label, baseline, verdict)
 for k in keys:
     s = S.Standing(k)
@@ -72,6 +83,15 @@ for k in keys:
             if s.has(b):
                 cells.append((s.ds.name, s.fields[f], b, s.verdict(b, f)))
 held = [(S.DATASETS[k].short, S.Standing(k).fields[f]) for k in keys for f in S.DATASETS[k].provisional]
+def az_verdict(b, f, split="full"):
+    """The seed rule of standing.Standing.verdict on one AeroZoo split."""
+    cb, ci = AZA[b]["splits"][split][f], AZA["ISLA"]["splits"][split][f]
+    bs, i = list(cb["per_seed"].values()), list(ci["per_seed"].values())
+    if abs(cb["mean"] / ci["mean"] - 1) < S.TIE_BAND:
+        return "is level with"
+    return "leads" if min(bs) > max(i) else "trails" if max(bs) < min(i) else "is level with"
+cells += [("AeroZoo", AZS["fields"]["velocity_l2"], b, az_verdict(b, "velocity_l2")) for b in S.BASELINES if "full" in AZA[b]["splits"]]
+az_p = {b: AZA[b]["splits"]["full"]["pressure_l2"]["mean"] / AZA["ISLA"]["splits"]["full"]["pressure_l2"]["mean"] for b in S.BASELINES if "full" in AZA[b]["splits"]}
 cells = [c for c in cells if c[3] != "is not compared with"]
 n = len(cells)
 lead = [c for c in cells if c[3] == "leads"]
@@ -93,24 +113,30 @@ for k in keys:
 bent_ds = {}
 for ds, fl, r in bent:
     bent_ds[ds] = max(bent_ds.get(ds, 1.0), r)
-print(f"At the reference configurations on the native mesh, over {len(keys)} datasets and {n} comparisons "
+print(f"At the reference configurations on the native mesh, over {len(keys)} datasets and AeroZoo's in-distribution split, {n} comparisons "
       f"(each headline field against each baseline, by the seed rule of @sec-fair-comparison), ISLA leads in {len(lead)}"
       + (f" ({nl} of them on the lug against Transolver, which reads no boundary-condition labels there)"
          if (nl := sum("lug" in c[0] and c[2] == "Transolver" for c in lead)) else "")
       + f", "
-      f"is level in {level} and trails in {len(trail)}. It trails on: {group(trail)}. "
+      f"is level in {level} and trails in {len(trail)}. It trails on: {group(trail)}. AeroZoo counts on velocity only: on its "
+      "pressure both baselines are about a zero predictor, so " + " and ".join(f"{b} ÷ ISLA {S.fmt_ratio(r)}" for b, r in az_p.items())
+      + " there compare ISLA with predicting zero (@sec-aerozoo-baselines). "
       + "".join(f"{d} {fl} is not counted: the baselines' error on it includes an out-of-plane component that ISLA's "
                 "planar prediction does not have (@sec-interior-airfrans). " for d, fl in held) +
       f"Rotated and translated, ISLA's error moves by at most "
-      f"{100 * max(abs(r - 1) for *_, r in posed_isla):.1f}% on every headline field except on "
-      + " and ".join(f"{ds} (up to ×{r:.2f})" for ds, r in bent_ds.items())
-      + f", the two solid meshes where tied nearest samples move the nearest-token form's prediction (@sec-medial-ties); "
+      f"{100 * max(abs(r - 1) for *_, r in posed_isla):.1f}% on every headline field"
+      + (" except on " + " and ".join(f"the {ds} (up to ×{r:.2f})" for ds, r in bent_ds.items()) if bent_ds else "")
+      + "; " + S.tally_note()[0].lower() + S.tally_note()[1:-1] + ", and on the GINOT bracket lug ISLA's error is "
+      f"×{S.Standing('lug').shift('ISLA', 'von_mises_l2', 'posed'):.2f} rotated and translated, where its structured mesh ties interior "
+      "nodes for their closest feature of the exact geometry (@sec-limits-ties); "
       f"the baselines' errors grow by factors of {min(posed_base):.1f} to {max(posed_base):.0f}.")
 notes = [S.DATASETS[k] for k in keys if not S.DATASETS[k].reference]
 if notes:
     print("\n\n" + " ".join(f"On {d.name}, ISLA's checkpoints are of the raw-read variant: its slice pooling "
                              f"and broadcast read the raw stream." for d in notes))
-print("\n\nData: " + ", ".join(S.Standing(k).source for k in keys) + ". The standing row by row is @sec-standing.")
+print("\n\nData: " + ", ".join(S.Standing(k).source for k in keys + flight) + ", results/char/aerozoo_090.json. The standing row by row is @sec-standing.")
+print()
+print(S.in_flight_callout("lug"))
 ```
 
 ## Ideas, one at a time {#sec-vs-novel}
@@ -185,9 +211,13 @@ the biased draw too (@sec-robustness-density).
 quadrature-weighted attention from the neural-operator literature; the routing form, the instruments and the
 factors are what is new. An interior prediction point takes its wall
 distance and direction from the exact closest point of the full-resolution
-surface, the same for every draw of the boundary tokens; the standing's
-checkpoints read the nearest sampled token instead
-(@sec-exact-geometry-draw).
+surface, the same for every draw of the boundary tokens
+(@sec-exact-geometry-draw), so ISLA needs the wall at the precision of the
+mesh the interior was built on: a watertight STL in place of the CFD wall of
+the DrivAerML car raises its interior error
+`{python} " / ".join(f"{STL[f]:.2f}" for f in ("pressure_l2", "velocity_l2", "nut_l2"))`
+times on pressure, velocity and eddy viscosity, all of it next to the wall
+(@sec-limits-boundary-law).
 
 ### An origin-free frame with an integral length unit {#sec-vs-novel-frame}
 
@@ -256,7 +286,7 @@ equivariance inside every layer.
 *What is new.* The choice to keep the entire trunk an ordinary scalar
 transformer and pay for equivariance once, at the edges, in an
 industrial-scale slice transformer, and the measurement of what that costs
-against two non-equivariant baselines on `{python} len(S.available())` datasets (@sec-standing). The
+against two non-equivariant baselines on every dataset of the standing (@sec-standing). The
 contrast in the literature is the price of the per-layer route: Rygiel et
 al. (2026) report AB-GATr at 2 to 11 times the training time of AB-UPT. A
 second element is small and sharp. Scalar heads on invariants are
@@ -307,7 +337,7 @@ relational-invariant ablations of @sec-isla-relational.
 barely varies between cases they barely move, and positional resolution is
 then only as fine as the partition. PLAID Tensile2d, one specimen family whose
 outline stays a tension specimen, is the dataset where that bound would bind, and
-GeoTransolver leads there on stress and displacement (@sec-tensile2d).
+GeoTransolver leads there on `{python} " and ".join(T2_GT)` (@sec-tensile2d).
 Whether the bound is the cause is not measured.
 
 ### Normalized slice reads {#sec-vs-novel-norm}
@@ -341,7 +371,11 @@ rises and never recovers while the normalized reads train through
 
 *Caveat.* The normalized read is adopted, not invented. Its accuracy effect is measured
 against the raw-read variant, an ablation, and not against other
-normalization placements.
+normalization placements. It stops at the slice sublayer: the frame of
+the equivariant head reads the raw stream, and on DeepJEB++ its anchors
+concentrate on about one point (@sec-deepjeb-ladders). A normalized input
+for the head frame, a candidate fix for its logit growth, was tested and
+not adopted.
 
 ### Cosine routing {#sec-vs-novel-cosine}
 
@@ -401,13 +435,24 @@ integral at every depth of a slice transformer, evaluated with a
 Barnes–Hut forest so that every prediction point reads every boundary
 cell, beside read-only access to the slices.
 
-*Evidence.* The interior chapters measure ISLA-DTT against the
-interacting form (@sec-drivaerml, @sec-airfrans); its step cost is in
-@sec-arch-tree-read.
+*Evidence.* Under every change of the request probed on AirfRANS its
+error moves by at most
+`{python} f"{LIM['query_population']['dtt_max_abs_dev']:.0e}"`, float32
+roundoff, where the interacting form's moves by factors
+(@sec-limits-query-independence). Refining the airfoil moves its pressure
+error by up to `{python} f"{100 * (max(TH['1.0']) - 1):.0f}"`% at its
+trained opening angle $\theta = 1$ and by
+`{python} f"{100 * (max(TH['0']) - 1):.1f}"`% at $\theta = 0$, the size of
+the tree's approximation (@sec-oq-dtt-frame). The interior chapters measure
+it against the interacting form (@sec-drivaerml, @sec-airfrans), and the
+AeroZoo held-out splits decide which of the two is ISLA's interior form
+(@sec-oq-dtt).
 
 *Caveat.* Which interior form is the better default is an open question
-(@sec-open-questions); the read costs time and memory over the interacting
-form. Where the canonical frame the forest is built in ties, a rotation
+(@sec-oq-dtt). The read costs time and memory: on AeroZoo `full` its median
+training step is `{python} f"{C_D['step_seconds'] / C_I['step_seconds']:.1f}"`
+times the interacting form's and its peak memory
+`{python} f"{C_D['peak_gib'] / C_I['peak_gib']:.2f}"` times (@tbl-ref-cost). Where the canonical frame the forest is built in ties, a rotation
 regroups clusters and moves the read only by the tree's error.
 
 ### The general boundary interface {#sec-vs-novel-interface}
@@ -473,7 +518,7 @@ geometry run at 200,000 cells per case (@sec-architecture).
    edges** (@sec-vs-novel-frame, @sec-vs-novel-invariants,
    @sec-vs-novel-anchors together): the anchor-relative invariant
    construction, its contracts, and its cost measured as the
-   in-distribution standing on `{python} len(S.available())` datasets, with the component clause of
+   in-distribution standing on every dataset, with the component clause of
    the scalar heads as a corollary.
 3. **Read-only prediction points with a tree-evaluated boundary read**
    (@sec-vs-novel-tree): a query-independent interior form whose evidence
@@ -494,7 +539,7 @@ on are in @sec-open-questions.
   al., 2025), as a control on the fixed temperature of cosine routing;
 - a measure-weighted local aggregation among interior prediction points,
   after GeoTransolver's ball queries, DoMINO and GAOT (Ranade et al., 2025;
-  Wen et al., 2025), for the interior eddy-viscosity deficit against GeoTransolver on the DrivAerML Volume task;
+  Wen et al., 2025), for the interior pressure deficit against both baselines on the AirfRANS interior task (@sec-limits-interior);
 - reflection-odd invariants (a triple product of a token's normal, a
   global direction and its separation from an anchor) for frame-component
   targets, after GATr, whose multivector features are typed by grade
