@@ -47,8 +47,12 @@ def _boundary(n=700, seed=0, device="cuda", dtype=torch.float32, cell_data=None)
     """One boundary soup of ``n`` cells with a global direction, and a target."""
     pts, nrm, w, drv = cloud(n, seed=seed, dtype=torch.float32)
     mesh = soup(pts, nrm, w, cell_data=cell_data).to(device).to(dtype)
-    tgt = torch.randn(n, 4, generator=torch.Generator().manual_seed(seed + 1)).to(device, dtype)
-    return dict(boundary_meshes={"wall": mesh}, global_data={"g": drv.to(device, dtype)}), tgt
+    tgt = torch.randn(n, 4, generator=torch.Generator().manual_seed(seed + 1)).to(
+        device, dtype
+    )
+    return dict(
+        boundary_meshes={"wall": mesh}, global_data={"g": drv.to(device, dtype)}
+    ), tgt
 
 
 def _flat(o):
@@ -63,14 +67,19 @@ def _run(model, inputs, target):
     model.zero_grad(set_to_none=True)
     out = _flat(outputs(model(**inputs)))
     torch.nn.functional.mse_loss(out.float(), target.float()).backward()
-    grads = {k.replace("_orig_mod.", ""): p.grad.detach().clone() for k, p in model.named_parameters()}
+    grads = {
+        k.replace("_orig_mod.", ""): p.grad.detach().clone()
+        for k, p in model.named_parameters()
+    }
     return out.detach(), grads
 
 
 def _pair(dtype, device="cuda", geo_kernel="auto", **kw):
     torch.manual_seed(0)
     ref = ISLA(**REF).to(device, dtype)
-    ref.geo_kernel = "eager"  # the eager reference ("auto" resolves to the fused kernel on CUDA)
+    ref.geo_kernel = (
+        "eager"  # the eager reference ("auto" resolves to the fused kernel on CUDA)
+    )
     torch.manual_seed(0)
     opt = ISLA(**{**REF, **kw}).to(device, dtype)
     opt.geo_kernel = geo_kernel
@@ -97,7 +106,10 @@ def _assert_same(ref, opt, dtype, out_tol, grad_tol, n=700):
 # --------------------------------------------------------------------------- fused region
 @cuda_only
 @pytest.mark.parametrize("dtype", [torch.float64, torch.float32])
-@pytest.mark.parametrize("K,P", [(1, 0), (2, 0), (3, 0), (4, 0), (1, 1), (1, 2), (1, 3), (2, 1), (2, 2), (3, 1)])
+@pytest.mark.parametrize(
+    "K,P",
+    [(1, 0), (2, 0), (3, 0), (4, 0), (1, 1), (1, 2), (1, 3), (2, 1), (2, 2), (3, 1)],
+)
 def test_fused_geo_region_matches_eager_region(dtype, K, P):
     """Region level: forward outputs (bias, mix, pooled) and every input gradient, for
     K global directions plus P per-token rank-1 vectors (the (5 + K + P)-invariant set
@@ -109,12 +121,26 @@ def test_fused_geo_region_matches_eager_region(dtype, K, P):
     g = torch.Generator().manual_seed(0)
 
     def mk(*shape):
-        return (torch.randn(*shape, generator=g) * 0.1).to("cuda", dtype).requires_grad_()
+        return (
+            (torch.randn(*shape, generator=g) * 0.1).to("cuda", dtype).requires_grad_()
+        )
 
     r, z = mk(b, n, 3), mk(b, s, 3)
-    nh = torch.nn.functional.normalize(torch.randn(b, n, 3, generator=g), dim=-1).to("cuda", dtype).requires_grad_()
-    ms = torch.nn.functional.normalize(torch.randn(b, s, 3, generator=g), dim=-1).to("cuda", dtype).requires_grad_()
-    d = torch.nn.functional.normalize(torch.randn(b, 1, K, 3, generator=g), dim=-1).to("cuda", dtype).requires_grad_()
+    nh = (
+        torch.nn.functional.normalize(torch.randn(b, n, 3, generator=g), dim=-1)
+        .to("cuda", dtype)
+        .requires_grad_()
+    )
+    ms = (
+        torch.nn.functional.normalize(torch.randn(b, s, 3, generator=g), dim=-1)
+        .to("cuda", dtype)
+        .requires_grad_()
+    )
+    d = (
+        torch.nn.functional.normalize(torch.randn(b, 1, K, 3, generator=g), dim=-1)
+        .to("cuda", dtype)
+        .requires_grad_()
+    )
     v = (torch.randn(b, n, P, 3, generator=g) * 0.7).to("cuda", dtype).requires_grad_()
     logits = torch.randn(b, n, s, generator=g).to("cuda", dtype).requires_grad_()
     torch.manual_seed(0)
@@ -129,14 +155,27 @@ def test_fused_geo_region_matches_eager_region(dtype, K, P):
     def run(fn):
         for t in leaves:
             t.grad = None
-        d_n = d.expand(b, n, K, 3)  # both regions take the K global directions as (B, N, K, 3)
+        d_n = d.expand(
+            b, n, K, 3
+        )  # both regions take the K global directions as (B, N, K, 3)
         if fn is _geo_region:
             outs = fn(lin, logits, r, nh, d_n, z, ms, 1e-12, v if P else None)
         else:  # the fused kernel takes the directions and the token vectors as one (B, N, K + P, 3) set
-            outs = fn(lin, logits, r, nh, torch.cat([d_n, v], 2) if P else d_n, z, ms, 1e-12, n_global=K)
+            outs = fn(
+                lin,
+                logits,
+                r,
+                nh,
+                torch.cat([d_n, v], 2) if P else d_n,
+                z,
+                ms,
+                1e-12,
+                n_global=K,
+            )
         sum((o * w).sum() for o, w in zip(outs, wts)).backward()
         return [o.detach() for o in outs], [
-            (t.grad.detach().clone() if t.grad is not None else torch.zeros_like(t)) for t in leaves
+            (t.grad.detach().clone() if t.grad is not None else torch.zeros_like(t))
+            for t in leaves
         ]
 
     o_ref, g_ref = run(_geo_region)
@@ -163,7 +202,11 @@ def test_fused_geo_region_bf16_autocast_forward_matches_eager():
     z = (torch.randn(b, s, 3, generator=g) * 0.1).cuda()
     nh = torch.nn.functional.normalize(torch.randn(b, n, 3, generator=g), dim=-1).cuda()
     ms = torch.nn.functional.normalize(torch.randn(b, s, 3, generator=g), dim=-1).cuda()
-    d = torch.nn.functional.normalize(torch.randn(b, 1, 1, 3, generator=g), dim=-1).cuda().expand(b, n, 1, 3)
+    d = (
+        torch.nn.functional.normalize(torch.randn(b, 1, 1, 3, generator=g), dim=-1)
+        .cuda()
+        .expand(b, n, 1, 3)
+    )
     logits = torch.randn(b, n, s, generator=g).cuda().bfloat16()
     torch.manual_seed(0)
     lin = torch.nn.Linear(6, 1).cuda()
@@ -235,7 +278,9 @@ def test_compile_blocks_matches_eager(device):
     inputs, tgt = _boundary(500, device=device, dtype=torch.float64)
     o_ref, g_ref = _run(ref, inputs, tgt)
     o_opt, g_opt = _run(opt, inputs, tgt)
-    assert opt._block_forwards is not None and len(opt._block_forwards) == len(opt.blocks)
+    assert opt._block_forwards is not None and len(opt._block_forwards) == len(
+        opt.blocks
+    )
     assert _rel(o_opt, o_ref) < 1e-9, _rel(o_opt, o_ref)
     total = torch.cat([g.flatten() for g in g_ref.values()]).norm()
     for k, g in g_ref.items():
@@ -262,8 +307,15 @@ def test_query_independent_interior_fused_and_compiled_blocks_match_eager():
     opt.geo_kernel = "fused"
     opt.load_state_dict(ref.state_dict())
     inputs, _ = _boundary(600, dtype=torch.float64)
-    q = torch.randn(300, 3, generator=torch.Generator().manual_seed(5), dtype=torch.float64).cuda() * 3.0
-    tgt = torch.randn(300, 4, generator=torch.Generator().manual_seed(6), dtype=torch.float64).cuda()
+    q = (
+        torch.randn(
+            300, 3, generator=torch.Generator().manual_seed(5), dtype=torch.float64
+        ).cuda()
+        * 3.0
+    )
+    tgt = torch.randn(
+        300, 4, generator=torch.Generator().manual_seed(6), dtype=torch.float64
+    ).cuda()
     o_ref, g_ref = _run(ref, {**inputs, "prediction_points": q}, tgt)
     o_opt, g_opt = _run(opt, {**inputs, "prediction_points": q}, tgt)
     ### 1e-6 for what passes through the boundary read: its node means are float32 by design
