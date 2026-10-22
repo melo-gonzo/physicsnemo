@@ -1,6 +1,6 @@
 # GINOT Bracket Lug {#sec-lug}
 
-*Before this chapter:* @sec-tensile2d, whose @sec-tensile2d-ties introduces the tied nearest boundary samples this chapter measures at scale; @sec-isla for ISLA's interior task; @sec-invariances for the rigid-motion contract; @sec-protocol for the scoring. Small-strain elastoplasticity is assumed.
+*Before this chapter:* @sec-solids, which sets the lug beside the other two solids; @sec-isla for ISLA's interior task; @sec-invariances for the rigid-motion contract; @sec-protocol for the scoring. Small-strain elastoplasticity is assumed.
 
 ```{python}
 #| label: setup-lug
@@ -16,9 +16,8 @@ F = "von_mises_l2"
 N_TEST = ST.cell("ISLA", F)["n_cases"]
 POSE_SEED = [p / n for p, n in zip(ST.seeds("ISLA", F, "posed"), ST.seeds("ISLA", F))]
 B_POSED = [ST.err(a, F, "posed") for a in S.BASELINES]
-TIES = json.load(open(RES / "char" / "solids_ties_2026-10-18.json"))
-LT = TIES["lug"]["lug_0004"]
-TT = TIES["tensile2d"]["sample_000001"]
+# closest-feature ties of ISLA's exact query geometry on 60 test lugs (book_D2_2026-10-22.py, from ATTRIB-090's geometry probe)
+TIE = json.load(open(RES / "campaigns_2026-10-22" / "book_D2" / "book_D2.json"))["lug_closest_feature_ties"]
 COST = json.load(open(RES / "char" / "char_lanes_cost_2026-10-04.json"))["cost"]["lug"]
 # GeoTransolver's standing arm reads the labeled surface triangles as its geometry context: its parameter count is its own scoring record's
 _df = RES / "campaigns_2026-10-19/drive_fix/scores/evals_lugbc/lugbc_gt_seed42/native/lugbc_gt_seed42/metrics.jsonl"
@@ -41,7 +40,22 @@ def lug_conditions(ax, bp, bc, fixed, loaded, hole, lw=4.0, fill="#e4e3dc"):
     return np.array([x0, f[:, 1].mean()]), ctr, R
 ```
 
-**On the GINOT bracket lug ISLA leads GeoTransolver and Transolver: their errors are `{python} f"{ST.ratio('GeoTransolver', F):.2f}"` and `{python} f"{ST.ratio('Transolver', F):.2f}"` times ISLA's on the von Mises stress.** Rotated and translated, ISLA's error grows to `{python} f"{ST.shift('ISLA', F, 'posed'):.1f}"` times its native value and stays `{python} f"{min(B_POSED) / ST.err('ISLA', F, 'posed'):.0f}"` times below the baselines', which rise to about one, the error of predicting zero everywhere. ISLA reads, face by face, which faces are clamped, which belong to the hole and to its loaded half, and the pressure on each; GeoTransolver reads the same four labels on the surface triangles, and Transolver reads none. The ISLA checkpoints are of the nearest-token form (@sec-checkpoint-form), and the growth is the mechanism of @sec-tensile2d-ties at full strength: on one test lug's structured hexahedral mesh, `{python} f"{100 * LT['tie_fraction_by_rel_gap']['1e-07']:.0f}"`% of the nodes, interior nodes included, tie for their nearest boundary sample to a relative gap of 1e-7, inside float32 rounding, and one rigid motion changes the nearest sample of `{python} f"{100 * LT['nearest_changes_under_pose_fraction']:.0f}"`%.
+```{python}
+#| label: para-lug-opening
+#| output: asis
+V = {a: ST.verdict(a, F) for a in S.BASELINES}
+head = (f"ISLA {V['GeoTransolver']} GeoTransolver and Transolver" if V["GeoTransolver"] == V["Transolver"] else
+        f"ISLA {V['GeoTransolver']} GeoTransolver and {V['Transolver']} Transolver")
+print(f"**On the GINOT bracket lug {head} on the von Mises stress: GeoTransolver ÷ ISLA is {ST.ratio('GeoTransolver', F):.2f} and "
+      f"Transolver ÷ ISLA {ST.ratio('Transolver', F):.2f}.** Rotated and translated, ISLA's error grows to "
+      f"{ST.shift('ISLA', F, 'posed'):.2f} times its native value and stays {min(B_POSED) / ST.err('ISLA', F, 'posed'):.0f} times below "
+      "the baselines', which rise to about one, the error of predicting zero everywhere. ISLA reads, face by face, which faces are "
+      "clamped, which belong to the hole and to its loaded half, and the pressure on each; GeoTransolver reads the same four labels on "
+      "the surface triangles, and Transolver reads none. Where ISLA's posed growth comes from is not isolated; the structured mesh "
+      "gives its exact query geometry ties between equally near surface features, a measured candidate (@sec-lug-ties).")
+print()
+print(S.in_flight_callout("lug"))
+```
 
 ## The problem: a clamped lug pressed in its hole {#sec-lug-problem}
 
@@ -142,7 +156,7 @@ plt.show()
 **3,000 three-dimensional elastoplastic lugs (Liu, Koric et al.; Zenodo 15293036; CC BY 4.0), clamped at one end and pressed on the lower half of the hole, with three geometry parameters and the pressure varying.** The material is steel-like: $E$ = 200 GPa, $\nu$ = 0.3, yield stress $\sigma_y$ = 380 MPa, linear isotropic hardening with modulus $H$ = 571.4 MPa. The release stores the corner nodes of a quadratic hexahedral mesh (5 to 15 thousand nodes, mean 9.5 thousand), the nodal von Mises stress in MPa, the hexahedral connectivity and the parameters [hole radius, length, thickness, pressure] in m and Pa, with pressures of 50 to 100 MPa. The lug lies along $+x$: the flat end face at $x_{\min}$ is clamped, the far end is a semicircular nose around a hole whose axis is parallel to $z$, and the lug is 0.05 m wide.
 
 - **Conversion** (`ginot_lug_convert.py`). Interior: every node with `von_mises` (MPa), the stored signed distance `sdf` (negative inside) and its gradient `sdf_normals`. Boundary `surface`: the boundary quadrilaterals of the hexahedral mesh, each split into two triangles, with outward normals, triangle areas as the measure, and the per-cell labels `bc_fixed` (the clamped face), `bc_hole` (the hole's cylinder), `bc_loaded` (the lower half of the hole) and `bc_pressure` (MPa on loaded cells). The clamped and pressed faces are identified geometrically from the paper's description; their areas match the paper's to 0.1%.
-- **What each model receives.** ISLA (`isla_lug.yaml`) reads the surface as four named boundary conditions, which `SplitBoundaryByLabels` cuts from its labels in the order `loaded`, `hole`, `fixed`, the first winning where two mark a cell: `loaded` is the pressed half of the hole and carries the pressure, `hole` its other half, `fixed` the clamped face, and the unlabeled triangles are `free`. The four standardized design parameters are four global scalars, and every node is a prediction point, which gets its exact signed distance and direction to the surface inside the model; ISLA reads no stored `sdf`. The standing's checkpoints, of the nearest-token form, read the surface as one boundary with the four label fields, the stored `sdf` and `sdf_normals` at every node, and the distance and direction to the nearest boundary sample (@sec-checkpoint-form, @sec-lug-ties). Coordinates stay in meters; ISLA's length unit absorbs the scale. GeoTransolver and Transolver read every node with its coordinates and the same stored `sdf` and `sdf_normals`, and the four standardized parameters, the pressure among them, as their global embedding. GeoTransolver's geometry context is the surface triangles, each with its centroid, its normal and the dataset's four labels, `bc_fixed`, `bc_hole`, `bc_loaded` and `bc_pressure`, so it is told the boundary conditions. Transolver has no boundary path and receives no boundary-condition label: the lug data carries its conditions only as labels on boundary cells, and has no nodal condition tags (Tensile2d has them, @sec-data-tensile2d). In every case's stored frame the clamped face sits at the same place, and the hole lies on a fixed axis at a position set by the length and the hole radius, which the baselines read as global scalars. No model trains with augmentation, so Transolver can infer the clamped and loaded regions from the coordinates and the parameters; it is not told them (@tbl-model-inputs).
+- **What each model receives.** ISLA (`isla_lug.yaml`) reads the surface as four named boundary conditions, which `SplitBoundaryByLabels` cuts from its labels in the order `loaded`, `hole`, `fixed`, the first winning where two mark a cell: `loaded` is the pressed half of the hole and carries the pressure, `hole` its other half, `fixed` the clamped face, and the unlabeled triangles are `free`. The four standardized design parameters are four global scalars, and every node is a prediction point, which gets its exact signed distance and direction to the surface inside the model; ISLA reads no stored `sdf`. Coordinates stay in meters; ISLA's length unit absorbs the scale. GeoTransolver and Transolver read every node with its coordinates and the same stored `sdf` and `sdf_normals`, and the four standardized parameters, the pressure among them, as their global embedding. GeoTransolver's geometry context is the surface triangles, each with its centroid, its normal and the dataset's four labels, `bc_fixed`, `bc_hole`, `bc_loaded` and `bc_pressure`, so it is told the boundary conditions. Transolver has no boundary path and receives no boundary-condition label: the lug data carries its conditions only as labels on boundary cells, and has no nodal condition tags (Tensile2d has them, @sec-data-tensile2d). In every case's stored frame the clamped face sits at the same place, and the hole lies on a fixed axis at a position set by the length and the hole radius, which the baselines read as global scalars. No model trains with augmentation, so Transolver can infer the clamped and loaded regions from the coordinates and the parameters; it is not told them (@tbl-model-inputs).
 - **Normalization** (statistics over the 2,400 training lugs). The four parameters are standardized per component (mean $[0.01249, 0.1001, 0.02251, 7.53\times10^{7}]$, standard deviation $[1.44\times10^{-3}, 0.0116, 4.24\times10^{-3}, 1.44\times10^{7}]$); the von Mises stress has mean 150.2 MPa and standard deviation 92.4 MPa over 22.8 million nodes.
 - **Splits.** No indices are published (the paper holds out 20%), so the converter draws one seed-0 permutation: 600 test lugs and 2,400 training lugs. Every model trains on the 2,400 and is scored on the 600.
 - **Published numbers** on the authors' split (from the dataset scouting notes, `results/book_audit_2026-09-22/datasets_scout.md`): Transolver 2.74% (0.32% with the load scalar as input), GNOT (the General Neural Operator Transformer of Hao et al.) 3.58%, and GINOT (the Geometry-Informed Neural Operator Transformer the dataset's authors propose) 0.40% relative error. They are comparable in kind to this chapter's figures, not in split.
@@ -159,8 +173,9 @@ for a in S.ARCHS:
     v = COST[a]
     print(f"| {S.CONFIG[a]} | {v['n_parameters'] / 1e6:.1f}M | {v['peak_gib']:.1f} | {v['epoch_seconds']:.0f} |")
 print("\n: The cost of training on the GINOT bracket lug at the three reference configurations: parameters, peak device memory (maximum over "
-      "four GB300 ranks, bfloat16) and wall time of one epoch of 2,400 lugs. The parameter counts are exact for the standing's checkpoints, "
-      "since the normalized slice reads add no parameters, and GeoTransolver's is read from its own scoring record; memory and time are "
+      "four GB300 ranks, bfloat16) and wall time of one epoch of 2,400 lugs. ISLA's row is a one-epoch lane of the raw-read variant; ISLA at its "
+      "reference configuration adds one input layer per named boundary condition, so its parameter count differs from the row's and "
+      "the cost is representative. GeoTransolver's parameter count is read from its own scoring record; memory and time are "
       "one-epoch measurements, GeoTransolver's in its configuration without the labeled surface context. How to read this: the comparison "
       "of @tbl-lug-protocols is not resource-matched; ISLA has the most parameters and the longest epoch. Instrument: ISLA at 512 wide, "
       "512 slices, 3.75e-4, raw slice reads (@sec-study-configurations). Data: results/char/char_lanes_cost_2026-10-04.json. {#tbl-lug-cost}")
@@ -169,8 +184,6 @@ print("\n: The cost of training on the GINOT bracket lug at the three reference 
 **The comparison is not matched in cost** (@tbl-lug-cost). ISLA has `{python} f"{COST['ISLA']['n_parameters'] / COST['GeoTransolver']['n_parameters']:.1f}"` times GeoTransolver's parameters, and its epoch is `{python} f"{COST['ISLA']['epoch_seconds'] / statistics.mean(COST[a]['epoch_seconds'] for a in S.BASELINES):.1f}"` times the baselines' mean on this task of 5 to 15 thousand nodes per case.
 
 ## The standing {#sec-interior-lug}
-
-<!-- SLOT: ISLA at the current class: one row beside the nearest-token-form row; native/area/posed seed means and per-seed values (standing.DATASETS["lug"].current) -->
 
 ```{python}
 #| label: lug-lede
@@ -198,8 +211,10 @@ _R = _json.load(open(RENDER_DIR / "render_2d_lug.json"))["lug"]
 rendering_figure("fig-lug-prediction", [("figures/renderings/lug_von_mises.png", "von Mises stress, top face")],
     f"The three reference configurations on one GINOT bracket lug from the test set, {_R['sample_id'].split('_')[0]}, its top face. Relative L2 on this case: {case_errors(_R['per_sample_rel_l2'])}. " + "Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one "
       f"symmetric scale. ISLA checkpoints of the {S.FORM_TAG} (@sec-checkpoint-form). How to read this: one case, chosen as the case of median ISLA error (seed 42 of each reference configuration), "
-      "not a standing; the standing is the table above. "
+      "not a standing; the standing is the table above, whose ISLA rows are of other checkpoints. "
     + "GeoTransolver's panel is drawn from its checkpoint that reads no boundary-condition labels, not from the standing's, which reads them; Transolver reads none (@tbl-model-inputs). Data: results/renderings_2026-10-18/arrays/render_2d_lug.json.", nrow=None)
+print()
+print(rendering_in_flight(baselines="a GeoTransolver checkpoint that reads no boundary-condition labels, not the standing's"))
 ```
 
 ```{python}
@@ -213,184 +228,83 @@ print(f"**Natively the three are close in absolute terms and ISLA's error is the
 print()
 print(f"**Rotated and translated, the baselines fail and ISLA bends.** GeoTransolver and Transolver read {min(B_POSED):.2f} and "
       f"{max(B_POSED):.2f}, about the error of predicting zero everywhere: a model that reads raw coordinates and trained "
-      f"without augmentation has no answer for a rotated lug. ISLA reads {ST.err('ISLA', F, 'posed'):.4f}, {ST.shift('ISLA', F, 'posed'):.1f} "
-      f"times its native error (per seed {' and '.join(f'{x:.1f}' for x in POSE_SEED)}). In absolute terms ISLA's posed error is "
+      f"without augmentation has no answer for a rotated lug. ISLA reads {ST.err('ISLA', F, 'posed'):.4f}, {ST.shift('ISLA', F, 'posed'):.2f} "
+      f"times its native error (per seed {' and '.join(f'{x:.2f}' for x in POSE_SEED)}). In absolute terms ISLA's posed error is "
       f"{100 * (ST.err('ISLA', F, 'posed') - ST.err('ISLA', F)):.2f}% of the field above its native one. The ratio is large because the native "
       "error is so small: the same perturbation would barely register on a task whose native error is several percent. Where it comes "
-      "from is the subject of the next section.")
+      "from is not isolated; the next section measures a candidate.")
 ```
 
 ## Studies on this dataset {#sec-lug-ladders}
 
-**Two studies belong to the lug: why ISLA's error grows under the pose, and what happens when the surface it reads is thinned.** The lug's training-set ladder is a study configuration's and appears with the other learning curves (@fig-exponents-datasets).
+**One measurement belongs to the lug: where ISLA's exact query geometry is not a continuous function of position on this mesh.** The lug's training-set ladder is a study configuration's and appears with the other learning curves (@fig-exponents-datasets).
 
-### Why the posed error is several times the native error {#sec-lug-ties}
-
-**On one test lug's structured mesh, `{python} f"{100 * LT['tie_fraction_by_rel_gap']['1e-07']:.0f}"`% of the nodes tie for their nearest boundary sample to a relative gap of 1e-7, inside float32 rounding, and one rigid motion in float32 changes the nearest sample of `{python} f"{100 * LT['nearest_changes_under_pose_fraction']:.0f}"`% of all nodes.** The standing's checkpoints, of the nearest-token form (@sec-checkpoint-form), give every prediction point the distance $d$ and the direction $\hat\nu$ from its nearest boundary sample, the centroid of the nearest surface triangle (@sec-tensile2d-ties). On Tensile2d only the nodes on the polyline tie. On the lug two more kinds of node tie, both because the mesh is structured:
-
-- **Nodes on a surface.** A node at a corner of the surface quadrilaterals is equally far from the centroids of the triangles around it, and $\hat\nu$ lies in the face, so the sign of $d$ is decided by rounding too.
-- **Interior nodes on a symmetry plane of the mesh.** The node layers are uniform through the thickness, so the middle layer is exactly as far from the top face as from the bottom face. Its nodes' $\hat\nu$ points up or down depending on rounding: a reversal deep inside the body. Nodes in a column under a surface vertex tie between that vertex's triangles, with a change of direction that shrinks with depth.
-
-@fig-lug-ties measures both effects on one test lug and sets it beside the Tensile2d specimens.
+### Closest-feature ties of the exact geometry {#sec-lug-ties}
 
 ```{python}
-#| label: fig-lug-ties
-#| fig-cap: >
-#|   Tied nearest boundary samples on the lug of @fig-problem-lug, against the
-#|   seven Tensile2d specimens drawn in @sec-tensile2d. Top: the share of nodes
-#|   whose two nearest boundary samples are equally near to within a relative
-#|   gap $\delta$, against $\delta$; the gray band spans, over the eight
-#|   meshes, the median gap that float32 rounding of the coordinates can
-#|   reorder (about $2^{-24}\lvert x\rvert / d$ at a node a distance $d$ from its
-#|   nearest sample). Bottom: two layers of the lug's
-#|   nodes seen along the hole's axis, the top face (on the boundary) and the
-#|   middle layer through the thickness (interior but for its rim), colored by how far the
-#|   direction $\hat\nu$ turns when the lug is rotated and translated in float32; gray
-#|   nodes keep their nearest sample. How to read this: a curve's height at the
-#|   band is the share of nodes whose nearest sample is decided by rounding; the
-#|   curves join measurements at the five marked gaps, so inside the band the
-#|   height is read off the line between two of them; the lug's curve sits an
-#|   order of magnitude above Tensile2d's. The figure is
-#|   geometry only and shows no prediction. Data:
-#|   results/char/solids_ties_2026-10-18.{json,npz};
-#|   results/problem_figures_2026-09-22/lug.npz.
-#| fig-alt: "Top: share of tied nodes against the relative gap on a log axis, the lug curve near 0.45 to 0.8 and the Tensile2d curves near 0.02 to 0.3. Bottom: two maps of the lug's node layers colored by the change of the boundary direction under a rotation."
-#| code-fold: true
-NODE = np.load(RES / "char" / "solids_ties_2026-10-18.npz")
-fig = plt.figure(figsize=(8.0, 6.6))
-gs = fig.add_gridspec(2, 2, height_ratios=[1.0, 0.95], hspace=0.3, wspace=0.08)
-ax = fig.add_subplot(gs[0, :])
-gaps = [float(k) for k in LT["tie_fraction_by_rel_gap"]]
-for case, r in TIES["tensile2d"].items():
-    ax.plot(gaps, list(r["tie_fraction_by_rel_gap"].values()), color=MUTED, lw=1.0, marker="o", ms=3, alpha=0.8)
-ax.plot(gaps, list(LT["tie_fraction_by_rel_gap"].values()), color=INK, lw=2.2, marker="o", ms=5)
-label_line(ax, gaps[-1], LT["tie_fraction_by_rel_gap"]["1e-03"], "lug", INK, dx=0.0, dy=0.06, ha="right")
-label_line(ax, gaps[-1], max(r["tie_fraction_by_rel_gap"]["1e-03"] for r in TIES["tensile2d"].values()), "Tensile2d (seven specimens)", MUTED, dy=0.06, ha="right")
-g32 = [LT["float32_rounding_rel_gap_median"]] + [r["float32_rounding_rel_gap_median"] for r in TIES["tensile2d"].values()]
-ax.axvspan(min(g32), max(g32), color=GRID, zorder=0)
-ax.text(np.sqrt(min(g32) * max(g32)), 0.93, "float32\nrounding", ha="center", va="top", fontsize=8, color=INK2)
-ax.set_xscale("log"); ax.set_xticks(gaps); ax.set_xticklabels([f"$10^{{{int(round(np.log10(g)))}}}$" for g in gaps]); ax.xaxis.set_minor_formatter(mpl.ticker.NullFormatter())
-ax.set_ylim(0, 1); ax.set_xlabel("relative gap between the two nearest boundary samples, $\\delta$ [–]")
-ax.set_ylabel("share of nodes\ntied within $\\delta$ [–]")
-ax.set_title("how many nodes tie for their nearest boundary sample", fontsize=9.5)
-ip = Lg["int_points"]; layer = np.round(ip[:, 2] / ip[:, 2].max() * 10).astype(int)
-dchg = NODE["lug_direction_change_deg"]
-for col, (lay, name) in enumerate(((10, "top face (on the boundary)"), (5, "middle layer through the thickness"))):
-    bx = fig.add_subplot(gs[1, col]); m = layer == lay
-    still = m & (dchg == 0); sw = m & (dchg > 0)
-    bx.scatter(ip[still, 0] * 1e3, ip[still, 1] * 1e3, s=4, c=BASELINE, lw=0, rasterized=True)
-    sc = bx.scatter(ip[sw, 0] * 1e3, ip[sw, 1] * 1e3, s=7, c=dchg[sw], cmap=SEQUENTIAL, vmin=0, vmax=180, lw=0, rasterized=True)
-    map_axes(bx); bx.set_xlabel("x [mm]")
-    if col == 0: bx.set_ylabel("y [mm]")
-    else: bx.set_yticklabels([])
-    bx.set_title(f"{name}: {int(sw.sum())} of {int(m.sum())} switch", fontsize=9)
-cb = fig.colorbar(sc, ax=fig.axes[1:], orientation="horizontal", fraction=0.05, pad=0.26, aspect=40, ticks=[0, 45, 90, 135, 180]); cb.outline.set_visible(False)
-cb.set_label("turn of $\\hat\\nu$ under the pose [deg]")
-plt.show()
+#| label: para-lug-ties-lede
+#| output: asis
+print(f"**On the lug's structured mesh, {TIE['interior_direction_changed']:,} of {TIE['n_interior']:,} interior nodes "
+      f"({100 * TIE['interior_direction_changed'] / TIE['n_interior']:.1f}%) on {TIE['n_cases']} test lugs are equally far, to float32 "
+      "resolution, from two or more surface features, and which feature sets their direction is decided by the order of the search.** "
+      "ISLA gives every prediction point the signed distance $s = d / L$ to the closest point of the full surface and the direction "
+      "$\\nu = \\operatorname{sign}(d)\\, u$, with $u$ the unit vector from that closest point. Where the closest point is unique, both are "
+      "continuous functions of position and rotate with the body. Where two features are equally near, the distance is still well "
+      "defined and continuous, but the direction is not: it jumps between the candidates' directions. A structured hexahedral mesh "
+      "puts whole layers of nodes there. The mid-thickness layer is exactly as far from the top face as from the bottom face, so its "
+      "candidates point up and down; nodes on the bisector of a corner sit between two faces at a small angle. The closest-feature "
+      "search, a float32 bounding-volume hierarchy, keeps the first feature it meets, and which one that is depends on the vertex order "
+      "of the triangles and on rounding.")
+```
+
+```{python}
+#| label: tab-lug-ties
+#| output: asis
+rows = [("nodes / of them on the surface", f"{TIE['n_nodes']:,} / {TIE['n_surface']:,}"),
+        ("largest change of the distance, $\\lvert d_{\\text{flipped}} + d \\rvert / L$", f"{TIE['max_distance_deviation']:.1e}"),
+        ("surface nodes whose direction does not flip exactly / largest deviation [rad]",
+         f"{TIE['surface_direction_changed']} / {TIE['max_angle_surface_rad']:.1e}"),
+        ("interior nodes whose direction does not flip", f"{TIE['interior_direction_changed']:,}"),
+        ("the same, per lug", f"{TIE['interior_direction_changed_per_case'][0]} to {TIE['interior_direction_changed_per_case'][1]}"),
+        ("largest turn of their direction [rad]", f"{TIE['max_angle_interior_rad']:.2f}"),
+        ("largest change of the length unit $L$, relative", f"{TIE['max_length_unit_rel_change']:.0e}")]
+print("| quantity | value |\n|---|--:|")
+for k, x in rows:
+    print(f"| {k} | {x} |")
+print(f"\n: ISLA's exact query geometry on {TIE['n_cases']} GINOT bracket lugs from the test set, computed twice: on the stored surface, and "
+      "with every surface triangle's vertex order reversed and its normal negated. That reversal negates $d$ and $\\nu$ exactly wherever "
+      "the closest feature is unique, so every node that does not flip is a node whose closest feature is tied and chosen by the search. "
+      "How to read this: geometry only, with no trained model and no prediction; the reversal is not a rigid motion, so the table "
+      "counts the ties and does not measure how a rotation breaks them. Data: results/campaigns_2026-10-22/book_D2/book_D2.json "
+      "(from ATTRIB-090's geometry probe). {#tbl-lug-ties}")
 ```
 
 ```{python}
 #| label: para-lug-ties
 #| output: asis
-print(f"**The counts.** On this lug {100 * LT['tie_fraction_by_rel_gap']['1e-07']:.0f}% of the {LT['n_nodes']:,} nodes are tied to a relative "
-      f"gap of 1e-7, at or below float32 rounding, and {100 * LT['tied_fraction']:.0f}% to 1e-4; on the Tensile2d specimen of "
-      f"@fig-problem-tensile2d the shares are {100 * TT['tie_fraction_by_rel_gap']['1e-07']:.0f}% and {100 * TT['tied_fraction']:.0f}%. Under one "
-      f"generic rotation and translation in float32, {LT['nearest_changes_under_pose_nodes']:,} nodes ({100 * LT['nearest_changes_under_pose_fraction']:.0f}%) "
-      f"change their nearest sample, against {100 * TT['nearest_changes_under_pose_fraction']:.0f}% on Tensile2d. For "
-      f"{LT['direction_change_over_30deg_nodes']:,} of them, {LT['direction_change_over_30deg_nodes'] - LT['direction_change_over_30deg_on_boundary_nodes']:,} "
-      f"in the interior, the direction $\\hat\\nu$ turns by more than 30°; {LT['sign_flips_on_boundary_nodes']:,} of the "
-      f"{LT['n_on_boundary']:,} surface nodes also change the sign of their distance. Data: results/char/solids_ties_2026-10-18.json.")
-print()
-print("**The size of the input change tracks the size of the shift.** Each switched node presents ISLA with an "
-      "order-one change of its direction input, in thousands of nodes at once, and the attention spreads each change across the field. "
-      "On Tensile2d a few percent of the nodes switch, all of them on the wall, and ISLA's error moves by a few percent; here three nodes in "
-      "ten switch, many deep inside the body, and ISLA's error grows several-fold. The other interior tasks of the book use unstructured "
-      "meshes on which ties are rare, and their rotated and translated scores reproduce the native ones (@sec-standing).")
+print(f"**Everywhere else the geometry is exact, and at the ties it is not.** @tbl-lug-ties reverses every triangle of the surface, "
+      "which should negate every distance and direction. The distance does so on every node to float32 resolution, and every surface "
+      "node keeps $s = 0$ with its direction flipped. At the tied interior nodes the distance flips and the direction does not: it turns "
+      f"by up to {TIE['max_angle_interior_rad']:.2f} rad, a reversal on the mid-thickness layer. A rigid motion in float32 changes the "
+      "rounding and with it the order in which the search meets the tied features, so the same nodes are a candidate cause of ISLA's "
+      f"posed growth of {ST.shift('ISLA', F, 'posed'):.2f} (@tbl-lug-protocols). The link is not isolated: the measurement counts ties "
+      "of the geometry, not their effect on the prediction under a pose. A tie rule that does not depend on the search, such as the "
+      "mean of the tied candidates' directions (zero where they cancel, as on the mid-plane), would remove the tie from the input; whether "
+      "it removes the posed growth is open (@sec-oq-ties).")
 ```
-
-```{python}
-#| label: para-lug-precision
-#| output: asis
-TIE = json.load(open(RES / "char" / "lug_ties_2026-10-04.json")); T32, T64 = TIE["fp32"], TIE["fp64"]
-# the exact-geometry evidence on the lug (GEO-CONT): ctl, the exact closest point with the logarithmic channel; cont, the class's
-# continuous channel; a2, the standing's ISLA arm (the nearest-token form)
-GC = json.load(open(RES / "campaigns_2026-10-19" / "geo_evidence" / "geo_evidence.json"))["geo_cont"]["lug"]
-pon_rng = lambda arm: " and ".join(f"{v:.2f}" for v in GC["posed_over_native_per_seed"][arm][F].values())
-print(f"**Higher precision does not remove the effect, because the trained model depends on how the ties are broken.** On one trained ISLA "
-      f"lug model and one test lug (a study configuration, @tbl-lug-model-check), a forward pass in float64 shrinks the change under a quarter "
-      f"turn and a translation from {100 * T32['rot90_translate_rel_change']:.2f}% to {100 * T64['rot90_translate_rel_change']:.2f}% of the field, "
-      f"and raises the native error from {100 * T32['native_rel_err']:.2f}% to {100 * T64['native_rel_err']:.2f}%: another arithmetic breaks the "
-      "ties differently, and the model's output follows. The remedy is an input that is continuous at ties, not more bits.")
-print()
-print(f"**The exact built-in geometry removes most of the shift.** Trained at the reference configuration with each node's distance and "
-      f"direction taken from the exact closest point of the surface, and otherwise of the nearest-token form (the stored signed distance still "
-      f"read as a prediction-point input), ISLA's rotated and translated error on the lug is {pon_rng('ctl')} times "
-      f"its native error per seed, and {pon_rng('cont')} with the continuous distance channel of the class, against {pon_rng('a2')} for the "
-      f"standing's checkpoints. Natively the continuous form is level with the standing's (ratio {GC['cont_over_a2']['native'][F]:.2f}), "
-      "so the gain is in the pose and not in accuracy. What is left of the shift is the ties of the direction on the medial surface "
-      "(@sec-medial-ties). Data: results/campaigns_2026-10-19/geo_evidence/geo_evidence.json.")
-```
-
-::: {.callout-note collapse="true" title="Optional: the same mechanism seen through one trained model"}
-```{python}
-#| label: tab-lug-model-check
-#| output: asis
-rows = [("a quarter turn about a coordinate axis (exact in float32: a permutation of coordinates)", T32["rot90_rel_change"]),
-        ("a 37° rotation", T32["rot37_rel_change"]),
-        ("a translation by one RMS node radius", T32["translate_rel_change"]),
-        ("the quarter turn and the translation together", T32["rot90_translate_rel_change"]),
-        ("no motion, coordinates jittered by 1e-7 relative", T32["jitter_1e-7_rel_change"]),
-        ("no motion, coordinates jittered by 1e-5 relative", T32["jitter_1e-5_rel_change"]),
-        ("the quarter turn and the translation, forward pass in float64", T64["rot90_translate_rel_change"])]
-print("| change of the input | change of the prediction [% of the field] |\n|---|--:|")
-for name, v in rows:
-    print(f"| {name} | {100 * v:.2f} |")
-print(f"\n: One trained ISLA lug model on one test lug ({TIE['case']}), its von Mises prediction under exact and inexact changes of the "
-      "input coordinates: the relative L2 change of the prediction against the native prediction. How to read this: an exact motion "
-      "leaves the prediction nearly unchanged and every inexact one moves it by the same order, even a jitter far below the mesh spacing, "
-      "so the response is a discontinuity, not a smooth amplification of roundoff; the numbers are of this model and are read for the "
-      "mechanism only. Instrument: ISLA at 768 wide, 256 slices, 2.5e-4, raw slice reads (@sec-study-configurations). "
-      "Data: results/char/lug_ties_2026-10-04.json. {#tbl-lug-model-check}")
-```
-
-```{python}
-#| label: para-lug-model-check
-#| output: asis
-print(f"@tbl-lug-model-check probes one trained model directly. A coordinate jitter of 1e-7 relative, with no motion at all, changes the "
-      f"prediction by {100 * T32['jitter_1e-7_rel_change']:.2f}% of the field, exactly as much as a jitter a hundred times larger: once a tie "
-      "is broken the other way the change is the same, however small the push.")
-```
-:::
-
-### A thinner surface {#sec-lug-boundary-law}
-
-```{python}
-#| label: tab-lug-area2
-#| output: asis
-A2R = json.load(open(RES / "char" / "area2_2026-10-16.json"))["runs"]
-xs = [r["fields"][F] for r in sorted((r for r in A2R.values() if r["dataset"] == "lug" and r["arch"] == "ISLA"), key=lambda r: r["seed"])]
-print("| | seed 42 | seed 43 |\n|---|--:|--:|")
-print("| uniform ÷ native | " + " | ".join(f"{x['count_effect']:.1f}" for x in xs) + " |")
-print("| area ÷ uniform | " + " | ".join(f"{x['r']:.3f}" for x in xs) + " |")
-print("| second uniform draw ÷ first − 1 | " + " | ".join(f"{x['d']:.3f}" for x in xs) + " |")
-print(f"\n: ISLA's von Mises error on the {N_TEST} test lugs with each lug's surface thinned to 2,000 triangles, drawn three ways: uniformly, "
-      "in proportion to area, and uniformly with a second seed; each kept triangle's measure is divided by its inclusion probability. The "
-      "nodes, the targets and the global scalars are the same in every draw. *Uniform ÷ native* is the error on the thinned surface over "
-      "the error on the whole one; *area ÷ uniform* isolates the law of the draw; the last row is how much a second uniform draw moves the "
-      "error, the noise floor. How to read this: the checkpoints trained on the whole surface, so the first row is the response of a "
-      "trained model to a surface thinner than any it saw, not a resolution requirement; only ISLA is scored on the thinned surfaces. Instrument: ISLA at 512 wide, 512 slices, 3.75e-4, raw slice reads (@sec-study-configurations). "
-      "Data: results/char/area2_2026-10-16.json. {#tbl-lug-area2}")
-```
-
-**Thinning the surface to 2,000 triangles multiplies ISLA's error by `{python} f"{min(x['count_effect'] for x in xs):.0f}"` to `{python} f"{max(x['count_effect'] for x in xs):.0f}"`, and the law of the draw moves it by no more than two uniform draws differ** (@tbl-lug-area2). Area ÷ uniform is `{python} " and ".join(f"{x['r']:.3f}" for x in xs)` on the two seeds, in opposite directions, against a noise floor of up to `{python} f"{max(x['d'] for x in xs):.3f}"`. In the nearest-token form, on a mesh this tied, a redraw moves the nearest sample of many nodes, so the noise floor is itself a footprint of the mechanism above.
 
 ## What this dataset does not say {#sec-lug-limits}
 
-**The lug standing is one scalar field on one bracket family, three shape parameters and one load; its posed column measures the nearest-sample construction of the standing's checkpoints on a structured mesh, not a frame-dependent input.**
+**The lug standing is one scalar field on one bracket family, three shape parameters and one load; its posed column measures ISLA's exact geometry on a structured mesh whose nodes tie for their closest surface feature.**
 
-- **The standing's pose contract does not hold on this mesh.** The posed error of its checkpoints is several times their native one through tied nearest samples, a property of the nearest-token form's interior geometry on structured meshes with nodes on boundaries and symmetry planes (@sec-checkpoint-form). Trained with the exact built-in geometry, the stored signed distance still read as a prediction-point input, the same configuration's shift falls to a few percent, and what is left is the direction ties on the medial surface (@sec-medial-ties); the class's own standing on the lug is open (@sec-oq-class-standing).
-- **The native lead is a float32 reading.** The standing's checkpoints were scored in float32 only. On a study model a float64 forward pass raises ISLA's native error several-fold through the same ties (@sec-lug-ties), so how the ordering responds to another scoring precision is not known.
+```{python}
+#| label: para-lug-limits
+#| output: asis
+print(f"- **The pose contract does not hold exactly on this mesh.** ISLA's posed error is {ST.shift('ISLA', F, 'posed'):.2f} times "
+      "its native one (@tbl-lug-protocols). Float32 tie-breaking in the closest-feature search has no knob that converges to exact "
+      "invariance, so this is a limit, with closest-feature ties as the measured candidate cause (@sec-lug-ties).")
+```
+
 - **No tensor target and no geometry class change.** Tensile2d measures a tensor target (@sec-interior-tensile2d); the lug's shapes are one topology.
-- **The surface sampling law is measured only at a reduced budget**, and only for ISLA (@sec-lug-boundary-law).
 - **Against Transolver the inputs differ.** Transolver reads no boundary-condition label, and knows the clamp and the load only through the shape in its fixed pose; GeoTransolver reads the four labels, and ISLA the same conditions as named boundaries (@tbl-model-inputs).
 - **Not matched in cost**, and the published GINOT, Transolver and GNOT numbers are on the authors' split: comparable in kind, not in value.
