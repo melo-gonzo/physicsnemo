@@ -169,8 +169,9 @@ def test_two_dimensional_gradients_and_interior_task():
     o1 = _run(mq, mesh, drv, q)
     o2 = _run(mq, transform(mesh, rq), drv @ rq.T, q @ rq.T)
     assert o1["p"].shape == (50,) and o1["v"].shape == (50, 2)
-    torch.testing.assert_close(o2["p"], o1["p"], rtol=1e-4, atol=1e-5)
-    torch.testing.assert_close(o2["v"], o1["v"] @ rq.T, rtol=1e-4, atol=1e-5)
+    ### (float32: the rotation moves a point 3e-4 from the wall by 2e-4 of its distance)
+    torch.testing.assert_close(o2["p"], o1["p"], rtol=1e-4, atol=5e-5)
+    torch.testing.assert_close(o2["v"], o1["v"] @ rq.T, rtol=1e-4, atol=5e-5)
 
 
 def test_two_dimensional_rank_inputs_keep_the_contracts():

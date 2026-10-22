@@ -819,6 +819,192 @@ def test_the_sign_follows_the_surface_s_orientation(dim):
 
 
 # ---------------------------------------------------------------------------
+# The sign: the generalized winding number
+# ---------------------------------------------------------------------------
+
+
+def _exact_winding(q, points, cells):
+    """The generalized winding number of the oriented cells at each query, summed
+    exactly over every (query, cell) pair in float64: the signed solid angles over 4
+    pi (Van Oosterom and Strackee 1983), the signed subtended angles over 2 pi in
+    two dimensions; 0 outside a closed surface with outward normals, 1 inside."""
+    q, s = q.double(), points.double()[cells]
+    out = []
+    for x in q.split(256):
+        r = s[None] - x[:, None, None]  # (n, F, d, d)
+        if q.shape[-1] == 2:
+            a, b = r[:, :, 0], r[:, :, 1]
+            theta = torch.atan2(
+                a[..., 0] * b[..., 1] - a[..., 1] * b[..., 0], (a * b).sum(-1)
+            )
+            out.append(-theta.sum(-1) / (2 * math.pi))
+            continue
+        a, b, c = r.unbind(2)
+        la, lb, lc = a.norm(dim=-1), b.norm(dim=-1), c.norm(dim=-1)
+        num = (a * torch.linalg.cross(b, c, dim=-1)).sum(-1)
+        den = (
+            la * lb * lc
+            + (a * b).sum(-1) * lc
+            + (a * c).sum(-1) * lb
+            + (b * c).sum(-1) * la
+        )
+        out.append(2 * torch.atan2(num, den).sum(-1) / (4 * math.pi))
+    return torch.cat(out)
+
+
+def _exact_sign(q, mesh):
+    """sign(sigma / 2 - w) with the exact winding number and sigma the sign of the
+    enclosed signed volume, +1 at zero."""
+    n, c = mesh.cell_normals.double(), mesh.cell_centroids.double()
+    a = mesh.cell_areas.double()
+    g = (a[:, None] * c).sum(0) / a.sum()
+    sigma = 1.0 if float((a[:, None] * n * (c - g)).sum()) >= 0 else -1.0
+    w = _exact_winding(q, mesh.points, mesh.cells)
+    return torch.where(0.5 * sigma - w >= 0, 1.0, -1.0).to(D)
+
+
+def _tree_winding(q, mesh):
+    """The winding number the geometry evaluates on its BVH (far field at
+    ``WINDING_NUMBER_BETA``, exact solid angles at the near leaves)."""
+    pts = mesh.points.double()
+    cells, parity = geometry._canonical_cells(pts, geometry._weld(pts)[mesh.cells])
+    s, par = pts[cells], parity.to(D)
+    e = s[:, 1:] - s[:, :1]
+    area = par[:, None] * 0.5 * torch.linalg.cross(e[:, 0], e[:, 1], dim=-1)
+    return geometry._tree_winding_numbers(
+        q.double(), s, par, area, geometry._cell_tree(s)
+    )
+
+
+def _finned_cube() -> Mesh:
+    """The unit cube (outward normals) with a fin on its +x face: a 1 x 0.5 square
+    in the plane y = 0, stored as two coincident sheets of opposite orientation (a
+    zero-thickness fold, as two roles welded back to back)."""
+    cube = cube_surface.load()
+    fin = torch.tensor(
+        [[0.5, 0, -0.25], [1.5, 0, -0.25], [1.5, 0, 0.25], [0.5, 0, 0.25]], dtype=D
+    )
+    sheet = torch.tensor([[0, 1, 2], [0, 2, 3]]) + cube.n_points
+    return Mesh(
+        points=torch.cat([cube.points.double(), fin]),
+        cells=torch.cat([cube.cells, sheet, sheet[:, [0, 2, 1]]]),
+    )
+
+
+_DEVICES = [
+    "cpu",
+    pytest.param(
+        "cuda",
+        marks=pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA"),
+    ),
+]
+
+
+@pytest.mark.parametrize("device", _DEVICES)
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_a_fold_is_signed_by_the_region_around_it(dtype, device):
+    """Both sides of a zero-thickness fin outside a cube are fluid: d > 0 there, in
+    float32 and float64, on CPU and CUDA (its two sheets cancel in the winding
+    number; a local sign, a pseudo-normal or the closest cell's own normal, is
+    decided by which of the two coincident cells comes first)."""
+    mesh = _finned_cube()
+    g = torch.Generator().manual_seed(0)
+    n = 600
+    off = torch.tensor([1e-4, 1e-2, 0.1], dtype=D)[torch.randint(3, (n,), generator=g)]
+    side = torch.where(torch.rand(n, dtype=D, generator=g) < 0.5, 1.0, -1.0)
+    q = torch.stack(
+        [
+            0.7 + 0.7 * torch.rand(n, dtype=D, generator=g),
+            side * off,
+            0.4 * torch.rand(n, dtype=D, generator=g) - 0.2,
+        ],
+        -1,
+    )
+    d, _ = exact_boundary_geometry(
+        q.to(device, dtype), mesh.points.to(device, dtype), mesh.cells.to(device)
+    )
+    assert d.dtype == dtype and (d > 0).all()
+    assert torch.allclose(d.double().cpu(), off, rtol=1e-5, atol=0)
+
+
+@pytest.mark.parametrize("device", _DEVICES)
+def test_a_winding_flip_negates_the_distance_bitwise(device):
+    """Reversing every cell of the finned cube negates d bitwise at every query, on
+    CPU and CUDA, those in the fin's plane beyond its free edge included (where the
+    fin's edge pseudo-normal cancels and a local test reads a zero)."""
+    mesh = _finned_cube()
+    g = torch.Generator().manual_seed(1)
+    beyond = torch.stack(
+        [
+            1.6 + torch.rand(200, dtype=D, generator=g),
+            torch.zeros(200, dtype=D),
+            0.4 * torch.rand(200, dtype=D, generator=g) - 0.2,
+        ],
+        -1,
+    )
+    q = torch.cat([torch.randn(1000, 3, dtype=D, generator=g), beyond]).to(device)
+    d, _ = _geometry(q, mesh.to(device))
+    d2, _ = _geometry(q, _flipped(mesh).to(device))
+    assert (d != 0).all() and torch.equal(d2, -d)
+
+
+def test_an_open_surface_signs_its_far_field_consistently():
+    """A cube with its top face removed (outward normals): every query far from it,
+    above the hole included, is outside (d > 0); a local sign reads the rim's side
+    walls there and calls the points above the hole inside."""
+    cube = cube_surface.load().subdivide(levels=2, filter="linear")
+    keep = cube.cell_centroids[:, 2] < 0.49
+    mesh = Mesh(points=cube.points.double(), cells=cube.cells[keep])
+    g = torch.Generator().manual_seed(2)
+    dirs = torch.nn.functional.normalize(
+        torch.randn(2000, 3, dtype=D, generator=g), dim=-1
+    )
+    q = dirs * (3 + 27 * torch.rand(2000, 1, dtype=D, generator=g))
+    q = torch.cat([q, torch.tensor([[0.0, 0.0, 5.0], [0.1, -0.2, 3.0]], dtype=D)])
+    d, _ = _geometry(q, mesh)
+    assert (d > 0).all()
+
+
+@pytest.mark.parametrize("shape", ["naca", "sphere", "torus"])
+def test_closed_surfaces_take_the_sign_of_the_exact_winding_number(shape):
+    """On watertight surfaces (a NACA 0012, a sphere, a torus), natively, in a
+    generic pose, with every cell split and with every cell doubled, d takes
+    sign(sigma / 2 - w) of the exact winding number at every query off the surface,
+    so the inside-outside sign of the closed surface; in three dimensions the
+    winding number of the BVH is within its far-field error of the exact one (a
+    tenth of the margin of a closed surface, per copy of each cell)."""
+    g = torch.Generator().manual_seed(3)
+    if shape == "naca":
+        mesh = _polygon(_naca(100))
+        q = torch.randn(1500, 2, dtype=D, generator=g) * 0.6 + torch.tensor(
+            [0.5, 0.0], dtype=D
+        )
+    elif shape == "sphere":
+        mesh = _sphere(3)
+        q = _near_wall(3, 1500, 3, band=0.5)
+    else:
+        mesh = _torus()
+        q = torch.randn(1500, 3, dtype=D, generator=g) * torch.tensor(
+            [1.5, 1.5, 0.5], dtype=D
+        )
+    dim = q.shape[-1]
+    R, t = orthogonal(dim, 5), torch.arange(1, dim + 1, dtype=D) / 3
+    doubled = Mesh(points=mesh.points, cells=mesh.cells.repeat_interleave(2, 0))
+    for m, x, copies in (
+        (mesh, q, 1),
+        (transform(mesh, R, t), q @ R.T + t, 1),
+        (mesh.subdivide(levels=1, filter="linear"), q, 1),
+        (doubled, q, 2),
+    ):
+        d, _ = _geometry(x, m)
+        off = _brute_force_surface(x, m.points, m.cells).values > 1e-9
+        assert torch.equal(torch.sign(d)[off], _exact_sign(x, m)[off])
+        if dim == 3:
+            w = _exact_winding(x, m.points, m.cells)
+            assert (_tree_winding(x, m) - w).abs().max() < 0.05 * copies
+
+
+# ---------------------------------------------------------------------------
 # Closest-feature ties (the medial surface)
 # ---------------------------------------------------------------------------
 
@@ -1014,6 +1200,7 @@ def test_tie_search_on_cuda_matches_cpu(dim):
     pts, q = mesh.points.float(), _near_wall(dim, 4000, 11, band=0.3).float()
     d, u = exact_boundary_geometry(q, pts, mesh.cells)
     d2, u2 = exact_boundary_geometry(q.cuda(), pts.cuda(), mesh.cells.cuda())
+    assert torch.equal(torch.sign(d2.cpu()), torch.sign(d))
     assert torch.allclose(d2.cpu(), d, atol=1e-6, rtol=0)
     assert torch.allclose(u2.cpu(), u, atol=1e-5, rtol=0)
     assert torch.equal(u2.cpu().norm(dim=-1) < 1 - 1e-5, u.norm(dim=-1) < 1 - 1e-5)
