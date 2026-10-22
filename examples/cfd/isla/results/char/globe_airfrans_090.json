@@ -1,0 +1,376 @@
+{
+ "protocol": "GLOBE on the AirfRANS interior task (2026-10-22): GLOBE at its published configuration (globe_af_seed42/43, 500 epochs,\ntrained on 4,096 points per step), scored in float32 on the final checkpoint on the 200 full_test cases, native mesh / uniform\npoint cloud / rotated + translated, on the same 100,000-point draw as every AirfRANS arm. Registered rules:\nscratch/isla-globe-2026-10-19/PREREG.md (no adoption rule: the result adds a GLOBE column to the AirfRANS standing).\n\nSource: results/campaigns_2026-10-22/globe/globe_af_scores.json, copied unmodified from scratch/isla-globe-2026-10-19/scores_af/\n(reduce_af.py: infer_summary rows checked against the mean of the per-case rows, epoch 500 and 200 cases asserted). The\ncomparators are the arms of results/char/airfrans_090.json (written by r090_protocol_artifacts_2026-10-22.py; rerun this\nscript after it).\n\nWrites results/char/globe_airfrans_090.json:\n  arms[\"GLOBE\"][protocol][field]   {mean, per_seed, n_cases, n_seeds}\n  posed_over_native, area_over_native, posed_per_case_max_rel_dev   per field and seed\n  over_baselines[arm][protocol][field]   GLOBE / baseline (seed means; per_seed seed-matched): final\n  over_isla       GLOBE / ISLA's arm of airfrans_090.json, with that file's status and in-flight text: the AirfRANS standing\n                  of ISLA is in flight, so this ratio is\n  drivaerml       GLOBE on the DrivAerML Surface task: in flight, no numbers\nusage: python globe_airfrans_090_2026-10-22.py",
+ "status": "final",
+ "in_flight": null,
+ "protocols": {
+  "native": "native mesh",
+  "area": "uniform point cloud",
+  "posed": "rotated + translated"
+ },
+ "fields": {
+  "pressure_l2": "pressure",
+  "velocity_l2": "velocity",
+  "nut_l2": "eddy viscosity"
+ },
+ "arms": {
+  "GLOBE": {
+   "native": {
+    "pressure_l2": {
+     "mean": 0.023794139623641967,
+     "per_seed": {
+      "42": 0.025851900577545165,
+      "43": 0.02173637866973877
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.02141552984714508,
+     "per_seed": {
+      "42": 0.02290369749069214,
+      "43": 0.01992736220359802
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.0380659556388855,
+     "per_seed": {
+      "42": 0.04060741901397705,
+      "43": 0.03552449226379394
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "mean": 0.02379413962364197,
+     "per_seed": {
+      "42": 0.025851898193359375,
+      "43": 0.021736381053924562
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.021415528059005737,
+     "per_seed": {
+      "42": 0.022903695106506347,
+      "43": 0.019927361011505128
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.038065949678421016,
+     "per_seed": {
+      "42": 0.04060741424560547,
+      "43": 0.03552448511123657
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "mean": 0.023794054985046387,
+     "per_seed": {
+      "42": 0.025851852893829345,
+      "43": 0.021736257076263428
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "velocity_l2": {
+     "mean": 0.021416152119636538,
+     "per_seed": {
+      "42": 0.022904322147369385,
+      "43": 0.019927982091903686
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    },
+    "nut_l2": {
+     "mean": 0.038065924644470214,
+     "per_seed": {
+      "42": 0.04060737609863281,
+      "43": 0.03552447319030762
+     },
+     "n_cases": 200,
+     "n_seeds": 2
+    }
+   }
+  }
+ },
+ "posed_over_native": {
+  "pressure_l2": {
+   "42": 0.9999981555044405,
+   "43": 0.9999944059920381
+  },
+  "velocity_l2": {
+   "42": 1.000027273180564,
+   "43": 1.0000311073939105
+  },
+  "nut_l2": {
+   "42": 0.9999989431649369,
+   "43": 0.9999994630891222
+  }
+ },
+ "area_over_native": {
+  "pressure_l2": {
+   "42": 0.9999999077752221,
+   "43": 1.0000001096864308
+  },
+  "velocity_l2": {
+   "42": 0.9999998959038909,
+   "43": 0.9999999401780888
+  },
+  "nut_l2": {
+   "42": 0.999999882573882,
+   "43": 0.9999997986584208
+  }
+ },
+ "posed_per_case_max_rel_dev": {
+  "pressure_l2": {
+   "42": 0.0002457609376956789,
+   "43": 0.00026054811472813735
+  },
+  "velocity_l2": {
+   "42": 0.0007817927583238072,
+   "43": 0.0008889602468308582
+  },
+  "nut_l2": {
+   "42": 6.977432062366043e-05,
+   "43": 0.00014823826852539514
+  }
+ },
+ "over_baselines": {
+  "GeoTransolver 256": {
+   "native": {
+    "pressure_l2": {
+     "mean": 2.1828949264297175,
+     "per_seed": {
+      "42": 2.335398986973933,
+      "43": 2.0255782944093346
+     }
+    },
+    "velocity_l2": {
+     "mean": 0.5356883037587745,
+     "per_seed": {
+      "42": 0.5764721752838988,
+      "43": 0.4954048980359229
+     }
+    },
+    "nut_l2": {
+     "mean": 2.2285459351784374,
+     "per_seed": {
+      "42": 2.3140642355793237,
+      "43": 2.138219784692064
+     }
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "mean": 2.182894926429718,
+     "per_seed": {
+      "42": 2.33539877159228,
+      "43": 2.025578516587788
+     }
+    },
+    "velocity_l2": {
+     "mean": 0.535688259030237,
+     "per_seed": {
+      "42": 0.5764721152753883,
+      "43": 0.4954048683998551
+     }
+    },
+    "nut_l2": {
+     "mean": 2.2285455862270274,
+     "per_seed": {
+      "42": 2.314063963847744,
+      "43": 2.138219354179516
+     }
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "mean": 0.013190174166575594,
+     "per_seed": {
+      "42": 0.013363669408901725,
+      "43": 0.012989604756496092
+     }
+    },
+    "velocity_l2": {
+     "mean": 0.01835161979042451,
+     "per_seed": {
+      "42": 0.019332356830303005,
+      "43": 0.017340542018973816
+     }
+    },
+    "nut_l2": {
+     "mean": 0.02395854641815814,
+     "per_seed": {
+      "42": 0.024315842949283156,
+      "43": 0.023562776110641614
+     }
+    }
+   }
+  },
+  "Transolver 512 x 16": {
+   "native": {
+    "pressure_l2": {
+     "mean": 2.1826765109602833,
+     "per_seed": {
+      "42": 2.420929703980095,
+      "43": 1.9539694346209664
+     }
+    },
+    "velocity_l2": {
+     "mean": 0.7217723628858794,
+     "per_seed": {
+      "42": 0.7695410946180388,
+      "43": 0.6737063272108345
+     }
+    },
+    "nut_l2": {
+     "mean": 2.137091170200584,
+     "per_seed": {
+      "42": 2.2986395745839783,
+      "43": 1.9781729950058609
+     }
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "mean": 2.1826765109602833,
+     "per_seed": {
+      "42": 2.4209294807103907,
+      "43": 1.9539696489448994
+     }
+    },
+    "velocity_l2": {
+     "mean": 0.7217723026198217,
+     "per_seed": {
+      "42": 0.769541014511805,
+      "43": 0.6737062869084344
+     }
+    },
+    "nut_l2": {
+     "mean": 2.1370908355693947,
+     "per_seed": {
+      "42": 2.298639304663656,
+      "43": 1.978172596717386
+     }
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "mean": 0.01872024703826951,
+     "per_seed": {
+      "42": 0.019020497410853366,
+      "43": 0.018375260535213305
+     }
+    },
+    "velocity_l2": {
+     "mean": 0.017403810454557758,
+     "per_seed": {
+      "42": 0.01824959830541785,
+      "43": 0.01652363770950286
+     }
+    },
+    "nut_l2": {
+     "mean": 0.020575573871432128,
+     "per_seed": {
+      "42": 0.01960514121621721,
+      "43": 0.021809588115347077
+     }
+    }
+   }
+  }
+ },
+ "over_isla": {
+  "arm": "ISLA 512 with 512 slices",
+  "status": "in_flight",
+  "in_flight": {
+   "what": "ISLA and ISLA-DTT trained with the compiled training path after its fault was fixed",
+   "replacement": "The standing of ISLA and ISLA-DTT trained without compilation"
+  },
+  "native": {
+   "pressure_l2": {
+    "mean": 1.9465618350685527,
+    "per_seed": {
+     "42": 1.9905267563214086,
+     "43": 1.896736462064043
+    }
+   },
+   "velocity_l2": {
+    "mean": 3.3848577322664237,
+    "per_seed": {
+     "42": 3.562658834763638,
+     "43": 3.201232157163037
+    }
+   },
+   "nut_l2": {
+    "mean": 2.445666958873834,
+    "per_seed": {
+     "42": 2.579950803836985,
+     "43": 2.3083299044218046
+    }
+   }
+  },
+  "area": {
+   "pressure_l2": {
+    "mean": 1.946561835068553,
+    "per_seed": {
+     "42": 1.9905265727455206,
+     "43": 1.8967366701102955
+    }
+   },
+   "velocity_l2": {
+    "mean": 3.384857449639876,
+    "per_seed": {
+     "42": 3.5626584639047154,
+     "43": 3.2012319656592108
+    }
+   },
+   "nut_l2": {
+    "mean": 2.4456665759250598,
+    "per_seed": {
+     "42": 2.579950500883377,
+     "43": 2.3083294396590164
+    }
+   }
+  },
+  "posed": {
+   "pressure_l2": {
+    "mean": 1.9414183719955636,
+    "per_seed": {
+     "42": 1.9856473997676005,
+     "43": 1.8913139786576711
+    }
+   },
+   "velocity_l2": {
+    "mean": 3.379617922106724,
+    "per_seed": {
+     "42": 3.557285969954517,
+     "43": 3.1961453331837846
+    }
+   },
+   "nut_l2": {
+    "mean": 2.445588962579406,
+    "per_seed": {
+     "42": 2.5799456706168815,
+     "43": 2.308185766730745
+    }
+   }
+  }
+ },
+ "drivaerml": {
+  "status": "in_flight",
+  "in_flight": {
+   "what": "GLOBE on the AirfRANS interior task alone",
+   "replacement": "GLOBE on the DrivAerML Surface task"
+  }
+ }
+}
