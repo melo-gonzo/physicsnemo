@@ -40,8 +40,8 @@ source. Do not edit by hand.
 | attrib090 | arch_airfrans.md | scratch/isla-attrib090-2026-10-21/arch_airfrans.md | abbf8c160dafe0b13cd5890f7026f73f |
 | attrib090 | t2d_eager_native.md | scratch/isla-attrib090-2026-10-21/t2d_eager_native.md | 72138ebbc50aebbeafa8446aaebc7aed |
 | attrib090 | t2d_eager_posed.md | scratch/isla-attrib090-2026-10-21/t2d_eager_posed.md | 31e3214261471c9757d03f5a5e430c95 |
-| af_extrap | RESULTS.md | scratch/isla-af-extrap-2026-10-21/RESULTS.md | dc0730dedd3fdf90ee438b303406334e |
-| af_extrap | POSTHOC.md | scratch/isla-af-extrap-2026-10-21/POSTHOC.md | a5bf31f68d091a5c43c2169fbe732b4d |
+| af_extrap | RESULTS.md | scratch/isla-af-extrap-2026-10-21/RESULTS.md | 91fbee8e7f16c006e78e3b0481fe1ea0 |
+| af_extrap | POSTHOC.md | scratch/isla-af-extrap-2026-10-21/POSTHOC.md | 230e926b28b02490fcb350134ee007f8 |
 | af_extrap | afx_tables.md | scratch/isla-af-extrap-2026-10-21/afx_tables.md | 2387eaa1930aa830492de937e28d7cec |
 | af_extrap | afx_results.json | scratch/isla-af-extrap-2026-10-21/afx_results.json | 60dfd526fb60ee7563a60a710f5fa8cf |
 | af_extrap | posthoc.json | scratch/isla-af-extrap-2026-10-21/posthoc.json | 11b97a9357bbffdee5b2284d705b0fc0 |
@@ -80,7 +80,7 @@ source. Do not edit by hand.
 | az_diag | scales/scales_test_all.tsv | scratch/isla-az-decide-2026-10-21/scales/scales_test_all.tsv | 2559911c32562bebadc38ab3cac1ba7e |
 | az_diag | scales/scales_train_full.tsv | scratch/isla-az-decide-2026-10-21/scales/scales_train_full.tsv | ef9c59c8aa5f63a13f9c76a2392a48d4 |
 | az_diag | worst/cases.tsv | scratch/isla-az-decide-2026-10-21/worst/cases.tsv | 62420953e4af949504e7da343643ca08 |
-| medial_tie | DESIGN.md | scratch/isla-medial-tie-2026-10-22/DESIGN.md | 935d06ab953e9d33d6d3d5b7c0c0648d |
+| medial_tie | DESIGN.md | scratch/isla-medial-tie-2026-10-22/DESIGN.md | d75271876ad9b9be50be475cf00db43e |
 | ref090 | r090_final_tables.md | scratch/isla-ref090-2026-10-20/r090_final_tables.md | 80a9b86a10e67a096d45f605c3265aa2 |
 | ref090 | r090_final.json | scratch/isla-ref090-2026-10-20/r090_final.json | 0ed88eb280c664338eacb82e2e032a49 |
 | ref090 | t2d_control.md | scratch/isla-ref090-2026-10-20/t2d_control.md | fcc11cc3415b316d554182c84903b746 |

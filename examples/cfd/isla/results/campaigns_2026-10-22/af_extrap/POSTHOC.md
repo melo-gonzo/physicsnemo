@@ -35,13 +35,13 @@ ISLA family fix-trained (code_cmpaf_fix); its in-distribution reference is the f
 | ISLA-DTT | 0.0272 / 0.0157 / 0.0559 | 0.0132 / 0.0074 / 0.0214 | 2.05 / 2.12 / 2.61 |
 | GeoTransolver | 0.0191 / 0.0447 / 0.0379 | 0.0108 / 0.0382 / 0.0160 | 1.78 / 1.17 / 2.37 |
 | Transolver | 0.0203 / 0.0361 / 0.0393 | 0.0112 / 0.0288 / 0.0167 | 1.81 / 1.26 / 2.35 |
-ρ_matched = g_B ÷ g_ISLA-family (p / v / nut): GeoTransolver ÷ ISLA 0.69 / 0.44 / 0.86; Transolver ÷ ISLA 0.70 / 0.48 / 0.86; GeoTransolver ÷ ISLA-DTT 0.87 / 0.55 / 0.91; Transolver ÷ ISLA-DTT 0.88 / 0.59 / 0.90
+ρ_matched = g_B ÷ g_ISLA-family (p / v / nut; below 1: the ISLA-family arm's error grows more, the opposite direction to the excess ratios of §1; note 2026-10-22): GeoTransolver ÷ ISLA 0.69 / 0.44 / 0.86; Transolver ÷ ISLA 0.70 / 0.48 / 0.86; GeoTransolver ÷ ISLA-DTT 0.87 / 0.55 / 0.91; Transolver ÷ ISLA-DTT 0.88 / 0.59 / 0.90
 
 ### 4. Input-space reach (ISLA's in-model z of log10 Re; the baselines' standardized speed u)
 
 - ISLA z: train -2.05 to 1.80; test -4.85 to 3.04.
 - Baselines u: train -1.80 to 1.75; test -3.57 to 3.54.
-- Reach beyond the training edge, in each model's own input units (test extreme minus train extreme): ISLA below -2.81, above 1.24; baselines below -1.78, above 1.79.
+- Reach beyond the training edge, in each model's own input units, i.e. training standard deviations (test extreme minus train extreme; corrected 2026-10-22: in training ranges ISLA reaches 0.73 below and 0.32 above, the baselines 0.50 and 0.49): ISLA below -2.81, above 1.24; baselines below -1.78, above 1.79.
 
 | side | ISLA: Spearman(error, own reach) p / v / nut | ISLA-DTT: Spearman(error, own reach) p / v / nut | GeoTransolver: Spearman(error, own reach) p / v / nut | Transolver: Spearman(error, own reach) p / v / nut |
 |---|---|---|---|---|
@@ -82,3 +82,5 @@ Below the band, by quartile of distance (same cases for every arm): each model's
 | below (111) | 0.067 / 0.016 / 0.031 (0.19 / 0.20 / 0.30) | 0.057 / 0.014 / 0.029 (0.02 / 0.07 / 0.25) | 0.236 / 0.063 / 0.205 (0.89 / 0.86 / 0.89) | 0.126 / 0.031 / 0.064 (0.85 / 0.82 / 0.82) |
 | above (85) | 0.004 / 0.005 / 0.054 (0.49 / 0.58 / 0.66) | 0.003 / 0.005 / 0.065 (0.52 / 0.56 / 0.61) | 0.200 / 0.068 / 0.359 (0.97 / 0.84 / 0.94) | 0.023 / 0.010 / 0.110 (0.86 / 0.68 / 0.88) |
 
+
+**Note, 2026-10-22 (reviewer's second read).** Edited in place: the reach units (training standard deviations; ranges added) and the direction of ρ_matched. posthoc.py prints the original wording.
