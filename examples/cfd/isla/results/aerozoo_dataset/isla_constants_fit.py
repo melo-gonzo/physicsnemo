@@ -1,3 +1,19 @@
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """ISLA-SCALES round 2 (2026-10-19): fit ISLA's dataset constants on the train parts with the implemented scale function
 (ISLA._case_scales on the full-resolution boundaries, the model built from the recipe's model config).
 
@@ -6,8 +22,16 @@ units (a seeded 20,000-point interior sample, as the output_stats fit; velocity 
 Per split: reynolds = {mean, std (population)} of log10 Re over the train cases; scale c = the median over the train
 cases of the per-case RMS.
 usage: isla_constants_fit.py aerozoo <data> <model yaml> <out.jsonl> <shard> <n_shards> <workers>
-       isla_constants_fit.py airfrans <data> <model yaml> <out.jsonl> <workers>
-       isla_constants_fit.py summarize <aerozoo manifest> <airfrans manifest> <out.json> <jsonl...>"""
+       isla_constants_fit.py airfrans <data> <model yaml> <out.jsonl> <workers> [<split>...]
+       isla_constants_fit.py summarize <aerozoo manifest> <airfrans manifest> <out.json> <jsonl...>
+       isla_constants_fit.py airfrans_fit <airfrans manifest> <out.json> <split,...> <jsonl...>
+
+AF-EXTRAP (2026-10-21): the airfrans scan takes the splits whose cases it reads (default full_train) and also records
+each case's freestream speed, angle of attack and Reynolds number and the mean and population std of nut over every
+interior point (the converter's per-case statistics). airfrans_fit fits each named split on its own cases only:
+isla_constants as above, the nut NormalizeMeshFields stats as the mean over the cases of the per-case mean and of the
+per-case std (how the dataset files' 7.9e-4 / 2.4e-3 were made, there over every case), and the mean and population
+std of U_inf_mag (the baselines' SplitGlobalVector)."""
 
 import glob
 import json
@@ -108,6 +132,11 @@ def _rms(m, s, name, y):
 
 
 def aerozoo_case(arg):
+    """Fit inputs for one AeroZoo case.
+
+    Returns ISLA's scales (L, U, log10 Re), the dimensionless RMS of each target
+    field and of each boundary input, or an error row.
+    """
     path, yaml = arg
     torch.set_num_threads(1)
     from physicsnemo.mesh import DomainMesh
@@ -161,6 +190,11 @@ def aerozoo_case(arg):
 
 
 def airfrans_case(arg):
+    """Fit inputs for one AirfRANS case.
+
+    Returns ISLA's scales on the in-plane airfoil, the dimensionless RMS of nut,
+    the nut and freestream statistics, or an error row.
+    """
     path, yaml = arg
     torch.set_num_threads(1)
     from physicsnemo.mesh import DomainMesh, Mesh
@@ -181,13 +215,19 @@ def airfrans_case(arg):
         idx = torch.randperm(
             dm.interior.n_points, generator=torch.Generator().manual_seed(0)
         )[:20000]
-        nut = dm.interior.point_data["nut"].reshape(-1)[idx]
+        nut_all = dm.interior.point_data["nut"].reshape(-1).double()
+        nut = nut_all[idx]
         return {
             "case": os.path.basename(os.path.dirname(path)),
             "L": float(s["L"]),
             "U": float(s["U"]),
             "log10_re": float(s["z"]),
             "nut": _rms(m, s, "nut", nut),
+            "nut_mean": float(nut_all.mean()),
+            "nut_std": float(nut_all.std(correction=0)),
+            "U_inf_mag": float(dm.global_data["U_inf_mag"]),
+            "aoa_deg": float(dm.global_data["aoa_deg"]),
+            "Re": float(dm.global_data["Re"]),
         }
     except Exception:  # noqa: BLE001
         import traceback
@@ -262,13 +302,56 @@ if __name__ == "__main__":
     elif mode == "airfrans":
         data, yaml, out, nw = sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5])
         man = json.load(open(os.path.join(data, "manifest.json")))
-        paths = [
-            p
-            for c in man[AF_SPLIT]
-            for p in glob.glob(os.path.join(data, c, "*.pdmsh"))
-        ]
-        print("cases", len(man[AF_SPLIT]), "paths", len(paths), flush=True)
+        cases = sorted(set().union(*(man[s] for s in (sys.argv[6:] or [AF_SPLIT]))))
+        paths = [p for c in cases for p in glob.glob(os.path.join(data, c, "*.pdmsh"))]
+        print("cases", len(cases), "paths", len(paths), flush=True)
         _run(airfrans_case, [(p, yaml) for p in paths], out, nw)
+    elif mode == "airfrans_fit":
+        af_man, out, splits = json.load(open(sys.argv[2])), sys.argv[3], sys.argv[4]
+        rows = [json.loads(line) for f in sys.argv[5:] for line in open(f)]
+        errors = [r for r in rows if "error" in r]
+        good = {r["case"]: r for r in rows if "error" not in r}
+        fits = {}
+        for s in splits.split(","):
+            names = sorted(
+                set().union(*(af_man[x] for x in s.split("+")))
+            )  # a+b: the union
+            af = [good[c] for c in names if c in good]
+            u = [r["U_inf_mag"] for r in af]
+            fits["airfrans." + s] = {
+                **_fit(af, AF_FIELDS),
+                "n_train": len(names),
+                "nut_norm": {
+                    "mean": statistics.fmean(r["nut_mean"] for r in af),
+                    "std": statistics.fmean(r["nut_std"] for r in af),
+                },
+                "U_inf_mag": {"mean": statistics.fmean(u), "std": statistics.pstdev(u)},
+            }
+        json.dump(
+            {"fits": fits, "n_errors": len(errors), "errors": errors[:5]},
+            open(out, "w"),
+            indent=1,
+        )
+        print(
+            json.dumps(
+                {
+                    k: {
+                        kk: v[kk]
+                        for kk in (
+                            "n_cases",
+                            "n_train",
+                            "reynolds",
+                            "scale",
+                            "nut_norm",
+                            "U_inf_mag",
+                        )
+                    }
+                    for k, v in fits.items()
+                },
+                indent=1,
+            )
+        )
+        print("errors", len(errors), errors[:2])
     else:
         az_man, af_man, out = (
             json.load(open(sys.argv[2])),

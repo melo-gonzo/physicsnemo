@@ -278,3 +278,66 @@ def test_ud_twin_feeds_the_baselines_the_direction_and_the_standardized_speed(
     expected = torch.cat([u / u.norm(), ((u.norm() - 62.116) / 17.914).reshape(1)])
     rows = x.reshape(-1, x.shape[-1])
     torch.testing.assert_close(rows, expected.expand_as(rows))
+
+
+#: AF-EXTRAP (2026-10-21): the constants of the extrapolation splits' dataset files, each fitted on its split's train
+#: side only (examples/cfd/isla/results/aerozoo_dataset/isla_constants_fit.py airfrans_fit, LHR job 309151).
+SPLIT_FITS = {
+    "reynolds": {
+        "nut": {"mean": 7.967e-4, "std": 2.383e-3},
+        "speed": {"mean": 62.587, "std": 8.762},
+        "isla": {
+            "reynolds": {"mean": 6.223, "std": 0.06224},
+            "output_scale": {"nut": 7.460e-05},
+        },
+    },
+    "aoa": {
+        "nut": {"mean": 7.122e-4, "std": 2.131e-3},
+        "speed": {"mean": 62.363, "std": 17.776},
+        "isla": {
+            "reynolds": {"mean": 6.207, "std": 0.1327},
+            "output_scale": {"nut": 7.540e-05},
+        },
+    },
+}
+
+
+@pytest.mark.parametrize("task", sorted(SPLIT_FITS))
+@pytest.mark.parametrize(
+    "src",
+    [
+        "airfrans_uvolume_2d",
+        "airfrans_uvolume_2d_posed",
+        "airfrans_uvolume_ud",
+        "airfrans_uvolume_ud_posed",
+    ],
+)
+def test_extrapolation_split_file_is_its_source_with_train_side_constants(src, task):
+    """airfrans_uvolume_{2d,ud}_<task>{,_posed}.yaml is its full-split file with the nut stats, and ISLA's
+    isla_constants or the baselines' standardized-speed constants, replaced by their fit on <task>_train."""
+    datasets = _RECIPE_ROOT / "datasets"
+    stem, posed = (
+        (src[: -len("_posed")], "_posed") if src.endswith("_posed") else (src, "")
+    )
+    a = OmegaConf.to_container(
+        OmegaConf.load(datasets / f"{stem}_{task}{posed}.yaml"), resolve=False
+    )
+    b = OmegaConf.to_container(OmegaConf.load(datasets / f"{src}.yaml"), resolve=False)
+    fit = SPLIT_FITS[task]
+    (norm,) = [
+        t
+        for t in b["pipeline"]["transforms"]
+        if t["_target_"] == "${dp:NormalizeMeshFields}"
+    ]
+    assert norm["fields"]["nut"] == {"type": "scalar", "mean": 7.9e-4, "std": 2.4e-3}
+    norm["fields"]["nut"] = {"type": "scalar", **fit["nut"]}
+    if "_ud" in src:
+        assert b["pipeline"]["transforms"][-1] == SPEED_STD
+        b["pipeline"]["transforms"][-1] = {**SPEED_STD, **fit["speed"]}
+    else:
+        assert b["isla_constants"] == {
+            "reynolds": {"mean": 6.205, "std": 0.1347},
+            "output_scale": {"nut": 7.511e-05},
+        }
+        b["isla_constants"] = fit["isla"]
+    assert a == b
