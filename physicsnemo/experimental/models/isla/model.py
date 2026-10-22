@@ -226,8 +226,10 @@ of the full surface, exact on a boundary kept whole; and the sample is spread
 along the space-filling curve, so every part of the surface is represented. In
 training the draw's start is uniform from the global torch RNG
 (``torch.manual_seed`` reproduces it), in evaluation it is fixed, so inference
-is deterministic. A surface task reads every cell it is given (its outputs are
-predicted there) and samples none.
+is deterministic. The draw reads the cells' measures and centroids in float64
+from the input meshes, so it is the same at every model precision. A surface
+task reads every cell it is given (its outputs are predicted there) and samples
+none.
 
 **Global inputs.** Rank-1 global inputs are the :math:`K` global directions:
 each is normalized to a unit direction inside the model (a direction is what
@@ -324,7 +326,7 @@ from physicsnemo.experimental.models.isla.inputs import (
     _pack,
     _schema_layout,
 )
-from physicsnemo.experimental.models.isla.sampling import sample_boundary_cells
+from physicsnemo.experimental.models.isla.sampling import draw_inputs, sample_boundary_cells
 from physicsnemo.experimental.models.isla.scales import (
     check_output_stats,
     merged,
@@ -1653,17 +1655,19 @@ class ISLA(Module):
             ### The boundary tokens: the sample of the cells (sample_boundary_cells),
             ### each kept cell with its Horvitz-Thompson measure. A uniform start
             ### from the global torch RNG in training, a fixed one in evaluation; in
-            ### the measures' precision (float64 inside), whatever the autocast.
+            ### float64 from the input meshes whatever the model's precision or the
+            ### autocast, the weights cast to the tokens' measures at the end.
             if self.training:
                 start = torch.rand((), dtype=torch.float64, device=q_points.device)
             else:
                 start = torch.full((), EVAL_START, dtype=torch.float64, device=q_points.device)
             with torch.autocast(q_points.device.type, enabled=False):
+                draw = [draw_inputs(m) for m in meshes]
                 kept, weights = sample_boundary_cells(
-                    measures, [m.cell_centroids for m in meshes], self.boundary_tokens, start
+                    [a for a, _ in draw], [x for _, x in draw], self.boundary_tokens, start
                 )
             boundary = boundary.apply(lambda t: t[:, kept], batch_size=[1, kept.shape[0]])
-            boundary["measure"] = weights[None]
+            boundary["measure"] = weights[None].to(boundary["measure"].dtype)
             query = query[None]
         fields = self._redimensionalize(self._forward_tokens(boundary, query, g_unit, g_scalars, gauge=gauge), scales)
         return Mesh(

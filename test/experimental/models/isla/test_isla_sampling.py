@@ -46,7 +46,9 @@ def _conditions(sizes, seed=0):
 def _per_condition(kept, weights, sizes):
     bounds = torch.tensor(sizes).cumsum(0)[:-1]
     cid = torch.bucketize(kept, bounds, right=True)
-    counts = torch.zeros(len(sizes), dtype=torch.long).index_add(0, cid, torch.ones_like(kept))
+    counts = torch.zeros(len(sizes), dtype=torch.long).index_add(
+        0, cid, torch.ones_like(kept)
+    )
     sums = torch.zeros(len(sizes), dtype=weights.dtype).index_add(0, cid, weights)
     return counts, sums
 
@@ -57,12 +59,19 @@ def test_water_fill_shares_the_budget():
     c = lambda *v: torch.tensor(v, dtype=D)  # noqa: E731
     assert torch.equal(water_fill(c(10, 1000, 30, 5000), 400), c(10, 180, 30, 180))
     assert torch.equal(water_fill(c(10**6), 200_000), c(200_000))
-    assert torch.equal(water_fill(c(10**6, 10**6, 10**6, 10**6), 200_000), c(*[50_000] * 4))
-    assert torch.equal(water_fill(c(23_380, 54_853, 291_030, 54_621), 200_000), c(23_380, 54_853, 67_146, 54_621))
+    assert torch.equal(
+        water_fill(c(10**6, 10**6, 10**6, 10**6), 200_000), c(*[50_000] * 4)
+    )
+    assert torch.equal(
+        water_fill(c(23_380, 54_853, 291_030, 54_621), 200_000),
+        c(23_380, 54_853, 67_146, 54_621),
+    )
     assert torch.equal(water_fill(c(10, 20), 400), c(10, 20))
     assert torch.equal(water_fill(c(0, 500), 100), c(0, 100))
     shares = water_fill(c(3, 7, 400, 401, 9_000), 1_000)
-    assert float(shares.sum()) == pytest.approx(1_000) and torch.equal(shares[:2], c(3, 7))
+    assert float(shares.sum()) == pytest.approx(1_000) and torch.equal(
+        shares[:2], c(3, 7)
+    )
 
 
 def test_inclusion_probabilities_are_capped_proportional_to_size():
@@ -79,7 +88,10 @@ def test_inclusion_probabilities_are_capped_proportional_to_size():
     ratio = pi[~capped] / a[~capped]
     assert torch.allclose(ratio, ratio[0].expand_as(ratio), rtol=1e-12)
     assert bool((ratio[0] * a[capped] >= 1).all())
-    assert torch.equal(pps_inclusion_probabilities(a, torch.tensor(1000.0, dtype=D)), torch.ones_like(a))
+    assert torch.equal(
+        pps_inclusion_probabilities(a, torch.tensor(1000.0, dtype=D)),
+        torch.ones_like(a),
+    )
 
 
 @pytest.mark.parametrize("budget", [1, 77, 300, 3539, 3540, 10**6])
@@ -88,7 +100,9 @@ def test_the_count_is_exact(budget):
     sizes = [500, 40, 3000]
     measures, centroids = _conditions(sizes)
     for u in (0.0, 0.37, 0.999):
-        kept, w = sample_boundary_cells(measures, centroids, budget, torch.tensor(u, dtype=D))
+        kept, w = sample_boundary_cells(
+            measures, centroids, budget, torch.tensor(u, dtype=D)
+        )
         assert kept.shape == w.shape == (min(sum(sizes), budget),)
         assert torch.equal(kept, kept.unique())
 
@@ -102,12 +116,16 @@ def test_horvitz_thompson_measure_sums_are_unbiased():
     measures, centroids = _conditions(sizes)
     budget, draws = 300, 2_000
     shares = water_fill(torch.tensor(sizes, dtype=D), budget)
-    pi = torch.cat([pps_inclusion_probabilities(a, s) for a, s in zip(measures, shares)])
+    pi = torch.cat(
+        [pps_inclusion_probabilities(a, s) for a, s in zip(measures, shares)]
+    )
     total = torch.stack([a.sum() for a in measures])
     torch.manual_seed(0)
     sums, hits = [], torch.zeros(sum(sizes), dtype=D)
     for _ in range(draws):
-        kept, w = sample_boundary_cells(measures, centroids, budget, torch.rand((), dtype=D))
+        kept, w = sample_boundary_cells(
+            measures, centroids, budget, torch.rand((), dtype=D)
+        )
         counts, s = _per_condition(kept, w, sizes)
         assert int(counts[1]) == 40
         assert float(s[1]) == pytest.approx(float(total[1]), rel=1e-12)
@@ -155,12 +173,17 @@ def test_one_compiled_graph_for_every_cell_count():
 
     torch._dynamo.reset()
     compiled = torch.compile(draw, fullgraph=True, dynamic=True)
-    for i, (n1, n2) in enumerate([(500, 40), (700, 90), (100, 50), (2000, 3), (150, 140)]):
+    for i, (n1, n2) in enumerate(
+        [(500, 40), (700, 90), (100, 50), (2000, 3), (150, 140)]
+    ):
         g = torch.Generator().manual_seed(i)
         args = (
-            torch.rand(n1, generator=g), torch.rand(n2, generator=g),
-            torch.randn(n1, 3, generator=g), torch.randn(n2, 3, generator=g),
-            torch.randn(n1, 4, generator=g), torch.randn(n2, 4, generator=g),
+            torch.rand(n1, generator=g),
+            torch.rand(n2, generator=g),
+            torch.randn(n1, 3, generator=g),
+            torch.randn(n2, 3, generator=g),
+            torch.randn(n1, 4, generator=g),
+            torch.randn(n2, 4, generator=g),
             torch.tensor(0.5, dtype=D),
         )
         with torch._dynamo.config.patch(error_on_recompile=i > 0):
@@ -217,3 +240,120 @@ def test_the_length_unit_is_the_full_boundary_s_for_every_draw():
     assert p0.shape[1] == 60 and not torch.equal(p0, p1)  # two different draws
     assert torch.equal(g0, g1)
     torch.testing.assert_close(g0, full, atol=0, rtol=1e-14)
+
+
+def _model_draw(model, meshes, q):
+    """The kept cells and the tokens' final measures of one evaluation forward."""
+    import physicsnemo.experimental.models.isla.model as isla_model
+
+    seen, forward_tokens, draw = (
+        {},
+        model._forward_tokens,
+        isla_model.sample_boundary_cells,
+    )
+
+    def spy_draw(*a, **k):
+        seen["kept"], seen["raw"] = out = draw(*a, **k)
+        return out
+
+    def spy_tokens(boundary, *a, **k):
+        seen["measure"] = boundary["measure"][0].clone()
+        return forward_tokens(boundary, *a, **k)
+
+    model._forward_tokens = spy_tokens
+    isla_model.sample_boundary_cells = spy_draw
+    try:
+        with torch.no_grad():
+            model.eval()(boundary_meshes=meshes, prediction_points=q)
+    finally:
+        isla_model.sample_boundary_cells = draw
+        del model._forward_tokens
+    return seen
+
+
+def test_the_draw_is_the_same_at_every_model_precision():
+    """On the same float32 meshes a float32 and a float64 model keep bitwise the same
+    cells, and the tokens' measures agree up to the final cast: the draw reads the
+    cells' measures and centroids in float64 from the input coordinates. The cells sit
+    far from the origin, so float32 centroids and areas are rounded by many Morton
+    grid units and a draw on them is a different sample."""
+    import copy
+
+    from physicsnemo.experimental.models import ISLA
+    from physicsnemo.mesh import Mesh
+    from test.experimental.models.isla._meshes import cloud, soup
+
+    torch.manual_seed(0)
+    m32 = ISLA(
+        output_schema={"p": {"rank": 0}},
+        boundary_schemas={"a": {}, "b": {}},
+        interior=True,
+        boundary_tokens=500,
+        hidden=16,
+        n_layers=1,
+        n_slices=4,
+    ).float()
+    m64 = copy.deepcopy(m32).double()
+    shift = torch.tensor([300.0, -200.0, 100.0], dtype=D)
+    meshes = {}
+    for i, k in enumerate("ab"):
+        pts, nrm, _, _ = cloud(1500, seed=i)
+        meshes[k] = soup(pts * 1e-2 + shift, nrm, size=1e-3).to(torch.float32)
+    q = (
+        torch.randn(20, 3, generator=torch.Generator().manual_seed(5)) * 1e-2 + shift
+    ).float()
+
+    def fresh(dtype):
+        return {
+            k: Mesh(points=m.points.to(dtype), cells=m.cells) for k, m in meshes.items()
+        }
+
+    d32 = _model_draw(m32, fresh(torch.float32), q)
+    d64 = _model_draw(m64, fresh(torch.float64), q.double())
+    assert d32["kept"].shape == (500,)
+    assert torch.equal(d32["kept"], d64["kept"])
+    assert torch.equal(d32["raw"], d64["raw"]) and d32["raw"].dtype == torch.float64
+    assert (
+        d32["measure"].dtype == torch.float32 and d64["measure"].dtype == torch.float64
+    )
+    assert torch.equal(d32["measure"], d64["measure"].float())
+
+
+def test_the_draw_is_independent_of_the_numbering():
+    """Renumbering the cells and the vertices of float32 meshes keeps the same physical
+    cells with bitwise the same weights."""
+    from physicsnemo.experimental.models.isla.sampling import draw_inputs
+    from physicsnemo.mesh import Mesh
+    from test.experimental.models.isla._meshes import cloud, soup
+
+    meshes = []
+    for i, n in enumerate((900, 2500)):
+        pts, nrm, w, _ = cloud(n, seed=i)
+        meshes.append(soup(pts + 40.0, nrm, w if i else None).to(torch.float32))
+    g = torch.Generator().manual_seed(7)
+    renumbered, cell_perms = [], []
+    for m in meshes:
+        p = torch.randperm(m.n_points, generator=g)  # new vertex j is old vertex p[j]
+        c = torch.randperm(m.n_cells, generator=g)  # new cell j is old cell c[j]
+        cells = torch.empty_like(p).scatter_(0, p, torch.arange(m.n_points))[m.cells[c]]
+        renumbered.append(
+            Mesh(points=m.points[p], cells=cells, cell_data=m.cell_data[c])
+        )
+        cell_perms.append(c)
+    old_index = torch.cat(
+        [c + sum(m.n_cells for m in meshes[:i]) for i, c in enumerate(cell_perms)]
+    )
+    for u in (0.5, 0.123):
+        start = torch.tensor(u, dtype=D)
+        draws = []
+        for ms in (meshes, renumbered):
+            inputs = [draw_inputs(m) for m in ms]
+            draws.append(
+                sample_boundary_cells(
+                    [a for a, _ in inputs], [x for _, x in inputs], 700, start
+                )
+            )
+        (k0, w0), (k1, w1) = draws
+        order = old_index[k1].argsort()
+        assert torch.equal(old_index[k1][order], k0)
+        assert torch.equal(w1[order], w0)
