@@ -39677,7 +39677,7 @@ These numbers enter the cross-dataset table of PREREG_v2
 
 **Question.** Does a model trained on one SHIFT-SUV rear-end family predict the other? Every SHIFT-SUV checkpoint in
 the book trains on the estate family only, and the fastback family had never been scored by a current one, so the
-cross-family question was open (@sec-limits). It is a generalization test on a surface task beside AeroZoo's volume test,
+cross-family question was open (@sec-shift-suv-limits, @sec-limits-transfer). It is a generalization test on a surface task beside AeroZoo's volume test,
 with a near shift: both families are parametric morphs of one SUV (same footprint, varying height) at the same 30 m/s
 far field and the same single no-slip boundary, and only the class of the rear end changes. It tests neither a new
 boundary role nor Reynolds extrapolation.
@@ -39776,7 +39776,8 @@ with the column sum of the slice-state softmax over points, and the column sum s
 token count N (≥ 10,240) is not a multiple of 4, each slice's denominator gained k = (−N) mod 4 phantom tokens. Each
 phantom token has value 0 and, as far as the emulation shows, measure 1 in the data's raw units, and its logit equals
 the block's geometry-logit bias: an attention sink. The masked log_w load has no `other`, so its value on padded rows is
-undefined, and the emulation's match is the evidence that it reads 0. None of the four registered emulations matched
+undefined, and the emulation's match is the evidence that it reads 0. None of the three registered emulations (EMU-A, EMU-S,
+EMU-AS) matched
 (M0 as registered: not confirmed; the closest, EMU-S, sits at 4e-3 to 1.2e-2). A kernel-derived emulation (EMU-Sb,
 phantom logit b_geo), added after the smoke in the PREREG §6 addendum, which carries no rule weight, matches the bug
 path's block outputs to 2.9e-7-3.4e-7, at or below the k = 0 float32 floor of 3.5e-7-5.2e-7. That holds on three
