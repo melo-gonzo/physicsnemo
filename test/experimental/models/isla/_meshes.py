@@ -51,13 +51,19 @@ def cloud(n: int, d: int = 3, seed: int = 0, *, dtype=torch.float64, scale=None)
     else:
         scale = torch.as_tensor(scale, dtype=dtype)
     pts = torch.randn(n, d, generator=g, dtype=dtype) * scale
-    nrm = torch.nn.functional.normalize(torch.randn(n, d, generator=g, dtype=dtype), dim=-1)
+    nrm = torch.nn.functional.normalize(
+        torch.randn(n, d, generator=g, dtype=dtype), dim=-1
+    )
     w = torch.rand(n, generator=g, dtype=dtype) + 0.5
-    drv = torch.nn.functional.normalize(torch.randn(d, generator=g, dtype=dtype), dim=-1)
+    drv = torch.nn.functional.normalize(
+        torch.randn(d, generator=g, dtype=dtype), dim=-1
+    )
     return pts, nrm, w, drv
 
 
-def soup(points, normals, measures=None, cell_data=None, size: float = CELL_SIZE) -> Mesh:
+def soup(
+    points, normals, measures=None, cell_data=None, size: float = CELL_SIZE
+) -> Mesh:
     """A ``Mesh[d-1, d]`` whose cell centroids are ``points``, cell normals
     ``normals`` and cell measures ``measures`` (geometric and effective; ``None``:
     every cell a simplex of legs ``size``). ``cell_data`` adds per-cell fields."""
@@ -92,7 +98,11 @@ def transform(mesh: Mesh, R=None, shift=None, scale: float = 1.0, specs=None) ->
     (rank 0 unchanged, rank 1 ``R v``, rank 2 ``R T R^T``)."""
     d = mesh.n_spatial_dims
     dtype, device = mesh.points.dtype, mesh.points.device
-    R = torch.eye(d, dtype=dtype, device=device) if R is None else R.to(dtype=dtype, device=device)
+    R = (
+        torch.eye(d, dtype=dtype, device=device)
+        if R is None
+        else R.to(dtype=dtype, device=device)
+    )
     pts = scale * mesh.points @ R.T
     if shift is not None:
         pts = pts + shift.to(dtype=dtype, device=device)
@@ -144,14 +154,18 @@ def law(x, R, rank: int):
     """``R^{(x)rank} x`` on the trailing ``rank`` axes of an unbatched output ``x``."""
     y = x
     for k in range(rank):
-        y = torch.movedim(torch.tensordot(y, R.to(x.dtype), dims=([1 + k], [1])), -1, 1 + k)
+        y = torch.movedim(
+            torch.tensordot(y, R.to(x.dtype), dims=([1 + k], [1])), -1, 1 + k
+        )
     return y
 
 
 def orthogonal(d: int, seed: int, improper: bool = False):
     """A random orthogonal map with ``det = -1`` when ``improper``, else ``+1``."""
     q, _ = torch.linalg.qr(
-        torch.randn(d, d, dtype=torch.float64, generator=torch.Generator().manual_seed(seed))
+        torch.randn(
+            d, d, dtype=torch.float64, generator=torch.Generator().manual_seed(seed)
+        )
     )
     if (torch.det(q) < 0) != improper:
         q[:, 0] = -q[:, 0]
