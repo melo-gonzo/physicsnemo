@@ -40003,8 +40003,9 @@ pairs agreeing; a task summary needs 4 of 6 cells and none against).
 - *Input reach (post hoc, registered before running).* ISLA 0.9.0 reads z = (log10 Re − m) / s with the split's constants:
   training −2.05 to 1.80, test down to −4.85. GeoTransolver 256 and Transolver 512 × 16 read the standardized speed: training
   −1.80 to 1.75, test down to −3.57. Clamping each model's input to its training range at inference halves ISLA's below-band
-  pressure error (post hoc, clamped ÷ native, both seeds, beyond 2σ: 0.47×; ISLA-DTT 0.58×). ISLA's z uses its boundary gauge
-  length, so 45 test cases lie inside its z range and are unchanged. Post hoc: clamped, the four architectures' below-band
+  pressure error (post hoc, clamped ÷ native over the 241 below-band cases whose z the clamp changes, both seeds, beyond 2σ:
+  0.47×; ISLA-DTT 0.58×; over all 254 below-band cases 0.477 and 0.590). ISLA's z uses its own length unit L, so 45 test
+  cases (13 of them below the band) lie inside its z range and are unchanged. Post hoc: clamped, the four architectures' below-band
   pressure errors meet. On the same 254 below-band cases they are ISLA 0.9.0 0.0260, ISLA-DTT 0.0262, GeoTransolver 256 0.0261
   and Transolver 512 × 16 0.0248 (0.025-0.026), with the baselines' standardized speed clamped to their training range
   [−1.80, 1.75]. On ν_t the clamp costs the baselines 2.2-3.3× and ISLA 0.9.0 1.10-1.35× (clamped ÷ native; within noise below
