@@ -39076,7 +39076,7 @@ cancelled on 2026-10-21 and relaunch under the fix: AF-EXTRAP's ISLA and
 ISLA-DTT arms, ATTRIB-090's AirfRANS and lug arms, and REF-090's lug
 ISLA-DTT.
 
-**Later (2026-10-22).** An independent check of the fix (scratch/isla-review-2026-10-21/second-read-2026-10-22/cert.md) confirms it: with mix-order reduction off, ISLA's per-block compiled path equals the eager function on every case measured. The N % 4 rule holds exactly on AirfRANS (20 of 20), lug seed 42 (60 of 60) and Tensile2d. Lug seed 43's checkpoint amplifies float32 roundoff: its eager float32 and float64 forwards differ by a median 1.8e-3 per case, against 7e-6 on seed 42. So about 150 of seed 43's 428 moved cases are roundoff, not the fault, and roundoff moves its case means by about 0.1 to 0.2 percent. The model.py fix was certified on 20 of 200 AirfRANS cases per checkpoint, and the environment-variable path on all 200 cases of one AirfRANS ISLA-DTT checkpoint. Both certifications cover the float32 forward only. On AeroZoo, ISLA's compiled and eager forwards differ by up to 4.9e-4, which the fused kernel does not explain; a diagnostic runs before the AeroZoo ISLA-DTT lanes are read. Training under the fault changed what training found on some datasets and not on others. Models retrained on the fixed path, divided by the originals (both scored eager), read 1.024 / 0.985 / 0.998 for AirfRANS ISLA, 0.898 / 0.961 / 0.962 for AirfRANS ISLA-DTT and 0.768 for the lug's von Mises. The AirfRANS, Tensile2d and lug standings are now the eager-trained rows (@sec-nb-ref090-t2d-control).
+**Later (2026-10-22).** An independent check of the fix (scratch/isla-review-2026-10-21/second-read-2026-10-22/cert.md) confirms it: with mix-order reduction off, ISLA's per-block compiled path equals the eager function on every case measured. The N % 4 rule holds exactly on AirfRANS (20 of 20), lug seed 42 (60 of 60) and Tensile2d. Lug seed 43's checkpoint amplifies float32 roundoff: its eager float32 and float64 forwards differ by a median 1.8e-3 per case, against 7e-6 on seed 42. So about 150 of seed 43's 428 moved cases are roundoff, not the fault, and roundoff moves its case means by about 0.1 to 0.2 percent. The model.py fix was certified on 20 of 200 AirfRANS cases per checkpoint, and the environment-variable path on all 200 cases of one AirfRANS ISLA-DTT checkpoint. Both certifications cover the float32 forward only. On AeroZoo the fault cannot fire at the scorer's settings: every block sees 400,000 tokens (200,000 drawn boundary tokens plus 200,000 interior points, a multiple of 4), and the geometry runs in the fused kernel. Compiled and eager agree to 4.8e-6 on ISLA and to 6.9e-4 on one ISLA-DTT case (job 333632, 20 cases each), both below the float32-against-float64 floor, which on AeroZoo reaches 1e-2 to 0.28 of the target's RMS on 4 of 20 ISLA cases (scratch/isla-az-decide-2026-10-21/cmpdiag/README.md). PROBES-090's 4.9e-4 sits inside that floor. Training under the fault changed what training found on some datasets and not on others. Models retrained on the fixed path, divided by the originals (both scored eager), read 1.024 / 0.985 / 0.998 for AirfRANS ISLA, 0.898 / 0.961 / 0.962 for AirfRANS ISLA-DTT and 0.768 for the lug's von Mises. The AirfRANS, Tensile2d and lug standings are now the eager-trained rows (@sec-nb-ref090-t2d-control).
 
 ## 2026-10-21 — ISLA's residual stream grows without bound while the learning rate is constant, and only the head frame reads its scale {#sec-nb-stream-audit}
 
@@ -39672,3 +39672,133 @@ These numbers enter the cross-dataset table of PREREG_v2
 (scratch/isla-az-decide-2026-10-21/QUERYPOP090_FOR_12F.md); the AeroZoo ISLA-DTT probe follows when its checkpoints finish.
 
 *Read by the supervisor and second-read by the reviewer on 2026-10-22 (scratch/isla-review-2026-10-21/SECOND_READ_2026-10-22.md).*
+
+## 2026-10-22 — SUV-XFAM, zero-shot estate to fastback on SHIFT-SUV: registered summary mixed / no difference. On pressure the three architectures' penalties (fastback-test error ÷ estate-test error) are indistinguishable across ISLA 0.9.0, GeoTransolver 256 and Transolver 512 × 16: 2.557, 2.561 and 2.557 (registered: no difference; GeoTransolver's own seeds give 2.39 and 2.74), while ISLA 0.9.0's wall-shear penalty is smaller (1.78 against GeoTransolver 256's 1.93 and Transolver 512 × 16's 1.97), so its wall-shear error goes from 1.044 times Transolver's on estates to 0.941 times on fastbacks {#sec-nb-suv-xfam}
+
+**Question.** Does a model trained on one SHIFT-SUV rear-end family predict the other? Every SHIFT-SUV checkpoint in
+the book trains on the estate family only, and the fastback family had never been scored by a current one, so the
+cross-family question was open (@sec-limits). It is a generalization test on a surface task beside AeroZoo's volume test,
+with a near shift: both families are parametric morphs of one SUV (same footprint, varying height) at the same 30 m/s
+far field and the same single no-slip boundary, and only the class of the rear end changes. It tests neither a new
+boundary role nor Reynolds extrapolation.
+
+**Setting.** The six standing estate checkpoints, as trained (794 estates, 500 epochs, bf16): ISLA 0.9.0 (width 512,
+512 slices; `r090_suv_isla_seed42/43`, code_r090 / recipe_r090), and the fair-drive GeoTransolver 256 and Transolver
+512 × 16 (`clud_suv_{gt,t}_seed42/43`, code_v20 / recipe_v8). Each is scored with its own snapshot and its own saved
+normalization; no fastback statistic reaches any arm. Native protocol, float32, 200k scored cells for every arm
+(Transolver 512 × 16 trained at 100k cells and is scored at 200k, as in the standing estate scorer), final checkpoint, on
+three splits: fastback test (99 cases, never used before; the lead), fastback val (99; the replicate), and estate test
+(100; the in-family reference). The fastback data file is the reference `shift_suv_surface.yaml` with only its data root
+changed. The scored cells and targets are identical per case across the three loaders (loader hashes, and reference
+force coefficients agreeing to 4.2e-5 relative across all six checkpoints). Pre-registered
+(scratch/isla-suv-xfam-2026-10-22/PREREG.md, approved 2026-10-22 10:20 EDT with floors of 3 percent on R2 and 5 percent
+on the part-B trigger) before any fastback or estate-test score (the estate-val scores and the old 10k-cell
+near-transfer numbers were already known). LHR jobs 333701 (loader check), 333702 and 333789 (scoring); 1.5 GPU-h.
+
+**What we saw** (relative L2, seed means, pressure / wall shear; seeds 42 · 43 in RESULTS.md):
+
+| arm | estate test | fastback test | penalty P = fastback ÷ estate, geometric mean of the two seeds' ratios | fastback val |
+|---|---|---|---|---|
+| ISLA 0.9.0 | 0.0437 / 0.0657 | 0.1118 / **0.1168** | 2.56 / **1.78** | 0.1109 / 0.1174 |
+| GeoTransolver 256 | 0.0450 / 0.0656 | 0.1155 / 0.1267 | 2.56 / 1.93 | 0.1150 / 0.1276 |
+| Transolver 512 × 16 | **0.0416** / **0.0629** | **0.1063** / 0.1241 | 2.56 / 1.97 | 0.1061 / 0.1247 |
+
+| cell | R1: fastback test, baseline ÷ ISLA | R2: P_baseline ÷ P_ISLA (D / SE) | part-B cell |
+|---|---|---|---|
+| GeoTransolver 256 pressure | 1.034, level | 1.002 (0.0), no difference | no |
+| GeoTransolver 256 wall shear | 1.085, ISLA leads | 1.087 (3.0), ISLA transfers better (registered label) | yes |
+| Transolver 512 × 16 pressure | 0.952, Transolver leads | 1.000 (0.0), no difference | no |
+| Transolver 512 × 16 wall shear | 1.063, ISLA leads | 1.110 (11), ISLA transfers better (registered label) | yes |
+
+**Verdict, as registered.** R1, on unseen fastbacks: ISLA leads both baselines on wall shear; Transolver leads ISLA on
+pressure by 5 percent, as it does on estates; GeoTransolver is level with ISLA on pressure. R2: the pressure penalties
+are the same for all three; ISLA's wall-shear penalty is smaller than both baselines'. Both wall-shear cells clear the
+registered screen (D = 3.0 and 11.4 SE(D), and above ln 1.03), but each SE rests on one degree of freedom per arm, so
+the 2-SE band is a rough screen and not a 95 percent test; the GeoTransolver cell sits at 3.0 SE. The registered summary
+is "mixed / no difference", because it needs three of four cells to agree and only the two wall-shear cells do. The
+part-B trigger fires on both wall-shear cells. Every cell repeats on fastback val. Of ten predictions seven held; the
+three that failed had expected no difference in the R2 wall-shear cells (P3 against GeoTransolver, P4 against
+Transolver) and a level R1 GeoTransolver wall-shear cell (P8). The caveat stands: P mixes the transfer gap with how hard
+fastbacks are in themselves, and only the reverse direction (train on fastbacks, score on estates) separates them.
+
+**Beside the rules** (post hoc, no verdict):
+- The wall-shear advantage is on nearly every case: ISLA's seed-mean error is lower than GeoTransolver's on all 99
+  fastback-test cases and lower than Transolver's on 96. The case-bootstrap 95 percent interval of the penalty ratio is
+  1.070-1.105 against GeoTransolver and 1.093-1.126 against Transolver. These intervals hold the seeds fixed, so they
+  show consistency from case to case, not seed noise. The advantage holds on every component, most on the y component,
+  along the dataset's axes (penalty ISLA 1.64, GeoTransolver 1.83, Transolver 1.86).
+- The wall-shear advantage is not an artifact of different in-family floors. ISLA 0.9.0's extra fastback error is
+  smaller additively (fastback − estate: 0.051 against 0.061 / 0.061, 16-17 percent smaller) and in quadrature
+  (√(E_f² − E_e²): 0.097 against 0.108 / 0.107, 10-11 percent smaller). On pressure ISLA's excess lies between the two
+  baselines' under both measures (additive 0.068 against 0.071 / 0.065; quadrature 0.103 against 0.106 / 0.098).
+- The registered pressure penalties agree to 0.2 percent across the three architectures (2.557, 2.561, 2.557). One
+  hypothesis, untested because predictions were not saved: the extra pressure error sits where the rear ends differ
+  (the sloped rear window), which an estate-trained model has not seen.
+- Transfer amplifies GeoTransolver's seed spread: its two seeds differ by 0.1 percent on estate-test pressure and by
+  15 percent on fastback-test pressure (seed 42 ÷ seed 43 = 0.1234 ÷ 0.1076 = 1.146). ISLA's seed gap is 3.6 percent on
+  estate test and 3.2 percent on fastback test, with the order flipped (seed 42 higher on estates, seed 43 on
+  fastbacks), and Transolver's under 1 percent.
+- At old versions (10k cells, @sec-nb-window-readout-1 and @sec-nb-mega-synthesis) GeoTransolver's estate-to-fastback
+  penalty was about 2.4, the exact-kernel predecessor's about 2.0-2.4 (0.21-0.23 on fastbacks against its own
+  0.097-0.104 in family), and ISLA-v3c reached parity with GeoTransolver on absolute fastback error (0.117-0.131
+  against 0.11-0.12; fastback val split, old metric). At the current configurations and 200k cells, all three arms sit
+  at 2.56 on pressure.
+
+*Read by the supervisor and second-read by the reviewer on 2026-10-22 (scratch/isla-review-2026-10-21/second-read-2026-10-22/suvx.md).*
+
+## 2026-10-22 — MECH-090: on Tensile2d the fixed compiled path's float32 gradients sit at a one-ulp eager floor, and pytorch/pytorch#195845 added a unit-dependent sink to ISLA's slice-state softmax (registered emulations not confirmed; a post-smoke emulation matches) {#sec-nb-mech090}
+
+**Question.** REF-090's Tensile2d control (@sec-nb-ref090-t2d-control) read (b) by its registered weighing, in which A2
+decides: A2's eager-trained rows matched the bug-trained ones (eager ÷ bug 1.037, overlapping) and not the fix-trained
+ones (eager ÷ fix 0.853, below); ISLA 0.9.0 read (c). Does the fixed compiled path train something other than the eager
+model, and what exactly did pytorch/pytorch#195845 do to ISLA?
+
+**Setting.** Rules: PREREG.md §§1-5 (registered md5 58d8096d, copy PREREG.md.registered); its §6 addendum (10:31 EDT,
+written after the smoke) carries no rule weight. Records: scratch/isla-mech090-2026-10-22/RESULTS.md. LHR jobs 333750
+(smoke) and 333837 (main), about 0.85 GPU-h.
+
+**On Tensile2d the fixed path computes the eager model's gradients, to float32 roundoff.** To give the one-step
+gradient comparison a real floor, we moved every block input of the eager model by one float32 ulp. On eight Tensile2d
+checkpoints from ISLA 0.9.0 and ISLA A2, the fixed path's gradients sit at that floor (0.55 to 1.19 times it); the bug
+path's sit at 1,574 to 32,531 times the floor. Over 300 float32 training steps from one epoch-251 checkpoint per family
+(seed 42), the fixed path's distance from eager's trajectory stays within 0.85 to 2.2 times the one-ulp copy's at each
+of the six reported steps (1, 3, 10, 30, 100, 300), with no growing ratio. (This lockstep is descriptive, with no
+registered rule.) One ulp of roundoff alone takes the trajectories apart, to 0.42-0.56 of eager's own displacement by
+step 100, and 0.89-0.91 by step 300. So, as far as one-step gradients and 300 steps show, a fix-trained seed differs
+from its eager-trained twin the way two eager runs with different roundoff do; full-length (50,000-step) runs were not
+compared. A seed-paired re-read of the existing scores, descriptive because its inputs had been seen, does not separate
+the paths when pooled ((c), n = 5 after the P1 pairing check dropped ISLA 0.9.0 seed 43: ē = +0.043, SE 0.069,
+sign-flip p = 0.22). ISLA 0.9.0 alone reads (a)-side on displacement (ē = +0.127, 2.09 SE, 3 of 3 seeds); A2 alone
+leans the other way (fix ÷ eager error about 1.18 on average).
+
+**What the bug was.** We read the generated Triton kernel. Inductor fused the geometry region's softmax over slices
+with the column sum of the slice-state softmax over points, and the column sum skipped the row mask. On an input whose
+token count N (≥ 10,240) is not a multiple of 4, each slice's denominator gained k = (−N) mod 4 phantom tokens. Each
+phantom token has value 0 and, as far as the emulation shows, measure 1 in the data's raw units, and its logit equals
+the block's geometry-logit bias: an attention sink. The masked log_w load has no `other`, so its value on padded rows is
+undefined, and the emulation's match is the evidence that it reads 0. None of the four registered emulations matched
+(M0 as registered: not confirmed; the closest, EMU-S, sits at 4e-3 to 1.2e-2). A kernel-derived emulation (EMU-Sb,
+phantom logit b_geo), added after the smoke in the PREREG §6 addendum, which carries no rule weight, matches the bug
+path's block outputs to 2.9e-7-3.4e-7, at or below the k = 0 float32 floor of 3.5e-7-5.2e-7. That holds on three
+affected Tensile2d training cases per family (epoch 500), forward only, while eager sits at 1.7e-2-4.2e-2. We measure
+the sink's strength as ρ′ = k·e^{b_geo} ÷ Σ_i w_i e^{x_is}, phantom mass over real mass, where x_is is the slice-state
+logit including b_geo. It is computed the same way on every dataset and reported as the median over affected (case,
+block, slice) entries. ρ′ is the kernel-derived measure from the §6 addendum. The registered ρ (phantom logit 0) gives
+state-softmax medians of 0.075, 0.077, 0.29 and 20. Since a phantom token's measure is 1 in raw units, the strength
+depends on the units of the measure (epoch-500 checkpoints; AirfRANS and the lug from one ISLA 0.9.0 checkpoint, seed
+42):
+- Tensile2d (median total measure 18.5-18.6; ISLA 0.9.0 and A2, 151 of 400 training cases affected): phantom ÷ real
+  mass 8-9 % (median 0.082 and 0.091).
+- AirfRANS (median total measure 4.0; ISLA 0.9.0 only, 155 of the first 200 cases affected): about 31 % (median 0.308).
+- Lug (median total measure 0.039; ISLA 0.9.0 only): phantom ÷ real mass about 37 (median). On 89 of the first 200
+  training cases (45 %), the median affected slice state was shrunk 38-fold (by 1 ÷ (1 + ρ′)).
+
+**Against the registration** (PREREG §§1-5). The fixed path reads "at the floor's order" on all eight checkpoints
+(R_fix at most 1.19, against the registered cut of 10), and the bug path's R_bug is at least 1,574; F1, F2 and F3
+held. M0 is not confirmed, so M1 failed. The registered ρ is non-negligible on Tensile2d (38 % of training cases
+affected; medians 0.075 to 0.098 over the anchor and state softmaxes, at least 2^-8 as registered), so S1 held, and
+AirfRANS's sink is stronger than Tensile2d's, so S2 held. The supervisor declined both proposed arms on 2026-10-22: EMU
+is not run, and SINK is deferred to the architecture agenda. SINK will be revisited, with a fresh pre-registration, if
+the eager-trained AirfRANS and lug standings show seed spreads large enough to matter.
+
+*Read by the supervisor and second-read by the reviewer on 2026-10-22 (scratch/isla-review-2026-10-21/second-read-2026-10-22/mech.md).*
