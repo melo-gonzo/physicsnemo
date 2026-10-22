@@ -349,10 +349,12 @@ def _ball_candidates_kernel(
     escape: wp.array(dtype=wp.int32),
     leaf_cell: wp.array(dtype=wp.int64),
     corners: wp.array(dtype=wp.vec3d),
+    planes: wp.array(dtype=wp.vec4f),
     query: wp.array(dtype=wp.vec3d),
     query32: wp.array(dtype=wp.vec3f),
     radius: wp.array(dtype=wp.float64),
     radius32: wp.array(dtype=wp.float32),
+    reach32: wp.array(dtype=wp.float32),
     rows: wp.array(dtype=wp.int64),
     cap: wp.int64,
     count: wp.array(dtype=wp.int64),
@@ -363,14 +365,18 @@ def _ball_candidates_kernel(
     subtree), pruning the nodes whose boxes lie farther than ``radius32`` (float32
     boxes rounded outward, a radius padded over float32 rounding), then the cells
     farther than ``radius`` (float64; ``corners`` holds each cell's three
-    vertices). Writes the first ``cap`` of them from ``tid * cap`` on and counts
-    them all."""
+    vertices), after a float32 lower bound on their distance rejects the far ones:
+    the distance to the cell's plane and beyond its farthest edge, from the unit
+    normals in ``planes`` (the plane's, then each edge's outward one in the plane,
+    with their offsets), against ``reach32``. Writes the first ``cap`` of them from
+    ``tid * cap`` on and counts them all."""
     tid = wp.tid()
     q = rows[tid]
     x = query[q]
     x32 = query32[q]
     r2 = radius[q] * radius[q]
     r2_32 = radius32[q] * radius32[q]
+    reach2 = reach32[q] * reach32[q]
     zero = wp.float32(0.0)
     k = wp.int64(0)
     node = wp.int32(0)
@@ -383,9 +389,18 @@ def _ball_candidates_kernel(
         if g0 * g0 + g1 * g1 + g2 * g2 <= r2_32:
             c = leaf_cell[node]
             if c >= wp.int64(0):
-                ### (not ``<=``: a NaN distance keeps the cell)
+                j = c * wp.int64(4)
+                h = planes[j]
+                s = h[0] * x32[0] + h[1] * x32[1] + h[2] * x32[2] - h[3]
+                o = zero
+                for e in range(1, 4):
+                    h = planes[j + wp.int64(e)]
+                    o = wp.max(o, h[0] * x32[0] + h[1] * x32[1] + h[2] * x32[2] - h[3])
+                ### (not ``<=``: a NaN, from a degenerate cell, keeps it)
                 i = c * wp.int64(3)
-                if not (_triangle_distance2(x, corners[i], corners[i + wp.int64(1)], corners[i + wp.int64(2)]) > r2):
+                if not (s * s + o * o > reach2) and not (
+                    _triangle_distance2(x, corners[i], corners[i + wp.int64(1)], corners[i + wp.int64(2)]) > r2
+                ):
                     if k < cap:
                         cells_out[wp.int64(tid) * cap + k] = c
                     k += wp.int64(1)
@@ -425,11 +440,26 @@ def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.T
     lo, hi = bvh.node_aabb_min.float(), bvh.node_aabb_max.float()
     lo = torch.where(lo.double() > bvh.node_aabb_min, lo.nextafter(lo.new_tensor(-torch.inf)), lo)
     hi = torch.where(hi.double() < bvh.node_aabb_max, hi.nextafter(hi.new_tensor(torch.inf)), hi)
+    ### Each cell's unit normal and its edges' outward unit normals in its plane,
+    ### with their offsets: a point's distance to the cell is at least the root sum
+    ### of squares of its height over the plane and of its largest edge offset.
+    a, b, c = simplex.unbind(1)
+    n = torch.nn.functional.normalize(torch.linalg.cross(b - a, c - a, dim=-1), dim=-1, eps=0.0)
+    rows_ = [torch.cat([n, (n * a).sum(-1, keepdim=True)], -1)]
+    for p0, p1, opp in ((a, b, c), (b, c, a), (c, a, b)):
+        m = torch.nn.functional.normalize(torch.linalg.cross(p1 - p0, n, dim=-1), dim=-1, eps=0.0)
+        m = torch.where(((m * (opp - p0)).sum(-1, keepdim=True) > 0), -m, m)
+        rows_.append(torch.cat([m, (m * p0).sum(-1, keepdim=True)], -1))
+    planes = torch.stack(rows_, 1).float().reshape(-1, 4)
     q32 = query.float()
     ### (the query's own rounding, then a relative pad far above float32's on the
     ### box test's few operations)
     r32 = ((radius + (query - q32.double()).norm(dim=-1)) * (1 + 1e-5)).float()
     r32 = r32.nextafter(r32.new_tensor(torch.inf))
+    ### (the lower bound's float32 rounding: the products and offsets, against the
+    ### coordinates' magnitude)
+    reach = simplex.norm(dim=-1).amax()
+    reach32 = ((r32.double() + 16 * torch.finfo(torch.float32).eps * (query.norm(dim=-1) + reach)) * (1 + 1e-5)).float()
     device, stream = FunctionSpec.warp_launch_context(query)
     fixed = [
         wp.from_torch(lo.contiguous(), dtype=wp.vec3f),
@@ -438,10 +468,12 @@ def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.T
         wp.from_torch(escape.int().contiguous(), dtype=wp.int32),
         wp.from_torch(leaf_cell.contiguous(), dtype=wp.int64),
         wp.from_torch(simplex.reshape(-1, 3).contiguous(), dtype=wp.vec3d),
+        wp.from_torch(planes.contiguous(), dtype=wp.vec4f),
         wp.from_torch(query.contiguous(), dtype=wp.vec3d),
         wp.from_torch(q32.contiguous(), dtype=wp.vec3f),
         wp.from_torch(radius.contiguous(), dtype=wp.float64),
         wp.from_torch(r32.contiguous(), dtype=wp.float32),
+        wp.from_torch(reach32.contiguous(), dtype=wp.float32),
     ]
 
     def search(rows, cap):
