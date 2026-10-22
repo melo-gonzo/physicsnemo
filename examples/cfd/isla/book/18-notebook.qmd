@@ -39803,3 +39803,147 @@ is not run, and SINK is deferred to the architecture agenda. SINK will be revisi
 the eager-trained AirfRANS and lug standings show seed spreads large enough to matter.
 
 *Read by the supervisor and second-read by the reviewer on 2026-10-22 (scratch/isla-review-2026-10-21/second-read-2026-10-22/mech.md).*
+
+## 2026-10-22 — E1-AZ reads REJECT as registered: on AeroZoo's held-out non-box family, HEADNORM (ISLA 0.10.0) ÷ CONTROL (ISLA 0.9.0) is 1.287 on pressure with both seed-matched ratios at least 1.10 (1.339 / 1.178), so HEADNORM is not adopted; post hoc, both arms are worse than predicting zero on that pressure, and the normalized head frame stays near-uniform {#sec-nb-e1az}
+
+**E1-AZ: HEADNORM rejected on AeroZoo pressure.** E1 makes ISLA's head frame read the normalized stream `norm_out(h)`
+instead of the raw stream (ISLA 0.10.0); the stream itself is unchanged. Its AeroZoo pair was registered to complete
+E1's rule (@sec-nb-headnorm-jb; PREREG_AZ, md5 5f18f7e0): two seeds on `family_non_box` against the ISLA 0.9.0 lanes
+`azc_nonbox_isla_seed42/43`, scored on the test side at epoch 250 in float32. The pair was registered (2026-10-20) by
+supervisor decision after E1's other 12 ratios were known. No amendment was written before those results, so its
+registration is later than E1's original rule (PREREG.md). The REJECT follows the text of PREREG_AZ as written.
+
+- **Ratios (HEADNORM ÷ CONTROL error; above 1 means HEADNORM is worse).** Velocity 1.047 (seed-matched 42 / 43:
+  1.022 / 1.081), within seed spread. Pressure 1.287 (1.339 / 1.178). Its unpaired seed ranges overlap, so the
+  registered reporting marks it within seed spread, but both paired ratios are ≥ 1.10. Recorded, outside the rule: nut
+  1.030 and tke 1.042, both within seed spread.
+- **The rule.** Pressure meets the registered reject clause: the seed-mean ratio and both seed-matched ratios are each
+  at least 1.10. G14, the 14-field geometric mean of HEADNORM ÷ CONTROL, is 1.004, below the 1.05 reject bar. That bar
+  cannot bind on AeroZoo in practice. The 12 known ratios give G12 = 0.9797, so G14 reaches 1.05 only if
+  r_vel × r_p ≥ 2.534. Those 12 were also measured on A2 code (ISLA 0.4.0 CONTROL against 0.5.0 HEADNORM), not on
+  ISLA 0.9.0, and they hold about 5 independent numbers.
+- **The registered instrument, (b1)-(b3), holds on AeroZoo.** There is no HEADNORM collapse (minimum support 3.44e5 of
+  4.0e5 tokens). HEADNORM's final seed-logit p99.9 is 0.595 (0.550 / 0.640), against CONTROL's 25.0 (15.76 / 34.26);
+  HEADNORM ÷ CONTROL is 0.024. CONTROL's p99.9 grows 33× and 104× over its epoch-1 value.
+- **Verdict: REJECT.** ISLA 0.9.0 stays the reference.
+
+Beside the rule (post hoc):
+
+- Both arms do worse than predicting zero on nonbox pressure: physical relative L2 2.77 (CONTROL, ISLA 0.9.0) and 3.57
+  (HEADNORM, ISLA 0.10.0), where predicting zero scores 1. CONTROL's failure is broad across cases: per-case median
+  1.51, p90 6.3, and the 5 worst cases carry 4 % of the mean. HEADNORM's per-case distribution was not reduced.
+  GeoTransolver 256 reads 1.17 there (median 1.00), i.e. it predicts about zero pressure. Seed 42 is the worse seed in
+  both arms, so pairing keeps both ratios above 1.10.
+- (Post hoc.) On these lanes HEADNORM bounds the head frame's logit scale: final p99.9 0.55 / 0.64, against CONTROL's
+  15.8 / 34.3. Under (b3)'s definition it still grows 7.1× and 12.0× from a smaller epoch-1 value, and the stream grows
+  as in CONTROL. Nonbox pressure gets worse, not better. So the frame's logit growth alone does not explain the failure.
+  The same change also left the frame near-uniform, so this one intervention has two effects.
+- With the frame reading `norm_out(h)`, the head frame stays near-uniform: a support fraction of 0.93 / 0.90 at epoch
+  250, the same as at epoch 1 (0.92); minimum seed support 3.44e5 / 3.46e5 of 4.0e5 tokens. Its input norm fell from
+  22.48 at epoch 1 to 5.36-5.90 from epoch 99 on (final 5.63 / 5.90). Over the same span the RMS of norm_out's gain went
+  from 0.99 at epoch 1 to 0.94-0.95, which alone would give 21.3-21.6. The likely cause is a few outlier channels that
+  dominate the grown stream and carry a small gain. That is an inference; the activations were not inspected. The
+  registered instrument checks only the collapse side, (b1), not this uniform side, so this is a finding, not a rule
+  outcome.
+- Registered predictions: V gave REJECT 0.04. A2, A3, A5 and I1 (as written) failed. A1, A4 and I2-I5 held.
+- Record: `scratch/isla-headnorm-2026-10-18/RESULTS_AZ_2026-10-22.md`.
+
+*Read by the supervisor and second-read by the reviewer on 2026-10-22 (scratch/isla-review-2026-10-21/second-read-2026-10-22/e1az.md).*
+
+## 2026-10-22 — AeroZoo diagnostics: no compiled-path exposure; GeoTransolver 256 and Transolver 512 × 16 end as about a zero predictor on pressure; ISLA 0.9.0's pressure error is above 1 on two held-out families, on profile_crossflow as an amplitude error from about a 2× velocity overshoot (a post hoc reading) and on family_non_box as a shape error by family, with part scale extrapolation on ducts {#sec-nb-azdiag}
+
+**Four diagnostics on compliant AeroZoo before the ISLA-DTT read.** The 16 baseline lanes and the 14 ISLA lanes are
+scored: test side, epoch 250, float32. All checks pass (`tables_partial.md`; it and every folder below are in
+scratch/isla-az-decide-2026-10-21/). Four diagnostics then asked whether those numbers mean what they seem to mean.
+Each pair below gives the seed mean, then [the median over cases of the per-case seed mean]; 'a / b' is seed 42 / seed
+43. A relative L2 of 1.0 is the zero predictor.
+
+- **Compiled-path exposure: none** (job 333632, `cmpdiag/`).
+  - Setup: ISLA 0.9.0 (azc_full_isla_seed42, epoch 250) and ISLA-DTT (azc_full_dtt_seed42, epoch 155, its latest
+    checkpoint; that lane is still training), on 20 `full` test cases each.
+  - The compiled and eager paths agree to a median d = RMS(compiled − eager) / RMS(target) of 1.8e-6 (ISLA 0.9.0) and
+    3.4e-6 (ISLA-DTT). The maxima are 4.8e-6 (ISLA 0.9.0) and 6.9e-4 (ISLA-DTT case 00078: 0.20 of that case's float64
+    floor, per-field ratio ≤ 0.22; its query-independence probe reads 1.2e-3 compiled against 1.8e-4 eager).
+  - On the 20 `full` test cases measured, for both ISLA 0.9.0 (epoch 250) and ISLA-DTT (epoch 155), every block sees
+    N = 400,000 tokens (N % 4 = 0) and the geometry runs in the fused kernel. Either fact alone keeps the
+    pytorch/pytorch#195845 fusion from firing at the scorer's inputs. N is 400,000 only when a case has more than
+    200,000 boundary faces (these 20 have 0.29-1.39 M). Face counts were not recorded for the other splits (non-box
+    ducts included) or for the training draw, so on those cases the protection rests on the fused kernel.
+  - The geometry kernel is chosen by the model's configuration and device, not by the case. At its first forward pass
+    ISLA picks the fused kernel when the inputs are on CUDA, Triton is importable and the configuration's constraints
+    hold (one to four per-point vectors counting the global directions, at most 1,024 slices, no rank-2 inputs), and
+    caches the choice per device (physicsnemo/experimental/models/isla/model.py: the 'Kernels' paragraph of the ISLA
+    docstring, lines 242-258, and `ISLA.resolve_geo_kernel`). The fused kernel excludes the faulty fusion, whose first
+    condition is the eager geometry region (COMPILE-AF, @sec-nb-compiled-path-defect), so the protection holds on every
+    AeroZoo case and training draw. So no AeroZoo lane is retrained (supervisor's decision, 2026-10-22).
+  - PROBES-090's 4.9e-4 (azc_full_isla at epoch 155, eager against the infer.py scorer, two processes, 40 cases) is not
+    reproduced by the compiled path here (epoch 250, same process: metric difference ≤ 6e-6). It is of the size of this
+    family's float32 floor and of the run-to-run float32 nondeterminism (4.7e-4 on one bank_zero_to_cad case). Its
+    source was not checked: that would mean reading the test-side score file. It stays unexplained.
+- **Side finding: a percent-level float32 floor** on some AeroZoo cases.
+  - Float32 eager differs from float64 eager by more than 1e-2 of RMS(target) on 4 of 20 ISLA 0.9.0 cases (up to 0.28
+    on k; case metric up to 8 %) and on 6 of 20 ISLA-DTT cases (up to 0.044). AirfRANS shows at most 2.3e-4. The
+    float64 pass may draw different boundary tokens inside the model, so this floor may include a draw difference and
+    is not pure roundoff (`f32floor/PREREG.md`, amendment).
+  - The cause is open: float32 geometry on raw-metre coordinates, or a network that is ill-conditioned there.
+- **GeoTransolver 256 is about a zero predictor on pressure, and Transolver 512 × 16 about a zero predictor on every
+  field** (`basecheck/`).
+  - No pipeline bug was found: every field reaches the loss; no head is frozen: the pressure row of the output layer
+    receives a non-zero gradient (median |grad| 0.54, 14, 0.0014 and 0.4 on the four runs checked); the normalization
+    matches.
+  - At epoch 250 the output weight rows for p, ν_t, k and ω are about 0 (weights and outputs measured on 4 of the 16
+    baseline lanes: GeoTransolver 256 full s42, full s43, nonbox s42 and Transolver 512 × 16 full s42, on 30 cases
+    each; the loss curves of all 16 lanes, both Transolver seeds included, sit at the zero-predictor plateau).
+    Transolver 512 × 16 predicts a constant 0.010 Pa of pressure and about 0.02 m/s of velocity in every case: its
+    documented floor (PREREG_v2 Q2), since it cannot see the inlet.
+  - GeoTransolver 256 sees the inlet values and learns part of the velocity (cosine about 0.9). Pressure, though, has a
+    median over cases of 1.00 on every split; its means are 1.00-1.25, which is no better than predicting zero.
+  - Likely mechanism: under one dataset-wide scale, the training cases' RMS pressure spans 8 decades (2.6e-4 Pa to
+    2.8e4 Pa). The case-relative loss scales each case's gradient by 1/RMS. On that argument the 100 cases with the
+    smallest pressure RMS would carry 51 % of the gradient near the zero predictor (computed from the per-case RMS, not
+    from measured gradients). The 3,332 cases are the union of the nonbox and crossflow training sets, not each lane's
+    own training set. The step median of the pressure loss ends at 1.00-1.02 on all 16 lanes.
+  - GeoTransolver 256's velocity is under-converged. It is still falling at epoch 250 (`full`: 0.88 → 0.59 over the
+    last 50 epochs), and its seeds differ by about 2× (reynolds 0.48 against 0.94).
+- **ISLA above 1 on pressure: an amplitude overshoot on crossflow, a shape error on non-box** (ISLA 0.9.0; `pdiag/`:
+  30 random test cases per split, seed 42, plus seed 43 on nonbox and crossflow; `preddiag/`: 20 worst and 10 random
+  crossflow cases).
+  - *profile_crossflow* (pressure 2.66 [2.49]). ISLA 0.9.0 keeps the inlet direction but does not turn the flow toward
+    the adjacent outlet (its mean is 24-31° off the true mean direction), and it drives the flow about 2× too fast: RMS
+    speed ratio (predicted to true, RMS |u_pred| / RMS |u_true|) 2.07 / 1.86 on pdiag's 30 random cases; on
+    preddiag's sample (20 worst + 10 random) ISLA reads 2.26 / 2.04 against 0.99 for GeoTransolver 256. The 1.42
+    velocity L2 near √2 is a coincidence.
+  - Read post hoc, its pressure follows from that overshoot: the affine fit p ≈ α p̂ + β of the prediction p̂ to the
+    truth p gives β ≈ 0 and α·(speed ratio)² = 1.06 / 1.34 (about 1 when p̂ is too large by the square of the speed
+    ratio). Dividing each case's p̂ by its own (speed ratio)² takes the median L2 over the 30 cases from 3.34 / 2.00 to
+    0.33 / 0.36 (seed 42 / 43). By the pre-registered table (M2_methods (c),
+    scratch/isla-review-2026-10-21/second-read-2026-10-22/M2_methods.md) this pattern matches no row: the offset share
+    is 0.85 / 0.90, not small, and the mean-removed L2 is 1.21 / 0.59, not about 0.3. The amplitude reading rests on a
+    post hoc test, dividing p̂ by (speed ratio)², and on pdiag's argument that the large offset share comes from
+    scaling a pressure that is mostly a level (post hoc).
+  - ISLA also does not hold p ≈ 0 at the adjacent outlet: near it, it predicts 1.2-1.8 RMS p, where the truth is
+    0.017. Crossflow is the one layout whose outlet is adjacent to the inlet rather than opposite it.
+  - *family_non_box* (pressure 2.77 [1.51]; velocity 0.53 [0.48]). This is a shape error, by family: affine residual
+    0.79 / 0.75, corr 0.48 / 0.49. Opposed spheres and hemispheres overpredict by 1.3-7.5×, ducts mostly under-predict
+    the pressure (RMS ratio 0.01-0.75), and bends (2 cases per seed) overshoot 6-9×. The 3.76 / 1.79 seed split is
+    broad, not one case. Seed 42 is worse on 72 % of the 1,074 cases (per-case medians 1.68 against 1.10). The 10
+    largest per-case gaps carry 0.25 of the 1.97 difference in the means; case 9c74 (52.7 / 7.7 across seeds) carries
+    0.04 of it. In-model scales (`scales/`; z = log10 Re): most of the 20 worst nonbox cases have U, L and z inside the
+    training ranges. 2 lie outside in L and 2 in z (9c74 among them: z above the training maximum). 9 of the 10
+    velocity-worst ducts have a head velocity RMS below every training case, as do 40 % of all duct test cases.
+  - On full, reynolds, blobs and bank_zero_to_cad the fit is clean: α = 0.97-0.98, offset share ≤ 4 %, speed ratio
+    0.99-1.00.
+  - Per-case pressure medians, ISLA 0.9.0: full 0.29, reynolds 0.54, blobs 0.42, bank_zero_to_cad 0.37, and
+    profile_dual_inlet 0.79, the mirror of crossflow: speed ratio 0.49 (predicted to true RMS speed), pressure RMS
+    ratio 0.37, offset share 0.70, an amplitude undershoot that stays below 1.
+  - Reynolds split (`reynolds/`): ISLA 0.9.0's error grows with the distance above the training band. Velocity grows
+    ×1.23 per decade (0.14 → 0.20) and pressure ×1.67 per decade (0.38 → 0.72). GeoTransolver 256 stays flat (velocity
+    ×0.97 per decade at about 0.7, pressure ×1.01 per decade at about 1.0, the zero predictor). That flatness is not
+    better extrapolation: GeoTransolver sits at the zero-predictor level on pressure and is under-converged on
+    velocity, so it has no in-band skill to lose.
+
+**Pending.** Two follow-ups are running and are not yet results: the cause of the float32 floor (float64 geometry with
+float32 blocks, and the reverse; `f32floor/PREREG.md`, amended 11:29 EDT before its GPU job), and a head-only AdamW
+scout of GeoTransolver 256's pressure collapse, which asks whether the Muon optimizer's fixed step limits it (`gtopt/`).
+
+*Read by the supervisor and second-read by the reviewer on 2026-10-22 (scratch/isla-review-2026-10-21/second-read-2026-10-22/azdiag.md).*
