@@ -1,0 +1,59 @@
+{
+ "lug_closest_feature_ties": {
+  "source": "$T/kernel/att2/geoflip/nodes.jsonl (ATTRIB-090 job 334176)",
+  "n_cases": 60,
+  "n_nodes": 575702,
+  "n_surface": 192172,
+  "n_interior": 383530,
+  "interior_direction_changed": 8428,
+  "interior_direction_changed_per_case": [
+   62,
+   245
+  ],
+  "surface_direction_changed": 0,
+  "distance_mismatched": 0,
+  "surface_zero_in_flipped": 192172,
+  "max_distance_deviation": 2.59718973511594e-07,
+  "max_angle_interior_rad": 3.141592653589793,
+  "max_angle_surface_rad": 0.0006696422447697175,
+  "max_normal_flip_deviation": 1.7881393432617188e-07,
+  "max_length_unit_rel_change": 1.1904856860167813e-07
+ },
+ "tensile2d_eager_validation": {
+  "source": "$T/runs/r090eag_t2dz_isla_seed{42,43,44,45}/metrics.jsonl, val_summary rows (in-training validation, displacement_l2)",
+  "seeds": {
+   "42": {
+    "best_epoch": 390,
+    "best": 0.009010468609631062,
+    "max_after_best_epoch": 460,
+    "max_after_best": 0.009561157785356045,
+    "last_epoch": 499,
+    "last": 0.009175402112305164
+   },
+   "43": {
+    "best_epoch": 350,
+    "best": 0.007822555489838123,
+    "max_after_best_epoch": 400,
+    "max_after_best": 0.008019596338272095,
+    "last_epoch": 499,
+    "last": 0.007910043001174927
+   },
+   "44": {
+    "best_epoch": 410,
+    "best": 0.00989080686122179,
+    "max_after_best_epoch": 430,
+    "max_after_best": 0.010463040322065353,
+    "last_epoch": 499,
+    "last": 0.01022593304514885
+   },
+   "45": {
+    "best_epoch": 180,
+    "best": 0.010119311511516571,
+    "max_after_best_epoch": 200,
+    "max_after_best": 0.018811391666531563,
+    "last_epoch": 499,
+    "last": 0.011957633309066296
+   }
+  }
+ }
+}
