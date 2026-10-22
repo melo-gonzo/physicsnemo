@@ -343,64 +343,75 @@ def _triangle_distance2(p: wp.vec3d, a: wp.vec3d, b: wp.vec3d, c: wp.vec3d) -> w
 
 @wp.kernel
 def _ball_candidates_kernel(
-    node_lo: wp.array(dtype=wp.vec3d),
-    node_hi: wp.array(dtype=wp.vec3d),
+    node_lo: wp.array(dtype=wp.vec3f),
+    node_hi: wp.array(dtype=wp.vec3f),
     left: wp.array(dtype=wp.int32),
     escape: wp.array(dtype=wp.int32),
     leaf_cell: wp.array(dtype=wp.int64),
     corners: wp.array(dtype=wp.vec3d),
     query: wp.array(dtype=wp.vec3d),
+    query32: wp.array(dtype=wp.vec3f),
     radius: wp.array(dtype=wp.float64),
-    offsets: wp.array(dtype=wp.int64),
+    radius32: wp.array(dtype=wp.float32),
+    rows: wp.array(dtype=wp.int64),
+    cap: wp.int64,
     count: wp.array(dtype=wp.int64),
     cells_out: wp.array(dtype=wp.int64),
-    fill: wp.int32,
 ):
-    """Every cell within ``radius`` of its query: a stackless depth-first traversal
-    of the BVH (``escape`` is the node after a node's subtree), pruning the nodes
-    whose boxes lie farther than the radius, then the cells farther than it
-    (``corners`` holds each cell's three vertices). Counts them (``fill = 0``) or
-    writes them from ``offsets`` on."""
+    """Every cell within ``radius`` of the query ``rows[tid]``: a stackless
+    depth-first traversal of the BVH (``escape`` is the node after a node's
+    subtree), pruning the nodes whose boxes lie farther than ``radius32`` (float32
+    boxes rounded outward, a radius padded over float32 rounding), then the cells
+    farther than ``radius`` (float64; ``corners`` holds each cell's three
+    vertices). Writes the first ``cap`` of them from ``tid * cap`` on and counts
+    them all."""
     tid = wp.tid()
-    x = query[tid]
-    r2 = radius[tid] * radius[tid]
-    zero = wp.float64(0.0)
+    q = rows[tid]
+    x = query[q]
+    x32 = query32[q]
+    r2 = radius[q] * radius[q]
+    r2_32 = radius32[q] * radius32[q]
+    zero = wp.float32(0.0)
     k = wp.int64(0)
     node = wp.int32(0)
     while node >= 0:
         lo = node_lo[node]
         hi = node_hi[node]
-        g0 = wp.max(wp.max(lo[0] - x[0], x[0] - hi[0]), zero)
-        g1 = wp.max(wp.max(lo[1] - x[1], x[1] - hi[1]), zero)
-        g2 = wp.max(wp.max(lo[2] - x[2], x[2] - hi[2]), zero)
-        if g0 * g0 + g1 * g1 + g2 * g2 <= r2:
+        g0 = wp.max(wp.max(lo[0] - x32[0], x32[0] - hi[0]), zero)
+        g1 = wp.max(wp.max(lo[1] - x32[1], x32[1] - hi[1]), zero)
+        g2 = wp.max(wp.max(lo[2] - x32[2], x32[2] - hi[2]), zero)
+        if g0 * g0 + g1 * g1 + g2 * g2 <= r2_32:
             c = leaf_cell[node]
             if c >= wp.int64(0):
                 ### (not ``<=``: a NaN distance keeps the cell)
                 i = c * wp.int64(3)
                 if not (_triangle_distance2(x, corners[i], corners[i + wp.int64(1)], corners[i + wp.int64(2)]) > r2):
-                    if fill != 0:
-                        cells_out[offsets[tid] + k] = c
+                    if k < cap:
+                        cells_out[wp.int64(tid) * cap + k] = c
                     k += wp.int64(1)
                 node = escape[node]
             else:
                 node = left[node]
         else:
             node = escape[node]
-    if fill == 0:
-        count[tid] = k
+    count[tid] = k
+
+
+#: Candidate slots per query of the first pass of :func:`_ball_candidates`; a query
+#: with more is searched again with as many as it needs.
+_BALL_SLOTS = 16
 
 
 def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.Tensor):
     """The (query, cell) pairs ``(P,)``, ``(P,)`` of every cell of ``simplex`` ``(F,
     3, 3)`` within ``radius`` ``(Q,)`` of its query ``(Q, 3)``, all float64: a Warp
-    traversal of a BVH over the cells (:class:`physicsnemo.mesh.spatial.BVH`, its
-    boxes exact in float64), counted, scanned and filled, so it needs no capacity.
-    The queries are traversed in Morton order, so neighbouring threads visit
-    neighbouring nodes."""
+    traversal of a BVH over the cells (:class:`physicsnemo.mesh.spatial.BVH`),
+    with its boxes and the queries in float32 for the pruning (rounded outward and
+    padded) and the distances to the cells in float64. One pass fills
+    ``_BALL_SLOTS`` slots per query; the queries that overflow are searched again
+    with as many slots as they need, so no candidate is dropped. The queries are
+    traversed in Morton order, so neighbouring threads visit neighbouring nodes."""
     f, dev = simplex.shape[0], query.device
-    order = _compute_morton_codes(query).argsort()
-    query, radius = query[order], radius[order]
     bvh = BVH.from_mesh(Mesh(points=simplex.reshape(-1, 3), cells=torch.arange(3 * f, device=dev).reshape(f, 3)))
     left, right = bvh.node_left_child, bvh.node_right_child
     escape = torch.full_like(left, -1)
@@ -411,41 +422,54 @@ def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.T
         escape[right[inner]] = escape[inner]
         frontier = torch.cat([left[inner], right[inner]])
     leaf_cell = torch.where(bvh.leaf_count > 0, bvh.sorted_cell_order[bvh.leaf_start.clamp_min(0)], -1)
-    nq = query.shape[0]
-    count = torch.zeros(nq, dtype=torch.int64, device=dev)
-    offsets = torch.zeros_like(count)
-    out = torch.empty(0, dtype=torch.int64, device=dev)
+    lo, hi = bvh.node_aabb_min.float(), bvh.node_aabb_max.float()
+    lo = torch.where(lo.double() > bvh.node_aabb_min, lo.nextafter(lo.new_tensor(-torch.inf)), lo)
+    hi = torch.where(hi.double() < bvh.node_aabb_max, hi.nextafter(hi.new_tensor(torch.inf)), hi)
+    q32 = query.float()
+    ### (the query's own rounding, then a relative pad far above float32's on the
+    ### box test's few operations)
+    r32 = ((radius + (query - q32.double()).norm(dim=-1)) * (1 + 1e-5)).float()
+    r32 = r32.nextafter(r32.new_tensor(torch.inf))
     device, stream = FunctionSpec.warp_launch_context(query)
-    arrays = [
-        wp.from_torch(bvh.node_aabb_min.contiguous(), dtype=wp.vec3d),
-        wp.from_torch(bvh.node_aabb_max.contiguous(), dtype=wp.vec3d),
+    fixed = [
+        wp.from_torch(lo.contiguous(), dtype=wp.vec3f),
+        wp.from_torch(hi.contiguous(), dtype=wp.vec3f),
         wp.from_torch(left.int().contiguous(), dtype=wp.int32),
         wp.from_torch(escape.int().contiguous(), dtype=wp.int32),
         wp.from_torch(leaf_cell.contiguous(), dtype=wp.int64),
         wp.from_torch(simplex.reshape(-1, 3).contiguous(), dtype=wp.vec3d),
         wp.from_torch(query.contiguous(), dtype=wp.vec3d),
+        wp.from_torch(q32.contiguous(), dtype=wp.vec3f),
         wp.from_torch(radius.contiguous(), dtype=wp.float64),
+        wp.from_torch(r32.contiguous(), dtype=wp.float32),
     ]
-    for fill in (0, 1):
-        if fill:
-            offsets = torch.cumsum(count, 0) - count
-            out = torch.empty(int(count.sum()), dtype=torch.int64, device=dev)
+
+    def search(rows, cap):
+        count = torch.zeros(rows.shape[0], dtype=torch.int64, device=dev)
+        out = torch.empty(rows.shape[0] * cap, dtype=torch.int64, device=dev)
         with FunctionSpec.warp_stream_scope(stream):
             wp.init()
             wp.launch(
                 _ball_candidates_kernel,
-                dim=nq,
-                inputs=[
-                    *arrays,
-                    wp.from_torch(offsets, dtype=wp.int64),
-                    wp.from_torch(count, dtype=wp.int64),
-                    wp.from_torch(out, dtype=wp.int64) if fill else wp.empty(0, dtype=wp.int64, device=arrays[0].device),
-                    fill,
-                ],
+                dim=rows.shape[0],
+                inputs=[*fixed, wp.from_torch(rows, dtype=wp.int64), cap,
+                        wp.from_torch(count, dtype=wp.int64), wp.from_torch(out, dtype=wp.int64)],
                 device=device,
                 stream=stream,
             )
-    return torch.repeat_interleave(order, count), out
+        return count, out.reshape(-1, cap)
+
+    rows = _compute_morton_codes(query).argsort()
+    count, out = search(rows, _BALL_SLOTS)
+    over = count > _BALL_SLOTS
+    keep = (torch.arange(_BALL_SLOTS, device=dev) < count[:, None]) & ~over[:, None]
+    li, pk = rows[:, None].expand_as(out)[keep], out[keep]
+    if bool(over.any()):
+        rows = rows[over]
+        count, out = search(rows, int(count.max()))
+        keep = torch.arange(out.shape[1], device=dev) < count[:, None]
+        li, pk = torch.cat([li, rows[:, None].expand_as(out)[keep]]), torch.cat([pk, out[keep]])
+    return li, pk
 
 
 def _segment_candidates(query: torch.Tensor, points: torch.Tensor, cells: torch.Tensor, margin: torch.Tensor):
