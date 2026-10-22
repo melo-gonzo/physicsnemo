@@ -39947,3 +39947,91 @@ float32 blocks, and the reverse; `f32floor/PREREG.md`, amended 11:29 EDT before 
 scout of GeoTransolver 256's pressure collapse, which asks whether the Muon optimizer's fixed step limits it (`gtopt/`).
 
 *Read by the supervisor and second-read by the reviewer on 2026-10-22 (scratch/isla-review-2026-10-21/second-read-2026-10-22/azdiag.md).*
+
+## 2026-10-22 — AF-EXTRAP, AirfRANS's extrapolation splits at 0.9.0: registered summaries angle of attack "mixed / no difference" and Reynolds "ISLA extrapolates worse". Outside the angle-of-attack band ISLA 0.9.0's error grows less than GeoTransolver 256's and Transolver 512 × 16's on pressure and eddy viscosity (ρ = g_baseline ÷ g_ISLA 1.5-4.2); outside the Reynolds band it grows more on pressure, and in a post hoc inference-only test, holding its Reynolds input at the edge of the training range halves its below-band pressure error, which suggests that its learned dependence on log Re extrapolates poorly {#sec-nb-af-extrap-090}
+
+**Setting.** AirfRANS ships two extrapolation splits: `reynolds` (504 training airfoils at Re 3e6-5e6; 496 test airfoils at
+2e6-3e6 and 5e6-6e6) and `aoa` (804 training airfoils at −2.5 to 12.5 degrees; 196 outside). The only earlier run
+(@sec-nb-airfrans-extrap-verdict) used an old ISLA and the windowed interior draw. Here four architectures ran at their current
+AirfRANS reference configurations, changing only the split: ISLA 0.9.0, ISLA-DTT 0.9.0, GeoTransolver 256 and Transolver 512 × 16,
+two seeds each, 500 epochs, 100,000 interior points, scored in float32 on the test side. Every fitted constant was refit on each
+split's training side, for every arm: ISLA's Reynolds standardization and ν_t scale, the ν_t target statistics, and the
+baselines' standardized freestream speed. The ISLA-family lanes trained on the fixed compiled path (code_cmpaf_fix;
+@sec-nb-compiled-path-defect), after the first launch was cancelled for the compiled-path defect; their in-distribution reference is
+the fix-trained full_test standing r090fix_af_*. The rules were registered before any score
+(scratch/isla-af-extrap-2026-10-21/PREREG.md, md5 35d3349d through §13): §6 on 2026-10-20; S-RE (§11) before submission; §12,
+before any score, replaced the ISLA family's in-distribution reference with the fix-trained r090fix_af_* standings; the clamp test
+(§13) was written after the scores were read and before it ran. R1 compares the test errors (band max(3 %, 2σ), seed ranges
+separate), R2 the penalty ρ = g_baseline ÷ g_ISLA with g = test error ÷ in-distribution error (band max(1.10, e^{2√2σ}), both seed
+pairs agreeing; a task summary needs 4 of 6 cells and none against).
+
+**What we saw.**
+
+| arm | in distribution p / v / ν_t | Reynolds test | penalty g | AoA test | penalty g |
+|---|---|---|---|---|---|
+| ISLA 0.9.0 | 0.0122 / 0.0063 / 0.0156 | 0.0389 / 0.0195 / 0.0457 | 3.18 / 3.08 / 2.94 | 0.0485 / 0.0163 / 0.0538 | 3.97 / 2.57 / 3.46 |
+| ISLA-DTT 0.9.0 | 0.0127 / 0.0071 / 0.0215 | 0.0335 / 0.0175 / 0.0590 | 2.65 / 2.46 / 2.75 | 0.0528 / 0.0168 / 0.0745 | 4.17 / 2.36 / 3.47 |
+| GeoTransolver 256 | 0.0109 / 0.0400 / 0.0171 | 0.0246 / 0.0466 / 0.0467 | 2.26 / 1.17 / 2.74 | 0.1809 / 0.0880 / 0.2313 | 16.6 / 2.20 / 13.5 |
+| Transolver 512 × 16 | 0.0109 / 0.0297 / 0.0178 | 0.0274 / 0.0381 / 0.0466 | 2.51 / 1.28 / 2.62 | 0.0856 / 0.0493 / 0.0938 | 7.85 / 1.66 / 5.27 |
+
+: AirfRANS extrapolation splits, relative L2 error, seed means over two seeds, float32 (scratch/isla-af-extrap-2026-10-21/RESULTS.md, section 1). {#tbl-nb-af-extrap-090}
+
+- *AoA.* ISLA 0.9.0 leads GeoTransolver 256 and Transolver 512 × 16 on every field of the test set (baseline ÷ ISLA 1.7-5.4).
+  Its error grows far less on pressure (ρ 4.19 against GeoTransolver, 1.98 against Transolver) and eddy viscosity (3.92, 1.52).
+  Velocity reads "no difference" against GeoTransolver and "worse" against Transolver (0.646), so the registered summary is
+  "mixed / no difference". That one cell is floor-driven. Post hoc: ISLA's velocity excess is smaller than Transolver 512 × 16's
+  under both measures (ISLA ÷ Transolver: additive 0.51, quadrature 0.38). The registered ρ penalizes ISLA's 4.7× lower
+  in-distribution floor (Transolver 512 × 16's own g is 1.66). Post hoc: the baselines' per-case errors rise steadily with the
+  angle outside the band (Spearman 0.68-0.97; GeoTransolver 256's slope below the band 0.24 / 0.063 / 0.21 per degree), ISLA
+  0.9.0's much less (Spearman 0.19-0.66; slope 0.067 / 0.016 / 0.031).
+- *Reynolds.* ISLA 0.9.0 trails GeoTransolver 256 and Transolver 512 × 16 on pressure (baseline ÷ ISLA 0.63, 0.70), leads on
+  velocity (2.39, 1.96) and is level on eddy viscosity. R2 reads ISLA extrapolates worse on pressure (ρ 0.709, 0.789) and
+  velocity (0.379, 0.417), so the registered summary is "ISLA extrapolates worse". Post hoc, the pressure result holds under
+  every measure we tried (ISLA ÷ baseline, above 1 means ISLA's excess is larger: additive 1.95 / 1.62, quadrature 1.68 / 1.47;
+  matched-case ρ = g_baseline ÷ g_ISLA on the 103 full_test cases outside the band, below 1 means ISLA's error grows more:
+  0.69 / 0.70). The matched-case g still compares a 504-case model with an 800-case model. Post hoc: the velocity cells depend
+  on the measure. Under the additive excess ISLA's is still larger (1.98 / 1.56); under the quadrature excess it is smaller
+  (0.77 / 0.77). Both baselines' in-distribution velocity error is 4.7-6.3× ISLA's, which caps their penalty. The registered
+  data-size control, S-RE, trains the same architectures in distribution on a fixed 504-case subset of full_train. S-RE
+  (registered beside the verdict; it controls case count only, not the 2.2× lower density of cases per decade of Re, and ρ_504
+  is still a ratio of ratios) leaves the Transolver 512 × 16 pressure cell inside the band (ρ_504 = g_baseline ÷ g_ISLA 0.898,
+  no difference), which is consistent with training-set size. The GeoTransolver 256 cell stays worse (ρ_504 0.716). Post hoc:
+  the gap is mostly below the band (per-side ρ = g_baseline ÷ g_ISLA on pressure, below 0.62 / 0.78, above 0.92 / 0.81). Below
+  the band ISLA's pressure error grows 0.62 per decade of Re, against 0.16 and 0.32.
+- *ISLA-DTT 0.9.0* reads "no difference" against ISLA 0.9.0 on all six penalty cells of both tasks; its Reynolds penalty is
+  smaller in point estimate (R3 ρ = g_DTT ÷ g_ISLA 0.832 / 0.799 / 0.936), inside the band.
+- *Input reach (post hoc, registered before running).* ISLA 0.9.0 reads z = (log10 Re − m) / s with the split's constants:
+  training −2.05 to 1.80, test down to −4.85. GeoTransolver 256 and Transolver 512 × 16 read the standardized speed: training
+  −1.80 to 1.75, test down to −3.57. Clamping each model's input to its training range at inference halves ISLA's below-band
+  pressure error (post hoc, clamped ÷ native over the 241 below-band cases whose z the clamp changes, both seeds, beyond 2σ:
+  0.47×; ISLA-DTT 0.58×; over all 254 below-band cases 0.477 and 0.590). ISLA's z uses its own length unit L, so 45 test
+  cases (13 of them below the band) lie inside its z range and are unchanged. Post hoc: clamped, the four architectures' below-band
+  pressure errors meet. On the same 254 below-band cases they are ISLA 0.9.0 0.0260, ISLA-DTT 0.0262, GeoTransolver 256 0.0261
+  and Transolver 512 × 16 0.0248 (0.025-0.026), with the baselines' standardized speed clamped to their training range
+  [−1.80, 1.75]. On ν_t the clamp costs the baselines 2.2-3.3× and ISLA 0.9.0 1.10-1.35× (clamped ÷ native; within noise below
+  the band), since ISLA's ν_t is in units of U L. ISLA-DTT's ν_t below the band improves (0.87×, within noise) and worsens above
+  it (1.50×).
+
+**Reading.** At 0.9.0, AirfRANS's angle-of-attack extrapolation again favors ISLA 0.9.0, consistent with the 2026-09-22 reading
+at the old version. One post hoc reading: ISLA 0.9.0 is rotation-equivariant, so an out-of-band angle of attack is, for it, only
+a new relative angle between body and flow. GeoTransolver 256 and Transolver 512 × 16 read the freestream direction as an input
+whose values also lie outside their training range. The baselines' steady per-case growth with angle (Spearman up to 0.97) fits
+that reading. It is not tested here. Reynolds extrapolation does not favor ISLA 0.9.0: its pressure error grows more than the
+baselines' below the training band. The clamp points at how ISLA reads its own Reynolds input far outside its training range.
+That is a hypothesis: the clamp also lowers Transolver 512 × 16's below-band pressure error (0.65×, beyond 2σ), and it does not
+test the flow features. The hypothesis is about reach: a log scale puts the lowest-Re test case 2.8 training standard deviations
+(z units) beyond the edge of its training range, where the baselines' linear speed puts it 1.8 (in training ranges: 0.73 against
+0.50). A linear first layer absorbs any fixed affine scale. So a fixed rescaling, such as the z = log10(Re/1e6) control, cannot
+change how far the test cases sit outside the training range in units of the training spread. That control (about 57 GPU-h) is
+still a log coordinate, so it cannot test this reach hypothesis; it tests only whether a different scale changes what training
+learns, which is plausible but untested. The direct test is an ISLA 0.9.0 arm whose Reynolds input is linear in Re, standardized
+on the training side like the baselines' speed. On this split ν is constant, so that input is the baselines' own coordinate up to
+ISLA's per-case length unit. As registered, it places the lowest-Re case 0.45 training ranges out instead of 0.73. If ISLA's
+below-band pressure growth then falls to the baselines' level, the log coordinate's reach is the cause. Both training controls
+are running and have no result yet: ISLA 0.9.0 with the dataset-independent scale z = log10(Re/1e6), which tests the
+training-dynamics part, and ISLA 0.9.0 with a linear, training-side-standardized Re, which tests the log coordinate's reach
+below the band, each registered before it ran (PREREG.md §14 and §14b). Two seeds per arm, so each σ pair has one degree of
+freedom (the band pools 8 pairs). The Reynolds and AoA pressure and ν_t results are large against those bands; the velocity
+cells depend on the measure. With AeroZoo's `reynolds` split (AZ-DECIDE), this is the second dataset for the Reynolds question.
+
+*Read by the supervisor and second-read by the reviewer on 2026-10-22 (scratch/isla-review-2026-10-21/second-read-2026-10-22/afx.md).*
