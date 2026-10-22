@@ -2201,7 +2201,7 @@ print(f"**ISLA-DTT's forward waits on the host.** Its step takes {HT['isla_dtt']
 
 **How the step scales with the case.** On one GPU, from 100,000 tokens per case up, ISLA's memory grows linearly in
 the number of tokens, as slice attention's $\mathcal{O}(NM)$ cost predicts, and so does its step time on the surface
-task; on the volume task its step grows faster. @fig-cost-sweep measures both for every reference configuration, and
+task; on the volume task its step grows less than in proportion, from a fixed cost per step. @fig-cost-sweep measures both for every reference configuration, and
 @tbl-cost-slopes gives what a token costs each of them.
 
 ## The switches {#sec-arch-switches}

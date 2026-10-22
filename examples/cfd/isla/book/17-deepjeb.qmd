@@ -196,7 +196,7 @@ rendering_figure("fig-deepjeb-prediction", [("figures/renderings/deepjebpp_von_m
     f"The three reference configurations on one DeepJEB++ test bracket under its horizontal load case, {_R['sample_id'].split('_')[0]}, "
     "from the standing's checkpoints (seed 42): ISLA at its reference configuration and the baselines' standing checkpoints. "
     f"Relative L2 on this case: {case_errors(_R['per_sample_rel_l2'])}. The case is not ISLA's median: it ranks {_rk:,} of {len(_e):,} "
-    "test files by ISLA's von Mises error, a harder case than the median; it is the case the earlier renderings used. "
+    "test files by ISLA's von Mises error, a harder case than the median. "
     "Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one "
     "symmetric scale. How to read this: one case, not a standing; the standing is the table above. "
     "Data: results/renderings_2026-10-22/arrays/render_cloud_deepjebpp.json.", nrow=2)
