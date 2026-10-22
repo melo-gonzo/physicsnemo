@@ -159,11 +159,8 @@ DATASETS = {
             "DrivAerML Volume task",
             "drivaerml_volume_090.json",
             ("pressure_l2", "velocity_l2", "nut_l2"),
-            (
-                "native",
-                "area",
-                "posed",
-            ),  # area: degenerate, n/a (the file's "degenerate")
+            # the uniform point cloud is degenerate here: the file's "degenerate", shown as n/a by Standing.table
+            ("native", "posed"),
             "sec-interior-results",
         ),
         # ISLA's arm is h090_hl_isla and the baselines read U_inf_dir (UDRV-HL: udrv_hl_gt, udrv_hl_t), every arm on ISLA's
@@ -327,7 +324,14 @@ class Standing:
         """The headline table: one row per architecture, one column group per protocol, ratio rows.
 
         Returns markdown with a Quarto caption; print it from an ``output: asis`` cell."""
-        protocols = tuple(protocols or self.ds.protocols)
+        protocols = tuple(
+            protocols
+            or [
+                p
+                for p in self.raw["protocols"]
+                if p in self.ds.protocols or p in self.degenerate
+            ]
+        )
         fields = tuple(fields or self.fields)
         flab = " / ".join(self.fields[f] for f in fields)
         out = [
@@ -402,9 +406,9 @@ class Standing:
 
 def _num(x: float | None, spec: str | None) -> str:
     """A table value: 'n/a' for a degenerate cell, a ratio by ``fmt_ratio`` when ``spec`` is None."""
-    if x is None:
-        return "n/a"
-    return fmt_ratio(x) if spec is None else format(x, spec)
+    if x is None or spec is None:
+        return fmt_ratio(x)
+    return format(x, spec)
 
 
 def _load(key: str) -> dict:
@@ -464,8 +468,10 @@ def suv_xfam() -> dict:
     return _load("suv_xfam")
 
 
-def fmt_ratio(r: float) -> str:
-    """A ratio as the book writes it: two decimals below 2, one decimal below 10, none above."""
+def fmt_ratio(r: float | None) -> str:
+    """A ratio as the book writes it: two decimals below 2, one decimal below 10, none above; 'n/a' for a degenerate one."""
+    if r is None:
+        return "n/a"
     return f"{r:.0f}" if r >= 10 else f"{r:.1f}" if r >= 2 else f"{r:.2f}"
 
 
