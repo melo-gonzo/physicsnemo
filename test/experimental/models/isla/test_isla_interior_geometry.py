@@ -994,6 +994,68 @@ def test_on_wall_direction_flips_exactly_with_the_winding(dim):
     assert torch.allclose(u, nu @ R.T, atol=1e-12, rtol=0)
 
 
+@pytest.mark.parametrize("surface", ["ellipse", "sphere", "torus"])
+def test_on_wall_direction_in_float32_is_the_float64_one(surface):
+    """Curved float32 surfaces in a generic pose, at their vertices and their cells'
+    edge midpoints: on the surface, u is the least-norm normal that float64 copies
+    of the same inputs give, to float32 rounding, never 0 where that one is not
+    (the float32 normals are not unit in float64, and their least-norm point failed
+    its own optimality test), and a winding flip negates it bitwise."""
+    if surface == "ellipse":
+        m = _circle(400)
+        mesh = Mesh(points=m.points * torch.tensor([1.0, 0.12], dtype=D), cells=m.cells)
+    else:
+        mesh = _sphere(3) if surface == "sphere" else _torus()
+    dim = mesh.points.shape[-1]
+    R, t = orthogonal(dim, 7), torch.arange(1, dim + 1, dtype=D) / 3
+    pts = (mesh.points @ R.T + t).float()
+    q = torch.cat([pts, pts[mesh.cells[:, :2]].mean(1)])
+    d, u = exact_boundary_geometry(q, pts, mesh.cells)
+    d64, u64 = exact_boundary_geometry(q.double(), pts.double(), mesh.cells)
+    wall = d64 == 0
+    assert wall[: pts.shape[0]].all() and torch.equal(
+        d[wall], torch.zeros_like(d[wall])
+    )
+    assert (u64[wall].norm(dim=-1) > 0.5).all() and (u[wall].norm(dim=-1) > 0.5).all()
+    assert (u[wall].double() - u64[wall]).norm(dim=-1).max() <= 1e-5
+    _, u2 = exact_boundary_geometry(
+        q, pts, _flipped(Mesh(points=pts, cells=mesh.cells)).cells
+    )
+    assert torch.equal(u2[wall], -u[wall])
+
+
+def test_on_wall_direction_skips_zero_area_cells():
+    """A zero-area triangle on an edge of a sphere has no normal: at the edge's
+    vertices and its midpoint the on-wall rule reads the other cells holding the
+    query, so d and u are bitwise those without it (its zero normal in the hull
+    made u 0)."""
+    mesh = _sphere(2)
+    a, b = mesh.cells[0, :2].tolist()
+    mid = 0.5 * (mesh.points[a] + mesh.points[b])
+    pts = torch.cat([mesh.points, mid[None]])
+    cells = torch.cat([mesh.cells, torch.tensor([[a, b, mesh.n_points]])])
+    q = torch.stack([mesh.points[a], mesh.points[b], mid, 1.01 * mid])
+    d, u = exact_boundary_geometry(q, pts, cells)
+    d0, u0 = exact_boundary_geometry(q, pts, mesh.cells)
+    assert torch.equal(d[:3], torch.zeros(3, dtype=D))
+    assert torch.equal(d, d0) and torch.equal(u, u0)
+    assert (u.norm(dim=-1) > 0.9).all()
+
+
+def test_float32_tie_keeps_its_side_off_the_wall():
+    """Float32 queries at a posed sphere's edge midpoints lie a few 1e-8 off the
+    surface (the rounding of the midpoint), off it in float64: at a tie, |d| is the
+    float64 distance, which float32 does not round to 0, so d keeps the side the
+    vote gives it (d = -0 lost it) and a winding flip negates sign(d) u."""
+    mesh = _sphere(3)
+    R, t = orthogonal(3, 7), torch.arange(1, 4, dtype=D) / 3
+    moved = Mesh(points=(mesh.points @ R.T + t).float(), cells=mesh.cells)
+    q = moved.points[mesh.cells[:, :2]].mean(1)
+    d, u = _geometry(q, moved)
+    d2, u2 = _geometry(q, _flipped(moved))
+    assert torch.equal(_gradient(d2, u2), -_gradient(d, u))
+
+
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="compares CUDA with CPU")
 @pytest.mark.parametrize("dim", [2, 3])
 def test_tie_search_on_cuda_matches_cpu(dim):

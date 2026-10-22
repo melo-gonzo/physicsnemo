@@ -249,9 +249,11 @@ def _min_norm_points(c: torch.Tensor) -> torch.Tensor:
     that face's least-norm affine point with non-negative weights, and every such
     point lies in the hull: so it is the least-norm one over those faces (a pair's
     midpoint, since the vectors have equal norms; the first in the enumeration at
-    equal norms), unless the origin is in the hull, which the optimality condition
-    ``c_k . x >= |x|^2`` detects. ``c`` in a canonical order, so the result is a
-    function of the set. Chunked over the rows."""
+    equal norms) that meets the optimality condition ``c_k . x >= |x|^2``, which
+    only the hull's least-norm point does (other faces' points can match its norm
+    to rounding where vectors nearly coincide), and none when the origin is in the
+    hull. ``c`` in a canonical order, so the result is a function of the set.
+    Chunked over the rows."""
     n, k, d = c.shape
     if k == 1:
         return c[:, 0]
@@ -276,11 +278,12 @@ def _min_norm_points(c: torch.Tensor) -> torch.Tensor:
             x = ((lam / lam.sum(-1, keepdim=True))[..., None] * p).sum(-2)
             xs.append(torch.where(ok[..., None], x, torch.inf))
         x = torch.cat(xs, 1)
-        best = x.gather(1, x.norm(dim=-1).argmin(1)[:, None, None].expand(-1, 1, d))[:, 0]
         ### Rounding of a d-term dot product of unit vectors, on each side.
         slack = 2 * d * torch.finfo(c.dtype).eps
-        inside = ((cc * best[:, None]).sum(-1) < (best * best).sum(-1, keepdim=True) - slack).any(-1)
-        out.append(torch.where(inside[:, None], 0.0, best))
+        optimal = ((cc[:, None] * x[:, :, None]).sum(-1) >= (x * x).sum(-1, keepdim=True) - slack).all(-1)
+        norm = torch.where(optimal, x.norm(dim=-1), torch.inf)
+        best = x.gather(1, norm.argmin(1)[:, None, None].expand(-1, 1, d))[:, 0]
+        out.append(torch.where(torch.isfinite(norm).any(1)[:, None], best, 0.0))
     return torch.cat(out)
 
 
@@ -550,7 +553,8 @@ def _closest_candidates(
     beside the foot of the perpendicular on a cell next to the vertex), except on
     the surface, where every cell within the bound holds the query. A tie's
     directions are the unit vectors from the surface to the query, and on the
-    surface the tied cells' unit normals, whose least-norm point is taken odd in
+    surface the unit normals of the tied cells that have one (with none, the query
+    keeps its closest cell's normal), whose least-norm point is taken odd in
     them (half its value at the normals less its value at their negations), so a
     winding flip negates it bitwise.
 
@@ -620,10 +624,14 @@ def _closest_candidates(
         )
     reached = torch.ones_like(nonzero[:, 0])
     on_feature = key >= 0
-    group = li[on_feature] * (n_vertices + n_vertices**2) + key[on_feature]
-    _, inverse, counts = torch.unique(group, return_inverse=True, return_counts=True)
+    group = torch.stack([li[on_feature], key[on_feature]], -1)
+    _, inverse, counts = torch.unique(group, dim=0, return_inverse=True, return_counts=True)
     reached[on_feature] = counts[inverse] == count[on_feature]
-    tie = (dist - err <= upper[li]) & (reached | on_wall[li])
+    ### On the surface the directions are the cells' normals, renormalized in float64
+    ### (the least-norm step needs unit vectors); a degenerate cell has none.
+    wall_n = face_n / face_n.norm(dim=-1, keepdim=True)
+    has_n = torch.isfinite(wall_n).all(-1)
+    tie = (dist - err <= upper[li]) & torch.where(on_wall[li], has_n[pk], reached)
     tq = li[tie]
     fn, on_cell = _feature_normals(w[tie], pk[tie], cells[pk[tie]], face_n, vertex_n, edge_n)
     dt = diff[tie]
@@ -634,7 +642,7 @@ def _closest_candidates(
         dt / dist[tie].clamp_min(torch.finfo(dist.dtype).tiny)[:, None],
     )
     wall = on_wall[tq]
-    tc = torch.where(wall[:, None], face_n[pk[tie]], tc)
+    tc = torch.where(wall[:, None], wall_n[pk[tie]], tc)
     ### A tie is two or more distinct directions (the cells sharing a vertex or an
     ### edge give its direction bitwise).
     head = torch.full((nq,), tq.shape[0], dtype=torch.long, device=dev).scatter_reduce(
@@ -673,8 +681,8 @@ def _closest_features(
     ``(Q, d)``, the unit pseudo-normal of the feature it lies on ``(Q, d)``,
     whether that feature is the interior of a cell ``(Q,)``, the cell's unit
     normal ``(Q, d)``, at a closest-feature tie (:func:`_closest_candidates`)
-    whether there is one ``(Q,)``, the direction ``(Q, d)`` and the sign ``(Q,)``,
-    and whether the query is on the surface ``(Q,)``; see
+    whether there is one ``(Q,)``, the direction ``(Q, d)``, the sign ``(Q,)`` and
+    the distance ``(Q,)``, and whether the query is on the surface ``(Q,)``; see
     :func:`exact_boundary_geometry`."""
     points = points.to(query_points.dtype)
     cells, parity = _canonical_cells(points, _weld(points)[cells])
@@ -695,7 +703,9 @@ def _closest_features(
     closest = (weights.to(simplex.dtype)[..., None] * simplex).sum(1)
     feature_n, on_cell = _feature_normals(weights, idx, corners, all_n, vertex_n, edge_n)
     dtype = query_points.dtype
-    return closest, feature_n, on_cell, all_n[idx], tied, tie_u.to(dtype), tie_sign.to(dtype), on_wall
+    ### (in float64: off the surface a lower precision can round it to 0, losing the sign)
+    tie_dist = (query_points.double() - (weights[..., None] * simplex.double()).sum(1)).norm(dim=-1).to(dtype)
+    return closest, feature_n, on_cell, all_n[idx], tied, tie_u.to(dtype), tie_sign.to(dtype), tie_dist, on_wall
 
 
 def exact_boundary_geometry(
@@ -766,7 +776,7 @@ def exact_boundary_geometry(
         raise NotImplementedError(
             f"the exact boundary geometry is implemented in two and three dimensions; got {query_points.shape[-1]}"
         )
-    closest, feature_n, on_cell, face_n, tied, tie_u, tie_sign, on_wall = _closest_features(
+    closest, feature_n, on_cell, face_n, tied, tie_u, tie_sign, tie_dist, on_wall = _closest_features(
         query_points, points, cells, eps
     )
     diff = query_points - closest
@@ -783,7 +793,7 @@ def exact_boundary_geometry(
     d = torch.where(
         on_wall,
         torch.zeros_like(dist),
-        torch.where(tied, tie_sign * dist, torch.where(on_cell, plane, sign * dist)),
+        torch.where(tied, tie_sign * tie_dist, torch.where(on_cell, plane, sign * dist)),
     )
     return d, u
 
