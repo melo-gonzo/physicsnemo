@@ -61,7 +61,8 @@ _QA = R.load("probes090", "results/qpop_afix/reduced.json")
 _qa = lambda m: [sum(_QA[f"r090fix_af_isla_seed{s}"]["ratio_to_native_h"][m][f] for s in (42, 43)) / 2
                  for f in ("pressure_l2", "velocity_l2", "nut_l2")]
 QP_CHUNKS = _qa("chunks4")                                   # four chunks ÷ one request, AirfRANS, interacting ISLA
-QP_SMALL = [x for m in ("sub1000", "sub100", "sub10", "sub1") for x in _qa(m)]
+QP_SUBS = sorted((m for m in _QA["r090fix_af_isla_seed42"]["ratio_to_native_h"] if m.startswith("sub")), key=lambda m: -int(m[3:]))
+QP_SMALL = [x for m in QP_SUBS for x in _qa(m)]
 ```
 
 ```{python}
@@ -1024,9 +1025,10 @@ r2 = [float(r["r2_h_vs_S_phase1"]) for r in GT_]
 print(f"\n\nOver training the normalized stream still grows. In an audit of {len(GT_)} trained checkpoints of ISLA and "
       "ISLA-DTT at the reference configuration, the mean token norm after the last block "
       f"grows linearly in optimizer steps while the learning rate is constant (R² of a linear fit {min(r2):.2f} to "
-      f"{max(r2):.2f}; on AirfRANS a square-root fit is closer) and stops growing when the rate steps down. Each layer's "
-      "update stays bounded; what grows is the sum of the updates, and the head frame, which reads the raw stream, collapses "
-      f"on DeepJEB++ (@sec-deepjeb; {R.source('stream_audit', 'REPORT.md')}).")
+      f"{max(r2):.2f}; on AirfRANS a square-root fit is closer) and stops growing when the rate steps down. It is a scale "
+      "drift: each block's update grows with the stream, and only the head frame, which reads the raw stream, reads its "
+      f"size; on DeepJEB++ the head frame collapses (@sec-deepjeb; {R.source('stream_audit', 'REPORT.md')}). The audit's "
+      "AirfRANS, Tensile2d and lug checkpoints were trained with the compiled path before its fault was fixed.")
 ```
 
 
@@ -1053,12 +1055,13 @@ import json
 from pathlib import Path
 RES = Path("..") / "results"
 SL = RES / "renderings_2026-10-18" / "routing"
+SL_090 = RES / "renderings_2026-10-22" / "routing"     # the standings' checkpoints
 PF = RES / "problem_figures_2026-09-22"
 M_SL = 512
 
-def load_slices(run, n_draw=60000):
+def load_slices(run, n_draw=60000, sl=SL):
     """One routing probe; the per-token arrays are thinned to a fixed subset of n_draw tokens for drawing."""
-    z = np.load(SL / f"{run}.npz"); meta = json.load(open(SL / f"{run}.json"))
+    z = np.load(sl / f"{run}.npz"); meta = json.load(open(sl / f"{run}.json"))
     d = {k: z[k] for k in z.files}
     if len(d["keep"]) > n_draw:
         sub = np.sort(np.random.default_rng(0).choice(len(d["keep"]), n_draw, replace=False))
@@ -1085,7 +1088,7 @@ def draw_anchors(ax, d, li, scale=1.0, dims=(0, 1), s=50):
     ax.scatter(A[:, dims[0]], A[:, dims[1]], marker="*", s=s, c=SLICE_COLS[active], edgecolors=INK, linewidths=0.45, zorder=5)
     return len(active)
 
-DR, DRm = load_slices("a2r_dr_isla_seed42_s00079")
+DR, DRm = load_slices("r090_dr_isla_seed42_s00079", sl=SL_090)
 AF, AFm = load_slices("afu_a2s_isla_seed42_s00215")
 LG, LGm = load_slices("a2r_lug_isla_seed42_s00633")
 L_REF_DR = json.load(open(PF / "drivaer.json"))["L_ref"]        # the recipe divides DrivAerML positions by L_ref = 5 m
@@ -1093,24 +1096,10 @@ NE_DR = [n_eff(DR["q"][li]) for li in range(12)]
 L_PEAK = int(np.argmin(NE_DR))       # the layer whose routing is most concentrated
 ```
 
+::: {#fig-routing-partition-drivaer}
+
 ```{python}
-#| label: fig-routing-partition-drivaer
-#| fig-cap: >
-#|   How a trained ISLA partitions a car, DrivAerML Surface task. Side view
-#|   of the 200,000 boundary tokens of one validation car (a 60,000-token
-#|   subset drawn), each colored by its dominant slice at the first layer,
-#|   at the layer whose routing is most concentrated and at the last layer,
-#|   faded toward the paper where its largest soft assignment is small
-#|   relative to that layer's. Stars are the anchors of the slices whose mass exceeds the uniform
-#|   share. How to read this: slice colors are labels and repeat (twenty
-#|   hues), so two distant patches of one hue are usually different slices;
-#|   what the picture shows is the granularity and placement of the
-#|   partition, not the identity of any slice. The tokens carry no
-#|   coordinates; the patches come from the token states and the relational
-#|   invariants alone. ISLA's reference configuration, a checkpoint of the
-#|   nearest-token form (@sec-checkpoint-form), seed 42, final
-#|   checkpoint; the validation car of median ISLA pressure error. Data:
-#|   results/renderings_2026-10-18/routing/a2r_dr_isla_seed42_s00079.npz.
+#| label: plot-routing-partition-drivaer
 #| code-fold: true
 P = DR["points"][DR["keep"]] * L_REF_DR
 layers = [0, L_PEAK, 11]
@@ -1125,6 +1114,25 @@ axes[-1].set_xlabel("x [m]  (far-field flow along $+x$)")
 plt.show()
 ```
 
+How a trained ISLA partitions a car, DrivAerML Surface task. Side view
+of the `{python} f"{DRm['n_tokens']:,}"` boundary tokens of one validation car (a
+`{python} f"{len(DR['keep']):,}"`-token subset drawn), each colored by its dominant slice at the first layer,
+at the layer whose routing is most concentrated and at the last layer,
+faded toward the paper where its largest soft assignment is small
+relative to that layer's. Stars are the anchors of the slices whose mass exceeds the uniform
+share. How to read this: slice colors are labels and repeat (twenty
+hues), so two distant patches of one hue are usually different slices;
+what the picture shows is the granularity and placement of the
+partition, not the identity of any slice. The tokens carry no
+coordinates; the patches come from the token states and the relational
+invariants alone. ISLA at its reference configuration, the standing's
+DrivAerML Surface checkpoint, seed 42, final checkpoint; validation car
+`{python} DRm['sample_id'].split('_')[0]` (the car of @fig-drivaerml-prediction), on which its pressure error is
+`{python} f"{DRm['probe_metrics']['metrics']['pressure_l2']:.4f}"`. Data:
+results/renderings_2026-10-22/routing/r090_dr_isla_seed42_s00079.npz.
+
+:::
+
 ```{python}
 #| label: fig-routing-weights-drivaer
 #| fig-cap: >
@@ -1135,11 +1143,11 @@ plt.show()
 #|   soft region, brightest at its core and fading over its neighbors; the
 #|   anchor is the region's weighted mean position and sits inside the body
 #|   when the region wraps around it, here between a pair of wheels. The
-#|   three largest territories of this layer are wheels. Each panel's color scale runs to
+#|   two largest territories of this layer are the front and the rear pair
+#|   of wheels. Each panel's color scale runs to
 #|   the slice's own 99.9th percentile; $q_s$ is the slice's mass.
-#|   ISLA's reference configuration, a checkpoint of the nearest-token form
-#|   (@sec-checkpoint-form), as @fig-routing-partition-drivaer. Data:
-#|   results/renderings_2026-10-18/routing/a2r_dr_isla_seed42_s00079.npz.
+#|   The checkpoint and car of @fig-routing-partition-drivaer. Data:
+#|   results/renderings_2026-10-22/routing/r090_dr_isla_seed42_s00079.npz.
 #| code-fold: true
 li_pos = 1; L6 = int(DR["top_layers"][li_pos]); ts = DR["top_slices"][li_pos][:3]
 fig, axes = plt.subplots(3, 2, figsize=(8, 5.8), gridspec_kw=dict(hspace=0.6, wspace=0.08, width_ratios=[1, 1]))
@@ -1161,14 +1169,6 @@ for j, (ax_side, ax_below) in enumerate(axes):
 for ax in axes[-1]:
     ax.set_xlabel("x [m]")
 plt.show()
-```
-
-```{python}
-#| label: callout-routing-drivaer
-#| output: asis
-print(S.in_flight_callout({"what": "the routing of an ISLA checkpoint of the nearest-token form (@sec-checkpoint-form) in "
-                                   "@fig-routing-partition-drivaer and @fig-routing-weights-drivaer",
-                           "replacement": "The routing of the standing's DrivAerML Surface checkpoint on the same car"}))
 ```
 
 ```{python}
@@ -1244,7 +1244,8 @@ print(
     f"concentrated one ({n_eff(LG['q'][0]):.0f}) (@fig-routing-other-tasks). In the last layer the effective numbers are "
     f"{n_eff(AF['q'][11]):.0f} on the airfoil and {n_eff(LG['q'][11]):.0f} on the lug: the last layers spread the mass on every "
     f"task, and why the routing concentrates where it does is not measured. This is one case of one seed on each task, from "
-    f"checkpoints of the {S.FORM_TAG}; it shows the granularity of the learned partition, not its accuracy.\n"
+    f"the standing's checkpoint on the car and checkpoints of the {S.FORM_TAG} on the airfoil and the lug; it shows the "
+    "granularity of the learned partition, not its accuracy.\n"
 )
 ```
 
@@ -1479,12 +1480,13 @@ a learned fraction of the total boundary measure split equally among them,
 so they help form the slices and their anchors, and the prediction at one
 point depends on which other points are in the request. That dependence is
 the price of letting the interior shape the latent partition, and it is a
-limit with no knob: on the AirfRANS interior task, sending the same points in
+limit with no knob: on the AirfRANS interior task, with checkpoints trained
+with the compiled path after its fault was fixed, sending the same points in
 four chunks raises the error
 `{python} f"{min(QP_CHUNKS):.2f}"`-fold to `{python} f"{max(QP_CHUNKS):.2f}"`-fold,
-and queries of at most 1,000 points raise it
+and queries of at most `{python} f"{int(QP_SUBS[0][3:]):,}"` points raise it
 `{python} f"{min(QP_SMALL):.1f}"`-fold to `{python} f"{max(QP_SMALL):.0f}"`-fold
-(@sec-query-population). ISLA-DTT
+(@sec-query-population, with the In-flight note on those checkpoints). ISLA-DTT
 (`query_independent=True`) makes the points **read-only**: they carry no
 routing mass, so at every layer they read the slices the boundary formed
 and never write into them, and after every layer each point also reads
