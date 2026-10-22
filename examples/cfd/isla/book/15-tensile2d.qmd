@@ -57,7 +57,7 @@ def lug_conditions(ax, bp, bc, fixed, loaded, hole, lw=4.0, fill="#e4e3dc"):
 #| label: para-tensile2d-opening
 #| output: asis
 who = [S.CONFIG[a].split(" (")[0] for a in S.BASELINES if V_SD[a] == {"trails"}]
-print(f"**On a planar notched specimen whose target includes the stress tensor, {' and '.join(who) if who else 'no baseline'} "
+print(f"**On a planar notched specimen whose target includes the stress tensor, scored on the native mesh, {' and '.join(who) if who else 'no baseline'} "
       f"{'lead' if len(who) > 1 else 'leads'} ISLA on stress and displacement: GeoTransolver ÷ ISLA is {min(GT_SD):.2f} to "
       f"{max(GT_SD):.2f}.** ISLA is the one architecture of the three that keeps its answer when the specimen is rotated and "
       f"translated: its posed errors differ from its native ones by at most {100 * POSE_DEV:.1f}% on any seed.")
@@ -249,7 +249,7 @@ print(f"**Diversity.** Each of the {G['n_ok']} cases has its own geometry and it
 - **What each model receives.** ISLA (`isla_tensile2d.yaml`, `dim: 2` after `RestrictToPlane`) reads the outer polyline as four named boundary conditions, which `SplitBoundaryByLabels` cuts from its labels in the order `loaded`, `fixed`, `pinned`, the first winning where two mark a cell: the bottom edge's cell at the pinned corner stays `fixed`, the left side's cell at that node is `pinned`, and the unlabeled cells are `free`; only `loaded` carries a field, the applied pressure. The six standardized scalars are six global scalars, and every node is a prediction point, which gets its exact signed distance and direction to the polyline inside the model; ISLA reads no stored `sdf`. GeoTransolver and Transolver read every node with its coordinates, the same stored `sdf` and `sdf_normals` and the three nodal tags `tag_top`, `tag_bottom`, `tag_bottomleft`, which carry the boundary conditions to them, and the six scalars as their global embedding (@tbl-model-inputs). They predict the three stress components as three scalars.
 - **Normalization** (statistics over `train_400`). The six scalars are standardized per component. **Every target of rank one or more is normalized with zero mean and one isotropic scale**, because a vector shifted by a fixed mean vector, which does not rotate with the specimen, or a tensor scaled per component, is no longer equivariant: no equivariant model can emit it for a rotated specimen. The displacement is divided by `{python} f"{DISP_SCALE:.2e}"` and the three stress components by the one scale `{python} f"{STRESS_SCALE:.1f}"` MPa, the root mean of $(\sigma_{11}^2 + \sigma_{22}^2 + 2\sigma_{12}^2)/4$ over the training nodes. The plastic strain is standardized to zero mean and unit variance. The baselines train on the same normalized numbers.
 - **Splits.** `val_100` holds 100 samples drawn with seed 0 from `train_500` minus `train_250`, so the official nested ladder up to `train_250` stays disjoint from it, and `train_400` is `train_500` minus `val_100`. Every model trains on `train_400` and is scored on `val_100`.
-- **Pitfalls.** Most specimens never yield. On 69 of the 100 validation specimens $q$ is identically zero, which the standardization maps to the constant `{python} f"{-Q_MEAN / Q_STD:.4f}"`. On those specimens the relative error of $q$ is the model's absolute error divided by `{python} f"{Q_MEAN / Q_STD:.4f}"`: the size of a constant offset, not an error in a plastic field. The numbers of PLAID's public benchmark leaderboard are on the withheld test set and are not comparable to `val_100` figures.
+- **Pitfalls.** Most specimens never yield. On `{python} D2['tensile2d_never_yield']['n_q_zero']` of the `{python} D2['tensile2d_never_yield']['n_val']` validation specimens $q$ is identically zero (results/campaigns_2026-10-22/book_D2/book_D2.json, from the converter's per-case record), which the standardization maps to the constant `{python} f"{-Q_MEAN / Q_STD:.4f}"`. On those specimens the relative error of $q$ is the model's absolute error divided by `{python} f"{Q_MEAN / Q_STD:.4f}"`: the size of a constant offset, not an error in a plastic field. The numbers of PLAID's public benchmark leaderboard are on the withheld test set and are not comparable to `val_100` figures.
 
 ## What is measured {#sec-tensile2d-measured}
 
@@ -269,22 +269,44 @@ Each trained checkpoint is scored twice on the same specimens: on the native mes
 ```{python}
 #| label: tab-tensile2d-cost
 #| output: asis
-COST = json.load(open(RES / "char" / "char_lanes_cost_2026-10-04.json"))["cost"]["Tensile2D"]
-print("| | parameters | peak memory per GPU [GiB] | time per epoch [s] |\n|---|--:|--:|--:|")
+COST = {a: S.cost("tensile2d", a) for a in S.ARCHS}
+import re as _re
+def cost_how(c):
+    """How the rows of a cost table were measured, from the notes of standing.cost."""
+    i, b = c["ISLA"], c["Transolver"]
+    out = ("parameters, peak allocated device memory per GPU (the maximum over ranks) and the median wall time of one training step "
+           "without the compile steps, seed means. "
+           f"Every architecture trains on {i['gpus']} GB300 GPUs and {i['ranks']} ranks; the configuration that trains ISLA is "
+           f"{i['precision']} autocast with its blocks compiled one by one and Inductor's mix-order reduction off; the baselines train "
+           f"in {b['precision']} autocast and uncompiled, as released. ")
+    if "before the compile fix" in i["note"]:
+        out += "The ISLA lanes priced here trained before that setting, with the mix-order reduction on in the compiled blocks. "
+    m = _re.search(r"trained eager\b.*?at about (\w+) this step time", i["note"])
+    if m:
+        out += (f"The standing's ISLA checkpoints trained eager, for a control of the training path, at about {m.group(1)} this step "
+                "time; the row prices the compiled lane of the same configuration. ")
+    smoke = [a for a in S.BASELINES if "smoke lane" in c[a]["note"]]
+    if smoke:
+        out += (f"{' and '.join(smoke)} {'have' if len(smoke) > 1 else 'has'} no training log left from the standing's "
+                f"lane{'s' if len(smoke) > 1 else ''}, so {'their rows price' if len(smoke) > 1 else 'its row prices'} the one-epoch "
+                "smoke lane of the same configuration, one seed; the parameter counts are the standing's. ")
+    return out
+
+
+cost_src = lambda c: "; ".join(sorted({"results/" + p for v in c.values() for p in _re.findall(r"campaigns_[^\s;:]+", v["source"])}))
+print("| | parameters | peak memory per GPU [GiB] | median training step [s] |\n|---|--:|--:|--:|")
 for a in S.ARCHS:
     v = COST[a]
-    print(f"| {S.CONFIG[a]} | {v['n_parameters'] / 1e6:.1f}M | {v['peak_gib']:.1f} | {v['epoch_seconds']:.0f} |")
-print("\n: The cost of training on PLAID Tensile2d at the three reference configurations: parameters, peak device memory (maximum over "
-      "four GB300 ranks, bfloat16) and wall time of one epoch of 400 specimens. ISLA's row is a one-epoch lane of the raw-read variant; "
-      "ISLA at its reference configuration adds one input layer per named boundary condition, so its parameter count differs from the "
-      "row's and the cost is representative; memory and time are one-epoch measurements. How to read this: "
-      "ISLA has several times the baselines' parameters and the longest epoch, so the comparison of @tbl-tensile2d-protocols is not "
-      "resource-matched. Instrument: ISLA at 512 wide, 512 slices, 3.75e-4, raw slice reads (@sec-study-configurations). "
-      "Data: results/char/char_lanes_cost_2026-10-04.json. {#tbl-tensile2d-cost}")
-ISLA_EPOCH = COST["ISLA"]["epoch_seconds"] / statistics.mean(COST[a]["epoch_seconds"] for a in S.BASELINES)
+    print(f"| {S.CONFIG[a]} | {v['n_parameters'] / 1e6:.1f}M | {v['peak_gib']:.1f} | {v['step_seconds']:.3f} |")
+longest = max(S.ARCHS, key=lambda a: COST[a]["step_seconds"])
+print("\n: The cost of training on PLAID Tensile2d at the three reference configurations, as the standing's lanes trained them: "
+      + cost_how(COST) + "How to read this: ISLA has several times the baselines' parameters"
+      + (" and the longest step" if longest == "ISLA" else "") + ", so the comparison of @tbl-tensile2d-protocols is not "
+      f"resource-matched. Data: results/char/{S.COST_FILE}, from {cost_src(COST)}. {{#tbl-tensile2d-cost}}")
+ISLA_STEP = COST["ISLA"]["step_seconds"] / statistics.mean(COST[a]["step_seconds"] for a in S.BASELINES)
 ```
 
-**The comparison is not matched in cost.** @tbl-tensile2d-cost gives each architecture's parameters, memory and epoch time. ISLA has `{python} f"{COST['ISLA']['n_parameters'] / COST['GeoTransolver']['n_parameters']:.1f}"` times GeoTransolver's parameters, and its epoch is `{python} f"{ISLA_EPOCH:.1f}"` times the baselines' mean on this task of about ten thousand nodes per case.
+**The comparison is not matched in cost.** @tbl-tensile2d-cost gives each architecture's parameters, memory and step time. ISLA has `{python} f"{COST['ISLA']['n_parameters'] / COST['GeoTransolver']['n_parameters']:.1f}"` times GeoTransolver's parameters, and its training step is `{python} f"{ISLA_STEP:.1f}"` times the baselines' mean on this task of about ten thousand nodes per case.
 
 ## The standing {#sec-interior-tensile2d}
 
@@ -394,7 +416,7 @@ def reading(k):
         return "base"
     if k == "CONT":
         return "the step is real" if a["moves"] else "the step is not real"
-    return {"opposes": "moves, away from the earlier code"}.get(a["label"], a["label"])
+    return {"opposes": "opposes (moves away from the earlier code)"}.get(a["label"], a["label"])
 print("| arm | displacement, seeds 42 to 45 | displacement ÷ ISLA | Δ / SE | registered reading | stress ÷ ISLA | plastic strain ÷ ISLA |\n"
       "|---|---|--:|--:|---|--:|--:|")
 for k, lab in ARM.items():

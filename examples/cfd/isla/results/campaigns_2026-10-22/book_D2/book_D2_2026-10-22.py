@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Reduce two cluster outputs that the Tensile2d and lug chapters (15, 16) read, and that no record holds in reduced form,
+"""Reduce three cluster outputs that the Tensile2d and lug chapters (15, 16) read, and that no record holds in reduced form,
 into book_D2.json beside this file.
 
 ``lug_closest_feature_ties``: ATTRIB-090's geometry probe (job 334176, launcher geo_flip_probe.py; RESULTS.md section 4 of
@@ -28,6 +28,9 @@ whose direction changes, and the largest deviations.
 the eager-trained Tensile2d standing, r090eag_t2dz_isla seeds 42-45: per seed the epoch and value of the lowest displacement
 error, the largest value after it, and the last value.
 
+``tensile2d_never_yield``: the validation specimens (manifest split val_100) whose plastic strain q is identically zero, from
+the converter's per-case record (largest q and the sum and sum of squares of q over the nodes).
+
 Sources (copied unmodified from LHR, $T = /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/
 2026-08-09-mt2-stage0, into scratch/isla-book-current-2026-10-22/book_D2_src/):
 
@@ -35,6 +38,9 @@ Sources (copied unmodified from LHR, $T = /scratch/fsw/portfolios/coreai/project
 - the val_summary rows of $T/runs/r090eag_t2dz_isla_seed{42,43,44,45}/metrics.jsonl (md5 8494725f66591846a3bb7b9aae6b898c,
   01fde3c4d6f12a9534ca943714c38658, 6930accf4ae524969e1715ceee2f52bb, 55f5a97dc09c0be1101fc3765d523f81)
   -> r090eag_t2dz_isla_seed<s>_val_summary.jsonl
+- /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/plaid_tensile2d_pdmsh/convert_results.json
+  and manifest.json there -> plaid_tensile2d_convert_results.json (md5 9865e100b88fe99ea53cf581a049c712),
+  plaid_tensile2d_manifest.json (md5 7abdf9af380590a2a4e778d80f07e12e)
 
 usage: python book_D2_2026-10-22.py [source folder, default ~/gh/physicsnemo/scratch/isla-book-current-2026-10-22/book_D2_src]
 """
@@ -116,10 +122,27 @@ def t2d_validation() -> dict:
     }
 
 
+def t2d_never_yield() -> dict:
+    """The val_100 specimens on which q is zero at every node."""
+    val = json.load(open(SRC / "plaid_tensile2d_manifest.json"))["val_100"]
+    conv = {
+        r["case"]: r
+        for r in json.load(open(SRC / "plaid_tensile2d_convert_results.json"))
+    }
+    zero = [c for c in val if conv[c]["scalars"]["max_q"] == 0]
+    assert zero == [c for c in val if conv[c]["sums"]["q"][:2] == [0, 0]]
+    return {
+        "source": "plaid_tensile2d_pdmsh/convert_results.json (scalars.max_q, sums.q) over manifest.json val_100",
+        "n_val": len(val),
+        "n_q_zero": len(zero),
+    }
+
+
 if __name__ == "__main__":
     res = {
         "lug_closest_feature_ties": lug_ties(),
         "tensile2d_eager_validation": t2d_validation(),
+        "tensile2d_never_yield": t2d_never_yield(),
     }
     (HERE / "book_D2.json").write_text(json.dumps(res, indent=1) + "\n")
     print(json.dumps(res, indent=1))

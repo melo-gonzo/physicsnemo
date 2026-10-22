@@ -55,5 +55,10 @@
     "last": 0.011957633309066296
    }
   }
+ },
+ "tensile2d_never_yield": {
+  "source": "plaid_tensile2d_pdmsh/convert_results.json (scalars.max_q, sums.q) over manifest.json val_100",
+  "n_val": 100,
+  "n_q_zero": 69
  }
 }
