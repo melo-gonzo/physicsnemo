@@ -542,7 +542,10 @@ def test_isla_airfrans_similarity_end_to_end():
         for task in ("reynolds", "aoa")
         for posed in ("", "_posed")
     ]
-    + [("isla_volume_airfrans", "airfrans_uvolume_2d_s504")],
+    + [
+        ("isla_volume_airfrans", "airfrans_uvolume_2d_s504"),
+        ("isla_volume_airfrans", "airfrans_uvolume_2d_reynolds_lre"),
+    ],
 )
 def test_isla_takes_its_split_s_constants_from_the_dataset_file(model, dataset):
     """ISLA's AeroZoo and AirfRANS configs leave reynolds and each output's scale to the dataset file, whose
