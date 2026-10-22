@@ -1,0 +1,1096 @@
+{
+ "protocol": "AeroZoo standing under the compliant protocol (2026-10-22): ISLA 0.9.0 at its reference configuration on the seven splits,\nGeoTransolver 256 on the seven splits, Transolver 512 x 16 on `full`; test side, final checkpoint (epoch 250), float32, 200,000\ninterior points, seeds 42 and 43 (scratch/isla-az-compliant-2026-10-19/PREREG_v2.md, sections 7 and 11; reduction as\nscratch/isla-az-decide-2026-10-21/reduce_azdecide.py). The relative L2 is the recipe's physical one per field and case, so\npredicting zero scores 1.0 on every field and case.\n\nScores: results/campaigns_2026-10-22/aerozoo/scores/p200k_fp32_test_azc/<run>/<run>/metrics.jsonl (with .done and\nSNAPSHOT_USED), copied unmodified from scratch/isla-az-decide-2026-10-21/scores/ (originals on LHR, $T/p200k_fp32_test_azc/).\nPer split, arm and field: the seed mean of the per-seed means over cases (the rows after the last config row, checked equal to\nthe infer_summary row), the per-seed values, the median over cases of the per-case seed mean, and the case count. Checks: epoch\n250, the test side, the snapshot (code_r090 for ISLA, code_azv2 for the baselines), the manifest's test-side case count.\n\nISLA-DTT (query_independent=True, the same configuration) is an in-flight arm with no numbers. \"diagnostics\" holds the\nmachine-readable readouts of the AZ-DECIDE diagnostics: the velocity speed ratio and direction on profile_crossflow and nonbox\n(preddiag/predictions_diag.tsv: medians over the 30 diagnosed cases per run), and GeoTransolver's velocity loss over its last\nepochs (basecheck/raw/curves/*.json: the training loss/velocity with its weight of 3 divided out, and the validation\nvelocity_l2), both copied into results/campaigns_2026-10-22/aerozoo/.\nusage: python aerozoo_090_2026-10-22.py  ->  results/char/aerozoo_090.json",
+ "status": "in_flight",
+ "in_flight": {
+  "what": "interacting ISLA, GeoTransolver and Transolver, without ISLA-DTT",
+  "replacement": "ISLA-DTT on the same seven splits"
+ },
+ "splits": [
+  "full",
+  "nonbox",
+  "reynolds",
+  "blobs",
+  "bank_zero_to_cad",
+  "profile_crossflow",
+  "profile_dual_inlet"
+ ],
+ "held_out": [
+  "nonbox",
+  "reynolds",
+  "blobs",
+  "bank_zero_to_cad",
+  "profile_crossflow",
+  "profile_dual_inlet"
+ ],
+ "fields": {
+  "velocity_l2": "velocity",
+  "pressure_l2": "pressure",
+  "nut_l2": "eddy viscosity",
+  "tke_l2": "turbulent kinetic energy",
+  "omega_l2": "specific dissipation rate"
+ },
+ "n_cases": {
+  "full": 716,
+  "nonbox": 1074,
+  "reynolds": 1385,
+  "blobs": 1367,
+  "bank_zero_to_cad": 333,
+  "profile_crossflow": 578,
+  "profile_dual_inlet": 516
+ },
+ "zero_predictor": 1.0,
+ "isla_arm": "ISLA 512 with 512 slices",
+ "arms": {
+  "ISLA 512 with 512 slices": {
+   "note": "",
+   "splits": {
+    "full": {
+     "velocity_l2": {
+      "mean": 0.11811514473429169,
+      "per_seed": {
+       "42": 0.12056516161105237,
+       "43": 0.115665127857531
+      },
+      "median": 0.10714270733296871,
+      "n_cases": 716,
+      "n_seeds": 2
+     },
+     "pressure_l2": {
+      "mean": 0.3037410008489524,
+      "per_seed": {
+       "42": 0.3111458173666836,
+       "43": 0.2963361843312211
+      },
+      "median": 0.28735318034887314,
+      "n_cases": 716,
+      "n_seeds": 2
+     },
+     "nut_l2": {
+      "mean": 0.39994425403979195,
+      "per_seed": {
+       "42": 0.4117424884347984,
+       "43": 0.3881460196447855
+      },
+      "median": 0.32522740960121155,
+      "n_cases": 716,
+      "n_seeds": 2
+     },
+     "tke_l2": {
+      "mean": 0.9991201300670877,
+      "per_seed": {
+       "42": 1.0330448084323558,
+       "43": 0.9651954517018195
+      },
+      "median": 0.5820977538824081,
+      "n_cases": 716,
+      "n_seeds": 2
+     },
+     "omega_l2": {
+      "mean": 0.372372330356306,
+      "per_seed": {
+       "42": 0.3706309994339277,
+       "43": 0.3741136612786844
+      },
+      "median": 0.31971368193626404,
+      "n_cases": 716,
+      "n_seeds": 2
+     }
+    },
+    "nonbox": {
+     "velocity_l2": {
+      "mean": 0.5332221167501985,
+      "per_seed": {
+       "42": 0.6128449231400059,
+       "43": 0.45359931036039103
+      },
+      "median": 0.4796023741364479,
+      "n_cases": 1074,
+      "n_seeds": 2
+     },
+     "pressure_l2": {
+      "mean": 2.774195915289237,
+      "per_seed": {
+       "42": 3.7600211595329047,
+       "43": 1.7883706710455693
+      },
+      "median": 1.5070496797561646,
+      "n_cases": 1074,
+      "n_seeds": 2
+     },
+     "nut_l2": {
+      "mean": 0.9023040417422241,
+      "per_seed": {
+       "42": 0.9329277435716526,
+       "43": 0.8716803399127955
+      },
+      "median": 0.8581247329711914,
+      "n_cases": 1074,
+      "n_seeds": 2
+     },
+     "tke_l2": {
+      "mean": 1.2639257753999762,
+      "per_seed": {
+       "42": 1.3198437580571716,
+       "43": 1.2080077927427806
+      },
+      "median": 0.9369970560073853,
+      "n_cases": 1074,
+      "n_seeds": 2
+     },
+     "omega_l2": {
+      "mean": 1.3150302508613527,
+      "per_seed": {
+       "42": 1.709953536118209,
+       "43": 0.9201069656044967
+      },
+      "median": 0.9204055815935135,
+      "n_cases": 1074,
+      "n_seeds": 2
+     }
+    },
+    "reynolds": {
+     "velocity_l2": {
+      "mean": 0.1642371394009151,
+      "per_seed": {
+       "42": 0.1608392175434944,
+       "43": 0.16763506125833583
+      },
+      "median": 0.15271327644586563,
+      "n_cases": 1385,
+      "n_seeds": 2
+     },
+     "pressure_l2": {
+      "mean": 0.50920097125015,
+      "per_seed": {
+       "42": 0.5061976022440066,
+       "43": 0.5122043402562934
+      },
+      "median": 0.5358002781867981,
+      "n_cases": 1385,
+      "n_seeds": 2
+     },
+     "nut_l2": {
+      "mean": 0.8530168091811051,
+      "per_seed": {
+       "42": 0.8189399643804515,
+       "43": 0.8870936539817588
+      },
+      "median": 0.49614447355270386,
+      "n_cases": 1385,
+      "n_seeds": 2
+     },
+     "tke_l2": {
+      "mean": 0.685074127750599,
+      "per_seed": {
+       "42": 0.6812173296882358,
+       "43": 0.6889309258129622
+      },
+      "median": 0.6953220963478088,
+      "n_cases": 1385,
+      "n_seeds": 2
+     },
+     "omega_l2": {
+      "mean": 0.5776652050214661,
+      "per_seed": {
+       "42": 0.584783680048445,
+       "43": 0.5705467299944873
+      },
+      "median": 0.5665271282196045,
+      "n_cases": 1385,
+      "n_seeds": 2
+     }
+    },
+    "blobs": {
+     "velocity_l2": {
+      "mean": 0.14522968505488076,
+      "per_seed": {
+       "42": 0.14499643331512144,
+       "43": 0.14546293679464012
+      },
+      "median": 0.14096827805042267,
+      "n_cases": 1367,
+      "n_seeds": 2
+     },
+     "pressure_l2": {
+      "mean": 0.3880914265750454,
+      "per_seed": {
+       "42": 0.3949661231064936,
+       "43": 0.38121673004359724
+      },
+      "median": 0.41863834857940674,
+      "n_cases": 1367,
+      "n_seeds": 2
+     },
+     "nut_l2": {
+      "mean": 0.49892948930790126,
+      "per_seed": {
+       "42": 0.5252770557618088,
+       "43": 0.4725819228539937
+      },
+      "median": 0.37711693346500397,
+      "n_cases": 1367,
+      "n_seeds": 2
+     },
+     "tke_l2": {
+      "mean": 0.8339097344145538,
+      "per_seed": {
+       "42": 0.8824467827765586,
+       "43": 0.7853726860525492
+      },
+      "median": 0.6661515533924103,
+      "n_cases": 1367,
+      "n_seeds": 2
+     },
+     "omega_l2": {
+      "mean": 0.41451821388743526,
+      "per_seed": {
+       "42": 0.4152106663488784,
+       "43": 0.4138257614259922
+      },
+      "median": 0.36684978008270264,
+      "n_cases": 1367,
+      "n_seeds": 2
+     }
+    },
+    "bank_zero_to_cad": {
+     "velocity_l2": {
+      "mean": 0.17503430211899784,
+      "per_seed": {
+       "42": 0.17432300712320362,
+       "43": 0.1757455971147921
+      },
+      "median": 0.1639997363090515,
+      "n_cases": 333,
+      "n_seeds": 2
+     },
+     "pressure_l2": {
+      "mean": 0.37743829020967445,
+      "per_seed": {
+       "42": 0.38025848687746683,
+       "43": 0.3746180935418821
+      },
+      "median": 0.36902177333831787,
+      "n_cases": 333,
+      "n_seeds": 2
+     },
+     "nut_l2": {
+      "mean": 0.49668336210229824,
+      "per_seed": {
+       "42": 0.4823893734642693,
+       "43": 0.5109773507403271
+      },
+      "median": 0.4203793704509735,
+      "n_cases": 333,
+      "n_seeds": 2
+     },
+     "tke_l2": {
+      "mean": 2.478440138033113,
+      "per_seed": {
+       "42": 2.3312405532074942,
+       "43": 2.6256397228587316
+      },
+      "median": 0.6318035423755646,
+      "n_cases": 333,
+      "n_seeds": 2
+     },
+     "omega_l2": {
+      "mean": 0.4596361816936248,
+      "per_seed": {
+       "42": 0.46284962226231174,
+       "43": 0.45642274112493786
+      },
+      "median": 0.4382113665342331,
+      "n_cases": 333,
+      "n_seeds": 2
+     }
+    },
+    "profile_crossflow": {
+     "velocity_l2": {
+      "mean": 1.4186117379929368,
+      "per_seed": {
+       "42": 1.445258076215698,
+       "43": 1.3919653997701757
+      },
+      "median": 1.443641036748886,
+      "n_cases": 578,
+      "n_seeds": 2
+     },
+     "pressure_l2": {
+      "mean": 2.6611010702552473,
+      "per_seed": {
+       "42": 3.2944709424535294,
+       "43": 2.0277311980569652
+      },
+      "median": 2.4920274019241333,
+      "n_cases": 578,
+      "n_seeds": 2
+     },
+     "nut_l2": {
+      "mean": 0.9279036165753244,
+      "per_seed": {
+       "42": 0.910218299724239,
+       "43": 0.9455889334264098
+      },
+      "median": 0.8920088708400726,
+      "n_cases": 578,
+      "n_seeds": 2
+     },
+     "tke_l2": {
+      "mean": 2.1725416252047958,
+      "per_seed": {
+       "42": 2.6369903415544633,
+       "43": 1.708092908855128
+      },
+      "median": 1.739802747964859,
+      "n_cases": 578,
+      "n_seeds": 2
+     },
+     "omega_l2": {
+      "mean": 0.6956103251712029,
+      "per_seed": {
+       "42": 0.7371676902844213,
+       "43": 0.6540529600579846
+      },
+      "median": 0.6923167556524277,
+      "n_cases": 578,
+      "n_seeds": 2
+     }
+    },
+    "profile_dual_inlet": {
+     "velocity_l2": {
+      "mean": 0.6524900445757911,
+      "per_seed": {
+       "42": 0.649572220075038,
+       "43": 0.655407869076544
+      },
+      "median": 0.6528685539960861,
+      "n_cases": 516,
+      "n_seeds": 2
+     },
+     "pressure_l2": {
+      "mean": 0.7990346768972023,
+      "per_seed": {
+       "42": 0.716139119898164,
+       "43": 0.8819302338962407
+      },
+      "median": 0.7946396768093109,
+      "n_cases": 516,
+      "n_seeds": 2
+     },
+     "nut_l2": {
+      "mean": 0.9339410172876461,
+      "per_seed": {
+       "42": 0.8628344338878181,
+       "43": 1.0050476006874742
+      },
+      "median": 0.8262740969657898,
+      "n_cases": 516,
+      "n_seeds": 2
+     },
+     "tke_l2": {
+      "mean": 0.9602819237598152,
+      "per_seed": {
+       "42": 0.9113795350688373,
+       "43": 1.0091843124507933
+      },
+      "median": 0.8999762684106827,
+      "n_cases": 516,
+      "n_seeds": 2
+     },
+     "omega_l2": {
+      "mean": 0.5334743501965042,
+      "per_seed": {
+       "42": 0.5145221633706675,
+       "43": 0.5524265370223411
+      },
+      "median": 0.5407209992408752,
+      "n_cases": 516,
+      "n_seeds": 2
+     }
+    }
+   }
+  },
+  "GeoTransolver 256": {
+   "note": "about a zero predictor on pressure: its output row for pressure (and for eddy viscosity, k and omega) is about zero at the final epoch, so its median per-case pressure error is about 1.0, the zero predictor's; its velocity is learned in part",
+   "splits": {
+    "full": {
+     "velocity_l2": {
+      "mean": 0.6089837209493255,
+      "per_seed": {
+       "42": 0.6075000019650386,
+       "43": 0.6104674399336124
+      },
+      "median": 0.5937882363796234,
+      "n_cases": 716,
+      "n_seeds": 2
+     },
+     "pressure_l2": {
+      "mean": 1.2502971184153795,
+      "per_seed": {
+       "42": 1.4757550076565928,
+       "43": 1.0248392291741664
+      },
+      "median": 1.000037044286728,
+      "n_cases": 716,
+      "n_seeds": 2
+     },
+     "nut_l2": {
+      "mean": 1.0631705114420233,
+      "per_seed": {
+       "42": 1.0140156671404839,
+       "43": 1.1123253557435626
+      },
+      "median": 0.9977252930402756,
+      "n_cases": 716,
+      "n_seeds": 2
+     },
+     "tke_l2": {
+      "mean": 1.0671736338493212,
+      "per_seed": {
+       "42": 1.1018213837839372,
+       "43": 1.0325258839147051
+      },
+      "median": 0.9945293366909027,
+      "n_cases": 716,
+      "n_seeds": 2
+     },
+     "omega_l2": {
+      "mean": 1.1311105984632528,
+      "per_seed": {
+       "42": 1.044370192222755,
+       "43": 1.2178510047037507
+      },
+      "median": 1.0000235736370087,
+      "n_cases": 716,
+      "n_seeds": 2
+     }
+    },
+    "nonbox": {
+     "velocity_l2": {
+      "mean": 0.5905684995060887,
+      "per_seed": {
+       "42": 0.5642028220892785,
+       "43": 0.616934176922899
+      },
+      "median": 0.4502101540565491,
+      "n_cases": 1074,
+      "n_seeds": 2
+     },
+     "pressure_l2": {
+      "mean": 1.1684302609115562,
+      "per_seed": {
+       "42": 1.0511424102485736,
+       "43": 1.2857181115745389
+      },
+      "median": 1.0003872066736221,
+      "n_cases": 1074,
+      "n_seeds": 2
+     },
+     "nut_l2": {
+      "mean": 1.1502628238070445,
+      "per_seed": {
+       "42": 1.1265537188539292,
+       "43": 1.1739719287601595
+      },
+      "median": 0.9924340397119522,
+      "n_cases": 1074,
+      "n_seeds": 2
+     },
+     "tke_l2": {
+      "mean": 1.5844176203928182,
+      "per_seed": {
+       "42": 1.601708841487571,
+       "43": 1.567126399298065
+      },
+      "median": 0.9898388236761093,
+      "n_cases": 1074,
+      "n_seeds": 2
+     },
+     "omega_l2": {
+      "mean": 1.3468827374931598,
+      "per_seed": {
+       "42": 1.0951005580038997,
+       "43": 1.5986649169824199
+      },
+      "median": 1.0001682043075562,
+      "n_cases": 1074,
+      "n_seeds": 2
+     }
+    },
+    "reynolds": {
+     "velocity_l2": {
+      "mean": 0.7095029013184326,
+      "per_seed": {
+       "42": 0.4768752062229258,
+       "43": 0.9421305964139395
+      },
+      "median": 0.6635870635509491,
+      "n_cases": 1385,
+      "n_seeds": 2
+     },
+     "pressure_l2": {
+      "mean": 1.0360262947392378,
+      "per_seed": {
+       "42": 1.0315067793488073,
+       "43": 1.0405458101296683
+      },
+      "median": 1.0000839829444885,
+      "n_cases": 1385,
+      "n_seeds": 2
+     },
+     "nut_l2": {
+      "mean": 0.9942661398907431,
+      "per_seed": {
+       "42": 0.9983111671592354,
+       "43": 0.9902211126222508
+      },
+      "median": 0.9965496957302094,
+      "n_cases": 1385,
+      "n_seeds": 2
+     },
+     "tke_l2": {
+      "mean": 1.0897680421383371,
+      "per_seed": {
+       "42": 1.157502072016685,
+       "43": 1.0220340122599894
+      },
+      "median": 0.9989080727100372,
+      "n_cases": 1385,
+      "n_seeds": 2
+     },
+     "omega_l2": {
+      "mean": 1.025947878334927,
+      "per_seed": {
+       "42": 1.0265644329549604,
+       "43": 1.0253313237148933
+      },
+      "median": 1.000032126903534,
+      "n_cases": 1385,
+      "n_seeds": 2
+     }
+    },
+    "blobs": {
+     "velocity_l2": {
+      "mean": 0.7179166625724627,
+      "per_seed": {
+       "42": 0.8979216800851375,
+       "43": 0.5379116450597878
+      },
+      "median": 0.6981126964092255,
+      "n_cases": 1367,
+      "n_seeds": 2
+     },
+     "pressure_l2": {
+      "mean": 1.1141340159528346,
+      "per_seed": {
+       "42": 1.1323537140016409,
+       "43": 1.095914317904028
+      },
+      "median": 1.000120759010315,
+      "n_cases": 1367,
+      "n_seeds": 2
+     },
+     "nut_l2": {
+      "mean": 1.0225090101121461,
+      "per_seed": {
+       "42": 1.0233327953830285,
+       "43": 1.0216852248412636
+      },
+      "median": 0.9941853284835815,
+      "n_cases": 1367,
+      "n_seeds": 2
+     },
+     "tke_l2": {
+      "mean": 1.0406910504031197,
+      "per_seed": {
+       "42": 1.0812967570271035,
+       "43": 1.0000853437791362
+      },
+      "median": 0.9964264035224915,
+      "n_cases": 1367,
+      "n_seeds": 2
+     },
+     "omega_l2": {
+      "mean": 1.0352568016404555,
+      "per_seed": {
+       "42": 1.0244877138273858,
+       "43": 1.0460258894535253
+      },
+      "median": 1.0000141263008118,
+      "n_cases": 1367,
+      "n_seeds": 2
+     }
+    },
+    "bank_zero_to_cad": {
+     "velocity_l2": {
+      "mean": 0.5056639828805898,
+      "per_seed": {
+       "42": 0.5007713438646572,
+       "43": 0.5105566218965225
+      },
+      "median": 0.4458126723766327,
+      "n_cases": 333,
+      "n_seeds": 2
+     },
+     "pressure_l2": {
+      "mean": 1.1234613562131428,
+      "per_seed": {
+       "42": 1.2344494057489228,
+       "43": 1.012473306677363
+      },
+      "median": 1.0006247758865356,
+      "n_cases": 333,
+      "n_seeds": 2
+     },
+     "nut_l2": {
+      "mean": 1.1008373663142637,
+      "per_seed": {
+       "42": 1.0671550031001862,
+       "43": 1.1345197295283411
+      },
+      "median": 0.9928967654705048,
+      "n_cases": 333,
+      "n_seeds": 2
+     },
+     "tke_l2": {
+      "mean": 1.3237555904520883,
+      "per_seed": {
+       "42": 1.6143814985816543,
+       "43": 1.0331296823225222
+      },
+      "median": 0.9958474636077881,
+      "n_cases": 333,
+      "n_seeds": 2
+     },
+     "omega_l2": {
+      "mean": 1.2022293519687366,
+      "per_seed": {
+       "42": 1.2143583421234612,
+       "43": 1.190100361814012
+      },
+      "median": 0.9999978244304657,
+      "n_cases": 333,
+      "n_seeds": 2
+     }
+    },
+    "profile_crossflow": {
+     "velocity_l2": {
+      "mean": 0.8311574874142874,
+      "per_seed": {
+       "42": 0.8404207566308315,
+       "43": 0.8218942181977433
+      },
+      "median": 0.8565321415662766,
+      "n_cases": 578,
+      "n_seeds": 2
+     },
+     "pressure_l2": {
+      "mean": 1.0031893610644917,
+      "per_seed": {
+       "42": 0.9913996671516591,
+       "43": 1.0149790549773245
+      },
+      "median": 1.00006802380085,
+      "n_cases": 578,
+      "n_seeds": 2
+     },
+     "nut_l2": {
+      "mean": 0.9969247934057226,
+      "per_seed": {
+       "42": 1.01930591757941,
+       "43": 0.9745436692320352
+      },
+      "median": 0.9819277673959732,
+      "n_cases": 578,
+      "n_seeds": 2
+     },
+     "tke_l2": {
+      "mean": 1.4349128978526715,
+      "per_seed": {
+       "42": 1.3314314593390197,
+       "43": 1.5383943363663235
+      },
+      "median": 0.9893308728933334,
+      "n_cases": 578,
+      "n_seeds": 2
+     },
+     "omega_l2": {
+      "mean": 1.0341532048882085,
+      "per_seed": {
+       "42": 1.0184438402883735,
+       "43": 1.0498625694880437
+      },
+      "median": 0.9998021572828293,
+      "n_cases": 578,
+      "n_seeds": 2
+     }
+    },
+    "profile_dual_inlet": {
+     "velocity_l2": {
+      "mean": 0.7884595520621123,
+      "per_seed": {
+       "42": 0.7877328333466552,
+       "43": 0.7891862707775693
+      },
+      "median": 0.7908613681793213,
+      "n_cases": 516,
+      "n_seeds": 2
+     },
+     "pressure_l2": {
+      "mean": 1.0001938207320464,
+      "per_seed": {
+       "42": 0.994197283026784,
+       "43": 1.0061903584373089
+      },
+      "median": 1.000000223517418,
+      "n_cases": 516,
+      "n_seeds": 2
+     },
+     "nut_l2": {
+      "mean": 0.9794668351379476,
+      "per_seed": {
+       "42": 0.9697082195171091,
+       "43": 0.9892254507587862
+      },
+      "median": 0.9892200231552124,
+      "n_cases": 516,
+      "n_seeds": 2
+     },
+     "tke_l2": {
+      "mean": 0.9932664395418278,
+      "per_seed": {
+       "42": 0.9917218635479609,
+       "43": 0.9948110155356947
+      },
+      "median": 0.9975857585668564,
+      "n_cases": 516,
+      "n_seeds": 2
+     },
+     "omega_l2": {
+      "mean": 1.0379607512853868,
+      "per_seed": {
+       "42": 1.024503813580025,
+       "43": 1.0514176889907483
+      },
+      "median": 0.9998720735311508,
+      "n_cases": 516,
+      "n_seeds": 2
+     }
+    }
+   }
+  },
+  "Transolver 512 x 16": {
+   "note": "about a zero predictor on every field: its predictions are constants, about zero, on every case",
+   "splits": {
+    "full": {
+     "velocity_l2": {
+      "mean": 0.9975275991266,
+      "per_seed": {
+       "42": 0.9967570196649882,
+       "43": 0.9982981785882119
+      },
+      "median": 0.9998551309108734,
+      "n_cases": 716,
+      "n_seeds": 2
+     },
+     "pressure_l2": {
+      "mean": 1.166816743392518,
+      "per_seed": {
+       "42": 1.1105450148689013,
+       "43": 1.2230884719161348
+      },
+      "median": 0.9999978244304657,
+      "n_cases": 716,
+      "n_seeds": 2
+     },
+     "nut_l2": {
+      "mean": 1.0633945890894816,
+      "per_seed": {
+       "42": 1.0455373922706317,
+       "43": 1.0812517859083315
+      },
+      "median": 0.9997713714838028,
+      "n_cases": 716,
+      "n_seeds": 2
+     },
+     "tke_l2": {
+      "mean": 1.0195711874325015,
+      "per_seed": {
+       "42": 0.9970454862289255,
+       "43": 1.0420968886360775
+      },
+      "median": 0.9995989948511124,
+      "n_cases": 716,
+      "n_seeds": 2
+     },
+     "omega_l2": {
+      "mean": 1.009455259702059,
+      "per_seed": {
+       "42": 1.0058564490446165,
+       "43": 1.0130540703595017
+      },
+      "median": 1.0000081658363342,
+      "n_cases": 716,
+      "n_seeds": 2
+     }
+    }
+   }
+  },
+  "ISLA-DTT 512 with 512 slices": {
+   "note": "",
+   "status": "in_flight",
+   "in_flight": {
+    "what": "interacting ISLA, GeoTransolver and Transolver, without ISLA-DTT",
+    "replacement": "ISLA-DTT on the same seven splits"
+   },
+   "splits": {}
+  }
+ },
+ "diagnostics": {
+  "velocity_direction_and_speed": {
+   "columns": {
+    "speed_ratio_rms": "RMS predicted speed / RMS true speed",
+    "cos_global": "global cosine of the predicted and true velocity fields",
+    "angle_g_pred_mean": "angle between the inlet drive direction and the mean predicted velocity [deg]",
+    "angle_true_pred_means": "angle between the mean true and the mean predicted velocity [deg]",
+    "l2_speed_matched": "velocity relative L2 after rescaling the prediction to the true RMS speed"
+   },
+   "n_cases": {
+    "azc_nonbox_gt_seed42": 30,
+    "azc_nonbox_isla_seed42": 30,
+    "azc_nonbox_isla_seed43": 30,
+    "azc_profile_crossflow_gt_seed42": 30,
+    "azc_profile_crossflow_isla_seed42": 30,
+    "azc_profile_crossflow_isla_seed43": 30
+   },
+   "runs": {
+    "azc_nonbox_gt_seed42": {
+     "speed_ratio_rms": 1.109,
+     "cos_global": 0.84598,
+     "angle_g_pred_mean": 3.8265,
+     "angle_true_pred_means": 3.6383,
+     "l2_speed_matched": 0.554895
+    },
+    "azc_nonbox_isla_seed42": {
+     "speed_ratio_rms": 1.67595,
+     "cos_global": 0.867815,
+     "angle_g_pred_mean": 0.49705,
+     "angle_true_pred_means": 0.553115,
+     "l2_speed_matched": 0.514035
+    },
+    "azc_nonbox_isla_seed43": {
+     "speed_ratio_rms": 1.30085,
+     "cos_global": 0.87526,
+     "angle_g_pred_mean": 0.45445,
+     "angle_true_pred_means": 0.760665,
+     "l2_speed_matched": 0.49892000000000003
+    },
+    "azc_profile_crossflow_gt_seed42": {
+     "speed_ratio_rms": 0.98484,
+     "cos_global": 0.70684,
+     "angle_g_pred_mean": 1.4117,
+     "angle_true_pred_means": 35.355000000000004,
+     "l2_speed_matched": 0.76562
+    },
+    "azc_profile_crossflow_isla_seed42": {
+     "speed_ratio_rms": 2.26455,
+     "cos_global": 0.7883150000000001,
+     "angle_g_pred_mean": 8.71875,
+     "angle_true_pred_means": 23.641,
+     "l2_speed_matched": 0.6503300000000001
+    },
+    "azc_profile_crossflow_isla_seed43": {
+     "speed_ratio_rms": 2.0446,
+     "cos_global": 0.70557,
+     "angle_g_pred_mean": 2.9316,
+     "angle_true_pred_means": 31.2515,
+     "l2_speed_matched": 0.76737
+    }
+   }
+  },
+  "geotransolver_velocity_last_epochs": {
+   "azc_full_gt_seed42": {
+    "train_velocity": {
+     "200": 0.8744277159372965,
+     "239": 0.6278884410858154,
+     "249": 0.5882189671198527
+    },
+    "train_velocity_slope_last_10_epochs": -0.003966947396596277,
+    "train_velocity_slope_200_to_last": -0.005840994873825385,
+    "val_velocity_l2": {
+     "240": 0.644409716129303,
+     "249": 0.6112725734710693
+    }
+   },
+   "azc_full_gt_seed43": {
+    "train_velocity": {
+     "200": 0.8586775461832682,
+     "239": 0.6279255549112955,
+     "249": 0.590425173441569
+    },
+    "train_velocity_slope_last_10_epochs": -0.003750038146972656,
+    "train_velocity_slope_200_to_last": -0.005474538219218351,
+    "val_velocity_l2": {
+     "240": 0.6350522041320801,
+     "249": 0.604963481426239
+    }
+   },
+   "azc_nonbox_gt_seed42": {
+    "train_velocity": {
+     "200": 0.44287991523742676,
+     "239": 0.4246061642964681,
+     "249": 0.42322444915771484
+    },
+    "train_velocity_slope_last_10_epochs": -0.00013817151387532367,
+    "train_velocity_slope_200_to_last": -0.0004011319608104472,
+    "val_velocity_l2": {
+     "240": 0.43433988094329834,
+     "249": 0.43359437584877014
+    }
+   },
+   "azc_nonbox_gt_seed43": {
+    "train_velocity": {
+     "200": 0.4500237703323364,
+     "239": 0.4306766192118327,
+     "249": 0.42903582255045575
+    },
+    "train_velocity_slope_last_10_epochs": -0.00016407966613769532,
+    "train_velocity_slope_200_to_last": -0.00042832546493634037,
+    "val_velocity_l2": {
+     "240": 0.4442005455493927,
+     "249": 0.445020854473114
+    }
+   },
+   "azc_reynolds_gt_seed42": {
+    "train_velocity": {
+     "200": 0.5819657246271769,
+     "239": 0.49857227007548016,
+     "249": 0.4934656222661336
+    },
+    "train_velocity_slope_last_10_epochs": -0.0005106647809346554,
+    "train_velocity_slope_200_to_last": -0.001806124537980475,
+    "val_velocity_l2": {
+     "240": 0.48656603693962097,
+     "249": 0.4845278859138489
+    }
+   },
+   "azc_reynolds_gt_seed43": {
+    "train_velocity": {
+     "200": 0.9856735865275065,
+     "239": 0.9491469065348307,
+     "249": 0.9367303053538004
+    },
+    "train_velocity_slope_last_10_epochs": -0.0012416601181030273,
+    "train_velocity_slope_200_to_last": -0.0009988424729327767,
+    "val_velocity_l2": {
+     "240": 0.9461117386817932,
+     "249": 0.9346632361412048
+    }
+   },
+   "azc_blobs_gt_seed42": {
+    "train_velocity": {
+     "200": 0.9700660705566406,
+     "239": 0.9030927022298177,
+     "249": 0.8845423062642416
+    },
+    "train_velocity_slope_last_10_epochs": -0.0018550395965576173,
+    "train_velocity_slope_200_to_last": -0.0017453829447428377,
+    "val_velocity_l2": {
+     "240": 0.9322997331619263,
+     "249": 0.9253208637237549
+    }
+   },
+   "azc_blobs_gt_seed43": {
+    "train_velocity": {
+     "200": 0.7298701604207357,
+     "239": 0.5487763484319051,
+     "249": 0.5354400873184204
+    },
+    "train_velocity_slope_last_10_epochs": -0.0013336261113484737,
+    "train_velocity_slope_200_to_last": -0.003967960675557455,
+    "val_velocity_l2": {
+     "240": 0.5297088623046875,
+     "249": 0.5154252052307129
+    }
+   },
+   "azc_bank_zero_to_cad_gt_seed42": {
+    "train_velocity": {
+     "200": 0.5227313836415609,
+     "239": 0.45144522190093994,
+     "249": 0.44920547803243
+    },
+    "train_velocity_slope_last_10_epochs": -0.0002239743868509947,
+    "train_velocity_slope_200_to_last": -0.0015005286859006309,
+    "val_velocity_l2": {
+     "240": 0.4285873770713806,
+     "249": 0.42636561393737793
+    }
+   },
+   "azc_bank_zero_to_cad_gt_seed43": {
+    "train_velocity": {
+     "200": 0.5308453241984049,
+     "239": 0.46487991015116376,
+     "249": 0.46234742800394696
+    },
+    "train_velocity_slope_last_10_epochs": -0.0002532482147216797,
+    "train_velocity_slope_200_to_last": -0.0013979162488664887,
+    "val_velocity_l2": {
+     "240": 0.44741180539131165,
+     "249": 0.4453369975090027
+    }
+   },
+   "azc_profile_crossflow_gt_seed42": {
+    "train_velocity": {
+     "200": 0.46916961669921875,
+     "239": 0.38843639691670734,
+     "249": 0.38553086916605633
+    },
+    "train_velocity_slope_last_10_epochs": -0.00029055277506510044,
+    "train_velocity_slope_200_to_last": -0.0017069132149624983,
+    "val_velocity_l2": {
+     "240": 0.36497342586517334,
+     "249": 0.3633006513118744
+    }
+   },
+   "azc_profile_crossflow_gt_seed43": {
+    "train_velocity": {
+     "200": 0.46062302589416504,
+     "239": 0.4001447359720866,
+     "249": 0.39689215024312335
+    },
+    "train_velocity_slope_last_10_epochs": -0.0003252585728963253,
+    "train_velocity_slope_200_to_last": -0.0013006301153273814,
+    "val_velocity_l2": {
+     "240": 0.3799717426300049,
+     "249": 0.3767232894897461
+    }
+   },
+   "azc_profile_dual_inlet_gt_seed42": {
+    "train_velocity": {
+     "200": 0.4768354892730713,
+     "239": 0.41182708740234375,
+     "249": 0.4079511562983195
+    },
+    "train_velocity_slope_last_10_epochs": -0.0003875931104024233,
+    "train_velocity_slope_200_to_last": -0.0014058027137704443,
+    "val_velocity_l2": {
+     "240": 0.3857470154762268,
+     "249": 0.3820633590221405
+    }
+   },
+   "azc_profile_dual_inlet_gt_seed43": {
+    "train_velocity": {
+     "200": 0.4936364491780599,
+     "239": 0.411288579305013,
+     "249": 0.4067162275314331
+    },
+    "train_velocity_slope_last_10_epochs": -0.0004572351773579897,
+    "train_velocity_slope_200_to_last": -0.0017738820744209545,
+    "val_velocity_l2": {
+     "240": 0.3923463821411133,
+     "249": 0.38597583770751953
+    }
+   }
+  }
+ }
+}
