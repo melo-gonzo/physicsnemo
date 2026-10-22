@@ -275,14 +275,19 @@ print(f"Three readings. **First, Transolver leads on the native mesh, as it does
 #| output: asis
 #| column: page
 import json as _json
-_R = _json.load(open(RENDER_DIR / "render_cloud_shift_suv.json"))
-rendering_figure("fig-shift-suv-prediction", [("figures/renderings/shift_suv_cp.png", "Pressure coefficient")],
-    f"The three reference configurations on one SHIFT-SUV case, {_R['sample_id'].split('_')[0]}, left side. Relative L2 on this case: {case_errors(_R['per_sample_rel_l2'])}. " + "Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one "
-      f"symmetric scale. ISLA checkpoints of the {S.FORM_TAG} (@sec-checkpoint-form). How to read this: one case, chosen as the case of median ISLA error (seed 42 of each reference configuration), "
-      "not a standing, and drawn from checkpoints other than the standing's; the standing is the table above. The baselines drawn are their checkpoints that read the freestream as the "
-      "constant physical vector, kept on record beside the standing's unit-direction checkpoints (@sec-unit-direction-rule). "
-    + "Data: results/renderings_2026-10-18/arrays/render_cloud_shift_suv.json.", nrow=None)
-print(rendering_in_flight(baselines="baseline checkpoints that read the freestream as a physical vector, not the standing's unit direction"))
+_R = _json.load(open(RENDER_DIR_090 / "render_cloud_shift_suv.json"))
+_src = next(v for k, v in _R["source"].items() if k.endswith("_isla/native"))
+_rec = RES / "campaigns_2026-10-22/standing_090/scores" / _src["scorer_record"].removeprefix("$T/")
+_e = {r["sample_id"]: r["metrics"]["pressure_l2"] for r in map(_json.loads, open(_rec)) if r.get("phase") == "infer_step"}
+_rk = sorted(_e, key=_e.get).index(_R["sample_id"]) + 1
+rendering_figure("fig-shift-suv-prediction", [("figures/renderings/shift_suv_cp_090.png", "Pressure coefficient")],
+    f"The three reference configurations on one SHIFT-SUV case, {_R['sample_id'].split('_')[0]}, left side, from the standing's "
+    "checkpoints (seed 42): ISLA at its reference configuration, and the baselines reading the freestream as the unit direction "
+    f"(@sec-unit-direction-rule). Relative L2 on this case: {case_errors(_R['per_sample_rel_l2'])}; the case ranks {_rk} of {len(_e)} "
+    "by ISLA's pressure error over the validation bodies. "
+    "Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one "
+    "symmetric scale. How to read this: one case, not a standing; the standing is the table above. "
+    "Data: results/renderings_2026-10-22/arrays/render_cloud_shift_suv.json.", nrow=None)
 ```
 
 ## Studies on this dataset {#sec-shift-suv-studies}
