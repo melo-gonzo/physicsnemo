@@ -43,12 +43,16 @@ def shifts(ks, archs, protocol):
     return [S.Standing(k).shift(a, f, protocol) for k in ks for f in S.DATASETS[k].headline for a in archs]
 isla_area = max(abs(x - 1) for x in shifts(SURF, ["ISLA"], "area"))
 base_area = min(shifts(SURF, S.BASELINES, "area"))
-_V = S.Standing("drivaerml_volume")
-vol_area = [_V.err("ISLA", f, "area") / _V.err("ISLA", f, "native") for f in _V.ds.headline]   # the record holds the redraw; the standing reads only native and posed
 isla_posed = max(abs(x - 1) for x in shifts(FLOW, ["ISLA"], "posed"))
 base_posed_flow = (min(shifts(FLOW, S.BASELINES, "posed")), max(shifts(FLOW, S.BASELINES, "posed")))
 base_posed_solid = (min(shifts(SOLID, S.BASELINES, "posed")), max(shifts(SOLID, S.BASELINES, "posed")))
-tie_shift = {k: max(shifts([k], ["ISLA"], "posed")) for k in ("tensile2d", "lug")}
+solid_dev = {k: max(abs(x - 1) for x in shifts([k], ["ISLA"], "posed")) for k in SOLID}
+SOLID_STILL = [k for k in SOLID if solid_dev[k] < 0.01]     # pose-exact to float32 on every headline field
+SOLID_MOVED = {k: max(shifts([k], ["ISLA"], "posed")) for k in SOLID if k not in SOLID_STILL}
+FLIGHT = [k for k in S.available() if S.Standing(k).in_flight]
+_n = {k: S.Standing(k).n_seeds("ISLA") for k in S.available()}
+_n0 = S.Standing("drivaerml_surface").n_seeds("ISLA")
+SEEDS_TXT = f"{S._COUNT[_n0]} seeds" + "".join(f" ({S._COUNT[n]} for ISLA on {S.DATASETS[k].name})" for k, n in _n.items() if n != _n0)
 ```
 
 ## The thesis {#sec-verdict}
@@ -63,8 +67,9 @@ print(
     "equivariant to rigid motions and consistent under a change of mesh, by construction, and it computes its own scales from each "
     "case, so its training data are spent on the physics rather than on frames, resolutions and units. "
     "AeroZoo, whose held-out splits take a whole enclosure family, geometry bank, inflow layout or Reynolds range out of training, "
-    "is the book's test of generalization; @sec-aerozoo-why makes the case for it, and where ISLA stands on it is the open question "
-    "of @sec-oq-aerozoo. "
+    "is the book's test of generalization; @sec-aerozoo-why makes the case for it, and @sec-aerozoo gives ISLA's standing there. "
+    "On AeroZoo both baselines end as about a zero predictor on pressure, so ISLA's pressure lead there is a lead over predicting "
+    "zero, and whether ISLA-DTT is the better interior form is the open question of @sec-oq-dtt. "
     "The other benchmarks, DrivAerML, HiLiftAeroML, SHIFT-SUV, AirfRANS, Tensile2d, the lug and DeepJEB++, are here because the "
     "community measures surrogates on them. Each covers one narrow family, so its native score measures interpolation within that "
     "family. There ISLA leads the strongest models of its family, Transolver and its geometry-aware successor GeoTransolver, each at "
@@ -80,17 +85,17 @@ print(
     f"Rotate and translate the test geometry, and on the {len(FLOW)} flow tasks ISLA's error stays within "
     f"{100 * isla_posed:.1f}% of its native value while every baseline's grows {base_posed_flow[0]:.0f}-fold to "
     f"{base_posed_flow[1]:.0f}-fold; on the {len(SOLID)} solid-mechanics tasks the baselines' errors grow {base_posed_solid[0]:.1f}-fold "
-    f"to {base_posed_solid[1]:.0f}-fold, and ISLA's is unchanged on DeepJEB++ and moves up to {tie_shift['tensile2d']:.2f}-fold on "
-    f"Tensile2d and {tie_shift['lug']:.1f}-fold on the lug, where a mesh node is equally near two boundary samples and float32 rounding "
-    "under the motion decides which one the standing's checkpoints read (@sec-invariances). "
+    f"to {base_posed_solid[1]:.0f}-fold, and ISLA's is unchanged on "
+    + " and ".join(S.DATASETS[k].short for k in SOLID_STILL)
+    + "".join(f" and moves {v:.2f}-fold on the {S.DATASETS[k].short}" for k, v in SOLID_MOVED.items())
+    + " (@sec-invariances). "
     f"Redraw the surface as a uniform point cloud, and on the {len(SURF)} surface tasks every baseline error grows at least "
-    f"{base_area:.1f}-fold while ISLA's stays within {100 * isla_area:.1f}%; on the DrivAerML Volume task the same redraw moves "
-    f"ISLA's own error {min(vol_area):.1f}-fold to {max(vol_area):.1f}-fold, because those checkpoints compute each interior point's "
-    "wall distance from the boundary samples. They are of the nearest-token form, which differs from ISLA as Part II defines it in how "
-    "the boundary and the prediction points enter the model, in its length unit and in its scales; the class computes the wall distance "
-    "from the full-resolution surface (@sec-checkpoint-form). "
-    "Where ISLA trails, and where its own error moves, the book shows the mechanism."
+    f"{base_area:.1f}-fold while ISLA's stays within {100 * isla_area:.1f}%. "
+    "Where ISLA trails, and where its own error moves, the book shows where the difference sits and what is known of its cause."
 )
+print()
+_az = S.aerozoo()["in_flight"]
+print(S.in_flight_callout({"what": f"AeroZoo's standing of {_az['what']}", "replacement": _az["replacement"]}))
 ```
 
 ```{python}
@@ -140,11 +145,10 @@ plt.show()
 #|   architectures are called level. Right: what happens to each
 #|   architecture's own error when every test case is rotated and translated,
 #|   as its error over its native error; ISLA (blue squares) sits at one
-#|   except on the lug and Tensile2d, whose boundary samples tie. How to read this: rows are different datasets, fields
+#|   except on the lug. Rows marked ‡ are in flight (below). How to read this: rows are different datasets, fields
 #|   and units of difficulty and are not comparable with one another; every
 #|   baseline reads the freestream as a unit direction (@tbl-model-inputs).
-#|   ISLA checkpoints of the nearest-token form (@sec-checkpoint-form). Data: results/char/; every number is in
-#|   @tbl-thesis.
+#|   Data: results/char/; every number is in @tbl-thesis.
 #| fig-height: 6.6
 #| code-fold: true
 fig, axes = plt.subplots(1, 2, figsize=(10, 6.4), gridspec_kw=dict(width_ratios=[1.35, 1.0], wspace=0.06))
@@ -170,6 +174,15 @@ label_line(ax, 1.15, len(ROWS) - 0.6, "ISLA", BLUE, fontsize=8.5)
 label_line(ax, 80, len(ROWS) - 0.6, "GeoTransolver", RED, fontsize=8.5, ha="center")
 label_line(ax, 80, len(ROWS) - 1.4, "Transolver", AMBER, fontsize=8.5, ha="center")
 plt.show()
+```
+
+```{python}
+#| label: callout-standing-in-flight
+#| output: asis
+for k in FLIGHT:
+    w, dn = S.Standing(k).in_flight, S.DATASETS[k].in_sentence
+    dn = dn if dn.startswith("the ") else "the " + dn
+    print(S.in_flight_callout({"what": f"the ‡ rows of {dn}: {w['what']}", "replacement": w["replacement"]}))
 ```
 
 ```{python}
@@ -209,7 +222,7 @@ a marker it keeps in every figure.
 
 : The architectures of this book. How to read this: a ratio is always
 *baseline ÷ ISLA*, so above one favors ISLA; errors are the area-weighted
-relative L2 of @sec-metrics, scored in float32 and averaged over two seeds.
+relative L2 of @sec-metrics, scored in float32 and averaged over `{python} SEEDS_TXT`.
 Every name, symbol and color is in @sec-principled-decisions.
 {#tbl-key-index}
 
