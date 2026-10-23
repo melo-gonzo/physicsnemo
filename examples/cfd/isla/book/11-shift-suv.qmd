@@ -373,62 +373,81 @@ print(f"**ISLA degrades less on fastback wall shear.** Transolver ÷ ISLA on wal
 ```{python}
 #| label: para-shift-suv-xfam-b
 #| output: asis
-XB = XF["part_b"]["stage1"]
-EB = {n.split()[0]: a for n, a in XB["E"].items()}
-AK = {"ISLA": "isla", "Transolver": "t"}
-qb = lambda k, a, f: XB["quantities"][f"{k}/lead/{AK[a]}/{f}"]["value"]
-cb = lambda k, f: XB["comparisons"][f"{k}/lead/{f}"]
+XB, XB2 = XF["part_b"]["stage1"], XF["part_b"]["stage2"]
+EB = {n.split()[0]: a for n, a in {**XB["E"], **XB2["E"]}.items()}
+AK = {"ISLA": "isla", "GeoTransolver": "gt", "Transolver": "t"}
+stage = lambda a: XB2 if a == "GeoTransolver" else XB
+qb = lambda k, a, f: stage(a)["quantities"][f"{k}/lead/{AK[a]}/{f}"]["value"]
+cb = lambda b, k, f: stage(b)["comparisons"][f"{k}/lead/{f}"]
+rb = lambda c: c["ratio_T_over_ISLA"] if "ratio_T_over_ISLA" in c else c["ratio_B_over_ISLA"]
+lnP = lambda b, a, f: stage(b)["quantities"][f"P/lead/{AK[a]}/{f}"]["ln"]
+share = {b: cb(b, "D_G", "wss_l2")["D"] / (lnP(b, b, "wss_l2") - lnP(b, "ISLA", "wss_l2")) for b in S.BASELINES}
 H_all = [qb("H", a, f) for a in AK for f in SUV_F]
-share = {k: cb(k, "wss_l2")["D"] / cb("D_P", "wss_l2")["D"] for k in ("D_G", "D_H")}
+Gp = sorted({f"{qb('G', a, 'pressure_l2'):.2f}" for a in AK})
 spread = lambda sp: [max(v) / min(v) - 1 for a in AK for f in SUV_F for v in [EB[a]["fastback"][sp][f]["per_seed"].values()]]
-g = cb("D_G", "wss_l2")
-print("**Against models trained on fastbacks, ISLA's smaller wall-shear penalty is mostly transfer.** ISLA and Transolver at their reference "
-      "configurations were trained on the fastback training split, each with its estate lane's settings and only the dataset changed, "
-      "two seeds each, and scored on both families at 200,000 cells in float32. The penalty mixes two factors. The *forward gap* $G$ of "
-      "an architecture is its estate-trained model's fastback error over its fastback-trained model's fastback error: how far the "
-      "estate-trained model is from what the architecture reaches in family. The *hardness* $H$ is the fastback-trained model's fastback "
-      "error over the estate-trained model's estate error: how hard fastbacks are in themselves. The penalty is $G \\times H$. On wall "
-      f"shear ISLA's forward gap is {qb('G', 'ISLA', 'wss_l2'):.2f} against Transolver's {qb('G', 'Transolver', 'wss_l2'):.2f}, a "
-      f"Transolver ÷ ISLA ratio of {g['ratio_T_over_ISLA']:.3f} at {g['z']:.1f} standard errors, which the registered rule reads as "
-      f"*{g['verdict']}* (@tbl-shift-suv-xfam-b). Fastbacks are not harder in themselves: $H$ lies between {min(H_all):.2f} and "
-      f"{max(H_all):.2f} for both models on both fields. Of the logarithm of Transolver's wall-shear penalty over ISLA's, "
-      f"{100 * share['D_G']:.0f}% is the forward gap and {100 * share['D_H']:.0f}% hardness. On pressure every comparison reads "
-      f"*{cb('D_G', 'pressure_l2')['verdict']}*: the two models lose alike on fastback pressure. The reverse direction, the "
-      "fastback-trained models scored on estates, reads *no difference* on both fields at two seeds, because each model's two "
-      f"fastback-trained seeds differ by {100 * min(spread('est_test')):.0f} to {100 * max(spread('est_test')):.0f}% on estates, "
-      f"against at most {100 * max(spread('fb_test')):.1f}% on fastbacks. The comparison is against Transolver alone.")
+g = {b: cb(b, "D_G", "wss_l2") for b in S.BASELINES}
+se = {b: g[b]["SE"] for b in S.BASELINES}
+rev = {cb(b, "D_R", f)["verdict"] for b in S.BASELINES for f in SUV_F}
+b1g = {f: XB2["B1"]["fb_test"][f] for f in SUV_F}
+B1G_WORD = {"baseline leads": "leads ISLA", "baseline trails": "trails ISLA", "level": "is level with ISLA"}
+print("**Against models trained on fastbacks, ISLA's smaller wall-shear penalty is mostly transfer, against both baselines.** The three "
+      "architectures at their reference configurations were trained on the fastback training split, each with its estate lane's "
+      "settings and only the dataset changed, two seeds each, and scored on both families at 200,000 cells in float32. The penalty "
+      "mixes two factors. The *forward gap* $G$ of an architecture is its estate-trained model's fastback error over its "
+      "fastback-trained model's fastback error: how far the estate-trained model is from what the architecture reaches in family. The "
+      "*hardness* $H$ is the fastback-trained model's fastback error over the estate-trained model's estate error: how hard fastbacks "
+      "are in themselves. The penalty is $G \\times H$. On wall shear ISLA's forward gap is "
+      f"{qb('G', 'ISLA', 'wss_l2'):.2f} against GeoTransolver's {qb('G', 'GeoTransolver', 'wss_l2'):.2f} and Transolver's "
+      f"{qb('G', 'Transolver', 'wss_l2'):.2f}. The ratios of the forward gaps, baseline ÷ ISLA, are "
+      + " and ".join(f"{rb(g[b]):.3f} at {g[b]['z']:.1f} standard errors ({b})" for b in S.BASELINES)
+      + ", both of which the registered rule reads as " + " and ".join(sorted({f"*{g[b]['verdict']}*" for b in S.BASELINES}))
+      + f" (@tbl-shift-suv-xfam-b). Against GeoTransolver the standard error of the logarithm is {se['GeoTransolver'] / se['Transolver']:.1f} "
+      "times that against Transolver, mostly from the spread of GeoTransolver's two estate-trained seeds on fastback wall shear. "
+      f"Fastbacks are not harder in themselves: $H$ lies between {min(H_all):.2f} and {max(H_all):.2f} for all "
+      "three architectures on both fields. Of the logarithm of each baseline's wall-shear penalty over ISLA's, the forward gap is "
+      + " and ".join(f"{100 * share[b]:.0f}% against {b}" for b in S.BASELINES) + ", the rest hardness. On pressure the forward gap "
+      f"is {' to '.join(Gp[::len(Gp) - 1] if len(Gp) > 1 else Gp)} for all three and every comparison reads "
+      f"*{cb('GeoTransolver', 'D_G', 'pressure_l2')['verdict']}*: the three lose alike on fastback pressure. The reverse direction, "
+      f"the fastback-trained models scored on estates, reads *{' / '.join(sorted(rev))}* on both fields against both baselines at two "
+      f"seeds, because each architecture's two fastback-trained seeds differ by {100 * min(spread('est_test')):.0f} to "
+      f"{100 * max(spread('est_test')):.0f}% on estates, against at most {100 * max(spread('fb_test')):.1f}% on fastbacks. In family on "
+      f"fastbacks GeoTransolver {B1G_WORD[b1g['pressure_l2']['verdict']]} on pressure (GeoTransolver ÷ ISLA "
+      f"{b1g['pressure_l2']['r_B_over_ISLA']:.3f}) and {B1G_WORD[b1g['wss_l2']['verdict']]} on wall shear "
+      f"({b1g['wss_l2']['r_B_over_ISLA']:.3f}).")
 ```
 
 ```{python}
 #| label: make-tbl-shift-suv-xfam-b
 #| output: asis
 E2 = lambda a, t, sp: " / ".join(f"{EB[a][t][sp][f]['geo_mean']:.4f}" for f in SUV_F)
-B1 = XB["B1"]["fb_test"]
-B1_WORD = {"baseline leads": "Transolver leads", "baseline trails": "ISLA leads", "level": "level"}
-print("| | ISLA: p / wss | Transolver: p / wss | Transolver ÷ ISLA: p / wss |")
-print("|---|---|---|---|")
-print(f"| trained on fastbacks, fastback test | {E2('ISLA', 'fastback', 'fb_test')} | {E2('Transolver', 'fastback', 'fb_test')} | "
-      + " / ".join(f"{B1[f]['r_T_over_ISLA']:.3f} ({B1_WORD[B1[f]['verdict']]})" for f in SUV_F) + " |")
+B1 = {b: stage(b)["B1"]["fb_test"] for b in S.BASELINES}
+r1 = lambda c: c["r_T_over_ISLA"] if "r_T_over_ISLA" in c else c["r_B_over_ISLA"]
+B1_WORD = lambda b: {"baseline leads": f"{b} leads", "baseline trails": "ISLA leads", "level": "level"}
+print("| | ISLA: p / wss | GeoTransolver: p / wss | Transolver: p / wss | GeoTransolver ÷ ISLA: p / wss | Transolver ÷ ISLA: p / wss |")
+print("|---|---|---|---|---|---|")
+print(f"| trained on fastbacks, fastback test | " + " | ".join(E2(a, 'fastback', 'fb_test') for a in S.ARCHS) + " | "
+      + " | ".join(" / ".join(f"{r1(B1[b][f]):.3f} ({B1_WORD(b)[B1[b][f]['verdict']]})" for f in SUV_F) for b in S.BASELINES) + " |")
 for t, sp, lab in (("estate", "fb_test", "trained on estates, fastback test"), ("fastback", "est_test", "trained on fastbacks, estate test"),
                    ("estate", "est_test", "trained on estates, estate test")):
-    print(f"| {lab} | {E2('ISLA', t, sp)} | {E2('Transolver', t, sp)} | |")
+    print(f"| {lab} | " + " | ".join(E2(a, t, sp) for a in S.ARCHS) + " | | |")
 for k, lab in (("G", "forward gap $G$"), ("R", "reverse gap $R$"), ("H", "hardness $H$")):
     q = lambda a: " / ".join(f"{qb(k, a, f):.2f}" for f in SUV_F)
-    print(f"| {lab} | {q('ISLA')} | {q('Transolver')} | " + " / ".join(
-        f"{cb('D_' + k, f)['ratio_T_over_ISLA']:.3f} ({cb('D_' + k, f)['z']:.1f} SE, *{cb('D_' + k, f)['verdict']}*)" for f in SUV_F) + " |")
+    print(f"| {lab} | " + " | ".join(q(a) for a in S.ARCHS) + " | " + " | ".join(" / ".join(
+        f"{rb(cb(b, 'D_' + k, f)):.3f} ({abs(cb(b, 'D_' + k, f)['z']) >= 0.05 and cb(b, 'D_' + k, f)['z'] or 0:.1f} SE, *{cb(b, 'D_' + k, f)['verdict']}*)" for f in SUV_F)
+        for b in S.BASELINES) + " |")
 print()
-print(": SHIFT-SUV, models trained on fastbacks against the estate-trained standing models: ISLA and Transolver at their reference "
-      "configurations, surface pressure / wall shear (p / wss), area-weighted relative L2 on the native mesh, geometric seed means of two "
-      "seeds, float32, 200,000 cells per case. The forward gap $G$ divides the estate-trained model's fastback-test error by the "
-      "fastback-trained model's; the reverse gap $R$ divides the fastback-trained model's estate-test error by the estate-trained "
-      "model's; the hardness $H$ divides the fastback-trained model's fastback-test error by the estate-trained model's estate-test "
-      "error. The last column is the registered comparison, Transolver ÷ ISLA, with its distance from one in standard errors of its "
-      "logarithm and the registered label; a label other than *no difference* needs two standard errors and 3%. How to read this: $G$ "
-      "above one is the distance from the in-family fastback model, and a ratio above one in the last column favors ISLA. Each "
-      "standard-error term rests on the two seeds of one model, one degree of freedom, so the two-standard-error band is a rough screen, not a 95% test. It does not show GeoTransolver trained on fastbacks. "
-      f"Data: {XSRC}, from results/campaigns_2026-10-23/suv_xfam_b/reduce_b_out.json. {{#tbl-shift-suv-xfam-b}}")
-print()
-print(S.in_flight_callout(XF["part_b"]["in_flight"]))
+print(": SHIFT-SUV, models trained on fastbacks against the estate-trained standing models: ISLA, GeoTransolver and Transolver at "
+      "their reference configurations, surface pressure / wall shear (p / wss), area-weighted relative L2 on the native mesh, "
+      "geometric seed means of two seeds, float32, 200,000 cells per case. The forward gap $G$ divides the estate-trained model's "
+      "fastback-test error by the fastback-trained model's; the reverse gap $R$ divides the fastback-trained model's estate-test error "
+      "by the estate-trained model's; the hardness $H$ divides the fastback-trained model's fastback-test error by the estate-trained "
+      "model's estate-test error. The last two columns are the registered comparisons, baseline ÷ ISLA, each against the same ISLA "
+      "runs, with the distance of the logarithm from zero in its standard errors and the registered label; a label other than *no "
+      "difference* needs two standard errors and 3%. How to read this: $G$ above one is the distance from the in-family fastback "
+      "model, and a ratio above one in the last two columns favors ISLA. Each standard-error term rests on the two seeds of one model, "
+      "one degree of freedom, so the two-standard-error band is a rough screen, not a 95% test. It does not show the reverse direction "
+      "at more than two seeds, where the seeds of every fastback-trained model spread widely on estates. "
+      f"Data: {XSRC}, from results/campaigns_2026-10-23/suv_xfam_b/reduce_b_out.json and reduce_b2_out.json. {{#tbl-shift-suv-xfam-b}}")
 ```
 
 ## What this dataset does not say {#sec-shift-suv-limits}
@@ -437,5 +456,5 @@ print(S.in_flight_callout(XF["part_b"]["in_flight"]))
 
 Questions this dataset raises and leaves open:
 
-- **Does ISLA also transfer better than GeoTransolver, and in the reverse direction?** Against Transolver it does, from estates to fastbacks on wall shear, and the two lose alike on pressure (@sec-shift-suv-xfam). The reverse direction reads no difference at two seeds, because the two seeds of each fastback-trained model differ far more on estates than on fastbacks (@sec-oq-transfer).
+- **Does ISLA also transfer better from fastbacks to estates?** From estates to fastbacks it transfers better than both baselines on wall shear and alike on pressure (@sec-shift-suv-xfam). In the reverse direction two seeds cannot tell against either baseline, because the two seeds of each fastback-trained model differ far more on estates than on fastbacks (@sec-oq-transfer).
 - **Why does Transolver lead here and not on DrivAerML?** The two car sets differ in body class, in mesh and in Reynolds number at once; no experiment in the book separates them (@sec-open-questions).

@@ -30,8 +30,8 @@ Writes results/char/shift_suv_xfam_090.json:
                            cells D = ln(P_B / P_ISLA) with SE, z and verdict, and the summary as registered
   B_trigger, predictions   as registered
   case_level               percase_out.json (fraction of cases ISLA is lower on, case-bootstrap intervals; no verdict)
-  part_b                   the fastback-trained comparison: {status, in_flight: {what, replacement}, stage1}
-Part A is final; the file's own status is final, with part B's status inside part_b.
+  part_b                   the fastback-trained comparison: {status, stage1, stage2}
+Parts A and B are final; the file's own status is final, with part B's status inside part_b.
 
 Part B (scratch/isla-suv-xfam-2026-10-22/PREREG_B.md, md5 118f36a0; amendment 2 in its section 8, stage 2 in section 9):
 ISLA 0.9.0 (sxb_isla) and Transolver 512 x 16 (sxb_t) trained on the fastback train split, seeds 42 and 43, scored on the
@@ -44,7 +44,12 @@ worse only past 2 SE and ln 1.03.
   part_b.stage1            {status: final, E, B1, quantities, comparisons, reading, stage2_trigger, predictions, checks,
                            identity: {registered, amended}}, the reduction's keys unchanged; E[arm][trained][split][field]
                            {geo_mean, per_seed}, trained 'fastback' (part B) or 'estate' (part A's rows, as reduce_b.py reads them)
-  part_b.status, in_flight stage 2, GeoTransolver trained on fastbacks, is in flight
+  part_b.stage2            stage 2 (PREREG_B.md section 9): GeoTransolver 256 (sxb_gt) trained on fastbacks against stage 1's
+                           ISLA runs, from reduce_b2_out.json (reduce_b2.py, the registered rules; copied likewise):
+                           {status: final, E, B1, quantities, comparisons, reading, predictions, checks, identity}, the
+                           reduction's keys unchanged (ratios there are ratio_B_over_ISLA / r_B_over_ISLA, B = GeoTransolver;
+                           identity holds the registered and the amended statistic per split); E as in stage1
+  part_b.status            final
 usage: python shift_suv_xfam_090_2026-10-22.py"""
 
 import json
@@ -68,23 +73,12 @@ SPLITS = {
 }
 FIELDS = {"pressure_l2": "pressure", "wss_l2": "wall shear"}
 SEEDS = ("42", "43")
-PART_B_FLIGHT = {
-    "what": "ISLA and Transolver trained on fastbacks, so the transfer comparison is against Transolver only",
-    "replacement": "GeoTransolver trained on fastbacks and scored on both families",
-}
 TRAINED = {"fb": "fastback", "est": "estate"}
 
 
-def part_b():
-    """Part B: stage 1 final from the reduction as registered and the amended identity check; stage 2 in flight."""
-    red = json.load(open(f"{SRC_B}/reduce_b_out.json"))
-    ident = json.load(open(f"{SRC_B}/identity_b_out.json"))
-    assert len(red["checks"]) == 16 and all(
-        all(v for k, v in c.items() if k != "run") for c in red["checks"]
-    )
-    assert ident["all_pass"]
-    E = red["E"]
-    arms = {
+def e_arms(E, keys):
+    """E[arm][trained][split][field] {geo_mean, per_seed} from a part-B reduction's flat E."""
+    return {
         ARMS[a]: {
             TRAINED[t]: {
                 sp: {
@@ -100,11 +94,21 @@ def part_b():
             }
             for t in TRAINED
         }
-        for a in ("isla", "t")
+        for a in keys
     }
+
+
+def part_b():
+    """Part B: stage 1 from the reduction as registered and the amended identity check; stage 2 from its reduction."""
+    red = json.load(open(f"{SRC_B}/reduce_b_out.json"))
+    ident = json.load(open(f"{SRC_B}/identity_b_out.json"))
+    assert len(red["checks"]) == 16 and all(
+        all(v for k, v in c.items() if k != "run") for c in red["checks"]
+    )
+    assert ident["all_pass"]
     stage1 = {
         "status": "final",
-        "E": arms,
+        "E": e_arms(red["E"], ("isla", "t")),
         **{
             k: red[k]
             for k in (
@@ -119,7 +123,28 @@ def part_b():
         },
         "identity": {"registered": red["identity"], "amended": ident},
     }
-    return {"status": "in_flight", "in_flight": PART_B_FLIGHT, "stage1": stage1}
+    red2 = json.load(open(f"{SRC_B}/reduce_b2_out.json"))
+    assert red2["checks_all_pass"] and all(
+        all(v for k, v in c.items() if k != "run") for c in red2["checks"]
+    )
+    assert all(v["pass"] for v in red2["identity"].values())
+    stage2 = {
+        "status": "final",
+        "E": e_arms(red2["E"], ("isla", "gt")),
+        **{
+            k: red2[k]
+            for k in (
+                "B1",
+                "quantities",
+                "comparisons",
+                "reading",
+                "predictions",
+                "checks",
+                "identity",
+            )
+        },
+    }
+    return {"status": "final", "stage1": stage1, "stage2": stage2}
 
 
 def main():
@@ -194,6 +219,16 @@ def main():
                 f: (round(c["ratio_T_over_ISLA"], 3), round(c["z"], 1), c["verdict"])
                 for f in FIELDS
                 for c in [s1["comparisons"][f"{k}/lead/{f}"]]
+            },
+        )
+    s2 = out["part_b"]["stage2"]
+    for k in ("D_G", "D_R", "D_H"):
+        print(
+            f"part B stage 2 {k} lead:",
+            {
+                f: (round(c["ratio_B_over_ISLA"], 3), round(c["z"], 1), c["verdict"])
+                for f in FIELDS
+                for c in [s2["comparisons"][f"{k}/lead/{f}"]]
             },
         )
 

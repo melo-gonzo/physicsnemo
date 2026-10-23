@@ -8,7 +8,7 @@ source. Do not edit by hand.
 | `attrib090/` | ATTRIB-090: which change of ISLA 0.9.0 moves Tensile2d, AirfRANS and the lug | `scratch/isla-attrib090-2026-10-21/` |
 | `ref090/` | REF-090: ISLA 0.9.0 against the nearest-token form, the training-path control | `scratch/isla-ref090-2026-10-20/` |
 | `af_extrap/` | AF-EXTRAP: AirfRANS extrapolation in Reynolds number and angle of attack | `scratch/isla-af-extrap-2026-10-21/` |
-| `suv_xfam_b/` | SUV-XFAM part B: SHIFT-SUV models trained on fastbacks, against the estate-trained ones | `scratch/isla-suv-xfam-2026-10-22/` |
+| `suv_xfam_b/` | SUV-XFAM part B: SHIFT-SUV models trained on fastbacks, against the estate-trained ones (stages 1 and 2) | `scratch/isla-suv-xfam-2026-10-22/` |
 | `probes090/` | PROBES-090: query-population dependence and re-meshing invariance of ISLA 0.9.0 | `scratch/isla-probes090-2026-10-21/` |
 | `cap_audit/` | CAP-AUDIT: capacity floors of the three architectures, phases 1, 1b and 2 | `scratch/isla-cap-audit-2026-10-20/` |
 | `floor_drv/` | FLOOR-DRV: ISLA on one DrivAerML Volume car with the domain's four boundary meshes, the pre-registration | `scratch/isla-floor-drv-2026-10-23/` |
@@ -51,10 +51,11 @@ source. Do not edit by hand.
 | af_extrap | LRE.md | scratch/isla-af-extrap-2026-10-21/LRE.md | d4af4d170c1860aa3b0cacc2bf389e01 |
 | af_extrap | lre.json | scratch/isla-af-extrap-2026-10-21/lre.json | 493d95be22c44af6a41029e9d6822f54 |
 | suv_xfam_b | PREREG_B.md | scratch/isla-suv-xfam-2026-10-22/PREREG_B.md | 118f36a0e86fe690414f8b3feaaa9c3b |
-| suv_xfam_b | RESULTS_B.md | scratch/isla-suv-xfam-2026-10-22/RESULTS_B.md | c6715009750f4ed84878ac896cceb2e1 |
-| suv_xfam_b | JOBS.md | scratch/isla-suv-xfam-2026-10-22/JOBS.md | 0fa83ff66b0ef3aa45bdb2c263a276d8 |
+| suv_xfam_b | RESULTS_B.md | scratch/isla-suv-xfam-2026-10-22/RESULTS_B.md | 5458fb411157543ddaea49fc9df1e6ff |
+| suv_xfam_b | JOBS.md | scratch/isla-suv-xfam-2026-10-22/JOBS.md | eeccbdce7208570e10bf595682ee8969 |
 | suv_xfam_b | reduce_b_out.json | scratch/isla-suv-xfam-2026-10-22/reduce_b_out.json | 91e0cbab2d509fbe8b71ba76c5f436d4 |
 | suv_xfam_b | identity_b_out.json | scratch/isla-suv-xfam-2026-10-22/identity_b_out.json | 389255a80b9364a941b2cbbf98826eb6 |
+| suv_xfam_b | reduce_b2_out.json | scratch/isla-suv-xfam-2026-10-22/reduce_b2_out.json | 12b150610a9f8aee1dfa4b25bd6ea128 |
 | probes090 | RESULTS.md | scratch/isla-probes090-2026-10-21/RESULTS.md | c9d1e9c66e5131cfc76047c3b617a049 |
 | probes090 | results/qpop/reduced.json | scratch/isla-probes090-2026-10-21/results/qpop/reduced.json | bfd1167be24751f0094d44dd1de213c6 |
 | probes090 | results/qpop_afix/reduced.json | scratch/isla-probes090-2026-10-21/results/qpop_afix/reduced.json | 82913383c1bd164d586a383c19919c9a |

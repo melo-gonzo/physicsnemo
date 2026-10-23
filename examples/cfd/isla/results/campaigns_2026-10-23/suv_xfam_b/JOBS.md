@@ -64,6 +64,9 @@ scratch/isla-main-2026-10-14/suvxb-identity-2026-10-23/identity_detail.py. Amend
 4b03096a905233355dda7be6446276c2 -> identity_b_out.json: pass on all four splits (max statistic fb_test 5.2e-7,
 fb_val 5.1e-7, est_test 6.1e-7, est_val 5.5e-7; ids and order match; 4,752 / 4,752 / 4,800 / 4,752 rows).
 Stage 1 read 07:05 UTC: RESULTS_B.md. GPU-h 147.5 (sacct).
+Erratum added to RESULTS_B.md by the supervisor 2026-10-23 07:03 EDT (book second read): fastback-trained seeds agree
+within 0.7 / 0.9 percent on fastback test / val, not 0.5; ISLA estate-test pressure spread 8.4 percent. No verdict
+changes. RESULTS_B.md md5 a0e1d7c3 -> c6715009750f4ed84878ac896cceb2e1. Stage 1 is in the book (psharpe/isla 93d53aaac).
 
 # Part B, stage 2 (GeoTransolver)
 - Approved by the supervisor 2026-10-23 ~07:10 UTC (cap 125 GPU-h; exclude four bad nodes incl. nvl72d057-T13).
@@ -79,7 +82,15 @@ Stage 1 read 07:05 UTC: RESULTS_B.md. GPU-h 147.5 (sacct).
 | job | what | submitted (UTC) | state |
 |---|---|---|---|
 | 347451 | isla.suvxb.smoke-gt, short QoS: sxb_smoke_gt_seed42, 2 epochs, then smoke_check.py | 10-23 07:13 | COMPLETED 5 min; smoke_check ALL PASS (diff dataset, run_id, num_epochs; global_embedding=global_data.U_inf_dir; 199/25, 995; finite; constants). 2-epoch val losses visible (wss_l2 0.306) |
-| 347553 / 347554 | isla.suvxb.gt-seed42 / -seed43 (gt/submit.sh 0 1), normal, 3:59 singleton chains | 10-23 07:19 | both RUNNING at 07:20 |
+| 347553 / 347554 | isla.suvxb.gt-seed42 / -seed43 (gt/submit.sh 0 1), normal, 3:59 singleton chains | 10-23 07:19 | links 347553/347554, 347562/347563, 351818/351877 TIMEOUT; 354737/354775 COMPLETED (Training completed, epoch 500, ~21:00 UTC); pending no-op links 357433/357471 cancelled by this lane by explicit id 21:24 UTC |
+| 358922_4-5 | isla.suvxb.score, short QoS: rows 16-23 (sxb_gt_seed42/43 x 4 splits) | 10-23 21:24 | COMPLETED ~5 min; 8 of 8 pass the per-scoring checks |
+
+Stage 2 lane checks (smoke_check.py on sxb_gt_seed42/43, 21:24 UTC): ALL PASS; config diff = dataset and run_id only;
+global_embedding=global_data.U_inf_dir; validation epochs 0-499 without gaps.
+Stage 2 reduction: reduce_b2.py f7c66a5d (as registered) on lhr2 21:31 UTC -> reduce_b2_out.json: checks_all_pass true
+(amended identity passes on all four splits, max 6.1e-7; registered statistic fails on est_val at 1.28e-4, the same
+case 00888 CMR). Read 21:32 UTC: RESULTS_B.md sections 7-10; NOTEBOOK_DRAFT_SUVXB.md (stage-2 entry and chapter changes).
+Stage 2 GPU-h 105.0 (sacct: training 52.2 + 52.1, smoke 0.3, scoring 0.4); cap 125. Part B total 252.5 GPU-h.
 
 - Section 9 approved by the supervisor as written, 07:15 UTC (no amendment).
 - reduce_b2.py f7c66a5d657ddc05f06b040dcc73ce61, written 07:20 UTC before any GeoTransolver stage-2 score; dry-run on

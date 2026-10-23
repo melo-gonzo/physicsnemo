@@ -92,13 +92,14 @@ RECORDS = {
     ),
     "suv_xfam_b": (
         "isla-suv-xfam-2026-10-22",
-        "SUV-XFAM part B: SHIFT-SUV models trained on fastbacks, against the estate-trained ones",
+        "SUV-XFAM part B: SHIFT-SUV models trained on fastbacks, against the estate-trained ones (stages 1 and 2)",
         [
             "PREREG_B.md",
             "RESULTS_B.md",
             "JOBS.md",
             "reduce_b_out.json",
             "identity_b_out.json",
+            "reduce_b2_out.json",
         ],
     ),
     "probes090": (

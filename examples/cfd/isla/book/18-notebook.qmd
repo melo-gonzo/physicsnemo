@@ -39963,6 +39963,68 @@ denominator by the component's median (largest value 6.1e-7).
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-book-am-2026-10-23/SECOND_READ_SUVXB.md).*
 
+## 2026-10-23 — SUV-XFAM-B, stage 2: against fastback-trained GeoTransolver too, ISLA 0.9.0 transfers better on SHIFT-SUV wall shear from estates to fastbacks (estate-trained error 1.78 times the in-family fastback error, against GeoTransolver 256's 1.92; GeoTransolver ÷ ISLA 1.078 at 2.7 SE), so on wall shear it transfers better than both baselines in that direction; on pressure the three transfer alike (forward gap 2.63 each), and the reverse direction shows no difference {#sec-nb-suv-xfam-b2}
+
+**Question.** Stage 1 (@sec-nb-suv-xfam-b1) found that ISLA's smaller wall-shear penalty against Transolver is a
+transfer advantage: its estate-trained model is closer to a fastback-trained ISLA than Transolver's is to a
+fastback-trained Transolver. Does the same hold against GeoTransolver? Part A's GeoTransolver cell was the weaker one
+(penalty ratio 1.087 at 3.0 SE), because GeoTransolver's two estate-trained seeds differ by 14 percent on fastback
+pressure and 5 percent on fastback wall shear.
+
+**Setting.** GeoTransolver 256 (`global_embedding = U_inf_dir`), seeds 42 and 43, trained on the fastback train split,
+500 epochs. Each lane is its estate reference lane (`clud_suv_gt_seed4x`) with only the dataset file changed: the saved
+configs differ only in `dataset` and `run_id`. Scoring, the quantities G, R and H, the SE and the 2-SE-and-3-percent
+rule are stage 1's, with D = ln(X_GeoTransolver ÷ X_ISLA) against stage 1's ISLA runs. Pre-registered before any
+GeoTransolver stage-2 lane existed (scratch/isla-suv-xfam-2026-10-22/PREREG_B.md section 9, approved by the supervisor
+as written 2026-10-23 07:15 UTC); reducer reduce_b2.py (f7c66a5d), written before any stage-2 score. LHR jobs 347451
+(smoke), 347553-347554 and their chain links (training), 358922 (scoring); 105.0 GPU-h (training 52.2 + 52.1), against
+a registered estimate of 108.
+
+**What we saw** (relative L2, pressure / wall shear, geometric seed means; seeds in RESULTS_B.md section 8):
+
+| | ISLA 0.9.0 | GeoTransolver | Transolver (stage 1) |
+|---|---|---|---|
+| E(fb→fb), fastback test | 0.0425 / 0.0656 | 0.0439 / 0.0660 | 0.0405 / 0.0643 |
+| forward gap G | 2.63 / **1.78** | 2.63 / 1.92 | 2.63 / 1.93 |
+| reverse gap R | 3.14 / 1.98 | 3.03 / 1.89 | 3.43 / 2.04 |
+| hardness H | 0.97 / 1.00 | 0.98 / 1.01 | 0.97 / 1.02 |
+
+| cell, GeoTransolver ÷ ISLA | lead (D / SE) | verdict | fastback-val replicate |
+|---|---|---|---|
+| forward gap, wall shear | **1.078 (2.7)** | **ISLA transfers better** | 1.086 (2.9), better |
+| forward gap, pressure | 0.999 (0.0) | no difference | 1.002 (0.0), no difference |
+| reverse gap, wall shear / pressure | 0.955 (-0.9) / 0.964 (-0.6) | no difference | 0.954 / 0.969, no difference |
+| hardness, wall shear / pressure | 1.008 (1.3) / 1.003 (0.2) | no difference | 1.001 / 1.009, no difference |
+
+**Verdict, as registered.** On wall shear, ISLA **transfers better** than GeoTransolver from estates to fastbacks:
+1.078 at 2.7 SE, and 1.086 at 2.9 SE on the replicate. The registered reading is "transfer advantage, estate → fastback
+only". Of the logarithm of part A's wall-shear penalty ratio against GeoTransolver (0.084), 90 percent is this forward
+gap and 10 percent hardness. Hardness and the reverse direction read no difference on both fields. On pressure every
+comparison reads no difference (the registered words are "split unresolved", with nothing to split: part A's pressure
+D_P is 0.002), so ISLA and GeoTransolver lose alike on fastback pressure. In family on fastbacks, GeoTransolver trails
+ISLA on pressure (GeoTransolver ÷ ISLA 1.032, the seeds separated; the replicate gives 1.033, trails) and is level on
+wall shear (1.006). Eight of nine predictions held. The one that failed (S6, p = 0.55) had expected both in-family cells
+to be level. Validity: every lane and scoring check passed. Scored-set identity passes on all four splits under the
+amended check (largest 6.1e-7); the registered statistic fails on estate val at 1.28e-4, on the same near-zero roll
+moment (case 00888) as in stage 1.
+
+**Beside the rules** (no verdict):
+- Across the three architectures the forward pressure gap is 2.63 to three digits (2.629, 2.627, 2.625 for ISLA,
+  GeoTransolver and Transolver). Whatever an estate-trained model lacks on fastback pressure, all three lack it equally.
+  The forward wall-shear gap separates ISLA (1.78) from both baselines (1.92, 1.93): about 8 percent against each, at
+  2.7 and 5.8 SE.
+- The reverse direction has no consistent sign: Transolver's reverse wall-shear gap is 3 percent above ISLA's and
+  GeoTransolver's 4.5 percent below, each well inside its SE. Out of family, the fastback-trained seeds of all three
+  architectures differ by 6-9 percent on estates (GeoTransolver 7.4 / 6.3 percent, pressure / wall shear), against
+  under 1 percent on fastbacks, so two seeds cannot call a difference of that size.
+- The GeoTransolver verdict rests on a wider SE (0.028, against 0.014 for Transolver). Most of it is GeoTransolver's
+  own estate-trained seed spread on fastback wall shear, which part A found. The verdict clears 2 SE by 0.019 and the
+  3-percent floor by 0.046.
+- Part B is closed: 252.5 GPU-h over both stages. The reverse direction stays open (two more seeds of each of the three
+  fastback-trained models would narrow its SE).
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-book-eve-2026-10-23/SECOND_READ_EVE_P1.md).*
+
 ## 2026-10-22 — MECH-090: on Tensile2d the fixed compiled path's float32 gradients sit at a one-ulp eager floor, and pytorch/pytorch#195845 added a unit-dependent sink to ISLA's slice-state softmax (registered emulations not confirmed; a post-smoke emulation matches) {#sec-nb-mech090}
 
 **Question.** REF-090's Tensile2d control (@sec-nb-ref090-t2d-control) read (b) by its registered weighing, in which A2
