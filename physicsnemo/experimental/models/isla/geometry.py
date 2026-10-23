@@ -974,10 +974,13 @@ def _closest_candidates(
     ### The winding number is the surface's, not the cell list's: identical oriented
     ### cells count once. The cells go in the sorted order of their keys, so a surface
     ### stored with repeated cells has the same BVH, and the same far field, as the
-    ### surface stored once.
-    _, inverse = torch.unique(torch.cat([cells, parity[:, None]], 1), dim=0, return_inverse=True)
-    order = torch.argsort(inverse, stable=True)
-    rep = order[torch.cat([inverse.new_ones(1, dtype=torch.bool), inverse[order][1:] != inverse[order][:-1]])]
+    ### surface stored once (a stable lexicographic sort, as in _weld).
+    rows = torch.cat([cells, parity[:, None]], 1)
+    order = torch.arange(rows.shape[0], device=dev)
+    for k in reversed(range(rows.shape[1])):
+        order = order[torch.argsort(rows[order, k], stable=True)]
+    rows = rows[order]
+    rep = order[torch.cat([rows.new_ones(1, dtype=torch.bool), (rows[1:] != rows[:-1]).any(-1)])]
     oriented = _oriented_areas(simplex[rep], parity[rep].to(q64))
     if dim == 3:
         seed = signed_distance_field(Mesh(points=points, cells=cells), query_points)[2]
