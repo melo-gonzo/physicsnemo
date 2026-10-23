@@ -40332,7 +40332,7 @@ f6835adbc removes it by putting those centroids on the wall (DESIGN k.3).
 16:07 EDT 2026-10-22 before any job of the rerun; LHR 341526). CMPDIAG's 20 AeroZoo `full` test cases of
 azc_full_isla_seed42 at epoch 250, float32 throughout (A32) against float64 throughout (A64), on code_foldsign (702f60f97).
 
-- **R1: "the sign flips go to 0".** No point changes sign between A32 and A64 on any of the 20 cases. [AUDIT] The base
+- **R1: "the sign flips go to 0".** No point changes sign between A32 and A64 on any of the 20 cases. The base
   geometry on the same inputs flips 33 (00002), 904 (00019), 466 (00022), 82 (00045) and 12 (00083). No point lies in the
   band `|w - sigma/2| < 3e-2`; the least margin is 0.456. Predicted 0.85.
 - **R2: "the fold sign removes ISLA's float32 floor on AeroZoo".** Three of the four high-gap cases fall to at most 0.2 times
@@ -40340,35 +40340,35 @@ azc_full_isla_seed42 at epoch 250, float32 throughout (A32) against float64 thro
   7.3e-3 (0.56). Every case is at most 1e-2; the largest is 00079's 9.0e-3. Predicted 0.6 and 0.45 for the two parts. The
   registered confound: the snapshot also differs from code_r090 by GEO-ROBUST phase 1 (the tie rule, and f56068328's on-wall
   rule with the 1e-12 cutoff) and TIE-FIX, so the after floor is that of the whole new geometry at 702f60f97.
-- **R3, no verdict.** [AUDIT] Of the fluid points the base geometry puts at negative `d` (in float64), 2,170 turn positive,
+- **R3, no verdict.** Of the fluid points the base geometry puts at negative `d` (in float64), 2,170 turn positive,
   none turns negative, and 301 stay negative on 8 cases, every one outside the band, so the closed boundary itself puts them
   outside its region; their locations go to a data check (f32floor_tables.md; DESIGN k.5 prints the turned count as 1,170,
   but the per-case column sums to 2,170). Predicted 0.5 that every base-negative point turns positive (301 do not), and 0.7
   that the band count is 0 on every case (it is).
 - Beside the verdict: of the 16 other cases, 11 rose 1.35 to 80 times (the control 00037 from 3.0e-5 to 2.4e-3), four stayed
   within 4 percent, and 00002 fell from 7.3e-3 to 4.0e-4; after, they lie at 4.0e-4 to 9.0e-3, which DESIGN k.5 reads as a
-  nearly uniform float32 floor of about 1e-3. [AUDIT] A diagnosis registered in JOBS.md at 21:03 EDT, before its job (LHR
+  nearly uniform float32 floor of about 1e-3. A diagnosis registered in JOBS.md at 21:03 EDT, before its job (LHR
   342500), reads "the guess holds on both cases" (predicted 0.6): computed with float32's unit roundoff in the tie band, the
   float64 run has bitwise the float32 run's tie flags, and d(A32, A64E32) is 3.0e-5 (00037) and 8.2e-5 (00039), against
   2.4e-3 and 7.9e-4 with its own. The floor is the tie set's resolution at medial axes. It stays (decisions, below).
 
 **Measurements on the data.**
 
-- [AUDIT] *Sign changes against the base* (DESIGN k.4; CPU, the datapipe's float32 inputs, the model's union of the named
+- *Sign changes against the base* (DESIGN k.4; CPU, the datapipe's float32 inputs, the model's union of the named
   meshes; three pairs of commits, the last ONWALL 1e2c431cd against f6835adbc, LHR 342807 and 342938): 0 sign changes in
   3,768,183 off-wall nodes of the lug's 600 test cases, in 922,124 of Tensile2d's 100 val_100 cases and in 35,645,073 of
   AirfRANS's 200 full_test cases, with `|d|` and `u` bitwise equal and no node in the band (least margins 0.471, 0.500 and
   0.500).
-- [AUDIT] *The on-wall rule on real data* (DESIGN n.5; 17 cases of AirfRANS, Tensile2d, the lug, DrivAerML Volume and
+- *The on-wall rule on real data* (DESIGN n.5; 17 cases of AirfRANS, Tensile2d, the lug, DrivAerML Volume and
   AeroZoo): no query changes its on-wall status in either direction, at either compute precision, and `d`, `u` and the soft-log
   channel are bitwise those of 34654e01d on every row. Every on-wall query of these datasets lies exactly on the stored
   surface, and the nearest off-wall query is at least 2.46 `E` away (the opposed sphere). The rule's value here is principle
   and the synthetic and posed cases, not a change of real features.
 - *Normals in float64* (DESIGN o.3; the lug's first 20 test cases, LHR 343621 and CPU): on-wall nodes whose float32 and
   float64 directions differ by more than 1e-7 fall from 389 to 0, and the largest difference from 1.15e-5 to 4.2e-8, the
-  cast. Float32 `d` changes at none of 187,786 nodes. [AUDIT] With float64 inputs no output changes (`d` and `u` bitwise on
+  cast. Float32 `d` changes at none of 187,786 nodes. With float64 inputs no output changes (`d` and `u` bitwise on
   the 20 lug cases and the test meshes).
-- [AUDIT] *The token draw* (TOKEN-DRAW section 2; drawn cells that change, of 200,000; 16 AeroZoo cases and DrivAerML run_1
+- *The token draw* (TOKEN-DRAW section 2; drawn cells that change, of 200,000; 16 AeroZoo cases and DrivAerML run_1
   and run_2). Between float32 and float64 compute on the same float32 inputs: 10 to 21,352 cells per AeroZoo case and 28,129
   and 120,618 on DrivAerML before, 0 on every case after. Under a rotation with a translation: the canonical frame cuts the
   changes 7.2 to 1,621 times on the 15 cases whose frame is not degenerate (DrivAerML run_1 7.2 times, run_2 73 times, every
@@ -40393,20 +40393,25 @@ bfloat16, eager, one GPU per version; medians after 5 warm-up calls or steps; ba
   to 1.50 on DrivAerML Volume. The geometry call costs 2.3 to 6.5 times the base's, about 265 ms more on DrivAerML Volume.
 - The path there. GEO-ROBUST's tie search took the 3-D call from 174 ms to 77 ms on AeroZoo in four versions (DESIGN j). The
   fold sign alone cost the call 1.8 to 2.4 times over d3d9da49d, and four speed commits brought that to 1.2 to 1.6 times
-  (DESIGN k.6). [AUDIT] Each speed commit was checked bitwise on CPU against 702f60f97, and on CUDA in job 342837.
-  GEO-BUNDLE found that DrivAerML Volume's 17.2M cells doubled the step (579 to 1,105-1,177 ms; DESIGN o.4); [AUDIT] its
+  (DESIGN k.6). Each speed commit was checked bitwise on CPU against 702f60f97, and on CUDA in job 342837.
+  GEO-BUNDLE found that DrivAerML Volume's 17.2M cells doubled the step (579 to 1,105-1,177 ms; DESIGN o.4); its
   speed commit 1862a2639 was checked bitwise against 96f1ad583 (DESIGN o.5). DV-COST's five cuts (c2221d3c8 to ae953f7ae)
   took the DrivAerML call from about 610 ms to 410-430 ms and the step from about 1,106 to 912 ms (DESIGN p.3). DV-COST2's
   option (a), f13eb5ce0, takes the cell tree's Morton projection as column products, not a float64 GEMM, and saves about 52
   ms there (DESIGN q.2).
 - A flaw in the bitwise probes (DESIGN q.1). Two copies of geometry.py loaded into one process register the custom op
   `physicsnemo::isla_closest_candidates` twice, and the second registration replaces the first for every caller, so a probe
-  that loads a reference geometry.py beside the package compared one version of `_closest_candidates` with itself. [AUDIT]
+  that loads a reference geometry.py beside the package compared one version of `_closest_candidates` with itself.
   With the reference loaded under a renamed op (`scratch/isla-dv-cost2-2026-10-23/lhr/refload.py`), the cuts ae953f7ae
   against 1862a2639 and f13eb5ce0 against ae953f7ae are bitwise in `d`, `u` and their gradients on CPU and CUDA (52 checks:
   the 20 lug cases, an AeroZoo case at 20k queries and five test meshes, each in float32 and float64), and in `d`, `u`, the
-  search's outputs and `w` on CUDA on DrivAerML Volume, AeroZoo and the 20 lug cases in both precisions. The earlier
-  cross-version claims are re-checked by GEO-AUDIT.
+  search's outputs and `w` on CUDA on DrivAerML Volume, AeroZoo and the 20 lug cases in both precisions. GEO-AUDIT then
+  checked every cross-version comparison of 2026-10-22/23 (scratch/isla-geo-audit-2026-10-23/AUDIT.md). Only DV-COST's
+  equivalence checks (DESIGN p.2) had loaded a reference copy that kept the op's name. Rerun with every version's op
+  renamed, and with a check that each module runs its own search, all five of DV-COST's cuts are bitwise against 1862a2639
+  on CPU and CUDA, with the recorded tie counts (21,248 in float32 and 10,751 in float64 on DrivAerML Volume). Every other
+  comparison renamed its op or ran one version per process. FOLD-SIGN's sign counts were rerun anyway and reproduce
+  exactly.
 - Measured and not adopted (DESIGN p.4, q.3): beta 1.5 and 1.0 (30-55 ms saved, a far field accurate to 0.3 at beta 1.0);
   float32 near-leaf solid angles (3-6 ms); leaves of 2, 4 and 8 cells (90 to 1,055 ms slower on DrivAerML) and 4-, 8- and
   16-ary trees (12 to 166 ms slower). Not measured: a per-mesh cache, about 195 ms of DrivAerML's call and several GB per
@@ -40441,7 +40446,7 @@ case).
 
 **Status.** A candidate for the canonical ISLA, not adopted; the scope freeze, about 2026-10-27, decides. The bundle as a
 whole has not been trained. TIE-EXP retrains the tie rules (19fb0a754) on the lug and Tensile2d (@sec-nb-tie-exp-prereg), and
-[AUDIT] its amendments A3 and A8 carry that test to the fold sign and the on-wall rule on those two datasets through the
+its amendments A3 and A8 carry that test to the fold sign and the on-wall rule on those two datasets through the
 counts above. The chapters state 0.9.0's geometry, with an in-flight callout in 04 and 20.
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-geo-nb-2026-10-23/SECOND_READ_GEO.md).*
@@ -40608,7 +40613,7 @@ rules jointly, never to one of them.
   at most on-wall nodes); every pre-step and smoke on code_tie is superseded; new gate item (a) checks the float32 features
   against float64, and new item (b) runs the two geometry test files on GB300.
 - A3 and A8: the stated assumption that TIE stands for the whole geometry bundle on these two datasets rests on the cell
-  count (every boundary cell kept), [AUDIT] FOLD-SIGN's count of 0 sign changes on the lug and Tensile2d, and the count of
+  count (every boundary cell kept), FOLD-SIGN's count of 0 sign changes on the lug and Tensile2d, and the count of
   0 queries in the band where ONWALL's rule could move them. A3 measured the count against d3d9da49d, before TIE-FIX, and
   states the assumption for code_tie2 only once a repeat against the fix commit is recorded in the PREREG. FOLD-SIGN
   repeated it against 19fb0a754 with the same counts (LHR 341328 and 341486; DESIGN k.4 of
