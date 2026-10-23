@@ -126,3 +126,5 @@ Eager-side pooled G13 = 0.890; 1.10 clause: none
 | von Mises | 0.0014537 (0.0014625, 0.0014449) | 0.0018933 (0.0017804, 0.0020062) | 0.768 (0.821, 0.720) | 0.232 vs 0.144 EXCEEDS | 0.843 (0.849, 0.838) | 1.3461, 1.3829 |
 
 r090fix_af_dtt ÷ r090fix_af_isla (native | posed): pressure 1.035 | 1.035 (DTT 0.012654); velocity 1.126 | 1.126 (DTT 0.0071261); eddy viscosity 1.381 | 1.381 (DTT 0.021494)
+
+r090fix_lug_dtt ÷ r090fix_lug_isla (native | posed): von Mises 1.394 | 1.769 (DTT 0.0020268)

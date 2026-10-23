@@ -1568,16 +1568,22 @@ _v = {f: _AF.verdict("ISLA-DTT", f) for f in _AF.ds.headline}
 _by = {}
 for f, v in _v.items():
     _by.setdefault(v, []).append(_AF.fields[f])
-print("Read-only points give up the coupling that lets the interior shape the partition, and the measurement does not "
+_LDT = R.load("ref090", "r090_final.json")["fix"]
+_li, _ld = _LDT["lug"]["von_mises_l2"]["fix"], _LDT["r090fix_lug_dtt"]["von_mises_l2"]["dtt"]
+assert min(_ld["per_seed"].values()) > max(_li["per_seed"].values()) and _ld["mean"] / _li["mean"] >= 1 + S.TIE_BAND
+print("Read-only points give up the coupling that lets the interior shape the partition, and the measurements do not "
       "settle which form is better. On the AirfRANS interior task at the reference configuration, interacting ISLA "
       + ", and ".join(f"{v} ISLA-DTT on {' and '.join(fs)}" for v, fs in _by.items())
       + " (ISLA-DTT ÷ ISLA " + " / ".join(f"{_AF.ratio('ISLA-DTT', f):.3f}" for f in _AF.ds.headline) + " on "
-      + " / ".join(_AF.fields[f] for f in _AF.ds.headline) + f", a ratio of arithmetic seed means; {_AF.source}). Which interior form is ISLA's "
+      + " / ".join(_AF.fields[f] for f in _AF.ds.headline) + f", a ratio of arithmetic seed means; {_AF.source}). On the GINOT bracket lug, with both forms trained on the compiled "
+      "training path after its fault was fixed, interacting ISLA leads ISLA-DTT on the von Mises stress (ISLA-DTT ÷ ISLA "
+      f"{_ld['mean'] / _li['mean']:.3f} on the native mesh, a ratio of arithmetic seed means; {R.source('ref090', 'r090_final.json')}). "
+      "Which interior form is ISLA's "
       "reference is decided on AeroZoo's held-out splits, and it is an open question (@sec-oq-dtt); the interior standings "
       "of Part IV are of the interacting form.\n")
 _azd = S.aerozoo()["arms"]["ISLA-DTT 512 with 512 slices"].get("in_flight")
 if _azd:
-    print(S.in_flight_callout({"what": "ISLA against ISLA-DTT on AirfRANS alone",
+    print(S.in_flight_callout({"what": "ISLA against ISLA-DTT on AirfRANS and the GINOT bracket lug",
                                "replacement": "ISLA-DTT on AeroZoo's seven splits, which decides the interior form,"}))
 ```
 

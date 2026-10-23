@@ -118,8 +118,7 @@ print("- **Not that equivariance is an accuracy edge in general.** A baseline gi
       "one trained with rotation augmentation approximately so. ISLA's pose lead is against GeoTransolver and Transolver as released, "
       "trained in the dataset's frame without augmentation and scored in random poses (@sec-pose).")
 print(f"- **Not that ISLA's pose invariance is exact on every mesh.** Rotated and translated, its error stays within {100 * worst:.1f}% "
-      f"of native on {of_fin(exact)} final standings, and it is {lug:.2f} times native on the GINOT bracket lug, whose standing "
-      "is in flight and whose structured "
+      f"of native on {of_fin(exact)} final standings, and it is {lug:.2f} times native on the GINOT bracket lug, whose structured "
       "mesh puts interior nodes equally far from two boundary features, where float32 rounding picks the direction, a candidate cause "
       "of the growth whose link is not isolated (@sec-limits-ties). "
       "ISLA-DTT's far-field read adds no such limit: a tie of its forest's frame moves the read only by the tree's error "
@@ -511,6 +510,11 @@ dtt = {f: AFS.ratio("ISLA-DTT", f) for f in AFS.ds.headline}
 dtt_v = {f: AFS.verdict("ISLA-DTT", f) for f in AFS.ds.headline}
 c_i, c_d = S.cost("aerozoo", "ISLA"), S.cost("aerozoo", "ISLA-DTT")
 r3n = sum(v == "no difference" for v in r3)
+# the lug pair, both fix-trained (REF-090's r090fix_lug_isla and r090fix_lug_dtt), native von Mises
+LDT = R.load("ref090", "r090_final.json")["fix"]
+ld_i, ld_d = LDT["lug"]["von_mises_l2"]["fix"], LDT["r090fix_lug_dtt"]["von_mises_l2"]["dtt"]
+ld_r = ld_d["mean"] / ld_i["mean"]
+assert min(ld_d["per_seed"].values()) > max(ld_i["per_seed"].values()) and ld_r >= 1 + S.TIE_BAND
 print("**The open question is whether the read-only form, whose prediction at a point is a function of that point and the boundary alone, "
       "should be ISLA's only interior model.** The interacting form lets prediction points inform one another through the slices, and pays "
       "for it with a prediction that depends on the request (@sec-limits-query-independence). The read-only form gives that up and reads "
@@ -521,7 +525,11 @@ print("**The open question is whether the read-only form, whose prediction at a 
       + "; ratios of arithmetic seed means): ISLA "
       + ", ".join(f"{v} ISLA-DTT on {FW[f]}" for f, v in dtt_v.items())
       + f" (@sec-airfrans-dtt-reference); outside its training bands the two forms' penalties read *no difference* on {r3n} of the "
-      f"{len(r3)} cells (@sec-limits-regime). One planar dataset does not settle the question. The decisive data are AeroZoo's "
+      f"{len(r3)} cells (@sec-limits-regime). On the GINOT bracket lug, a three-dimensional interior task, ISLA-DTT trails ISLA on the "
+      f"von Mises stress on the native mesh: ISLA-DTT ÷ ISLA is {ld_r:.3f} (a ratio of arithmetic seed means, two seeds each), and both "
+      "of ISLA-DTT's seeds lie above both of ISLA's. Both forms in that pair trained on the compiled training path after its fault was "
+      f"fixed, while the lug standing's ISLA trained eagerly ({R.source('ref090', 'r090_final.json')}). Neither dataset settles the "
+      "question: both ratios measure accuracy inside the training distribution. The decisive data are AeroZoo's "
       "held-out splits, where generalization rather than in-distribution accuracy is at stake. What would settle it: both forms at equal "
       f"size under the benchmark protocol (@sec-aerozoo-allowed), on `full` and on each of the {len(AZS['held_out'])} held-out splits, two "
       "seeds each, with the ratio ISLA-DTT ÷ ISLA on velocity and pressure as the readout, read by the rule registered for it before any "

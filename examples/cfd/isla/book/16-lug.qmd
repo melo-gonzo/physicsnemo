@@ -328,6 +328,15 @@ print(f"**Everywhere else the geometry is exact, and at the ties it is not.** @t
 print(f"- **The pose contract does not hold exactly on this mesh.** ISLA's posed error is {ST.shift('ISLA', F, 'posed'):.2f} times "
       "its native one (@tbl-lug-protocols). Float32 tie-breaking in the closest-feature search has no knob that converges to exact "
       "invariance, so this is a limit, with closest-feature ties as the measured candidate cause (@sec-lug-ties).")
+import records as R
+LDT = R.load("ref090", "r090_final.json")["fix"]
+ld_i, ld_d = LDT["lug"][F]["fix"], LDT["r090fix_lug_dtt"][F]["dtt"]
+assert min(ld_d["per_seed"].values()) > max(ld_i["per_seed"].values()) and ld_d["mean"] / ld_i["mean"] >= 1 + S.TIE_BAND
+print("- **The standing is of the interacting form.** ISLA-DTT, whose prediction points read the boundary and write nothing into "
+      f"the slices, trails it on the lug: on the native mesh ISLA-DTT ÷ ISLA is {ld_d['mean'] / ld_i['mean']:.2f} on the von Mises "
+      "stress (a ratio of arithmetic seed means over two seeds), and both of ISLA-DTT's seeds lie above both of ISLA's. Both forms in "
+      "that pair trained on the compiled training path after its fault was fixed, while the standing's ISLA trained eagerly "
+      f"({R.source('ref090', 'r090_final.json')}). Which form is ISLA's interior model is open (@sec-oq-dtt).")
 ```
 
 - **No tensor target and no geometry class change.** Tensile2d measures a tensor target (@sec-interior-tensile2d); the lug's shapes are one topology.
