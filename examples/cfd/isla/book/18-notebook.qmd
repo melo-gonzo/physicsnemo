@@ -40427,8 +40427,9 @@ case).
   calls, and at DrivAerML Volume size a cache would hold several GB per case (DESIGN p.4 (f); excluded, q).
 - The fold sign by the generalized winding number (DESIGN i.1, k).
 - The token draw computed in float64 from the input mesh, on a Morton grid in the boundary's canonical frame. The supervisor
-  rejected breadth-first and Cuthill-McKee orders and hashed priority sampling (TOKEN-DRAW, header; the record gives no
-  reason). The canonical frame was kept under the bar fixed in TOKEN-DRAW's task (at least 10 times fewer pose changes on the
+  rejected breadth-first and Cuthill-McKee orders, which depend on the cells' numbering and need a per-mesh cache that the
+  boundary-only input ruling excludes, and hashed priority sampling, which depends on the numbering and is not stratified
+  over the surface (TOKEN-DRAW, header). The canonical frame was kept under the bar fixed in TOKEN-DRAW's task (at least 10 times fewer pose changes on the
   non-degenerate cases, at under 2 percent of AeroZoo's 0.51 s step): every non-degenerate AeroZoo case (37 to 1,621 times),
   DrivAerML run_2 (73 times) and the pool (39 times) pass it, and DrivAerML run_1 (7.2 times) does not. The lane asked the
   supervisor whether the bar means every case or the pool, and the frame was committed as c2db0445e (TOKEN-DRAW 4).
@@ -40436,7 +40437,7 @@ case).
 - The tie band keeps the unit roundoff of the queries as given (DESIGN o, supervisor 2026-10-22): the model's geometry is a
   function of its inputs, values and dtype, and cannot know that a caller cast float32 data to float64. The float32 against
   float64 floor of about 1e-3 that remains on AeroZoo is the tie set's resolution at medial axes, not a defect.
-- Peter's decisions on DV-COST's options (DESIGN q): option (a) goes into the candidate (f13eb5ce0); beta 1.5, beta 1.0 and
+- The supervisor's decisions on DV-COST's options (2026-10-23; DESIGN p.4, q): option (a) goes into the candidate (f13eb5ce0); beta 1.5, beta 1.0 and
   float32 near-leaf solid angles are declined, so `WINDING_NUMBER_BETA` stays 2 and the solid angles stay float64; (f) is
   excluded and (g) skipped. Option (e) was not committed under the rule fixed in DV-COST2's task, since no leaf size or tree
   width saved time (DESIGN q.3).
