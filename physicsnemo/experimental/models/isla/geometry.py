@@ -1034,9 +1034,9 @@ def _closest_candidates(
     key = torch.where(n_nonzero == 1, corners.gather(1, w.argmax(-1, keepdim=True))[:, 0], -1)
     count = torch.bincount(cells.reshape(-1), minlength=n_vertices)[key.clamp_min(0)]
     if dim == 3:
-        pairs = torch.stack([cells[:, [0, 0, 1]], cells[:, [1, 2, 2]]], -1).sort(-1).values
+        a, b = cells[:, [0, 0, 1]], cells[:, [1, 2, 2]]
         edge_keys, edge_valence = torch.unique(
-            n_vertices + pairs[..., 0] * n_vertices + pairs[..., 1], return_counts=True
+            n_vertices + torch.minimum(a, b) * n_vertices + torch.maximum(a, b), return_counts=True
         )
         ends = corners.masked_fill(~nonzero, n_vertices)
         ends = ends.sort(-1).values  # the edge's two vertices, ascending
