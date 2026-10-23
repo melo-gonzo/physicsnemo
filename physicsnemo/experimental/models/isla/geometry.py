@@ -989,7 +989,8 @@ def _closest_candidates(
         order = order[torch.argsort(rows[order, k], stable=True)]
     rows = rows[order]
     rep = order[torch.cat([rows.new_ones(1, dtype=torch.bool), (rows[1:] != rows[:-1]).any(-1)])]
-    oriented = _oriented_areas(simplex[rep], parity[rep].to(q64))
+    s_rep, p_rep = simplex[rep], parity[rep].to(q64)
+    oriented = _oriented_areas(s_rep, p_rep)
     if dim == 3:
         seed = signed_distance_field(Mesh(points=points, cells=cells), query_points)[2]
         w0 = _closest_weights(q64, simplex[seed])
@@ -998,14 +999,15 @@ def _closest_candidates(
         ### and by the rounding of its box test)
         ### Without repeated cells the two trees are one, and one traversal serves the
         ### ball search and the winding number.
-        tree, winding = _cell_tree(simplex[order]), None
-        if rep.shape[0] == cells.shape[0]:
-            par = parity[rep].to(q64)
-            winding = _winding_moments(simplex[rep], par, oriented[0], tree)
-        li, pk, w_sum = _ball_candidates(q64, (bound + 3 * err_max) * (1 + 1e-12), simplex[order], tree, winding)
+        once = rep.shape[0] == cells.shape[0]
+        s_ord = s_rep if once else simplex[order]
+        tree, winding = _cell_tree(s_ord), None
+        if once:
+            winding = _winding_moments(s_rep, p_rep, oriented[0], tree)
+        li, pk, w_sum = _ball_candidates(q64, (bound + 3 * err_max) * (1 + 1e-12), s_ord, tree, winding)
         pk = order[pk]
         if winding is None:
-            tree = _cell_tree(simplex[rep])
+            tree = _cell_tree(s_rep)
     else:
         w_sum = None
         rounding = 32 * torch.finfo(query_points.dtype).eps / 2 * (q_norm + reach.max())
@@ -1083,7 +1085,7 @@ def _closest_candidates(
     g, c, wall = tq[sel], tc[sel], wall[sel]
     m = _grouped_min_norm(torch.cat([g, g[wall] + nq]), torch.cat([c, -c[wall]]), 2 * nq)
     tie_u = torch.where(on_wall[:, None], 0.5 * (m[:nq] - m[nq:]), m[:nq])
-    sign = _winding_sign(q64, simplex[rep], parity[rep].to(q64), tree, w_sum, oriented)
+    sign = _winding_sign(q64, s_rep, p_rep, tree, w_sum, oriented)
     return idx, tied, tie_u.to(query_points.dtype), sign.to(query_points.dtype), on_wall, w[first]
 
 
