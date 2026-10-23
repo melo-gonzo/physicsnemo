@@ -32,7 +32,8 @@ from physicsnemo.core.function_spec import FunctionSpec
 from physicsnemo.experimental.models.isla.tree_read import canonical_frame
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.geometry._cell_normals import compute_cell_normals
-from physicsnemo.mesh.spatial import BVH, signed_distance_field
+from physicsnemo.mesh.spatial import signed_distance_field
+from physicsnemo.mesh.spatial._lbvh import build_lbvh_topology
 from physicsnemo.mesh.spatial.bvh import _compute_morton_codes
 from physicsnemo.nn.functional.geometry.sdf import _closest_point_weights
 
@@ -381,37 +382,61 @@ def _ball_candidates_kernel(
 _BALL_SLOTS = 16
 
 
+@wp.kernel
+def _node_boxes_kernel(
+    inner: wp.array(dtype=wp.int64),
+    left: wp.array(dtype=wp.int64),
+    right: wp.array(dtype=wp.int64),
+    lo: wp.array(dtype=wp.vec3d),
+    hi: wp.array(dtype=wp.vec3d),
+):
+    """The box of each node ``inner[tid]`` from its two children's."""
+    i = inner[wp.tid()]
+    lo[i] = wp.min(lo[left[i]], lo[right[i]])
+    hi[i] = wp.max(hi[left[i]], hi[right[i]])
+
+
+def _bottom_up(kernel, levels, arrays, ref: torch.Tensor):
+    """``kernel`` over the inner nodes of each level of a BVH, deepest first, one
+    launch per level (``arrays`` follow the node ids)."""
+    device, stream = FunctionSpec.warp_launch_context(ref)
+    with FunctionSpec.warp_stream_scope(stream):
+        wp.init()
+        for inner in reversed(levels):
+            wp.launch(kernel, dim=inner.shape[0], inputs=[wp.from_torch(inner, dtype=wp.int64), *arrays], device=device, stream=stream)
+
+
 def _cell_tree(simplex: torch.Tensor):
-    """A BVH over the cells ``simplex`` ``(F, 3, 3)`` (:class:`physicsnemo.mesh.spatial.BVH`,
-    one cell per leaf), with what a stackless traversal needs: the BVH, each node's
-    escape pointer (the node after its subtree, -1 at the end), the inner nodes of
-    each breadth-first level, root first, each node's cell (-1 inside), and each
-    node's box ``(N, 3)`` twice (least and greatest corner). The cells are put in
-    Morton order in the boundary's canonical frame (:func:`canonical_frame`), so the
-    tree, and the far field of :func:`_tree_winding_numbers` on it, is the same in
-    every pose of the case; the boxes are in the queries' frame."""
+    """A BVH over the cells ``simplex`` ``(F, 3, 3)``, one cell per leaf (the
+    midpoint-split LBVH of :class:`physicsnemo.mesh.spatial.BVH`), with what a
+    stackless traversal needs: each node's two children, its escape pointer (the
+    node after its subtree, -1 at the end), the inner nodes of each level, root
+    first, each node's cell (-1 inside), and each node's box ``(N, 3)`` twice (least
+    and greatest corner). The cells are put in Morton order in the boundary's
+    canonical frame (:func:`canonical_frame`), so the tree, and the far field of
+    :func:`_tree_winding_numbers` on it, is the same in every pose of the case; the
+    boxes are in the queries' frame. The topology depends on ``F`` alone, so it is
+    built without reading the device."""
     f, dev = simplex.shape[0], simplex.device
     e = simplex[:, 1:] - simplex[:, :1]
     frame = canonical_frame(simplex.mean(1), torch.linalg.cross(e[:, 0], e[:, 1], dim=-1).norm(dim=-1))
     cells = torch.arange(3 * f, device=dev).reshape(f, 3)
-    bvh = BVH.from_mesh(Mesh(points=simplex.reshape(-1, 3) @ frame, cells=cells))
-    left, right = bvh.node_left_child, bvh.node_right_child
+    order = _compute_morton_codes(Mesh(points=simplex.reshape(-1, 3) @ frame, cells=cells).cell_centroids).argsort(stable=True)
+    topo = build_lbvh_topology(f, 1, dev)
+    left, right = topo.left_child[: topo.node_count], topo.right_child[: topo.node_count]
+    levels = topo.internal_nodes_per_level
     escape = torch.full_like(left, -1)
-    frontier, levels = left.new_zeros(1), []
-    while frontier.numel():
-        inner = frontier[left[frontier] >= 0]
-        levels.append(inner)
+    for inner in levels:
         escape[left[inner]] = right[inner]
         escape[right[inner]] = escape[inner]
-        frontier = torch.cat([left[inner], right[inner]])
-    leaf_cell = torch.where(bvh.leaf_count > 0, bvh.sorted_cell_order[bvh.leaf_start.clamp_min(0)], -1)
+    leaf_start, leaf_count = topo.leaf_start[: topo.node_count], topo.leaf_count[: topo.node_count]
+    leaf_cell = torch.where(leaf_count > 0, order[leaf_start.clamp_min(0)], -1)
     leaf = leaf_cell >= 0
     lo, hi = simplex.new_full((left.shape[0], 3), torch.inf), simplex.new_full((left.shape[0], 3), -torch.inf)
     lo[leaf], hi[leaf] = simplex[leaf_cell[leaf]].amin(1), simplex[leaf_cell[leaf]].amax(1)
-    for inner in reversed(levels):
-        lo[inner] = torch.minimum(lo[left[inner]], lo[right[inner]])
-        hi[inner] = torch.maximum(hi[left[inner]], hi[right[inner]])
-    return bvh, escape, levels, leaf_cell, lo, hi
+    children = [wp.from_torch(c.contiguous(), dtype=wp.int64) for c in (left, right)]
+    _bottom_up(_node_boxes_kernel, levels, [*children, wp.from_torch(lo, dtype=wp.vec3d), wp.from_torch(hi, dtype=wp.vec3d)], simplex)
+    return left, right, escape, levels, leaf_cell, lo, hi
 
 
 def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.Tensor, tree):
@@ -424,8 +449,7 @@ def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.T
     with as many slots as they need, so no candidate is dropped. The queries are
     traversed in Morton order, so neighbouring threads visit neighbouring nodes."""
     dev = query.device
-    bvh, escape, _, leaf_cell, box_lo, box_hi = tree
-    left = bvh.node_left_child
+    left, _, escape, _, leaf_cell, box_lo, box_hi = tree
     lo, hi = box_lo.float(), box_hi.float()
     lo = torch.where(lo.double() > box_lo, lo.nextafter(lo.new_tensor(-torch.inf)), lo)
     hi = torch.where(hi.double() < box_hi, hi.nextafter(hi.new_tensor(torch.inf)), hi)
@@ -525,6 +549,35 @@ def _solid_angle(x: wp.vec3d, a: wp.vec3d, b: wp.vec3d, c: wp.vec3d) -> wp.float
 
 
 @wp.kernel
+def _node_moments_kernel(
+    inner: wp.array(dtype=wp.int64),
+    left: wp.array(dtype=wp.int64),
+    right: wp.array(dtype=wp.int64),
+    weight: wp.array(dtype=wp.float64),
+    centre: wp.array(dtype=wp.vec3d),
+    dipole: wp.array(dtype=wp.vec3d),
+    spread: wp.array(dtype=wp.mat33d),
+    radius: wp.array(dtype=wp.float64),
+):
+    """The far-field moments of each node ``inner[tid]`` from its two children's
+    (:func:`_tree_winding_numbers`)."""
+    i = inner[wp.tid()]
+    a = left[i]
+    b = right[i]
+    s = weight[a] + weight[b]
+    p = wp.float64(0.5) * (centre[a] + centre[b])
+    if s > wp.float64(0.0):
+        p = (weight[a] * centre[a] + weight[b] * centre[b]) / s
+    weight[i] = s
+    centre[i] = p
+    dipole[i] = dipole[a] + dipole[b]
+    ea = centre[a] - p
+    eb = centre[b] - p
+    spread[i] = spread[a] + wp.outer(dipole[a], ea) + spread[b] + wp.outer(dipole[b], eb)
+    radius[i] = wp.max(wp.length(ea) + radius[a], wp.length(eb) + radius[b])
+
+
+@wp.kernel
 def _winding_kernel(
     left: wp.array(dtype=wp.int32),
     escape: wp.array(dtype=wp.int32),
@@ -579,8 +632,7 @@ def _tree_winding_numbers(query: torch.Tensor, simplex: torch.Tensor, parity: to
     radii takes the expansion of the solid angle about ``p`` to first order, ``m .
     r / |r|^3 + tr(N) / |r|^3 - 3 r . N r / |r|^5`` with ``r = p - x``, and the near
     leaves the exact solid angle."""
-    bvh, escape, levels, leaf_cell, _, _ = tree
-    left, right = bvh.node_left_child, bvh.node_right_child
+    left, right, escape, levels, leaf_cell, _, _ = tree
     n, leaf = left.shape[0], leaf_cell >= 0
     cell = leaf_cell[leaf]
     centroid = simplex.mean(1)
@@ -588,22 +640,19 @@ def _tree_winding_numbers(query: torch.Tensor, simplex: torch.Tensor, parity: to
     spread, radius = simplex.new_zeros(n, 3, 3), simplex.new_zeros(n)
     weight[leaf], centre[leaf], dipole[leaf] = area[cell].norm(dim=-1), centroid[cell], area[cell]
     radius[leaf] = (simplex[cell] - centroid[cell, None]).norm(dim=-1).amax(-1)
-    for inner in reversed(levels):
-        lt, rt = left[inner], right[inner]
-        s = weight[lt] + weight[rt]
-        p = torch.where(
-            (s > 0)[:, None],
-            (weight[lt, None] * centre[lt] + weight[rt, None] * centre[rt]) / s.clamp_min(torch.finfo(s.dtype).tiny)[:, None],
-            0.5 * (centre[lt] + centre[rt]),
-        )
-        weight[inner], centre[inner], dipole[inner] = s, p, dipole[lt] + dipole[rt]
-        spread[inner] = (
-            spread[lt] + dipole[lt, :, None] * (centre[lt] - p)[:, None]
-            + spread[rt] + dipole[rt, :, None] * (centre[rt] - p)[:, None]
-        )
-        radius[inner] = torch.maximum(
-            (centre[lt] - p).norm(dim=-1) + radius[lt], (centre[rt] - p).norm(dim=-1) + radius[rt]
-        )
+    _bottom_up(
+        _node_moments_kernel,
+        levels,
+        [
+            *(wp.from_torch(c.contiguous(), dtype=wp.int64) for c in (left, right)),
+            wp.from_torch(weight, dtype=wp.float64),
+            wp.from_torch(centre, dtype=wp.vec3d),
+            wp.from_torch(dipole, dtype=wp.vec3d),
+            wp.from_torch(spread, dtype=wp.mat33d),
+            wp.from_torch(radius, dtype=wp.float64),
+        ],
+        simplex,
+    )
     out = torch.empty(query.shape[0], dtype=torch.float64, device=query.device)
     device, stream = FunctionSpec.warp_launch_context(query)
     with FunctionSpec.warp_stream_scope(stream):
