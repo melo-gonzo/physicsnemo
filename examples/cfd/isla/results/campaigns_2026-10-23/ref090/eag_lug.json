@@ -1,0 +1,115 @@
+{
+ "protocol": "REF-090 PREREG \u00a714 / \u00a715 training-path reads (2026-10-22): eager-trained r090eag_* against fix-trained r090fix_* and\nbug-trained r090_* (COMPILE-AF eager re-scores), all scored fully eager, native, float32, epoch 500. The \u00a713 rule:\nd = log(mean X / mean Y), SE = sqrt(sX^2/nX + sY^2/nY) with each set's sample sigma of log over its seeds; match if |d| <= 2 SE,\ndiffer if > 2 SE; (a) eager matches fix and differs from bug; (b) eager matches bug and differs from fix; (c) otherwise.\n\u00a714 (AirfRANS, per model): (a)/(b) when at least two of the three fields read it and no field reads the other; else (c).\n\u00a715 (lug ISLA, von Mises): the field's reading. usage: python eag_reads.py {lug|af_isla|af_dtt} -> eag_<which>.md / .json",
+ "sets": {
+  "eager": {
+   "42": {
+    "von_mises_l2": 0.0013761952519416808
+   },
+   "43": {
+    "von_mises_l2": 0.0017713018258412678
+   }
+  },
+  "fix": {
+   "42": {
+    "von_mises_l2": 0.0014624581734339395
+   },
+   "43": {
+    "von_mises_l2": 0.0014448897043863932
+   }
+  },
+  "bug": {
+   "42": {
+    "von_mises_l2": 0.0017803792158762614
+   },
+   "43": {
+    "von_mises_l2": 0.002006216645240784
+   }
+  }
+ },
+ "posed": {
+  "eager": {
+   "42": {
+    "von_mises_l2": 0.0017153143882751465
+   },
+   "43": {
+    "von_mises_l2": 0.002867894172668457
+   }
+  },
+  "fix": {
+   "42": {
+    "von_mises_l2": 0.001968671480814616
+   },
+   "43": {
+    "von_mises_l2": 0.0019981805483500164
+   }
+  },
+  "bug": {
+   "42": {
+    "von_mises_l2": 0.0021253623565038043
+   },
+   "43": {
+    "von_mises_l2": 0.0022175824642181397
+   }
+  }
+ },
+ "out": {
+  "fields": {
+   "von_mises_l2": {
+    "eager_vs_fix": {
+     "ratio": 1.082600779148128,
+     "d": 0.07936627508132023,
+     "se": 0.12634066888925913,
+     "d_over_2se": 0.3140963071474904,
+     "match": true,
+     "ranges": "overlap"
+    },
+    "eager_vs_bug": {
+     "ratio": 0.8312207569081421,
+     "d": -0.1848598672902698,
+     "se": 0.13961013307569967,
+     "d_over_2se": 0.6620574854335062,
+     "match": true,
+     "ranges": "below"
+    },
+    "fix_vs_bug": {
+     "ratio": 0.7677998879348761,
+     "d": -0.26422614237158987,
+     "se": 0.06001713793046094,
+     "d_over_2se": 2.201255770291282,
+     "match": false,
+     "ranges": "below"
+    },
+    "reading": "c",
+    "values": {
+     "eager": {
+      "42": 0.0013761952519416808,
+      "43": 0.0017713018258412678
+     },
+     "fix": {
+      "42": 0.0014624581734339395,
+      "43": 0.0014448897043863932
+     },
+     "bug": {
+      "42": 0.0017803792158762614,
+      "43": 0.002006216645240784
+     }
+    },
+    "posed_over_native": {
+     "eager": {
+      "42": 1.246417894448481,
+      "43": 1.6190883624852417
+     },
+     "fix": {
+      "42": 1.346138656527904,
+      "43": 1.382929466715656
+     },
+     "bug": {
+      "42": 1.193769472004171,
+      "43": 1.1053554308198794
+     }
+    }
+   }
+  },
+  "overall": "c"
+ }
+}

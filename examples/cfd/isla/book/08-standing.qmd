@@ -54,7 +54,9 @@ print(": The standing of the three reference configurations on every dataset wit
       "relative L2 error (@sec-metrics) on the native mesh, each baseline's error divided by ISLA's, and ISLA's own error when every test case "
       f"is rotated and translated, over its native error. {seed_txt}, float32, the validation or test split of "
       "each dataset (@sec-splits). The words apply the book's seed rule: a lead needs every seed of one architecture below every "
-      "seed of the other and the seed means at least 3% apart. ‡: in flight, as the notes below the table say. How to read this: a "
+      "seed of the other and the seed means at least 3% apart. "
+      + ("‡: in flight, as the notes below the table say. " if any(S.Standing(k).in_flight for k in KEYS) else "")
+      + "How to read this: a "
       "ratio above one favors ISLA; rows are different problems and are not comparable with one another; every baseline reads the "
       "freestream as a unit direction (@tbl-model-inputs). AeroZoo has its own table (@sec-standing-families). Data: "
       "results/char/*_090.json (the artifact of each row is named in its chapter).")
@@ -93,8 +95,7 @@ under the scoring over its own native error.
 #|   a uniform point cloud, on the three surface tasks where that changes the
 #|   scored set. ISLA blue squares, ISLA-DTT light open squares (AirfRANS),
 #|   GeoTransolver red circles, Transolver amber triangles; the vertical line
-#|   is no change. The AirfRANS and lug marks are of the in-flight rows of
-#|   @tbl-thesis. How to read this: these are changes of each model's own
+#|   is no change. How to read this: these are changes of each model's own
 #|   error, not comparisons between models; a baseline mark at 20 means its
 #|   error is twenty times its native error. ISLA's one mark away from one is
 #|   the lug's; nodes of the lug that lie equally close to two surface
@@ -114,6 +115,14 @@ label_line(axes[0], 1.12, 7.3, "ISLA", BLUE, fontsize=8.5)
 label_line(axes[0], 60, 7.3, "GeoTransolver", RED, fontsize=8.5, ha="center")
 label_line(axes[0], 60, 6.55, "Transolver", AMBER, fontsize=8.5, ha="center")
 plt.show()
+```
+
+```{python}
+#| label: callout-shifts-dtt-in-flight
+#| output: asis
+_d = S.Standing("airfrans").arm_in_flight("ISLA-DTT")
+print(S.in_flight_callout({"what": f"the AirfRANS ISLA-DTT mark of @fig-standing-shifts: {_d['what']}",
+                           "replacement": _d["replacement"]} if _d else None))
 ```
 
 ```{python}
@@ -265,7 +274,8 @@ has several times GeoTransolver's parameters.
 #| output: asis
 import json, re
 COST_RAW = json.load(open(S.CHAR / S.COST_FILE))
-COST_NOTE = re.sub(r" \([a-z0-9_*]+\)", "", COST_RAW["note"])
+# the eager-trained lanes are the AirfRANS, Tensile2d and lug ISLA standings, not a control alone
+COST_NOTE = re.sub(r" \([a-z0-9_*]+\)", "", COST_RAW["note"]).replace("they trained eager only for the training-path control, at", "they train at")
 CKEYS = [k for k in S.available() + ["aerozoo"] if S.cost(k, "ISLA")]
 and_ = lambda xs: ", ".join(xs[:-1]) + " and " + xs[-1] if len(xs) > 1 else "".join(xs)
 BEFORE = [S.DATASETS[k].short for k in CKEYS if "before the compile fix" in S.cost(k, "ISLA")["note"]]
@@ -298,7 +308,7 @@ print(": The resources of the reference configurations on each task, from the tr
       "leaving out the compile steps, seed means; AeroZoo's lanes are those of its `full` split, and its Transolver is AeroZoo's "
       f"own configuration, {ARM['Transolver']}. {COST_NOTE} "
       f"On {and_(FIXED)} the ISLA rows are the lanes trained on the compiled path with the mix-order setting, not the "
-      "eagerly trained lanes of the training-path control. "
+      "eagerly trained lanes behind the standing. "
       f"ISLA's lanes on {and_(BEFORE)} trained before the mix-order setting; where both were "
       f"timed, on {and_(TIMED)}, the setting moves the median step by at most {100 * FIXMOVE:.1f}%. "
       + (f"¹ {and_([f'{S.DATASETS[k].short} {a}' for k, a, _ in marked['¹']])}: "

@@ -239,7 +239,7 @@ print("**On the AirfRANS interior task, at the reference configurations, ISLA ex
       f"velocity the cells read *{AOA['R2']['gt']['velocity_l2']['verdict']}* against GeoTransolver and "
       f"*{AOA['R2']['t']['velocity_l2']['verdict']}* against Transolver. ISLA-DTT against ISLA reads "
       + (f"*{r3[0]}* on all {len(r3)} penalty cells of the two splits" if len(set(r3)) == 1 else "mixed on the penalty cells")
-      + " (@sec-interior-extrapolation). Why ISLA's Reynolds extrapolation is worse is open (@sec-oq-reynolds). In three-dimensional "
+      + " (@sec-interior-extrapolation). Training controls on the split trace most of the pressure penalty to the scale of ISLA's Reynolds input (@sec-oq-reynolds). In three-dimensional "
       "flow a Reynolds range is held out only by AeroZoo's `reynolds` split (@sec-limits-transfer), and on the surface tasks by none. No checkpoint of a reference "
       "configuration is scored on the HiLiftAeroML regime test splits (angle of attack; attached to separated flow). Data: "
       + R.source("af_extrap", "afx_results.json") + ".")
@@ -444,10 +444,8 @@ fmt_h = lambda h: f"{h:,.0f}" if h < 1000 else f"{h / 1000:.1f} thousand"
 AZ_SPLITS = AZS["splits"]
 # ISLA-DTT on every AeroZoo split, each split priced at the `full` lane (an upper bound: every held-out split trains on fewer cases)
 q_dtt = SEEDS * len(AZ_SPLITS) * lane_gpuh("aerozoo", "ISLA-DTT")
-# the separating arm on AirfRANS, priced at the ISLA lane
-q_scales = SEEDS * lane_gpuh("airfrans")
-# the two Reynolds training controls, priced at the full AirfRANS training set (an upper bound: the split trains on fewer cases)
-q_rey = 2 * SEEDS * lane_gpuh("airfrans")
+# ISLA with the fixed Reynolds scale on AeroZoo's `reynolds` split, priced at the `full` lane (an upper bound: the split trains on fewer cases)
+q_rey = SEEDS * lane_gpuh("aerozoo")
 # the reverse SHIFT-SUV direction: ISLA and Transolver trained on fastbacks, priced at the estate lanes
 q_transfer = SEEDS * (lane_gpuh("shift_suv") + lane_gpuh("shift_suv", "Transolver"))
 # the tie rule's experiment as MEDIAL-TIE's design prices it (eager-trained lug and Tensile2d, two seeds each)
@@ -471,8 +469,8 @@ AZ_DTT = AZS["arms"][next(n for n in AZS["arms"] if n.startswith("ISLA-DTT"))]
 #| output: asis
 rows = [
     ("Should ISLA-DTT be ISLA's only interior form? (@sec-oq-dtt)", "ISLA-DTT ÷ ISLA on velocity and pressure on `full` and each AeroZoo held-out split under the benchmark protocol, at equal size, read by the rule registered for it", f"at most {fmt_h(q_dtt)}"),
-    ("Do ISLA's own scales or the standardization of its global input carry its AirfRANS gain? (@sec-oq-scales)", "the arm without the scales, reading a standardized inlet speed, on AirfRANS", fmt_h(q_scales)),
-    ("Why does ISLA extrapolate worse below the training Reynolds band? (@sec-oq-reynolds)", "ISLA trained with a dataset-independent log-Reynolds scale, and ISLA trained with a linear Reynolds number standardized on the training side, on the AirfRANS Reynolds split; AeroZoo's `reynolds` split as the second dataset", f"at most {fmt_h(q_rey)}; AeroZoo in the first row"),
+    ("Do ISLA's declared scales add accuracy where the Reynolds number varies widely? (@sec-oq-scales)", "ISLA with and without its scales, the latter reading a standardized global input, on a dataset whose Reynolds number varies widely, such as AeroZoo", "not priced"),
+    ("Does a fixed scale of ISLA's Reynolds input hold beyond AirfRANS? (@sec-oq-reynolds)", "ISLA trained with the fixed log-Reynolds scale on AeroZoo's `reynolds` split, read against ISLA with the fitted scale", f"at most {fmt_h(q_rey)}"),
     ("Are ISLA's crossflow and non-box failures on AeroZoo limits of the architecture? (@sec-oq-aerozoo)", "ISLA-DTT on the same splits; for the non-box family, a training set whose velocity scales cover the ducts'", "in the first row"),
     ("Why does ISLA not hold the outlet at its prescribed pressure on the crossflow layout? (@sec-oq-outlet)", "the predicted gauge pressure on the outlet faces against the prescribed zero, on every split and for both forms", "scoring only"),
     ("Do the closest-feature ties carry the lug's posed growth? (@sec-oq-ties)", "a tie rule that does not depend on the search, retrained on the lug and Tensile2d and scored posed against the same base, by the reading rule of its design", f"{q_ties} (the design's figure)"),
@@ -507,6 +505,7 @@ print(": The open questions, the measurement that would settle each, and its cos
 #| label: para-oq-dtt
 #| output: asis
 AFS = ST["airfrans"]
+AF_DTT = AFS.arm_in_flight("ISLA-DTT")
 dtt = {f: AFS.ratio("ISLA-DTT", f) for f in AFS.ds.headline}
 dtt_v = {f: AFS.verdict("ISLA-DTT", f) for f in AFS.ds.headline}
 c_i, c_d = S.cost("aerozoo", "ISLA"), S.cost("aerozoo", "ISLA-DTT")
@@ -517,7 +516,8 @@ print("**The open question is whether the read-only form, whose prediction at a 
       "every boundary cell through a Barnes–Hut forest at every depth, at a longer training step (@sec-arch-tree-read): on AeroZoo `full` "
       f"its median step is {c_d['step_seconds'] / c_i['step_seconds']:.1f} times the interacting form's and its peak memory "
       f"{c_d['peak_gib'] / c_i['peak_gib']:.2f} times (@tbl-ref-cost). On the AirfRANS interior task at the reference configuration, "
-      "ISLA-DTT ÷ ISLA reads " + f3(dtt.values(), 3) + " (" + " / ".join(FW[f] for f in dtt) + "): ISLA "
+      "ISLA-DTT ÷ ISLA reads " + f3(dtt.values(), 3) + " (" + " / ".join(FW[f] for f in dtt)
+      + (f"; across training paths: {AF_DTT['what']}" if AF_DTT else "") + "): ISLA "
       + ", ".join(f"{v} ISLA-DTT on {FW[f]}" for f, v in dtt_v.items())
       + f" (@sec-airfrans-dtt-reference); outside its training bands the two forms' penalties read *no difference* on {r3n} of the "
       f"{len(r3)} cells (@sec-limits-regime). One planar dataset does not settle the question. The decisive data are AeroZoo's "
@@ -529,10 +529,10 @@ print("**The open question is whether the read-only form, whose prediction at a 
       f"Cost: {len(AZ_SPLITS)} splits × two seeds of ISLA-DTT, at most {fmt_h(q_dtt)} GPU-hours.")
 print()
 print(S.in_flight_callout(AZ_DTT["in_flight"]))
-print(S.in_flight_callout("airfrans"))
+print(S.in_flight_callout(AF_DTT))
 ```
 
-### ISLA's own scales against the standardized global input {#sec-oq-scales}
+### Do ISLA's declared scales add accuracy where the Reynolds number varies widely? {#sec-oq-scales}
 
 ```{python}
 #| label: para-oq-scales
@@ -540,19 +540,20 @@ print(S.in_flight_callout("airfrans"))
 AT = [R.md_table("attrib090", "relaunch_native.md", "af / isla (native)", i) for i in range(3)]
 arm = lambda t, a: next(r_ for r_ in t if r_["arm"] == a)
 step = [R.num(arm(t, "CONT")["÷ B"]) for t in AT]
-phi = [R.num(arm(t, "NOSC")["φ"]) for t in AT]
-print("**The open question is which of two changes carries ISLA's gain on AirfRANS: its own physical scales, or the standardization of "
-      "its global input.** Against an earlier form of its code, trained and scored alike, ISLA's error on the AirfRANS interior task is "
-      f"lower by a factor of {f3(step)} (pressure / velocity / eddy viscosity). An arm that removes ISLA's scales, the inlet speed "
-      "$U$, the length unit $L$, the Reynolds number built from them and eddy viscosity in units of $U L$, gives back a share "
-      f"{f3(phi)} of that step. That arm also reads the raw inlet speed where ISLA reads a standardized log Reynolds number, so the "
-      "scales together with the standardized global input carry the gain, and the measurement does not say which one does "
-      "(@sec-airfrans-attribution); it also changes the precision of the output head. What would settle it: the arm without the scales reading a standardized inlet speed, two seeds, "
-      "trained and scored like the others. Every arm of the ablation, the base included, trained on the compiled path after its fault "
-      f"was fixed. Cost: {fmt_h(q_scales)} GPU-hours. Data: {R.source('attrib090', 'relaunch_native.md')}.")
-print()
-print(S.in_flight_callout({"what": "an ablation whose arm without ISLA's scales also reads the raw, unstandardized inlet speed",
-                           "replacement": "The arm without the scales that reads a standardized inlet speed"}))
+std = [R.num(arm(t, "NOSCSTD")["÷ B"]) for t in AT]
+phi = [R.num(arm(t, "NOSCSTD")["φ"]) for t in AT]
+assert all(arm(t, "NOSCSTD")["moves (R1)"] == "no" for t in AT)
+print("**On AirfRANS, standardizing ISLA's global input carries its gain over an earlier form of its code, and its declared scales add "
+      "nothing measurable; whether they add accuracy where the Reynolds number varies widely is untested.** Against that earlier form, "
+      f"trained and scored alike, ISLA's error on the AirfRANS interior task is lower by a factor of {f3(step)} (pressure / velocity / "
+      "eddy viscosity). An arm without the scales that reads the inlet speed standardized, as the baselines read it, has "
+      f"{f3(std, 3)} times ISLA's error, a share {f3(phi)} of that step and no measurable effect on any field (each ratio exp(Δ), of "
+      "geometric seed means), so by the rule registered for it standardizing the global input carries the step "
+      "(@sec-airfrans-attribution). On AirfRANS the viscosity is constant and $L$ nearly so, so the log Reynolds number the scales form "
+      "is close to a monotone reparametrization of the inlet speed, and the scales can add little there beyond a standardized input. "
+      "What would settle it: ISLA with and without its scales, the latter reading a standardized global input, on a dataset whose "
+      "Reynolds number varies widely, such as AeroZoo, two seeds each. Every arm of the ablation, the base included, trained on the "
+      f"compiled path after its fault was fixed. Data: {R.source('attrib090', 'relaunch_native.md')}.")
 ```
 
 ### Reynolds extrapolation below the training band {#sec-oq-reynolds}
@@ -561,29 +562,33 @@ print(S.in_flight_callout({"what": "an ablation whose arm without ISLA's scales 
 #| label: para-oq-reynolds
 #| output: asis
 below = CLAMP["isla"]["sides"]["below"]
-nut_cost = [CLAMP[b]["sides"][s]["ratio"]["nut_l2"] for b in ("gt", "t") for s in ("below", "above")]
-t_p = CLAMP["t"]["sides"]["below"]["ratio"]["pressure_l2"]
 zr = {f: az_cell("ISLA", f, "reynolds")["mean"] / az_cell("ISLA", f)["mean"] for f in ("velocity_l2", "pressure_l2")}
-print("**The open question is why ISLA's pressure error grows more than the baselines' outside the training Reynolds band, and whether "
-      "the growth is a property of AirfRANS or of ISLA.** The registered verdict on the AirfRANS Reynolds split is "
-      f"*{REY['summary']}*, carried by pressure (@sec-limits-regime), and most of the growth comes from the lowest Reynolds numbers. In a "
-      "post hoc, inference-only diagnostic, holding ISLA's Reynolds input at the edge of its training range brings its below-band "
-      f"pressure error to {below['ratio']['pressure_l2']:.2f} of its value over the {below['n']} below-band cases whose input the "
-      "clamp changes, down to the baselines' clamped level (@sec-interior-extrapolation). The hypothesis it suggests: ISLA's learned "
-      "dependence on its log-Reynolds input extrapolates poorly. The clamp is a diagnostic, not a fix: it raises the baselines' "
-      f"eddy-viscosity error {min(nut_cost):.1f} to {max(nut_cost):.1f} times, it also lowers Transolver's below-band pressure error "
-      f"(to {t_p:.2f}), and it is not a training-time change. What would settle it: two training controls on the same split, ISLA with "
-      "a dataset-independent log-Reynolds scale, which tests whether a different scale changes what training learns, and ISLA with a "
-      "linear Reynolds number standardized on the training side, the baselines' own coordinate on this split, which tests whether the "
-      "log coordinate's reach beyond the band is the cause; and AeroZoo's `reynolds` split as the second dataset, where ISLA's "
-      f"velocity and pressure errors are {zr['velocity_l2']:.2f} and {zr['pressure_l2']:.2f} times its `{AZ_IN}` errors and "
-      f"GeoTransolver ÷ ISLA on velocity reads {fmt_ratio(az_ratio('GeoTransolver', 'velocity_l2', 'reynolds'))}, with ISLA-DTT in "
-      f"the first open question. Cost: at most {fmt_h(q_rey)} GPU-hours. Data: {R.source('af_extrap', 'clamp.json')}; "
-      "results/char/aerozoo_090.json.")
+LR = R.load("af_extrap", "lre.json")
+FIT = R.load("af_extrap", "stats/afx_fits.json")["fits"]["airfrans.reynolds_train"]["reynolds"]
+seeds2 = lambda a: " / ".join(f"{LR[a]['a']['r'][sd]:.2f}" for sd in ("42", "43"))
+print("**On AirfRANS, the fitted, narrow scale of ISLA's Reynolds input sets most of its pressure penalty below the training band; the "
+      "open question is whether a fixed scale that removes it holds on a second dataset, and so becomes ISLA's Reynolds input.** The "
+      f"registered verdict on the AirfRANS Reynolds split is *{REY['summary']}*, carried by pressure (@sec-limits-regime), and most of the "
+      "growth comes from the lowest Reynolds numbers. A post hoc, inference-only clamp of ISLA's Reynolds input to its training range "
+      f"brings its below-band pressure error to {below['ratio']['pressure_l2']:.2f} of its value over the {below['n']} below-band cases "
+      "whose input the clamp changes (@sec-interior-extrapolation). ISLA standardizes its log Reynolds number by a spread fitted on the "
+      f"split's training airfoils, {FIT['std']:.3f} decades. Two training controls registered before they ran replace that input. With "
+      "a fixed scale, $\\log_{10}(\\mathrm{Re} / 10^6)$ in ISLA's own length unit, ISLA's below-band pressure error is "
+      f"{seeds2('LRE')} of its value with the fitted scale (per seed), and with the Reynolds number itself, standardized on the training "
+      f"side, {seeds2('LIN')}; the registered joint reading is *{LR['joint'].split(':')[0]}*: the log coordinate's reach beyond the band "
+      "and the training dynamics of a narrow fitted spread each contribute (@sec-interior-extrapolation). This rests on AirfRANS alone, "
+      "two seeds per arm, ISLA trained on the fixed compiled path. Like the attribution of ISLA's in-distribution gain (@sec-oq-scales), "
+      "it is about how a global scalar input is scaled, not about the declared physical scales, which all three models share. The "
+      "fixed scale is set by the dataset file examples/cfd/external_aerodynamics/unified_external_aero_recipe/datasets/"
+      "airfrans_uvolume_2d_reynolds_lre.yaml, with no change of ISLA's code. What would settle it: ISLA trained with the fixed scale "
+      "on AeroZoo's `reynolds` split, whose Reynolds numbers span decades, read against ISLA with the fitted scale, two seeds; there "
+      f"ISLA's velocity and pressure errors are {zr['velocity_l2']:.2f} and {zr['pressure_l2']:.2f} times its `{AZ_IN}` errors and "
+      f"GeoTransolver ÷ ISLA on velocity reads {fmt_ratio(az_ratio('GeoTransolver', 'velocity_l2', 'reynolds'))}. Cost: at most "
+      f"{fmt_h(q_rey)} GPU-hours. Data: {R.source('af_extrap', 'lre.json')}, {R.source('af_extrap', 'stats/afx_fits.json')}, "
+      f"{R.source('af_extrap', 'clamp.json')}; results/char/aerozoo_090.json.")
 print()
-print(S.in_flight_callout({"what": "the registered Reynolds split and an inference-only clamp of ISLA's Reynolds input",
-                           "replacement": "A pair of training controls, ISLA with a dataset-independent log-Reynolds scale and ISLA with a "
-                                          "linear Reynolds number standardized on the training side,"}))
+print(S.in_flight_callout({"what": "the fixed scale of ISLA's Reynolds input measured on AirfRANS alone",
+                           "replacement": "The fixed scale on AeroZoo's `reynolds` split, which decides whether it becomes ISLA's Reynolds input,"}))
 ```
 
 ### ISLA's crossflow and non-box failures on AeroZoo {#sec-oq-aerozoo}
