@@ -48,9 +48,10 @@ the forward pass from the full-resolution surfaces (:func:`sample_boundary_cells
   the model's precision, so the draw is a function of the input mesh only: a
   float32 and a float64 run on the same inputs keep the same cells.
 
-Everything is tensor arithmetic without a host synchronization or a
-data-dependent shape, so the draw traces into one graph under
-``torch.compile(fullgraph=True, dynamic=True)``.
+Everything is tensor arithmetic without a data-dependent shape, so the draw
+traces into one graph under ``torch.compile(fullgraph=True, dynamic=True)``.
+It synchronizes with the host only in the canonical frame's 3 x 3 eigensolve
+(:func:`~physicsnemo.experimental.models.isla.tree_read.canonical_frame`).
 """
 
 import torch
