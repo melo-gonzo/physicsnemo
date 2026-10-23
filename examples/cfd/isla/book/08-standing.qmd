@@ -211,7 +211,7 @@ print(f"On SHIFT-SUV, the fastback pressure error is {' to '.join(pp[::len(pp) -
       "(geometric means over two seeds, the fastback test split). The registered summary over the four cells, pressure and "
       f"wall shear against each baseline, is \"{XF['R2']['fb_test']['summary']}\" (@sec-shift-suv). "
       "Against models trained on fastbacks, which do as well there as the estate-trained models do on estates, ISLA's "
-      f"estate-trained wall-shear error is {G('isla'):.2f} times the in-family fastback error, against Transolver's {G('t'):.2f}: "
+      f"estate-trained wall-shear error is {G('isla'):.2f} times the in-family fastback error, against Transolver's {G('t'):.2f} (geometric means over two seeds, the fastback test split): "
       "ISLA transfers better on wall shear, and the two lose alike on fastback pressure (@sec-shift-suv-xfam). "
       "Data: results/char/shift_suv_xfam_090.json.")
 print()

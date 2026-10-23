@@ -890,8 +890,8 @@ print("- **Not a statement about geometry.** The airfoils are one smooth paramet
 print("- **No cross-architecture discretization reading.** The boundary's discretization is measured for ISLA alone, because the baselines "
       "never read the airfoil (@sec-airfrans-discretization); discretization independence across architectures is measured on the surface "
       "datasets (@sec-invariances).")
-print("- **No choice of ISLA's interior form.** ISLA-DTT ÷ ISLA is " + " / ".join(f"{rho_b[f]:.3f}" for f in FK) + " at the reference "
-      "configuration with both forms trained alike (@sec-airfrans-dtt-reference), on one planar dataset in distribution with two seeds; which form ISLA's interior model "
+print("- **No choice of ISLA's interior form.** ISLA-DTT ÷ ISLA is " + " / ".join(f"{dtt_r[f]:.3f}" for f in FK) + " at the reference "
+      "configuration with both forms trained alike (ratios of arithmetic seed means; @sec-airfrans-dtt-reference), on one planar dataset in distribution with two seeds; which form ISLA's interior model "
       "takes is the open question of @sec-oq-dtt.")
 print("- **Reynolds extrapolation is measured on this dataset only.** ISLA's error grows more than the baselines' below the training band, "
       "as registered (@sec-interior-extrapolation); trained with its Reynolds input on a fixed scale, its below-band pressure error is "

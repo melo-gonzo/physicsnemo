@@ -39746,7 +39746,7 @@ fastbacks are in themselves, and only the reverse direction (train on fastbacks,
 
 *Read by the supervisor and second-read by the reviewer on 2026-10-22 (scratch/isla-review-2026-10-21/second-read-2026-10-22/suvx.md).*
 
-## 2026-10-23 — SUV-XFAM-B, stage 1: against models trained on fastbacks, ISLA 0.9.0's smaller wall-shear penalty is a transfer advantage over Transolver (estate-trained error 1.78 times the in-family fastback error, against 1.93; 1.085 at 5.8 SE), fastbacks are not harder in themselves (H 0.97-1.02), and the reverse direction shows no difference at two seeds {#sec-nb-suv-xfam-b1}
+## 2026-10-23 — SUV-XFAM-B, stage 1: against models trained on fastbacks, ISLA 0.9.0's smaller wall-shear penalty is mostly a transfer advantage over Transolver (estate-trained error 1.78 times the in-family fastback error, against 1.93; Transolver ÷ ISLA 1.085 at 5.8 SE), fastbacks are not harder in themselves (H 0.97-1.02), and the reverse direction shows no difference at two seeds {#sec-nb-suv-xfam-b1}
 
 **Question.** Part A (@sec-nb-suv-xfam) found that, trained on estates, ISLA loses less than the baselines on fastback
 wall shear (penalty 1.78 against 1.93 and 1.97) and the same on pressure (2.56 for all three). The penalty divides the
@@ -39783,7 +39783,7 @@ fastback-trained run existed (scratch/isla-suv-xfam-2026-10-22/PREREG_B.md, appr
 | E(est→est), estate test (part A) | 0.0437 / 0.0657 | 0.0416 / 0.0629 | |
 | forward gap G | 2.63 / **1.78** | 2.63 / 1.93 | 0.999 (no difference) / **1.085, 5.8 SE (ISLA transfers better)** |
 | reverse gap R | 3.14 / 1.98 | 3.43 / 2.04 | 1.091, 1.6 SE (no difference) / 1.034, 0.6 SE (no difference) |
-| hardness H | 0.97 / 1.00 | 0.97 / 1.02 | 1.002 (no difference) / 1.023, 3.8 SE (no difference: under 3 percent) |
+| hardness H | 0.97 / 1.00 | 0.97 / 1.02 | 1.001 (no difference) / 1.023, 3.8 SE (no difference: under 3 percent) |
 
 **Verdict, as registered.** On wall shear, ISLA **transfers better** than Transolver from estates to fastbacks. Its
 estate-trained model is closer to what a fastback-trained ISLA reaches than Transolver's is to a fastback-trained
@@ -40172,7 +40172,7 @@ both fix-trained 0.01265 (eager ÷ fix-trained 0.981, 1.37 × 2 SE) and bug-trai
   three fields); fix-trained, the pair read 1.035 / 1.126 / 1.381. P13's AirfRANS part (G ≤ 1.05) failed as
   registered (G 1.230 on the r090 rows); the fix-trained and eager-trained pairs exceed 1.05 too. The lug ISLA-DTT,
   fix-trained (r090fix_lug_dtt), is still training on seed 42; it will be read against ISLA 0.9.0 fix-trained, and
-  P13's lug part (in [0.8, 1.25]) with it. Seed 43 alone reads 1.270 (0.001834 ÷ 0.001445).
+  P13's lug part (in [0.8, 1.25]) with it. Seed 43 alone, against ISLA 0.9.0 fix-trained seed 43, reads 1.270 (0.001834 ÷ 0.001445).
 - R1 under one training function (beside the registered 0.891, which stands): on Tensile2d, ISLA 0.9.0
   eager-trained ÷ ISLA A2 eager-trained is 1.200 on displacement over four seeds and 0.998 on seeds
   42/43. On the lug and AirfRANS, no eager-trained A2 exists. ISLA 0.9.0 eager-trained ÷ ISLA A2
