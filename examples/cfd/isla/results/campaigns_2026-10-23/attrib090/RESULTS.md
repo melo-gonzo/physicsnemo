@@ -242,3 +242,21 @@ principled way to make this automatic (a declared velocity source yields an O(1)
 matter where the physics varies more than one scalar (several ν or L). **Proposed model change (not made):** ISLA should never
 feed an unscaled dimensional rank-0 global into its seeds: a rank-0 global without `units` should be standardized by fitted
 constants (as `isla_constants.reynolds` is), or refused, so that no config can reintroduce the defect.
+
+## 2d. STDU (PREREG §10, conditional on RAWU; read 2026-10-23 06:49 EDT; fix-trained; B and D_f as §2; pooled σ 0.076 / 0.048 / 0.056, 9 dof)
+
+STDU (ISLA's scales kept: U_inf as the velocity source, nut in U L, the fp32 head; the standardized inlet speed
+(U_inf_mag − 62.116) / 17.914 in place of the standardized log Reynolds number): p 0.01235 (0.01355, 0.01115), v 0.00643
+(0.00672, 0.00614), nut 0.01548 (0.01566, 0.01530); ÷ B = **1.008 / 1.015 / 0.995**, φ 0.03 / 0.05 / −0.02, **no measurable
+effect** on any field (posed 1.008 / 1.015, the same).
+
+**Reading.** With the scales on, a standardized speed serves as well as the standardized log Reynolds number, and RAWU (the same
+with the raw speed) carries the whole step. So the form of the global scalar (log Re or speed) does not matter on AirfRANS; its
+standardization does. This closes the AirfRANS attribution: **the CONT → 0.9.0 gain is the standardization of the one global
+scalar** (NOSC-STD and STDU both at 0.9.0's level; NOSC and RAWU, the raw speed with and without the scales, both at CONT's).
+Label: fix-trained (T on AirfRANS ≈ 1, scratch/isla-ref090-2026-10-20/r090_final_tables.md, section REF-090-FIX AirfRANS).
+
+**Float64 models of the probes (supervisor's check, 2026-10-23).** Every float64 model I used scores as eager float32 does:
+case-mean metric float64 ÷ eager float32 = 1.0002 (att2c_lug_cont_seed42, f64_probe_g2.py, 100 cases), 1.0003 and 1.0000
+(att_lug_enc_seed42 / 43, f64_probe.py, 60 cases). So the float64 floors behind deviations 2 and 4 are valid (unlike the
+code_a2r case REF-090-CLOSE found).
