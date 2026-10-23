@@ -40268,11 +40268,12 @@ confirming run on AeroZoo's Reynolds split.
 **Question.** Four steps of ISLA 0.9.0's geometry are decided by rounding, by the search order or by the dataset's axes
 (@sec-medial-ties): the direction at a closest-feature tie, the sign of the wall distance at a fold, the cells the token draw
 keeps, and the fixed cutoff `EPS = 1e-12` below which a point is on the wall. Can each become a function of the input mesh
-alone, at a cost training can carry? Ten lanes worked on it: GEO-ROBUST (the GPU tie search and the on-wall rule), TIE-REVIEW,
-TIE-FIX, TIE-FIX2, FOLD-SIGN, TOKEN-DRAW (with TOKEN-COST), ONWALL, GEO-BUNDLE, DV-COST and DV-COST2. Records:
-scratch/isla-medial-tie-2026-10-22/DESIGN.md (sections a-q, one per lane), scratch/isla-tie-review-2026-10-22/REVIEW.md,
-scratch/isla-fold-sign-2026-10-22/ (PREREG.md, f32floor_tables.md, JOBS.md) and scratch/isla-token-draw-2026-10-22/DESIGN.md.
-The bundle is branch psharpe/isla-geo-bundle at f13eb5ce0 (pushed, not merged into psharpe/isla).
+alone, at a cost training can carry? Ten lanes worked on it: GEO-ROBUST (the GPU tie search and the on-wall rule),
+TIE-REVIEW, TIE-FIX, TIE-FIX2, FOLD-SIGN, TOKEN-DRAW (with TOKEN-COST), ONWALL, GEO-BUNDLE, DV-COST and DV-COST2. Records:
+scratch/isla-medial-tie-2026-10-22/DESIGN.md (sections a-h the tie rule's design and CPU prototype, i-j GEO-ROBUST phase 1,
+k-q one per lane), scratch/isla-tie-review-2026-10-22/REVIEW.md, scratch/isla-fold-sign-2026-10-22/ (PREREG.md,
+f32floor_tables.md, JOBS.md) and scratch/isla-token-draw-2026-10-22/DESIGN.md. The bundle is branch psharpe/isla-geo-bundle
+at f13eb5ce0 (pushed, not merged into psharpe/isla).
 
 **The rules.**
 
@@ -40282,8 +40283,9 @@ The bundle is branch psharpe/isla-geo-bundle at f13eb5ce0 (pushed, not merged in
   with no tolerance). At a tie the direction is the minimum-norm element of the convex hull of the tied directions, the
   least-norm element of the Clarke generalized gradient: the midpoint of two, 0 where they cancel, kept unnormalized. Each
   cell's vertices are put in lexicographic order, the permutation's parity carrying the orientation, so the result does not
-  depend on the numbering or the search order, and a winding flip negates it bitwise. The search is a Warp ball traversal
-  of a BVH over the cells in 3-D and a brute force in 2-D.
+  depend on the numbering or the search order; a winding flip leaves the tie set and the direction bitwise unchanged and
+  negates `d` and `sign(d) u` bitwise. The search is a Warp ball traversal of a BVH over the cells in 3-D and a brute force
+  in 2-D.
 - *On the wall* (f56068328; ONWALL 1e2c431cd). The direction is the least-norm point of the hull of the normals of the cells
   within the bound, computed odd in them. A query is on the wall when `D_min - E_min <= 0`, in place of `d_min <= 1e-12`.
 - *The fold sign* (FOLD-SIGN 476521aac). Every off-wall `d` is `sign(sigma/2 - w(x))` times its magnitude, with `w` the
@@ -40291,24 +40293,25 @@ The bundle is branch psharpe/isla-geo-bundle at f13eb5ce0 (pushed, not merged in
   `WINDING_NUMBER_BETA = 2`, exact float64 solid angles at the near leaves; an exact float64 sum in 2-D) and `sigma` the sign
   of the enclosed signed volume. The pseudo-normals and the tie votes are deleted. The BVH is built in the boundary's
   canonical frame, so `w` is the same in every pose, and identical oriented cells count once.
-- *The token draw* (TOKEN-DRAW 2042c50cf and c2db0445e; TOKEN-COST 3d9acfa63). The measures and centroids the draw reads are
-  computed in float64 from the input vertices, and the Morton codes are taken in the boundary's canonical frame
-  (`tree_read.canonical_frame` over every cell, in float64, its projections taken as column products).
+- *The token draw* (TOKEN-DRAW 2042c50cf and c2db0445e; TOKEN-COST 3d9acfa63). The draw reads float64 centroids, the means of
+  the input vertices, and float64 measures, the stored measure cast or else the areas of the float64 vertices; the Morton
+  codes are taken in the boundary's canonical frame (`tree_read.canonical_frame` over every cell, in float64, its projections
+  taken as column products).
 - *Normals in float64* (GEO-BUNDLE 96f1ad583). The on-wall and tie normals come from the float64 copy of the input vertices.
 
 **The review's blocker and the fixes.** TIE-REVIEW blocked d3d9da49d. With float32 inputs, the on-wall directions were
 float32 unit normals cast to float64, off unit length by about 1e-8 to 1e-7. The least-norm routine assumes exactly unit
 inputs, so it decided that 0 lay in the hull and returned `u = 0`: at 210 of 642 vertices of a posed icosphere and 398 of 400
-vertices of a 2-D ellipse, and, the review inferred, at the lug's on-wall nodes (about 15 percent of its queries), which
-ones depending on rounding and so on pose. Its other findings: a zero-area cell holding an on-wall node forced `u = 0`
-(major); a float32 distance that rounds to 0 at a tie lost its sign (minor); the group key could overflow int64 (minor).
-TIE-FIX (19fb0a754) renormalizes the on-wall directions in float64, drops cells with a zero or non-finite normal from the
-on-wall set, signs a tie's `d` on its float64 distance, and groups by a stacked unique. It also found a defect the review
-had not listed: where directions nearly coincide, the routine took the least-norm candidate over all faces and returned 0
-when that one failed the optimality certificate, in float64 as well (a posed oriented torus: 10 on-wall points with
-`|u| < 0.5` in float64 and 342 in float32 before, 0 and 0 after). It now takes the least-norm candidate among those that
-pass. TIE-FIX2 (34654e01d) adds the rule for a row where no candidate passes: the separating candidate with the least
-duality gap, else 0. With unit inputs it fired on no row of the test meshes and of 84,000 random sets (DESIGN m.2).
+vertices of a 2-D ellipse, and, by the review's reading, at the lug's on-wall nodes (about 15 percent of its queries) and
+Tensile2d's boundary nodes, which ones depending on rounding and so on pose. Its other findings: a zero-area cell holding an
+on-wall node forced `u = 0` (major); a float32 distance that rounds to 0 at a tie lost its sign (minor); the group key could
+overflow int64 (minor). TIE-FIX (19fb0a754) renormalizes the on-wall directions in float64, drops cells with a zero or
+non-finite normal from the on-wall set, signs a tie's `d` on its float64 distance, and groups by a stacked unique. It also
+found a defect the review had not listed: where directions nearly coincide, the routine took the least-norm candidate over
+all faces and returned 0 when that one failed the optimality certificate, in float64 as well (a posed oriented torus: 10
+on-wall points with `|u| < 0.5` in float64 and 342 in float32 before, 0 and 0 after). It now takes the least-norm candidate
+among those that pass. TIE-FIX2 (34654e01d) adds the rule for a row where no candidate passes: the separating candidate with
+the least duality gap, else 0. With unit inputs it fired on no row of the test meshes and of 84,000 random sets (DESIGN m.2).
 
 | mesh (the review's probes) | float32, before TIE-FIX | float32, after |
 |---|---|---|
@@ -40329,22 +40332,25 @@ f6835adbc removes it by putting those centroids on the wall (DESIGN k.3).
 16:07 EDT 2026-10-22 before any job of the rerun; LHR 341526). CMPDIAG's 20 AeroZoo `full` test cases of
 azc_full_isla_seed42 at epoch 250, float32 throughout (A32) against float64 throughout (A64), on code_foldsign (702f60f97).
 
-- **R1: "the sign flips go to 0".** No point changes sign between A32 and A64 on any of the 20 cases. The base geometry on
-  the same inputs flips 33 (00002), 904 (00019), 466 (00022), 82 (00045) and 12 (00083). No point lies in the band
-  `|w - sigma/2| < 3e-2`; the least margin is 0.456. Predicted 0.85.
+- **R1: "the sign flips go to 0".** No point changes sign between A32 and A64 on any of the 20 cases. [AUDIT] The base
+  geometry on the same inputs flips 33 (00002), 904 (00019), 466 (00022), 82 (00045) and 12 (00083). No point lies in the
+  band `|w - sigma/2| < 3e-2`; the least margin is 0.456. Predicted 0.85.
 - **R2: "the fold sign removes ISLA's float32 floor on AeroZoo".** Three of the four high-gap cases fall to at most 0.2 times
-  their gap: 00019 from 1.2e-1 to 1.4e-3, 00022 from 5.6e-2 to 2.4e-3, 00045 from 2.8e-1 to 2.1e-3; 00083 goes from 1.3e-2
-  to 7.3e-3 (0.56). Every case is at most 1e-2; the largest is 00079's 9.0e-3. Predicted 0.6 and 0.45 for the two parts.
-  The registered confound: the snapshot also carries the tie and on-wall rules.
-- **R3, no verdict.** Of the fluid points the base geometry puts at negative `d` (in float64), 2,170 turn positive, none
-  turns negative, and 301 stay negative on 8 cases, every one outside the band, so the closed boundary itself puts them
+  their gap: 00019 from 1.2e-1 to 1.4e-3, 00022 from 5.6e-2 to 2.4e-3, 00045 from 2.8e-1 to 2.1e-3; 00083 goes from 1.3e-2 to
+  7.3e-3 (0.56). Every case is at most 1e-2; the largest is 00079's 9.0e-3. Predicted 0.6 and 0.45 for the two parts. The
+  registered confound: the snapshot also differs from code_r090 by GEO-ROBUST phase 1 (the tie rule, and f56068328's on-wall
+  rule with the 1e-12 cutoff) and TIE-FIX, so the after floor is that of the whole new geometry at 702f60f97.
+- **R3, no verdict.** [AUDIT] Of the fluid points the base geometry puts at negative `d` (in float64), 2,170 turn positive,
+  none turns negative, and 301 stay negative on 8 cases, every one outside the band, so the closed boundary itself puts them
   outside its region; their locations go to a data check (f32floor_tables.md; DESIGN k.5 prints the turned count as 1,170,
-  but the per-case column sums to 2,170).
-- Beside the verdict: the cases with a small gap rose, the control 00037 from 3.0e-5 to 2.4e-3, so the new geometry has a
-  nearly uniform float32 floor of about 1e-3. A diagnosis registered in JOBS.md at 21:03 EDT, before its job (LHR 342500),
-  reads "the guess holds on both cases": computed with float32's unit roundoff in the tie band, the float64 run has bitwise
-  the float32 run's tie flags, and d(A32, A64E32) is 3.0e-5 (00037) and 8.2e-5 (00039), against 2.4e-3 and 7.9e-4 with its
-  own. The floor is the tie set's resolution at medial axes. It stays (decisions, below).
+  but the per-case column sums to 2,170). Predicted 0.5 that every base-negative point turns positive (301 do not), and 0.7
+  that the band count is 0 on every case (it is).
+- Beside the verdict: of the 16 other cases, 11 rose 1.35 to 80 times (the control 00037 from 3.0e-5 to 2.4e-3), four stayed
+  within 4 percent, and 00002 fell from 7.3e-3 to 4.0e-4; after, they lie at 4.0e-4 to 9.0e-3, which DESIGN k.5 reads as a
+  nearly uniform float32 floor of about 1e-3. [AUDIT] A diagnosis registered in JOBS.md at 21:03 EDT, before its job (LHR
+  342500), reads "the guess holds on both cases" (predicted 0.6): computed with float32's unit roundoff in the tie band, the
+  float64 run has bitwise the float32 run's tie flags, and d(A32, A64E32) is 3.0e-5 (00037) and 8.2e-5 (00039), against
+  2.4e-3 and 7.9e-4 with its own. The floor is the tie set's resolution at medial axes. It stays (decisions, below).
 
 **Measurements on the data.**
 
@@ -40362,13 +40368,14 @@ azc_full_isla_seed42 at epoch 250, float32 throughout (A32) against float64 thro
   float64 directions differ by more than 1e-7 fall from 389 to 0, and the largest difference from 1.15e-5 to 4.2e-8, the
   cast. Float32 `d` changes at none of 187,786 nodes. [AUDIT] With float64 inputs no output changes (`d` and `u` bitwise on
   the 20 lug cases and the test meshes).
-- *The token draw* (TOKEN-DRAW section 2; drawn cells that change, of 200,000; 15 AeroZoo cases and DrivAerML run_1 and
-  run_2). Between float32 and float64 compute on the same float32 inputs: 10 to 21,352 cells per AeroZoo case and 28,129 and
-  120,618 on DrivAerML before, 0 on every case after. Under a rotation with a translation: the canonical frame cuts the
+- [AUDIT] *The token draw* (TOKEN-DRAW section 2; drawn cells that change, of 200,000; 16 AeroZoo cases and DrivAerML run_1
+  and run_2). Between float32 and float64 compute on the same float32 inputs: 10 to 21,352 cells per AeroZoo case and 28,129
+  and 120,618 on DrivAerML before, 0 on every case after. Under a rotation with a translation: the canonical frame cuts the
   changes 7.2 to 1,621 times on the 15 cases whose frame is not degenerate (DrivAerML run_1 7.2 times, run_2 73 times, every
-  AeroZoo case at least 37 times), and leaves the three opposed-layout cases, whose principal moments nearly tie, unchanged
-  (1.0 times). What it leaves is float32 rounding of the posed coordinates across Morton grid lines, which no order built from
-  coordinates removes. Renumbering changes nothing, except where Morton codes tie (12 to 14 cells on one case).
+  non-degenerate AeroZoo case at least 37 times), and leaves the three opposed-layout cases, whose principal moments nearly
+  tie, unchanged (1.0 times). What it leaves is float32 rounding of the posed coordinates across Morton grid lines, which no
+  order built from coordinates removes. Renumbering changes nothing, except where Morton codes tie (12 to 14 cells on AZ 026)
+  and at one cell of AZ 092 under the canonical frame, whose float64 sums run in the cells' order.
 
 **Cost on GB300** (DESIGN q.4; LHR 346068, one node; `recipe_r090` train.py under `timed_train.py`, REF-090 settings,
 bfloat16, eager, one GPU per version; medians after 5 warm-up calls or steps; base = code_cmpaf_fix, head = f13eb5ce0):
@@ -40380,7 +40387,7 @@ bfloat16, eager, one GPU per version; medians after 5 warm-up calls or steps; ba
 | AeroZoo | 200k / 0.5M | 18.3 / 17.6 ms | 101.9 / 111.3 | 100.1 / 94.2 / 100.8 | 505 / 500 ms | 598 / 609 | 602 / 577 / 591 |
 | DrivAerML Volume | 200k / 17.2M | 98.1 / 97.6 ms | 418.7 / 421.0 | 374.5 / 365.1 / 360.5 | 570 / 571 ms | 904 / 916 | 856 / 857 / 842 |
 
-: The geometry call and the training step, pass 1 / pass 2 (/ a third head run on GPU 3); placement moves the same code by up to about 20 percent (DESIGN o.4). {#tbl-nb-geo-cost}
+: The geometry call and the training step, pass 1 / pass 2 (/ a third head run on GPU 3); placement moves the same code by up to 32 percent (the AirfRANS head call, 29.9 to 39.5 ms; DESIGN q.4). {#tbl-nb-geo-cost}
 
 - The head's step is 1.03 to 1.12 times the base's on AirfRANS, 1.22 to 1.40 on the lug, 1.14 to 1.20 on AeroZoo and 1.47
   to 1.50 on DrivAerML Volume. The geometry call costs 2.3 to 6.5 times the base's, about 265 ms more on DrivAerML Volume.
@@ -40394,11 +40401,12 @@ bfloat16, eager, one GPU per version; medians after 5 warm-up calls or steps; ba
   ms there (DESIGN q.2).
 - A flaw in the bitwise probes (DESIGN q.1). Two copies of geometry.py loaded into one process register the custom op
   `physicsnemo::isla_closest_candidates` twice, and the second registration replaces the first for every caller, so a probe
-  that loads a reference geometry.py beside the package compared one version of `_closest_candidates` with itself. With the
-  reference loaded under a renamed op (`scratch/isla-dv-cost2-2026-10-23/lhr/refload.py`), the cuts ae953f7ae against
-  1862a2639 and f13eb5ce0 against ae953f7ae are bitwise in `d`, `u`, their gradients, the search's outputs and `w`, on CPU and
-  CUDA, on DrivAerML Volume, AeroZoo and 20 lug cases in both precisions. The earlier cross-version claims are re-checked by
-  GEO-AUDIT.
+  that loads a reference geometry.py beside the package compared one version of `_closest_candidates` with itself. [AUDIT]
+  With the reference loaded under a renamed op (`scratch/isla-dv-cost2-2026-10-23/lhr/refload.py`), the cuts ae953f7ae
+  against 1862a2639 and f13eb5ce0 against ae953f7ae are bitwise in `d`, `u` and their gradients on CPU and CUDA (52 checks:
+  the 20 lug cases, an AeroZoo case at 20k queries and five test meshes, each in float32 and float64), and in `d`, `u`, the
+  search's outputs and `w` on CUDA on DrivAerML Volume, AeroZoo and the 20 lug cases in both precisions. The earlier
+  cross-version claims are re-checked by GEO-AUDIT.
 - Measured and not adopted (DESIGN p.4, q.3): beta 1.5 and 1.0 (30-55 ms saved, a far field accurate to 0.3 at beta 1.0);
   float32 near-leaf solid angles (3-6 ms); leaves of 2, 4 and 8 cells (90 to 1,055 ms slower on DrivAerML) and 4-, 8- and
   16-ary trees (12 to 166 ms slower). Not measured: a per-mesh cache, about 195 ms of DrivAerML's call and several GB per
@@ -40410,20 +40418,26 @@ case).
 
 **Decisions, as the records give them.**
 
-- No per-case geometry cache: the model takes only the boundary meshes (DESIGN p.4 (f), q).
+- No per-case geometry cache: the model takes only the boundary meshes. DV-COST's task also allowed no caches across forward
+  calls, and at DrivAerML Volume size a cache would hold several GB per case (DESIGN p.4 (f); excluded, q).
 - The fold sign by the generalized winding number (DESIGN i.1, k).
-- The token draw computed in float64 from the input mesh, on a Morton grid in the boundary's canonical frame. Breadth-first
-  and Cuthill-McKee orders and hashed priority sampling were rejected (TOKEN-DRAW, header); the connectivity order of
-  DESIGN i.2 needed a per-mesh cache, and priority sampling has no stratification.
+- The token draw computed in float64 from the input mesh, on a Morton grid in the boundary's canonical frame. The supervisor
+  rejected breadth-first and Cuthill-McKee orders and hashed priority sampling (TOKEN-DRAW, header; the record gives no
+  reason). The canonical frame was kept under the bar fixed in TOKEN-DRAW's task (at least 10 times fewer pose changes on the
+  non-degenerate cases, at under 2 percent of AeroZoo's 0.51 s step): every non-degenerate AeroZoo case (37 to 1,621 times),
+  DrivAerML run_2 (73 times) and the pool (39 times) pass it, and DrivAerML run_1 (7.2 times) does not. The lane asked the
+  supervisor whether the bar means every case or the pool, and the frame was committed as c2db0445e (TOKEN-DRAW 4).
 - The on-wall test derived from the precision, `D_min - E_min <= 0` (DESIGN m.4, approved; n).
 - The tie band keeps the unit roundoff of the queries as given (DESIGN o, supervisor 2026-10-22): the model's geometry is a
   function of its inputs, values and dtype, and cannot know that a caller cast float32 data to float64. The float32 against
   float64 floor of about 1e-3 that remains on AeroZoo is the tie set's resolution at medial axes, not a defect.
-- `WINDING_NUMBER_BETA` stays 2 and the solid angles stay float64; option (a) is adopted, (e) declined on its measurement, (g)
-  skipped (Peter, DESIGN q).
+- Peter's decisions on DV-COST's options (DESIGN q): option (a) goes into the candidate (f13eb5ce0); beta 1.5, beta 1.0 and
+  float32 near-leaf solid angles are declined, so `WINDING_NUMBER_BETA` stays 2 and the solid angles stay float64; (f) is
+  excluded and (g) skipped. Option (e) was not committed under the rule fixed in DV-COST2's task, since no leaf size or tree
+  width saved time (DESIGN q.3).
 - The conditioning of the least-norm point at near-duplicate normals goes to the design agenda (TIE-EXP's A7,
-  @sec-nb-tie-exp-prereg); 96f1ad583's float64 normals make the float32 on-wall direction the cast of the float64 one on
-  the lug.
+  @sec-nb-tie-exp-prereg); 96f1ad583's float64 normals make the float32 on-wall direction the cast of the float64 one on the
+  lug's 20 measured test cases (DESIGN o.3).
 
 **Status.** A candidate for the canonical ISLA, not adopted; the scope freeze, about 2026-10-27, decides. The bundle as a
 whole has not been trained. TIE-EXP retrains the tie rules (19fb0a754) on the lug and Tensile2d (@sec-nb-tie-exp-prereg), and
