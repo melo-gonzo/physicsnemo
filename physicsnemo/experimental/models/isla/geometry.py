@@ -29,7 +29,7 @@ import warp as wp
 from jaxtyping import Float, Int
 
 from physicsnemo.core.function_spec import FunctionSpec
-from physicsnemo.experimental.models.isla.tree_read import canonical_frame
+from physicsnemo.experimental.models.isla.tree_read import canonical_frame, frame_coordinates
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.geometry._cell_normals import compute_cell_normals
 from physicsnemo.mesh.spatial import signed_distance_field
@@ -464,7 +464,10 @@ def _cell_tree(simplex: torch.Tensor):
     e = simplex[:, 1:] - simplex[:, :1]
     frame = canonical_frame(simplex.mean(1), torch.linalg.cross(e[:, 0], e[:, 1], dim=-1).norm(dim=-1))
     cells = torch.arange(3 * f, device=dev).reshape(f, 3)
-    order = _compute_morton_codes(Mesh(points=simplex.reshape(-1, 3) @ frame, cells=cells).cell_centroids).argsort(stable=True)
+    ### Column products, not a GEMM (see frame_coordinates).
+    order = _compute_morton_codes(
+        Mesh(points=frame_coordinates(simplex.reshape(-1, 3), frame), cells=cells).cell_centroids
+    ).argsort(stable=True)
     topo = build_lbvh_topology(f, 1, dev)
     left, right = topo.left_child[: topo.node_count], topo.right_child[: topo.node_count]
     levels = topo.internal_nodes_per_level
