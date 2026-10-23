@@ -120,6 +120,18 @@ RECORDS = {
             "qpop/qpop_rows.tsv",
         ],
     ),
+    "cap_audit": (
+        "isla-cap-audit-2026-10-20",
+        "CAP-AUDIT: capacity floors of the three architectures, phases 1, 1b and 2",
+        [
+            "RESULTS.md",
+            "HANDOFF.md",
+            "tables/*.md",
+            "tables/*.json",
+            "tables/*.csv",
+            "tables/probes/*.json",
+        ],
+    ),
 }
 
 

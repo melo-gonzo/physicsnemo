@@ -10,6 +10,7 @@ source. Do not edit by hand.
 | `af_extrap/` | AF-EXTRAP: AirfRANS extrapolation in Reynolds number and angle of attack | `scratch/isla-af-extrap-2026-10-21/` |
 | `suv_xfam_b/` | SUV-XFAM part B: SHIFT-SUV models trained on fastbacks, against the estate-trained ones | `scratch/isla-suv-xfam-2026-10-22/` |
 | `probes090/` | PROBES-090: query-population dependence and re-meshing invariance of ISLA 0.9.0 | `scratch/isla-probes090-2026-10-21/` |
+| `cap_audit/` | CAP-AUDIT: capacity floors of the three architectures, phases 1, 1b and 2 | `scratch/isla-cap-audit-2026-10-20/` |
 
 | topic | file | source | md5 |
 | --- | --- | --- | --- |
@@ -66,3 +67,28 @@ source. Do not edit by hand.
 | probes090 | remesh/facts_dv.json | scratch/isla-probes090-2026-10-21/remesh/facts_dv.json | 2d6eeb21e7deac33aaa87e54fab703ec |
 | probes090 | remesh/README.md | scratch/isla-probes090-2026-10-21/remesh/README.md | 9ad17033baca19c8d90f313172f764d6 |
 | probes090 | qpop/qpop_rows.tsv | scratch/isla-probes090-2026-10-21/qpop/qpop_rows.tsv | 23a0b83bf5fe89ae07221ffa57f7621d |
+| cap_audit | RESULTS.md | scratch/isla-cap-audit-2026-10-20/RESULTS.md | 2388272f3a650bb790b4795108f196e3 |
+| cap_audit | HANDOFF.md | scratch/isla-cap-audit-2026-10-20/HANDOFF.md | 2910d64849860af35e34966d9fa3da2a |
+| cap_audit | tables/ctl40k.md | scratch/isla-cap-audit-2026-10-20/tables/ctl40k.md | c44fecb8e16f9670288840f8747d4a11 |
+| cap_audit | tables/phase1_floors.md | scratch/isla-cap-audit-2026-10-20/tables/phase1_floors.md | 10be6ce3275e378395da307d9fa7046c |
+| cap_audit | tables/phase1b_floors.md | scratch/isla-cap-audit-2026-10-20/tables/phase1b_floors.md | 9e1484de2d0e78a5d856589866ee4606 |
+| cap_audit | tables/phase2_floors.md | scratch/isla-cap-audit-2026-10-20/tables/phase2_floors.md | c8c31550f1a241381d4eb00816dabe49 |
+| cap_audit | tables/resid_af_ladder.md | scratch/isla-cap-audit-2026-10-20/tables/resid_af_ladder.md | 01c30a3be9056512c56ff28d875baed3 |
+| cap_audit | tables/resid_af_rd.md | scratch/isla-cap-audit-2026-10-20/tables/resid_af_rd.md | 0a3a0da34d76decfb42405463027a1f3 |
+| cap_audit | tables/resid_deficit_cases.md | scratch/isla-cap-audit-2026-10-20/tables/resid_deficit_cases.md | b44c24507943ea2a0b18a229b719e721 |
+| cap_audit | tables/resid_drv_ladder.md | scratch/isla-cap-audit-2026-10-20/tables/resid_drv_ladder.md | 4cd3d5377818dc8f5fd26c3d91e3b5fb |
+| cap_audit | tables/resid_drv_p1.md | scratch/isla-cap-audit-2026-10-20/tables/resid_drv_p1.md | 63d6c434172f6e190a089b778b4dd54d |
+| cap_audit | tables/resid_drv_partB.md | scratch/isla-cap-audit-2026-10-20/tables/resid_drv_partB.md | eb9cf5a6e519bf7e9de58e9950aa1f5d |
+| cap_audit | tables/phase1_floors.json | scratch/isla-cap-audit-2026-10-20/tables/phase1_floors.json | 9b24f3349d96ac842000f1d2ccac5781 |
+| cap_audit | tables/phase1b_floors.json | scratch/isla-cap-audit-2026-10-20/tables/phase1b_floors.json | 3ee6eda13263dd1778d5d96f33d8c913 |
+| cap_audit | tables/phase2_floors.json | scratch/isla-cap-audit-2026-10-20/tables/phase2_floors.json | 8bede23b62dfccb583aa20cef78d0687 |
+| cap_audit | tables/residuals_p1_p1b.csv | scratch/isla-cap-audit-2026-10-20/tables/residuals_p1_p1b.csv | c634b0612745169fa4f3b8d7755278cb |
+| cap_audit | tables/residuals_p2.csv | scratch/isla-cap-audit-2026-10-20/tables/residuals_p2.csv | 68cbee1e3771c480d81e2442bf67d5fe |
+| cap_audit | tables/residuals_p2b.csv | scratch/isla-cap-audit-2026-10-20/tables/residuals_p2b.csv | f779d65ba91171d9fd68e49f2289c6ea |
+| cap_audit | tables/probes/pathcheck_drv_d6.json | scratch/isla-cap-audit-2026-10-20/tables/probes/pathcheck_drv_d6.json | b00e2695edb8393ce96ed802b9eb2f6e |
+| cap_audit | tables/probes/pathcheck_drv_ref.json | scratch/isla-cap-audit-2026-10-20/tables/probes/pathcheck_drv_ref.json | 6996f00695c4f6dbe13bbdfa404a9db8 |
+| cap_audit | tables/probes/pathcheck_drv_s128.json | scratch/isla-cap-audit-2026-10-20/tables/probes/pathcheck_drv_s128.json | bc080b1e46228c4720dd0cedc053cd2c |
+| cap_audit | tables/probes/pathcheck_drv_w256.json | scratch/isla-cap-audit-2026-10-20/tables/probes/pathcheck_drv_w256.json | 3e8a43cfbde117ab1c8240ce807ef801 |
+| cap_audit | tables/probes/probe_a.json | scratch/isla-cap-audit-2026-10-20/tables/probes/probe_a.json | e78a4025f867112633ecb90466a4fefc |
+| cap_audit | tables/probes/probe_bc_cap_drv_isla_rd_s42.json | scratch/isla-cap-audit-2026-10-20/tables/probes/probe_bc_cap_drv_isla_rd_s42.json | 42c04c41ae5dc2d62d7732f040b12198 |
+| cap_audit | tables/probes/probe_bc_cap_drv_isla_rd_s43.json | scratch/isla-cap-audit-2026-10-20/tables/probes/probe_bc_cap_drv_isla_rd_s43.json | 739aa09d766de52e7cc23e9e24b7d354 |
