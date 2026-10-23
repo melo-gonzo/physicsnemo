@@ -740,21 +740,25 @@ ATT = {"CONT": "the reduced form: exact wall geometry and the continuous distanc
        "NUT0": "ISLA with its declared scales, eddy viscosity standardized by the dataset's statistics instead of in units of $U L$",
        "NOSCSTD": "ISLA without its declared scales, reading the inlet speed standardized over the training airfoils, as the baselines "
                   "read it; eddy viscosity standardized by the dataset's statistics",
+       "STDU": "ISLA with its declared scales, reading the inlet speed standardized over the training airfoils in place of the "
+               "standardized log Reynolds number",
        "SDF": "ISLA reading the stored signed distance and its gradient at every prediction point",
        "QEMB": "ISLA with the reduced form's prediction-point embedding"}
 READ = lambda k, f: {"CONT": "the whole gain", "NOSC": "carries the step, with the raw input",
                      "RAWU": "carries the step, with the raw input"}.get(k, AI[f][k]["label"])
 r3a = lambda k: " / ".join(f"{AI[f][k]['ratio']:.3f}" for f in FK)
-assert not any(AI[f][k]["moves"] for f in FK for k in ("NOSCSTD", "NUT0")) and all(AI[f]["RAWU"]["moves"] for f in FK)
+assert not any(AI[f][k]["moves"] for f in FK for k in ("NOSCSTD", "STDU", "NUT0")) and all(AI[f]["RAWU"]["moves"] for f in FK)
 print("**On AirfRANS, ISLA's error is " + " / ".join(f"{1 / AI[f]['CONT']['ratio']:.2f}" for f in FK) + " of a reduced form's on "
-      + " / ".join(l for _, l in FIELDS) + ", and standardizing the global input carries that gain; ISLA's declared scales, the "
-      "stored signed distance and the reduced form's prediction-point embedding carry none of it.** Each arm of @tbl-airfrans-attribution "
+      + " / ".join(l for _, l in FIELDS) + ", and standardizing its one global scalar input carries that gain, whether that input is the log Reynolds number or the "
+      "inlet speed; ISLA's declared scales, the stored signed distance and the reduced form's prediction-point embedding carry none of it.** Each arm of @tbl-airfrans-attribution "
       "changes ISLA at its reference configuration in one place and is read against two seeds of ISLA itself. Removing the declared scales "
       "puts back " + " / ".join(f"{100 * AI[f]['NOSC']['phi']:.0f}%" for f in FK) + " of the reduced form's excess error. That arm "
       "changes four things at once: the nondimensionalization by $U L / \\nu$, the standardized log Reynolds number in place of the raw "
       "inlet speed, the units of eddy viscosity and the precision of the output head. An arm without the declared scales that reads the "
       f"inlet speed standardized, as the baselines read it, is as accurate as ISLA (÷ ISLA {r3a('NOSCSTD')}, "
-      f"{AI['pressure_l2']['NOSCSTD']['label']} on any field, the reading registered for it). Keeping the scales and putting the raw speed back puts back the whole step "
+      f"{AI['pressure_l2']['NOSCSTD']['label']} on any field, the reading registered for it). Keeping the scales and reading the standardized inlet speed in place of the standardized log "
+      f"Reynolds number is as accurate as ISLA too ({r3a('STDU')}, {AI['pressure_l2']['STDU']['label']} on any field), so the form of the "
+      "global scalar does not matter here, only its standardization. Keeping the scales and putting the raw speed back puts back the whole step "
       f"({r3a('RAWU')}); taking eddy viscosity's units away changes nothing measurable ({r3a('NUT0')}). On AirfRANS the viscosity is "
       "constant and $L$ nearly so, so the log Reynolds number is close to a monotone reparametrization of the inlet speed; whether the "
       "declared scales add accuracy where the Reynolds number varies widely, as on AeroZoo, is untested (@sec-oq-scales). Every arm "
@@ -765,7 +769,7 @@ print("**On AirfRANS, ISLA's error is " + " / ".join(f"{1 / AI[f]['CONT']['ratio
 #| label: out-tbl-airfrans-attribution
 #| output: asis
 out = "| arm | what it changes | pressure (seeds) | velocity | eddy viscosity | ÷ ISLA: p / v / nut | share of the gain | reading |\n|---|---|---|--:|--:|---|---|---|\n"
-for k in ("CONT", "NOSC", "RAWU", "NUT0", "NOSCSTD", "SDF", "QEMB"):
+for k in ("CONT", "NOSC", "RAWU", "NUT0", "NOSCSTD", "STDU", "SDF", "QEMB"):
     p = AI["pressure_l2"][k]
     out += (f"| {k.replace('NOSCSTD', 'NOSC-STD')} | {ATT[k]} | {p['mean']:.4f} (" + ", ".join(f"{v:.4f}" for v in p["seeds"].values()) + ") | "
             + " | ".join(f"{AI[f][k]['mean']:.4f}" for f in FK[1:]) + " | " + " / ".join(f"{AI[f][k]['ratio']:.3f}" for f in FK) + " | "
@@ -777,12 +781,8 @@ print(": Which of ISLA's components carry its accuracy on the AirfRANS interior 
       "of the gain*: the arm's log error ratio to ISLA over the reduced form's. ÷ ISLA is exp(Δ), the ratio of the geometric seed means. "
       "How to read this: an ISLA-against-ISLA ablation, so the "
       "ratios are arm ÷ ISLA and above one means the change costs accuracy; no baseline is in the table. "
-      f"Data: {R.source('attrib090', 'results2_native.json')}, {R.source('attrib090', 'RESULTS.md')} (sections 2, 2b and 2c). "
+      f"Data: {R.source('attrib090', 'results2_native.json')}, {R.source('attrib090', 'RESULTS.md')} (sections 2, 2b, 2c and 2d). "
       "{#tbl-airfrans-attribution}")
-print()
-print(S.in_flight_callout({"what": "arms that each remove the declared scales or change the global input, two seeds each",
-                           "replacement": "An arm with the declared scales that reads the standardized inlet speed in place of the log "
-                                          "Reynolds number, the last check of this reading,"}))
 ```
 
 ### The query population {#sec-airfrans-query-population}

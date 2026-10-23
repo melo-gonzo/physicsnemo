@@ -40212,6 +40212,7 @@ field by R1, that field reads "input standardization carries the step" whatever 
 | RAWU | scales kept, raw speed in place of the log Reynolds number | 1.292 / 1.351 / 1.333 | 1.02 / 0.99 / 0.83 | carries it (confounded) |
 | NUT0 | scales kept, eddy viscosity without the units U L | 0.982 / 1.009 / 0.990 | ≈ 0 | no measurable effect |
 | **NOSC-STD** | no scales, standardized speed | **1.003 / 1.029 / 1.043** | **0.01 / 0.10 / 0.12** | **no measurable effect** |
+| **STDU** (read later, below) | scales kept, standardized speed in place of the log Reynolds number | **1.008 / 1.015 / 0.995** | **0.03 / 0.05 / −0.02** | **no measurable effect** |
 
 The ÷ 0.9.0 column is exp(Δ), a ratio of geometric seed means.
 
@@ -40266,6 +40267,17 @@ standardized form, not from its declared physical scales. Where the Reynolds num
 alone, the scales are one principled way to get that standardization, not a source of accuracy. Whether they add
 accuracy where the Reynolds number varies widely, as on AeroZoo, is untested: ATTRIB-090 has no AeroZoo arm. On the lug,
 once the compile fault is fixed, 0.9.0 leads its predecessor, and the winding flip is a reparametrization.
+
+**Later (2026-10-23).** STDU read under the same rule, with B and the step as above (scratch/isla-attrib090-2026-10-21/RESULTS.md
+§2d). σ, now pooled over nine degrees of freedom (0.076 / 0.048 / 0.056), leaves every reading above unchanged. STDU keeps
+ISLA's scales (the inlet velocity as the velocity source, eddy viscosity in units of U L, the fp32 head) and reads the
+standardized inlet speed, (U_inf_mag − 62.116) / 17.914, in place of the standardized log Reynolds number. STDU ÷ 0.9.0 is
+1.008 / 1.015 / 0.995 (exp(Δ), a ratio of geometric seed means), φ 0.03 / 0.05 / −0.02: no measurable effect on any field
+(posed 1.008 / 1.015, the same). With the scales on, a standardized speed serves as well as the standardized log Reynolds
+number, while RAWU, the same with the raw speed, carries the whole step. So on AirfRANS the form of the global scalar (log
+Re or speed) does not matter; its standardization does. This closes the AirfRANS attribution: the gain from CONT to 0.9.0
+is the standardization of the one global scalar. NOSC-STD and STDU sit at 0.9.0's level; NOSC and RAWU, the raw speed without
+and with the scales, sit at CONT's. Label: fix-trained.
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-book-1023/SECOND_READ_ATTRIB_STAGE2.md).*
 
