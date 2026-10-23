@@ -678,6 +678,15 @@ print("**The open question is whether two discrete steps of ISLA's geometry, the
       f"{R.source('az_diag', 'f32floor/README.md')}; {R.source('medial_tie', 'DESIGN.md')} (section i).")
 ```
 
+::: {.callout-note title="In flight"}
+These limits are those of ISLA's geometry as it is: a closest-feature tie resolved by the order of the search, the sign of
+the wall distance taken from the closest feature's pseudo-normal, a token draw ordered along the dataset's axes on
+coordinates in the mesh's own precision, and a fixed distance cutoff for a point on the wall. A candidate geometry that
+replaces each of them, with the least-norm direction at a tie, the generalized winding number for the sign, a draw computed
+in float64 in the boundary's canonical frame, and an on-wall test set by the rounding of the coordinates, is being measured,
+and the ledger (@sec-ledger) tracks it.
+:::
+
 ### The frame of ISLA-DTT's forest {#sec-oq-dtt-frame}
 
 ```{python}

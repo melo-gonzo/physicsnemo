@@ -735,6 +735,12 @@ print(f"On {sn('nonbox')} the pressure error is {nb['mean']:.2f} in the mean, {n
       f"{R.source('az_diag', 'pdiag/README.md')} (by family).")
 ```
 
+::: {.callout-note title="In flight"}
+These numbers come from ISLA as it is, whose pressure level at the outlet is learned freely. ISLA trained with the outlet's
+prescribed gauge pressure held by construction, its pressure shifted by the one constant that gives the outlet faces the
+prescribed mean, is being measured on `profile_crossflow` and `full`, and the ledger (@sec-ledger) tracks it.
+:::
+
 ### Dependence on the request {#sec-aerozoo-request}
 
 ```{python}

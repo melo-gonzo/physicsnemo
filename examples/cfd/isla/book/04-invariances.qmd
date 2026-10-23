@@ -823,6 +823,15 @@ print("At a fold of the surface, where cells meet back to back, the pseudo-norma
       "float64 removes none of it.")
 ```
 
+::: {.callout-note title="In flight"}
+These limits are those of ISLA's geometry as it is: a closest-feature tie resolved by the order of the search, the sign of
+the wall distance taken from the closest feature's pseudo-normal, a token draw ordered along the dataset's axes on
+coordinates in the mesh's own precision, and a fixed distance cutoff for a point on the wall. A candidate geometry that
+replaces each of them, with the least-norm direction at a tie, the generalized winding number for the sign, a draw computed
+in float64 in the boundary's canonical frame, and an on-wall test set by the rounding of the coordinates, is being measured,
+and the ledger (@sec-ledger) tracks it.
+:::
+
 ## Studies on a smaller ISLA {#sec-contract-studies}
 
 **Three probes on a smaller ISLA measure what the standing cannot: how the shift falls with the sample count,
