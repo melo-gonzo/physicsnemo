@@ -932,8 +932,7 @@ def _closest_candidates(
     distance from the winding number of the cells (:func:`_winding_sign`) ``(Q,)``,
     and whether the query is on the surface (below) ``(Q,)``; see
     :func:`exact_boundary_geometry`. ``cells`` in canonical order with their
-    orientations ``parity`` (:func:`_canonical_cells`), the normals in the queries'
-    precision.
+    orientations ``parity`` (:func:`_canonical_cells`), the normals in float64.
 
     Every candidate distance is computed in float64 on the canonical cell; the
     features tie when their distances are equal within the error bound ``E_k =
@@ -1101,11 +1100,16 @@ def _closest_features(
     cells, parity = _canonical_cells(points, _weld(points)[cells])
     cell_points = points[cells]
     all_n = parity[:, None].to(points.dtype) * compute_cell_normals(cell_points[:, 1:] - cell_points[:, :1])
+    ### The normals the on-wall rule and the tie directions read, in float64 from the
+    ### coordinates as given: the least-norm point of near-duplicate normals amplifies
+    ### their rounding, so they must not depend on the queries' precision.
+    cell64 = cell_points.double()
+    n64 = parity[:, None].double() * compute_cell_normals(cell64[:, 1:] - cell64[:, :1])
     with torch.no_grad():
         q, y = query_points, points
         if q.dtype in (torch.float16, torch.bfloat16):
             q, y = q.float(), y.float()
-        idx, tied, tie_u, sign, on_wall = _closest_candidates(q, y, cells, parity, all_n.to(q.dtype))
+        idx, tied, tie_u, sign, on_wall = _closest_candidates(q, y, cells, parity, n64)
         corners = cells[idx]  # (Q, d)
         weights = _closest_weights(query_points.double(), points.double()[corners])
     simplex = points[corners]  # (Q, d, d)
@@ -1114,7 +1118,8 @@ def _closest_features(
     dtype = query_points.dtype
     ### (in float64: off the surface a lower precision can round it to 0, losing the sign)
     tie_dist = (query_points.double() - (weights[..., None] * simplex.double()).sum(1)).norm(dim=-1).to(dtype)
-    return closest, on_cell, all_n[idx], tied, tie_u.to(dtype), sign.to(dtype), tie_dist, on_wall
+    face_n = torch.where(on_wall[:, None], n64[idx].to(dtype), all_n[idx])
+    return closest, on_cell, face_n, tied, tie_u.to(dtype), sign.to(dtype), tie_dist, on_wall
 
 
 def exact_boundary_geometry(

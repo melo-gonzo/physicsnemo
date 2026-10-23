@@ -1211,6 +1211,35 @@ def test_on_wall_direction_in_float32_is_the_float64_one(surface):
     assert torch.equal(u2[wall], -u[wall])
 
 
+@pytest.mark.parametrize("surface", ["split", "icosphere"])
+def test_on_wall_direction_is_a_function_of_the_input_mesh(surface):
+    """Float32 meshes in a generic pose, at their vertices, edge midpoints and
+    centroids: on the surface, u from the float32 inputs is bitwise u from float64
+    copies of them after the cast. The normals are computed in float64 from the
+    coordinates as given, whatever the queries' precision; float32 normals carried
+    their rounding into the least-norm point, which amplifies it where a split face's
+    two triangles have near-duplicate normals (``split``: a torus with its vertices
+    moved by 1e-5 of their radius, so each quad's triangles are about 1e-5 apart,
+    as on the lug's hex faces), and differed from float64's at 594 of 781 on-wall
+    points of the icosphere."""
+    if surface == "split":
+        m = torus.load(n_major=28, n_minor=12)
+        g = torch.Generator().manual_seed(0)
+        p = m.points.double() * (
+            1 + 1e-5 * (2 * torch.rand(m.n_points, 1, dtype=D, generator=g) - 1)
+        )
+    else:
+        m = sphere_icosahedral.load(radius=1.0, subdivisions=3)
+        p = m.points.double()
+    pts = (p @ orthogonal(3, 7).T + torch.arange(1, 4, dtype=D) / 3).float()
+    q = torch.cat([pts, pts[m.cells[:, :2]].mean(1), pts[m.cells].mean(1)])
+    d, u = exact_boundary_geometry(q, pts, m.cells)
+    d64, u64 = exact_boundary_geometry(q.double(), pts.double(), m.cells)
+    wall = (d == 0) & (d64 == 0)
+    assert wall[: pts.shape[0]].all() and (u[wall].norm(dim=-1) > 0.9).all()
+    assert torch.equal(u[wall], u64[wall].float())
+
+
 def test_on_wall_direction_skips_zero_area_cells():
     """A zero-area triangle on an edge of a sphere has no normal: at the edge's
     vertices and its midpoint the on-wall rule reads the other cells holding the
