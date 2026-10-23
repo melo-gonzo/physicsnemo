@@ -39746,6 +39746,78 @@ fastbacks are in themselves, and only the reverse direction (train on fastbacks,
 
 *Read by the supervisor and second-read by the reviewer on 2026-10-22 (scratch/isla-review-2026-10-21/second-read-2026-10-22/suvx.md).*
 
+## 2026-10-23 — SUV-XFAM-B, stage 1: against models trained on fastbacks, ISLA 0.9.0's smaller wall-shear penalty is a transfer advantage over Transolver (estate-trained error 1.78 times the in-family fastback error, against 1.93; 1.085 at 5.8 SE), fastbacks are not harder in themselves (H 0.97-1.02), and the reverse direction shows no difference at two seeds {#sec-nb-suv-xfam-b1}
+
+**Question.** Part A (@sec-nb-suv-xfam) found that, trained on estates, ISLA loses less than the baselines on fastback
+wall shear (penalty 1.78 against 1.93 and 1.97) and the same on pressure (2.56 for all three). The penalty divides the
+fastback error by the *estate* error, so it mixes two things: how far an estate-trained model is from what a model can
+do on fastbacks (the transfer gap) and how hard fastbacks are in themselves. Models trained on fastbacks measure the
+second part and separate them.
+
+**Setting.** ISLA 0.9.0 and the fair-drive Transolver (512 × 16, `fx.source = U_inf_dir`), seeds 42 and 43, trained on
+the fastback train split (796 cases; validation on fastback val), 500 epochs. Each lane is its estate reference lane
+(`r090_suv_isla_seed4x`, `clud_suv_t_seed4x`) with only the dataset file changed: the saved configs differ only in
+`dataset` and `run_id`. A loader check showed that training read exactly the fastback manifest's train and val cases.
+The recipe fits no normalization statistic on SHIFT-SUV (wall shear is divided by a declared constant, pressure is Cp
+from each case's own far field), so no statistic of either family reaches any model. Every fastback-trained checkpoint is
+scored on fastback test, estate test, fastback val and estate val: native, float32, 200,000 cells, final epoch, part A's
+scorer. With E(x→y) the error of a model trained on family x and scored on family y (geometric seed means):
+- the forward gap G = E(est→fb) ÷ E(fb→fb), on fastback test;
+- the reverse gap R = E(fb→est) ÷ E(est→est), on estate test;
+- the hardness H = E(fb→fb) ÷ E(est→est).
+
+Part A's penalty is P = G × H. Each comparison is D = ln(X_Transolver ÷ X_ISLA), with an SE from the seed spreads of the
+four runs it involves. A cell reads *better* or *worse* only past 2 SE and 3 percent. Pre-registered before any
+fastback-trained run existed (scratch/isla-suv-xfam-2026-10-22/PREREG_B.md, approved by the supervisor 2026-10-22
+15:00 UTC). LHR jobs
+334400 (loader checks), 334401 (smoke), 334466-334469 and their chain links (training), 345738 and 347052 (scoring);
+147.5 GPU-h.
+
+**What we saw** (relative L2, pressure / wall shear, geometric seed means; seeds in RESULTS_B.md):
+
+| | ISLA 0.9.0 | Transolver | Transolver ÷ ISLA |
+|---|---|---|---|
+| E(fb→fb), fastback test | 0.0425 / 0.0656 | **0.0405** / 0.0643 | 0.953 (Transolver leads) / 0.980 (level) |
+| E(est→fb), fastback test (part A) | 0.1117 / **0.1168** | 0.1063 / 0.1241 | |
+| E(fb→est), estate test | 0.1374 / 0.1298 | 0.1427 / 0.1285 | |
+| E(est→est), estate test (part A) | 0.0437 / 0.0657 | 0.0416 / 0.0629 | |
+| forward gap G | 2.63 / **1.78** | 2.63 / 1.93 | 0.999 (no difference) / **1.085, 5.8 SE (ISLA transfers better)** |
+| reverse gap R | 3.14 / 1.98 | 3.43 / 2.04 | 1.091, 1.6 SE (no difference) / 1.034, 0.6 SE (no difference) |
+| hardness H | 0.97 / 1.00 | 0.97 / 1.02 | 1.002 (no difference) / 1.023, 3.8 SE (no difference: under 3 percent) |
+
+**Verdict, as registered.** On wall shear, ISLA **transfers better** than Transolver from estates to fastbacks. Its
+estate-trained model is closer to what a fastback-trained ISLA reaches than Transolver's is to a fastback-trained
+Transolver: 1.78 against 1.93 times, a ratio of 1.085 at 5.8 SE, and 1.098 at 8.7 SE on the fastback-val replicate. The
+registered reading is "transfer advantage, estate → fastback only", because the reverse gap reads *no difference*.
+Of part A's 11 percent wall-shear ratio, 78 percent is this transfer gap and 22 percent is hardness. On its own the
+hardness part is 2.3 percent, at 3.8 SE but under the 3-percent floor. On pressure every comparison reads *no
+difference*, and part A's pressure penalties were level, so the two models lose alike on fastback pressure. The
+stage-2 trigger (GeoTransolver trained on fastbacks) fires; the supervisor approved stage 2 (PREREG_B section 9), and
+it is running. Ten of eleven predictions held. The one that failed (Q4,
+p = 0.45) had expected the reverse wall-shear gap to favor ISLA as well.
+
+Validity: all scorings passed their checks, and the scored points and targets are identical across loaders (one
+digest per split). The registered force-coefficient identity check failed on estate val, at 1.28e-4 against a 1e-4
+bound. The failure sits on one near-zero roll moment (case 00888, CMR = -4.4e-6) and is the same for the standing
+estate-trained Transolver. It passes on all four splits under amendment 2 (PREREG_B section 8), approved by the supervisor before results, which
+scales the
+denominator by the component's median (largest value 6.1e-7).
+
+**Beside the rules** (no verdict):
+- Fastbacks are not harder than estates in themselves: a model trained and tested on fastbacks does as well as one
+  trained and tested on estates (H between 0.97 and 1.02 for both models and both fields). Part A's penalties are
+  therefore almost all transfer gap.
+- The reverse transfer costs more than the forward one, for both models and both fields: R exceeds G in every cell
+  (pressure 3.1-3.4 against 2.6).
+- The reverse direction is not resolved because of seed spread, not because the gaps agree. ISLA's reverse pressure
+  gap is 9 percent smaller than Transolver's, but each model's two fastback-trained seeds differ by 7-9 percent on
+  estates, against under 1 percent on fastbacks. Part A saw the same with GeoTransolver: out of family, the seed spread
+  grows by an order of magnitude.
+- In family, the fastback ordering repeats the estate one: Transolver leads on pressure by 5 percent, and on wall shear
+  it is 2 percent ahead (level) on fastback test and 3 percent ahead on fastback val.
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-book-am-2026-10-23/SECOND_READ_SUVXB.md).*
+
 ## 2026-10-22 — MECH-090: on Tensile2d the fixed compiled path's float32 gradients sit at a one-ulp eager floor, and pytorch/pytorch#195845 added a unit-dependent sink to ISLA's slice-state softmax (registered emulations not confirmed; a post-smoke emulation matches) {#sec-nb-mech090}
 
 **Question.** REF-090's Tensile2d control (@sec-nb-ref090-t2d-control) read (b) by its registered weighing, in which A2
@@ -40485,9 +40557,10 @@ query permutation and an outlet remeshing). It adds no parameter and leaves the 
 declaration, or on a case with no outlet token, the model is bitwise unchanged. Options rejected: interacting probes (they
 break query independence), every full-resolution outlet face (up to 890k extra tokens), the nearest queries' mean (it
 depends on the request), a soft penalty (a tuned weight), and a post hoc shift (below). A hard pointwise condition,
-`p = p_bc + phi N` with `phi` the distance to the outlet, is a later step if the pointwise outlet residual matters. Tests
-(CPU, on five files of the ISLA test directory: conditions, isla, scales, release, tree_read): 167 passed, 6 skipped; the
-9 new tests fail on the base.
+`p = p_bc + phi N` with `phi` the distance to the outlet, is a later step if the pointwise outlet residual matters. Tests:
+the whole ISLA test directory passes at 9250072af on CPU, serial (282 passed, 47 skipped, 0 failed; the supervisor's run,
+scratch/isla-main-2026-10-14/outlet-suite-2026-10-23/suite_9250072af.log, and DESIGN section 7); the 9 new tests fail on
+the base.
 
 **A post hoc estimate** (DESIGN section 2; estimate.md; not a test of the construction). PDIAG's rows (LHR 333637; ISLA
 0.9.0, epoch 250, float32, 30 random test cases per split) give the exact effect of shifting each case's scored prediction
@@ -40577,7 +40650,8 @@ of A's); if it fails, it is reported as "fails on cost as the code stands".
 and were resubmitted at 20:59 EDT as 342423 and 342424, with those nodes excluded. The registry expects the lanes to end by
 2026-10-25, and the read is expected about 2026-10-25 to 2026-10-26.
 
-*Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-geo-nb-2026-10-23/SECOND_READ_OUTLET.md).*
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-geo-nb-2026-10-23/SECOND_READ_OUTLET.md;
+the test sentence, scratch/isla-book-am-2026-10-23/SECOND_READ_OUTLET.md).*
 
 ## 2026-10-22 — TIE-EXP registered: ISLA with the tie rules trained eager on the lug and Tensile2d against REF-090's eager-trained base, scored on flip symmetry, native accuracy and the lug's pose excess; gated before launch, with one supervisor-approved deviation (A7); read about 2026-10-24 {#sec-nb-tie-exp-prereg}
 

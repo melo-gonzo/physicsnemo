@@ -1,4 +1,4 @@
-# REF-090 results: the final record (2026-10-22 22:30 EDT; sections marked PENDING are completed by the successor per HANDOFF_CLOSE.md)
+# REF-090 results: the final record (2026-10-23 06:15 EDT; the one PENDING item, the lug ISLA-DTT seed 42, is completed by the successor per HANDOFF_CLOSE.md)
 
 Pre-registration: PREREG.md (§§1-11 before submission; §12-§15 amendments, §13 a deviation for Tensile2d; md5 at this writing
 6ebab6ab). Jobs: JOBS.md. Interim record: RESULTS_partial.md. Reductions: `reduce_r090.py` → r090_final.json /
@@ -74,8 +74,9 @@ the Morton draw of the vehicle tokens, ordered along the dataset's axes, changes
 P1-P4 held (SUV 0.979, DrivAerML S 0.935, V 0.924 and ≤ 1.00, DeepJEB++ 1.008). P5 failed (Tensile2d displacement 1.041; r ≤
 0.97 failed too; contested field). P6 held (AirfRANS G 0.683; confirmed). P7 held (lug 1.104 in [0.85, 1.20]). P8 held
 (0.891). P9 held. P10 held. P11 held at ±0.01, failed at ±0.002 (Volume velocity 1.0040). P12 held (1.141 / 1.107). P13:
-AirfRANS failed (ISLA-DTT ÷ ISLA on the r090 rows 1.163 / 1.147 / 1.396, G 1.230; fix-trained 1.035 / 1.126 / 1.381);
-**lug part PENDING** (r090fix_lug_dtt ÷ r090fix_lug_isla in [0.8, 1.25]). P14 failed (the r090 lug ISLA-DTT lanes were
+AirfRANS part failed as registered (ISLA-DTT ÷ ISLA on the r090 rows 1.163 / 1.147 / 1.396, G 1.230, against ≤ 1.05); beside
+it, fix-trained 1.035 / 1.126 / 1.381 and eager-trained 0.994 / 1.129 / 1.342 (G 1.146) also exceed 1.05. **Lug part PENDING**
+(r090fix_lug_dtt ÷ r090fix_lug_isla in [0.8, 1.25]); seed 43 alone reads 1.270 (0.001834 ÷ 0.001445). P14 failed (the r090 lug ISLA-DTT lanes were
 cancelled before epoch 500).
 
 ## 4. R2, the standings (ISLA rows; baselines are the book's standing arms, results/char/<dataset>_a2.json)
@@ -95,8 +96,10 @@ AirfRANS r090eag_af_isla: pressure 0.012479 (0.013163, 0.011794), velocity 0.006
 0.015353 (0.015738, 0.014968); posed ÷ native 1.0022-1.0025 / 1.0016 / 1.0000; ÷ A2 (bug-trained, eager-scored; mixed training
 paths) 0.692 / 0.668 / 0.687 (eag_af_isla.md). Values: Tensile2d r090eag displacement 0.00849 (0.00783, 0.00629, 0.00891, 0.01092), stress 0.01113, plastic strain 0.273
 (t2d_standing.md); lug r090eag von Mises 0.001574 (0.001376, 0.001771), posed 0.002292 (eag_lug.md). Secondary arms (not
-standings): AirfRANS ISLA-DTT → r090eag_af_dtt (**PENDING**); lug ISLA-DTT → r090fix_lug_dtt, labelled fix-trained
-(**PENDING**, §15 (c)).
+standings): AirfRANS ISLA-DTT → r090eag_af_dtt, eager-trained: pressure 0.012408 (0.012428, 0.012389), velocity 0.007173
+(0.007373, 0.006973), eddy viscosity 0.020598 (0.020711, 0.020484); ÷ r090eag_af_isla 0.994 / 1.129 / 1.342; posed ÷ native
+1.0017-1.0022 / 1.0010-1.0012 / 1.0001 (eag_af_dtt.md). Lug ISLA-DTT → r090fix_lug_dtt, labelled fix-trained (§15 (c)):
+seed 43 0.001834 (posed 0.003627, posed ÷ native 1.98); **seed 42 PENDING**.
 
 ## 5. The compiled-path defect: retrain (§12) and training-path reads (§§13-15)
 
@@ -122,8 +125,9 @@ failed. Lug ISLA-DTT eager pair stays held.
 
 **§14, AirfRANS read: ISLA (c)** (eag_af_isla.md, scorer 344920): eager ÷ fix 1.021 / 1.005 / 0.986 (|d|/2SE 0.12 / 0.11 /
 0.25), eager ÷ bug 1.045 / 0.989 / 0.985 (0.27 / 0.25 / 0.21); all three training paths within 5 %, seed ranges overlap; no
-(b), so AF-EXTRAP's and ATTRIB-090's fix-path lanes stand, labelled fix-trained. **ISLA-DTT: PENDING** (`python3 eag_reads.py
-af_dtt`).
+(b), so AF-EXTRAP's and ATTRIB-090's fix-path lanes stand, labelled fix-trained. **ISLA-DTT: (c)** (eag_af_dtt.md, scorers
+350103 / 350296; PREREG §14c): pressure (c) (eager ÷ fix 0.981 at 1.37 × 2SE, ÷ bug 0.880 at 2.97 × 2SE: differs from both),
+velocity (c) (1.007, 0.968), eddy viscosity (a) (0.958 at 0.28, 0.922 at 1.26 × 2SE); one field of three, so (c).
 
 **Mechanism checks beside the rules (never in them).**
 - Lockstep v1 (317142, the registered bf16 check): inconclusive. Eager is bitwise deterministic (zero floor), and the fixed and
@@ -142,8 +146,10 @@ af_dtt`).
   near 0.012 to 0.01196 (not a late spike). σ(log) of displacement: eager 0.23, fix 0.16, bug 0.025; on the lug the opposite
   (fix seeds 1.2 % apart, bug 12 %).
 
-## 6. Secondary arm: lug ISLA-DTT — PENDING
+## 6. Secondary arm: lug ISLA-DTT — seed 42 PENDING
 
+Seed 43 (scorer 350102): von Mises 0.001834, ÷ r090fix_lug_isla seed 43 1.270, ÷ r090eag_lug_isla 1.166; posed 0.003627.
+Seed 42 is at epoch 452 of 500 (its link 342582_0 hung on the second quota event; successor 345709 pending).
 r090_lug_dtt (rows 16-17) was cancelled under the defect ("incomplete as registered"). r090fix_lug_dtt (kernel/r090fix rows
 0-1) fills it, labelled fix-trained. Report against lug ISLA 0.9.0 (r090 0.001904, posed 0.002139; r090fix 0.001454; r090eag
 0.001574) and P13's [0.8, 1.25]. No A2-era ISLA-DTT lug value exists in the record (searched the book, results/, scratch and
@@ -155,4 +161,5 @@ Training: r090 wave 298076-298093 (and their chains); r090fix 312864-312865, 312
 313540-313541; r090fix2 315442-315443; a2rfix 315538-315539; r090eag Tensile2d 317148-317151; a2reag 317152-317153;
 r090eagaf 323068-323069, 323076-323077, 323083-323084. Smokes 312815, 323028. Scorers: 312784, 314657 (DeepJEB++), 315170,
 317020, 317050, 321760, 322902, 325815, 326815, 330338, 343170. Checks: 312826 (setcheck), 315431/315466/315498 (a2rfix cert),
-317142, 317294, 323041 (lockstep), 343190 (certlug).
+317142, 317294, 323041 (lockstep), 343190 (certlug). Later scorers: 343170 (lug eager), 344920, 350103, 350296 (AirfRANS
+eager), 350102 (lug ISLA-DTT s43). PROBES-090 (f): 350362, 350363, 350364.

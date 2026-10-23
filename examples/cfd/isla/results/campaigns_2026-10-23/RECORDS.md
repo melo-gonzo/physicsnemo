@@ -8,6 +8,7 @@ source. Do not edit by hand.
 | `attrib090/` | ATTRIB-090: which change of ISLA 0.9.0 moves Tensile2d, AirfRANS and the lug | `scratch/isla-attrib090-2026-10-21/` |
 | `ref090/` | REF-090: ISLA 0.9.0 against the nearest-token form, the training-path control | `scratch/isla-ref090-2026-10-20/` |
 | `af_extrap/` | AF-EXTRAP: AirfRANS extrapolation in Reynolds number and angle of attack | `scratch/isla-af-extrap-2026-10-21/` |
+| `suv_xfam_b/` | SUV-XFAM part B: SHIFT-SUV models trained on fastbacks, against the estate-trained ones | `scratch/isla-suv-xfam-2026-10-22/` |
 
 | topic | file | source | md5 |
 | --- | --- | --- | --- |
@@ -30,8 +31,8 @@ source. Do not edit by hand.
 | ref090 | t2d_control.json | scratch/isla-ref090-2026-10-20/t2d_control.json | 37335a48f8d838dc94452fb88931de25 |
 | ref090 | t2d_fourseed.json | scratch/isla-ref090-2026-10-20/t2d_fourseed.json | 0c67dc5548a683fd122a62c9aed0a811 |
 | ref090 | t2d_fourseed.md | scratch/isla-ref090-2026-10-20/t2d_fourseed.md | f443a07295a57fd1b4548017f5f1241d |
-| ref090 | PREREG.md | scratch/isla-ref090-2026-10-20/PREREG.md | 6ebab6ab650d5f49ead98c09ec460b72 |
-| ref090 | RESULTS.md | scratch/isla-ref090-2026-10-20/RESULTS.md | 44c2a1d22cee9526aa3958fdbcd985e4 |
+| ref090 | PREREG.md | scratch/isla-ref090-2026-10-20/PREREG.md | 74ee9c8ff5801eb930e2ae27e0f28146 |
+| ref090 | RESULTS.md | scratch/isla-ref090-2026-10-20/RESULTS.md | 6c22b9552191c7b2e645656a5579c3ed |
 | ref090 | eag_lug.md | scratch/isla-ref090-2026-10-20/eag_lug.md | 103172e919599832b34e61ebd2c384d5 |
 | ref090 | eag_lug.json | scratch/isla-ref090-2026-10-20/eag_lug.json | ed4d5799bcd2d0a67c8f8bc25a17fbed |
 | ref090 | eag_af_isla.md | scratch/isla-ref090-2026-10-20/eag_af_isla.md | b4dd12f005fe0f37d40c2037de5b6b16 |
@@ -46,3 +47,8 @@ source. Do not edit by hand.
 | af_extrap | stats/clamp_bounds.json | scratch/isla-af-extrap-2026-10-21/stats/clamp_bounds.json | 5fc5005d16d7ec38475f488382e656f6 |
 | af_extrap | LRE.md | scratch/isla-af-extrap-2026-10-21/LRE.md | d4af4d170c1860aa3b0cacc2bf389e01 |
 | af_extrap | lre.json | scratch/isla-af-extrap-2026-10-21/lre.json | 493d95be22c44af6a41029e9d6822f54 |
+| suv_xfam_b | PREREG_B.md | scratch/isla-suv-xfam-2026-10-22/PREREG_B.md | 118f36a0e86fe690414f8b3feaaa9c3b |
+| suv_xfam_b | RESULTS_B.md | scratch/isla-suv-xfam-2026-10-22/RESULTS_B.md | a0e1d7c361e2ef99bed075706ca5854e |
+| suv_xfam_b | JOBS.md | scratch/isla-suv-xfam-2026-10-22/JOBS.md | 0fa83ff66b0ef3aa45bdb2c263a276d8 |
+| suv_xfam_b | reduce_b_out.json | scratch/isla-suv-xfam-2026-10-22/reduce_b_out.json | 91e0cbab2d509fbe8b71ba76c5f436d4 |
+| suv_xfam_b | identity_b_out.json | scratch/isla-suv-xfam-2026-10-22/identity_b_out.json | 389255a80b9364a941b2cbbf98826eb6 |

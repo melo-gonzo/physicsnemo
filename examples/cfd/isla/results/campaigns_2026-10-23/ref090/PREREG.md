@@ -466,3 +466,13 @@ ISLA-DTT eager pair stays held, r090fix_lug_dtt fills the secondary arm, labelle
 r090eag_lug_isla. Posed ÷ native: eager 1.246 / 1.619, fix 1.346 / 1.383, bug 1.194 / 1.105. Predictions: L1 failed, L2 held,
 L3 held (1.083), L4 held, L5 failed (1.619). Beside it: MECH-090 (scratch/isla-mech090-2026-10-22/RESULTS.md) forecast (a) and
 finds the fixed path at a one-ulp eager floor in fp32 gradients; it is not part of the rule.
+
+### 14c. §14 as read (2026-10-23 06:10 EDT; eag_af_isla.md scorer 344920, eag_af_dtt.md scorers 350103 / 350296)
+- **ISLA: (c)** (all three fields (c)). Eager ÷ fix 1.021 / 1.005 / 0.986 (|d| / 2SE 0.12 / 0.11 / 0.25), eager ÷ bug 1.045 / 0.989
+  / 0.985 (0.27 / 0.25 / 0.21); every seed range overlaps; the three training paths lie within 5 %.
+- **ISLA-DTT: (c)** (pressure (c), velocity (c), eddy viscosity (a): one field of three). Pressure: eager 0.012408 ÷ fix 0.981
+  (1.37 × 2SE, both eager seeds below both fix seeds) and ÷ bug 0.880 (2.97 × 2SE): differs from both. Velocity ÷ fix 1.007 (0.12),
+  ÷ bug 0.968 (0.58). Eddy viscosity ÷ fix 0.958 (0.28), ÷ bug 0.922 (1.26 × 2SE, below).
+- Consequences: no (b), so AF-EXTRAP's ISLA family and ATTRIB-090's AirfRANS and lug arms stand, labelled fix-trained; the
+  lug ISLA-DTT eager pair was already re-gated on §15 (read (c): not launched). AirfRANS ISLA standing r090eag_af_isla;
+  ISLA-DTT secondary arm r090eag_af_dtt.

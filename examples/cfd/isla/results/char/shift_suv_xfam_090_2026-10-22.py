@@ -30,8 +30,21 @@ Writes results/char/shift_suv_xfam_090.json:
                            cells D = ln(P_B / P_ISLA) with SE, z and verdict, and the summary as registered
   B_trigger, predictions   as registered
   case_level               percase_out.json (fraction of cases ISLA is lower on, case-bootstrap intervals; no verdict)
-  part_b                   {status: in_flight, in_flight: {what, replacement}}: the fastback-trained comparison
+  part_b                   the fastback-trained comparison: {status, in_flight: {what, replacement}, stage1}
 Part A is final; the file's own status is final, with part B's status inside part_b.
+
+Part B (scratch/isla-suv-xfam-2026-10-22/PREREG_B.md, md5 118f36a0; amendment 2 in its section 8, stage 2 in section 9):
+ISLA 0.9.0 (sxb_isla) and Transolver 512 x 16 (sxb_t) trained on the fastback train split, seeds 42 and 43, scored on the
+same four splits. Sources, copied unmodified into results/campaigns_2026-10-23/suv_xfam_b/ by copy_records_2026-10-23.py:
+reduce_b_out.json (reduce_b.py, the registered rules) and identity_b_out.json (identity_b.py, the force-coefficient identity
+check as amended before results). With E(x->y) the error of a model trained on family x and scored on family y, geometric
+seed means: the forward gap G = E(est->fb) / E(fb->fb), the reverse gap R = E(fb->est) / E(est->est), the hardness
+H = E(fb->fb) / E(est->est), and part A's penalty P = G x H; each comparison D = ln(X_Transolver / X_ISLA) reads better or
+worse only past 2 SE and ln 1.03.
+  part_b.stage1            {status: final, E, B1, quantities, comparisons, reading, stage2_trigger, predictions, checks,
+                           identity: {registered, amended}}, the reduction's keys unchanged; E[arm][trained][split][field]
+                           {geo_mean, per_seed}, trained 'fastback' (part B) or 'estate' (part A's rows, as reduce_b.py reads them)
+  part_b.status, in_flight stage 2, GeoTransolver trained on fastbacks, is in flight
 usage: python shift_suv_xfam_090_2026-10-22.py"""
 
 import json
@@ -40,6 +53,7 @@ import statistics as st
 
 R = os.path.dirname(os.path.abspath(__file__))
 SRC = f"{os.path.dirname(R)}/campaigns_2026-10-22/suv_xfam"
+SRC_B = f"{os.path.dirname(R)}/campaigns_2026-10-23/suv_xfam_b"
 ARMS = {
     "isla": "ISLA 512 with 512 slices",
     "gt": "GeoTransolver 256",
@@ -54,13 +68,58 @@ SPLITS = {
 }
 FIELDS = {"pressure_l2": "pressure", "wss_l2": "wall shear"}
 SEEDS = ("42", "43")
-PART_B = {
-    "status": "in_flight",
-    "in_flight": {
-        "what": "models trained on estates only, so the penalty mixes the transfer gap with how hard fastbacks are in themselves",
-        "replacement": "The reverse direction, ISLA and Transolver trained on fastbacks and scored on estates,",
-    },
+PART_B_FLIGHT = {
+    "what": "ISLA and Transolver trained on fastbacks, so the transfer comparison is against Transolver only",
+    "replacement": "GeoTransolver trained on fastbacks and scored on both families",
 }
+TRAINED = {"fb": "fastback", "est": "estate"}
+
+
+def part_b():
+    """Part B: stage 1 final from the reduction as registered and the amended identity check; stage 2 in flight."""
+    red = json.load(open(f"{SRC_B}/reduce_b_out.json"))
+    ident = json.load(open(f"{SRC_B}/identity_b_out.json"))
+    assert len(red["checks"]) == 16 and all(
+        all(v for k, v in c.items() if k != "run") for c in red["checks"]
+    )
+    assert ident["all_pass"]
+    E = red["E"]
+    arms = {
+        ARMS[a]: {
+            TRAINED[t]: {
+                sp: {
+                    f: {
+                        "geo_mean": st.geometric_mean(
+                            E[f"{t}/{a}/{s}/{sp}/{f}"] for s in SEEDS
+                        ),
+                        "per_seed": {s: E[f"{t}/{a}/{s}/{sp}/{f}"] for s in SEEDS},
+                    }
+                    for f in FIELDS
+                }
+                for sp in SPLITS
+            }
+            for t in TRAINED
+        }
+        for a in ("isla", "t")
+    }
+    stage1 = {
+        "status": "final",
+        "E": arms,
+        **{
+            k: red[k]
+            for k in (
+                "B1",
+                "quantities",
+                "comparisons",
+                "reading",
+                "stage2_trigger",
+                "predictions",
+                "checks",
+            )
+        },
+        "identity": {"registered": red["identity"], "amended": ident},
+    }
+    return {"status": "in_flight", "in_flight": PART_B_FLIGHT, "stage1": stage1}
 
 
 def main():
@@ -111,7 +170,7 @@ def main():
         "B_trigger": red["B_trigger"],
         "predictions": red["predictions"],
         "case_level": json.load(open(f"{SRC}/percase_out.json")),
-        "part_b": PART_B,
+        "part_b": part_b(),
     }
     json.dump(out, open(f"{R}/shift_suv_xfam_090.json", "w"), indent=1)
     for label, a in arms.items():
@@ -127,6 +186,16 @@ def main():
         out["R2"]["fb_test"]["summary"],
         {k: v["verdict"] for k, v in out["R2"]["fb_test"]["cells"].items()},
     )
+    s1 = out["part_b"]["stage1"]
+    for k in ("D_G", "D_R", "D_H"):
+        print(
+            f"part B {k} lead:",
+            {
+                f: (round(c["ratio_T_over_ISLA"], 3), round(c["z"], 1), c["verdict"])
+                for f in FIELDS
+                for c in [s1["comparisons"][f"{k}/lead/{f}"]]
+            },
+        )
 
 
 if __name__ == "__main__":
