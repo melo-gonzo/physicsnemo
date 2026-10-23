@@ -213,9 +213,12 @@ def _min_norm_points(c: torch.Tensor) -> torch.Tensor:
     midpoint, since the vectors have equal norms; the first in the enumeration at
     equal norms) that meets the optimality condition ``c_k . x >= |x|^2``, which
     only the hull's least-norm point does (other faces' points can match its norm
-    to rounding where vectors nearly coincide), and none when the origin is in the
-    hull. ``c`` in a canonical order, so the result is a function of the set.
-    Chunked over the rows."""
+    to rounding where vectors nearly coincide). When none meets it to rounding, the
+    origin is outside the hull exactly when a candidate separates it (``c_k . x >
+    0`` for every ``k``; the least-norm point does): then the candidate with the
+    least duality gap ``g = |x|^2 - min_k c_k . x`` (``|x - x*| <= sqrt(2 g)``),
+    otherwise 0. ``c`` in a canonical order, so the result is a function of the
+    set. Chunked over the rows."""
     n, k, d = c.shape
     if k == 1:
         return c[:, 0]
@@ -242,10 +245,13 @@ def _min_norm_points(c: torch.Tensor) -> torch.Tensor:
         x = torch.cat(xs, 1)
         ### Rounding of a d-term dot product of unit vectors, on each side.
         slack = 2 * d * torch.finfo(c.dtype).eps
-        optimal = ((cc[:, None] * x[:, :, None]).sum(-1) >= (x * x).sum(-1, keepdim=True) - slack).all(-1)
-        norm = torch.where(optimal, x.norm(dim=-1), torch.inf)
-        best = x.gather(1, norm.argmin(1)[:, None, None].expand(-1, 1, d))[:, 0]
-        out.append(torch.where(torch.isfinite(norm).any(1)[:, None], best, 0.0))
+        low, sq = (cc[:, None] * x[:, :, None]).sum(-1).amin(-1), (x * x).sum(-1)
+        norm = torch.where(low >= sq - slack, x.norm(dim=-1), torch.inf)
+        gap = torch.where((low > slack) & torch.isfinite(sq), sq - low, torch.inf)
+        certified = torch.isfinite(norm).any(1)
+        pick = torch.where(certified, norm.argmin(1), gap.argmin(1))
+        best = x.gather(1, pick[:, None, None].expand(-1, 1, d))[:, 0]
+        out.append(torch.where((certified | torch.isfinite(gap).any(1))[:, None], best, 0.0))
     return torch.cat(out)
 
 

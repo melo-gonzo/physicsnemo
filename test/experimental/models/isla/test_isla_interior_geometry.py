@@ -25,6 +25,7 @@ and exact references, its sign convention and convergence, and the contracts of
 the interior task.
 """
 
+import itertools
 import math
 import os
 
@@ -1240,6 +1241,103 @@ def test_float32_tie_keeps_its_side_off_the_wall():
     d, u = _geometry(q, moved)
     d2, u2 = _geometry(q, _flipped(moved))
     assert torch.equal(_gradient(d2, u2), -_gradient(d, u))
+
+
+def _least_norm(c, tol: float = 1e-14):
+    """The point of the convex hull of each row of ``c`` ``(n, K, d)`` closest to
+    the origin, by enumeration in float64: every face of at most d of the vectors
+    gives its least-norm affine point (the KKT system), and the hull's is the
+    least-norm one with non-negative weights that meets the optimality condition
+    c_k . x >= |x|^2; zero when none does (the origin is in the hull)."""
+    n, k, d = c.shape
+    best, best_norm = c.new_zeros(n, d), c.new_full((n,), torch.inf)
+    for m in range(1, min(k, d) + 1):
+        for sub in itertools.combinations(range(k), m):
+            p = c[:, list(sub)]
+            a = c.new_zeros(n, m + 1, m + 1)
+            a[:, :m, :m], a[:, :m, m], a[:, m, :m] = p @ p.mT, 1.0, 1.0
+            rhs = c.new_zeros(n, m + 1)
+            rhs[:, m] = 1.0
+            sol, info = torch.linalg.solve_ex(a, rhs)
+            lam = sol[:, :m]
+            x = (lam[..., None] * p).sum(1)
+            ok = (info == 0) & torch.isfinite(lam).all(-1) & (lam >= -tol).all(-1)
+            ok &= ((c * x[:, None]).sum(-1) >= (x * x).sum(-1, keepdim=True) - tol).all(
+                -1
+            )
+            ok &= x.norm(dim=-1) < best_norm
+            best = torch.where(ok[:, None], x, best)
+            best_norm = torch.where(ok, x.norm(dim=-1), best_norm)
+    return best
+
+
+@pytest.mark.parametrize("dtype", [D, torch.float32])
+@pytest.mark.parametrize(
+    "surface", ["sphere", "raw torus", "torus", "ellipse", "sliver"]
+)
+def test_tie_directions_take_the_exact_least_norm_point(surface, dtype, monkeypatch):
+    """At the vertices and the cells' edge midpoints of curved surfaces in a generic
+    pose (the raw torus with its stored winding, the sliver a sphere with a zero-area
+    triangle on one edge), on the surface and off it (a float32 midpoint lies a few
+    1e-8 off its edge), every tie's least-norm step returns the exact least-norm
+    point of its directions (enumerated in float64), to 1e-6 from float64 inputs and
+    1e-5 from float32 ones, and never 0 where that is not."""
+    if surface == "ellipse":
+        m = _circle(400)
+        mesh = Mesh(points=m.points * torch.tensor([1.0, 0.12], dtype=D), cells=m.cells)
+    elif surface == "raw torus":
+        m = torus.load(n_major=48, n_minor=24)
+        mesh = Mesh(points=m.points.double(), cells=m.cells)
+    else:
+        mesh = {
+            "sphere": lambda: _sphere(3),
+            "torus": _torus,
+            "sliver": lambda: _sphere(2),
+        }[surface]()
+    pts, cells = mesh.points, mesh.cells
+    if surface == "sliver":
+        a, b = cells[0, :2].tolist()
+        pts = torch.cat([pts, 0.5 * (pts[a] + pts[b])[None]])
+        cells = torch.cat([cells, torch.tensor([[a, b, mesh.n_points]])])
+    dim = pts.shape[-1]
+    R, t = orthogonal(dim, 7), torch.arange(1, dim + 1, dtype=D) / 3
+    pts = (pts @ R.T + t).to(dtype)
+    q = torch.cat([pts[: mesh.n_points], pts[mesh.cells[:, :2]].mean(1)])
+    calls = []
+    min_norm = geometry._min_norm_points
+
+    def recorded(c):
+        x = min_norm(c)
+        calls.append((c, x))
+        return x
+
+    monkeypatch.setattr(geometry, "_min_norm_points", recorded)
+    exact_boundary_geometry(q, pts, cells)
+    assert calls
+    tol = 1e-6 if dtype == D else 1e-5
+    for c, x in calls:
+        exact = _least_norm(c)
+        assert not ((x.norm(dim=-1) == 0) & (exact.norm(dim=-1) > 0)).any()
+        assert (x - exact).norm(dim=-1).max() <= tol
+
+
+@pytest.mark.parametrize("k, dim", [(2, 2), (3, 2), (2, 3), (3, 3), (6, 3)])
+def test_least_norm_point_without_a_certified_candidate(k, dim):
+    """Float32 unit vectors read in float64 are unit only to about 6e-8, beyond the
+    optimality certificate's rounding slack, so often no candidate passes it. Where
+    a candidate separates the origin from the hull, the routine returns the one
+    with the least duality gap g = |x|^2 - min_k c_k . x, within sqrt(2 g) of the
+    exact least-norm point; otherwise 0, exactly where the exact point is 0. Before,
+    every row without a certified candidate gave 0."""
+    g = torch.Generator().manual_seed(k * dim)
+    c = torch.randn(200, 1, dim, generator=g) + 0.4 * torch.randn(
+        200, k, dim, generator=g
+    )
+    c = torch.nn.functional.normalize(c, dim=-1).double()
+    x, exact = geometry._min_norm_points(c), _least_norm(c, tol=1e-12)
+    assert torch.equal(x.norm(dim=-1) == 0, exact.norm(dim=-1) == 0)
+    gap = (x * x).sum(-1) - (c * x[:, None]).sum(-1).amin(-1)
+    assert ((x - exact).norm(dim=-1) <= (2 * gap.clamp_min(0)).sqrt() + 1e-12).all()
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="compares CUDA with CPU")
