@@ -39327,6 +39327,10 @@ That is what the control tests.
 
 *Read by the supervisor and second-read by the reviewer on 2026-10-22 (scratch/isla-review-2026-10-21/SECOND_READ_2026-10-22.md).*
 
+**Later (2026-10-23).** The retrained lug ISLA-DTT arm, labelled fix-trained, finished on both seeds, and P13's lug part failed: r090fix_lug_dtt ÷ r090fix_lug_isla is 1.394 (a ratio of arithmetic seed means; seed-matched 1.517, 1.270) against [0.8, 1.25]. So P13 failed on both parts (@sec-nb-ref090-standings; scratch/isla-ref090-2026-10-20/lug_dtt_read.md).
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-book-pm-2026-10-23/SECOND_READ_LUG_DTT.md).*
+
 ## 2026-10-21 — Capacity audit, phases 1 and 1b: trained on one case with fresh point draws, ISLA fits the field to within 1.2-1.7 times the best baseline on DrivAerML Surface and HiLift 18°, and on AirfRANS velocity and eddy viscosity, but is 2.6-2.7 times GeoTransolver on AirfRANS pressure, whose excess sits 1e-3 to 0.1 chords from the wall {#sec-nb-cap-audit-p1}
 
 **Question.** Peter asked whether ISLA can overfit a single sample. If it can, the architecture can represent that
@@ -40171,8 +40175,12 @@ both fix-trained 0.01265 (eager ÷ fix-trained 0.981, 1.37 × 2 SE) and bug-trai
   1.342 on pressure / velocity / eddy viscosity (ratios of arithmetic seed means; G 1.146, their geometric mean over the
   three fields); fix-trained, the pair read 1.035 / 1.126 / 1.381. P13's AirfRANS part (G ≤ 1.05) failed as
   registered (G 1.230 on the r090 rows); the fix-trained and eager-trained pairs exceed 1.05 too. The lug ISLA-DTT,
-  fix-trained (r090fix_lug_dtt), is still training on seed 42; it will be read against ISLA 0.9.0 fix-trained, and
-  P13's lug part (in [0.8, 1.25]) with it. Seed 43 alone, against ISLA 0.9.0 fix-trained seed 43, reads 1.270 (0.001834 ÷ 0.001445).
+  fix-trained (r090fix_lug_dtt), reads von Mises 0.002027 (seeds 0.002219, 0.001834). ÷ ISLA 0.9.0 fix-trained it is
+  1.394 (a ratio of arithmetic seed means; seed-matched 1.517, 1.270), and ÷ the eager-trained ISLA standing 1.288,
+  across training paths. Both ISLA-DTT seeds lie above all four fix- and eager-trained ISLA seeds, so on the lug the
+  read-only form trails the interacting one beyond seed noise. Its posed ÷ native is 1.53 / 1.98. P13's lug part (in
+  [0.8, 1.25], p 0.6) failed, so P13 failed on both parts. No registered rule escalates it: the arm is secondary and
+  changes no standing (scratch/isla-ref090-2026-10-20/lug_dtt_read.md; scorers 354186 and 350102).
 - R1 under one training function (beside the registered 0.891, which stands): on Tensile2d, ISLA 0.9.0
   eager-trained ÷ ISLA A2 eager-trained is 1.200 on displacement over four seeds and 0.998 on seeds
   42/43. On the lug and AirfRANS, no eager-trained A2 exists. ISLA 0.9.0 eager-trained ÷ ISLA A2
@@ -40187,7 +40195,8 @@ percent on pressure and rose 3 percent on eddy viscosity. The other datasets' st
 (@sec-nb-ref090-r1).
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-book-1023/SECOND_READ_STANDINGS.md;
-the ISLA-DTT read, scratch/isla-book-am-2026-10-23/SECOND_READ_REF090.md).*
+the ISLA-DTT read, scratch/isla-book-am-2026-10-23/SECOND_READ_REF090.md; the lug ISLA-DTT read,
+scratch/isla-book-pm-2026-10-23/SECOND_READ_LUG_DTT.md).*
 
 ## 2026-10-23 — ATTRIB-090, stage 2: on AirfRANS ISLA's gain over its earlier form comes from standardizing the global input, not from its scales; on the lug the fix-trained 0.9.0 leads the fix-trained CONT (directional) {#sec-nb-attrib090-stage2}
 
