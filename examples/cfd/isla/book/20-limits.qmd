@@ -133,6 +133,8 @@ print("- **Not that ISLA extrapolates across a flow regime, or that it transfers
       "the baselines in general.** On SHIFT-SUV it transfers better than GeoTransolver and Transolver from estates to fastbacks on "
       "wall shear only; on pressure the three transfer alike, and in the reverse direction two seeds show no difference against "
       "either baseline (@sec-limits-regime, @sec-limits-transfer).")
+print("- **Not that every standing is of ISLA reading its whole boundary.** On the DrivAerML Volume and Surface tasks, SHIFT-SUV, "
+      "HiLiftAeroML and AirfRANS its configuration reads the body alone (@sec-limits-whole-boundary).")
 print("- **Not that the HiLiftAeroML numbers are test-set numbers** (@sec-limits-validation).")
 print("- **Not that the scaling law, the cell-count saturation or the capacity floor are measured at the reference configuration.** "
       "They are measured on smaller ISLAs and read for slopes and floors (@sec-capacity, @sec-oq-scaling).")
@@ -517,7 +519,7 @@ L_REF = float(re.search(r"`global_data\.L_ref` = ([\d.]+) m", " ".join(R.load("c
 #| label: tbl-open-questions
 #| output: asis
 rows = [
-    ("Which form is ISLA's default interior model? (@sec-oq-dtt)", "ISLA-DTT ÷ ISLA on velocity and pressure on `full` and each AeroZoo held-out split under the benchmark protocol, at equal size, read by the rule registered for it: ISLA-DTT unless interacting ISLA is clearly more accurate", f"at most {fmt_h(q_dtt)}"),
+    ("Which form is ISLA's default interior model? (@sec-oq-dtt)", "ISLA-DTT ÷ ISLA on velocity and pressure on `full` and each AeroZoo held-out split under the benchmark protocol, at equal size, read by the bands registered for it; ISLA-DTT is the default interior form unless interacting ISLA is clearly more accurate", f"at most {fmt_h(q_dtt)}"),
     ("Do ISLA's declared scales add accuracy where the Reynolds number varies widely? (@sec-oq-scales)", "ISLA with and without its scales, the latter reading a standardized global input, on a dataset whose Reynolds number varies widely, such as AeroZoo", "not priced"),
     ("Does a fixed scale of ISLA's Reynolds input hold beyond AirfRANS? (@sec-oq-reynolds)", "ISLA trained with the fixed log-Reynolds scale on AeroZoo's `reynolds` split, read against ISLA with the fitted scale", f"at most {fmt_h(q_rey)}"),
     ("Are ISLA's crossflow and non-box failures on AeroZoo limits of the architecture? (@sec-oq-aerozoo)", "ISLA-DTT on the same splits; for the non-box family, a training set whose velocity scales cover the ducts'", "in the first row"),
@@ -588,8 +590,8 @@ print("**The open question is whether the read-only form, whose prediction at a 
       "question: both ratios measure accuracy inside the training distribution. The decisive data are AeroZoo's "
       "held-out splits, where generalization rather than in-distribution accuracy is at stake. What would settle it: both forms at equal "
       f"size under the benchmark protocol (@sec-aerozoo-allowed), on `full` and on each of the {len(AZS['held_out'])} held-out splits, two "
-      "seeds each, with the ratio $R$ = ISLA-DTT ÷ ISLA (seed means) on velocity and pressure as the readout, read by the rule registered "
-      f"for it before any ISLA-DTT score. Interacting ISLA stays the default only if the arithmetic mean of $R$ over the held-out splits "
+      "seeds each, with the ratio $R$ = ISLA-DTT ÷ ISLA (seed means) on velocity and pressure as the readout, read by the bands registered "
+      f"for them before any ISLA-DTT score. Interacting ISLA stays the default only if the arithmetic mean of $R$ over the held-out splits "
       f"is at least {ISLA_CLEAR} on velocity or on pressure. Otherwise ISLA-DTT becomes the default interior form: where $R$ is at most "
       f"{DTT_CLEAR} on both fields on every held-out split, and also in the close call between the two bands, where the principled "
       "choice, a prediction that does not depend on the request, decides. Removing the interacting form, and with it the query routing "
@@ -718,7 +720,7 @@ print("**The open question is whether the closest-feature ties of the lug's mesh
       "residual falls to float32 roundoff, whether native accuracy is unchanged within the seed spread, and how much of the excess of "
       f"posed ÷ native over one is left. The bar the other standings set is posed ÷ native within 0.002 of one on every headline field, which {n_pose} of "
       f"the {len(FIN)} final standings meet. Nodes on the surface itself keep the found feature's direction under this rule, and a rule for "
-      f"them is open too. If native accuracy is unchanged, the rule enters ISLA's geometry with the rest of the candidate geometry of "
+      f"them is open too. If retraining with it shows no accuracy cost, the rule enters ISLA's geometry with the rest of the candidate geometry of "
       f"@sec-oq-precision. Cost: {q_ties} GPU-hours, as the design prices it. Data: {R.source('medial_tie', 'DESIGN.md')}.")
 ```
 
@@ -833,6 +835,11 @@ print("**The open question is whether ISLA's far-field eddy-viscosity error on t
       f"{R.source('floor_drv', 'PREREG.md')} (section 8).")
 ```
 
+::: {.callout-note title="In flight"}
+This question rests on the single-car runs with the vehicle alone. ISLA trained on the same car with the
+domain's four other boundary meshes is being measured, and the ledger (@sec-ledger) tracks it.
+:::
+
 ### The rest of the boundary on the other datasets {#sec-oq-whole-boundary}
 
 ```{python}
@@ -848,6 +855,11 @@ print("**The open question is what each dataset stores of its domain's boundary 
       "the standing as it is. A piece a dataset does not store is a gap of the dataset; the model cannot supply it. Cost: the read needs "
       "no training; the retraining is not priced, because what each dataset stores sets the runs.")
 ```
+
+::: {.callout-note title="In flight"}
+These are the pieces ISLA's configurations read. What each dataset stores of its boundary, piece by piece with its
+condition type, is being measured, and the ledger (@sec-ledger) tracks it.
+:::
 
 ```{python}
 #| label: para-oq-planar-velocity

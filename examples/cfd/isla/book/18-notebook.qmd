@@ -40051,13 +40051,15 @@ moment (case 00888) as in stage 1.
   the six held-out splits: "ISLA-DTT clearly" is R ≤ 1.05 on both fields on every held-out split, "ISLA clearly" is an
   arithmetic mean of R of at least 1.10 on velocity or on pressure, and everything else is a close call. A close call
   makes ISLA-DTT the default interior form (Peter's answer), and so does "ISLA-DTT clearly" (the supervisor's reading).
-  "ISLA clearly" keeps interacting ISLA by the registered rule. Section 13(b) had kept interacting ISLA as the default
+  "ISLA clearly" keeps interacting ISLA by the registered rule; the cross-dataset table of section 13(b) still goes to
+  Peter (the supervisor's application). Section 13(b) had kept interacting ISLA as the default
   in the first two bands until Peter answered an explicit question; his answer settles it for a close call, and the
   supervisor's reading for "ISLA-DTT clearly".
   Removing the interacting form stays a separate proposal to Peter (section 12(f) edit i, section 13(d)). The AeroZoo
   ISLA-DTT lanes that the rule reads are still training.
 - *The geometry robustness bundle.* Branch psharpe/isla-geo-bundle (f13eb5ce0) is merged into canonical ISLA once the
-  tie experiment (TIE-EXP) shows no accuracy cost; it has no result yet. The book states the bundle's measured cost. On
+  tie experiment (TIE-EXP) shows no accuracy cost; it has no result yet. The ledger and this notebook state the bundle's measured cost until it merges; the chapters
+  state the adoption rule. On
   GB300 (scratch/isla-medial-tie-2026-10-22/DESIGN.md section q.4, LHR job 346068; REF-090 settings, bfloat16, eager,
   one GPU per version, medians after 5 warm-up steps), the training step is +7 / +29 / +17 / +49 percent on AirfRANS /
   the lug / AeroZoo / DrivAerML Volume. That is the mean of the head's three per-run medians over the mean of the base's

@@ -421,6 +421,7 @@ print("**Against models trained on fastbacks, ISLA's smaller wall-shear penalty 
 #| output: asis
 E2 = lambda a, t, sp: " / ".join(f"{EB[a][t][sp][f]['geo_mean']:.4f}" for f in SUV_F)
 B1 = {b: stage(b)["B1"]["fb_test"] for b in S.BASELINES}
+fz = lambda z: f"{0.0 if abs(z) < 0.05 else z:.1f}"
 r1 = lambda c: c["r_T_over_ISLA"] if "r_T_over_ISLA" in c else c["r_B_over_ISLA"]
 B1_WORD = lambda b: {"baseline leads": f"{b} leads", "baseline trails": "ISLA leads", "level": "level"}
 print("| | ISLA: p / wss | GeoTransolver: p / wss | Transolver: p / wss | GeoTransolver ÷ ISLA: p / wss | Transolver ÷ ISLA: p / wss |")
@@ -433,7 +434,7 @@ for t, sp, lab in (("estate", "fb_test", "trained on estates, fastback test"), (
 for k, lab in (("G", "forward gap $G$"), ("R", "reverse gap $R$"), ("H", "hardness $H$")):
     q = lambda a: " / ".join(f"{qb(k, a, f):.2f}" for f in SUV_F)
     print(f"| {lab} | " + " | ".join(q(a) for a in S.ARCHS) + " | " + " | ".join(" / ".join(
-        f"{rb(cb(b, 'D_' + k, f)):.3f} ({abs(cb(b, 'D_' + k, f)['z']) >= 0.05 and cb(b, 'D_' + k, f)['z'] or 0:.1f} SE, *{cb(b, 'D_' + k, f)['verdict']}*)" for f in SUV_F)
+        f"{rb(cb(b, 'D_' + k, f)):.3f} ({fz(cb(b, 'D_' + k, f)['z'])} SE, *{cb(b, 'D_' + k, f)['verdict']}*)" for f in SUV_F)
         for b in S.BASELINES) + " |")
 print()
 print(": SHIFT-SUV, models trained on fastbacks against the estate-trained standing models: ISLA, GeoTransolver and Transolver at "
