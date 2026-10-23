@@ -97,16 +97,38 @@ def _surface_domain(n_cells: int = 12) -> DomainMesh:
     return MeshToDomainMesh(cell_data_targets=["pressure", "wss"])(mesh)
 
 
+DOMAIN_WALLS = ("no_slip", "slip", "inlet", "outlet")
+
+
+def _wall(axis: int, c: float, up: bool) -> Mesh:
+    """A square of two triangles at coordinate c along axis, its normals +axis (up)
+    or -axis."""
+    cells = [[0, 1, 2], [0, 2, 3]] if up else [[0, 2, 1], [0, 3, 2]]
+    square = torch.tensor([[-5.0, -5.0], [5.0, -5.0], [5.0, 5.0], [-5.0, 5.0]])
+    points = torch.empty(4, 3)
+    points[:, axis] = c
+    points[:, (axis + 1) % 3], points[:, (axis + 2) % 3] = square[:, 0], square[:, 1]
+    return Mesh(points=points, cells=torch.tensor(cells))
+
+
 def _volume_domain() -> DomainMesh:
     """What drivaer_ml_volume_reference.yaml hands the collate: an interior point cloud
-    with sdf / sdf_normals and the targets, the whole vehicle boundary with its measure
-    materialized by ComposeQuadratureMeasure, and U_inf_dir in global_data."""
+    with sdf / sdf_normals and the targets, the whole vehicle boundary and the four
+    domain meshes the case files store (no_slip, the ground; slip; inlet; outlet; no
+    cell data, normals into the fluid), each with its measure materialized by
+    ComposeQuadratureMeasure, and U_inf_dir in global_data."""
     domain = make_volume_domain_mesh(n_pts=64)
-    vehicle = ComposeQuadratureMeasure()(domain.boundaries["vehicle"])
+    boundaries = {"vehicle": domain.boundaries["vehicle"]}
+    for name, axis, c, up in zip(
+        DOMAIN_WALLS, (2, 2, 0, 0), (-3.0, 3.0, -4.0, 4.0), (True, False, True, False)
+    ):
+        boundaries[name] = _wall(axis, c, up)
     gd = domain.global_data.clone()
     gd["U_inf_dir"] = torch.tensor([1.0, 0.0, 0.0])
     return DomainMesh(
-        interior=domain.interior, boundaries={"vehicle": vehicle}, global_data=gd
+        interior=domain.interior,
+        boundaries={k: ComposeQuadratureMeasure()(m) for k, m in boundaries.items()},
+        global_data=gd,
     )
 
 
@@ -143,7 +165,8 @@ def test_isla_configs_declare_the_mesh_contract(model, dataset):
     m = cfg.model
     assert m._target_ == ISLA_TARGET
     assert cfg.input_type == "mesh" and cfg.output_type == "mesh"
-    assert cfg.forward_kwargs.boundary_meshes == {"vehicle": "boundaries.vehicle"}
+    names = ("vehicle", *DOMAIN_WALLS) if model == "isla_volume" else ("vehicle",)
+    assert cfg.forward_kwargs.boundary_meshes == {n: f"boundaries.{n}" for n in names}
     assert cfg.forward_kwargs.global_data == "global_data"
     assert OmegaConf.to_container(m.global_schema) == {"U_inf_dir": {"rank": 1}}
     assert (
@@ -217,18 +240,25 @@ def test_isla_volume_composes_and_runs():
         "pressure": {"rank": 0},
         "nut": {"rank": 0},
     }
-    ### One boundary input: the full-resolution vehicle, the surface of the prediction
-    ### points' geometry and the source of the tokens the model draws.
+    ### The whole boundary of the domain: the full-resolution vehicle and the four domain
+    ### meshes the files store, each a condition by its file name without fields, the
+    ### surface of the prediction points' geometry and the source of the tokens the
+    ### model draws.
     assert set(cfg.forward_kwargs) == {
         "boundary_meshes",
         "prediction_points",
         "global_data",
     }
+    names = ("vehicle", *DOMAIN_WALLS)
     assert OmegaConf.to_container(cfg.forward_kwargs.boundary_meshes) == {
-        "vehicle": "boundaries.vehicle"
+        name: f"boundaries.{name}" for name in names
+    }
+    assert OmegaConf.to_container(cfg.model.boundary_schemas) == {
+        name: {} for name in names
     }
     domain = _volume_domain()
     batch, out, pred = _run(cfg, domain, _targets("drivaer_ml_volume_reference"))
+    assert set(batch["forward_kwargs"]["boundary_meshes"]) == set(names)
     assert batch["forward_kwargs"]["prediction_points"] is domain.interior
     torch.testing.assert_close(out.points, domain.interior.points)
     assert pred["velocity"].shape == (64, 3) and pred["nut"].shape == (64,)
@@ -281,20 +311,23 @@ def test_isla_volume_composes_with_the_corrected_measure_dataset():
 @pytest.mark.parametrize("suffix", ["", "_area", "_posed"])
 def test_reference_volume_datasets_read_the_vehicle_whole_into_the_fluid(suffix):
     """ISLA draws its boundary tokens inside the model, so every reference volume
-    dataset file reads the vehicle whole (no boundary cell cap, no subsampling
-    transform), reverses its stored winding so the normals point into the fluid, and
-    drops the STL once the stored SDF is computed from it."""
+    dataset file reads the boundaries whole (no boundary cell cap, no subsampling
+    transform), keeps the four domain meshes of the files beside the vehicle, reverses
+    the vehicle's stored winding so the normals point into the fluid (the domain
+    meshes' point into it as stored), and drops only the STL, once the stored SDF is
+    computed from it."""
     ds = OmegaConf.load(
         _RECIPE_ROOT / "datasets" / f"drivaer_ml_volume_reference{suffix}.yaml"
     )
     assert ds.pipeline.reader.get("subsample_n_cells") is None
+    assert ds.pipeline.reader.drop_in_file_boundaries is False
     raw = OmegaConf.to_container(ds.pipeline.transforms, resolve=False)
     targets = [str(t["_target_"]) for t in raw]
     assert not any("Subsample" in t for t in targets), targets
     flips = [t for t in raw if "FlipBoundaryOrientation" in str(t["_target_"])]
     assert [t["boundaries"] for t in flips] == [["vehicle"]]
     dropped = [t.get("names", []) for t in raw if "DropBoundary" in str(t["_target_"])]
-    assert ["stl_geometry"] in dropped
+    assert dropped == [["stl_geometry"]]
     sdf = targets.index("${dp:ComputeSDFFromBoundary}")
     assert sdf < targets.index("${dp:DropBoundary}")
 
