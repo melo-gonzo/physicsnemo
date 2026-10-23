@@ -382,7 +382,7 @@ H_all = [qb("H", a, f) for a in AK for f in SUV_F]
 share = {k: cb(k, "wss_l2")["D"] / cb("D_P", "wss_l2")["D"] for k in ("D_G", "D_H")}
 spread = lambda sp: [max(v) / min(v) - 1 for a in AK for f in SUV_F for v in [EB[a]["fastback"][sp][f]["per_seed"].values()]]
 g = cb("D_G", "wss_l2")
-print("**Against models trained on fastbacks, ISLA's smaller wall-shear penalty is transfer.** ISLA and Transolver at their reference "
+print("**Against models trained on fastbacks, ISLA's smaller wall-shear penalty is mostly transfer.** ISLA and Transolver at their reference "
       "configurations were trained on the fastback training split, each with its estate lane's settings and only the dataset changed, "
       "two seeds each, and scored on both families at 200,000 cells in float32. The penalty mixes two factors. The *forward gap* $G$ of "
       "an architecture is its estate-trained model's fastback error over its fastback-trained model's fastback error: how far the "
@@ -425,7 +425,7 @@ print(": SHIFT-SUV, models trained on fastbacks against the estate-trained stand
       "error. The last column is the registered comparison, Transolver ÷ ISLA, with its distance from one in standard errors of its "
       "logarithm and the registered label; a label other than *no difference* needs two standard errors and 3%. How to read this: $G$ "
       "above one is the distance from the in-family fastback model, and a ratio above one in the last column favors ISLA. Each "
-      "standard error rests on two seeds per model. It does not show GeoTransolver trained on fastbacks. "
+      "standard-error term rests on the two seeds of one model, one degree of freedom, so the two-standard-error band is a rough screen, not a 95% test. It does not show GeoTransolver trained on fastbacks. "
       f"Data: {XSRC}, from results/campaigns_2026-10-23/suv_xfam_b/reduce_b_out.json. {{#tbl-shift-suv-xfam-b}}")
 print()
 print(S.in_flight_callout(XF["part_b"]["in_flight"]))
