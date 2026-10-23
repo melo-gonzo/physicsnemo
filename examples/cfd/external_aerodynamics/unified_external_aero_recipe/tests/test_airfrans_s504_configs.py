@@ -14,7 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""AF-EXTRAP S-RE (2026-10-22): the 504-case in-distribution control's dataset files airfrans_uvolume_{2d,ud}_s504.yaml."""
+"""AF-EXTRAP S-RE and LRE (2026-10-22): the 504-case in-distribution control's dataset files airfrans_uvolume_{2d,ud}_s504.yaml
+and the fixed-Reynolds-scale file airfrans_uvolume_2d_reynolds_lre.yaml."""
 
 from pathlib import Path
 
@@ -64,4 +65,20 @@ def test_s504_file_is_its_source_with_its_manifest_and_constants(src):
         b["pipeline"]["transforms"][-1] = {**SPEED_STD, **S504["speed"]}
     else:
         b["isla_constants"] = S504["isla"]
+    assert a == b
+
+
+def test_lre_file_is_the_reynolds_file_with_the_fixed_reynolds_scale():
+    """AF-EXTRAP LRE (2026-10-22): airfrans_uvolume_2d_reynolds_lre.yaml is airfrans_uvolume_2d_reynolds.yaml with ISLA's
+    reynolds constants {mean 6, std 1}, so z = log10(Re_ISLA / 1e6), and nothing else changed."""
+    datasets = _RECIPE_ROOT / "datasets"
+    a = OmegaConf.to_container(
+        OmegaConf.load(datasets / "airfrans_uvolume_2d_reynolds_lre.yaml"),
+        resolve=False,
+    )
+    b = OmegaConf.to_container(
+        OmegaConf.load(datasets / "airfrans_uvolume_2d_reynolds.yaml"), resolve=False
+    )
+    assert b["isla_constants"]["reynolds"] == {"mean": 6.223, "std": 0.06224}
+    b["isla_constants"]["reynolds"] = {"mean": 6.0, "std": 1.0}
     assert a == b
