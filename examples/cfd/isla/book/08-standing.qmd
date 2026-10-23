@@ -118,14 +118,6 @@ plt.show()
 ```
 
 ```{python}
-#| label: callout-shifts-dtt-in-flight
-#| output: asis
-_d = S.Standing("airfrans").arm_in_flight("ISLA-DTT")
-print(S.in_flight_callout({"what": f"the AirfRANS ISLA-DTT mark of @fig-standing-shifts: {_d['what']}",
-                           "replacement": _d["replacement"]} if _d else None))
-```
-
-```{python}
 #| label: para-standing-invariances
 #| output: asis
 SOLIDS = ("tensile2d", "lug", "deepjeb")

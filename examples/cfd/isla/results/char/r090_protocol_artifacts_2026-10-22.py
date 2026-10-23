@@ -30,7 +30,8 @@ STANDING below is the one table a later update edits: per dataset the run stem, 
 the case count and the status. A status of "in_flight" writes the in-flight text beside the numbers ("in_flight": {"what",
 "replacement"}, read by book/standing.py as "These numbers come from <what>. <replacement> is being measured ...").
 "Fix-trained" rows are trained with the compiled training path after its fault (pytorch/pytorch#195845) was fixed;
-"eager-trained" rows are trained without compilation; the AirfRANS and lug ISLA rows are eager-trained, the Tensile2d rows too.
+"eager-trained" rows are trained without compilation; the AirfRANS ISLA and ISLA-DTT rows and the lug ISLA rows are
+eager-trained, the Tensile2d rows too.
 "isla_runs" names each arm's training path. An ISLA-DTT arm that a running experiment will replace carries "arm_in_flight"
 ({arm name: {"what", "replacement"}}, read by book/standing.py as Standing.arm_in_flight): when its rows land, copy their
 score files into the scores folder, set its stem and evals folder in DTT, drop it from ARM_FLIGHT, and rerun.
@@ -69,25 +70,12 @@ STANDING = {
     "lug": ("r090eag_lug_isla", "evals_r090eag", S2, 500, 600, "final", None),
 }
 # dataset stem -> (ISLA-DTT run stem, evals folder); seeds, epoch and cases as the ISLA arm's
-DTT = {"airfrans": ("r090fix_af_dtt", "evals_r090fix")}
+DTT = {"airfrans": ("r090eag_af_dtt", "evals_r090eag")}
 # dataset stem -> {arm: the training path of its runs}, written as isla_runs["training_path"] where the arms' paths differ
-TRAINING_PATH = {
-    "airfrans": {
-        ISLA_ARM: "eager-trained: trained without compilation",
-        DTT_ARM: "fix-trained: trained with the compiled training path after its fault was fixed",
-    }
-}
+TRAINING_PATH = {}
 # dataset stem -> {arm: {"what", "replacement"}} for an arm that a running experiment will replace in a file whose status is
 # "final", written as the file's "arm_in_flight" (book/standing.py: Standing.arm_in_flight)
-ARM_FLIGHT = {
-    "airfrans": {
-        DTT_ARM: {
-            "what": "ISLA-DTT trained with the compiled training path after its fault was fixed, beside ISLA trained "
-            "without compilation",
-            "replacement": "ISLA-DTT trained without compilation",
-        }
-    }
-}
+ARM_FLIGHT = {}
 # dataset stem -> {protocol: why it changes no arm's input}
 DEGENERATE = {
     "drivaerml_volume": {

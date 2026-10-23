@@ -40067,13 +40067,17 @@ ATTRIB-090 quotes) and eager ÷ bug-trained is 0.831 (0.66 × 2 SE), so the eage
 below both bug-trained seeds, by a hair (0.001771 against 0.001780), and the point estimate leans toward (a). Posed ÷
 native: 1.246 / 1.619 eager-trained, 1.346 / 1.383 fix-trained, 1.194 / 1.105 bug-trained.
 
-**The AirfRANS read: (c) for ISLA 0.9.0; ISLA-DTT still training** (PREREG §14). On AirfRANS, fix-trained and
+**The AirfRANS read: (c) for ISLA 0.9.0 and for ISLA-DTT** (PREREG §14). On AirfRANS, fix-trained and
 bug-trained ISLA 0.9.0 agree within 2.4 percent: 1.024 on pressure, 0.985 on velocity, 0.998 on eddy viscosity. So this
 read could not tell (a) from (b), as expected. Eager-trained ÷ fix-trained is 1.021 / 1.005 / 0.986 (|d| / 2SE 0.12,
 0.11, 0.25), and eager-trained ÷ bug-trained is 1.045 / 0.989 / 0.985 (0.27, 0.25, 0.21). All three training paths lie
 within 5 percent, and every seed range overlaps. Eager-trained, posed ÷ native is 1.0022 to 1.0025 on pressure, 1.0016
-on velocity and 1.0000 on eddy viscosity. The eager-trained ISLA-DTT pair is still training; its read follows when it is
-scored.
+on velocity and 1.0000 on eddy viscosity. For ISLA-DTT the paths separate on pressure: eager-trained 0.01241 lies below
+both fix-trained 0.01265 (eager ÷ fix-trained 0.981, 1.37 × 2 SE) and bug-trained 0.01410 (eager ÷ bug-trained 0.880,
+2.97 × 2 SE), so pressure reads (c); velocity reads (c) (1.007 and 0.968) and eddy viscosity (a) (0.958 at 0.28 × 2 SE,
+0.922 at 1.26 × 2 SE). One field of three reads (a), so ISLA-DTT reads (c). Every ratio is of arithmetic seed means
+(eag_af_dtt.md, scorers 350103 and 350296). Eager-trained ISLA-DTT, posed ÷ native is 1.0017 to 1.0022 on pressure,
+1.0010 to 1.0012 on velocity and 1.0001 on eddy viscosity.
 
 **Beside the rules.**
 
@@ -40091,9 +40095,12 @@ scored.
   the bug, ISLA 0.9.0 trains less reproducibly on Tensile2d (σ(log) of displacement 0.23 eager-trained, 0.16
   fix-trained, 0.025 bug-trained). On the lug the fix-trained seeds lie 1.2 percent apart, the bug-trained ones 12
   percent and the eager-trained ones 25 percent (σ(log) 0.009, 0.084 and 0.178).
-- Secondary arms, both still training. AirfRANS ISLA-DTT eager-trained (r090eag_af_dtt) will be read against
-  ISLA 0.9.0 eager-trained; fix-trained, ISLA-DTT ÷ ISLA 0.9.0 read 1.035 / 1.126 / 1.381. The lug ISLA-DTT,
-  fix-trained (r090fix_lug_dtt), will be read against ISLA 0.9.0 fix-trained, and P13's lug part with it.
+- Secondary arms. AirfRANS ISLA-DTT eager-trained (r090eag_af_dtt) ÷ ISLA 0.9.0 eager-trained is 0.994 / 1.129 /
+  1.342 on pressure / velocity / eddy viscosity (ratios of arithmetic seed means; G 1.146, their geometric mean over the
+  three fields); fix-trained, the pair read 1.035 / 1.126 / 1.381. P13's AirfRANS part (G ≤ 1.05) failed as
+  registered (G 1.230 on the r090 rows); the fix-trained and eager-trained pairs exceed 1.05 too. The lug ISLA-DTT,
+  fix-trained (r090fix_lug_dtt), is still training on seed 42; it will be read against ISLA 0.9.0 fix-trained, and
+  P13's lug part (in [0.8, 1.25]) with it. Seed 43 alone reads 1.270 (0.001834 ÷ 0.001445).
 - R1 under one training function (beside the registered 0.891, which stands): on Tensile2d, ISLA 0.9.0
   eager-trained ÷ ISLA A2 eager-trained is 1.200 on displacement over four seeds and 0.998 on seeds
   42/43. On the lug and AirfRANS, no eager-trained A2 exists. ISLA 0.9.0 eager-trained ÷ ISLA A2
@@ -40107,7 +40114,8 @@ compiled-path rows (baseline ÷ ISLA 0.919 / 0.919 on pressure, 1.080 / 1.127 on
 percent on pressure and rose 3 percent on eddy viscosity. The other datasets' standings are unchanged
 (@sec-nb-ref090-r1).
 
-*Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-book-1023/SECOND_READ_STANDINGS.md).*
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-book-1023/SECOND_READ_STANDINGS.md;
+the ISLA-DTT read, scratch/isla-book-am-2026-10-23/SECOND_READ_REF090.md).*
 
 ## 2026-10-23 — ATTRIB-090, stage 2: on AirfRANS ISLA's gain over its earlier form comes from standardizing the global input, not from its scales; on the lug the fix-trained 0.9.0 leads the fix-trained CONT (directional) {#sec-nb-attrib090-stage2}
 

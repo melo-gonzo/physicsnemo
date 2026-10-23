@@ -505,7 +505,6 @@ print(": The open questions, the measurement that would settle each, and its cos
 #| label: para-oq-dtt
 #| output: asis
 AFS = ST["airfrans"]
-AF_DTT = AFS.arm_in_flight("ISLA-DTT")
 dtt = {f: AFS.ratio("ISLA-DTT", f) for f in AFS.ds.headline}
 dtt_v = {f: AFS.verdict("ISLA-DTT", f) for f in AFS.ds.headline}
 c_i, c_d = S.cost("aerozoo", "ISLA"), S.cost("aerozoo", "ISLA-DTT")
@@ -517,7 +516,7 @@ print("**The open question is whether the read-only form, whose prediction at a 
       f"its median step is {c_d['step_seconds'] / c_i['step_seconds']:.1f} times the interacting form's and its peak memory "
       f"{c_d['peak_gib'] / c_i['peak_gib']:.2f} times (@tbl-ref-cost). On the AirfRANS interior task at the reference configuration, "
       "ISLA-DTT ÷ ISLA reads " + f3(dtt.values(), 3) + " (" + " / ".join(FW[f] for f in dtt)
-      + (f"; across training paths: {AF_DTT['what']}" if AF_DTT else "") + "): ISLA "
+      + "; ratios of arithmetic seed means): ISLA "
       + ", ".join(f"{v} ISLA-DTT on {FW[f]}" for f, v in dtt_v.items())
       + f" (@sec-airfrans-dtt-reference); outside its training bands the two forms' penalties read *no difference* on {r3n} of the "
       f"{len(r3)} cells (@sec-limits-regime). One planar dataset does not settle the question. The decisive data are AeroZoo's "
@@ -529,7 +528,6 @@ print("**The open question is whether the read-only form, whose prediction at a 
       f"Cost: {len(AZ_SPLITS)} splits × two seeds of ISLA-DTT, at most {fmt_h(q_dtt)} GPU-hours.")
 print()
 print(S.in_flight_callout(AZ_DTT["in_flight"]))
-print(S.in_flight_callout(AF_DTT))
 ```
 
 ### Do ISLA's declared scales add accuracy where the Reynolds number varies widely? {#sec-oq-scales}
