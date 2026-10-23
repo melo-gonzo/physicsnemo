@@ -15,9 +15,11 @@
 # limitations under the License.
 
 """RENDER-090 (2026-10-22): the committed copy of a routing probe (slices_probe_090.py output) within the repository's
-5,000 KB file limit. A probe that stored at most N_DRAW tokens is copied unchanged. A larger one (DrivAerML Surface: all
-200,000 tokens) keeps exactly the tokens the book draws, the 60,000-token subset that 03-isla.qmd's load_slices takes
-(numpy default_rng(0).choice over the stored tokens, sorted), with:
+5,000 KB file limit. A probe of at most N_DRAW tokens (Tensile2d, the lug) is copied unchanged. A probe of more tokens
+that stored at most N_DRAW of them (AirfRANS: 60,000 of 101,046) keeps points, keep and the per-token fields as they are,
+with the last two cuts below (top territories, measure and top_a_density). One that stored more than N_DRAW (DrivAerML
+Surface: all 200,000 tokens) keeps exactly the tokens the book draws, the 60,000-token subset that 03-isla.qmd's
+load_slices takes (numpy default_rng(0).choice over the stored tokens, sorted), with:
   * points stored for those tokens only and keep = 0..n-1, so points[keep] is the drawn tokens' positions as before;
     token_index holds their indices among the n_tokens tokens of the forward pass;
   * the per-token fields (dominant, pi_max, top_pi) on those tokens;
@@ -38,8 +40,12 @@ TOP = 3
 
 src, dst = sys.argv[1:3]
 z = dict(np.load(src))
-if len(z["keep"]) <= N_DRAW:
+if len(z["points"]) <= N_DRAW:
     np.savez_compressed(dst, **z)
+elif len(z["keep"]) <= N_DRAW:
+    out = {k: v for k, v in z.items() if k not in ("measure", "top_a_density")}
+    out.update(top_pi=z["top_pi"][..., :TOP], top_slices=z["top_slices"][:, :TOP])
+    np.savez_compressed(dst, **out)
 else:
     sub = np.sort(
         np.random.default_rng(0).choice(len(z["keep"]), N_DRAW, replace=False)
