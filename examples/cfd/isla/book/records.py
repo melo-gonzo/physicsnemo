@@ -41,6 +41,8 @@ FOLDER = {
     "af_extrap": "campaigns_2026-10-23",
     "suv_xfam_b": "campaigns_2026-10-23",
     "probes090": "campaigns_2026-10-23",
+    "cap_audit": "campaigns_2026-10-23",
+    "floor_drv": "campaigns_2026-10-23",
 }
 
 

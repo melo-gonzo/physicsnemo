@@ -463,6 +463,12 @@ q5 = q5_ladder + q5_cells
 # Tensile2d: GeoTransolver + ISLA's measure-weighted pooling, priced at the GeoTransolver lane
 q6 = SEEDS * lane_gpuh("tensile2d", "GeoTransolver")
 AZ_DTT = AZS["arms"][next(n for n in AZS["arms"] if n.startswith("ISLA-DTT"))]
+# the domain's four boundary meshes on one DrivAerML Volume car: two seeds with them and two without, on one 4-GPU node,
+# at the cost FLOOR-DRV's smoke measured; L_ref converts the datapipe's band edges to metres
+FD = " ".join(R.load("floor_drv", "PREREG.md").split())
+fd_gpus, fd_hours, q_floor = map(int, re.search(r"the full job about (\d+) x (\d+) = (\d+) GPU-h allocated", FD).groups())
+fd_step = re.search(r"F ([\d.]+) s/step, C ([\d.]+) s/step, \*\*([\d.]+)x\*\*", FD).groups()
+L_REF = float(re.search(r"`global_data\.L_ref` = ([\d.]+) m", " ".join(R.load("cap_audit", "RESULTS.md").split())).group(1))
 ```
 
 ```{python}
@@ -478,6 +484,10 @@ rows = [
     ("Can the fold sign and the token draw be made exact in float32? (@sec-oq-precision)", "a fold-robust sign and a draw ordered by the mesh's connectivity, with the float32-against-float64 comparison of the same cases rescored", "scoring only for the gap"),
     ("How large is ISLA-DTT's tree error at $\\theta = 1$ where its forest's frame ties? (@sec-oq-dtt-frame)", "ISLA-DTT scored rotated and translated, and under boundary redraws, on cases whose boundary has near-equal principal variances", "scoring only"),
     ("Does ISLA's transfer advantage on SHIFT-SUV wall shear hold against GeoTransolver, and in the reverse direction? (@sec-oq-transfer)", "GeoTransolver trained on fastbacks and scored on both families; for the reverse direction, more seeds of the fastback-trained ISLA and Transolver", f"{fmt_h(q_transfer)} for two more seeds of each"),
+    ("Does ISLA's far-field eddy-viscosity error on the DrivAerML Volume task come from the ground and domain walls it is not given? (@sec-oq-far-field)",
+     "ISLA trained on one car with fresh draws, with the domain's whole boundary (the floor strip, the slip walls, the inlet and the outlet) added as named boundary meshes, against the same run without them, two seeds each, read on the error more than "
+     f"{L_REF:g} m from the car",
+     f"{fmt_h(q_floor)} (single-case runs)"),
 ]
 if HELD:
     rows.append((f"How do the architectures compare on {names(sorted({k for k, _ in HELD}))} {' and '.join(ST[k].fields[f] for k, f in HELD)} measured alike?",
@@ -495,9 +505,10 @@ print(": The open questions, the measurement that would settle each, and its cos
       "needs, two seeds per configuration, each run priced from the training log of the standing's lane of the same configuration on the "
       "same dataset (mean epoch time × the protocol's epochs × four GB300 GPUs); a run at a smaller training set is priced in proportion "
       "to its cases, and *at most* marks a run priced at a larger set than it trains on; *scoring only* means the measurement reads "
-      "checkpoints that exist. How to read this: the costs are training only, not scoring; they price the experiment's design, not a "
+      "checkpoints that exist; the far-field question is priced at the step time measured in short trial runs of its two arms. How to read this: the "
+      "costs are training only, not scoring; they price the experiment's design, not a "
       f"schedule. Data: {LIM_SRC}, from results/campaigns_2026-10-22/cost_090/extract.jsonl; the tie rule's figure is "
-      f"{R.source('medial_tie', 'DESIGN.md')}.")
+      f"{R.source('medial_tie', 'DESIGN.md')}; the far-field question's is {R.source('floor_drv', 'PREREG.md')} (section 8).")
 ```
 
 ### ISLA or ISLA-DTT as the interior form {#sec-oq-dtt}
@@ -744,6 +755,32 @@ print("**The open question is whether ISLA's transfer advantage on SHIFT-SUV wal
       "two measured.")
 print()
 print(S.in_flight_callout(X["part_b"]["in_flight"]))
+```
+
+### The ground and the domain walls on the DrivAerML Volume task {#sec-oq-far-field}
+
+```{python}
+#| label: para-oq-far-field
+#| output: asis
+FAR = next(r for r in R.md_table("cap_audit", "tables/resid_drv_partB.md", "drv heldout nut (rd) - wall") if r["region"] == "[1,inf)")
+PA = R.load("cap_audit", "tables/probes/probe_a.json")
+pc = lambda k: f"{100 * min(c[k] for c in PA):.0f} to {100 * max(c[k] for c in PA):.0f}%"
+print("**The open question is whether ISLA's far-field eddy-viscosity error on the DrivAerML Volume task comes from the boundaries "
+      "it is not given.** Trained on one car with a fresh draw of points every step, ISLA's relative eddy-viscosity error more than "
+      f"{L_REF:g} m from the car is {R.num(FAR['isla share % (e_R)'], 1):.3f}, against Transolver's {R.num(FAR['t share % (e_R)'], 1):.3f}, and "
+      f"those {R.num(FAR['weight %']):.1f}% of the points hold {R.num(FAR['ISLA excess %']):.0f}% of the amount by which its squared "
+      f"error exceeds Transolver's; neither halving its width or depth nor quartering its slices moves it (@sec-single-case-floor). On that car and "
+      f"{len(PA) - 1} validation cars the height above the floor explains {pc('r2_z')} of the far-field variance, the streamwise "
+      f"distance from the inlet {pc('r2_x')}. Every case file stores the floor strip, the slip walls, the inlet and the outlet as "
+      "meshes, and ISLA on this task reads the vehicle alone, while GeoTransolver and Transolver read each point's coordinates "
+      "(@tbl-model-inputs). What would settle it: the single-case run repeated with all four of those meshes, the domain's whole "
+      "boundary as on AeroZoo, added to ISLA's boundary as named meshes, two seeds, beside two seeds of the same run without them, "
+      "read on the far-field eddy-viscosity error and on the velocity error. It is a diagnostic: adopting that input would change "
+      "the task's input contract and needs Peter's word. Cost: with the four meshes ISLA's step takes "
+      f"{fd_step[2]} times as long ({fd_step[0]} against {fd_step[1]} s), so the {('two', 'three', 'four')[SEEDS * 2 - 2]} "
+      f"single-case runs take one {fd_gpus}-GPU node for about {fd_hours} hours, {fmt_h(q_floor)} GPU-hours. "
+      f"Data: {R.source('cap_audit', 'tables/resid_drv_partB.md')}, {R.source('cap_audit', 'tables/probes/probe_a.json')}, "
+      f"{R.source('floor_drv', 'PREREG.md')} (section 8).")
 ```
 
 ```{python}
