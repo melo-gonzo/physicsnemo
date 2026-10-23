@@ -912,4 +912,5 @@ print("The cause is that ISLA's interior points carry routing mass: they write i
 Questions this dataset raises and leaves open:
 
 - **ISLA or ISLA-DTT on the interior?** On this task ISLA-DTT is measured only on a study configuration with the raw slice reads (@tbl-interior-read-only), where it trades some accuracy for exact query independence. Which form the interior tasks use is decided on AeroZoo (@sec-oq-dtt).
+- **Does ISLA need the ground?** Trained on a single car, ISLA misses the eddy viscosity far from the car, whose level there follows the height above the floor, a boundary its input on this task does not include (@sec-single-case-floor). Whether the floor and the domain walls, given as named boundary meshes, remove that error is @sec-oq-far-field.
 - **How precisely must the wall be given?** The watertight STL raises ISLA's error only near the wall, where it differs from the CFD wall by about the chord error of its tessellation (@sec-interior-boundary-law). Whether the on-wall nodes' distance channel causes that rise is untested; a probe that moves only those nodes' distance would settle it.

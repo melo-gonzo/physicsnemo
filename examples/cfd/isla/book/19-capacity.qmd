@@ -405,6 +405,23 @@ PB = R.md_table("cap_audit", "RESULTS.md", "Part B")
 AF_ST = S.Standing("airfrans")
 xcase = {"drs": SURF.err("ISLA", "pressure_l2"), "hl18": HLS.err("ISLA", "pressure_l2"), "af": AF_ST.err("ISLA", "pressure_l2")}
 floor1b = lambda c: mean(fho(c, "pressure_l2", "isla", s) for s in (42, 43))
+# the ladder on the AirfRANS case (registered verdicts), its 40,000-step control, the path and seed set, and the AirfRANS bands
+LADR = {r["axis"]: r for r in R.md_table("cap_audit", "RESULTS.md", "Part A: the ladder")}
+CTL = {r["arm"]: r for r in R.md_table("cap_audit", "RESULTS.md", "15.9: the 40k control")}
+SEEDSET = [R.num(v) for r in R.md_table("cap_audit", "RESULTS.md", "15.11: path and seed set")
+           for k, v in r.items() if k.startswith("seed") and v != "-"]
+RES_TXT = " ".join(R.load("cap_audit", "RESULTS.md").split())
+S128 = [float(x) for x in re.search(r"s128 at two seeds: ([\d.]+) / ([\d.]+)", RES_TXT).groups()]
+BAND_AF = R.md_table("cap_audit", "tables/resid_af_ladder.md", "pressure")
+WALL_AF = R.md_table("cap_audit", "tables/resid_af_rd.md", "af heldout pressure (rd) - wall")
+# DrivAerML Volume: the fresh-draw maps by wall distance [m], the down-rung ladder, and the three far-field probes
+DRV_W = {f: R.md_table("cap_audit", "tables/resid_drv_partB.md", f"drv heldout {f} (rd) - wall") for f in ("velocity", "nut")}
+DRVL = {r["field"]: r for r in R.md_table("cap_audit", "RESULTS.md", "15.10: the DrivAerML Volume down-rung ladder")}
+BAND_DRV = R.md_table("cap_audit", "tables/resid_drv_ladder.md", "nut: e_R by band")
+PROBE_A = R.load("cap_audit", "tables/probes/probe_a.json")
+PROBE_BC = [R.load("cap_audit", f"tables/probes/probe_bc_cap_drv_isla_rd_s{s}.json") for s in (42, 43)]
+er = lambda cell: R.num(cell, 1)   # 'share % (e_R)' cell -> e_R
+rng = lambda xs, p=2: f"{min(xs):.{p}f} to {max(xs):.{p}f}"
 ```
 
 ```{python}
@@ -419,7 +436,9 @@ print(f"**Trained on one case with a fresh draw of points every step, ISLA fits 
       "better baseline on one DrivAerML Surface car, one HiLiftAeroML case and AirfRANS "
       + " and ".join(FNAME[f] for c, f in isla_cells if c == "af")
       + "; the registered rules call AirfRANS pressure and DrivAerML Volume " + " and ".join(pb_def) + " deficits of "
-      "representation. On the first three datasets the single-case floor lies far below ISLA's error across cases.** The capacity audit trains each reference "
+      "representation. More width, depth or slices leaves the AirfRANS excess where it is, next to the wall, and on DrivAerML Volume "
+      "ISLA misses the eddy viscosity far from the car, whose level there follows the height above a floor ISLA is not given. On the "
+      "first three datasets the single-case floor lies far below ISLA's error across cases.** The capacity audit trains each reference "
       f"configuration on a single case for {n_steps:,} steps, until its error stops falling, and scores a held-out draw of points of the "
       "same case. It asks whether an architecture can represent one field at all, apart from generalizing across cases. Every model is ISLA, "
       "GeoTransolver or Transolver at its reference configuration, run eager in float32, with ISLA-DTT beside ISLA on AirfRANS.")
@@ -463,9 +482,118 @@ print(f": Single-case floors with a fresh draw of points every step: relative L2
       "ratio below one means ISLA's floor is above the better baseline's, and the registered rule calls a cell representation-limited at "
       "0.5 or below on both seeds; each floor is one case's, not a dataset's. "
       f"Data: {R.source('cap_audit', 'tables/phase1b_floors.json')}. {{#tbl-single-case}}")
+```
+
+```{python}
+#| label: para-single-case-ladder
+#| output: asis
+ctl_isla = [a for a in CTL if a.startswith("ISLA")]
+gt20, gt_k = (R.num(CTL["GeoTransolver, seed 42"][c]) for c in ("20k", "40k ÷ 20k"))
+r20 = [gt20 / R.num(CTL[a]["20k"]) for a in ctl_isla]
+r40 = [1 / R.num(CTL[a]["÷ GeoTransolver 40k"]) for a in ctl_isla]
+ref_k = [R.num(CTL[f"ISLA ref, seed {s}"]["40k ÷ 20k"]) for s in (44, 45)]
+s40 = float(re.search(r"their 40k floors are ([\d.]+)x apart", RES_TXT).group(1))
+lab = lambda ax: LADR[ax]["label"]
+WORD = {5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine"}
+NEAR = ("[0.001,0.01)", "[0.01,0.1)")
+rungs = [c for c in BAND_AF[0] if c not in ("band", "isla_rd", "gt_rd", "s128")]
+near = [R.num(r[c]) for r in BAND_AF if r["band"] in NEAR for c in rungs]
+near128 = [R.num(r["s128"]) for r in BAND_AF if r["band"] in NEAR]
+neargt = [R.num(r["gt_rd"]) for r in BAND_AF if r["band"] in NEAR]
+w_band = sum(R.num(r["weight %"]) for r in WALL_AF if r["region"] in NEAR)
+x_band = sum(R.num(r["ISLA excess %"]) for r in WALL_AF if r["region"] in NEAR)
+ref_ladder = R.num(LADR["slices"][next(k for k in LADR["slices"] if k.startswith("rungs"))], 3)
+print("**On the AirfRANS case no parameter axis closes ISLA's pressure gap, and twice the training steps narrows it without "
+      "closing it.** A ladder varies ISLA one axis at a time from its reference configuration on the same airfoil, with a fresh draw "
+      "every step: width 256 and 1,024 (the learning rate scaled inversely with the width), depth 6 and 24 layers, and 128 and 2,048 "
+      "slices, with two seeds on the reference and on each top rung and one on each low rung. For each axis the registered rule fits "
+      "$F \\propto v^b$, with $F$ the held-out pressure floor and $v$ the axis value, and calls the axis helpful at $b \\le -0.3$ with "
+      "the top rung at least 1.2 times below the reference on separated seeds, a plateau under 1.07 times per doubling, and any other "
+      f"gain weak (@tbl-single-case-ladder). By that rule width reads *{lab('width')}*, depth *{lab('depth')}* and slices "
+      f"*{lab('slices')}*. Every top "
+      "rung's floor falls more than 1.5 times at 40,000 steps, so the rule labels each axis budget-limited, but the reference falls "
+      f"about as far: its 40,000-step floor is {' and '.join(f'{k:.2f}' for k in ref_k)} of its 20,000-step floor on its two seeds, "
+      f"against {gt_k:.2f} for GeoTransolver. GeoTransolver ÷ ISLA over the reference and the three top rungs is {rng(r20)} at "
+      f"20,000 steps and {rng(r40)} at 40,000 steps, with GeoTransolver on one seed at both budgets.")
 print()
-print(S.in_flight_callout({"what": "the reference configurations alone on one AirfRANS case",
-                           "replacement": "A ladder of ISLA's width, depth and slice count on that case"}))
+print(f"**The excess stays next to the wall.** On every rung but the 128-slice one, ISLA's relative pressure error within the band "
+      f"from 1e-3 to 0.1 chords from the wall is {rng(near, 4)}, against GeoTransolver's {rng(neargt, 4)}; with 128 slices it is "
+      f"{rng(near128, 4)}. That band holds {w_band:.0f}% of the held-out points and {x_band:.0f}% of the amount by which the reference "
+      "ISLA's squared error exceeds GeoTransolver's. Run-to-run spread on this one case is wide: "
+      f"{WORD.get(len(SEEDSET), len(SEEDSET))} reference runs of 20,000 steps span {max(SEEDSET) / min(SEEDSET):.2f} times, and its two runs of 40,000 steps "
+      f"{s40:.2f} times. The 128-slice rung's two seeds, {S128[0]:.5f} and {S128[1]:.5f} against the reference's {ref_ladder:.5f} at "
+      "the ladder's seeds, sit inside that spread, so its lower near-wall error is a lead, not a result. The evidence points to the "
+      "component that represents the variation next to the wall, not to the parameter count. "
+      f"Data: {R.source('cap_audit', 'RESULTS.md')} (Part A, 15.9, 15.11), {R.source('cap_audit', 'tables/resid_af_ladder.md')}, "
+      f"{R.source('cap_audit', 'tables/resid_af_rd.md')}.")
+```
+
+```{python}
+#| label: out-tbl-single-case-ladder
+#| output: asis
+AX = (("width", "256 / 512 / 1,024", "w1024"), ("depth", "6 / 12 / 24 layers", "d24"), ("slices", "128 / 512 / 2,048", "s2048"))
+out = ("| axis | rungs | held-out pressure floor, low / reference / top | slope $b$ | registered label | "
+       "GeoTransolver ÷ ISLA, top rung at 40,000 steps |\n|---|---|--:|--:|---|--:|\n")
+for ax, rung_txt, top in AX:
+    r = LADR[ax]; cell = r[next(k for k in r if k.startswith("rungs"))]
+    fl = " / ".join(f"{R.num(cell, i):.5f}" for i in (1, 3, 5))
+    out += (f"| {ax} | {rung_txt} | {fl} | {R.num(r['b']):+.2f} | {r['label']} | "
+            f"{1 / R.num(CTL[f'ISLA {top}, seed 44']['÷ GeoTransolver 40k']):.2f} |\n")
+print(out)
+print(": ISLA's width, depth and slice ladder on one AirfRANS airfoil, trained with a fresh draw of points every step for 20,000 "
+      "steps, eager, float32: the held-out pressure floor of the low rung (seed 44), the reference configuration and the top rung "
+      "(geometric means of seeds 44 and 45), the fitted slope $b$ of $\\log F$ against the log of the axis value, and the registered "
+      "label; the last column is GeoTransolver's floor ÷ the top rung's at 40,000 steps (one seed each). The width rungs train at a "
+      "learning rate scaled inversely with the width. How to read this: a negative $b$ means the floor falls as the axis grows; "
+      "each floor is one case's, and the reference's own run-to-run spread on this case is wider than the differences between "
+      f"rungs. Data: {R.source('cap_audit', 'RESULTS.md')} (Part A and 15.9). {{#tbl-single-case-ladder}}")
+```
+
+```{python}
+#| label: para-single-case-drv
+#| output: asis
+vr = [er(r["isla share % (e_R)"]) / er(r["t share % (e_R)"]) for r in DRV_W["velocity"]]
+far = next(r for r in DRV_W["nut"] if r["region"] == "[1,inf)")
+ref_cell = lambda f: R.num(DRVL[f]["ref s44 (s42, s43)"])
+DF = ("velocity", "nu_t", "pressure")
+d6, w256 = ([R.num(DRVL[f][c], 1) for f in DF] for c in ("d6", "w256"))
+s128 = [R.num(DRVL[f]["s128"]) / ref_cell(f) for f in DF]
+spread = [R.num(DRVL[f]["spread"]) for f in DF]
+far_row = next(r for r in BAND_DRV if r["band"] == "[1,inf)")
+far_isla = [R.num(v) for k, v in far_row.items() if k.startswith("isla_")]
+far_t = [R.num(v) for k, v in far_row.items() if k.startswith("t_")]
+f3 = lambda xs: " / ".join(f"{x:.2f}" for x in xs)
+print("**On one DrivAerML Volume car, ISLA's velocity deficit is a uniform multiple, and its eddy-viscosity deficit sits far from "
+      f"the car.** With a fresh draw every step, ISLA's relative velocity error is {rng(vr, 1)} times Transolver's in every decade of "
+      f"wall distance. The {R.num(far['weight %']):.1f}% of the held-out points more than 1 m from the car hold "
+      f"{R.num(far['isla share % (e_R)']):.0f}% of ISLA's squared eddy-viscosity error and {R.num(far['ISLA excess %']):.0f}% of the "
+      f"amount by which it exceeds Transolver's; there ISLA's relative error is {er(far['isla share % (e_R)']):.3f}, against "
+      f"Transolver's {er(far['t share % (e_R)']):.3f} (seed means). Shrinking ISLA one axis at a time on this car, on one seed beside "
+      "the reference's three, finds depth to be its capacity axis here: halving the depth raises the velocity, eddy-viscosity and "
+      f"pressure floors {f3(d6)} times, halving the width {f3(w256)} times and quartering the slices {f3(s128)} times, against a "
+      f"spread of {f3(spread)} over the reference's three seeds. No rung moves the far-field eddy viscosity: beyond 1 m, ISLA's "
+      f"relative error is {rng(far_isla, 3)} on every rung and seed, and Transolver's {rng(far_t, 3)}.")
+print()
+r2 = {k: [c[k] for c in PROBE_A] for k in ("r2_z", "r2_x", "r2_d")}
+pc = lambda xs: f"{100 * min(xs):.0f} to {100 * max(xs):.0f}%"
+bins = [b for p in PROBE_BC for b in p["probe_b"]["bins"]]
+sens_in = [b["dh_dlogd_median"] for b in bins if b["sdf"][0] > 0 and b["sdf"][1] <= 1]
+sens_out = [b["dh_dlogd_median"] for b in bins if b["sdf"][0] >= 1]
+n_blocks = len(PROBE_BC[0]["probe_c"])
+maj = [c["n_slices_far_majority"] for p in PROBE_BC for c in p["probe_c"] if c["block"] >= 4]
+print(f"**Three probes without training point to an input ISLA lacks: the ground.** On this car and {len(PROBE_A) - 1} validation "
+      "cars, a cross-validated fit of the true eddy viscosity beyond 1 m from the car explains "
+      f"{pc(r2['r2_z'])} of its variance with the height above the floor, {pc(r2['r2_x'])} with the streamwise distance from the "
+      f"inlet and {pc(r2['r2_d'])} with the distance to the car. ISLA's prediction-point embedding $h$ keeps resolving the wall "
+      f"distance $d$ far from the car: $\\|\\partial h / \\partial \\ln d\\|$ is {rng(sens_in, 1)} within 1 m and "
+      f"{rng(sens_out, 1)} beyond, so its distance channels do not saturate. From the fifth of its {n_blocks} blocks on, far points "
+      f"hold most of the mass of {min(maj)} to {max(maj)} slices in every block, so they are not starved of slices. Every case file "
+      "stores the floor strip, the slip walls, the inlet and the outlet as meshes beside the vehicle, and ISLA on this task reads "
+      "the vehicle alone (@tbl-model-inputs). Whether the floor and the walls as boundary inputs remove the far-field miss is "
+      f"@sec-oq-far-field. Data: {R.source('cap_audit', 'tables/resid_drv_partB.md')}, "
+      f"{R.source('cap_audit', 'tables/resid_drv_ladder.md')}, {R.source('cap_audit', 'RESULTS.md')} (15.10), "
+      f"{R.source('cap_audit', 'tables/probes/probe_a.json')}, {R.source('cap_audit', 'tables/probes/probe_bc_cap_drv_isla_rd_s42.json')} "
+      "and its seed-43 twin.")
 ```
 
 ## What the reference configurations spend {#sec-review-frontier}

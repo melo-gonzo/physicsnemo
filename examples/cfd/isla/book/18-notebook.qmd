@@ -39492,6 +39492,140 @@ EDT, after the 15.8 check passed.
 
 *Read by the supervisor and second-read by the reviewer on 2026-10-22 (scratch/isla-review-2026-10-21/SECOND_READ_2026-10-22.md).*
 
+## 2026-10-23 — Capacity audit, phase 2: neither width, depth or slices nor twice the steps bring ISLA's single-case AirfRANS pressure to the baselines' (1.6-2.5 times GeoTransolver at equal budget, the excess fixed 1e-3 to 0.1 chords from the wall); on DrivAerML Volume, fresh draws leave ISLA 2.2 times behind on velocity and eddy viscosity, the latter in the far field {#sec-nb-cap-audit-p2}
+
+**Question.** Phase 1b (@sec-nb-cap-audit-p1) found one field where ISLA cannot fit a single case as well as the
+baselines when the points are redrawn every step: AirfRANS pressure, at 2.70 / 2.61 times GeoTransolver. Phase 2
+asks whether more parameters close that gap, and whether DrivAerML Volume, phase 1's largest fixed-draw deficit, has a
+field-fitting deficit at all. Pre-registration: scratch/isla-cap-audit-2026-10-20/PREREG.md.
+- Section 15, approved 2026-10-21 with the conditions of 15.7.
+- Amendments, each before the numbers it reads: 15.8 (a held-out instrument fix), 15.9 (a 40k control), 15.10 (a drv
+  down-rung ladder) and 15.11 (a path and seed check).
+- The case was selected by the rule the supervisor set after a reviewer's audit (section 14), with a disclosure of the
+  values seen before it.
+
+**Instruments.** Phase 1b's harness throughout: a fresh datapipe draw every step, ISLA in train mode, float32 with
+TF32 off, Muon + AdamW, cosine decay to 0 over 20,000 steps, and scoring on phase 1's two fixed draws.
+- **The ladder** varies ISLA 0.9.0 on the AirfRANS case one axis at a time from the reference (width 512, 12 layers,
+  512 slices):
+  - width 256 / 1024, with the program's rate rule lr = 1e-3 x 192 / width;
+  - depth 6 / 24;
+  - slices 128 / 2048.
+  - Seeds are fresh (44, and 45 on the reference and the top rungs). Each top rung also gets a 40,000-step check.
+  - The ladder trains through the per-block compiled path with the fix (@sec-nb-compiled-path-defect). On every
+    final model, compiled and eager predictions agree to 0.6-2.5e-6 on held-out pressure.
+- **The DrivAerML Volume control (Part B)** is phase 1b on run_171 for all three arms, eager, seeds 42 and 43.
+- **Rules:**
+  - for each axis, b = the slope of log F against log(axis value);
+  - "helps": b <= -0.3, the top rung at least 1.2 times better than the reference, and the seeds separated;
+  - "plateau": under 1.07 times per doubling;
+  - "weak gain": any other improvement;
+  - "budget-limited": the 40k floor at most the 20k floor ÷ 1.5.
+
+**What we saw: the ladder** (AirfRANS pressure, held-out floor; seeds 44 / 45 as a geometric mean on the reference
+and the top rungs):
+
+| Axis | Low | Reference | Top | b | Label | Top at 40k (÷ 20k) |
+|---|---|---|---|---|---|---|
+| Width 256 / 512 / 1024 | 0.00209 | 0.00198 | 0.00193 | -0.06 | plateau | 0.00080 (0.48) |
+| Depth 6 / 12 / 24 | 0.00209 | 0.00198 | 0.00180 | -0.11 | weak gain | 0.00064 (0.33) |
+| Slices 128 / 512 / 2048 | 0.00140 | 0.00198 | 0.00201 | +0.13 | plateau | 0.00071 (0.38) |
+
+- No axis helps at 20k. Depth's weak gain rules out the registered "missing component" reading, so the registered
+  reading is mixed. Velocity plateaus on every axis.
+- Every top rung is budget-limited. The 40k control (15.9) put the reference itself at 40k: 0.00096 and 0.00062 on its
+  two seeds, a fall to 0.49 and 0.31 of its 20k floor. Read against the seed mean, budget explains most of the top
+  rungs' fall. Only d24 falls clearly more than the reference (1.20 times the seed-mean factor).
+- **At equal budget the gap stays.** At 40k GeoTransolver reaches 0.00039 and Transolver 0.00042 (one seed each).
+  Every ISLA arm is 1.59-2.47 times GeoTransolver. Against GeoTransolver's same seed at 20k (0.00061), the same ISLA
+  arms are 2.8-3.3 times, so twice the steps narrows the gap, since ISLA gains more from steps than GeoTransolver
+  (0.31-0.49 against 0.64), but it does not close it.
+- **The excess does not move.** On every rung, ISLA's local pressure error in the band 1e-3 to 0.1 chords from the
+  wall is 0.0024-0.0031, against GeoTransolver's 0.0005-0.0007. The exception is s128, at 0.0017-0.0018. That band
+  holds 39 percent of the points and about 70 percent of ISLA's excess.
+- **Run-to-run spread is wide on this case.** The path and seed check (15.11) trained the reference eager and compiled
+  at the same seeds.
+  - At seeds 44 and 45 the two paths agree to 2 percent (P = -0.018). Training through the compiled path costs
+    nothing.
+  - At seed 42 they sit 15 percent apart (0.00139 compiled, 0.00165 eager).
+  - Over seven 20k runs the reference ranges from 0.00139 to 0.00199, 1.43 times, and its two 40k seeds are 1.56 times
+    apart. One-seed rungs cannot resolve differences that small: s128's two seeds (gm 0.00157, 1.27 times better than
+    the reference) fall inside the spread.
+
+**What we saw: DrivAerML Volume with fresh draws** (Part B; held-out floors, seeds 42 / 43):
+
+| Field | ISLA | GeoTransolver | Transolver | ISLA ÷ best |
+|---|---|---|---|---|
+| Pressure | 0.0101 / 0.0115 | 0.0065 / 0.0065 | 0.0059 / 0.0058 | 1.72 / 1.99 |
+| Velocity | 0.0192 / 0.0200 | 0.0101 / 0.0097 | 0.0088 / 0.0086 | 2.18 / 2.32 |
+| Eddy viscosity | 0.0239 / 0.0219 | 0.0109 / 0.0106 | 0.0098 / 0.0100 | 2.44 / 2.20 |
+
+- With fresh draws every arm's held-out error falls 18-80 times below phase 1's. So phase 1's drv gap of 11-24 times
+  was point-set memorization.
+- What remains is a field-fitting deficit of about 2.2 times on velocity and eddy viscosity (both seeds), and none on
+  pressure. The fixed epoch-0 draw gives the same verdicts.
+- **Velocity's deficit is uniform:** ISLA's local error is 1.9-2.8 times Transolver's in every wall-distance decade.
+- **Eddy viscosity's is regional:** the 0.7 percent of points more than 1 m from the car hold 49-66 percent of ISLA's
+  error and 61-72 percent of its excess. There ISLA's local error is 0.035-0.044, against Transolver's 0.010. On
+  DrivAerML ISLA reads only the vehicle surface and the freestream direction, no inlet, outlet or domain walls.
+- **Depth is the capacity axis on drv (15.10, seed 44).** Shrinking the model one axis at a time:
+  - halving depth to 6 layers raises velocity, eddy-viscosity and pressure floors by 1.59, 1.36 and 1.61 times;
+  - halving width raises them by 1.03-1.12 times (velocity just at the bar);
+  - quartering the slices changes nothing.
+  - The reference's three seeds span 1.04-1.15 times. A 24-layer rung, the direction that might help, does not fit on
+    one GB300 without block-level activation checkpointing.
+  - No rung moves the far-field eddy viscosity (local error 0.029-0.042 beyond 1 m).
+- **Three probes of the far-field miss** (descriptive, no training):
+  - **Height explains it, the inlet does not.** On run_171 and ten validation cases, height above the floor explains
+    31-46 percent of the far-field eddy-viscosity variance (cross-validated R^2). The streamwise distance from the
+    inlet explains 6-10 percent, and the distance to the car 3-6 percent. The files carry the floor strip, the slip
+    walls, the inlet and the outlet as meshes; ISLA reads only the vehicle.
+  - **The distance channels do not saturate.** ISLA's query embedding changes 2.8-3.3 per unit log wall distance
+    within 1 m (2.8-3.0 within 0.1 m) and 5-10 beyond it.
+  - **Far points have slice mass.** From block 4 on, far points hold most of the mass of 3-31 slices per block, and their mean
+    mass per slice is 1.5-9 times their share of the queries, except in seed 43's last block (1 slice, 0.5 times; probe_bc_cap_drv_isla_rd_s43.json,
+    a block the record's ranges leave out).
+  - So the miss points to an input ISLA lacks, the ground and the domain walls, rather than to saturated features or
+    starved slices.
+
+**Beside the rules.**
+
+- **An instrument defect, found and fixed before any registered floor (15.8).** The held-out set joined the next
+  draw's points to the training draw's boundary. On DrivAerML Volume the datapipe centers each draw on its own mean, so
+  the held-out points sat 1.16 mm off the wall, 1.4 times their median wall distance. ISLA, which computes its wall
+  geometry from the boundary, then scored 0.39 on pressure; on a correct set it scores 0.022.
+  - Part B uses the corrected set from its resume.
+  - ISLA's phase-1 drv held-out values are invalid.
+  - AeroZoo, which runs no centering, was checked and is unaffected.
+- ISLA on DrivAerML does not resume bit-for-bit: its losses depart from the first segment within 100 steps of a
+  checkpoint, with or without the fix. ISLA on AeroZoo and HiLift and phase 1b's runs resume exactly.
+
+**What it means.** The plain answer to Peter's question:
+- ISLA has the capacity to fit one sample. On a fixed point set its training-point floors are 1.8e-4 to 0.013 on every
+  case (phase 1).
+- With fresh draws it fits every field tested to within 1.2-1.7 times the best baseline on DrivAerML Surface, HiLift
+  and two of AirfRANS's three fields.
+- Where it trails, more parameters do not close the gap at 20k, and twice the steps narrows it without closing it.
+  - On AirfRANS pressure, the excess sits in and just outside the boundary layer on every rung. That points to changing
+    the component that represents near-wall variation (the slice routing and its resolution there are the first
+    suspects, given s128's lead), not to adding width, depth or slices.
+  - On DrivAerML Volume, velocity trails uniformly by about 2 times, and depth is the axis that buys it (halving it
+    costs 1.4-1.6 times). Eddy viscosity trails in the far field. Its level there follows the height above the floor,
+    a boundary ISLA is not given. The evidence points to a new input, the floor and walls as boundary meshes by name,
+    not to more parameters.
+
+**Next.** The supervisor's decisions of 2026-10-23:
+- **SLICES-AF:** a full-data AirfRANS test of 128 slices against the standing's 512, about 180 GPU-h, read about
+  2026-10-25. It replaces the single-case slice test: the single-case floor is 9 times below ISLA's cross-case error
+  on this case and its spread is 1.43 times, while full-data scores resolve a 20 percent effect on two seeds
+  (HANDOFF.md, decision 1).
+- **FLOOR-DRV:** a single-case DrivAerML Volume probe with the floor and slip walls as named boundary meshes, about
+  72 GPU-h, read about 2026-10-24, as a diagnostic. Adopting that input would change the dataset's input contract and
+  needs Peter's word.
+- The deeper drv rung (24 layers, with block-level activation checkpointing) is deferred until FLOOR-DRV reads.
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-book-cap-2026-10-23/SECOND_READ_CAP_P2.md).*
+
 ## 2026-10-21 — Training path on Tensile2d: the registered reading is that the fixed compiled path trains differently from eager, but on weak evidence, and the eager-trained rows become the standing {#sec-nb-ref090-t2d-control}
 
 **Question** (PREREG §13, written 2026-10-21 after the fix-trained Tensile2d result was seen; a deviation for
