@@ -158,9 +158,11 @@ def canonical_frame(points: torch.Tensor, measure: torch.Tensor) -> torch.Tensor
     w = measure.detach().double().clamp_min(0)
     w = w / w.sum().clamp_min(torch.finfo(torch.float64).tiny)
     x = x - (w[:, None] * x).sum(0)
-    cov = (w[:, None] * x).t() @ x
+    wx = w[:, None] * x
+    ### Column sums, not a GEMM (see frame_coordinates).
+    cov = torch.stack([(wx * x[:, j, None]).sum(0) for j in range(d)], 1)
     _, axes = torch.linalg.eigh(cov)
-    proj = x @ axes
+    proj = frame_coordinates(x, axes)
     m2 = (w[:, None] * proj.square()).sum(0)
     m3 = (w[:, None] * proj.pow(3)).sum(0)
     skew = m3 / m2.clamp_min(torch.finfo(torch.float64).tiny).pow(1.5)
@@ -168,6 +170,17 @@ def canonical_frame(points: torch.Tensor, measure: torch.Tensor) -> torch.Tensor
     sign = torch.where(skew.abs() > CANONICAL_SKEW_TIE, torch.sign(skew), torch.sign(lab))
     sign = torch.where(sign == 0, torch.ones_like(sign), sign)
     return (axes * sign[None, :]).to(points.dtype)
+
+
+def frame_coordinates(points: torch.Tensor, frame: torch.Tensor) -> torch.Tensor:
+    """``points @ frame`` ``(N, d)`` as ``d`` column products. A float64 GEMM this thin
+    (or the ``(d, N) @ (N, d)`` of a covariance) runs far below memory bandwidth on
+    GPUs with few float64 units: on GB300 at 17.7M cells, 17.8 ms (34 ms) against
+    0.9 ms (1.3 ms) as columns."""
+    out = points[:, :1] * frame[0]
+    for k in range(1, points.shape[1]):
+        out = out + points[:, k : k + 1] * frame[k]
+    return out
 
 
 def normal_octants(normals: torch.Tensor) -> torch.Tensor:

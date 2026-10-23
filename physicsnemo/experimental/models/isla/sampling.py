@@ -56,7 +56,10 @@ data-dependent shape, so the draw traces into one graph under
 import torch
 from jaxtyping import Float, Int
 
-from physicsnemo.experimental.models.isla.tree_read import canonical_frame
+from physicsnemo.experimental.models.isla.tree_read import (
+    canonical_frame,
+    frame_coordinates,
+)
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
 from physicsnemo.mesh.geometry._cell_areas import compute_cell_areas
@@ -175,7 +178,7 @@ def sample_boundary_cells(
                 continue
             pis.append(pps_inclusion_probabilities(a.detach().double(), shares[i]))
             ### Morton order of the centroids on cubic cells, ties broken by index.
-            code = _compute_morton_codes(x.detach() @ frame, isotropic=True)
+            code = _compute_morton_codes(frame_coordinates(x.detach(), frame), isotropic=True)
             orders.append(code.argsort(stable=True) + offset)
             offset = offset + n_i
         pi = torch.cat(pis)
