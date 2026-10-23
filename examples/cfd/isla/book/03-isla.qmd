@@ -1188,9 +1188,10 @@ plt.show()
 #|   the trailing edge apart, with anchors along the chord line; on the lug
 #|   the first layer gives almost every node the same dominant slice, with
 #|   anchors along the bracket's mid-line, the sixth layer divides the
-#|   bracket along its length into three regions, the clamped root, the arm
-#|   and the head around the hole, and in the last layer the anchors
-#|   gather toward the head and around the hole. ISLA at its reference configuration, the standing's
+#|   bracket along its length into three regions, a weakly decided one over
+#|   the half toward the clamped root, the arm, and the head around the
+#|   hole, and in the last layer the anchors gather toward the head and
+#|   around the hole. ISLA at its reference configuration, the standing's
 #|   eagerly trained checkpoint on each task, seed 42, final checkpoint; the
 #|   airfoil of @fig-airfrans-prediction and the lug of @fig-lug-prediction.
 #|   Data: results/renderings_2026-10-22/routing/r090eag_af_isla_seed42_s00215.npz,
