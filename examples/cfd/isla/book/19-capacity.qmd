@@ -496,6 +496,7 @@ for key in TASKS:
     if st_.in_flight:
         flight.append(st_.ds.short)
     rows = [a for a, _ in COST_ROWS if st_.has(a) and S.cost(key, a)]
+    flight += [f"{st_.ds.short} {a}" for a in rows if st_.arm_in_flight(a)]
     for i, arch in enumerate(rows):
         c = S.cost(key, arch)
         rel = f"{st_.ratio(arch, f):.2f}" if arch in S.BASELINES else ""
@@ -515,7 +516,8 @@ print(": What the reference configurations spend, per dataset and task, in the t
       "lane of the same configuration, one seed: " + ", ".join(f"{d} {a} (seed {s}, {int(n.replace(',', '')):,} steps)" for d, a, s, n in smoke) + ". "
       "‡ The lane trained on the compiled training path after its fault was fixed (" + ", ".join(fixed) + "); the eager-trained lanes "
       "behind those standings are not priced, and eager training takes longer per step. "
-      + (f"The {' and '.join(flight)} errors are the in-flight rows of their dataset chapters. " if flight else "")
+      + (f"The {' and '.join(flight)} {'errors are' if len(flight) > 1 else 'error is'} in flight, as "
+         f"{'their dataset chapters say' if len(flight) > 1 else 'its dataset chapter says'} (@sec-ledger). " if flight else "")
       + "How to read this: the table pairs a price with a result; it does not say what each architecture would score at another "
       "architecture's budget, and a step is not an epoch, since the step counts per epoch differ between datasets. "
       f"Data: results/char/{S.COST_FILE} (the notes per lane) and the standing artifacts of @sec-standing.")

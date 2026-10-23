@@ -1718,6 +1718,7 @@ listing("tree_read.py", "node_means")
 #| label: para-arch-dtt-standing
 #| output: asis
 AFS = S.Standing("airfrans")
+_d = AFS.arm_in_flight("ISLA-DTT")
 _vd = {}
 for f in AFS.ds.headline:
     _vd.setdefault(AFS.verdict("ISLA-DTT", f), []).append(AFS.fields[f])
@@ -1728,10 +1729,8 @@ print("**On the AirfRANS interior task at the reference configuration, interacti
       + " / ".join(AFS.fields[f] for f in AFS.ds.headline) + " (seed means; ISLA-DTT's seeds "
       + "; ".join(" / ".join(f"{x:.5f}" for x in AFS.seeds("ISLA-DTT", f)) + " against ISLA's "
                   + " / ".join(f"{x:.5f}" for x in AFS.seeds("ISLA", f)) for f in AFS.ds.headline)
-      + f"; {AFS.source}). Which form is the reference is decided on AeroZoo's held-out splits (@sec-oq-dtt).\n")
-if AFS.in_flight:
-    print(S.in_flight_callout({"what": "the AirfRANS pair of " + AFS.in_flight["what"],
-                               "replacement": "The pair trained without compilation"}))
+      + (f"; across training paths: {_d['what']}" if _d else "") + f"; {AFS.source}). Which form is the reference is decided on AeroZoo's held-out splits (@sec-oq-dtt).\n")
+print(S.in_flight_callout(_d))
 _azd = S.aerozoo()["arms"]["ISLA-DTT 512 with 512 slices"].get("in_flight")
 if _azd:
     print(S.in_flight_callout({"what": "ISLA against ISLA-DTT on AirfRANS alone",

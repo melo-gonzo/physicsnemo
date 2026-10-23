@@ -147,7 +147,7 @@ plt.show()
 #|   architectures are called level. Right: what happens to each
 #|   architecture's own error when every test case is rotated and translated,
 #|   as its error over its native error; ISLA (blue squares) sits at one
-#|   except on the lug. Rows marked ‡ are in flight (below). How to read this: rows are different datasets, fields
+#|   except on the lug. How to read this: rows are different datasets, fields
 #|   and units of difficulty and are not comparable with one another; every
 #|   baseline reads the freestream as a unit direction (@tbl-model-inputs).
 #|   Data: results/char/; every number is in @tbl-thesis.

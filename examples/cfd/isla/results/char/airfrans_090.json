@@ -1,5 +1,5 @@
 {
- "protocol": "ISLA 0.9.0 standings (2026-10-22): the results/char/<dataset>_a2.json record of each dataset with ISLA's arm replaced by\nISLA 0.9.0 at its reference configuration (width 512, 12 layers, 512 slices, 3.75e-4), scored in float32 on the final\ncheckpoint by the protocol scorer: native mesh / uniform point cloud / rotated + translated. The baseline arms (GeoTransolver\n256, Transolver 512 x 16, both reading the unit freestream direction) and the keys that document them (fair_input, scored_set,\nraw_drive_<arch>, transolver_100k_scoring, unlabelled_geotransolver, char_baselines) are the _a2 file's, unchanged.\n\nISLA's arm is built from the scorer's rows, copied unmodified into results/campaigns_2026-10-22/standing_090/scores/\n<evals>/<run>/<protocol>/<run>/metrics.jsonl from the record folders (scratch/isla-ref090-2026-10-20/scores/,\nscratch/isla-hilift090-2026-10-20/scores/; originals on LHR under $T/<evals>/): per seed and protocol the mean over cases of\nthe per-case relative L2 (the last infer_step row per sample id, after the last config row), then the mean over seeds. Each\nconfig row must name the final epoch and each protocol must hold the expected case count.\n\nSTANDING below is the one table a later update edits: per dataset the run stem, the evals folder, the seeds, the final epoch,\nthe case count and the status. A status of \"in_flight\" writes the in-flight text beside the numbers (\"in_flight\": {\"what\",\n\"replacement\"}, read by book/standing.py as \"These numbers come from <what>. <replacement> is being measured ...\").\n\"Fix-trained\" rows are trained with the compiled training path after its fault (pytorch/pytorch#195845) was fixed;\n\"eager-trained\" rows are trained without compilation. When the eager-trained AirfRANS and lug rows land: copy their score\nfiles into the scores folder, set the stem, evals folder and status \"final\" here, and rerun.\n\nDEGENERATE marks a protocol that changes no arm's input: its cells keep the scorer's numbers under \"scored\" and carry\n\"mean\": null with the reason, and the file's \"degenerate\" key says why. On the DrivAerML Volume task ISLA draws its boundary\ntokens by area inside the model, and the baselines read only the interior points and the signed distance, so the uniform point\ncloud gives every arm its native input.\n\nHiLift adds \"registered\" (R-HL090 of scratch/isla-hilift090-2026-10-20/PREREG.md: ISLA 0.9.0 against the normalized-read\nnearest-token arm of hilift_surface_a2.json, as registered) and \"case_level\" (the per-case readouts of hilift_a2_2026-10-20.py\nagainst the baselines' per-case rows in results/campaigns_2026-10-20/hilift/scores/). AirfRANS adds the arm\n\"ISLA-DTT 512 with 512 slices\" (query_independent=True, the same configuration).\nusage: python r090_protocol_artifacts_2026-10-22.py",
+ "protocol": "ISLA 0.9.0 standings (2026-10-22): the results/char/<dataset>_a2.json record of each dataset with ISLA's arm replaced by\nISLA 0.9.0 at its reference configuration (width 512, 12 layers, 512 slices, 3.75e-4), scored in float32 on the final\ncheckpoint by the protocol scorer: native mesh / uniform point cloud / rotated + translated. The baseline arms (GeoTransolver\n256, Transolver 512 x 16, both reading the unit freestream direction) and the keys that document them (fair_input, scored_set,\nraw_drive_<arch>, transolver_100k_scoring, unlabelled_geotransolver, char_baselines) are the _a2 file's, unchanged.\n\nISLA's arm is built from the scorer's rows, copied unmodified into results/campaigns_2026-10-22/standing_090/scores/\n<evals>/<run>/<protocol>/<run>/metrics.jsonl from the record folders (scratch/isla-ref090-2026-10-20/scores/,\nscratch/isla-hilift090-2026-10-20/scores/; originals on LHR under $T/<evals>/): per seed and protocol the mean over cases of\nthe per-case relative L2 (the last infer_step row per sample id, after the last config row), then the mean over seeds. Each\nconfig row must name the final epoch and each protocol must hold the expected case count.\n\nSTANDING below is the one table a later update edits: per dataset the run stem, the evals folder, the seeds, the final epoch,\nthe case count and the status. A status of \"in_flight\" writes the in-flight text beside the numbers (\"in_flight\": {\"what\",\n\"replacement\"}, read by book/standing.py as \"These numbers come from <what>. <replacement> is being measured ...\").\n\"Fix-trained\" rows are trained with the compiled training path after its fault (pytorch/pytorch#195845) was fixed;\n\"eager-trained\" rows are trained without compilation; the AirfRANS and lug ISLA rows are eager-trained, the Tensile2d rows too.\n\"isla_runs\" names each arm's training path. An ISLA-DTT arm that a running experiment will replace carries \"arm_in_flight\"\n({arm name: {\"what\", \"replacement\"}}, read by book/standing.py as Standing.arm_in_flight): when its rows land, copy their\nscore files into the scores folder, set its stem and evals folder in DTT, drop it from ARM_FLIGHT, and rerun.\n\nDEGENERATE marks a protocol that changes no arm's input: its cells keep the scorer's numbers under \"scored\" and carry\n\"mean\": null with the reason, and the file's \"degenerate\" key says why. On the DrivAerML Volume task ISLA draws its boundary\ntokens by area inside the model, and the baselines read only the interior points and the signed distance, so the uniform point\ncloud gives every arm its native input.\n\nHiLift adds \"registered\" (R-HL090 of scratch/isla-hilift090-2026-10-20/PREREG.md: ISLA 0.9.0 against the normalized-read\nnearest-token arm of hilift_surface_a2.json, as registered) and \"case_level\" (the per-case readouts of hilift_a2_2026-10-20.py\nagainst the baselines' per-case rows in results/campaigns_2026-10-20/hilift/scores/). AirfRANS adds the arm\n\"ISLA-DTT 512 with 512 slices\" (query_independent=True, the same configuration).\nusage: python r090_protocol_artifacts_2026-10-22.py",
  "protocols": {
   "native": "native mesh",
   "area": "uniform point cloud",
@@ -11,37 +11,40 @@
   "nut_l2": "eddy viscosity"
  },
  "isla_arm": "ISLA 512 with 512 slices",
- "status": "in_flight",
- "in_flight": {
-  "what": "ISLA and ISLA-DTT trained with the compiled training path after its fault was fixed",
-  "replacement": "The standing of ISLA and ISLA-DTT trained without compilation"
+ "status": "final",
+ "in_flight": null,
+ "arm_in_flight": {
+  "ISLA-DTT 512 with 512 slices": {
+   "what": "ISLA-DTT trained with the compiled training path after its fault was fixed, beside ISLA trained without compilation",
+   "replacement": "ISLA-DTT trained without compilation"
+  }
  },
  "arms": {
   "ISLA 512 with 512 slices": {
    "native": {
     "pressure_l2": {
-     "mean": 0.012223675197456032,
+     "mean": 0.012478547336068005,
      "per_seed": {
-      "42": 0.012987467008642853,
-      "43": 0.011459883386269212
+      "42": 0.01316305402549915,
+      "43": 0.011794040646636859
      },
      "n_cases": 200,
      "n_seeds": 2
     },
     "velocity_l2": {
-     "mean": 0.00632686261611525,
+     "mean": 0.006355390857788734,
      "per_seed": {
-      "42": 0.0064288214372936634,
-      "43": 0.0062249037949368355
+      "42": 0.006440699013182893,
+      "43": 0.0062700827023945745
      },
      "n_cases": 200,
      "n_seeds": 2
     },
     "nut_l2": {
-     "mean": 0.015564652211032808,
+     "mean": 0.015352880388963968,
      "per_seed": {
-      "42": 0.01573960982263088,
-      "43": 0.015389694599434733
+      "42": 0.01573822255246341,
+      "43": 0.014967538225464523
      },
      "n_cases": 200,
      "n_seeds": 2
@@ -49,28 +52,28 @@
    },
    "area": {
     "pressure_l2": {
-     "mean": 0.012223675197456032,
+     "mean": 0.012478547336068005,
      "per_seed": {
-      "42": 0.012987467008642853,
-      "43": 0.011459883386269212
+      "42": 0.01316305402549915,
+      "43": 0.011794040646636859
      },
      "n_cases": 200,
      "n_seeds": 2
     },
     "velocity_l2": {
-     "mean": 0.00632686261611525,
+     "mean": 0.006355390857788734,
      "per_seed": {
-      "42": 0.0064288214372936634,
-      "43": 0.0062249037949368355
+      "42": 0.006440699013182893,
+      "43": 0.0062700827023945745
      },
      "n_cases": 200,
      "n_seeds": 2
     },
     "nut_l2": {
-     "mean": 0.015564652211032808,
+     "mean": 0.015352880388963968,
      "per_seed": {
-      "42": 0.01573960982263088,
-      "43": 0.015389694599434733
+      "42": 0.01573822255246341,
+      "43": 0.014967538225464523
      },
      "n_cases": 200,
      "n_seeds": 2
@@ -78,28 +81,28 @@
    },
    "posed": {
     "pressure_l2": {
-     "mean": 0.012256016182946042,
+     "mean": 0.012508201393648052,
      "per_seed": {
-      "42": 0.013019357261946425,
-      "43": 0.011492675103945658
+      "42": 0.013192318241344765,
+      "43": 0.011824084545951337
      },
      "n_cases": 200,
      "n_seeds": 2
     },
     "velocity_l2": {
-     "mean": 0.006336856003617868,
+     "mean": 0.006365566287422552,
      "per_seed": {
-      "42": 0.006438707020133733,
-      "43": 0.006235004987102002
+      "42": 0.006450812831753865,
+      "43": 0.006280319743091241
      },
      "n_cases": 200,
      "n_seeds": 2
     },
     "nut_l2": {
-     "mean": 0.01556513593532145,
+     "mean": 0.015352448557969182,
      "per_seed": {
-      "42": 0.01573962450493127,
-      "43": 0.01539064736571163
+      "42": 0.015737966326996686,
+      "43": 0.014966930788941681
      },
      "n_cases": 200,
      "n_seeds": 2
@@ -379,8 +382,12 @@
  "isla_runs": {
   "scores": "results/campaigns_2026-10-22/standing_090/scores",
   "epoch": 500,
-  "ISLA 512 with 512 slices": "evals_r090fix/r090fix_af_isla_seed{42,43}",
-  "ISLA-DTT 512 with 512 slices": "evals_r090fix/r090fix_af_dtt_seed{42,43}"
+  "ISLA 512 with 512 slices": "evals_r090eag/r090eag_af_isla_seed{42,43}",
+  "ISLA-DTT 512 with 512 slices": "evals_r090fix/r090fix_af_dtt_seed{42,43}",
+  "training_path": {
+   "ISLA 512 with 512 slices": "eager-trained: trained without compilation",
+   "ISLA-DTT 512 with 512 slices": "fix-trained: trained with the compiled training path after its fault was fixed"
+  }
  },
  "raw_drive_geotransolver": {
   "label": "GeoTransolver 256, reading the inlet velocity U_inf in m/s",
