@@ -39560,7 +39560,7 @@ and the top rungs):
 | Velocity | 0.0192 / 0.0200 | 0.0101 / 0.0097 | 0.0088 / 0.0086 | 2.18 / 2.32 |
 | Eddy viscosity | 0.0239 / 0.0219 | 0.0109 / 0.0106 | 0.0098 / 0.0100 | 2.44 / 2.20 |
 
-- With fresh draws every arm's held-out error falls 18-80 times below phase 1's. So phase 1's drv gap of 11-24 times
+- With fresh draws GeoTransolver's and Transolver's held-out errors fall 18-83 times below phase 1's (ISLA's phase-1 drv held-out values are invalid, 15.8). So phase 1's drv gap of 11-24 times
   was point-set memorization.
 - What remains is a field-fitting deficit of about 2.2 times on velocity and eddy viscosity (both seeds), and none on
   pressure. The fixed epoch-0 draw gives the same verdicts.
@@ -39605,19 +39605,19 @@ and the top rungs):
   case (phase 1).
 - With fresh draws it fits every field tested to within 1.2-1.7 times the best baseline on DrivAerML Surface, HiLift
   and two of AirfRANS's three fields.
-- Where it trails, more parameters do not close the gap at 20k, and twice the steps narrows it without closing it.
+- Where it trails, on AirfRANS pressure more parameters do not close the gap at 20k, and twice the steps narrows it without closing it; on DrivAerML Volume only smaller models were trained.
   - On AirfRANS pressure, the excess sits in and just outside the boundary layer on every rung. That points to changing
     the component that represents near-wall variation (the slice routing and its resolution there are the first
     suspects, given s128's lead), not to adding width, depth or slices.
-  - On DrivAerML Volume, velocity trails uniformly by about 2 times, and depth is the axis that buys it (halving it
+  - On DrivAerML Volume, velocity trails uniformly by about 2 times, and depth is the axis it is sensitive to (halving it
     costs 1.4-1.6 times). Eddy viscosity trails in the far field. Its level there follows the height above the floor,
     a boundary ISLA is not given. The evidence points to a new input, the floor and walls as boundary meshes by name,
     not to more parameters.
 
 **Next.** The supervisor's decisions of 2026-10-23:
 - **SLICES-AF:** a full-data AirfRANS test of 128 slices against the standing's 512, about 180 GPU-h, read about
-  2026-10-25. It replaces the single-case slice test: the single-case floor is 9 times below ISLA's cross-case error
-  on this case and its spread is 1.43 times, while full-data scores resolve a 20 percent effect on two seeds
+  2026-10-25. It replaces the single-case slice test: the single-case floor is 9 times below ISLA's error across the AirfRANS
+  test cases (0.0017 against 0.015, @sec-nb-cap-audit-p1) and its run-to-run spread is 1.43 times, while full-data scores resolve a 20 percent effect on two seeds
   (HANDOFF.md, decision 1).
 - **FLOOR-DRV:** a single-case DrivAerML Volume probe with the floor and slip walls as named boundary meshes, about
   72 GPU-h, read about 2026-10-24, as a diagnostic. Adopting that input would change the dataset's input contract and

@@ -767,7 +767,7 @@ print("**The open question is whether ISLA's far-field eddy-viscosity error on t
       "it is not given.** Trained on one car with a fresh draw of points every step, ISLA's relative eddy-viscosity error beyond 1 m "
       f"from the car is {R.num(FAR['isla share % (e_R)'], 1):.3f}, against Transolver's {R.num(FAR['t share % (e_R)'], 1):.3f}, and "
       f"those {R.num(FAR['weight %']):.1f}% of the points hold {R.num(FAR['ISLA excess %']):.0f}% of the amount by which its squared "
-      f"error exceeds Transolver's; no change of its width, depth or slice count moves it (@sec-single-case-floor). On that car and "
+      f"error exceeds Transolver's; neither halving its width or depth nor quartering its slices moves it (@sec-single-case-floor). On that car and "
       f"{len(PA) - 1} validation cars the height above the floor explains {pc('r2_z')} of the far-field variance, the streamwise "
       f"distance from the inlet {pc('r2_x')}. Every case file stores the floor strip, the slip walls, the inlet and the outlet as "
       "meshes, and ISLA on this task reads the vehicle alone, while GeoTransolver and Transolver read each point's coordinates "
