@@ -144,14 +144,15 @@ from physicsnemo.experimental.models.isla.tree_read import TREE_READ_THETA
 QP = R.load("probes090", "results/qpop/reduced.json")
 QV = [QP[f"r090_vol_isla_seed{s}"]["ratio_to_native_h"] for s in (42, 43)]
 qv = lambda mode: [sum(v[mode][f] for v in QV) / len(QV) for f in ("pressure_l2", "velocity_l2")]
-qd = max(abs(x - 1) for s in (42, 43) for mode in QP[f"r090_af_dtt_seed{s}"]["ratio_to_native_h"].values() for x in mode.values())
+QD = R.load("probes090", "results/qpop_afeag/reduced.json")
+qd = max(abs(x - 1) for s in (42, 43) for mode in QD[f"r090eag_af_dtt_seed{s}"]["ratio_to_native_h"].values() for x in mode.values())
 print(f"On the DrivAerML Volume task, the standing's ISLA asked for its scored points in four "
       f"chunks moves its pressure and velocity error by at most {100 * (max(qv('chunks4')) - 1):.1f}%, but 1,000 of those points "
       f"asked for on their own raise it {min(qv('sub1000')):.1f} to {max(qv('sub1000')):.1f} times, and points asked for one at a "
       f"time {min(qv('sub1')):.0f} to {max(qv('sub1')):.0f} times (seed means). On AirfRANS, ISLA-DTT's error moves by at most "
-      f"{sci(float(f'{qd:.1g}'))} relative under every such change of the request, float32 roundoff (weights trained on the compiled path before "
-      f"its fault was fixed, @sec-using-cost). Its tree read is a Barnes–Hut approximation at opening angle $\\theta = "
-      f"{TREE_READ_THETA:g}$, whose error vanishes as $\\theta \\to 0$. Data: {R.source('probes090', 'results/qpop/reduced.json')}.")
+      f"{sci(float(f'{qd:.1g}'))} relative under every such change of the request, float32 roundoff (the AirfRANS standing's checkpoints, "
+      f"trained without compilation). Its tree read is a Barnes–Hut approximation at opening angle $\\theta = "
+      f"{TREE_READ_THETA:g}$, whose error vanishes as $\\theta \\to 0$. Data: {R.source('probes090', 'results/qpop/reduced.json')}; {R.source('probes090', 'results/qpop_afeag/reduced.json')}.")
 ```
 
 What the two forms measure on the same datasets is in

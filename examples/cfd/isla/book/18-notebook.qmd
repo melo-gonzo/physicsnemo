@@ -40268,6 +40268,8 @@ alone, the scales are one principled way to get that standardization, not a sour
 accuracy where the Reynolds number varies widely, as on AeroZoo, is untested: ATTRIB-090 has no AeroZoo arm. On the lug,
 once the compile fault is fixed, 0.9.0 leads its predecessor, and the winding flip is a reparametrization.
 
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-book-1023/SECOND_READ_ATTRIB_STAGE2.md).*
+
 **Later (2026-10-23).** STDU read under the same rule, with B and the step as above (scratch/isla-attrib090-2026-10-21/RESULTS.md
 §2d). σ, now pooled over nine degrees of freedom (0.076 / 0.048 / 0.056), leaves every reading above unchanged. STDU keeps
 ISLA's scales (the inlet velocity as the velocity source, eddy viscosity in units of U L, the fp32 head) and reads the
@@ -40279,7 +40281,7 @@ Re or speed) does not matter; its standardization does. This closes the AirfRANS
 is the standardization of the one global scalar. NOSC-STD and STDU sit at 0.9.0's level; NOSC and RAWU, the raw speed without
 and with the scales, sit at CONT's. Label: fix-trained.
 
-*Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-book-1023/SECOND_READ_ATTRIB_STAGE2.md).*
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-book-noon-2026-10-23/SECOND_READ_STDU.md).*
 
 ## 2026-10-23 — AF-EXTRAP LRE and LIN, the Reynolds-input training controls: the registered Reynolds summary "ISLA extrapolates worse" stands; beside it, ISLA 0.9.0 trained with its Reynolds input on the fixed scale z = log10(Re_ISLA / 1e6) has 0.53-0.58× the fitted-scale model's below-band pressure error (registered reading "the fixed scale helps"), and with a linear, training-standardized Reynolds input 0.62-0.63× ("helps") {#sec-nb-af-lre-verdict}
 
@@ -40838,3 +40840,5 @@ against the redraw's 1.382); ISLA-DTT's qualifies.
 results/campaigns_2026-10-23/probes090/; chapter 20's numbers from book_E/limits_090_2026-10-23.py there), and the three
 In-flight callouts on them go (04 sec-query-population, 20 sec-limits-boundary-law, 20 sec-limits-query-independence). The
 ranges shift a little: four chunks 1.31 to 1.40; small requests 4.5 to 126 times; ISLA-DTT's refinement 1.7 to 5.9 percent.
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-book-noon-2026-10-23/SECOND_READ_PROBES_F.md).*
