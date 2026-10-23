@@ -38,7 +38,10 @@ remesh_dev = max(abs(RM_I[v][f] - 1) for v in ("refine2", "refine4", "refine31")
 PL = J("campaigns_2026-10-19/drive_fix2/planar/planar_scores.json")
 PLANAR_DEV = max(abs(xy / v3 - 1) for a in ("gt", "t") for v3, xy in zip(PL[f"afu_ud_{a}/native"]["velocity_l2"],
                                                                           PL[f"afu_ud_{a}/native"]["velocity_xy_l2"]))
-COST = {a: S.cost("airfrans", a) for a in ("ISLA", "ISLA-DTT") + BASE}   # the training lanes behind the standing
+COST = {a: S.cost("airfrans", a) for a in ("ISLA", "ISLA-DTT") + BASE}   # ISLA's and ISLA-DTT's on the fixed compiled path
+# the ISLA-DTT arm of the standing while it trained on another path than ISLA's: {what, replacement}, else None
+DTT_FLIGHT = St.arm_in_flight("ISLA-DTT")
+CROSS = f", across training paths: {DTT_FLIGHT['what']}" if DTT_FLIGHT else ""
 def word(arch, f, p="native"):
     """ISLA against a baseline in the book's words: 'leads GeoTransolver 3.9x', 'trails Transolver (ratio 0.75)', 'is level with ...',
     'is not compared with ...'."""
@@ -215,11 +218,11 @@ print("**Each checkpoint is scored twice on the same test cases**: on the native
       "it returns the native mesh. The boundary's discretization is measured directly instead (@sec-airfrans-discretization).")
 print()
 g = {(c["gpus"], c["precision"]) for c in COST.values()}
-print("**Cost.** One training step of the lanes behind the standing rows shown, ISLA's and ISLA-DTT's on the compiled training "
-      "path after its fault was fixed, " + " and ".join(f"on {n} GB300 GPUs in {pr}" for n, pr in sorted(g))
+print("**Cost.** One training step of each reference configuration, ISLA's and ISLA-DTT's on the compiled training "
+      "path after its fault was fixed (the standing's ISLA checkpoints trained without compilation), " + " and ".join(f"on {n} GB300 GPUs in {pr}" for n, pr in sorted(g))
       + " (allocator peak per GPU, the maximum over ranks; median step): "
       + "; ".join(f"{a} {v['peak_gib']:.0f} GiB and {v['step_seconds']:.2f} s" for a, v in COST.items())
-      + f". ISLA's step is {step_ratio:.1f} times the baselines' mean on this planar task. ISLA's lanes compile its blocks one by one, and "
+      + f". ISLA's step is {step_ratio:.1f} times the baselines' mean on this planar task. The ISLA lanes priced here compile its blocks one by one, and "
       "the baselines run uncompiled, as released (@tbl-ref-cost). Data: results/char/" + S.COST_FILE + ".")
 ```
 
@@ -246,7 +249,7 @@ print("**Velocity is measured alike for the three.** GeoTransolver and Transolve
 #| label: out-tbl-airfrans-protocols
 #| output: asis
 print(St.table("tbl-airfrans-protocols", f"The AirfRANS interior task, `full` split, {N_TEST} test airfoils"))
-print(S.in_flight_callout("airfrans"))
+print(S.in_flight_callout(DTT_FLIGHT))
 ```
 
 ```{python}
@@ -261,7 +264,7 @@ def dtt_word(f):
     return "behind ISLA" if min(d) > max(i) else "ahead of ISLA" if max(d) < min(i) else "level with ISLA"
 print(f"**ISLA-DTT, the same configuration with read-only prediction points, is " + ", ".join(f"{dtt_word(f)} on {l}" for f, l in FIELDS)
       + " by the seed rule: ISLA-DTT ÷ ISLA is " + " / ".join(f"{dtt_r[f]:.3f}" for f in FK) + " on " + " / ".join(l for _, l in FIELDS)
-      + ".** Against the baselines it reads " + "; ".join(f"{a} ÷ ISLA-DTT " + " / ".join(f"{St.err(a, f) / St.err('ISLA-DTT', f):.2f}" for f in FK)
+      + CROSS + ".** Against the baselines it reads " + "; ".join(f"{a} ÷ ISLA-DTT " + " / ".join(f"{St.err(a, f) / St.err('ISLA-DTT', f):.2f}" for f in FK)
                                                         for a in BASE)
       + f". Both forms keep their native error to within {100 * max(abs(St.shift(a, f, 'posed') - 1) for a in S.ISLA_FORMS for f in FK):.2f}% "
       "when every case is rotated and translated. @sec-airfrans-dtt-reference says what the bundle of ISLA's components does to each form.")
@@ -479,6 +482,10 @@ print(": Read-only prediction points on the AirfRANS interior task: relative L2 
 AT = R.load("attrib090", "results2_native.json")
 at = lambda fam, arm, f: AT[f"af/{fam}"][f]["arms"][arm]["mean"]
 rho_cont = {f: at("dtt", "DTT-CONT", f) / at("isla", "CONT", f) for f in FK}
+# the two forms with ISLA's own components (B), both fix-trained: ISLA-DTT ÷ ISLA and the fields where ISLA leads by the seed rule
+rho_b = {f: at("dtt", "B", f) / at("isla", "B", f) for f in FK}
+b_seeds = lambda fam, f: AT[f"af/{fam}"][f]["arms"]["B"]["seeds"].values()
+b_lead = [l for f, l in FIELDS if rho_b[f] - 1 >= S.TIE_BAND and min(b_seeds("dtt", f)) > max(b_seeds("isla", f))]
 bundle = {fam: {f: at(fam, "B", f) / at(fam, "CONT" if fam == "isla" else "DTT-CONT", f) for f in FK} for fam in ("isla", "dtt")}
 # The ANCHOR arms (results/campaigns_2026-10-18/anchor/PREREG.md), ISLA of the nearest-token form at the reference configuration: A interacting
 # ISLA, C read-only points with 50,000 boundary-drawn interior writers. Scores: readout/scores.json and verdict.json.
@@ -498,14 +505,14 @@ r3 = lambda arm: " / ".join(f"{aratio(arm, f):.3f}" for f in FK)
 #| label: para-airfrans-dtt-reference
 #| output: asis
 print(f"**At the reference configuration interacting ISLA leads ISLA-DTT on AirfRANS "
-      + " and ".join(l for f, l in FIELDS if dtt_word(f) == "behind ISLA") + ", and the order of the two forms comes from "
+      + " and ".join(b_lead) + ", and the order of the two forms comes from "
       f"the components that make ISLA what it is: with the reduced form's components ISLA-DTT ÷ ISLA is "
-      + " / ".join(f"{rho_cont[f]:.3f}" for f in FK) + ", and with ISLA's own it is " + " / ".join(f"{dtt_r[f]:.3f}" for f in FK)
+      + " / ".join(f"{rho_cont[f]:.3f}" for f in FK) + ", and with ISLA's own it is " + " / ".join(f"{rho_b[f]:.3f}" for f in FK)
       + " on " + " / ".join(l for _, l in FIELDS) + ".** The reduced form is defined with the attribution study (@sec-airfrans-attribution). "
       "Both forms gain from ISLA's components, interacting ISLA more: its error falls to " + " / ".join(f"{bundle['isla'][f]:.2f}" for f in FK)
       + " of the reduced form's, ISLA-DTT's to " + " / ".join(f"{bundle['dtt'][f]:.2f}" for f in FK)
       + ". Why interacting ISLA gains more is not measured. Every model in this comparison trained on the compiled training path after its "
-      f"fault was fixed and is scored eager, like the standing's ISLA rows. Data: {R.source('attrib090', 'results2_native.json')}.")
+      f"fault was fixed and is scored eager. Data: {R.source('attrib090', 'results2_native.json')}.")
 print()
 print("**Interior writers drawn from the boundary, tested on ISLA of the nearest-token form, do not replace interacting ISLA.** A read-only arm "
       "adds 50,000 interior tokens that write into the slices, placed from the boundary alone, so that the prediction stays a function of the "
@@ -817,8 +824,8 @@ print("- **Not a statement about geometry.** The airfoils are one smooth paramet
 print("- **No cross-architecture discretization reading.** The boundary's discretization is measured for ISLA alone, because the baselines "
       "never read the airfoil (@sec-airfrans-discretization); discretization independence across architectures is measured on the surface "
       "datasets (@sec-invariances).")
-print("- **No choice of ISLA's interior form.** ISLA-DTT ÷ ISLA is " + " / ".join(f"{dtt_r[f]:.3f}" for f in FK) + " at the reference "
-      "configuration (@sec-airfrans-dtt-reference), on one planar dataset in distribution with two seeds; which form ISLA's interior model "
+print("- **No choice of ISLA's interior form.** ISLA-DTT ÷ ISLA is " + " / ".join(f"{rho_b[f]:.3f}" for f in FK) + " at the reference "
+      "configuration with both forms trained alike (@sec-airfrans-dtt-reference), on one planar dataset in distribution with two seeds; which form ISLA's interior model "
       "takes is the open question of @sec-oq-dtt.")
 print("- **Reynolds extrapolation below the training band is unresolved.** ISLA's error grows more than the baselines' there, as registered "
       "(@sec-interior-extrapolation); the clamp diagnostic points at how ISLA reads its Reynolds number and is untested in training "

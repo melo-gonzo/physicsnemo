@@ -171,7 +171,7 @@ def cost_how(c):
     i, b = c["ISLA"], c["Transolver"]
     out = ("parameters, peak allocated device memory per GPU (the maximum over ranks) and the median wall time of one training step "
            "without the compile steps, seed means. "
-           f"Every architecture trains on {i['gpus']} GB300 GPUs and {i['ranks']} ranks; the configuration that trains ISLA is "
+           f"Every architecture trains on {i['gpus']} GB300 GPUs and {i['ranks']} ranks; the ISLA lane priced here trains in "
            f"{i['precision']} autocast with its blocks compiled one by one and Inductor's mix-order reduction off; the baselines train "
            f"in {b['precision']} autocast and uncompiled, as released. ")
     if "before the compile fix" in i["note"]:
@@ -180,6 +180,8 @@ def cost_how(c):
     if m:
         out += (f"The standing's ISLA checkpoints trained eager, for a control of the training path, at about {m.group(1)} this step "
                 "time; the row prices the compiled lane of the same configuration. ")
+    elif "r090eag_" in ST.raw["isla_runs"][ST.arm_names["ISLA"]]:
+        out += "The standing's ISLA checkpoints trained without compilation; the row prices the compiled lane of the same configuration. "
     smoke = [a for a in S.BASELINES if "smoke lane" in c[a]["note"]]
     if smoke:
         out += (f"{' and '.join(smoke)} {'have' if len(smoke) > 1 else 'has'} no training log left from the standing's "
@@ -194,8 +196,7 @@ for a in S.ARCHS:
     v = COST[a]
     print(f"| {S.CONFIG[a]} | {v['n_parameters'] / 1e6:.1f}M | {v['peak_gib']:.1f} | {v['step_seconds']:.3f} |")
 longest = max(S.ARCHS, key=lambda a: COST[a]["step_seconds"]); most = max(S.ARCHS, key=lambda a: COST[a]["n_parameters"])
-print("\n: The cost of training on the GINOT bracket lug at the three reference configurations, as the standing's lanes trained "
-      "them: " + cost_how(COST) + "How to read this: the comparison of @tbl-lug-protocols is not resource-matched; "
+print("\n: The cost of training on the GINOT bracket lug at the three reference configurations: " + cost_how(COST) + "How to read this: the comparison of @tbl-lug-protocols is not resource-matched; "
       + (f"{most} has the most parameters and the longest step" if most == longest else f"{most} has the most parameters")
       + f". Data: results/char/{S.COST_FILE}, from {cost_src(COST)}. {{#tbl-lug-cost}}")
 ```

@@ -55,14 +55,6 @@ SCORES = f"{RES}/campaigns_2026-10-22/standing_090/scores"
 ISLA_ARM, DTT_ARM = "ISLA 512 with 512 slices", "ISLA-DTT 512 with 512 slices"
 S2, S4 = ("42", "43"), ("42", "43", "44", "45")
 
-AF_FLIGHT = {
-    "what": "ISLA and ISLA-DTT trained with the compiled training path after its fault was fixed",
-    "replacement": "The standing of ISLA and ISLA-DTT trained without compilation",
-}
-LUG_FLIGHT = {
-    "what": "ISLA trained with the compiled training path after its fault was fixed",
-    "replacement": "The standing of ISLA trained without compilation",
-}
 # dataset stem -> (run stem, evals folder, seeds, final epoch, cases, status, in-flight text or None)
 STANDING = {
     "drivaerml_surface": ("r090_dr_isla", "evals_r090", S2, 500, 48, "final", None),
@@ -71,19 +63,29 @@ STANDING = {
     "hilift_surface": ("h090_hl_isla", "evals_h090", S2, 500, 180, "final", None),
     "deepjeb_surface": ("r090_jb_isla", "evals_r090", S2, 40, 5540, "final", None),
     "tensile2d": ("r090eag_t2dz_isla", "evals_r090eag", S4, 500, 100, "final", None),
-    "airfrans": (
-        "r090fix_af_isla",
-        "evals_r090fix",
-        S2,
-        500,
-        200,
-        "in_flight",
-        AF_FLIGHT,
-    ),
-    "lug": ("r090fix_lug_isla", "evals_r090fix", S2, 500, 600, "in_flight", LUG_FLIGHT),
+    "airfrans": ("r090eag_af_isla", "evals_r090eag", S2, 500, 200, "final", None),
+    "lug": ("r090eag_lug_isla", "evals_r090eag", S2, 500, 600, "final", None),
 }
 # dataset stem -> (ISLA-DTT run stem, evals folder); seeds, epoch and cases as the ISLA arm's
 DTT = {"airfrans": ("r090fix_af_dtt", "evals_r090fix")}
+# dataset stem -> {arm: the training path of its runs}, written as isla_runs["training_path"] where the arms' paths differ
+TRAINING_PATH = {
+    "airfrans": {
+        ISLA_ARM: "eager-trained: trained without compilation",
+        DTT_ARM: "fix-trained: trained with the compiled training path after its fault was fixed",
+    }
+}
+# dataset stem -> {arm: {"what", "replacement"}} for an arm that a running experiment will replace in a file whose status is
+# "final", written as the file's "arm_in_flight" (book/standing.py: Standing.arm_in_flight)
+ARM_FLIGHT = {
+    "airfrans": {
+        DTT_ARM: {
+            "what": "ISLA-DTT trained with the compiled training path after its fault was fixed, beside ISLA trained "
+            "without compilation",
+            "replacement": "ISLA-DTT trained without compilation",
+        }
+    }
+}
 # dataset stem -> {protocol: why it changes no arm's input}
 DEGENERATE = {
     "drivaerml_volume": {
@@ -268,6 +270,7 @@ def main():
             "isla_arm": ISLA_ARM,
             "status": status,
             "in_flight": flight if status == "in_flight" else None,
+            **({"arm_in_flight": ARM_FLIGHT[ds]} if ds in ARM_FLIGHT else {}),
             "arms": arms,
             "complete": complete,
             "degenerate": DEGENERATE.get(ds, {}),
@@ -275,6 +278,7 @@ def main():
                 "scores": "results/campaigns_2026-10-22/standing_090/scores",
                 "epoch": epoch,
                 **runs,
+                **({"training_path": TRAINING_PATH[ds]} if ds in TRAINING_PATH else {}),
             },
             **{
                 k: v

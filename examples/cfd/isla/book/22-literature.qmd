@@ -113,7 +113,8 @@ for k in keys:
         posed_base += [s.shift(b, f, "posed") for b in S.BASELINES if s.has(b)]
 bent_ds = {}
 for ds, fl, r in bent:
-    bent_ds[ds] = max(bent_ds.get(ds, 1.0), r)
+    if ds != S.DATASETS["lug"].name:   # the lug has its own clause below
+        bent_ds[ds] = max(bent_ds.get(ds, 1.0), r)
 print(f"At the reference configurations on the native mesh, over {len(keys)} datasets and AeroZoo's in-distribution split, {n} comparisons "
       f"(each headline field against each baseline, by the seed rule of @sec-fair-comparison), ISLA leads in {len(lead)}"
       + (f" ({nl} of them on the lug against Transolver, which reads no boundary-condition labels there)"
@@ -127,6 +128,7 @@ print(f"At the reference configurations on the native mesh, over {len(keys)} dat
                 "planar prediction does not have (@sec-interior-airfrans). " for d, fl in held) +
       f"Rotated and translated, ISLA's error moves by at most "
       f"{100 * max(abs(r - 1) for *_, r in posed_isla):.1f}% on every headline field of the final standings"
+      + (" but the lug's" if "lug" in keys else "")
       + (" except on " + " and ".join(f"the {ds} (up to ×{r:.2f})" for ds, r in bent_ds.items()) if bent_ds else "")
       + "; on the GINOT bracket lug ISLA's error is "
       f"×{S.Standing('lug').shift('ISLA', 'von_mises_l2', 'posed'):.2f} rotated and translated, where its structured mesh ties interior "

@@ -9,19 +9,16 @@
   "von_mises_l2": "von Mises"
  },
  "isla_arm": "ISLA 512 with 512 slices",
- "status": "in_flight",
- "in_flight": {
-  "what": "ISLA trained with the compiled training path after its fault was fixed",
-  "replacement": "The standing of ISLA trained without compilation"
- },
+ "status": "final",
+ "in_flight": null,
  "arms": {
   "ISLA 512 with 512 slices": {
    "native": {
     "von_mises_l2": {
-     "mean": 0.0014536739279477236,
+     "mean": 0.001573748507410831,
      "per_seed": {
-      "42": 0.0014624581758592588,
-      "43": 0.0014448896800361884
+      "42": 0.00137619527784409,
+      "43": 0.0017713017369775721
      },
      "n_cases": 600,
      "n_seeds": 2
@@ -29,10 +26,10 @@
    },
    "area": {
     "von_mises_l2": {
-     "mean": 0.0014536737886373884,
+     "mean": 0.001573749470456581,
      "per_seed": {
-      "42": 0.0014624580388772302,
-      "43": 0.0014448895383975468
+      "42": 0.001376195328484755,
+      "43": 0.001771303612428407
      },
      "n_cases": 600,
      "n_seeds": 2
@@ -40,10 +37,10 @@
    },
    "posed": {
     "von_mises_l2": {
-     "mean": 0.0019834259804338214,
+     "mean": 0.002291604254666405,
      "per_seed": {
-      "42": 0.001968671381473541,
-      "43": 0.001998180579394102
+      "42": 0.0017153143265750258,
+      "43": 0.0028678941827577848
      },
      "n_cases": 600,
      "n_seeds": 2
@@ -126,7 +123,7 @@
  "isla_runs": {
   "scores": "results/campaigns_2026-10-22/standing_090/scores",
   "epoch": 500,
-  "ISLA 512 with 512 slices": "evals_r090fix/r090fix_lug_isla_seed{42,43}"
+  "ISLA 512 with 512 slices": "evals_r090eag/r090eag_lug_isla_seed{42,43}"
  },
  "unlabelled_geotransolver": {
   "label": "GeoTransolver 256, the arm it replaces",
