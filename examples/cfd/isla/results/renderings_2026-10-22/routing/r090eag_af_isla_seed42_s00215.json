@@ -1,0 +1,193 @@
+{
+  "run": "r090eag_af_isla_seed42",
+  "epoch": 500,
+  "checkpoint": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/runs/r090eag_af_isla_seed42/checkpoints",
+  "model_yaml": "physicsnemo.experimental.models.isla.ISLA",
+  "dataset_yaml": "airfrans_uvolume_2d",
+  "overrides": [
+    "--config-path",
+    "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/recipe_r090/conf",
+    "--config-name",
+    "infer",
+    "model=isla_volume_airfrans",
+    "train_split=full_train",
+    "val_split=full_test",
+    "+training.val_interval=10",
+    "model.hidden=512",
+    "model.n_slices=512",
+    "model.compile_blocks=true",
+    "compile=false",
+    "model.compile_blocks=false",
+    "model.compile_blocks=false",
+    "compile=false",
+    "dataset=airfrans_uvolume_2d",
+    "run_id=r090eag_af_isla_seed42",
+    "infer_split=val",
+    "+save_predictions=true",
+    "sampling_resolution=100000",
+    "precision=float32",
+    "checkpoint_dir=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/runs",
+    "output_dir=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/book_figs_2026-10-22/routing/r090eag_af_isla_seed42_s00215"
+  ],
+  "sampling_resolution": 100000,
+  "precision": "float32",
+  "sample_id": "00215_airFoil2D_SST_44.638_-2.059_2.312_4.328_1.0_17.415_airFoil2D_SST_44.638_-2.059_2.312_4.328_1.0_17.415",
+  "probe_metrics": {
+    "phase": "infer_step",
+    "step": 0,
+    "sample_id": "00215_airFoil2D_SST_44.638_-2.059_2.312_4.328_1.0_17.415_airFoil2D_SST_44.638_-2.059_2.312_4.328_1.0_17.415",
+    "metrics": {
+      "pressure_l2": 0.011594696901738644,
+      "nut_l2": 0.00910030398517847,
+      "velocity_x_l2": 0.00428776303306222,
+      "velocity_y_l2": 0.011637636460363865,
+      "velocity_l2": 0.005170310381799936
+    },
+    "ts": "2026-10-23T04:50:38.263406+00:00"
+  },
+  "geo_kernel": "eager",
+  "query_independent": false,
+  "n_tokens": 101046,
+  "n_boundary": 1046,
+  "n_query": 100000,
+  "n_active": 101046,
+  "n_stored": 60000,
+  "n_layers": 12,
+  "n_slices": 512,
+  "gauge": 0.42879876494407654,
+  "layers": [
+    {
+      "n_eff": 390.217529296875,
+      "n_eff_w": 442.3357238769531,
+      "H_slices": 0.955237627029419,
+      "H_points": 0.8183680772781372,
+      "anchor_spread": 0.047750324010849,
+      "pi_max_mean": 0.009220336563885212
+    },
+    {
+      "n_eff": 399.188720703125,
+      "n_eff_w": 353.8592834472656,
+      "H_slices": 0.9206932187080383,
+      "H_points": 0.79592365026474,
+      "anchor_spread": 0.4297528564929962,
+      "pi_max_mean": 0.019484344869852066
+    },
+    {
+      "n_eff": 425.8961181640625,
+      "n_eff_w": 383.3013916015625,
+      "H_slices": 0.9381941556930542,
+      "H_points": 0.8297240138053894,
+      "anchor_spread": 0.6393791437149048,
+      "pi_max_mean": 0.024382947012782097
+    },
+    {
+      "n_eff": 334.0175476074219,
+      "n_eff_w": 409.7146911621094,
+      "H_slices": 0.857414186000824,
+      "H_points": 0.8078089356422424,
+      "anchor_spread": 0.3619477152824402,
+      "pi_max_mean": 0.03722231090068817
+    },
+    {
+      "n_eff": 324.5121154785156,
+      "n_eff_w": 413.3681945800781,
+      "H_slices": 0.8912463784217834,
+      "H_points": 0.8003216981887817,
+      "anchor_spread": 0.12403937429189682,
+      "pi_max_mean": 0.07542837411165237
+    },
+    {
+      "n_eff": 182.9220733642578,
+      "n_eff_w": 308.1862487792969,
+      "H_slices": 0.7256453037261963,
+      "H_points": 0.8294568061828613,
+      "anchor_spread": 0.28792792558670044,
+      "pi_max_mean": 0.06169414892792702
+    },
+    {
+      "n_eff": 315.5873718261719,
+      "n_eff_w": 378.9942321777344,
+      "H_slices": 0.7931851744651794,
+      "H_points": 0.757973313331604,
+      "anchor_spread": 0.3927903175354004,
+      "pi_max_mean": 0.08134867995977402
+    },
+    {
+      "n_eff": 298.528076171875,
+      "n_eff_w": 326.0977478027344,
+      "H_slices": 0.7884198427200317,
+      "H_points": 0.7181351184844971,
+      "anchor_spread": 0.38521233201026917,
+      "pi_max_mean": 0.12923142313957214
+    },
+    {
+      "n_eff": 471.2954406738281,
+      "n_eff_w": 475.51806640625,
+      "H_slices": 0.9567174315452576,
+      "H_points": 0.8130464553833008,
+      "anchor_spread": 0.2720341384410858,
+      "pi_max_mean": 0.02253311313688755
+    },
+    {
+      "n_eff": 70.7242202758789,
+      "n_eff_w": 239.84500122070312,
+      "H_slices": 0.5134506821632385,
+      "H_points": 0.7594893574714661,
+      "anchor_spread": 0.3599742650985718,
+      "pi_max_mean": 0.2952645719051361
+    },
+    {
+      "n_eff": 129.50845336914062,
+      "n_eff_w": 201.09217834472656,
+      "H_slices": 0.6880437135696411,
+      "H_points": 0.7995256185531616,
+      "anchor_spread": 0.16439785063266754,
+      "pi_max_mean": 0.16027601063251495
+    },
+    {
+      "n_eff": 202.0279083251953,
+      "n_eff_w": 254.11973571777344,
+      "H_slices": 0.7994549870491028,
+      "H_points": 0.8509731292724609,
+      "anchor_spread": 0.12766824662685394,
+      "pi_max_mean": 0.11754653602838516
+    }
+  ],
+  "top_layers": [
+    0,
+    5,
+    11
+  ],
+  "top_slices": [
+    [
+      52,
+      461,
+      180,
+      406,
+      192,
+      369,
+      444,
+      0
+    ],
+    [
+      6,
+      62,
+      265,
+      272,
+      390,
+      491,
+      94,
+      345
+    ],
+    [
+      164,
+      61,
+      469,
+      16,
+      49,
+      241,
+      77,
+      244
+    ]
+  ]
+}
