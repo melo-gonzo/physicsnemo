@@ -1089,8 +1089,8 @@ def draw_anchors(ax, d, li, scale=1.0, dims=(0, 1), s=50):
     return len(active)
 
 DR, DRm = load_slices("r090_dr_isla_seed42_s00079", sl=SL_090)
-AF, AFm = load_slices("afu_a2s_isla_seed42_s00215")
-LG, LGm = load_slices("a2r_lug_isla_seed42_s00633")
+AF, AFm = load_slices("r090eag_af_isla_seed42_s00215", sl=SL_090)
+LG, LGm = load_slices("r090eag_lug_isla_seed42_s00633", sl=SL_090)
 L_REF_DR = json.load(open(PF / "drivaer.json"))["L_ref"]        # the recipe divides DrivAerML positions by L_ref = 5 m
 NE_DR = [n_eff(DR["q"][li]) for li in range(12)]
 L_PEAK = int(np.argmin(NE_DR))       # the layer whose routing is most concentrated
@@ -1181,16 +1181,19 @@ plt.show()
 #|   lug, one test bracket, surface triangles and interior nodes projected
 #|   along the hole's axis. Airfoil: first layer, the layer of most
 #|   concentrated routing and last layer; lug: first, sixth and last layer.
-#|   How to read this: on the airfoil the first layers give almost every
-#|   point the same dominant slice and set the wake apart, and the last layer
-#|   divides the domain into regions ahead of, around and behind the airfoil,
-#|   with anchors along the chord line and the wake; on the lug the first
-#|   layer splits the arm from the head that holds the hole, and in the deep
-#|   layers the anchors line up along the bracket's mid-line and gather
-#|   around the hole. ISLA's reference configuration on
-#|   each task, checkpoints of the nearest-token form (@sec-checkpoint-form), seed 42, final checkpoint, the test case of median ISLA
-#|   error. Data: results/renderings_2026-10-18/routing/afu_a2s_isla_seed42_s00215.npz,
-#|   a2r_lug_isla_seed42_s00633.npz.
+#|   How to read this: on the airfoil the first layer gives almost every
+#|   interior point the same dominant slice, the layer of most concentrated
+#|   routing divides the domain into regions ahead of the airfoil, above its
+#|   rear half and in the wake, and the last layer sets the region behind
+#|   the trailing edge apart, with anchors along the chord line; on the lug
+#|   the first layer gives almost every node the same dominant slice, with
+#|   anchors along the bracket's mid-line, the sixth layer splits the arm
+#|   from the head that holds the hole, and in the last layer the anchors
+#|   gather toward the head and around the hole. ISLA at its reference configuration, the standing's
+#|   eagerly trained checkpoint on each task, seed 42, final checkpoint; the
+#|   airfoil of @fig-airfrans-prediction and the lug of @fig-lug-prediction.
+#|   Data: results/renderings_2026-10-22/routing/r090eag_af_isla_seed42_s00215.npz,
+#|   r090eag_lug_isla_seed42_s00633.npz.
 #| code-fold: true
 fig, axes = plt.subplots(2, 3, figsize=(8, 5.0), gridspec_kw=dict(hspace=0.45, wspace=0.1))
 nb_a = int(AF["n_boundary"]); PA = AF["points"][AF["keep"]]; isb = AF["keep"] < nb_a
@@ -1215,14 +1218,6 @@ plt.show()
 ```
 
 ```{python}
-#| label: callout-routing-other
-#| output: asis
-print(S.in_flight_callout({"what": "the routing of ISLA checkpoints of the nearest-token form (@sec-checkpoint-form) in "
-                                   "@fig-routing-other-tasks",
-                           "replacement": "The routing of the standing's AirfRANS and lug checkpoints on the same cases"}))
-```
-
-```{python}
 #| label: routing-trained-numbers
 #| output: asis
 def undecided(d, li, thr=0.5):
@@ -1230,6 +1225,7 @@ def undecided(d, li, thr=0.5):
 above = lambda d, li: int((d["q"][li] > 1.0 / M_SL).sum())
 pmax = lambda d, li: float(d["pi_max"][li].astype(float).mean())
 _af_pk = int(np.argmin([n_eff(AF["q"][l]) for l in range(12)]))
+_lg_pk = int(np.argmin([n_eff(LG["q"][l]) for l in range(12)]))
 print(
     f"**What the pictures show.** In the first layer the car model routes with an effective number of {NE_DR[0]:.0f} of its "
     f"{M_SL} slices, and a token's largest read-back weight is {100 * pmax(DR, 0):.1f}% on average: every token spreads its weight "
@@ -1239,12 +1235,12 @@ print(
     f"effective number rises again, to {NE_DR[11]:.0f} in the last layer. The assignment stays soft throughout: in the sixth layer "
     f"{undecided(DR, 5):.0f}% of the car's tokens give no single slice more than half their weight, and in the last layer "
     f"{undecided(DR, 11):.0f}%. Anchors sit inside the body, not on it, as the weighted mean of a patch that wraps a wheel, or a pair "
-    f"of wheels, must. The airfoil, like the car, concentrates most in layer {_af_pk + 1} (effective number "
-    f"{n_eff(AF['q'][_af_pk]):.0f}, against {n_eff(AF['q'][0]):.0f} in the first layer); on the lug the first layer is the "
-    f"concentrated one ({n_eff(LG['q'][0]):.0f}) (@fig-routing-other-tasks). In the last layer the effective numbers are "
+    f"of wheels, must. The airfoil concentrates most in layer {_af_pk + 1} (effective number "
+    f"{n_eff(AF['q'][_af_pk]):.0f}, against {n_eff(AF['q'][0]):.0f} in the first layer), the lug in layer {_lg_pk + 1} "
+    f"({n_eff(LG['q'][_lg_pk]):.0f}, against {n_eff(LG['q'][0]):.0f}) (@fig-routing-other-tasks). In the last layer the effective numbers are "
     f"{n_eff(AF['q'][11]):.0f} on the airfoil and {n_eff(LG['q'][11]):.0f} on the lug: the last layers spread the mass on every "
     f"task, and why the routing concentrates where it does is not measured. This is one case of one seed on each task, from "
-    f"the standing's checkpoint on the car and checkpoints of the {S.FORM_TAG} on the airfoil and the lug; it shows the "
+    f"the standing's checkpoint on each; it shows the "
     "granularity of the learned partition, not its accuracy.\n"
 )
 ```

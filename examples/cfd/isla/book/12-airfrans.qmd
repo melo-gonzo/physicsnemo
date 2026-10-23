@@ -291,24 +291,25 @@ print(f"**Under rotation and translation ISLA's error is its native error, and t
 #| label: out-fig-airfrans-prediction
 #| output: asis
 #| column: page
-RD = J("renderings_2026-10-18/arrays/render_2d_airfrans.json")["airfrans"]
+RD = json.load(open(RENDER_DIR_090 / "render_2d_airfrans.json"))["airfrans"]
 PE = RD["per_sample_rel_l2"]
+_src = next(v for k, v in RD["source"].items() if k.endswith("_isla/native"))
+_rec = RES / "campaigns_2026-10-22/standing_090/scores" / _src["scorer_record"].removeprefix("$T/")
+_e = {r["sample_id"]: r["metrics"]["pressure_l2"] for r in map(json.loads, open(_rec)) if r.get("phase") == "infer_step"}
+_rk = sorted(_e, key=_e.get).index(RD["sample_id"]) + 1
 
 print("::: {#fig-airfrans-prediction layout-nrow=2}\n")
-print("![Pressure coefficient](figures/renderings/airfrans_pressure.png)\n")
-print("![Velocity magnitude](figures/renderings/airfrans_velocity.png)\n")
-print(f"The three reference configurations on one held-out AirfRANS airfoil (Reynolds number {RD['Re'] / 1e6:.2f} million, angle of attack "
-      f"{RD['aoa_deg']:.1f}°), the case of median ISLA pressure error among the {N_TEST} test airfoils, seed 42. Top row of each panel: the "
-      "solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one symmetric scale. "
-      f"Relative L2 on this case: {case_errors(PE)}. How to read this: one case, not a standing; the "
-      "baseline panels are drawn from GeoTransolver and Transolver checkpoints that read the inlet velocity as the physical vector "
-      f"in m/s, not from the standing's, so they show what those trained models do and are not a comparison. ISLA checkpoints of the {S.FORM_TAG} "
-      "(@sec-checkpoint-form), not the standing's. The 100,000 points are drawn once for this figure, so ISLA's pressure error differs slightly from the scored record's. Data: "
-      "results/renderings_2026-10-18/arrays/render_2d_airfrans.json and airfrans_00215.npz.\n")
+print("![Pressure coefficient](figures/renderings/airfrans_pressure_090.png)\n")
+print("![Velocity magnitude](figures/renderings/airfrans_velocity_090.png)\n")
+print(f"The three reference configurations on one held-out AirfRANS airfoil, {RD['sample_id'].split('_')[0]} (Reynolds number "
+      f"{RD['Re'] / 1e6:.2f} million, angle of attack {RD['aoa_deg']:.1f}°), from the standing's checkpoints (seed 42): ISLA at its "
+      "reference configuration, trained eagerly as in the standing, and the baselines reading the inlet direction as a unit vector "
+      "and the inlet speed standardized (@sec-unit-direction-rule). All three are scored and drawn on the same "
+      f"{RD['n_points_scored']:,} points. Relative L2 on this case: {case_errors(PE)}; the airfoil ranks {_rk} of {len(_e)} by ISLA's "
+      "pressure error over the test airfoils. Top row of each panel: the solver's field and each model's prediction on one color "
+      "scale; bottom row: prediction minus solver, on one symmetric scale. How to read this: one case, not a standing; the standing "
+      "is @tbl-airfrans-protocols. Data: results/renderings_2026-10-22/arrays/render_2d_airfrans.json and airfrans_00215.npz.\n")
 print(":::")
-print()
-print(rendering_in_flight(baselines="GeoTransolver and Transolver checkpoints that read the inlet velocity as the physical vector in m/s, "
-                                    "not the standing's unit direction and standardized speed"))
 ```
 
 ### GLOBE on the same task {#sec-airfrans-globe}

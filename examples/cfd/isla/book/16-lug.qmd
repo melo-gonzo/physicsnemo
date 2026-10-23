@@ -226,14 +226,19 @@ print(ST.table("tbl-lug-protocols", f"The GINOT bracket lug, 2,400 training lugs
 #| output: asis
 #| column: page
 import json as _json
-_R = _json.load(open(RENDER_DIR / "render_2d_lug.json"))["lug"]
-rendering_figure("fig-lug-prediction", [("figures/renderings/lug_von_mises.png", "von Mises stress, top face")],
-    f"The three reference configurations on one GINOT bracket lug from the test set, {_R['sample_id'].split('_')[0]}, its top face. Relative L2 on this case: {case_errors(_R['per_sample_rel_l2'])}. " + "Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus solver, on one "
-      f"symmetric scale. ISLA checkpoints of the {S.FORM_TAG} (@sec-checkpoint-form). How to read this: one case, chosen as the case of median ISLA error (seed 42 of each reference configuration), "
-      "not a standing; the standing is the table above, whose ISLA rows are of other checkpoints. "
-    + "GeoTransolver's panel is drawn from its checkpoint that reads no boundary-condition labels, not from the standing's, which reads them; Transolver reads none (@tbl-model-inputs). Data: results/renderings_2026-10-18/arrays/render_2d_lug.json.", nrow=None)
-print()
-print(rendering_in_flight(baselines="a GeoTransolver checkpoint that reads no boundary-condition labels, not the standing's"))
+_R = _json.load(open(RENDER_DIR_090 / "render_2d_lug.json"))["lug"]
+_src = next(v for k, v in _R["source"].items() if k.endswith("_isla/native"))
+_rec = RES / "campaigns_2026-10-22/standing_090/scores" / _src["scorer_record"].removeprefix("$T/")
+_e = {r["sample_id"]: r["metrics"]["von_mises_l2"] for r in map(_json.loads, open(_rec)) if r.get("phase") == "infer_step"}
+_rk = sorted(_e, key=_e.get).index(_R["sample_id"]) + 1
+rendering_figure("fig-lug-prediction", [("figures/renderings/lug_von_mises_090.png", "von Mises stress, top face")],
+    f"The three reference configurations on one GINOT bracket lug from the test set, {_R['sample_id'].split('_')[0]}, its top face, "
+    "from the standing's checkpoints (seed 42): ISLA at its reference configuration, trained eagerly as in the standing, "
+    "GeoTransolver reading the four boundary-condition labels, and Transolver, which reads none (@tbl-model-inputs). "
+    f"Relative L2 on this case: {case_errors(_R['per_sample_rel_l2'])}; the lug ranks {_rk} of {len(_e)} by ISLA's error over "
+    "the test lugs. Top row: the solver's field and each model's prediction on one color scale; bottom row: prediction minus "
+    "solver, on one symmetric scale. How to read this: one case, not a standing; the standing is the table above. "
+    "Data: results/renderings_2026-10-22/arrays/render_2d_lug.json.", nrow=None)
 ```
 
 ```{python}
