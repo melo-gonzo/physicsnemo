@@ -9,17 +9,18 @@ source. Do not edit by hand.
 | `ref090/` | REF-090: ISLA 0.9.0 against the nearest-token form, the training-path control | `scratch/isla-ref090-2026-10-20/` |
 | `af_extrap/` | AF-EXTRAP: AirfRANS extrapolation in Reynolds number and angle of attack | `scratch/isla-af-extrap-2026-10-21/` |
 | `suv_xfam_b/` | SUV-XFAM part B: SHIFT-SUV models trained on fastbacks, against the estate-trained ones | `scratch/isla-suv-xfam-2026-10-22/` |
+| `probes090/` | PROBES-090: query-population dependence and re-meshing invariance of ISLA 0.9.0 | `scratch/isla-probes090-2026-10-21/` |
 
 | topic | file | source | md5 |
 | --- | --- | --- | --- |
-| attrib090 | RESULTS.md | scratch/isla-attrib090-2026-10-21/RESULTS.md | 5d8908d546fe0027d10db7c928aaec61 |
+| attrib090 | RESULTS.md | scratch/isla-attrib090-2026-10-21/RESULTS.md | f54a7fb1f5ea6e9c310e5686707b6c71 |
 | attrib090 | results_native.json | scratch/isla-attrib090-2026-10-21/results_native.json | 3f92835ce703e13a5f72641fa6cf241e |
-| attrib090 | results2_native.json | scratch/isla-attrib090-2026-10-21/results2_native.json | e558b89e8734beade85b3d831248b91e |
-| attrib090 | results2_posed.json | scratch/isla-attrib090-2026-10-21/results2_posed.json | 0b6e6efc8dfd8f17f910f7dbb0d3383a |
+| attrib090 | results2_native.json | scratch/isla-attrib090-2026-10-21/results2_native.json | aca0df21fb1babdacd80e472e6f1d414 |
+| attrib090 | results2_posed.json | scratch/isla-attrib090-2026-10-21/results2_posed.json | 56ace95286ccc10a034684d99f353dcf |
 | attrib090 | results_native_eager.json | scratch/isla-attrib090-2026-10-21/results_native_eager.json | 80be6f1a18d5b622ec9ee5c56a6c5e1a |
 | attrib090 | results_posed_eager.json | scratch/isla-attrib090-2026-10-21/results_posed_eager.json | 4d5713853c3c7e758c18586f61dd06ff |
-| attrib090 | relaunch_native.md | scratch/isla-attrib090-2026-10-21/relaunch_native.md | 0768b45ec5aa438799aa2e347650015f |
-| attrib090 | relaunch_posed.md | scratch/isla-attrib090-2026-10-21/relaunch_posed.md | af249348afa26ccd9e579489d14e17de |
+| attrib090 | relaunch_native.md | scratch/isla-attrib090-2026-10-21/relaunch_native.md | 70b25245a1903680968915d510d51d8c |
+| attrib090 | relaunch_posed.md | scratch/isla-attrib090-2026-10-21/relaunch_posed.md | e90c61bdd684b3a3dd5af7991834c286 |
 | attrib090 | arch_lug.md | scratch/isla-attrib090-2026-10-21/arch_lug.md | ec7191a56c0dace45f1d7921252c4a95 |
 | attrib090 | arch_tensile2d.md | scratch/isla-attrib090-2026-10-21/arch_tensile2d.md | cac94bc8495b8073dd30098b83d0a3bf |
 | attrib090 | arch_airfrans.md | scratch/isla-attrib090-2026-10-21/arch_airfrans.md | abbf8c160dafe0b13cd5890f7026f73f |
@@ -48,7 +49,20 @@ source. Do not edit by hand.
 | af_extrap | LRE.md | scratch/isla-af-extrap-2026-10-21/LRE.md | d4af4d170c1860aa3b0cacc2bf389e01 |
 | af_extrap | lre.json | scratch/isla-af-extrap-2026-10-21/lre.json | 493d95be22c44af6a41029e9d6822f54 |
 | suv_xfam_b | PREREG_B.md | scratch/isla-suv-xfam-2026-10-22/PREREG_B.md | 118f36a0e86fe690414f8b3feaaa9c3b |
-| suv_xfam_b | RESULTS_B.md | scratch/isla-suv-xfam-2026-10-22/RESULTS_B.md | a0e1d7c361e2ef99bed075706ca5854e |
+| suv_xfam_b | RESULTS_B.md | scratch/isla-suv-xfam-2026-10-22/RESULTS_B.md | c6715009750f4ed84878ac896cceb2e1 |
 | suv_xfam_b | JOBS.md | scratch/isla-suv-xfam-2026-10-22/JOBS.md | 0fa83ff66b0ef3aa45bdb2c263a276d8 |
 | suv_xfam_b | reduce_b_out.json | scratch/isla-suv-xfam-2026-10-22/reduce_b_out.json | 91e0cbab2d509fbe8b71ba76c5f436d4 |
 | suv_xfam_b | identity_b_out.json | scratch/isla-suv-xfam-2026-10-22/identity_b_out.json | 389255a80b9364a941b2cbbf98826eb6 |
+| probes090 | RESULTS.md | scratch/isla-probes090-2026-10-21/RESULTS.md | c9d1e9c66e5131cfc76047c3b617a049 |
+| probes090 | results/qpop/reduced.json | scratch/isla-probes090-2026-10-21/results/qpop/reduced.json | bfd1167be24751f0094d44dd1de213c6 |
+| probes090 | results/qpop_afix/reduced.json | scratch/isla-probes090-2026-10-21/results/qpop_afix/reduced.json | 82913383c1bd164d586a383c19919c9a |
+| probes090 | results/qpop_afeag/reduced.json | scratch/isla-probes090-2026-10-21/results/qpop_afeag/reduced.json | 91facdcc78c171b8c9e596ee22d10033 |
+| probes090 | results/qpop_az/reduced.json | scratch/isla-probes090-2026-10-21/results/qpop_az/reduced.json | bc85fd58c4cb7bf84846647fede4fec0 |
+| probes090 | results/remesh/reduced_full.json | scratch/isla-probes090-2026-10-21/results/remesh/reduced_full.json | bf7d8b98527cead8577b20cfe52cb596 |
+| probes090 | results/remesh_afix/reduced_full.json | scratch/isla-probes090-2026-10-21/results/remesh_afix/reduced_full.json | 1726c5c9dd8a920cd58e2ef7f7960f18 |
+| probes090 | results/remesh_afix_dtt/reduced_full.json | scratch/isla-probes090-2026-10-21/results/remesh_afix_dtt/reduced_full.json | a5176cfa9bbe4398cb7f5c73535830cc |
+| probes090 | results/remesh_afeag/reduced_full.json | scratch/isla-probes090-2026-10-21/results/remesh_afeag/reduced_full.json | 1b533a40e193bd5f80937b4256469b80 |
+| probes090 | results/afeag_book_numbers.md | scratch/isla-probes090-2026-10-21/results/afeag_book_numbers.md | a02fc6786a8b386f063e5dd4b09c1212 |
+| probes090 | remesh/facts_dv.json | scratch/isla-probes090-2026-10-21/remesh/facts_dv.json | 2d6eeb21e7deac33aaa87e54fab703ec |
+| probes090 | remesh/README.md | scratch/isla-probes090-2026-10-21/remesh/README.md | 9ad17033baca19c8d90f313172f764d6 |
+| probes090 | qpop/qpop_rows.tsv | scratch/isla-probes090-2026-10-21/qpop/qpop_rows.tsv | 23a0b83bf5fe89ae07221ffa57f7621d |

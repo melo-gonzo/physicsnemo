@@ -889,8 +889,8 @@ print(": Dependence on the request on the DrivAerML Volume task: ISLA at its ref
 ```{python}
 #| label: para-qpop
 #| output: asis
-QF = R.load("probes090", "results/qpop_afix/reduced.json")
-dtt_dev = max(abs(v - 1) for s in (42, 43) for m in QF[f"r090fix_af_dtt_seed{s}"]["ratio_to_native_h"].values() for v in m.values())
+QF = R.load("probes090", "results/qpop_afeag/reduced.json")
+dtt_dev = max(abs(v - 1) for s in (42, 43) for m in QF[f"r090eag_af_dtt_seed{s}"]["ratio_to_native_h"].values() for v in m.values())
 print("The cause is that ISLA's interior points carry routing mass: they write into the slices every other point reads, so a population "
       "drawn by another law, or one too small to stand for the domain, moves the slice states. Requests at the training law are benign: "
       f"halving costs at most {pct(max(qr('half', f) for f in VOL_F))} and four chunks {pct(max(qr('chunks4', f) for f in VOL_F[:2]))} "
@@ -900,8 +900,8 @@ print("The cause is that ISLA's interior points carry routing mass: they write i
       "interacting form with no knob that removes it: ISLA is deployed at its training count and draw of interior points, and every "
       "interior number in the book states them. ISLA-DTT can be queried at any set of points, alone or in chunks, because no prediction "
       f"point writes anything another one reads: under the same ten requests on AirfRANS its error ratios are one to within {dtt_dev:.0e} "
-      "on both seeds, float32 roundoff (fix-trained weights, the training-path measurement of @sec-interior-airfrans; "
-      f"{R.source('probes090', 'results/qpop_afix/reduced.json')}), and on the study configuration of @tbl-interior-read-only it is "
+      "on both seeds, float32 roundoff (the AirfRANS standing's eager-trained checkpoints; "
+      f"{R.source('probes090', 'results/qpop_afeag/reduced.json')}), and on the study configuration of @tbl-interior-read-only it is "
       f"{DT['request_probe']['ratio']:.6f} on every field of this task (largest departure {DT['request_probe']['largest_departure']:.0e}).")
 ```
 

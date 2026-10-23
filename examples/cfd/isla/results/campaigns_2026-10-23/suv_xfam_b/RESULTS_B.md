@@ -80,6 +80,9 @@ D_R reads "no difference" because of the seed spread, not because the effect is 
 is 9 percent smaller, but each arm's two fastback-trained seeds differ by 7-9 percent on estates (ISLA 8.3 / 7.7,
 T 7.0 / 9.2 percent, pressure / wss), which sets SE ≈ 0.056. The same models' seeds agree to within 0.5 percent on
 fastbacks. Part A saw the same with GeoTransolver: transfer amplifies seed spread.
+*Erratum (supervisor, 2026-10-23 07:05 EDT, found by BOOK-AM's second read):* the fastback-trained seeds agree within 0.7 percent
+on fastback test and within 0.9 percent on fastback val (reduce_b_out.json), not 0.5 percent. ISLA's estate-test pressure
+spread is 8.4 percent at the json's full precision (8.3 from the four-digit seed values). No verdict changes.
 
 ## 4. Stage-2 trigger: FIRES (B2 wss reads "ISLA transfers better")
 

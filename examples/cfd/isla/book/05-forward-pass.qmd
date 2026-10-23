@@ -35,9 +35,9 @@ REF = ISLA(output_schema={"pressure": {"rank": 0}, "wss": {"rank": 1}}, boundary
 cnt = lambda mod: sum(p.numel() for p in mod.parameters())
 import standing as S, records as R
 from IPython.display import Markdown
-_QD = R.load("probes090", "results/qpop_afix/reduced.json")
-DTT_QDEV = max(abs(v - 1) for s in (42, 43) for m in _QD[f"r090fix_af_dtt_seed{s}"]["ratio_to_native_h"].values() for v in m.values())
-_RD = R.load("probes090", "results/remesh_afix_dtt/reduced_full.json")["seed_mean_ratio"]["r090fix_af_dtt"]
+_QD = R.load("probes090", "results/qpop_afeag/reduced.json")
+DTT_QDEV = max(abs(v - 1) for s in (42, 43) for m in _QD[f"r090eag_af_dtt_seed{s}"]["ratio_to_native_h"].values() for v in m.values())
+_RD = R.load("probes090", "results/remesh_afeag/reduced_full.json")["seed_mean_ratio"]["r090eag_af_dtt"]
 DTT_REFINE = [_RD[v]["pressure_l2"] for v in ("refine2", "refine4", "refine31")]   # refined ÷ native, ISLA-DTT at theta = 1
 _TH = json.load(open(RES / "campaigns_2026-10-22" / "book_A" / "book_a.json"))["theta"]
 DTT_THETA0 = max(abs(_TH["0.0"][v][f] - 1) for v in ("refine2", "refine4", "refine31") for f in ("pressure", "velocity", "nut"))
@@ -1497,9 +1497,8 @@ $\pi_{qs}$, and it reads $b_q = \sum_s \pi_{qs} Z_s$ (step h). The boundary
 tokens therefore compute what they compute in the surface task whatever
 points are requested, and a request split into chunks, permuted, or reduced
 to one point returns the same predictions to $10^{-12}$ in float64
-(`test_query_independent_interior_contracts`). On AirfRANS checkpoints
-trained with the compiled path after its fault was fixed (their In-flight
-note is in @sec-query-population), in float32 every change of the request of
+(`test_query_independent_interior_contracts`). On the AirfRANS standing's
+checkpoints, trained without compilation, in float32 every change of the request of
 @tbl-query-population moves ISLA-DTT's error by at most
 `{python} Markdown(sci(DTT_QDEV))`, float32 roundoff. ISLA-DTT has no routing-mass
 parameter.
@@ -1674,8 +1673,8 @@ vanishes as $\theta \to 0$. $\theta$ is a constant of the class (`TREE_READ_THET
 an argument: ISLA-DTT trains and is scored at $\theta = 1$, so its kernel,
 keys and values are learned as the forest groups the cells. The tree's error
 is also what moves ISLA-DTT under an exact refinement of the boundary: on
-the AirfRANS interior task, with the pair trained with the compiled path
-after its fault was fixed, splitting the airfoil's panels raises its
+the AirfRANS interior task, with the standing's pair, trained without
+compilation, splitting the airfoil's panels raises its
 pressure error by `{python} f"{min(DTT_REFINE) - 1:.1%}"` to
 `{python} f"{max(DTT_REFINE) - 1:.1%}"` at $\theta = 1$, and on an ISLA-DTT
 pair trained under the compiled-path fault, read at $\theta = 0$, the same

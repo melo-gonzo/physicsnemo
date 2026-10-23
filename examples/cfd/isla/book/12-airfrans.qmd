@@ -29,9 +29,9 @@ DF = "campaigns_2026-10-19/drive_fix/scores/evals_afu_ud"
 isla_run = lambda arm: St.raw["isla_runs"]["scores"].split("results/", 1)[1] + "/" + St.raw["isla_runs"][St.arm_names[arm]].replace("{42,43}", "42")
 PARAMS = {"ISLA": nparams(isla_run("ISLA")), "ISLA-DTT": nparams(isla_run("ISLA-DTT")), "GeoTransolver": nparams(f"{DF}/afu_ud_gt_seed42"),
           "Transolver": nparams(f"{DF}/afu_ud_t_seed42")}
-# the study records at the reference configuration (results/campaigns_2026-10-22/RECORDS.md)
-RM = R.load("probes090", "results/remesh_afix/reduced_full.json")["seed_mean_ratio"]
-RM_I, RM_D = RM["r090fix_af_isla"], R.load("probes090", "results/remesh_afix_dtt/reduced_full.json")["seed_mean_ratio"]["r090fix_af_dtt"]
+# the study records at the reference configuration (RECORDS.md beside them, under results/campaigns_2026-10-22/ and campaigns_2026-10-23/)
+RM = R.load("probes090", "results/remesh_afeag/reduced_full.json")["seed_mean_ratio"]
+RM_I, RM_D = RM["r090eag_af_isla"], RM["r090eag_af_dtt"]
 FK = [f for f, _ in FIELDS]
 remesh_dev = max(abs(RM_I[v][f] - 1) for v in ("refine2", "refine4", "refine31") for f in FK)
 # the baselines' velocity error in the plane (x, y) against their scored three-component error, per seed, native mesh, the standing's arms
@@ -338,7 +338,7 @@ if GL["over_isla"]["status"] == "in_flight":
 
 ## Studies on this dataset {#sec-airfrans-ladders}
 
-**Two studies on this dataset use smaller ISLA configurations than the reference one; they are read for slopes and mechanisms, never as standings.** Each caption names its instrument in the tag of @sec-study-configurations. The training-airfoil ladder's baseline is *GeoTransolver-volume*, the GeoTransolver of the DrivAerML Volume task with its ball-query local features on (@sec-baselines), at width 256 and learning rate 1e-3, where the standing uses the reference GeoTransolver. Unlike the standing's baselines it reads the inlet velocity as the physical vector in m/s (@sec-unit-direction-rule), so a comparison with it carries that input difference and is a statement about these two configurations. Both studies read the interior points as contiguous blocks of the stored rows, a spatially coherent window of the domain rather than a uniform sample, in training and in scoring alike. The comparisons inside each study are like for like; their absolute errors are not comparable with @tbl-airfrans-protocols. The other studies are at the reference configuration, on ISLA and ISLA-DTT trained on the compiled training path after its fault was fixed: the two forms against each other (@sec-airfrans-dtt-reference), extrapolation (@sec-interior-extrapolation), which components carry ISLA's accuracy (@sec-airfrans-attribution), the request's population (@sec-airfrans-query-population) and the boundary's discretization (@sec-airfrans-discretization).
+**Two studies on this dataset use smaller ISLA configurations than the reference one; they are read for slopes and mechanisms, never as standings.** Each caption names its instrument in the tag of @sec-study-configurations. The training-airfoil ladder's baseline is *GeoTransolver-volume*, the GeoTransolver of the DrivAerML Volume task with its ball-query local features on (@sec-baselines), at width 256 and learning rate 1e-3, where the standing uses the reference GeoTransolver. Unlike the standing's baselines it reads the inlet velocity as the physical vector in m/s (@sec-unit-direction-rule), so a comparison with it carries that input difference and is a statement about these two configurations. Both studies read the interior points as contiguous blocks of the stored rows, a spatially coherent window of the domain rather than a uniform sample, in training and in scoring alike. The comparisons inside each study are like for like; their absolute errors are not comparable with @tbl-airfrans-protocols. The other studies are at the reference configuration: on ISLA and ISLA-DTT trained on the compiled training path after its fault was fixed, the two forms against each other (@sec-airfrans-dtt-reference), extrapolation (@sec-interior-extrapolation) and which components carry ISLA's accuracy (@sec-airfrans-attribution); on the standing's checkpoints, trained without compilation, the request's population (@sec-airfrans-query-population) and the boundary's discretization (@sec-airfrans-discretization).
 
 ### The training-airfoil ladder {#sec-airfrans-ladder}
 
@@ -740,21 +740,25 @@ ATT = {"CONT": "the reduced form: exact wall geometry and the continuous distanc
        "NUT0": "ISLA with its declared scales, eddy viscosity standardized by the dataset's statistics instead of in units of $U L$",
        "NOSCSTD": "ISLA without its declared scales, reading the inlet speed standardized over the training airfoils, as the baselines "
                   "read it; eddy viscosity standardized by the dataset's statistics",
+       "STDU": "ISLA with its declared scales, reading the inlet speed standardized over the training airfoils in place of the "
+               "standardized log Reynolds number",
        "SDF": "ISLA reading the stored signed distance and its gradient at every prediction point",
        "QEMB": "ISLA with the reduced form's prediction-point embedding"}
 READ = lambda k, f: {"CONT": "the whole gain", "NOSC": "carries the step, with the raw input",
                      "RAWU": "carries the step, with the raw input"}.get(k, AI[f][k]["label"])
 r3a = lambda k: " / ".join(f"{AI[f][k]['ratio']:.3f}" for f in FK)
-assert not any(AI[f][k]["moves"] for f in FK for k in ("NOSCSTD", "NUT0")) and all(AI[f]["RAWU"]["moves"] for f in FK)
+assert not any(AI[f][k]["moves"] for f in FK for k in ("NOSCSTD", "STDU", "NUT0")) and all(AI[f]["RAWU"]["moves"] for f in FK)
 print("**On AirfRANS, ISLA's error is " + " / ".join(f"{1 / AI[f]['CONT']['ratio']:.2f}" for f in FK) + " of a reduced form's on "
-      + " / ".join(l for _, l in FIELDS) + ", and standardizing the global input carries that gain; ISLA's declared scales, the "
-      "stored signed distance and the reduced form's prediction-point embedding carry none of it.** Each arm of @tbl-airfrans-attribution "
+      + " / ".join(l for _, l in FIELDS) + ", and standardizing its one global scalar input carries that gain, whether that input is the log Reynolds number or the "
+      "inlet speed; ISLA's declared scales, the stored signed distance and the reduced form's prediction-point embedding carry none of it.** Each arm of @tbl-airfrans-attribution "
       "changes ISLA at its reference configuration in one place and is read against two seeds of ISLA itself. Removing the declared scales "
       "puts back " + " / ".join(f"{100 * AI[f]['NOSC']['phi']:.0f}%" for f in FK) + " of the reduced form's excess error. That arm "
       "changes four things at once: the nondimensionalization by $U L / \\nu$, the standardized log Reynolds number in place of the raw "
       "inlet speed, the units of eddy viscosity and the precision of the output head. An arm without the declared scales that reads the "
       f"inlet speed standardized, as the baselines read it, is as accurate as ISLA (÷ ISLA {r3a('NOSCSTD')}, "
-      f"{AI['pressure_l2']['NOSCSTD']['label']} on any field, the reading registered for it). Keeping the scales and putting the raw speed back puts back the whole step "
+      f"{AI['pressure_l2']['NOSCSTD']['label']} on any field, the reading registered for it). Keeping the scales and reading the standardized inlet speed in place of the standardized log "
+      f"Reynolds number is as accurate as ISLA too ({r3a('STDU')}, {AI['pressure_l2']['STDU']['label']} on any field), so the form of the "
+      "global scalar does not matter here, only its standardization. Keeping the scales and putting the raw speed back puts back the whole step "
       f"({r3a('RAWU')}); taking eddy viscosity's units away changes nothing measurable ({r3a('NUT0')}). On AirfRANS the viscosity is "
       "constant and $L$ nearly so, so the log Reynolds number is close to a monotone reparametrization of the inlet speed; whether the "
       "declared scales add accuracy where the Reynolds number varies widely, as on AeroZoo, is untested (@sec-oq-scales). Every arm "
@@ -765,7 +769,7 @@ print("**On AirfRANS, ISLA's error is " + " / ".join(f"{1 / AI[f]['CONT']['ratio
 #| label: out-tbl-airfrans-attribution
 #| output: asis
 out = "| arm | what it changes | pressure (seeds) | velocity | eddy viscosity | ÷ ISLA: p / v / nut | share of the gain | reading |\n|---|---|---|--:|--:|---|---|---|\n"
-for k in ("CONT", "NOSC", "RAWU", "NUT0", "NOSCSTD", "SDF", "QEMB"):
+for k in ("CONT", "NOSC", "RAWU", "NUT0", "NOSCSTD", "STDU", "SDF", "QEMB"):
     p = AI["pressure_l2"][k]
     out += (f"| {k.replace('NOSCSTD', 'NOSC-STD')} | {ATT[k]} | {p['mean']:.4f} (" + ", ".join(f"{v:.4f}" for v in p["seeds"].values()) + ") | "
             + " | ".join(f"{AI[f][k]['mean']:.4f}" for f in FK[1:]) + " | " + " / ".join(f"{AI[f][k]['ratio']:.3f}" for f in FK) + " | "
@@ -777,12 +781,8 @@ print(": Which of ISLA's components carry its accuracy on the AirfRANS interior 
       "of the gain*: the arm's log error ratio to ISLA over the reduced form's. ÷ ISLA is exp(Δ), the ratio of the geometric seed means. "
       "How to read this: an ISLA-against-ISLA ablation, so the "
       "ratios are arm ÷ ISLA and above one means the change costs accuracy; no baseline is in the table. "
-      f"Data: {R.source('attrib090', 'results2_native.json')}, {R.source('attrib090', 'RESULTS.md')} (sections 2, 2b and 2c). "
+      f"Data: {R.source('attrib090', 'results2_native.json')}, {R.source('attrib090', 'RESULTS.md')} (sections 2, 2b, 2c and 2d). "
       "{#tbl-airfrans-attribution}")
-print()
-print(S.in_flight_callout({"what": "arms that each remove the declared scales or change the global input, two seeds each",
-                           "replacement": "An arm with the declared scales that reads the standardized inlet speed in place of the log "
-                                          "Reynolds number, the last check of this reading,"}))
 ```
 
 ### The query population {#sec-airfrans-query-population}
@@ -790,15 +790,15 @@ print(S.in_flight_callout({"what": "arms that each remove the declared scales or
 ```{python}
 #| label: setup-airfrans-qpop
 #| include: false
-# PROBES-090 on AirfRANS (results/campaigns_2026-10-22/probes090/RESULTS.md section 7): the fix-trained ISLA and ISLA-DTT pairs, eager, float32;
+# PROBES-090 on AirfRANS (results/campaigns_2026-10-23/probes090/RESULTS.md section 7b): the eager-trained pairs, the standing's, eager, float32;
 # ratio_to_native_h = case-mean error in the mode ÷ native, on the points scored in both
-QP = R.load("probes090", "results/qpop_afix/reduced.json")
+QP = R.load("probes090", "results/qpop_afeag/reduced.json")
 QMODES = {"half": "half of the native points", "chunks4": "the native points in four requests",
           "sub1000": "1,000 points in one request", "sub100": "requests of 100 points", "sub10": "requests of 10 points",
           "sub1": "one point per request", "same": "the native points and more drawn by the same law",
           "far": "the native points and as many far from the airfoil", "wall": "the native points and as many near the wall"}
-qr = lambda form, m, f: mean(QP[f"r090fix_af_{form}_seed{s}"]["ratio_to_native_h"][m][f] for s in (42, 43))
-qdev = max(abs(QP[f"r090fix_af_dtt_seed{s}"]["ratio_to_native_h"][m][f] - 1) for s in (42, 43) for m in QMODES for f in FK)
+qr = lambda form, m, f: mean(QP[f"r090eag_af_{form}_seed{s}"]["ratio_to_native_h"][m][f] for s in (42, 43))
+qdev = max(abs(QP[f"r090eag_af_dtt_seed{s}"]["ratio_to_native_h"][m][f] - 1) for s in (42, 43) for m in QMODES for f in FK)
 SMALL = [qr("isla", m, f) for m in ("sub1000", "sub100", "sub10", "sub1") for f in FK]
 ```
 
@@ -813,8 +813,8 @@ print(f"**Interacting ISLA's prediction at a point depends on which other points
       f"costs {100 * (qr('isla', 'half', 'pressure_l2') - 1):.0f}% and {100 * (qr('isla', 'chunks4', 'pressure_l2') - 1):.0f}% on pressure; "
       f"adding points far from the airfoil multiplies the pressure error by {qr('isla', 'far', 'pressure_l2'):.0f}. No knob of the model "
       "makes the dependence vanish, so it is a limit of the interacting form (@sec-limits-query-independence): request interacting ISLA with "
-      "the population it trained on, in one request, and use ISLA-DTT for point queries. The checkpoints trained on the compiled training "
-      "path after its fault was fixed.")
+      "the population it trained on, in one request, and use ISLA-DTT for point queries. The checkpoints are the standing's, trained "
+      "without compilation.")
 ```
 
 ```{python}
@@ -822,15 +822,15 @@ print(f"**Interacting ISLA's prediction at a point depends on which other points
 #| output: asis
 out = "| request | ISLA: p / v / nut | ISLA-DTT: largest \\|r − 1\\| |\n|---|---|--:|\n"
 for m, lab in QMODES.items():
-    dv = max(abs(QP[f"r090fix_af_dtt_seed{s}"]["ratio_to_native_h"][m][f] - 1) for s in (42, 43) for f in FK)
+    dv = max(abs(QP[f"r090eag_af_dtt_seed{s}"]["ratio_to_native_h"][m][f] - 1) for s in (42, 43) for f in FK)
     out += f"| {lab} | " + " / ".join(S.fmt_ratio(qr("isla", m, f)) for f in FK) + f" | {dv:.1e} |\n"
 print(out)
 print(f": Interacting ISLA and ISLA-DTT asked for different populations of prediction points on the AirfRANS interior task: error in the "
       f"request ÷ error with the native {CELLS:,} points, on the points scored in both, seed means of seeds 42 and 43, {N_TEST} test airfoils, "
-      "float32, eager. The checkpoints trained on the compiled training path after its fault was fixed. How to read this: one means the "
+      "float32, eager. The checkpoints are the standing's, trained without compilation. How to read this: one means the "
       "request changes nothing; the small requests ask for 1,000 scored points in groups of 1,000, 100 or 10, and for the first 100 of them "
       "one at a time; no baseline is in the table, since the baselines predict each point from its own inputs. "
-      f"Data: {R.source('probes090', 'results/qpop_afix/reduced.json')}. {{#tbl-airfrans-qpop}}")
+      f"Data: {R.source('probes090', 'results/qpop_afeag/reduced.json')}. {{#tbl-airfrans-qpop}}")
 ```
 
 ### The boundary's discretization {#sec-airfrans-discretization}
@@ -851,8 +851,8 @@ print(f"**Re-panelizing the airfoil exactly leaves interacting ISLA's error unch
       f"exact and raises the pressure error {' / '.join(f'{v:.2f}' for v in tok)} times; a second, independent 400-token draw scores "
       f"{RM_I['redraw400']['pressure_l2']:.2f} times native, so that loss is the variance of the draw, not a bias of the budget. ISLA-DTT moves under exact refinement by "
       f"up to {100 * (max(dtt_ref) - 1):.0f}%: its forest regroups the refined segments at θ = 1, an approximation that vanishes as θ → 0. "
-      "GeoTransolver and Transolver never read the airfoil, so these readings are ISLA's alone. The checkpoints trained on the compiled "
-      "training path after its fault was fixed.")
+      "GeoTransolver and Transolver never read the airfoil, so these readings are ISLA's alone. The checkpoints are the standing's, "
+      "trained without compilation.")
 ```
 
 ```{python}
@@ -865,10 +865,9 @@ for v, lab in VAR.items():
 print(out)
 print(f": Interacting ISLA and ISLA-DTT given other discretizations of the same airfoils on the AirfRANS interior task: error ÷ error on "
       f"the native airfoil, seed means of seeds 42 and 43, {N_TEST} test airfoils, float32, eager; the prediction points are the native ones. "
-      "The checkpoints trained on the compiled training path after its fault was fixed. How to read this: the refinements and the token "
+      "The checkpoints are the standing's, trained without compilation. How to read this: the refinements and the token "
       "budgets keep the geometry exact, so they test invariance; decimation changes the geometry, so it tests robustness; one means no "
-      f"change. Data: {R.source('probes090', 'results/remesh_afix/reduced_full.json')}, "
-      f"{R.source('probes090', 'results/remesh_afix_dtt/reduced_full.json')}. {{#tbl-airfrans-discretization}}")
+      f"change. Data: {R.source('probes090', 'results/remesh_afeag/reduced_full.json')}. {{#tbl-airfrans-discretization}}")
 ```
 
 ## What this dataset does not say {#sec-airfrans-limits}

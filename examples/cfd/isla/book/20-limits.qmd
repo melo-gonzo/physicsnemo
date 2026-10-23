@@ -25,9 +25,9 @@ import records as R
 from standing import fmt_ratio
 RES = Path("..") / "results"
 ST = {k: S.Standing(k) for k in S.available()}
-# the numbers of this chapter that no single record holds (results/campaigns_2026-10-22/book_E/limits_090_2026-10-22.py)
-LIM_SRC = "results/campaigns_2026-10-22/book_E/limits_090.json"
-LIM = json.load(open(RES / "campaigns_2026-10-22" / "book_E" / "limits_090.json"))
+# the numbers of this chapter that no single record holds (results/campaigns_2026-10-23/book_E/limits_090_2026-10-23.py)
+LIM_SRC = "results/campaigns_2026-10-23/book_E/limits_090.json"
+LIM = json.load(open(RES / "campaigns_2026-10-23" / "book_E" / "limits_090.json"))
 GPUH = LIM["lane_gpuh"]
 def lane_gpuh(key, arch="ISLA", scale=1.0):
     """GPU-hours of one training lane of a reference configuration on its dataset, from the standing lane's own log, times a scale."""
@@ -304,8 +304,8 @@ for k in INT:
 ```{python}
 #| label: para-limits-boundary-law
 #| output: asis
-AF, AFD, VOL = RM["airfrans_fix_isla"], RM["airfrans_fix_dtt"], RM["drivaerml_volume"]
-D4 = RM["airfrans_fix_isla_redraw400_d_pressure_median"]
+AF, AFD, VOL = RM["airfrans_eag_isla"], RM["airfrans_eag_dtt"], RM["drivaerml_volume"]
+D4 = RM["airfrans_eag_isla_redraw400_d_pressure_median"]
 dev = lambda d, vs: max(abs(d[v][f] - 1) for v in vs for f in FW)
 refine = ("refine2", "refine4", "refine31")
 tok = [AF[v]["pressure_l2"] for v in ("tok600", "tok400", "tok200")]
@@ -326,12 +326,8 @@ print("**Interacting ISLA's interior prediction does not move when the same boun
       f"than 0.001 $L$ it rises {min(near):.2f} to {max(near):.2f} times (per seed). The two surfaces differ by a median "
       f"{STL['offset_median_L']:.1e} $L$ and at most {STL['separation_max_L']:.1e} $L$, an offset ISLA's distance channel resolves; that "
       "the on-wall prediction points carry the rise fits these numbers and is not tested separately (@sec-interior-boundary-law). The "
-      "STL probe is ISLA against itself, and it is post hoc. The AirfRANS checkpoints probed were trained on the compiled path after its "
-      f"fault was fixed. Data: {LIM_SRC}, from {R.source('probes090', 'RESULTS.md')} and its reductions.")
-PROBE_FLIGHT = {"what": "the AirfRANS checkpoints trained with the compiled training path after its fault was fixed",
-                "replacement": "A re-run of the same probes on the AirfRANS standing's checkpoints, trained without compilation,"}
-print()
-print(S.in_flight_callout(PROBE_FLIGHT))
+      "STL probe is ISLA against itself, and it is post hoc. The AirfRANS checkpoints probed are the standing's, trained without "
+      f"compilation. Data: {LIM_SRC}, from {R.source('probes090', 'RESULTS.md')} and its reductions.")
 ```
 
 ### Pose invariance where closest features tie {#sec-limits-ties}
@@ -375,7 +371,7 @@ with the same result (@sec-arch-modes). Which of the two forms should be ISLA's 
 ```{python}
 #| label: para-limits-query-independence
 #| output: asis
-A, V, Z = QP["airfrans_fix"], QP["drivaerml_volume"], QP["aerozoo_full"]
+A, V, Z = QP["airfrans_eag"], QP["drivaerml_volume"], QP["aerozoo_full"]
 SMALL = ("sub1000", "sub100", "sub10", "sub1")
 rng = lambda d, ms, fs: (min(d[m][f] for m in ms for f in fs), max(d[m][f] for m in ms for f in fs))
 PV = ("pressure_l2", "velocity_l2")
@@ -395,8 +391,6 @@ print("**Measured on three datasets, the dependence is large where the request d
       f"{QP['dtt_max_abs_dev']:.0e} in every mode on AirfRANS, float32 roundoff. A dependence with no knob that converges is a limit of "
       "the interacting form, not an approximation (@sec-airfrans-query-population, @sec-interior-query-tokens, @sec-aerozoo-request). "
       f"Data: {LIM_SRC}, from {R.source('probes090', 'results')}.")
-print()
-print(S.in_flight_callout(PROBE_FLIGHT))
 ```
 
 ### Cross-family transfer {#sec-limits-transfer}

@@ -101,6 +101,25 @@ RECORDS = {
             "identity_b_out.json",
         ],
     ),
+    "probes090": (
+        "isla-probes090-2026-10-21",
+        "PROBES-090: query-population dependence and re-meshing invariance of ISLA 0.9.0",
+        [
+            "RESULTS.md",
+            "results/qpop/reduced.json",
+            "results/qpop_afix/reduced.json",
+            "results/qpop_afeag/reduced.json",
+            "results/qpop_az/reduced.json",
+            "results/remesh/reduced_full.json",
+            "results/remesh_afix/reduced_full.json",
+            "results/remesh_afix_dtt/reduced_full.json",
+            "results/remesh_afeag/reduced_full.json",
+            "results/afeag_book_numbers.md",
+            "remesh/facts_dv.json",
+            "remesh/README.md",
+            "qpop/qpop_rows.tsv",
+        ],
+    ),
 }
 
 

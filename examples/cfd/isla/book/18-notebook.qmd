@@ -39577,7 +39577,7 @@ predictions before any number. Both probes are inference only, on the final chec
 the query probe was being ported it found the compiled-path defect (@sec-nb-compiled-path-defect). So every AirfRANS row
 below is labelled defect-trained: the eager function of weights trained under that defect. The registered re-read on the
 fix-trained weights (the training-path measurement) repeats every label (Reading, below). The re-read on the eager-trained
-weights behind the AirfRANS standing is pending.
+weights behind the AirfRANS standing is pending (read in @sec-nb-probes090-eag).
 
 **Instruments.** QUERY-POP-090 keeps a fixed scored set per case, a seeded random half of the native points. It changes
 only the rest of the query population: the scored half alone; 4 chunks; 1,000 scored points queried in groups of 1,000,
@@ -39666,7 +39666,7 @@ single points raise the error 1.4 to 4.4 times over its five fields (2.3 to 4.0 
 On the fix-trained AirfRANS weights (the training-path measurement, PREREG §8) every label of both forms repeats:
 interacting ISLA half 1.11, 4 chunks 1.33, far-field 98, exact re-panelization invariant (d 3e-5); ISLA-DTT at roundoff
 in every mode and 1.0-7.0 percent under refinement. So the training-path defect did not create or hide these
-properties. The eager-trained rows behind the AirfRANS standing are read when they finish training, about 2026-10-23.
+properties. The eager-trained rows behind the AirfRANS standing are read when they finish training, about 2026-10-23 (read in @sec-nb-probes090-eag).
 These numbers enter the cross-dataset table of PREREG_v2
 §13(b) (scratch/isla-az-compliant-2026-10-19/PREREG_v2.md) beside the AeroZoo verdict
 (scratch/isla-az-decide-2026-10-21/QUERYPOP090_FOR_12F.md); the AeroZoo ISLA-DTT probe follows when its checkpoints finish.
@@ -40212,6 +40212,7 @@ field by R1, that field reads "input standardization carries the step" whatever 
 | RAWU | scales kept, raw speed in place of the log Reynolds number | 1.292 / 1.351 / 1.333 | 1.02 / 0.99 / 0.83 | carries it (confounded) |
 | NUT0 | scales kept, eddy viscosity without the units U L | 0.982 / 1.009 / 0.990 | ≈ 0 | no measurable effect |
 | **NOSC-STD** | no scales, standardized speed | **1.003 / 1.029 / 1.043** | **0.01 / 0.10 / 0.12** | **no measurable effect** |
+| **STDU** (read later, below) | scales kept, standardized speed in place of the log Reynolds number | **1.008 / 1.015 / 0.995** | **0.03 / 0.05 / −0.02** | **no measurable effect** |
 
 The ÷ 0.9.0 column is exp(Δ), a ratio of geometric seed means.
 
@@ -40268,6 +40269,19 @@ accuracy where the Reynolds number varies widely, as on AeroZoo, is untested: AT
 once the compile fault is fixed, 0.9.0 leads its predecessor, and the winding flip is a reparametrization.
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-book-1023/SECOND_READ_ATTRIB_STAGE2.md).*
+
+**Later (2026-10-23).** STDU read under the same rule, with B and the step as above (scratch/isla-attrib090-2026-10-21/RESULTS.md
+§2d). σ, now pooled over nine degrees of freedom (0.076 / 0.048 / 0.056), leaves every reading above unchanged. STDU keeps
+ISLA's scales (the inlet velocity as the velocity source, eddy viscosity in units of U L, the fp32 head) and reads the
+standardized inlet speed, (U_inf_mag − 62.116) / 17.914, in place of the standardized log Reynolds number. STDU ÷ 0.9.0 is
+1.008 / 1.015 / 0.995 (exp(Δ), a ratio of geometric seed means), φ 0.03 / 0.05 / −0.02: no measurable effect on any field
+(posed 1.008 / 1.015, the same). With the scales on, a standardized speed serves as well as the standardized log Reynolds
+number, while RAWU, the same with the raw speed, carries the whole step. So on AirfRANS the form of the global scalar (log
+Re or speed) does not matter; its standardization does. This closes the AirfRANS attribution: the gain from CONT to 0.9.0
+is the standardization of the one global scalar. NOSC-STD and STDU sit at 0.9.0's level; NOSC and RAWU, the raw speed without
+and with the scales, sit at CONT's. Label: fix-trained.
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-book-noon-2026-10-23/SECOND_READ_STDU.md).*
 
 ## 2026-10-23 — AF-EXTRAP LRE and LIN, the Reynolds-input training controls: the registered Reynolds summary "ISLA extrapolates worse" stands; beside it, ISLA 0.9.0 trained with its Reynolds input on the fixed scale z = log10(Re_ISLA / 1e6) has 0.53-0.58× the fitted-scale model's below-band pressure error (registered reading "the fixed scale helps"), and with a linear, training-standardized Reynolds input 0.62-0.63× ("helps") {#sec-nb-af-lre-verdict}
 
@@ -40780,3 +40794,51 @@ epoch-0 median step, 0.655 s, matches A's 0.651 and 0.644 s. The two lanes were 
 2026-10-24 midday.
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-geo-nb-2026-10-23/SECOND_READ_LREAZ.md).*
+
+## 2026-10-23 — PROBES-090 on the AirfRANS standing's eager-trained checkpoints: the registered prediction that every label repeats (p 0.7) fails narrowly; every query-population label repeats and interacting ISLA stays invariant to exact re-meshing, and ISLA-DTT under a two-fold re-panelization moves from invariant to small move {#sec-nb-probes090-eag}
+
+**Question** (PROBES-090, scratch/isla-probes090-2026-10-21/PREREG.md §9, an amendment before results). The AirfRANS
+standing comes from eager-trained checkpoints (r090eag_af_{isla,dtt}; @sec-nb-ref090-standings). The book's AirfRANS rows
+of the query-population and re-meshing probes read the fix-trained pair (@sec-nb-probes090). Do the registered labels hold
+on the standing's own checkpoints? Registered prediction: every AirfRANS label repeats (p 0.7). Jobs (LHR): QUERY-POP
+350362 (ISLA) and 350363 (ISLA-DTT), REMESH 350364, all COMPLETED 0:0; read by REF-090-CLOSE2 (RESULTS.md §7b).
+
+**Validity, read first: pass.** Each probe's native request reproduces the official eager scorer record on all 200 test
+cases at epoch 500: bitwise for ISLA (0.0 on both seeds, both probes), within 2.5e-6 for ISLA-DTT (registered gate 1e-3).
+Every mode and variant changes the input on every case; no row is degenerate.
+
+| request or boundary | ISLA 0.9.0, eager-trained (p / v / nut) | fix-trained | label |
+|---|---|---|---|
+| half the points | 1.10 / 1.12 / 1.15 | 1.11 / 1.13 / 1.14 | material |
+| four chunks | 1.31 / 1.36 / 1.40 | 1.33 / 1.37 / 1.41 | material |
+| at most 1,000 points (all fields) | 4.5 to 126 | 4.6 to 159 | severe |
+| far-field companions | 120 / 75 / 105 | 98 / 54 / 131 | severe |
+| wall-heavy companions | 19 / 30 / 22 | 19 / 29 / 24 | severe |
+| ISLA-DTT, every mode | largest abs(r − 1) 4.1e-6 | 4.5e-6 | roundoff |
+| exact re-panelization (ISLA) | within 0.012 %, d 3e-5 | within 0.011 % | invariant |
+| 800 / 600 / 400 / 200 tokens (ISLA, p) | 1.02 / 1.32 / 2.30 / 5.22 | 1.02 / 1.32 / 2.41 / 5.32 | small / sensitive |
+| exact re-panelization (ISLA-DTT, p) | 1.017 / 1.057 / 1.059 | 1.010 / 1.039 / 1.070 | small move (refine2 was invariant) |
+
+Seed means of seeds 42 and 43 (the mean of the two seeds' ratios), 200 test airfoils, float32, eager, final checkpoints.
+Every ratio is the error under the probe ÷ the same checkpoint's error on its native request or boundary.
+
+**Registered reading: the prediction is false, narrowly.** Every label repeats but one. ISLA-DTT under a two-fold split of
+the panels (refine2) reads 1.017 on pressure, seed 43 at 1.0235, just past the registered 0.02 for "invariant" (seed 42
+reads 1.0111; the prediction moves by a median 1.6e-3 and 2.7e-3, inside 0.01), so its label is "small move". The size sits
+in the 1 to 7 percent band that the opening-angle sweep traced to ISLA-DTT's θ = 1 tree read (@sec-nb-probes090), so it is
+the same mechanism at a two-seed boundary, not a new one. No conclusion in the book changes.
+
+**Beside the rule.** Interacting ISLA's query-population dependence and its invariance to exact re-meshing are the same on
+the defect-trained, fix-trained and eager-trained weights, so they are properties of the architecture, not of how it
+trained. The far-field ratio moves within its seed spread (pressure 91 to 181 defect-trained, 93 to 103 fix-trained, 106 to
+135 eager-trained). Two 400-token draws still lie farther from each other than either from native (median pressure distance
+0.032 and 0.033 against 0.017 and 0.018), so the 400-token loss is draw variance. Under the registered text (r and d both
+within the redraw's), interacting ISLA's 400-token row misses "within draw noise" by 0.4 percent on eddy viscosity (1.388
+against the redraw's 1.382); ISLA-DTT's qualifies.
+
+**For the book.** The AirfRANS probe rows in 03, 04, 05, 09, 12 and 20 read the eager-trained checkpoints (records copied to
+results/campaigns_2026-10-23/probes090/; chapter 20's numbers from book_E/limits_090_2026-10-23.py there), and the three
+In-flight callouts on them go (04 sec-query-population, 20 sec-limits-boundary-law, 20 sec-limits-query-independence). The
+ranges shift a little: four chunks 1.31 to 1.40; small requests 4.5 to 126 times; ISLA-DTT's refinement 1.7 to 5.9 percent.
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-book-noon-2026-10-23/SECOND_READ_PROBES_F.md).*

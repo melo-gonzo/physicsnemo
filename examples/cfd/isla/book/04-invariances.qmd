@@ -43,11 +43,11 @@ SEEDS_TXT = f"{S._COUNT[min(ST[k].n_seeds(a) for k in KEYS for a in S.ARCHS if S
     f" ({S._COUNT[ST[k].n_seeds('ISLA')]} for ISLA on {S.DATASETS[k].in_sentence})" for k in KEYS if ST[k].n_seeds("ISLA") != 2)
 import records as R, re
 P = "probes090"
-#: The AirfRANS checkpoints PROBES-090 probes (its remesh_afix and qpop_afix records).
-PROBE_CKPT = "ISLA and ISLA-DTT trained with the compiled training path after its fault was fixed"
-RA, RD, RV = "results/remesh_afix/reduced_full.json", "results/remesh_afix_dtt/reduced_full.json", "results/remesh/reduced_full.json"
-QA, QV, QZ = "results/qpop_afix/reduced.json", "results/qpop/reduced.json", "results/qpop_az/reduced.json"
-AF_I = [f"r090fix_af_isla_seed{s}" for s in (42, 43)]; AF_D = [f"r090fix_af_dtt_seed{s}" for s in (42, 43)]
+#: The AirfRANS checkpoints PROBES-090 probes (its remesh_afeag and qpop_afeag records; one remesh file holds both forms).
+PROBE_CKPT = "ISLA and ISLA-DTT trained without compilation (the AirfRANS standing's checkpoints)"
+RA = RD = "results/remesh_afeag/reduced_full.json"; RV = "results/remesh/reduced_full.json"
+QA, QV, QZ = "results/qpop_afeag/reduced.json", "results/qpop/reduced.json", "results/qpop_az/reduced.json"
+AF_I = [f"r090eag_af_isla_seed{s}" for s in (42, 43)]; AF_D = [f"r090eag_af_dtt_seed{s}" for s in (42, 43)]
 VOL = [f"r090_vol_isla_seed{s}" for s in (42, 43)]; AZ = [f"azc_full_isla_seed{s}" for s in (42, 43)]
 QF = (("pressure_l2", "pressure"), ("velocity_l2", "velocity"), ("nut_l2", "eddy viscosity"))
 rm = lambda name, arm, v, f: R.load(P, name)["seed_mean_ratio"][arm][v][f]       # re-meshed ÷ native, seed mean
@@ -631,10 +631,10 @@ plt.show()
 ```{python}
 #| label: para-remesh-lede
 #| output: asis
-EXACT = [(RA, "r090fix_af_isla", v) for v in ("refine2", "refine4", "refine31")] + [(RV, "r090_vol_isla", v) for v in ("tok100k", "tok400k", "subdiv4")]
+EXACT = [(RA, "r090eag_af_isla", v) for v in ("refine2", "refine4", "refine31")] + [(RV, "r090_vol_isla", v) for v in ("tok100k", "tok400k", "subdiv4")]
 exact_dev = max(abs(rm(n, a, v, f) - 1) for n, a, v in EXACT for f, _ in QF)
-budget = [rm(RA, "r090fix_af_isla", f"tok{k}", "pressure_l2") for k in (600, 400, 200)]
-n_af = R.load(P, RA)["runs"]["r090fix_af_isla_seed42"]["native_inputs"]["n_cells"]["median"]
+budget = [rm(RA, "r090eag_af_isla", f"tok{k}", "pressure_l2") for k in (600, 400, 200)]
+n_af = R.load(P, RA)["runs"]["r090eag_af_isla_seed42"]["native_inputs"]["n_cells"]["median"]
 stl = [rm(RV, "r090_vol_isla", "stl", f) for f, _ in QF]
 band = R.md_table(P, "RESULTS.md", "Analyses beside")
 far_band = [r for r in band if r["points"].startswith("≥")][0]
@@ -678,8 +678,8 @@ def what(v):
     if v.startswith("redraw"):
         return (f"another draw at the native budget, systematic start {int(v[8:]) / 100:g}", "draw floor")
     return {"subdiv4": ("every cell subdivided into four", "exact"), "stl": ("the watertight STL in place of the CFD wall", "new surface")}[v]
-GROUPS = ((RA, "r090fix_af_isla", "AirfRANS airfoil, ISLA", ("refine2", "refine4", "refine31", "tok800", "tok600", "tok400", "tok200", "decim400", "decim200")),
-          (RD, "r090fix_af_dtt", "AirfRANS airfoil, ISLA-DTT", ("refine2", "refine4", "refine31")),
+GROUPS = ((RA, "r090eag_af_isla", "AirfRANS airfoil, ISLA", ("refine2", "refine4", "refine31", "tok800", "tok600", "tok400", "tok200", "decim400", "decim200")),
+          (RD, "r090eag_af_dtt", "AirfRANS airfoil, ISLA-DTT", ("refine2", "refine4", "refine31")),
           (RV, "r090_vol_isla", "DrivAerML Volume car, ISLA", ("tok100k", "tok400k", "subdiv4", "redraw_u0", "redraw_u25", "stl")))
 out = ["| boundary and model | variant | kind | pressure | velocity | eddy viscosity |", "|---|---|---|---:|---:|---:|"]
 for name, arm, lab, variants in GROUPS:
@@ -690,12 +690,12 @@ print("\n".join(out))
 nc = lambda name, run: R.load(P, name)["runs"][run]["n_cases"]
 print("\n: Re-meshing the boundary of trained checkpoints: each arm's error with the changed boundary over its error with the "
       "native one, seed-mean ratio over two seeds, float32, eager, final checkpoints; "
-      f"{nc(RA, 'r090fix_af_isla_seed42')} AirfRANS test cases and {nc(RV, 'r090_vol_isla_seed42')} DrivAerML Volume validation "
+      f"{nc(RA, 'r090eag_af_isla_seed42')} AirfRANS test cases and {nc(RV, 'r090_vol_isla_seed42')} DrivAerML Volume validation "
       "cars. *exact*: the same surface, meshed or drawn differently; *budget*: fewer tokens than the airfoil has panels; "
       "*new surface*: a different geometry, a test of robustness rather than of invariance; *draw floor*: a second draw at the "
       "native budget, the noise against which the car's rows are read. The AirfRANS checkpoints are "
-      + PROBE_CKPT + " (In flight, below). How to read this: 1 is no change; a ratio compares a "
-      "checkpoint with itself. Data: " + "; ".join(R.source(P, n) for n in (RA, RD, RV)) + ". {#tbl-remesh}")
+      + PROBE_CKPT + ". How to read this: 1 is no change; a ratio compares a "
+      "checkpoint with itself. Data: " + "; ".join(R.source(P, n) for n in (RA, RV)) + ". {#tbl-remesh}")
 ```
 
 ```{python}
@@ -703,7 +703,7 @@ print("\n: Re-meshing the boundary of trained checkpoints: each arm's error with
 #| output: asis
 TH = BA["theta"]
 REF3 = ("refine2", "refine4", "refine31")
-t1 = [rm(RD, "r090fix_af_dtt", v, "pressure_l2") for v in REF3]
+t1 = [rm(RD, "r090eag_af_dtt", v, "pressure_l2") for v in REF3]
 th_dev = lambda t: max(abs(TH[t][v][f] - 1) for v in REF3 for f in ("pressure", "velocity", "nut"))
 print("ISLA-DTT moves under exact refinement because it reads the boundary through a Barnes–Hut tree at opening angle "
       f"$\\theta = 1$ (@sec-arch-tree-read), an approximation that vanishes as $\\theta \\to 0$. At $\\theta = 1$ the three "
@@ -765,14 +765,6 @@ print("\n: Interacting ISLA's error under a change of the request, divided by it
       "read this: 1 is no dependence on the request; ISLA-DTT reads 1 to float32 roundoff in every mode. Data: "
       + "; ".join(R.source(P, n) for n, _, _ in COLS) + "; the modes are defined in PROBES-090's registration, "
       "section 2. {#tbl-query-population}")
-```
-
-```{python}
-#| label: callout-probes-in-flight
-#| output: asis
-AFS = ST["airfrans"]
-print(S.in_flight_callout({"what": "the AirfRANS rows of @tbl-remesh and @tbl-query-population, which probe " + PROBE_CKPT,
-                           "replacement": "The same probe of the AirfRANS checkpoints trained without compilation"}))
 ```
 
 ### Ties in the geometry {#sec-medial-ties}
