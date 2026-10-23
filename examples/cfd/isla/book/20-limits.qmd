@@ -720,7 +720,8 @@ print("**The open question is whether the closest-feature ties of the lug's mesh
       "residual falls to float32 roundoff, whether native accuracy is unchanged within the seed spread, and how much of the excess of "
       f"posed ÷ native over one is left. The bar the other standings set is posed ÷ native within 0.002 of one on every headline field, which {n_pose} of "
       f"the {len(FIN)} final standings meet. Nodes on the surface itself keep the found feature's direction under this rule, and a rule for "
-      f"them is open too. If retraining with it shows no accuracy cost, the rule enters ISLA's geometry with the rest of the candidate geometry of "
+      f"them is open too. If retraining with it brings the flip residual to float32 roundoff and shows no accuracy cost, the rule enters "
+      f"ISLA's geometry with the rest of the candidate geometry of "
       f"@sec-oq-precision. Cost: {q_ties} GPU-hours, as the design prices it. Data: {R.source('medial_tie', 'DESIGN.md')}.")
 ```
 
@@ -755,7 +756,8 @@ coordinates in the mesh's own precision. A candidate geometry is being measured 
 tie, signs the distance by the generalized winding number, computes the draw in float64 in the boundary's canonical frame,
 which removes the draw's dependence on the compute precision and cuts, without removing, its dependence on the pose, and
 puts a point on the wall by the rounding of its coordinates in place of a fixed cutoff. It becomes ISLA's geometry, at its
-measured cost in training time, if retraining with its tie rule shows no accuracy cost; the ledger (@sec-ledger) tracks it.
+measured cost in training time, if retraining with its tie rule brings the flip residual to float32 roundoff and shows no
+accuracy cost (@sec-oq-ties); the ledger (@sec-ledger) tracks it.
 :::
 
 ### The frame of ISLA-DTT's forest {#sec-oq-dtt-frame}

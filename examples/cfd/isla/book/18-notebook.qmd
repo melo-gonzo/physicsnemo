@@ -40058,7 +40058,10 @@ moment (case 00888) as in stage 1.
   Removing the interacting form stays a separate proposal to Peter (section 12(f) edit i, section 13(d)). The AeroZoo
   ISLA-DTT lanes that the rule reads are still training.
 - *The geometry robustness bundle.* Branch psharpe/isla-geo-bundle (f13eb5ce0) is merged into canonical ISLA once the
-  tie experiment (TIE-EXP) shows no accuracy cost; it has no result yet. The ledger and this notebook state the bundle's measured cost until it merges; the chapters
+  tie experiment (TIE-EXP) reads "adopt" by its registered decision rule: its flip test F passes (the flip residual at
+  float32 roundoff) and its native-accuracy reading N is not "cost" on either dataset. N is Peter's condition; the
+  supervisor keeps F, because without it the registered rule reads nothing else as a property of the tie rules. It has
+  no result yet. The ledger and this notebook state the bundle's measured cost until it merges; the chapters
   state the adoption rule. On
   GB300 (scratch/isla-medial-tie-2026-10-22/DESIGN.md section q.4, LHR job 346068; REF-090 settings, bfloat16, eager,
   one GPU per version, medians after 5 warm-up steps), the training step is +7 / +29 / +17 / +49 percent on AirfRANS /
