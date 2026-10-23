@@ -378,3 +378,32 @@ seeds 42 and 43 and the new seed 44).
   - Moderate on the AirfRANS slice lead (one-seed-scale effect inside 1.43x spread) and on the drv depth result (one
     seed per rung, although 1.36-1.61x exceeds the three-seed reference spread of 1.04-1.15).
   - The floor-input lead is descriptive and untested.
+
+## Erratum (supervisor, 2026-10-23 13:13 EDT; found by BOOK-CAP's second read and FLOOR-DRV's frame check)
+
+No registered reading, band or verdict changes. Only metre wording and some ranges change.
+
+1. **Units on DrivAerML Volume.** `drivaer_ml_volume_reference` runs CenterMesh, then NonDimensionalizeByMetadata, whose
+   `scale_geometry` is true by default. The case files store `global_data.L_ref` = 5 m, so the datapipe divides every
+   coordinate by 5 m (FLOOR-DRV's frame check: scale 0.2 within 2e-8 on all five meshes). Every DrivAerML Volume length
+   in this record that comes from the datapipe is therefore in units of L_ref = 5 m, not metres: the labels' sdf, the
+   residual-map bands, the probes and the 15.8 offset. In metres:
+   - the far field, band [1, inf), is beyond 5 m from the car; 'within 1 m' is within 5 m; '1-3 m' is 5-15 m; 'beyond
+     3 m' is beyond 15 m;
+   - '1e-4 to 1e-3 m' is 0.5-5 mm; 'within 1e-3 m of the wall' is within 5 mm;
+   - the 15.8 frame offset of 1.16 'mm' is 5.8 mm (heldout_check.py's `offset_mm` and `median_wall_distance_mm` are in
+     thousandths of L_ref). Its ratio to the median wall distance (1.4) and every score are unchanged.
+   - AirfRANS stores no L_ref, so its geometry is not rescaled, and its bands in chords stand.
+2. **Counts and ranges.**
+   - 'six 20k runs' of the reference (section 15.11 and the notebook draft) is seven, as the 15.11 table and HANDOFF.md
+     have it.
+   - '20k's 2.6-3.3x' (15.9) mixes two GeoTransolver floors, the ladder's 0.00063 and the 15.9 table's seed-42 0.00061.
+     Against the 15.9 table's seed-42 floor it is 2.8-3.3x.
+   - 'On a fixed point set it reaches 1e-4 to 1e-2 on every case' (answer): ISLA's phase-1 training floors span 1.8e-4
+     (lug) to 0.013 (DrivAerML Surface wall shear) on the headline fields, and 0.0148 on AeroZoo nu_t, a reported field.
+   - Probe b: '2.8-3.0 within 1 m' is 2.8-3.0 below 0.1 L_ref and 3.3 at 0.1-1 L_ref.
+   - Probe c: '3-31 slices' is 1-31, '(at most 0.79-0.995 of a slice)' is 0.58-0.995, and '1.5-9 times their share' is
+     0.5-9, since seed 43's last block (block 11) holds 1 far-majority slice, at most 0.58 of a slice and 0.52 times the
+     far points' share.
+   - `tables/phase2_floors.json` was written at 23:22 EDT 10-22, before the 15.9 runs finished, so its values for the
+     two 40k reference runs are stale. `tables/ctl40k.md` is the record for them.

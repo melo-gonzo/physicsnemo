@@ -94,3 +94,9 @@ seeds 44 / 45; its near-wall band 0.0017-0.0018 against 0.0024-0.0031) real?
   (P = -0.018). Report it beside REF-090-CLOSE's full-protocol comparison, never pooled.
 - **ISLA on DrivAerML Volume does not resume bit-for-bit** after a checkpoint, with or without the 15.8 flag. It is
   nondeterministic on that case; ISLA on AeroZoo and HiLift resumes exactly.
+
+*Supervisor's note (2026-10-23 13:13 EDT):* on DrivAerML Volume every datapipe length is in units of L_ref = 5 m, so the
+far-field band '> 1 m' is beyond 5 m from the car and the 15.8 offset is 5.8 mm (RESULTS.md, erratum). The supervisor's
+decisions of 12:00: SLICES-AF (the full-data pair, launched), FLOOR-DRV (launched with all four domain meshes, no_slip,
+slip, inlet and outlet; about 120 GPU-h, since they cost ISLA 0.9.0's geometry 1.58x per step), and the d24 rung
+deferred until FLOOR-DRV reads.
