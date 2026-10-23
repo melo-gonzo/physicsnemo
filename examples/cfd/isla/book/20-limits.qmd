@@ -529,7 +529,7 @@ print("**The open question is whether the read-only form, whose prediction at a 
       f"von Mises stress on the native mesh: ISLA-DTT ÷ ISLA is {ld_r:.3f} (a ratio of arithmetic seed means, two seeds each), and both "
       "of ISLA-DTT's seeds lie above both of ISLA's. Both forms in that pair trained on the compiled training path after its fault was "
       f"fixed, while the lug standing's ISLA trained eagerly ({R.source('ref090', 'r090_final.json')}). Neither dataset settles the "
-      "question: both measure accuracy inside the training distribution. The decisive data are AeroZoo's "
+      "question: both ratios measure accuracy inside the training distribution. The decisive data are AeroZoo's "
       "held-out splits, where generalization rather than in-distribution accuracy is at stake. What would settle it: both forms at equal "
       f"size under the benchmark protocol (@sec-aerozoo-allowed), on `full` and on each of the {len(AZS['held_out'])} held-out splits, two "
       "seeds each, with the ratio ISLA-DTT ÷ ISLA on velocity and pressure as the readout, read by the rule registered for it before any "
