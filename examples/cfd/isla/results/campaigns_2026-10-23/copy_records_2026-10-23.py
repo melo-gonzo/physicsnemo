@@ -138,6 +138,11 @@ RECORDS = {
         "FLOOR-DRV: ISLA on one DrivAerML Volume car with the domain's four boundary meshes, the pre-registration",
         ["PREREG.md"],
     ),
+    "az_compliant": (
+        "isla-az-compliant-2026-10-19",
+        "AeroZoo under the benchmark protocol: the registered rule for ISLA against ISLA-DTT (PREREG_v2 sections 12(f) and 13)",
+        ["PREREG_v2.md"],
+    ),
 }
 
 

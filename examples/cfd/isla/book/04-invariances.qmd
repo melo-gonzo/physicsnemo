@@ -821,7 +821,8 @@ the wall distance taken from the closest feature's pseudo-normal, and a token dr
 coordinates in the mesh's own precision. A candidate geometry is being measured that takes the least-norm direction at a
 tie, signs the distance by the generalized winding number, computes the draw in float64 in the boundary's canonical frame,
 which removes the draw's dependence on the compute precision and cuts, without removing, its dependence on the pose, and
-puts a point on the wall by the rounding of its coordinates in place of a fixed cutoff; the ledger (@sec-ledger) tracks it.
+puts a point on the wall by the rounding of its coordinates in place of a fixed cutoff. It becomes ISLA's geometry, at its
+measured cost in training time, if retraining with its tie rule shows no accuracy cost; the ledger (@sec-ledger) tracks it.
 :::
 
 ## Studies on a smaller ISLA {#sec-contract-studies}

@@ -43,6 +43,7 @@ FOLDER = {
     "probes090": "campaigns_2026-10-23",
     "cap_audit": "campaigns_2026-10-23",
     "floor_drv": "campaigns_2026-10-23",
+    "az_compliant": "campaigns_2026-10-23",
 }
 
 

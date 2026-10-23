@@ -40023,7 +40023,72 @@ moment (case 00888) as in stage 1.
 - Part B is closed: 252.5 GPU-h over both stages. The reverse direction stays open (two more seeds of each of the three
   fastback-trained models would narrow its SE).
 
-*Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-book-eve-2026-10-23/SECOND_READ_EVE_P1.md).*
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-book-eve-2026-10-23/SECOND_READ_EVE.md).*
+
+## 2026-10-23 — Peter's rulings on canonical ISLA: a close call on AeroZoo makes ISLA-DTT the default interior form; the geometry robustness bundle goes into ISLA once the tie experiment shows no accuracy cost, with its cost documented and a fused fast path built beside it; ISLA reads every stored piece of the PDE domain's boundary on every dataset {#sec-nb-canonical-rulings}
+
+**Questions.** The supervisor asked Peter three questions in one form at about 17:00 EDT; Peter answered at 17:08 EDT.
+
+1. *ISLA against ISLA-DTT.* "If AeroZoo reads a close call between interacting ISLA and ISLA-DTT, which should be
+   ISLA's default interior form?" Peter chose "ISLA-DTT, on principle".
+2. *The geometry robustness bundle.* "If the tie experiment shows no accuracy cost, does the geometry robustness bundle go
+   into canonical ISLA at its measured cost?" Peter: "Adopt it, and then document the cost. Then, start a parallel thread
+   where we try to make it faster with a fused kernel. Correctness is most important; correct + fast is even better. If
+   the speedup experiment works, then add an optional fast path (like our other kernels, where we default iff triton is
+   installed), and then remove the documented limitation / change it."
+3. *The whole boundary.* "May ISLA read the domain's full boundary on DrivAerML Volume (the floor, slip walls, inlet and
+   outlet the case files store), adopted if FLOOR-DRV shows it fixes the far-field miss?" Peter: "Yes! And in fact, not
+   only CAN it read the whole boundary - it SHOULD read the whole boundary! As you say, this is a matter of PDE
+   well-posedness and correctness. Seeing where the floor is through raw coordinates is a bug, not a feature. Even if
+   there were an accuracy *cost* to reading the whole boundary (not that I expect it), I would recommend this. I don't
+   care that they make each step 1.58x as long. Think about something like AeroZoo - there, reading the whole boundary
+   is not a "choice", it's actually mandatory. WE should be doing that on all PDEs. The boundary conditions matter."
+
+**What follows for the program** (the supervisor's application of the three answers):
+
+- *The interior form.* AeroZoo's registered bands stand as written (scratch/isla-az-compliant-2026-10-19/PREREG_v2.md,
+  section 12(f) with section 13; md5 ebd75524). With R = ISLA-DTT ÷ ISLA on seed means, on velocity and pressure over
+  the six held-out splits: "ISLA-DTT clearly" is R ≤ 1.05 on both fields on every held-out split, "ISLA clearly" is an
+  arithmetic mean of R of at least 1.10 on velocity or on pressure, and everything else is a close call. A close call
+  makes ISLA-DTT the default interior form (Peter's answer), and so does "ISLA-DTT clearly" (the supervisor's reading).
+  "ISLA clearly" keeps interacting ISLA by the registered rule. Section 13(b) had kept interacting ISLA as the default
+  in the first two bands until Peter answered an explicit question; his answer settles it for a close call, and the
+  supervisor's reading for "ISLA-DTT clearly".
+  Removing the interacting form stays a separate proposal to Peter (section 12(f) edit i, section 13(d)). The AeroZoo
+  ISLA-DTT lanes that the rule reads are still training.
+- *The geometry robustness bundle.* Branch psharpe/isla-geo-bundle (f13eb5ce0) is merged into canonical ISLA once the
+  tie experiment (TIE-EXP) shows no accuracy cost; it has no result yet. The book states the bundle's measured cost. On
+  GB300 (scratch/isla-medial-tie-2026-10-22/DESIGN.md section q.4, LHR job 346068; REF-090 settings, bfloat16, eager,
+  one GPU per version, medians after 5 warm-up steps), the training step is +7 / +29 / +17 / +49 percent on AirfRANS /
+  the lug / AeroZoo / DrivAerML Volume. That is the mean of the head's three per-run medians over the mean of the base's
+  two per-pass medians (1.067, 1.291, 1.174, 1.493). Over every head run against every base pass it is 1.03 to 1.12,
+  1.22 to 1.40, 1.14 to 1.20 and 1.47 to 1.50 times (@sec-nb-geo-bundle). Until the merge, the cost stands in the
+  ledger and this notebook, and the chapters state the adoption rule. Lane GEO-FAST (launched 17:52 EDT, branch
+  psharpe/isla-geo-fast, scratch/isla-geo-fast-2026-10-23/) builds an optional fused fast path, chosen automatically
+  when CUDA and Triton are present, with the exact path kept as the reference. If it succeeds, the documented cost
+  changes.
+- *The whole boundary.* Canonical ISLA reads every stored piece of the PDE domain's boundary, by name with its
+  condition type, on every dataset. No accuracy or cost result reverses this. The recipe's ISLA configurations
+  (`conf/model/isla_*.yaml`, `forward_kwargs.boundary_meshes`) read the body alone on DrivAerML Volume (`vehicle`),
+  AirfRANS (`airfoil`), DrivAerML Surface and SHIFT-SUV (`vehicle`) and HiLift (`vehicle`). They read several named
+  pieces on AeroZoo (`inlet`, `outlet`, `no_slip`, `slip`), the lug (`fixed`, `hole`, `loaded`, `free`), Tensile2d
+  (`pinned`, `loaded`, `fixed`, `free`) and DeepJEB++ (`fixed`, `free`, `loaded`). Lane BOUNDARY-AUDIT (launched
+  17:52 EDT, scratch/isla-boundary-audit-2026-10-23/) checks what each dataset stores. A piece that a dataset does not
+  store is reported, never supplied by modifying the dataset. FLOOR-DRV now measures the effect of the change on
+  DrivAerML Volume and no longer decides adoption. Its smoke measured ISLA's step 1.58 times longer with the four
+  domain meshes (5.27 against 3.33 s; scratch/isla-floor-drv-2026-10-23/PREREG.md section 8), the factor Peter's
+  answer names.
+
+**For the book.** Chapter 20 gains a limit, *the whole boundary of the domain* (@sec-limits-whole-boundary), and an open
+question on what the other datasets store beyond the body (@sec-oq-whole-boundary). Its far-field question
+(@sec-oq-far-field) measures an effect and no longer decides an input. Its interior-form question (@sec-oq-dtt), its
+table row and the recommendation bullet state the registered rule with this answer: ISLA-DTT is the default unless
+interacting ISLA is clearly more accurate. Chapter 09's ground question, chapter 19's far-field paragraph and chapter
+21's design ledger (a row on the whole boundary) say the same. The In-flight callouts on the candidate geometry
+(chapters 04 and 20) and the tie question (@sec-oq-ties) give the adoption rule. The ledger updates GEO-BUNDLE, the
+AeroZoo decision in REF-090 and FLOOR-DRV in CAP-AUDIT, and adds GEO-FAST and BOUNDARY-AUDIT.
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-book-eve-2026-10-23/SECOND_READ_EVE.md).*
 
 ## 2026-10-22 — MECH-090: on Tensile2d the fixed compiled path's float32 gradients sit at a one-ulp eager floor, and pytorch/pytorch#195845 added a unit-dependent sink to ISLA's slice-state softmax (registered emulations not confirmed; a post-smoke emulation matches) {#sec-nb-mech090}
 
