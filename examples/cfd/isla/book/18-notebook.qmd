@@ -40188,3 +40188,77 @@ accuracy where the Reynolds number varies widely, as on AeroZoo, is untested: AT
 once the compile fault is fixed, 0.9.0 leads its predecessor, and the winding flip is a reparametrization.
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-book-1023/SECOND_READ_ATTRIB_STAGE2.md).*
+
+## 2026-10-23 — AF-EXTRAP LRE and LIN, the Reynolds-input training controls: the registered Reynolds summary "ISLA extrapolates worse" stands; beside it, ISLA 0.9.0 trained with its Reynolds input on the fixed scale z = log10(Re_ISLA / 1e6) has 0.53-0.58× the fitted-scale model's below-band pressure error (registered reading "the fixed scale helps"), and with a linear, training-standardized Reynolds input 0.62-0.63× ("helps") {#sec-nb-af-lre-verdict}
+
+**Setting.** On AirfRANS's `reynolds` split, ISLA 0.9.0's pressure error grew more than GeoTransolver 256's and
+Transolver 512 × 16's outside the training band (@sec-nb-af-extrap-090). The registered summary was "ISLA extrapolates
+worse" (pressure ρ = g_baseline ÷ g_ISLA 0.709 against GeoTransolver 256, 0.789 against Transolver 512 × 16), and it
+stands. Post hoc, the growth was concentrated below the band (pressure error 0.62 per decade of Re, against 0.16 and
+0.32), and an inference-only clamp of ISLA's Reynolds input z to its training range (PREREG §13, registered before it
+ran) cut ISLA's below-band pressure error to 0.477× (clamped ÷ native, ratio of two-seed arithmetic means over the 254
+below-band cases). ISLA read z = (log10 Re − m) / s, with m and s fitted on the 504 training airfoils (s = 0.062, so z
+spans about ±2 in training and reaches −4.85 on the test side). Two training controls were registered before any of
+their runs (scratch/isla-af-extrap-2026-10-21/PREREG.md §14, §14b; md5 5b38aa09 after §14b). Each is afxf ISLA's lane
+(fix-trained, two seeds, 500 epochs) with only z changed. LRE uses z = log10(Re_ISLA / 1e6), a dataset-independent fixed
+scale set as `isla_constants.reynolds: {mean: 6.0, std: 1.0}` in
+examples/cfd/external_aerodynamics/unified_external_aero_recipe/datasets/airfrans_uvolume_2d_reynolds_lre.yaml (on
+psharpe/isla since commit bb991f73e; md5 af151886), with no code change; z spans 0.096 to 0.335 in training. LIN is a
+diagnostic, not a candidate (a one-line change of ISLA's model code that removes the log10, committed to no branch): z =
+(Re_ISLA − m) / s, linear in Re and standardized on the training side, which puts the lowest-Re test case 1.73 training
+standard deviations beyond the training edge, against 2.81 for the fitted log scale and 1.78 for the baselines'
+standardized speed. Re_ISLA = U L / ν uses ISLA's own length.
+
+**What we saw.**
+
+| arm | Reynolds test p / v / ν_t | below-band pressure ÷ afxf ISLA (s42, s43) | in-band fit ÷ afxf ISLA (training cases) | below-band pressure slope [relative L2 per decade of Re] |
+|---|---|---|---|---|
+| ISLA 0.9.0, fitted log scale (afxf) | 0.0389 / 0.0195 / 0.0457 | 1 | 1 | 0.62 |
+| LRE, fixed log scale | 0.0246 / 0.0111 / 0.0364 | 0.530, 0.576: **helps** | 0.91 / 0.94 / 0.94: passes | 0.16 |
+| LIN, linear standardized Re | 0.0311 / 0.0161 / 0.0419 | 0.620, 0.632: **helps** | 1.02 / 1.00 / 0.99: passes | 0.23 |
+| GeoTransolver 256 | 0.0246 / 0.0466 / 0.0467 | | | 0.16 |
+| Transolver 512 × 16 | 0.0274 / 0.0381 / 0.0466 | | | 0.32 |
+
+: AirfRANS `reynolds` split, relative L2, float32, 100,000 interior points, final checkpoints (epoch 500). Test errors: the 496 test airfoils, arithmetic means of seeds 42 and 43. Below-band ratio: per seed, the case-mean pressure error over the 254 test airfoils below Re 3e6, arm ÷ afxf ISLA (registered reading (a); bar ≤ 0.8 on both seeds). In-band fit: ratio of two-seed means on the 504 training airfoils, scored eager (registered guard (b); bar ≤ 1.05 on every field; fit inside the band, not generalization). Slope: least squares of the two-seed-mean per-case error against decades below Re 3e6. Data: scratch/isla-af-extrap-2026-10-21/lre.json, afx_results.json, posthoc.json (RESULTS.md §6). {#tbl-nb-af-lre}
+
+- Both controls pass the registered bar (≤ 0.8 on both seeds), so the registered joint reading is **"both help"**: the
+  log coordinate's reach and the training dynamics of a narrow fitted spread both contribute. Post hoc: the fixed log
+  scale helps more (per seed 0.530 / 0.576, against LIN's 0.620 / 0.632).
+- Beside the rules (PREREG §14 reading (c), post hoc): the R2 rule with LRE in ISLA's place reads "no difference" on
+  pressure against GeoTransolver 256 (ρ = g_baseline ÷ g_LRE 1.12; band ×1.195) and "LRE extrapolates better" against
+  Transolver 512 × 16 (ρ 1.25; seed pairs 1.26, 1.23). LRE has no full-split run, so g_LRE divides LRE's test error by
+  ISLA's fix-trained in-distribution error (r090fix_af_isla). On the training airfoils LRE's pressure error is 0.91×
+  afxf ISLA's, so the borrowed reference may favor LRE. LRE's test-set pressure error is level with GeoTransolver 256's
+  (GeoTransolver 256 ÷ LRE 0.998) and with Transolver 512 × 16's (1.11), and LRE leads both on velocity (baseline ÷ LRE
+  4.20 and 3.43, against 2.39 and 1.96 for afxf ISLA). The velocity cells still read "LRE extrapolates worse" (ρ 0.664,
+  0.731); post hoc, as for afxf ISLA, the baselines' in-distribution velocity error (0.030-0.040) is already close to
+  their test error, which caps their penalty (RESULTS.md §3b).
+- Beside the rules (PREREG §14 reading (d), a post hoc diagnostic): clamping LRE's z to its training range lowers its
+  below-band pressure error only to 0.876× (s42 0.859, s43 0.894; ratio of two-seed means over the 254 below-band
+  cases), inside §13's noise band (|ln 0.876| = 0.13 against 2σ = 0.14), against 0.477× for afxf ISLA on the same cases,
+  and raises velocity 1.63× and ν_t 2.13×. By §14 (d)'s criterion, LRE no longer extrapolates harmfully in z.
+- Post hoc: one LRE seed-42 test case just above the band, airFoil2D_SST_78.545_-2.454_3.406_6.14_0.0_5.302 (Re 5.03e6;
+  inside LRE's training z range, so the clamp leaves it unchanged), has relative L2 p 0.85, v 0.35, ν_t 10.7 (seed 43:
+  0.24 / 0.057 / 0.14; afxf ISLA seed 42: 0.16 / 0.040 / 0.055). The table's ν_t mean includes it: without it LRE seed
+  42's test-set ν_t is 0.0251 instead of 0.0466, against seed 43's 0.0262, so this one case makes LRE's seed gap on ν_t.
+  It lies outside reading (a)'s population (below the band).
+
+**Reading.** Post hoc reading (AirfRANS only, two seeds, fix-trained ISLA): how ISLA encodes its Reynolds input sets
+most of its Reynolds pressure penalty here. The registered joint reading, "both", splits it between the log coordinate's
+reach (LIN helps) and the training dynamics of a narrow fitted spread (LRE helps more). A fixed affine rescaling cannot
+change how far a test case sits outside the training range. Post hoc, untested as a mechanism: it can change what
+training learns. On the fitted scale z spans about ±2, on the fixed one about ±0.12 around 0.22, and LRE's below-band
+pressure slope is 0.16 per decade against the fitted scale's 0.62. The fixed scale is also the dataset-independent input
+contract the program wants for cross-dataset training. A linear Reynolds number helps less, and it could not span
+AeroZoo's five decades. Two seeds per arm, AirfRANS only, ISLA family fix-trained.
+
+**For the book.** On the AirfRANS Reynolds split (two seeds, fix-trained ISLA), the registered summary "ISLA
+extrapolates worse" stands. Beside it, two training controls registered before they ran show that the scale of ISLA's
+Reynolds input sets most of its pressure penalty. With the Reynolds number in ISLA's own length unit read on a fixed
+scale, log10(Re_ISLA / 10^6) with no fitted mean or spread, ISLA's pressure error below the training band is 0.53-0.58×
+its value with the fitted scale (per seed), its test-set pressure error is level with GeoTransolver's (GeoTransolver ÷
+ISLA 0.998), and it leads both baselines on velocity (baseline ÷ ISLA 3.4-4.2). A linear, training-standardized Reynolds
+number helps less (0.62-0.63×). Recommendation, not a result: adopt the fixed scale as ISLA's Reynolds input after a
+confirming run on AeroZoo's Reynolds split.
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-book-1023/SECOND_READ_AFX_LRE.md).*
