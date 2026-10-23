@@ -40432,7 +40432,7 @@ counts above. The chapters state 0.9.0's geometry, with an in-flight callout in 
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-geo-nb-2026-10-23/SECOND_READ_GEO.md).*
 
-## 2026-10-22 to 2026-10-23 — The outlet pressure gauge: ISLA can hold AeroZoo's prescribed outlet pressure by construction, a declared prescribed value fixing its output's additive constant at the outlet's tokens read as passive probes; applied post hoc to the trained ISLA 0.9.0, the same shift helps `profile_crossflow` and hurts every other split, so the construction is trained; the registered test runs, its smoke passed, and B's step costs 1.24 to 1.49 times A's {#sec-nb-outlet-gauge}
+## 2026-10-22 to 2026-10-23 — The outlet pressure gauge: ISLA can hold the measure-weighted mean of AeroZoo's prescribed outlet pressure by construction, a declared prescribed value fixing its output's additive constant at the outlet's tokens read as passive probes; applied post hoc to the trained ISLA 0.9.0, the same shift helps `profile_crossflow` and hurts every other split, so the construction is trained; the registered test runs, its smoke passed, and in the smoke B's step took 1.24 to 1.49 times A's {#sec-nb-outlet-gauge}
 
 **Question.** On `profile_crossflow`, ISLA 0.9.0 predicts 1.2 to 1.8 times the case's RMS pressure next to the outlet, where
 the truth is 0.017 (@sec-nb-azdiag). Incompressible flow fixes the pressure only up to a constant unless a boundary prescribes
@@ -40447,18 +40447,22 @@ return the head's pressure plus the one constant `C* = sum_j a_j (p_bc,j - p_hat
 tokens, with their Horvitz-Thompson measures `a_j`. Of all constants, `C*` minimizes the measure-weighted squared residual
 on the outlet, so the output's residual there has zero weighted mean, and any constant the head adds cancels exactly. The
 outlet tokens are read as passive queries (log-weight minus infinity, ISLA-DTT's mechanism), so in interacting ISLA they
-change no other prediction, and ISLA-DTT stays query-independent. The shift is applied to the returned, standardized output,
-with the prescribed value standardized the same way, so the identity holds in pascals. It is a rank-0 invariant, so the
-rigid-motion, similarity, permutation and remeshing contracts hold as before (tested). It adds no parameter and leaves the
-state dict unchanged; without the declaration, or on a case with no outlet token, the model is bitwise unchanged. Options
-rejected: interacting probes (they break query independence), every full-resolution outlet face (up to 890k extra tokens),
-the nearest queries' mean (it depends on the request), a soft penalty (a tuned weight), and a post hoc shift (below). A
-hard pointwise condition, `p = p_bc + phi N` with `phi` the distance to the outlet, is a later step. Tests: 167 passed, 6
-skipped (CPU); the 9 new tests fail on the base.
+change no other prediction beyond float32 roundoff (the review, below), and ISLA-DTT stays query-independent. The shift is
+applied to the returned, standardized output, with the prescribed value standardized the same way, so the identity holds in
+pascals. It is a rank-0 invariant, so the rigid-motion, similarity and query-permutation contracts hold as before, and
+splitting outlet cells into equal-measure copies leaves the shift unchanged (tested: a reflection with a translation, a
+query permutation and an outlet remeshing). It adds no parameter and leaves the state dict unchanged; without the
+declaration, or on a case with no outlet token, the model is bitwise unchanged. Options rejected: interacting probes (they
+break query independence), every full-resolution outlet face (up to 890k extra tokens), the nearest queries' mean (it
+depends on the request), a soft penalty (a tuned weight), and a post hoc shift (below). A hard pointwise condition,
+`p = p_bc + phi N` with `phi` the distance to the outlet, is a later step if the pointwise outlet residual matters. Tests
+(CPU, on five files of the ISLA test directory: conditions, isla, scales, release, tree_read): 167 passed, 6 skipped; the
+9 new tests fail on the base.
 
 **A post hoc estimate** (DESIGN section 2; estimate.md; not a test of the construction). PDIAG's rows (LHR 333637; ISLA
-0.9.0, epoch 250, float32, 30 random test cases per split) give the exact effect of shifting each case's prediction so that
-its weighted mean over 4,096 outlet face centroids is 0 Pa:
+0.9.0, epoch 250, float32, 30 random test cases per split) give the exact effect of shifting each case's scored prediction
+by the constant that makes its area-weighted mean over 4,096 outlet face centroids 0 Pa, the face mean taken from PDIAG's
+second pass, which appended the centroids as interacting queries:
 
 | split | seed | scored | outlet-face shift | best constant shift |
 |---|---|---|---|---|
@@ -40476,15 +40480,17 @@ Post hoc reading: the shift recovers 23 and 59 percent of crossflow's error (26 
 other split, by 1 to 11 percent and by 36 to 50 percent on nonbox. The unconstrained model never trained on the outlet, and
 its prediction there is off by more than its interior offset (full: -0.03 RMS p at the faces against -0.004 inside), so
 subtracting it adds error. So no inference-only fix: a model trained with the construction learns pressure relative to its
-own outlet value, which this estimate cannot show. The best constant still leaves crossflow at 1.215 and 0.591, the
-amplitude error from its velocity overshoot, which no gauge fix touches.
+own outlet value, which this estimate cannot show. The best constant still leaves crossflow at 1.215 and 0.591; PDIAG read
+crossflow's error as mostly amplitude, from about a 2× velocity overshoot (a post hoc reading, @sec-nb-azdiag), which no
+gauge fix touches.
 
 **The review** (OUTLET-REVIEW, read-only, CPU; 44 tests passed; verdict "OK with notes", no code defect).
 
 - Major, procedural: the scorer silently drops the construction unless the override is repeated. `infer.py` builds the model
   from the command-line config and restores only the weights, the state dict is identical with and without the
-  declaration, and the head's pressure bias gets almost no gradient in B (3e-7 against 3.9 for the other columns), so a B
-  checkpoint scored without the override is an unconstrained model with an arbitrary pressure constant.
+  declaration, and with the declaration the head's pressure bias gets almost no gradient (3e-7 against 3.9 for the other
+  columns, on the review's toy case), so a B checkpoint scored without the override is an unconstrained model with an
+  arbitrary pressure constant.
 - Minor: in float32 the other outputs of interacting ISLA equal the undeclared model's only to roundoff (velocity up to
   3.6e-7, k 1.4e-6; 1e-12 in float64), since the probes lengthen the reductions. And `compile_blocks` recompiles once on the
   probe count.
@@ -40502,19 +40508,22 @@ amendment section 8, md5 5a478506, at 16:29, before any B job).
   declaration, every B mechanism unit asserts the declaration before it reads a case, every A unit asserts its absence, and a
   failed check makes the read incomplete as registered.
 - M1, the event guard: on every scored case of every B run (2,588), the measure-weighted mean of B's shifted pressure over the
-  probes equals the prescribed mean to at most 1e-5 times max(1, max |value|) in standardized units; one failure makes B
-  invalid and nothing is read. M2, descriptive: the mean predicted gauge pressure on the 1 percent of points nearest the
-  outlet, A and B.
+  probes equals the prescribed mean to at most 1e-5 times max(1, max |value|) in standardized units, the shift is one
+  constant over all outputs to the same tolerance, and the probe set is not empty; one failure, or a scored case with no
+  mechanism row, makes B invalid and nothing is read. M2, descriptive: the mean predicted gauge pressure on the 1 percent of
+  points nearest the outlet, A and B.
 - R1, per split: `D = ln(mean_seeds median p_L2(B) / mean_seeds median p_L2(A))`, `SE = sqrt((s_A^2 + s_B^2) / 2)` with `s` an
   arm's two-seed standard deviation of the log median. Helps: `D < ln 0.85` and `|D| > 2 SE`. Harms: `D > ln 1.15` and
   `|D| > 2 SE` on pressure, or the same on velocity. Otherwise no change. A's own seeds already bound it: on crossflow
   (medians 3.025 / 1.888) "helps" needs `exp(D) < 0.624` even with `s_B = 0`; on full the `ln 0.85` bar binds unless
-  `s_B > 0.20`.
+  `s_B` exceeds about 0.09 (PREREG section 4 says 0.20, a slip in its note beside the rule; the rule is unchanged).
 - Adoption: adopt B if it helps on crossflow and harms on no split tested. "Helps nowhere and harms nowhere" means adoption
-  on principle, which goes to the supervisor as a decision, as does any reading the two clauses do not cover. A validation
-  loss above twice its running minimum stops the read.
-- Predictions: M1 passes 0.95; crossflow helps 0.30, no change 0.60, harms 0.10; full no change 0.85; B's step within 25
-  percent of A's 0.85; adopted by the first clause 0.25, on principle to the supervisor 0.50, neither 0.25.
+  on principle after a cost check (step time within 25 percent), which goes to the supervisor as a decision; any reading
+  the two clauses do not cover is reported as "not adopted by the rule" and goes to the supervisor too. A validation loss
+  above twice its running minimum stops the read.
+- Predictions: M1 passes 0.95; M2, B's crossflow band median of the absolute predicted mean at most 0.3 RMS p on both
+  seeds, 0.7; crossflow helps 0.30, no change 0.60, harms 0.10; full no change 0.85, harms 0.08, helps 0.07; B's step
+  within 25 percent of A's 0.85; adopted by the first clause 0.25, on principle to the supervisor 0.50, neither 0.25.
 
 **The smoke** (LHR 338532, 34 minutes, 2.3 GPU-h; no smoke number is a result). One epoch of A and B on crossflow seed 42
 through the lane launcher, scored on 8 test cases. Every check of the amendment passes: the declaration is in B's training
@@ -40531,16 +40540,16 @@ per variant, 100 steps after 50 warm-up steps, the same crossflow cases) reads B
 0.490 s). Of B's extra 0.197 s, the probe tokens through the blocks take 87 percent (21 forward, 66 backward), the probes'
 geometry 7 percent, dynamic-shape kernels 2 percent, and the selection and shift 0.5 percent. The median probe count,
 50,000, is 12.5 percent more tokens than A's 400,000, and raises the blocks' forward time by about 34 percent and the
-backward by about 40 percent. The registered cost check reads B's lanes' own logs (median step within 25 percent of A's);
-if it fails, it is reported as "fails on cost as the code stands".
+whole backward pass by about 40 percent. The registered cost check reads B's lanes' own logs (median step within 25 percent
+of A's); if it fails, it is reported as "fails on cost as the code stands".
 
 **Lanes.** Submitted at 19:18 EDT 2026-10-22 (340874 to 340877). The two crossflow links died after 9 s on two faulty nodes
-and were resubmitted at 20:59 EDT as 342423 and 342424, with those nodes excluded. The read is expected about 2026-10-25 to
-2026-10-26.
+and were resubmitted at 20:59 EDT as 342423 and 342424, with those nodes excluded. The registry expects the lanes to end by
+2026-10-25, and the read is expected about 2026-10-25 to 2026-10-26.
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-geo-nb-2026-10-23/SECOND_READ_OUTLET.md).*
 
-## 2026-10-22 — TIE-EXP registered: the tie rules retrained eager on the lug and Tensile2d against REF-090's eager-trained base, scored on flip symmetry, native accuracy and the lug's pose excess; gated before launch, with one supervisor-approved deviation (A7); read about 2026-10-24 {#sec-nb-tie-exp-prereg}
+## 2026-10-22 — TIE-EXP registered: ISLA with the tie rules trained eager on the lug and Tensile2d against REF-090's eager-trained base, scored on flip symmetry, native accuracy and the lug's pose excess; gated before launch, with one supervisor-approved deviation (A7); read about 2026-10-24 {#sec-nb-tie-exp-prereg}
 
 **Question** (scratch/isla-tie-2026-10-22/PREREG.md; DESIGN f of scratch/isla-medial-tie-2026-10-22). Do the tie rules of
 @sec-nb-geo-bundle, the least-norm direction at closest-feature ties and on the wall, restore exact flip symmetry on the
@@ -40550,62 +40559,79 @@ arms, eager, with a cap of 220 GPU-h for everything (supervisor, 15:00 EDT).
 
 **Arms.** B is reused: r090eag_lug_isla and r090eag_t2dz_isla, seeds 42 and 43, on code_cmpaf_fix. TIE is B's lane rows byte
 for byte, apart from the run id and the code: `$T/code_tie2`, code_cmpaf_fix with geometry.py and tree_read.py of TIE-FIX
-19fb0a754 (A2, A5; the first snapshot, code_tie at d3d9da49d, carried the review's blocker and was never trained). Both train
-eager in bfloat16 at 3.75e-4 for 500 epochs and are scored as B was: final checkpoint, float32, fully eager, native, area and
-posed, 200,000 cells, the lug's 600 test cases and Tensile2d's 100 val_100 cases. A verdict attributes to the tie rules
-jointly, never to one of them.
+19fb0a754 (A2, A5; the first snapshot, code_tie at d3d9da49d, carried TIE-REVIEW's blocker (with float32 inputs the on-wall
+rule returned u = 0 at most on-wall nodes); its pre-steps and one-epoch smoke are superseded, and no arm ran on it). Both
+train eager in bfloat16 at 3.75e-4 for 500 epochs and are scored as B was: final checkpoint, float32, fully eager, native,
+area and posed, 200,000 cells, the lug's 600 test cases and Tensile2d's 100 val_100 cases. A verdict attributes to the tie
+rules jointly, never to one of them.
 
 **Rules** (PREREG section 4; registered verdicts stand as written).
 
-- **F (symmetry).** On the TIE checkpoints, the median over cases of the compensated flip residual `d_F` is at most 1e-6 for
-  every target field, both seeds, both datasets: "exact flip symmetry restored"; otherwise "a residual source remains".
+- **F (symmetry).** On the TIE checkpoints (flip_probe_tie2.py of A1; the lug's first 60 test cases, Tensile2d's 100 val
+  cases), the median over cases of the compensated flip residual `d_F` is at most 1e-6 for every target field, both seeds,
+  both datasets: "exact flip symmetry restored". Otherwise "a residual source remains", to be located before anything else
+  is read as a property of the tie rules.
 - **N (native).** `r` = TIE ÷ B on seed means; `sigma = max(sigma_reg, s_pool)`, with `sigma_reg` 0.036 on the lug and
-  0.232 / 0.330 / 0.303 on Tensile2d's displacement / stress / plastic strain. `|log r| <= 2 sigma` "no cost", above "costs
-  native accuracy", below "gain"; Tensile2d's verdict is displacement's.
+  0.232 / 0.330 / 0.303 on Tensile2d's displacement / stress / plastic strain. `|log r| <= 2 sigma` "no cost",
+  `log r > 2 sigma` "costs native accuracy", `log r < -2 sigma` "gain" (r above 1 means TIE's error is larger);
+  Tensile2d's verdict is displacement's.
 - **P (pose, the lug).** The excess `e` = posed ÷ native - 1 of each arm: `e_TIE <= 0.5 e_B` "the medial ties carry most of
-  the lug's pose sensitivity", `e_TIE >= 0.8 e_B` "they do not", between "partial"; read only if `log(1 + e_B) > 2 sigma`.
-  Tensile2d is the control.
-- **Decision.** Adopt if F passes and N is not "cost" on either dataset; P says whether other options are still needed. A
-  rule that cannot complete is reported incomplete as registered.
+  the lug's pose sensitivity", `e_TIE >= 0.8 e_B` "they do not; look elsewhere", between "partial"; read only if
+  `log(1 + e_B) > 2 sigma_lug`, otherwise "not readable: B shows no pose excess". Tensile2d is the control, not a verdict:
+  predicted `|log((1 + e_TIE) / (1 + e_B))| <= 2 sigma_T2D` (displacement), p 0.95.
+- **Decision.** Adopt (with section d's kernel or a per-mesh cache) if F passes and N is not "cost" on either dataset; P
+  decides whether the 2026-10-18 note's other options are still needed. A rule that cannot complete is reported incomplete
+  as registered.
 - Predictions: F restored on both 0.65; N on the lug no cost / gain / cost 0.70 / 0.10 / 0.20, on Tensile2d no cost 0.90; P
   most / partial / do not 0.40 / 0.30 / 0.30.
 
 **Amendments before any arm result.**
 
-- A1: the flip probe also negates the head rows of coefficients odd under the flip, since Tensile2d's outputs have rank 1
-  and 2 (thresholds unchanged).
-- A2: the code under test becomes code_tie2 after TIE-REVIEW's blocker; every pre-step and smoke on code_tie is superseded;
-  a new gate item (a) checks the float32 features.
+- A1: the flip probe also negates the head rows of coefficients odd under the flip, since ISLA assembles outputs of rank 1
+  or more, such as Tensile2d's displacement and stress, from the head's coefficients and the basis vectors n and
+  pc(rhat, n), which are odd under the flip (thresholds unchanged).
+- A2: the code under test becomes code_tie2 after TIE-REVIEW's blocker (float32 on-wall directions were not unit, so u = 0
+  at most on-wall nodes); every pre-step and smoke on code_tie is superseded; new gate item (a) checks the float32 features
+  against float64, and new item (b) runs the two geometry test files on GB300.
 - A3 and A8: the stated assumption that TIE stands for the whole geometry bundle on these two datasets rests on the cell
   count (every boundary cell kept), [AUDIT] FOLD-SIGN's count of 0 sign changes on the lug and Tensile2d, and the count of
-  0 queries in the band where ONWALL's rule could move them.
-- A4 to A6: gate (a) against an exact least-norm reference; code_tie2 fixed at 19fb0a754; a transfer argument to TIE-FIX2
-  (34654e01d), measured directly as 0 differing rows in 5,143,196; the supervisor's diagnosis rule.
+  0 queries in the band where ONWALL's rule could move them. A3 measured the count against d3d9da49d, before TIE-FIX, and
+  states the assumption for code_tie2 only once a repeat against the fix commit is recorded in the PREREG. FOLD-SIGN
+  repeated it against 19fb0a754 with the same counts (LHR 341328 and 341486; DESIGN k.4 of
+  scratch/isla-medial-tie-2026-10-22), but no amendment through A8 records the repeat.
+- A4 to A6: gate (a) against an exact least-norm reference, then items (4) to (6) on the CPU and GPU paths (every row of
+  the routine against the exact point, the gray-zone count, degenerate cells); code_tie2 fixed at 19fb0a754; a transfer
+  argument to TIE-FIX2 (34654e01d) through item (4)'s count of zero outputs; the supervisor's diagnosis rule for a failure
+  of (a)(1) and (a)(2).
 - **A7, the deviation** (21:10 EDT). Every gate item passed except (a)(1) and the float32 half of (a)(2), on the lug only,
   and the instrument's self-check (5.2e-9 against 1e-12, on 3 float64 rows with 5 near-duplicate directions). At 190 of
   about 3.8M lug on-wall nodes, `|u32 - u64|` reaches 2.07e-5, above the 1e-5 bar. The routine returns the exact least-norm
   point of the normals it receives at both precisions; the point itself is ill-conditioned at the lug's split hex faces,
   whose normals form clusters 0.0005 to 0.003 degrees wide and 9 to 12.9 degrees apart. The supervisor's rule of 20:16 EDT
-  launched only if the change propagated at most two to one (`r <= 2`); measured `r` reaches 2,261, so that premise was
-  wrong, and the supervisor overrode its do-not-launch branch at 21:10 EDT after seeing the diagnosis. Stated before any
-  result: F compares a flip within one precision, where the rule negates `u` bitwise, and the network reads these features
-  under bf16, about 200 times coarser than 2e-5.
+  launched only if the change propagated at most two to one (`r <= 2`); measured `r` exceeds 2 at all 190 nodes (max 2,261,
+  median about 300), so that premise was wrong, and the supervisor overrode its do-not-launch branch at 21:10 EDT after
+  seeing the diagnosis. Item (4)'s count of zero outputs was not 0 (189,092 and 172,836 lug rows, all with exact point 0),
+  so A6's transfer was measured directly: 0 uncertified rows and 0 differing rows in 5,143,196 (342299). Stated before any
+  result, as why F, N and P are unaffected: F compares a flip within one precision, where the rule negates `u` bitwise; for
+  N and P the network reads these features under bf16 autocast, about 200 times coarser than 2e-5, and only 0.005 % of
+  on-wall nodes are affected.
 
-**Launch.** The four arms were submitted at 21:10 EDT on code_tie2 (342513 to 342516) with the rules unchanged. No TIE number
-is read before the registered read, about 2026-10-24.
+**Launch.** The four arms were submitted at 21:10 EDT on code_tie2 (342513 to 342516) with the rules unchanged. No TIE score
+is read before the registered read, about 2026-10-24; the registry expects the arms to end by 2026-10-25.
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-geo-nb-2026-10-23/SECOND_READ_TIE.md).*
 
-## 2026-10-23 — LRE-AZ registered: ISLA 0.9.0 with the fixed Reynolds scale z = log10(Re_ISLA / 1e6) on AeroZoo's `reynolds` split, a check for harm before that scale becomes ISLA's Reynolds input; read about 2026-10-24 midday {#sec-nb-lre-az-prereg}
+## 2026-10-23 — LRE-AZ registered: ISLA 0.9.0 with the fixed Reynolds scale z = log10(Re_ISLA / 1e6) on AeroZoo's `reynolds` split, a check for harm before that scale is proposed as ISLA's Reynolds input; read about 2026-10-24 midday {#sec-nb-lre-az-prereg}
 
 **Question** (scratch/isla-lre-az-2026-10-23/PREREG.md, md5 f9964333, written 01:33 EDT 2026-10-23 before any B job;
 approved by the supervisor at 01:37 EDT). On AirfRANS the fixed scale cut ISLA's below-band pressure error to 0.53-0.58
 times the fitted scale's (@sec-nb-af-lre-verdict), where the fitted spread was 0.062 decades. On AeroZoo the fitted spread
-is 0.8985 decades, so the fixed scale only rescales z (z_fixed = 0.8985 z_fitted - 0.938). z enters ISLA 0.9.0 as one more
-global scalar into linear layers, which can absorb a fixed affine map; only what training finds can change. So the test is
-registered as a check for harm on a dataset whose Reynolds number spans several decades, not as a test for a gain.
+is 0.8985 decades, so the fixed scale only rescales and shifts z (z_fixed = 0.8985 z_fitted - 0.938). z enters ISLA 0.9.0
+as one more global scalar into linear layers, which can absorb a fixed affine map; only what training finds can change. So
+the test is registered as a check for harm on a dataset whose Reynolds number spans several decades, not as a test for a
+gain.
 
-**The split** (labels and ISLA's own log10 Re = log10(U L / nu), with its gauge length L):
+**The split** (labels and ISLA's own log10 Re = log10(U L / nu), with its length unit L):
 
 | quantity | train (2,119 cases) | test (1,385 cases) |
 |---|---|---|
@@ -40618,29 +40644,35 @@ registered as a check for harm on a dataset whose Reynolds number spans several 
 
 **Arms.** A reuses `azc_reynolds_isla_seed42` and `_seed43` and their scores (code_r090, recipe_r090; checkpoint args
 `reynolds: {mean: 5.062, std: 0.8985}`). B is A's snapshot and resolved config with one change,
-`dataset=aerozoo_uvolume_reynolds_lre`: the same dataset file with `isla_constants.reynolds {mean: 6.0, std: 1.0}`
-(md5 eb37789f; branch psharpe/isla-lre-az 4781af873, pushed), in the recipe snapshot `$T/recipe_lreaz`. Scoring exactly as
-A: float32, 200,000 interior points, the 1,385 test cases, native, final checkpoint. Since `reynolds` is a plain attribute, a
-four-part check on each score row (the score row's dataset, the scorer's saved config and recipe, the dataset file's md5,
-and the checkpoint's args) shows that B read {6, 1} and A did not; a failed check makes the read incomplete as registered.
+`dataset=aerozoo_uvolume_reynolds_lre`: a copy of A's dataset file `aerozoo_uvolume_reynolds.yaml` (md5 f7cc0d6d) with
+`isla_constants.reynolds {mean: 6.0, std: 1.0}` and a header (md5 eb37789f; branch psharpe/isla-lre-az 4781af873, pushed),
+in the recipe snapshot `$T/recipe_lreaz`. Scoring exactly as A: float32, 200,000 interior points, the 1,385 test cases,
+native, final checkpoint. `reynolds` is a plain attribute, not a buffer, so a score of B built with A's dataset file would
+silently use A's z. A four-part check on each score row (the score row's dataset, the scorer's saved config and recipe, the
+dataset file's md5, and the checkpoint's args) must therefore show that B read {6, 1} and A did not; a failed check makes
+that row invalid and the read incomplete as registered.
 
 **Rules** (PREREG section 5).
 
 - R1, per field on the test set, pressure and velocity ruled: `D = ln(mean_seeds CM(B) / mean_seeds CM(A))` with CM a run's
-  case-mean relative L2, `SE = sqrt((s_A^2 + s_B^2) / 2)`. Helps: `D < ln 0.90` and `|D| > 2 SE`. Harms: `D > ln 1.10` and
-  `|D| > 2 SE`. Otherwise no change. Eddy viscosity, k and omega are computed the same way and reported beside it. A's seeds
-  give `s_A` 0.0083 on pressure and 0.0293 on velocity, so the 10 percent bars bind unless `s_B > 0.13`.
+  case-mean relative L2, `SE = sqrt((s_A^2 + s_B^2) / 2)`, with s an arm's two-seed sample standard deviation (n - 1) of
+  ln CM. Helps: `D < ln 0.90` and `|D| > 2 SE`. Harms: `D > ln 1.10` and `|D| > 2 SE`. Otherwise no change. Eddy viscosity,
+  k and omega are computed the same way and reported beside it. A's seeds give `s_A` 0.0083 on pressure and 0.0293 on
+  velocity, so the 10 percent bars bind unless `s_B` exceeds about 0.06 to 0.07 (PREREG section 5 says 0.13, a slip in its
+  note beside the rule; the rule is unchanged).
 - R2, descriptive: per bin of distance above the training maximum, B ÷ A and the slopes per decade.
 - Consequence: "harms" on pressure or velocity means the fixed scale is not adopted without Peter. Otherwise the supervisor
   proposes z = log10(Re / 1e6) as ISLA's Reynolds input at the scope freeze, about 2026-10-27, on principle: it is
-  dataset-independent, it fixes AirfRANS, and it would cost nothing here.
-- Event guard: a validation loss above twice its running minimum stops the read.
+  dataset-independent, it helped below the band on AirfRANS (registered reading "helps", @sec-nb-af-lre-verdict), and it
+  would cost nothing here.
+- Event guard: if a B lane's validation loss passes twice its running minimum, the read stops and goes to the supervisor.
 - Predictions: pressure no change / helps / harms 0.80 / 0.08 / 0.12; velocity 0.80 / 0.07 / 0.13; no harm on either 0.75.
 
 **Smoke and launch.** The smoke (LHR 345967, 0.79 GPU-h) passed every registered item: every rank read
 `reynolds={'mean': 6.0, 'std': 1.0}`, z over one epoch's training batches spans -2.7533 to 1.0402, the training split's own
-extremes, and the resolved config equals A's but for the dataset and paths. Its epoch-0 median step, 0.655 s, matches A's
-0.651 and 0.644 s. The two lanes were submitted at 01:53 EDT 2026-10-23 (346117, 346118). Cost about 188 GPU-h against
-the brief's 300. The read is expected about 2026-10-24 midday.
+extremes, and the resolved config equals A's but for the dataset, the run id and the output and checkpoint paths. Its
+epoch-0 median step, 0.655 s, matches A's 0.651 and 0.644 s. The two lanes were submitted at 01:53 EDT 2026-10-23 (346117,
+346118). Cost about 188 GPU-h against the brief's 300. The read is expected about 2026-10-24 midday if the lanes start by
+06:00 EDT 2026-10-23.
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-geo-nb-2026-10-23/SECOND_READ_LREAZ.md).*
