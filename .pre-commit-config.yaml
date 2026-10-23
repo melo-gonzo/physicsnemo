@@ -22,6 +22,7 @@ repos:
         args: [--fix]
         exclude: ^examples/
       - id: ruff-format
+        exclude: ^examples/cfd/isla/results/campaigns_2026-10-23/[^/]+/
 
 -   repo: local
     hooks:
@@ -31,7 +32,7 @@ repos:
       language: python
       types: [python]
       additional_dependencies: ['interrogate==1.7.0']
-      exclude: ^docs/|^physicsnemo/experimental/|^test/
+      exclude: ^docs/|^physicsnemo/experimental/|^test/|^examples/cfd/isla/results/campaigns_2026-10-23/[^/]+/
 
 -   repo: https://github.com/igorshubovych/markdownlint-cli
     rev: v0.49.1
@@ -47,7 +48,7 @@ repos:
       language: python
       additional_dependencies: ['GitPython']
       files: \.(py|yaml|yml|ci|release)$|Dockerfile$
-      exclude: ^(physicsnemo/internal/|docs/)
+      exclude: ^(physicsnemo/internal/|docs/|examples/cfd/isla/results/campaigns_2026-10-23/[^/]+/)
 
 -   repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
