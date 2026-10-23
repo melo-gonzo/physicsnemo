@@ -600,8 +600,8 @@ print(f"Three probes without training point to an input ISLA lacks, the ground. 
       f"{rng(sens_out, 1)} beyond, so its distance channels do not saturate. From the fifth of its {n_blocks} blocks on, far points "
       f"hold most of the mass of {min(maj)} to {max(maj)} slices in every block, so they are not starved of slices. Every case file "
       "stores the floor strip, the slip walls, the inlet and the outlet as meshes beside the vehicle, and ISLA on this task reads "
-      "the vehicle alone (@tbl-model-inputs). Whether those four meshes, the domain's whole boundary, remove the far-field miss "
-      f"when given as boundary inputs is @sec-oq-far-field. Data: {R.source('cap_audit', 'tables/resid_drv_partB.md')}, "
+      "the vehicle alone (@tbl-model-inputs), short of the whole boundary ISLA reads by design (@sec-limits-whole-boundary). Whether "
+      f"those four meshes, the domain's whole boundary, remove the far-field miss when given as boundary inputs is @sec-oq-far-field. Data: {R.source('cap_audit', 'tables/resid_drv_partB.md')}, "
       f"{R.source('cap_audit', 'tables/resid_drv_ladder.md')}, {R.source('cap_audit', 'RESULTS.md')} (15.10), "
       f"{R.source('cap_audit', 'tables/probes/probe_a.json')}, {R.source('cap_audit', 'tables/probes/probe_bc_cap_drv_isla_rd_s42.json')} "
       "and its seed-43 twin.")

@@ -39963,6 +39963,138 @@ denominator by the component's median (largest value 6.1e-7).
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-book-am-2026-10-23/SECOND_READ_SUVXB.md).*
 
+## 2026-10-23 — SUV-XFAM-B, stage 2: against fastback-trained GeoTransolver too, ISLA 0.9.0 transfers better on SHIFT-SUV wall shear from estates to fastbacks (estate-trained error 1.78 times the in-family fastback error, against GeoTransolver 256's 1.92; GeoTransolver ÷ ISLA 1.078 at 2.7 SE), so on wall shear it transfers better than both baselines in that direction; on pressure the three transfer alike (forward gap 2.63 each), and the reverse direction shows no difference {#sec-nb-suv-xfam-b2}
+
+**Question.** Stage 1 (@sec-nb-suv-xfam-b1) found that ISLA's smaller wall-shear penalty against Transolver is a
+transfer advantage: its estate-trained model is closer to a fastback-trained ISLA than Transolver's is to a
+fastback-trained Transolver. Does the same hold against GeoTransolver? Part A's GeoTransolver cell was the weaker one
+(penalty ratio 1.087 at 3.0 SE), because GeoTransolver's two estate-trained seeds differ by 14 percent on fastback
+pressure and 5 percent on fastback wall shear.
+
+**Setting.** GeoTransolver 256 (`global_embedding = U_inf_dir`), seeds 42 and 43, trained on the fastback train split,
+500 epochs. Each lane is its estate reference lane (`clud_suv_gt_seed4x`) with only the dataset file changed: the saved
+configs differ only in `dataset` and `run_id`. Scoring, the quantities G, R and H, the SE and the 2-SE-and-3-percent
+rule are stage 1's, with D = ln(X_GeoTransolver ÷ X_ISLA) against stage 1's ISLA runs. Pre-registered before any
+GeoTransolver stage-2 lane existed (scratch/isla-suv-xfam-2026-10-22/PREREG_B.md section 9, approved by the supervisor
+as written 2026-10-23 07:15 UTC); reducer reduce_b2.py (f7c66a5d), written before any stage-2 score. LHR jobs 347451
+(smoke), 347553-347554 and their chain links (training), 358922 (scoring); 105.0 GPU-h (training 52.2 + 52.1), against
+a registered estimate of 108.
+
+**What we saw** (relative L2, pressure / wall shear, geometric seed means; seeds in RESULTS_B.md section 8):
+
+| | ISLA 0.9.0 | GeoTransolver | Transolver (stage 1) |
+|---|---|---|---|
+| E(fb→fb), fastback test | 0.0425 / 0.0656 | 0.0439 / 0.0660 | 0.0405 / 0.0643 |
+| forward gap G | 2.63 / **1.78** | 2.63 / 1.92 | 2.63 / 1.93 |
+| reverse gap R | 3.14 / 1.98 | 3.03 / 1.89 | 3.43 / 2.04 |
+| hardness H | 0.97 / 1.00 | 0.98 / 1.01 | 0.97 / 1.02 |
+
+| cell, GeoTransolver ÷ ISLA | lead (D / SE) | verdict | fastback-val replicate |
+|---|---|---|---|
+| forward gap, wall shear | **1.078 (2.7)** | **ISLA transfers better** | 1.086 (2.9), better |
+| forward gap, pressure | 0.999 (0.0) | no difference | 1.002 (0.0), no difference |
+| reverse gap, wall shear / pressure | 0.955 (-0.9) / 0.964 (-0.6) | no difference | 0.954 / 0.969, no difference |
+| hardness, wall shear / pressure | 1.008 (1.3) / 1.003 (0.2) | no difference | 1.001 / 1.009, no difference |
+
+**Verdict, as registered.** On wall shear, ISLA **transfers better** than GeoTransolver from estates to fastbacks:
+1.078 at 2.7 SE, and 1.086 at 2.9 SE on the replicate. The registered reading is "transfer advantage, estate → fastback
+only". Of the logarithm of part A's wall-shear penalty ratio against GeoTransolver (0.084), 90 percent is this forward
+gap and 10 percent hardness. Hardness and the reverse direction read no difference on both fields. On pressure every
+comparison reads no difference (the registered words are "split unresolved", with nothing to split: part A's pressure
+D_P is 0.002), so ISLA and GeoTransolver lose alike on fastback pressure. In family on fastbacks, GeoTransolver trails
+ISLA on pressure (GeoTransolver ÷ ISLA 1.032, the seeds separated; the replicate gives 1.033, trails) and is level on
+wall shear (1.006). Eight of nine predictions held. The one that failed (S6, p = 0.55) had expected both in-family cells
+to be level. Validity: every lane and scoring check passed. Scored-set identity passes on all four splits under the
+amended check (largest 6.1e-7); the registered statistic fails on estate val at 1.28e-4, on the same near-zero roll
+moment (case 00888) as in stage 1.
+
+**Beside the rules** (no verdict):
+- Across the three architectures the forward pressure gap is 2.63 to three digits (2.629, 2.627, 2.625 for ISLA,
+  GeoTransolver and Transolver). Whatever an estate-trained model lacks on fastback pressure, all three lack it equally.
+  The forward wall-shear gap separates ISLA (1.78) from both baselines (1.92, 1.93): about 8 percent against each, at
+  2.7 and 5.8 SE.
+- The reverse direction has no consistent sign: Transolver's reverse wall-shear gap is 3 percent above ISLA's and
+  GeoTransolver's 4.5 percent below, each well inside its SE. Out of family, the fastback-trained seeds of all three
+  architectures differ by 6-9 percent on estates (GeoTransolver 7.4 / 6.3 percent, pressure / wall shear), against
+  under 1 percent on fastbacks, so two seeds cannot call a difference of that size.
+- The GeoTransolver verdict rests on a wider SE (0.028, against 0.014 for Transolver). Most of it is GeoTransolver's
+  own estate-trained seed spread on fastback wall shear, which part A found. The verdict clears 2 SE by 0.019 and the
+  3-percent floor by 0.046.
+- Part B is closed: 252.5 GPU-h over both stages. The reverse direction stays open (two more seeds of each of the three
+  fastback-trained models would narrow its SE).
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-book-eve-2026-10-23/SECOND_READ_EVE.md).*
+
+## 2026-10-23 — Peter's rulings on canonical ISLA: a close call on AeroZoo makes ISLA-DTT the default interior form; the geometry robustness bundle goes into ISLA once the tie experiment shows no accuracy cost, with its cost documented and a fused fast path built beside it; ISLA reads every stored piece of the PDE domain's boundary on every dataset {#sec-nb-canonical-rulings}
+
+**Questions.** The supervisor asked Peter three questions in one form at about 17:00 EDT; Peter answered at 17:08 EDT.
+
+1. *ISLA against ISLA-DTT.* "If AeroZoo reads a close call between interacting ISLA and ISLA-DTT, which should be
+   ISLA's default interior form?" Peter chose "ISLA-DTT, on principle".
+2. *The geometry robustness bundle.* "If the tie experiment shows no accuracy cost, does the geometry robustness bundle go
+   into canonical ISLA at its measured cost?" Peter: "Adopt it, and then document the cost. Then, start a parallel thread
+   where we try to make it faster with a fused kernel. Correctness is most important; correct + fast is even better. If
+   the speedup experiment works, then add an optional fast path (like our other kernels, where we default iff triton is
+   installed), and then remove the documented limitation / change it."
+3. *The whole boundary.* "May ISLA read the domain's full boundary on DrivAerML Volume (the floor, slip walls, inlet and
+   outlet the case files store), adopted if FLOOR-DRV shows it fixes the far-field miss?" Peter: "Yes! And in fact, not
+   only CAN it read the whole boundary - it SHOULD read the whole boundary! As you say, this is a matter of PDE
+   well-posedness and correctness. Seeing where the floor is through raw coordinates is a bug, not a feature. Even if
+   there were an accuracy *cost* to reading the whole boundary (not that I expect it), I would recommend this. I don't
+   care that they make each step 1.58x as long. Think about something like AeroZoo - there, reading the whole boundary
+   is not a "choice", it's actually mandatory. WE should be doing that on all PDEs. The boundary conditions matter."
+
+**What follows for the program** (the supervisor's application of the three answers):
+
+- *The interior form.* AeroZoo's registered bands stand as written (scratch/isla-az-compliant-2026-10-19/PREREG_v2.md,
+  section 12(f) with section 13; md5 ebd75524). With R = ISLA-DTT ÷ ISLA on seed means, on velocity and pressure over
+  the six held-out splits: "ISLA-DTT clearly" is R ≤ 1.05 on both fields on every held-out split, "ISLA clearly" is an
+  arithmetic mean of R of at least 1.10 on velocity or on pressure, and everything else is a close call. A close call
+  makes ISLA-DTT the default interior form (Peter's answer), and so does "ISLA-DTT clearly" (the supervisor's reading).
+  "ISLA clearly" keeps interacting ISLA by the registered rule; the cross-dataset table of section 13(b) still goes to
+  Peter (the supervisor's application). Section 13(b) had kept interacting ISLA as the default
+  in the first two bands until Peter answered an explicit question; his answer settles it for a close call, and the
+  supervisor's reading for "ISLA-DTT clearly".
+  Removing the interacting form stays a separate proposal to Peter (section 12(f) edit i, section 13(d)). The AeroZoo
+  ISLA-DTT lanes that the rule reads are still training.
+- *The geometry robustness bundle.* Branch psharpe/isla-geo-bundle (f13eb5ce0) is merged into canonical ISLA once the
+  tie experiment (TIE-EXP) reads "adopt" by its registered decision rule: its flip test F passes (the flip residual at
+  float32 roundoff) and its native-accuracy reading N is not "cost" on either dataset. N is Peter's condition; the
+  supervisor keeps F, because without it the registered rule reads nothing else as a property of the tie rules. It has
+  no result yet. The ledger and this notebook state the bundle's measured cost until it merges; the chapters
+  state the adoption rule. On
+  GB300 (scratch/isla-medial-tie-2026-10-22/DESIGN.md section q.4, LHR job 346068; REF-090 settings, bfloat16, eager,
+  one GPU per version, medians after 5 warm-up steps), the training step is +7 / +29 / +17 / +49 percent on AirfRANS /
+  the lug / AeroZoo / DrivAerML Volume. That is the mean of the head's three per-run medians over the mean of the base's
+  two per-pass medians (1.067, 1.291, 1.174, 1.493). Over every head run against every base pass it is 1.03 to 1.12,
+  1.22 to 1.40, 1.14 to 1.20 and 1.47 to 1.50 times (@sec-nb-geo-bundle). Until the merge, the cost stands in the
+  ledger and this notebook, and the chapters state the adoption rule. Lane GEO-FAST (launched 17:52 EDT, branch
+  psharpe/isla-geo-fast, scratch/isla-geo-fast-2026-10-23/) builds an optional fused fast path, chosen automatically
+  when CUDA and Triton are present, with the exact path kept as the reference. If it succeeds, the documented cost
+  changes.
+- *The whole boundary.* Canonical ISLA reads every stored piece of the PDE domain's boundary, by name with its
+  condition type, on every dataset. No accuracy or cost result reverses this. The recipe's ISLA configurations
+  (`conf/model/isla_*.yaml`, `forward_kwargs.boundary_meshes`) read the body alone on DrivAerML Volume (`vehicle`),
+  AirfRANS (`airfoil`), DrivAerML Surface and SHIFT-SUV (`vehicle`) and HiLift (`vehicle`). They read several named
+  pieces on AeroZoo (`inlet`, `outlet`, `no_slip`, `slip`), the lug (`fixed`, `hole`, `loaded`, `free`), Tensile2d
+  (`pinned`, `loaded`, `fixed`, `free`) and DeepJEB++ (`fixed`, `free`, `loaded`). Lane BOUNDARY-AUDIT (launched
+  17:52 EDT, scratch/isla-boundary-audit-2026-10-23/) checks what each dataset stores. A piece that a dataset does not
+  store is reported, never supplied by modifying the dataset. FLOOR-DRV now measures the effect of the change on
+  DrivAerML Volume and no longer decides adoption. Its smoke measured ISLA's step 1.58 times longer with the four
+  domain meshes (5.27 against 3.33 s; scratch/isla-floor-drv-2026-10-23/PREREG.md section 8), the factor Peter's
+  answer names.
+
+**For the book.** Chapter 20 gains a limit, *the whole boundary of the domain* (@sec-limits-whole-boundary), and an open
+question on what the other datasets store beyond the body (@sec-oq-whole-boundary). Its far-field question
+(@sec-oq-far-field) measures an effect and no longer decides an input. Its interior-form question (@sec-oq-dtt), its
+table row and the recommendation bullet state the registered rule with this answer: ISLA-DTT is the default unless
+interacting ISLA is clearly more accurate. Chapter 09's ground question, chapter 19's far-field paragraph and chapter
+21's design ledger (a row on the whole boundary) say the same. The In-flight callouts on the candidate geometry
+(chapters 04 and 20) and the tie question (@sec-oq-ties) give the adoption rule. The ledger updates GEO-BUNDLE, the
+AeroZoo decision in REF-090 and FLOOR-DRV in CAP-AUDIT, and adds GEO-FAST and BOUNDARY-AUDIT.
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-book-eve-2026-10-23/SECOND_READ_EVE.md).*
+
 ## 2026-10-22 — MECH-090: on Tensile2d the fixed compiled path's float32 gradients sit at a one-ulp eager floor, and pytorch/pytorch#195845 added a unit-dependent sink to ISLA's slice-state softmax (registered emulations not confirmed; a post-smoke emulation matches) {#sec-nb-mech090}
 
 **Question.** REF-090's Tensile2d control (@sec-nb-ref090-t2d-control) read (b) by its registered weighing, in which A2

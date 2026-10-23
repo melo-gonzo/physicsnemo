@@ -431,7 +431,7 @@ def in_flight_callout(what) -> str:
     """STYLE's "In flight" callout as markdown, for an ``output: asis`` cell; the empty string when the numbers are final.
 
     ``what`` is a key of ``DATASETS`` or ``EXTRA`` (the file's own ``in_flight``), or an ``{what, replacement}`` dict, for
-    example ``aerozoo()["arms"]["ISLA-DTT 512 with 512 slices"]["in_flight"]`` or ``suv_xfam()["part_b"]["in_flight"]``."""
+    example ``aerozoo()["arms"]["ISLA-DTT 512 with 512 slices"]["in_flight"]``."""
     if isinstance(what, str):
         raw = _load(what)
         what = raw.get("in_flight") if raw.get("status") == "in_flight" else None
@@ -471,7 +471,7 @@ def suv_xfam() -> dict:
                         "cells": {"<baseline>/<field>": {"D", "ratio", "SE", "z", "verdict", "B_trigger_cell"}},
                         "summary": str}},
          "B_trigger": bool, "predictions": {str: bool}, "case_level": {...},
-         "part_b": {"status": "in_flight", "in_flight": {what, replacement}}}
+         "part_b": {"status": "final", "stage1": {...}, "stage2": {...}}}
 
     Splits: fb_test and fb_val (fastbacks, zero-shot), est_test and est_val (estates); verdicts and the R2 summary are as
     registered."""

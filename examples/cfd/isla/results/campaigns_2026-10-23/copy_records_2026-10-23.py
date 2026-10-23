@@ -92,13 +92,14 @@ RECORDS = {
     ),
     "suv_xfam_b": (
         "isla-suv-xfam-2026-10-22",
-        "SUV-XFAM part B: SHIFT-SUV models trained on fastbacks, against the estate-trained ones",
+        "SUV-XFAM part B: SHIFT-SUV models trained on fastbacks, against the estate-trained ones (stages 1 and 2)",
         [
             "PREREG_B.md",
             "RESULTS_B.md",
             "JOBS.md",
             "reduce_b_out.json",
             "identity_b_out.json",
+            "reduce_b2_out.json",
         ],
     ),
     "probes090": (
@@ -136,6 +137,11 @@ RECORDS = {
         "isla-floor-drv-2026-10-23",
         "FLOOR-DRV: ISLA on one DrivAerML Volume car with the domain's four boundary meshes, the pre-registration",
         ["PREREG.md"],
+    ),
+    "az_compliant": (
+        "isla-az-compliant-2026-10-19",
+        "AeroZoo under the benchmark protocol: the registered rule for ISLA against ISLA-DTT (PREREG_v2 sections 12(f) and 13)",
+        ["PREREG_v2.md"],
     ),
 }
 

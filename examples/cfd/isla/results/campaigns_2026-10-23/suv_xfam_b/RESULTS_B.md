@@ -1,5 +1,9 @@
 # SUV-XFAM-B stage 1: fastback-trained ISLA 0.9.0 and Transolver (read 2026-10-23 07:05 UTC)
 
+**Stage 2 added 2026-10-23 21:32 UTC (sections 7-10 below): against fastback-trained GeoTransolver too, ISLA transfers
+better on wall shear** (forward gap 1.78 against 1.92, ratio 1.078 at 2.7 SE; replicate 1.086 at 2.9 SE). Hardness and
+the reverse direction read no difference, and pressure reads no difference in every comparison.
+
 Registered rules: PREREG_B.md (approved on 6e77d876; amendments in section 8; now 57d188c3). Jobs, md5s and paths:
 JOBS.md, part B. Raw numbers: reduce_b_out.json (reduce_b.py 25a1a87c, as registered) and identity_b_out.json
 (identity_b.py 4b03096a, amendment 2). Scores: LHR $T/evals_suvxb/<run>/<split>/<run>/metrics.jsonl. Notation: E(x→y) is
@@ -110,3 +114,77 @@ to the supervisor; it is not launched without approval.
 147.5 GPU-h (sacct, 10-23 07:05 UTC): training ISLA 30.1 + 32.7, Transolver 41.6 + 41.4; smoke 0.5; scoring 1.2; the
 cpu-short checks ~0. Registered estimate 144; the excess is mostly the three links hung by the quota event (about
 1 h × 4 GPUs each).
+
+# Stage 2: fastback-trained GeoTransolver (read 2026-10-23 21:32 UTC)
+
+Registered rules: PREREG_B.md section 9 (118f36a0, approved as written 2026-10-23 07:15 UTC). Reducer reduce_b2.py
+f7c66a5d (as registered) -> reduce_b2_out.json. Runs sxb_gt_seed42/43 (kernel/suvxb/gt; cl_ud rows 4-5 with dataset and
+run_id the only changes). D_X = ln(X_GT ÷ X_ISLA), against stage 1's ISLA runs; the rules, SE and floors are stage 1's.
+
+## 7. Validity
+
+- Lanes (smoke_check.py on the real runs, 21:24 UTC): each config differs from clud_suv_gt_seed4x's only in `dataset`
+  and `run_id`; `forward_kwargs.global_embedding: global_data.U_inf_dir`; 199 / 25 per rank, dataset_size 995; finite;
+  norm_stats.pt = the declared constants; Training completed; validation epochs 0-499 without gaps.
+- 8 of 8 scorings (job 358922): epoch 500, n 99 / 99 / 100 / 99, the requested split and dataset, float32, one START,
+  no FAILED.
+- Identity (b), amended (the check): passes on all four splits (largest 6.1e-7). Registered statistic beside it: passes
+  on fb_test, fb_val and est_test; fails on est_val at 1.28e-4, the same near-zero roll moment (case 00888 CMR) as in
+  stage 1. GeoTransolver's recipe_v8 force integration gives the same value there as Transolver's.
+
+## 8. In-family fastback error and the quantities (lead sets; seed 42 · 43; SE of each ln in brackets)
+
+| | GeoTransolver pressure | GeoTransolver wss | for comparison: ISLA pressure / wss |
+|---|---|---|---|
+| E(fb→fb), fastback test | 0.0439 (0.0437 · 0.0441) | 0.0660 (0.0658 · 0.0662) | 0.0425 / 0.0656 |
+| E(fb→est), estate test | 0.1364 (0.1415 · 0.1314) | 0.1237 (0.1277 · 0.1199) | 0.1374 / 0.1298 |
+| G, fastback test | 2.627 (0.068) | **1.920** (0.025) | 2.629 / **1.780** |
+| R, estate test | 3.031 (0.037) | 1.887 (0.031) | 3.144 / 1.976 |
+| H | 0.975 (0.004) | 1.007 (0.004) | 0.972 / 0.999 |
+| P = G × H (part A) | 2.561 | 1.933 | 2.557 / 1.778 |
+
+B1 (part A's R1 rule): fastback-test pressure GT ÷ ISLA 1.032, b1 0.030, the seeds separate: **GeoTransolver trails**
+(fastback val 1.033, trails). Wall shear 1.006, level (val 1.001, level). The estate-trained models were level on estate
+test pressure (1.029, inside part A's wider band).
+
+## 9. Comparisons and reading (|D| > 2 SE and |D| ≥ ln 1.03)
+
+| cell | lead: GT ÷ ISLA | D / SE | verdict | replicate | verdict |
+|---|--:|--:|---|--:|---|
+| **D_G wss** | **1.078** | **2.7** | **ISLA transfers better** | 1.086 (2.9 SE) | better |
+| D_G pressure | 0.999 | -0.0 | no difference | 1.002 (0.0) | no difference |
+| D_R wss | 0.955 | -0.9 | no difference | 0.954 (-0.9) | no difference |
+| D_R pressure | 0.964 | -0.6 | no difference | 0.969 (-0.5) | no difference |
+| D_H wss | 1.008 | 1.3 | no difference | 1.001 (0.1) | no difference |
+| D_H pressure | 1.003 | 0.2 | no difference | 1.009 (0.4) | no difference |
+
+Registered reading, wss: **"transfer advantage, estate → fastback only"**; the replicate gives the same. Of part A's
+wss D_P against GeoTransolver (0.084), 90 percent is the forward gap and 10 percent hardness. Pressure: "split
+unresolved" by the registered words, with nothing to split (part A's D_P is 0.002), so the two lose alike.
+
+The D_G SE (0.028) is twice stage 1's against Transolver because GeoTransolver's estate-trained seeds differ by 5
+percent on fastback wall shear (part A). The verdict clears 2 SE by 0.019 and the floor by 0.046.
+
+Across both baselines (beside the rules): the forward wall-shear gap is 1.78 for ISLA against 1.92-1.93 for
+both baselines, so ISLA's advantage is about 8 percent against each, at 5.8 and 2.7 SE. The forward pressure gap is
+2.63 for all three architectures (2.629, 2.625, 2.627). The reverse direction has no consistent sign: Transolver's
+wall-shear R is 3 percent above ISLA's, GeoTransolver's 4.5 percent below. Fastback-trained GeoTransolver seeds differ
+by 7.4 / 6.3 percent on estate test (pressure / wss) against 0.8 / 0.7 percent on fastback test: the out-of-family
+seed spread seen for ISLA and Transolver holds for the third architecture too.
+
+## 10. Predictions S1-S9, cost
+
+| # | prediction | p | outcome |
+|---|---|--:|---|
+| S1 | D_G wss "ISLA transfers better" | 0.65 | held (1.078, 2.7 SE) |
+| S2 | D_G pressure no difference | 0.75 | held |
+| S3 | D_H wss no difference | 0.65 | held (1.008) |
+| S4 | D_R wss no difference | 0.65 | held (0.955) |
+| S5 | D_R pressure no difference | 0.70 | held (0.964) |
+| S6 | B1 fastback test: both GT cells level | 0.55 | failed (pressure: GeoTransolver trails by 3.2 percent) |
+| S7 | 0.95 < H_GT < 1.05, both fields | 0.70 | held (0.975, 1.007) |
+| S8 | GT seeds differ > 5 percent on estate test, some field | 0.60 | held (7.4, 6.3) |
+| S9 | replicates give the same D_G and D_H verdicts | 0.75 | held |
+
+Cost (sacct, 21:32 UTC): 105.0 GPU-h, with training 52.2 + 52.1, smoke 0.3 and scoring 0.4. The registered estimate
+was 108 and the cap 125. Parts B1 and B2 together: 252.5 GPU-h.
