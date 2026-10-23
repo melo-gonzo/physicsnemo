@@ -477,7 +477,7 @@ print(": Read-only prediction points on the AirfRANS interior task: relative L2 
 ```{python}
 #| label: setup-airfrans-dtt-reference
 #| include: false
-# ATTRIB-090 on AirfRANS (results/campaigns_2026-10-22/attrib090/RESULTS.md sections 2 and 3): each form at ISLA's reference configuration
+# ATTRIB-090 on AirfRANS (results/campaigns_2026-10-23/attrib090/RESULTS.md sections 2 and 3): each form at ISLA's reference configuration
 # (B) and with the reduced form's components (CONT for interacting ISLA, DTT-CONT for ISLA-DTT), fix-trained, scored eager, seeds 42 and 43
 AT = R.load("attrib090", "results2_native.json")
 at = lambda fam, arm, f: AT[f"af/{fam}"][f]["arms"][arm]["mean"]
@@ -565,7 +565,7 @@ print(": Boundary-drawn interior writers at ISLA's reference configuration on th
 ```{python}
 #| label: setup-airfrans-extrap
 #| include: false
-# AF-EXTRAP (results/campaigns_2026-10-22/af_extrap/): the registered rules (PREREG sections 6 and 11) in afx_results.json, the post hoc
+# AF-EXTRAP (results/campaigns_2026-10-23/af_extrap/): the registered rules (PREREG sections 6 and 11) in afx_results.json, the post hoc
 # readouts in posthoc.json, the clamp diagnostic (PREREG section 13, post hoc) on the 254 common below-band cases in
 # book_D1/afx_clamp_common.json. The ISLA family is fix-trained, and its in-distribution reference is its own fix-trained full-split row.
 AFX = R.load("af_extrap", "afx_results.json"); AXT = AFX["tasks"]
@@ -677,13 +677,57 @@ print(f"**A post hoc diagnostic, not a fix: holding ISLA's Reynolds input at the
       f"Transolver's pressure error ({ca['Transolver']['ratio']['pressure_l2']:.2f} times), and it costs the baselines "
       f"{rng(clamp_nut_b, 1)} times on eddy viscosity, whose units carry the inlet speed, and ISLA, whose eddy viscosity is in units of $U L$, "
       f"{ca['ISLA']['ratio']['nut_l2']:.2f} times ({CLJ['isla']['sides']['below']['reading']['nut_l2']}). The reading it suggests, that ISLA's learned dependence on the log Reynolds number "
-      "extrapolates worse than holding it at the band's edge, is a hypothesis. Data: "
+      "extrapolates worse than holding it at the band's edge, is what the training controls below test. Data: "
       f"results/campaigns_2026-10-22/book_D1/afx_clamp_common.json (from the scorer's per-case rows), {R.source('af_extrap', 'clamp.json')}.")
 print()
-print(S.in_flight_callout({"what": "ISLA and ISLA-DTT trained with the standardized log Reynolds number of ISLA's declared scales, and "
-                                   "the baselines, all clamped at inference",
-                           "replacement": "ISLA trained on the `reynolds` split with a fixed log Reynolds scale, and with a standardized Reynolds "
-                                          "number linear in Re,"}))
+# the two Reynolds-input training controls (AF-EXTRAP PREREG sections 14 and 14b): LRE, the fixed scale log10(Re / 1e6); LIN, Re itself
+# standardized on the training side. (a) and (b) are registered readings; (c) and (d) are beside the rules.
+LR = R.load("af_extrap", "lre.json"); fx, ln = LR["LRE"], LR["LIN"]
+FIT = R.load("af_extrap", "stats/afx_fits.json")["fits"]["airfrans.reynolds_train"]["reynolds"]
+per_seed = lambda a: " / ".join(f"{a['a']['r'][sd]:.3f}" for sd in ("42", "43"))
+fit3 = lambda a: " / ".join(f"{a['b']['ratio'][f]:.3f}" for f in FK)
+fc = lambda b, f: fx["c"][f"{b}/{f}"]
+reading = lambda b, f: fc(b, f)["R2"].removeprefix("LRE ")
+SLB = PH["reynolds"]["slopes"]["below"]
+print(f"**Trained with its Reynolds input on a fixed scale, ISLA's below-band pressure error falls to about half of its value with the "
+      f"fitted scale; the registered verdict on the split stands as above.** ISLA's standardized log Reynolds number divides by a spread "
+      f"fitted on the split's training airfoils, {FIT['std']:.3f} decades. Two training controls, registered before they ran, change only "
+      "that input: a fixed scale, $\\log_{10}(\\mathrm{Re} / 10^6)$ with $\\mathrm{Re}$ in ISLA's own length unit and no fitted mean or "
+      "spread, and the Reynolds number itself, standardized on the training side. On the "
+      f"{SLB['n']} test airfoils below the band (the `reynolds` split, two seeds, ISLA trained on the fixed compiled path, 100,000 "
+      f"interior points, float32), each control's pressure error over ISLA's with the fitted scale is {per_seed(fx)} per seed with the "
+      f"fixed scale (registered reading: *{fx['a']['verdict']}*) and {per_seed(ln)} with the linear one (*{ln['a']['verdict']}*); the "
+      f"registered joint reading is *{LR['joint'].split(':')[0]}*. On the split's training airfoils both fit as well as the fitted scale "
+      f"(ratio of two-seed means {fit3(fx)} and {fit3(ln)} on pressure / velocity / eddy viscosity; the registered guard *{fx['b']['verdict']}* "
+      "for both).")
+print()
+print("Beside the rules, post hoc and labelled as such:")
+print()
+print(f"- **With the fixed scale ISLA is level with both baselines on the split's pressure and leads them on velocity.** Its test error is "
+      + " / ".join(f"{fx['E'][f]:.4f}" for f in FK) + "; baseline ÷ ISLA on pressure reads "
+      f"{fc('gt', 'pressure_l2')['R1_ratio']:.3f} (GeoTransolver) and {fc('t', 'pressure_l2')['R1_ratio']:.2f} (Transolver), on velocity "
+      f"{fc('gt', 'velocity_l2')['R1_ratio']:.2f} and {fc('t', 'velocity_l2')['R1_ratio']:.2f}. The penalty rule applied with the fixed "
+      f"scale in ISLA's place reads, on pressure, $\\rho$ {fc('gt', 'pressure_l2')['rho']:.2f} (*{reading('gt', 'pressure_l2')}*) against "
+      f"GeoTransolver and {fc('t', 'pressure_l2')['rho']:.2f} (*{reading('t', 'pressure_l2')}*) against Transolver; on velocity it still reads "
+      f"*{reading('gt', 'velocity_l2')}* ({fc('gt', 'velocity_l2')['rho']:.2f}, {fc('t', 'velocity_l2')['rho']:.2f}), the floor effect above. "
+      "The fixed scale has no `full`-split run, so its penalty divides by the fitted-scale model's in-distribution error, and on the "
+      f"training airfoils it fits pressure {fx['b']['ratio']['pressure_l2']:.2f} times as closely, so that reference may favor it.")
+print(f"- **Its below-band pressure error grows {SLB['arms']['isla']['pressure_l2'][0] / fx['slope_below']['pressure_l2']:.0f} times more "
+      f"slowly.** Per decade of Reynolds number below the band it grows {fx['slope_below']['pressure_l2']:.2f} in relative L2, against "
+      f"{SLB['arms']['isla']['pressure_l2'][0]:.2f} with the fitted scale, {SLB['arms']['gt']['pressure_l2'][0]:.2f} for GeoTransolver and "
+      f"{SLB['arms']['t']['pressure_l2'][0]:.2f} for Transolver.")
+print(f"- **Clamping the fixed-scale input barely moves its pressure error.** Clamped to its training range at inference, its below-band pressure "
+      f"error is {fx['d']['below']['pressure_l2']:.2f} times its own, and velocity and eddy viscosity rise "
+      f"{fx['d']['below']['velocity_l2']:.2f} and {fx['d']['below']['nut_l2']:.2f} times. Clamped, the below-band pressure errors meet: "
+      f"{fx['d']['below_clamped_p']:.4f} with the fixed scale, {ln['d']['below_clamped_p']:.4f} with the linear one, {cp['ISLA']:.4f} with "
+      "the fitted scale.")
+print()
+print("Post hoc reading, on AirfRANS only: the fitted, narrow scale of ISLA's Reynolds input, not its architecture, sets most of its "
+      "pressure penalty below the band. Like the attribution below (@sec-airfrans-attribution), it is about how a global scalar input is "
+      "scaled; the declared physical scales are the same in all three models. Whether the fixed scale holds on a second dataset is "
+      f"the open question of @sec-oq-reynolds. Data: {R.source('af_extrap', 'lre.json')}, {R.source('af_extrap', 'LRE.md')}, "
+      f"{R.source('af_extrap', 'stats/afx_fits.json')}, {R.source('af_extrap', 'posthoc.json')}; the controls' scorer reduction is "
+      f"{R.source('af_extrap', 'reduce_lre.py')}.")
 ```
 
 ### Where ISLA's accuracy here comes from {#sec-airfrans-attribution}
@@ -854,9 +898,10 @@ print("- **No cross-architecture discretization reading.** The boundary's discre
 print("- **No choice of ISLA's interior form.** ISLA-DTT ÷ ISLA is " + " / ".join(f"{rho_b[f]:.3f}" for f in FK) + " at the reference "
       "configuration with both forms trained alike (@sec-airfrans-dtt-reference), on one planar dataset in distribution with two seeds; which form ISLA's interior model "
       "takes is the open question of @sec-oq-dtt.")
-print("- **Reynolds extrapolation below the training band is unresolved.** ISLA's error grows more than the baselines' there, as registered "
-      "(@sec-interior-extrapolation); the clamp diagnostic points at how ISLA reads its Reynolds number and is untested in training "
-      "(@sec-limits-regime).")
+print("- **Reynolds extrapolation is measured on this dataset only.** ISLA's error grows more than the baselines' below the training band, "
+      "as registered (@sec-interior-extrapolation); trained with its Reynolds input on a fixed scale, its below-band pressure error is "
+      + " and ".join(f"{fx['a']['r'][sd]:.2f}" for sd in ("42", "43")) + " of its value with the fitted scale (per seed), on this "
+      "dataset only (@sec-oq-reynolds).")
 print("- **Whether ISLA's declared scales add accuracy where the Reynolds number varies widely is untested here.** On AirfRANS, ISLA "
       "without them but with the inlet speed standardized is as accurate as ISLA, so standardizing the global input carries ISLA's gain "
       "on this dataset (@sec-airfrans-attribution); AeroZoo, whose Reynolds number varies widely, has no such arm.")
