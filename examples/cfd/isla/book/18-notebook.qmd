@@ -40035,3 +40035,156 @@ freedom (the band pools 8 pairs). The Reynolds and AoA pressure and ν_t results
 cells depend on the measure. With AeroZoo's `reynolds` split (AZ-DECIDE), this is the second dataset for the Reynolds question.
 
 *Read by the supervisor and second-read by the reviewer on 2026-10-22 (scratch/isla-review-2026-10-21/second-read-2026-10-22/afx.md).*
+
+## 2026-10-23 — REF-090 standings on the fixed path: eager-trained ISLA 0.9.0 on AirfRANS, Tensile2d and the lug; the lug's training-path read is (c) {#sec-nb-ref090-standings}
+
+**Question** (REF-090 R2 and PREREG §§12-15). On AirfRANS, Tensile2d and the lug, ISLA's per-block compile
+trained under pytorch#195845 (@sec-nb-compiled-path-defect). Which rows become the ISLA 0.9.0 standings
+there, and does the fixed compiled path train the model's own (eager) function? The Tensile2d control read
+(b) on weak evidence (@sec-nb-ref090-t2d-control). Under the registered consequence, the standings on all
+three datasets are eager-trained rows: two seeds each on AirfRANS and the lug, four on Tensile2d. Every
+row below is scored fully eager, in float32, at epoch 500.
+
+| Dataset | Field | ISLA 0.9.0, eager-trained | fix-trained | bug-trained | GeoTransolver 256 ÷ ISLA 0.9.0 | Transolver 512 × 16 ÷ ISLA 0.9.0 |
+|---|---|---|---|---|---|---|
+| AirfRANS | pressure | 0.01248 (0.01316, 0.01179) | 0.01222 | 0.01194 | 0.874 | 0.874 |
+| AirfRANS | velocity | 0.00636 | 0.00633 | 0.00642 | 6.290 | 4.669 |
+| AirfRANS | eddy viscosity | 0.01535 | 0.01557 | 0.01559 | 1.113 | 1.160 |
+| Tensile2d | displacement | 0.00849 | 0.00788 | 0.00717 | 0.473 | 0.649 |
+| Tensile2d | stress | 0.01113 | 0.00985 | 0.00915 | 0.478 | 0.619 |
+| Tensile2d | plastic strain | 0.273 | 0.201 | 0.258 | 1.684 | 0.843 |
+| lug | von Mises | 0.001574 (0.001376, 0.001771) | 0.001454 | 0.001893 | 1.423 | 1.378 |
+
+Native relative L2, arithmetic seed means. Every ratio is a ratio of arithmetic seed means; the last two columns are
+baseline ÷ ISLA 0.9.0, so above one means ISLA's error is lower. Tensile2d has four seeds per arm; its bug-trained seeds
+44/45 are ATTRIB-090's att_t2dz_base rows. The baselines are the book's standing arms.
+
+**The lug read: (c), as registered** (PREREG §15). Fix-trained and bug-trained separate cleanly on the lug: fix ÷ bug is
+0.768, at 2.2 × 2 SE, with both fix-trained seeds below both bug-trained ones. So the lug read was registered as the
+decisive test of the fixed path. The eager-trained pair, though, lies 25 percent apart (0.001376, 0.001771). As ratios
+of arithmetic seed means, eager ÷ fix-trained is 1.083 (0.31 × 2 SE; 1.074 as a ratio of geometric seed means, the form
+ATTRIB-090 quotes) and eager ÷ bug-trained is 0.831 (0.66 × 2 SE), so the eager rows match both. Both eager seeds lie
+below both bug-trained seeds, by a hair (0.001771 against 0.001780), and the point estimate leans toward (a). Posed ÷
+native: 1.246 / 1.619 eager-trained, 1.346 / 1.383 fix-trained, 1.194 / 1.105 bug-trained.
+
+**The AirfRANS read: (c) for ISLA 0.9.0; ISLA-DTT still training** (PREREG §14). On AirfRANS, fix-trained and
+bug-trained ISLA 0.9.0 agree within 2.4 percent: 1.024 on pressure, 0.985 on velocity, 0.998 on eddy viscosity. So this
+read could not tell (a) from (b), as expected. Eager-trained ÷ fix-trained is 1.021 / 1.005 / 0.986 (|d| / 2SE 0.12,
+0.11, 0.25), and eager-trained ÷ bug-trained is 1.045 / 0.989 / 0.985 (0.27, 0.25, 0.21). All three training paths lie
+within 5 percent, and every seed range overlaps. Eager-trained, posed ÷ native is 1.0022 to 1.0025 on pressure, 1.0016
+on velocity and 1.0000 on eddy viscosity. The eager-trained ISLA-DTT pair is still training; its read follows when it is
+scored.
+
+**Beside the rules.**
+
+- MECH-090 (scratch/isla-mech090-2026-10-22/RESULTS.md) puts the fixed path's float32 gradients at a one-ulp eager floor
+  on eight Tensile2d checkpoints of both ISLA versions, at 0.55 to 1.19 times that floor; the bug sits 1,574 to 32,531
+  times above it. Over 300 float32 steps the fixed path stays 0.9 to 2.2 times as far from eager's trajectory as a
+  one-ulp copy does, with no growing ratio. On that evidence the Tensile2d (b) is best read as two-seed chance; the
+  registered verdict stands. The bug acted as an attention sink in the slice-state softmax. Its phantom tokens carry
+  about 37 times a slice's real mass on about half of the lug's training cases, which is consistent with the lug's
+  0.768.
+- The defect's effect on training depends on the dataset. It cost the lug about 30 percent in von Mises (fix-trained ÷
+  bug-trained 0.768, both fix-trained seeds below both bug-trained ones) and left AirfRANS ISLA 0.9.0 unchanged (within
+  2.4 percent). On Tensile2d, fix-trained and bug-trained match under the §13 rule on four seeds against four (1.099 /
+  1.075 / 0.778 on displacement / stress / plastic strain; seed ranges overlap, |d| / 2SE 0.59 / 0.48 / 0.90). Without
+  the bug, ISLA 0.9.0 trains less reproducibly on Tensile2d (σ(log) of displacement 0.23 eager-trained, 0.16
+  fix-trained, 0.025 bug-trained). On the lug the fix-trained seeds lie 1.2 percent apart, the bug-trained ones 12
+  percent and the eager-trained ones 25 percent (σ(log) 0.009, 0.084 and 0.178).
+- Secondary arms, both still training. AirfRANS ISLA-DTT eager-trained (r090eag_af_dtt) will be read against
+  ISLA 0.9.0 eager-trained; fix-trained, ISLA-DTT ÷ ISLA 0.9.0 read 1.035 / 1.126 / 1.381. The lug ISLA-DTT,
+  fix-trained (r090fix_lug_dtt), will be read against ISLA 0.9.0 fix-trained, and P13's lug part with it.
+- R1 under one training function (beside the registered 0.891, which stands): on Tensile2d, ISLA 0.9.0
+  eager-trained ÷ ISLA A2 eager-trained is 1.200 on displacement over four seeds and 0.998 on seeds
+  42/43. On the lug and AirfRANS, no eager-trained A2 exists. ISLA 0.9.0 eager-trained ÷ ISLA A2
+  bug-trained, both scored eager, is 0.913 on the lug and 0.692 / 0.668 / 0.687 on AirfRANS, labelled "mixed training
+  paths".
+
+**Standings.** AirfRANS takes r090eag_af_isla, Tensile2d r090eag_t2dz 42-45 and the lug r090eag_lug_isla. On the lug
+ISLA 0.9.0 leads both baselines, and on Tensile2d it trails both on displacement and stress. On AirfRANS ISLA 0.9.0
+trails both on pressure (0.874) and leads both on velocity (6.29, 4.67) and eddy viscosity (1.11, 1.16); against the
+compiled-path rows (baseline ÷ ISLA 0.919 / 0.919 on pressure, 1.080 / 1.127 on eddy viscosity), baseline ÷ ISLA fell 5
+percent on pressure and rose 3 percent on eddy viscosity. The other datasets' standings are unchanged
+(@sec-nb-ref090-r1).
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-book-1023/SECOND_READ_STANDINGS.md).*
+
+## 2026-10-23 — ATTRIB-090, stage 2: on AirfRANS ISLA's gain over its earlier form comes from standardizing the global input, not from its scales; on the lug the fix-trained 0.9.0 leads the fix-trained CONT (directional) {#sec-nb-attrib090-stage2}
+
+**Question** (ATTRIB-090, scratch/isla-attrib090-2026-10-21/PREREG.md §§5, 9-11). @sec-nb-attrib090-t2d settled Tensile2d. On
+AirfRANS, one arm carried the whole step from E2's CONT code to ISLA 0.9.0: NOSC, which removes ISLA's declared scales. NOSC
+also feeds the raw inlet speed (m/s), unstandardized, where 0.9.0 feeds the standardized log Reynolds number, so it was
+confounded (@sec-airfrans-attribution). Stage 2 splits the confound. It adds ISLA-DTT's own reading of the scales and the lug's
+reads against a CONT retrained under the compile fix. Every arm and base is trained on the fixed compiled path
+(@sec-nb-compiled-path-defect), except where a row says otherwise. AirfRANS: 200 test cases at 100,000 points; the lug: 600
+cases at 200,000 cells; float32, epoch 500, seeds 42 and 43, native.
+
+**Rule.** Δ is an arm's mean log error minus that of B, the base. B is ISLA 0.9.0 (r090fix_af_isla; r090fix_af_dtt for
+ISLA-DTT; r090fix_lug_isla). σ is pooled over the arms. An arm moves a field if |Δ| ≥ 2 SE and the effect is at least 5
+%. φ is Δ divided by the step from CONT to B. For NOSC-STD (§10): φ ≤ 0.3 means input standardization carries the
+field's step, φ ≥ 0.7 means the scales carry it, and values between mean both share it. If NOSC-STD does not move a
+field by R1, that field reads "input standardization carries the step" whatever φ.
+
+| AirfRANS arm (ISLA) | what it changes from 0.9.0 | ÷ 0.9.0 (p / v / nut) | φ | verdict |
+|---|---|---|---|---|
+| CONT (E2, retrained) | the earlier code | 1.286 / 1.353 / 1.411 | 1 | the step |
+| NOSC | no scales, raw speed | 1.232 / 1.354 / 1.331 | 0.83 / 1.00 / 0.83 | carries it (confounded) |
+| RAWU | scales kept, raw speed in place of the log Reynolds number | 1.292 / 1.351 / 1.333 | 1.02 / 0.99 / 0.83 | carries it (confounded) |
+| NUT0 | scales kept, eddy viscosity without the units U L | 0.982 / 1.009 / 0.990 | ≈ 0 | no measurable effect |
+| **NOSC-STD** | no scales, standardized speed | **1.003 / 1.029 / 1.043** | **0.01 / 0.10 / 0.12** | **no measurable effect** |
+
+The ÷ 0.9.0 column is exp(Δ), a ratio of geometric seed means.
+
+**Verdict: input standardization carries the AirfRANS step on all three fields; the scales do not.** If the inlet speed
+is standardized as the baselines read it, a 0.9.0 model without ISLA's scales is as accurate as 0.9.0. That model has no
+Reynolds number, eddy viscosity in the dataset's units and a bf16 head. The step from CONT to 0.9.0 (0.9.0 ÷ CONT 0.778
+/ 0.739 / 0.709, a ratio of geometric seed means) came from replacing an unstandardized dimensional input, the raw speed
+of 31 to 94 m/s that every token's seed read, by an O(1) input. RAWU and NUT0 agree. On AirfRANS ν is constant and L
+nearly so, so the log Reynolds number is a monotone reparametrization of the speed. The gain is real and has a sound
+reason, but it is a side effect of the scales change, not of its physics.
+
+**ISLA-DTT** (B = r090fix_af_dtt):
+- DTT-CONT ÷ B = 1.109 / 1.169 / 1.026, against arm D of @sec-nb-anchor-verdict (bug-trained, scored eager) 1.103 / 1.218 / 1.047.
+  Exact geometry and CONT did not move ISLA-DTT.
+- R5 reads ρ_CONT = 0.895 on pressure. So the reversal of the ISLA / ISLA-DTT order happened in the 0.9.0 bundle. At
+  CONT, ISLA-DTT led by about 10 percent. At 0.9.0, fix-trained, ISLA-DTT ÷ ISLA is 1.035 / 1.126 / 1.381 (a ratio of
+  arithmetic seed means, REF-090's definition).
+- DTT-NOSC ÷ B = 1.264 / 1.225 / 1.158. It carries the same raw-speed confound, so it is most likely the standardization as well.
+  No ISLA-DTT standardization arm was run.
+- DTT-NOSC is 14 percent worse than DTT-CONT on pressure, with the raw speed in both. So for ISLA-DTT the rest of the bundle costs
+  about 12 percent, which interacting ISLA does not pay. Two mirrors, DTT-SDF and DTT-QEMB, are in flight to find which part.
+- Beside the rules: the compile defect had cost ISLA-DTT about 10 percent at 0.9.0 (fix ÷ bug-trained 0.898 on pressure). It
+  cost interacting ISLA about nothing.
+
+**The lug** (directional; labelled "fix-trained"; the lug training-path read gave (c), with no reading, @sec-nb-ref090-standings):
+- With CONT retrained, CONT ÷ B is **1.151**. Fix-trained 0.9.0 leads fix-trained CONT by 13 percent, both its seeds
+  below both of CONT's. Bug-trained, REF-090 had read 0.9.0 ÷ CONT at 1.092.
+- The retrained CONT carries a label (deviation 4): "trained under code_gcont + TORCHINDUCTOR_MIX_ORDER_REDUCTION=0; its compiled
+  block 2 deviates from eager on 5 of 100 lug cases, up to 4.5e-4 of the block's update". The per-block option gives the same
+  deviation, so this is a second, unidentified fusion difference in that code's lug graph. 0.9.0's per-block path reads at most
+  4.4e-7 on the lug.
+- L-FLIP (E2's winding) reads 1.088 and does not move (2 SE = 0.087). A zero-training test reproduces B's predictions to
+  a median 1.5e-4 of the target per case (at most 4.7e-4) and its case-mean metric to 0.3 percent: negate the
+  orientation-carrying weight columns and run on the flipped lug. Training is equivariant under that negation (Muon's
+  Newton-Schulz and AdamW are both sign-equivariant). So the flip is a reparametrization up to the tie residual below,
+  and 1.088 reads as seed noise.
+- The residual sits at 8,428 interior closest-feature ties (2.2 percent), which the float32 BVH resolves by search order
+  (@tbl-lug-ties). The tie rule MEDIAL-TIE is on the agenda.
+- L-ENC (CONT's encoding replaced by the sign·log one, trained eager) reads 1.141 against B: it moves (directional,
+  registered base). Against the eager-trained base r090eag_lug_isla it reads 1.062 (exp(Δ)), within that base's own seed
+  gap: its larger seed is 1.29 times its smaller (REF-090 gives the same pair as 25 percent apart, relative to their
+  mean). The lug's training path moves its error by as much as the effect. Eager ÷ fix-trained 0.9.0 is 1.083 as a ratio
+  of arithmetic seed means (REF-090's definition), or 1.074 geometric.
+
+**Next.** STDU (scales kept, with the standardized speed in place of the log Reynolds number) is the last check of the AirfRANS
+reading. DTT-SDF and DTT-QEMB locate ISLA-DTT's bundle cost. All three are in flight. Proposed model change, not made: ISLA
+refuses, or standardizes by fitted constants, any rank-0 global without units, so that no configuration can feed a raw
+dimensional scalar again.
+
+**For the book.** On AirfRANS, ISLA 0.9.0's accuracy over its earlier form comes from feeding its one global scalar in
+standardized form, not from its declared physical scales. Where the Reynolds number varies through the inlet speed
+alone, the scales are one principled way to get that standardization, not a source of accuracy. Whether they add
+accuracy where the Reynolds number varies widely, as on AeroZoo, is untested: ATTRIB-090 has no AeroZoo arm. On the lug,
+once the compile fault is fixed, 0.9.0 leads its predecessor, and the winding flip is a reparametrization.
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-book-1023/SECOND_READ_ATTRIB_STAGE2.md).*
