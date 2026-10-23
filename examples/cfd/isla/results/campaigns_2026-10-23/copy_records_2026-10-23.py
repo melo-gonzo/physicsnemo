@@ -132,6 +132,11 @@ RECORDS = {
             "tables/probes/*.json",
         ],
     ),
+    "floor_drv": (
+        "isla-floor-drv-2026-10-23",
+        "FLOOR-DRV: ISLA on one DrivAerML Volume car with the domain's four boundary meshes, the pre-registration",
+        ["PREREG.md"],
+    ),
 }
 
 
