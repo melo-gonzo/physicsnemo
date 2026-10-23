@@ -260,3 +260,6 @@ Label: fix-trained (T on AirfRANS ≈ 1, scratch/isla-ref090-2026-10-20/r090_fin
 case-mean metric float64 ÷ eager float32 = 1.0002 (att2c_lug_cont_seed42, f64_probe_g2.py, 100 cases), 1.0003 and 1.0000
 (att_lug_enc_seed42 / 43, f64_probe.py, 60 cases). So the float64 floors behind deviations 2 and 4 are valid (unlike the
 code_a2r case REF-090-CLOSE found).
+
+Erratum (2026-10-23 09:51 EDT): §2d's "NOSC and RAWU, the raw speed with and without the scales" should read "without and with"
+(NOSC has no scales, RAWU has them). Nothing else changes.
