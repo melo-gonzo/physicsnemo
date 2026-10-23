@@ -881,7 +881,7 @@ def _segment_winding_numbers(query: torch.Tensor, simplex: torch.Tensor, parity:
     return out / (2 * torch.pi)
 
 
-def _winding_sign(query: torch.Tensor, simplex: torch.Tensor, parity: torch.Tensor, tree, w=None):
+def _winding_sign(query: torch.Tensor, simplex: torch.Tensor, parity: torch.Tensor, tree, w=None, oriented=None):
     """The sign of the distance at each query ``(Q, d)``, float64: ``sign(sigma / 2 -
     w)``, with ``w`` the generalized winding number of the oriented cells
     ``simplex`` (canonical, orientation ``parity``; Jacobson, Kavan and
@@ -893,8 +893,9 @@ def _winding_sign(query: torch.Tensor, simplex: torch.Tensor, parity: torch.Tens
     bound), so ``sigma / 2 - w`` is +1/2 or -1/2: positive on the side the normals
     point to; coincident cells of opposite orientation (a
     zero-thickness fold) cancel in ``w``, so both of its sides take the sign of the
-    region around it. ``w`` times ``4 pi``, when the ball search has summed it."""
-    area, sigma = _oriented_areas(simplex, parity)
+    region around it. ``w`` times ``4 pi``, when the ball search has summed it, and
+    ``oriented``, :func:`_oriented_areas` of the cells, when the caller has it."""
+    area, sigma = _oriented_areas(simplex, parity) if oriented is None else oriented
     if w is not None:
         w = w / (4 * torch.pi)
     elif tree is None:
@@ -925,12 +926,14 @@ def _closest_candidates(
     cells: torch.Tensor,
     parity: torch.Tensor,
     face_normals: torch.Tensor,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """The closest-feature search (no gradient): for every query the cell of its
     closest point ``(Q,)``, whether several features tie for it ``(Q,)``, at a tie
     the least-norm point of the hull of their directions ``(Q, d)``, the sign of the
     distance from the winding number of the cells (:func:`_winding_sign`) ``(Q,)``,
-    and whether the query is on the surface (below) ``(Q,)``; see
+    whether the query is on the surface (below) ``(Q,)``, and the barycentric
+    weights of its closest point on its cell (:func:`_closest_weights`, float64)
+    ``(Q, d)``; see
     :func:`exact_boundary_geometry`. ``cells`` in canonical order with their
     orientations ``parity`` (:func:`_canonical_cells`), the normals in float64.
 
@@ -975,6 +978,7 @@ def _closest_candidates(
     _, inverse = torch.unique(torch.cat([cells, parity[:, None]], 1), dim=0, return_inverse=True)
     order = torch.argsort(inverse, stable=True)
     rep = order[torch.cat([inverse.new_ones(1, dtype=torch.bool), inverse[order][1:] != inverse[order][:-1]])]
+    oriented = _oriented_areas(simplex[rep], parity[rep].to(q64))
     if dim == 3:
         seed = signed_distance_field(Mesh(points=points, cells=cells), query_points)[2]
         w0 = _closest_weights(q64, simplex[seed])
@@ -986,7 +990,7 @@ def _closest_candidates(
         tree, winding = _cell_tree(simplex[order]), None
         if rep.shape[0] == cells.shape[0]:
             par = parity[rep].to(q64)
-            winding = _winding_moments(simplex[rep], par, _oriented_areas(simplex[rep], par)[0], tree)
+            winding = _winding_moments(simplex[rep], par, oriented[0], tree)
         li, pk, w_sum = _ball_candidates(q64, (bound + 3 * err_max) * (1 + 1e-12), simplex[order], tree, winding)
         pk = order[pk]
         if winding is None:
@@ -1068,8 +1072,8 @@ def _closest_candidates(
     g, c, wall = tq[sel], tc[sel], wall[sel]
     m = _grouped_min_norm(torch.cat([g, g[wall] + nq]), torch.cat([c, -c[wall]]), 2 * nq)
     tie_u = torch.where(on_wall[:, None], 0.5 * (m[:nq] - m[nq:]), m[:nq])
-    sign = _winding_sign(q64, simplex[rep], parity[rep].to(q64), tree, w_sum)
-    return idx, tied, tie_u.to(query_points.dtype), sign.to(query_points.dtype), on_wall
+    sign = _winding_sign(q64, simplex[rep], parity[rep].to(q64), tree, w_sum, oriented)
+    return idx, tied, tie_u.to(query_points.dtype), sign.to(query_points.dtype), on_wall, w[first]
 
 
 @_closest_candidates.register_fake
@@ -1081,6 +1085,7 @@ def _(query_points, points, cells, parity, face_normals):
         query_points.new_empty(query_points.shape),
         query_points.new_empty(nq),
         query_points.new_empty(nq, dtype=torch.bool),
+        query_points.new_empty(query_points.shape, dtype=torch.float64),
     )
 
 
@@ -1109,9 +1114,8 @@ def _closest_features(
         q, y = query_points, points
         if q.dtype in (torch.float16, torch.bfloat16):
             q, y = q.float(), y.float()
-        idx, tied, tie_u, sign, on_wall = _closest_candidates(q, y, cells, parity, n64)
+        idx, tied, tie_u, sign, on_wall, weights = _closest_candidates(q, y, cells, parity, n64)
         corners = cells[idx]  # (Q, d)
-        weights = _closest_weights(query_points.double(), points.double()[corners])
     simplex = points[corners]  # (Q, d, d)
     closest = (weights.to(simplex.dtype)[..., None] * simplex).sum(1)
     on_cell = (weights > 0).all(-1)
