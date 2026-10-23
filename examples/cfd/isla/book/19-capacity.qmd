@@ -414,7 +414,9 @@ RES_TXT = " ".join(R.load("cap_audit", "RESULTS.md").split())
 S128 = [float(x) for x in re.search(r"s128 at two seeds: ([\d.]+) / ([\d.]+)", RES_TXT).groups()]
 BAND_AF = R.md_table("cap_audit", "tables/resid_af_ladder.md", "pressure")
 WALL_AF = R.md_table("cap_audit", "tables/resid_af_rd.md", "af heldout pressure (rd) - wall")
-# DrivAerML Volume: the fresh-draw maps by wall distance [m], the down-rung ladder, and the three far-field probes
+# DrivAerML Volume: the fresh-draw maps by wall distance [L_ref], the down-rung ladder, and the three far-field probes;
+# the datapipe divides every coordinate by the case's L_ref, so a band edge times L_REF is metres
+L_REF = float(re.search(r"`global_data\.L_ref` = ([\d.]+) m", RES_TXT).group(1))
 DRV_W = {f: R.md_table("cap_audit", "tables/resid_drv_partB.md", f"drv heldout {f} (rd) - wall") for f in ("velocity", "nut")}
 DRVL = {r["field"]: r for r in R.md_table("cap_audit", "RESULTS.md", "15.10: the DrivAerML Volume down-rung ladder")}
 BAND_DRV = R.md_table("cap_audit", "tables/resid_drv_ladder.md", "nut: e_R by band")
@@ -570,7 +572,8 @@ far_t = [R.num(v) for k, v in far_row.items() if k.startswith("t_")]
 f3 = lambda xs: " / ".join(f"{x:.2f}" for x in xs)
 print("**On one DrivAerML Volume car, ISLA's velocity deficit is a uniform multiple, and its eddy-viscosity deficit sits far from "
       f"the car.** With a fresh draw every step, ISLA's relative velocity error is {rng(vr, 1)} times Transolver's in every decade of "
-      f"wall distance. The {R.num(far['weight %']):.1f}% of the held-out points more than 1 m from the car hold "
+      f"wall distance. The dataset's coordinates are in units of its reference length, {L_REF:g} m, and the bands here are "
+      f"given in metres. The {R.num(far['weight %']):.1f}% of the held-out points more than {L_REF:g} m from the car hold "
       f"{R.num(far['isla share % (e_R)']):.0f}% of ISLA's squared eddy-viscosity error and {R.num(far['ISLA excess %']):.0f}% of the "
       f"amount by which it exceeds Transolver's; there ISLA's relative error is {er(far['isla share % (e_R)']):.3f}, against "
       f"Transolver's {er(far['t share % (e_R)']):.3f} (seed means). Shrinking ISLA one axis at a time on this car, on one seed beside "
@@ -579,7 +582,7 @@ print("**On one DrivAerML Volume car, ISLA's velocity deficit is a uniform multi
       "on all three fields, width on velocity alone and at the bar (on pressure it is not resolved at one seed), and the slices "
       "plateau. Halving the depth raises the velocity, eddy-viscosity and "
       f"pressure floors {f3(d6)} times, halving the width {f3(w256)} times and quartering the slices {f3(s128)} times ({f3([x ** 0.5 for x in s128])} per halving), against a "
-      f"spread of {f3(spread)} over the reference's three seeds. No rung moves the far-field eddy viscosity: beyond 1 m, ISLA's "
+      f"spread of {f3(spread)} over the reference's three seeds. No rung moves the far-field eddy viscosity: beyond {L_REF:g} m, ISLA's "
       f"relative error is {rng(far_isla, 3)} on every rung and seed, and Transolver's {rng(far_t, 3)}.")
 print()
 r2 = {k: [c[k] for c in PROBE_A] for k in ("r2_z", "r2_x", "r2_d")}
@@ -590,15 +593,15 @@ sens_out = [b["dh_dlogd_median"] for b in bins if b["sdf"][0] >= 1]
 n_blocks = len(PROBE_BC[0]["probe_c"])
 maj = [c["n_slices_far_majority"] for p in PROBE_BC for c in p["probe_c"] if c["block"] >= 4]
 print(f"Three probes without training point to an input ISLA lacks, the ground. On this car and {len(PROBE_A) - 1} validation "
-      "cars, a cross-validated fit of the true eddy viscosity beyond 1 m from the car explains "
+      f"cars, a cross-validated fit of the true eddy viscosity beyond {L_REF:g} m from the car explains "
       f"{pc(r2['r2_z'])} of its variance with the height above the floor, {pc(r2['r2_x'])} with the streamwise distance from the "
       f"inlet and {pc(r2['r2_d'])} with the distance to the car. ISLA's prediction-point embedding $h$ keeps resolving the wall "
-      f"distance $d$ far from the car: $\\|\\partial h / \\partial \\ln d\\|$ is {rng(sens_in, 1)} within 1 m and "
+      f"distance $d$ far from the car: $\\|\\partial h / \\partial \\ln d\\|$ is {rng(sens_in, 1)} within {L_REF:g} m and "
       f"{rng(sens_out, 1)} beyond, so its distance channels do not saturate. From the fifth of its {n_blocks} blocks on, far points "
       f"hold most of the mass of {min(maj)} to {max(maj)} slices in every block, so they are not starved of slices. Every case file "
       "stores the floor strip, the slip walls, the inlet and the outlet as meshes beside the vehicle, and ISLA on this task reads "
-      "the vehicle alone (@tbl-model-inputs). Whether the floor and the walls as boundary inputs remove the far-field miss is "
-      f"@sec-oq-far-field. Data: {R.source('cap_audit', 'tables/resid_drv_partB.md')}, "
+      "the vehicle alone (@tbl-model-inputs). Whether those four meshes, the domain's whole boundary, remove the far-field miss "
+      f"when given as boundary inputs is @sec-oq-far-field. Data: {R.source('cap_audit', 'tables/resid_drv_partB.md')}, "
       f"{R.source('cap_audit', 'tables/resid_drv_ladder.md')}, {R.source('cap_audit', 'RESULTS.md')} (15.10), "
       f"{R.source('cap_audit', 'tables/probes/probe_a.json')}, {R.source('cap_audit', 'tables/probes/probe_bc_cap_drv_isla_rd_s42.json')} "
       "and its seed-43 twin.")
