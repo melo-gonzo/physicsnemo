@@ -11,37 +11,40 @@
   "nut_l2": "eddy viscosity"
  },
  "isla_arm": "ISLA 512 with 512 slices",
- "status": "in_flight",
- "in_flight": {
-  "what": "ISLA and ISLA-DTT trained with the compiled training path after its fault was fixed",
-  "replacement": "The standing of ISLA and ISLA-DTT trained without compilation"
+ "status": "final",
+ "in_flight": null,
+ "arm_in_flight": {
+  "ISLA-DTT 512 with 512 slices": {
+   "what": "ISLA-DTT trained with the compiled training path after its fault was fixed, beside ISLA trained without compilation",
+   "replacement": "ISLA-DTT trained without compilation"
+  }
  },
  "arms": {
   "ISLA 512 with 512 slices": {
    "native": {
     "pressure_l2": {
-     "mean": 0.012223675197456032,
+     "mean": 0.012478547336068005,
      "per_seed": {
-      "42": 0.012987467008642853,
-      "43": 0.011459883386269212
+      "42": 0.01316305402549915,
+      "43": 0.011794040646636859
      },
      "n_cases": 200,
      "n_seeds": 2
     },
     "velocity_l2": {
-     "mean": 0.00632686261611525,
+     "mean": 0.006355390857788734,
      "per_seed": {
-      "42": 0.0064288214372936634,
-      "43": 0.0062249037949368355
+      "42": 0.006440699013182893,
+      "43": 0.0062700827023945745
      },
      "n_cases": 200,
      "n_seeds": 2
     },
     "nut_l2": {
-     "mean": 0.015564652211032808,
+     "mean": 0.015352880388963968,
      "per_seed": {
-      "42": 0.01573960982263088,
-      "43": 0.015389694599434733
+      "42": 0.01573822255246341,
+      "43": 0.014967538225464523
      },
      "n_cases": 200,
      "n_seeds": 2
@@ -49,28 +52,28 @@
    },
    "area": {
     "pressure_l2": {
-     "mean": 0.012223675197456032,
+     "mean": 0.012478547336068005,
      "per_seed": {
-      "42": 0.012987467008642853,
-      "43": 0.011459883386269212
+      "42": 0.01316305402549915,
+      "43": 0.011794040646636859
      },
      "n_cases": 200,
      "n_seeds": 2
     },
     "velocity_l2": {
-     "mean": 0.00632686261611525,
+     "mean": 0.006355390857788734,
      "per_seed": {
-      "42": 0.0064288214372936634,
-      "43": 0.0062249037949368355
+      "42": 0.006440699013182893,
+      "43": 0.0062700827023945745
      },
      "n_cases": 200,
      "n_seeds": 2
     },
     "nut_l2": {
-     "mean": 0.015564652211032808,
+     "mean": 0.015352880388963968,
      "per_seed": {
-      "42": 0.01573960982263088,
-      "43": 0.015389694599434733
+      "42": 0.01573822255246341,
+      "43": 0.014967538225464523
      },
      "n_cases": 200,
      "n_seeds": 2
@@ -78,28 +81,28 @@
    },
    "posed": {
     "pressure_l2": {
-     "mean": 0.012256016182946042,
+     "mean": 0.012508201393648052,
      "per_seed": {
-      "42": 0.013019357261946425,
-      "43": 0.011492675103945658
+      "42": 0.013192318241344765,
+      "43": 0.011824084545951337
      },
      "n_cases": 200,
      "n_seeds": 2
     },
     "velocity_l2": {
-     "mean": 0.006336856003617868,
+     "mean": 0.006365566287422552,
      "per_seed": {
-      "42": 0.006438707020133733,
-      "43": 0.006235004987102002
+      "42": 0.006450812831753865,
+      "43": 0.006280319743091241
      },
      "n_cases": 200,
      "n_seeds": 2
     },
     "nut_l2": {
-     "mean": 0.01556513593532145,
+     "mean": 0.015352448557969182,
      "per_seed": {
-      "42": 0.01573962450493127,
-      "43": 0.01539064736571163
+      "42": 0.015737966326996686,
+      "43": 0.014966930788941681
      },
      "n_cases": 200,
      "n_seeds": 2
@@ -379,8 +382,12 @@
  "isla_runs": {
   "scores": "results/campaigns_2026-10-22/standing_090/scores",
   "epoch": 500,
-  "ISLA 512 with 512 slices": "evals_r090fix/r090fix_af_isla_seed{42,43}",
-  "ISLA-DTT 512 with 512 slices": "evals_r090fix/r090fix_af_dtt_seed{42,43}"
+  "ISLA 512 with 512 slices": "evals_r090eag/r090eag_af_isla_seed{42,43}",
+  "ISLA-DTT 512 with 512 slices": "evals_r090fix/r090fix_af_dtt_seed{42,43}",
+  "training_path": {
+   "ISLA 512 with 512 slices": "eager-trained: trained without compilation",
+   "ISLA-DTT 512 with 512 slices": "fix-trained: trained with the compiled training path after its fault was fixed"
+  }
  },
  "raw_drive_geotransolver": {
   "label": "GeoTransolver 256, reading the inlet velocity U_inf in m/s",

@@ -27,6 +27,7 @@ The standing artifacts live in ``results/char/<dataset>_090.json`` (written by
      "isla_arm":   arm name,
      "status":     "final" | "in_flight",
      "in_flight":  {"what": what the numbers are, "replacement": what replaces them} | None,
+     "arm_in_flight": {arm name: {"what", "replacement"}},   # optional: one arm in flight in a final file
      "degenerate": {protocol: why it changes no arm's input},
      "arms":       {arm name: {protocol: {field: {"mean": x, "per_seed": {seed: x},
                                                   "n_cases": n, "n_seeds": n}}}}}
@@ -34,7 +35,8 @@ The standing artifacts live in ``results/char/<dataset>_090.json`` (written by
 A degenerate cell has ``"mean": None`` (tables print "n/a"; ratios, shifts and verdicts skip it).
 The ISLA arm is ISLA at its reference configuration; an arm labelled ``ISLA-DTT ...`` is ISLA-DTT
 at the same configuration. ``in_flight_callout`` prints STYLE's "In flight" callout for a file whose
-numbers a running experiment will replace.
+numbers a running experiment will replace, or, given ``Standing.arm_in_flight(arch)``, for one arm.
+``isla_runs`` names each ISLA arm's runs and, where the arms trained differently, ``training_path``.
 
 Conventions (STYLE.md):
 
@@ -259,6 +261,10 @@ class Standing:
         """{what, replacement} of an in-flight file (the callout's two clauses), else None."""
         return self.raw.get("in_flight") if self.status == "in_flight" else None
 
+    def arm_in_flight(self, arch: str) -> dict | None:
+        """{what, replacement} of one arm that a running experiment will replace in a final file, else None."""
+        return self.raw.get("arm_in_flight", {}).get(self.arm_names.get(arch))
+
     @property
     def degenerate(self) -> dict:
         """{protocol: why it changes no arm's input}: the protocols shown as n/a."""
@@ -379,6 +385,10 @@ class Standing:
             f"The ISLA rows are in flight: they come from {self.in_flight['what']} (@sec-ledger). "
             if self.in_flight
             else ""
+        ) + "".join(
+            f"The {a} row is in flight: it comes from {self.arm_in_flight(a)['what']} (@sec-ledger). "
+            for a in rows
+            if self.arm_in_flight(a)
         )
         cap = (
             f": {setting}: the architectures at their reference configurations, {flab}, "
