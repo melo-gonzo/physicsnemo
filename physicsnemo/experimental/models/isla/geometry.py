@@ -402,6 +402,35 @@ def _node_boxes_kernel(
     hi[i] = wp.max(hi[left[i]], hi[right[i]])
 
 
+@wp.kernel
+def _parents_kernel(left: wp.array(dtype=wp.int64), right: wp.array(dtype=wp.int64), parent: wp.array(dtype=wp.int64)):
+    """Each inner node's children point back to it."""
+    i = wp.tid()
+    if left[i] >= wp.int64(0):
+        parent[left[i]] = wp.int64(i)
+        parent[right[i]] = wp.int64(i)
+
+
+@wp.kernel
+def _escape_kernel(
+    left: wp.array(dtype=wp.int64),
+    right: wp.array(dtype=wp.int64),
+    parent: wp.array(dtype=wp.int64),
+    escape: wp.array(dtype=wp.int64),
+):
+    """The node after each node's subtree in depth-first order: the right sibling of
+    its nearest ancestor-or-self that is a left child, -1 when there is none."""
+    n = wp.int64(wp.tid())
+    e = wp.int64(-1)
+    while n > wp.int64(0):
+        p = parent[n]
+        if left[p] == n:
+            e = right[p]
+            break
+        n = p
+    escape[wp.tid()] = e
+
+
 def _bottom_up(kernel, levels, arrays, ref: torch.Tensor):
     """``kernel`` over the inner nodes of each level of a BVH, deepest first, one
     launch per level (``arrays`` follow the node ids)."""
@@ -431,10 +460,13 @@ def _cell_tree(simplex: torch.Tensor):
     topo = build_lbvh_topology(f, 1, dev)
     left, right = topo.left_child[: topo.node_count], topo.right_child[: topo.node_count]
     levels = topo.internal_nodes_per_level
-    escape = torch.full_like(left, -1)
-    for inner in levels:
-        escape[left[inner]] = right[inner]
-        escape[right[inner]] = escape[inner]
+    parent, escape = torch.full_like(left, -1), torch.empty_like(left)
+    device, stream = FunctionSpec.warp_launch_context(simplex)
+    with FunctionSpec.warp_stream_scope(stream):
+        wp.init()
+        links = [wp.from_torch(t.contiguous(), dtype=wp.int64) for t in (left, right, parent)]
+        wp.launch(_parents_kernel, dim=left.shape[0], inputs=links, device=device, stream=stream)
+        wp.launch(_escape_kernel, dim=left.shape[0], inputs=[*links, wp.from_torch(escape, dtype=wp.int64)], device=device, stream=stream)
     leaf_start, leaf_count = topo.leaf_start[: topo.node_count], topo.leaf_count[: topo.node_count]
     leaf_cell = torch.where(leaf_count > 0, order[leaf_start.clamp_min(0)], -1)
     leaf = leaf_cell >= 0
