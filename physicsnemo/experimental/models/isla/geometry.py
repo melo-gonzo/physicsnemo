@@ -390,8 +390,10 @@ def _ball_candidates_kernel(
 
 
 #: Candidate slots per query of the first pass of :func:`_ball_candidates`; a query
-#: with more is searched again with as many as it needs.
-_BALL_SLOTS = 16
+#: with more is searched again with as many as it needs. That second pass takes about
+#: a whole traversal's time however few queries it holds (DrivAerML's surface: 45 ms
+#: for 360 queries of 200k at 16 slots; none overflow 64).
+_BALL_SLOTS = 64
 
 
 @wp.kernel
