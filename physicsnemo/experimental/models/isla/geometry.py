@@ -805,19 +805,48 @@ def _tree_winding_numbers(query: torch.Tensor, simplex: torch.Tensor, parity: to
     return out / (4 * torch.pi)
 
 
+@wp.kernel
+def _segment_winding_kernel(
+    ends: wp.array(dtype=wp.vec2d),
+    parity: wp.array(dtype=wp.float64),
+    query: wp.array(dtype=wp.vec2d),
+    out: wp.array(dtype=wp.float64),
+):
+    """The sum of the signed angles the segments (``ends`` two by two, times their
+    ``parity``) subtend at each query, in the cells' order."""
+    tid = wp.tid()
+    x = query[tid]
+    total = wp.float64(0.0)
+    for c in range(parity.shape[0]):
+        p = ends[2 * c] - x
+        q = ends[2 * c + 1] - x
+        total -= parity[c] * wp.atan2(p[0] * q[1] - p[1] * q[0], p[0] * q[0] + p[1] * q[1])
+    out[tid] = total
+
+
 def _segment_winding_numbers(query: torch.Tensor, simplex: torch.Tensor, parity: torch.Tensor):
     """The winding number of the oriented segments ``simplex`` ``(F, 2, 2)``
     (canonical, orientation ``parity`` ``(F,)``) at each query ``(Q, 2)``, float64:
     the sum of the signed angles they subtend, over ``2 pi``, positive for a query on
-    the side opposite to the normals; a brute force, chunked over the queries."""
-    a, b = simplex[None, :, 0], simplex[None, :, 1]
-    chunk = max(1, _SEARCH_PAIRS // simplex.shape[0])
-    out = []
-    for s in range(0, query.shape[0], chunk):
-        p, q = a - query[s : s + chunk, None], b - query[s : s + chunk, None]
-        theta = torch.atan2(p[..., 0] * q[..., 1] - p[..., 1] * q[..., 0], (p * q).sum(-1))
-        out.append(-(parity * theta).sum(-1))
-    return torch.cat(out) / (2 * torch.pi)
+    the side opposite to the normals; a brute force over the segments, one Warp
+    thread per query."""
+    out = torch.empty(query.shape[0], dtype=torch.float64, device=query.device)
+    device, stream = FunctionSpec.warp_launch_context(query)
+    with FunctionSpec.warp_stream_scope(stream):
+        wp.init()
+        wp.launch(
+            _segment_winding_kernel,
+            dim=query.shape[0],
+            inputs=[
+                wp.from_torch(simplex.reshape(-1, 2).contiguous(), dtype=wp.vec2d),
+                wp.from_torch(parity.contiguous(), dtype=wp.float64),
+                wp.from_torch(query.contiguous(), dtype=wp.vec2d),
+                wp.from_torch(out, dtype=wp.float64),
+            ],
+            device=device,
+            stream=stream,
+        )
+    return out / (2 * torch.pi)
 
 
 def _winding_sign(query: torch.Tensor, simplex: torch.Tensor, parity: torch.Tensor, tree, w=None):
