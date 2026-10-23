@@ -29,9 +29,9 @@ DF = "campaigns_2026-10-19/drive_fix/scores/evals_afu_ud"
 isla_run = lambda arm: St.raw["isla_runs"]["scores"].split("results/", 1)[1] + "/" + St.raw["isla_runs"][St.arm_names[arm]].replace("{42,43}", "42")
 PARAMS = {"ISLA": nparams(isla_run("ISLA")), "ISLA-DTT": nparams(isla_run("ISLA-DTT")), "GeoTransolver": nparams(f"{DF}/afu_ud_gt_seed42"),
           "Transolver": nparams(f"{DF}/afu_ud_t_seed42")}
-# the study records at the reference configuration (results/campaigns_2026-10-22/RECORDS.md)
-RM = R.load("probes090", "results/remesh_afix/reduced_full.json")["seed_mean_ratio"]
-RM_I, RM_D = RM["r090fix_af_isla"], R.load("probes090", "results/remesh_afix_dtt/reduced_full.json")["seed_mean_ratio"]["r090fix_af_dtt"]
+# the study records at the reference configuration (RECORDS.md beside them, under results/campaigns_2026-10-22/ and campaigns_2026-10-23/)
+RM = R.load("probes090", "results/remesh_afeag/reduced_full.json")["seed_mean_ratio"]
+RM_I, RM_D = RM["r090eag_af_isla"], RM["r090eag_af_dtt"]
 FK = [f for f, _ in FIELDS]
 remesh_dev = max(abs(RM_I[v][f] - 1) for v in ("refine2", "refine4", "refine31") for f in FK)
 # the baselines' velocity error in the plane (x, y) against their scored three-component error, per seed, native mesh, the standing's arms
@@ -790,15 +790,15 @@ print(": Which of ISLA's components carry its accuracy on the AirfRANS interior 
 ```{python}
 #| label: setup-airfrans-qpop
 #| include: false
-# PROBES-090 on AirfRANS (results/campaigns_2026-10-22/probes090/RESULTS.md section 7): the fix-trained ISLA and ISLA-DTT pairs, eager, float32;
+# PROBES-090 on AirfRANS (results/campaigns_2026-10-23/probes090/RESULTS.md section 7b): the eager-trained pairs, the standing's, eager, float32;
 # ratio_to_native_h = case-mean error in the mode ÷ native, on the points scored in both
-QP = R.load("probes090", "results/qpop_afix/reduced.json")
+QP = R.load("probes090", "results/qpop_afeag/reduced.json")
 QMODES = {"half": "half of the native points", "chunks4": "the native points in four requests",
           "sub1000": "1,000 points in one request", "sub100": "requests of 100 points", "sub10": "requests of 10 points",
           "sub1": "one point per request", "same": "the native points and more drawn by the same law",
           "far": "the native points and as many far from the airfoil", "wall": "the native points and as many near the wall"}
-qr = lambda form, m, f: mean(QP[f"r090fix_af_{form}_seed{s}"]["ratio_to_native_h"][m][f] for s in (42, 43))
-qdev = max(abs(QP[f"r090fix_af_dtt_seed{s}"]["ratio_to_native_h"][m][f] - 1) for s in (42, 43) for m in QMODES for f in FK)
+qr = lambda form, m, f: mean(QP[f"r090eag_af_{form}_seed{s}"]["ratio_to_native_h"][m][f] for s in (42, 43))
+qdev = max(abs(QP[f"r090eag_af_dtt_seed{s}"]["ratio_to_native_h"][m][f] - 1) for s in (42, 43) for m in QMODES for f in FK)
 SMALL = [qr("isla", m, f) for m in ("sub1000", "sub100", "sub10", "sub1") for f in FK]
 ```
 
@@ -813,8 +813,8 @@ print(f"**Interacting ISLA's prediction at a point depends on which other points
       f"costs {100 * (qr('isla', 'half', 'pressure_l2') - 1):.0f}% and {100 * (qr('isla', 'chunks4', 'pressure_l2') - 1):.0f}% on pressure; "
       f"adding points far from the airfoil multiplies the pressure error by {qr('isla', 'far', 'pressure_l2'):.0f}. No knob of the model "
       "makes the dependence vanish, so it is a limit of the interacting form (@sec-limits-query-independence): request interacting ISLA with "
-      "the population it trained on, in one request, and use ISLA-DTT for point queries. The checkpoints trained on the compiled training "
-      "path after its fault was fixed.")
+      "the population it trained on, in one request, and use ISLA-DTT for point queries. The checkpoints are the standing's, trained "
+      "without compilation.")
 ```
 
 ```{python}
@@ -822,15 +822,15 @@ print(f"**Interacting ISLA's prediction at a point depends on which other points
 #| output: asis
 out = "| request | ISLA: p / v / nut | ISLA-DTT: largest \\|r − 1\\| |\n|---|---|--:|\n"
 for m, lab in QMODES.items():
-    dv = max(abs(QP[f"r090fix_af_dtt_seed{s}"]["ratio_to_native_h"][m][f] - 1) for s in (42, 43) for f in FK)
+    dv = max(abs(QP[f"r090eag_af_dtt_seed{s}"]["ratio_to_native_h"][m][f] - 1) for s in (42, 43) for f in FK)
     out += f"| {lab} | " + " / ".join(S.fmt_ratio(qr("isla", m, f)) for f in FK) + f" | {dv:.1e} |\n"
 print(out)
 print(f": Interacting ISLA and ISLA-DTT asked for different populations of prediction points on the AirfRANS interior task: error in the "
       f"request ÷ error with the native {CELLS:,} points, on the points scored in both, seed means of seeds 42 and 43, {N_TEST} test airfoils, "
-      "float32, eager. The checkpoints trained on the compiled training path after its fault was fixed. How to read this: one means the "
+      "float32, eager. The checkpoints are the standing's, trained without compilation. How to read this: one means the "
       "request changes nothing; the small requests ask for 1,000 scored points in groups of 1,000, 100 or 10, and for the first 100 of them "
       "one at a time; no baseline is in the table, since the baselines predict each point from its own inputs. "
-      f"Data: {R.source('probes090', 'results/qpop_afix/reduced.json')}. {{#tbl-airfrans-qpop}}")
+      f"Data: {R.source('probes090', 'results/qpop_afeag/reduced.json')}. {{#tbl-airfrans-qpop}}")
 ```
 
 ### The boundary's discretization {#sec-airfrans-discretization}
@@ -851,8 +851,8 @@ print(f"**Re-panelizing the airfoil exactly leaves interacting ISLA's error unch
       f"exact and raises the pressure error {' / '.join(f'{v:.2f}' for v in tok)} times; a second, independent 400-token draw scores "
       f"{RM_I['redraw400']['pressure_l2']:.2f} times native, so that loss is the variance of the draw, not a bias of the budget. ISLA-DTT moves under exact refinement by "
       f"up to {100 * (max(dtt_ref) - 1):.0f}%: its forest regroups the refined segments at θ = 1, an approximation that vanishes as θ → 0. "
-      "GeoTransolver and Transolver never read the airfoil, so these readings are ISLA's alone. The checkpoints trained on the compiled "
-      "training path after its fault was fixed.")
+      "GeoTransolver and Transolver never read the airfoil, so these readings are ISLA's alone. The checkpoints are the standing's, "
+      "trained without compilation.")
 ```
 
 ```{python}
@@ -865,10 +865,9 @@ for v, lab in VAR.items():
 print(out)
 print(f": Interacting ISLA and ISLA-DTT given other discretizations of the same airfoils on the AirfRANS interior task: error ÷ error on "
       f"the native airfoil, seed means of seeds 42 and 43, {N_TEST} test airfoils, float32, eager; the prediction points are the native ones. "
-      "The checkpoints trained on the compiled training path after its fault was fixed. How to read this: the refinements and the token "
+      "The checkpoints are the standing's, trained without compilation. How to read this: the refinements and the token "
       "budgets keep the geometry exact, so they test invariance; decimation changes the geometry, so it tests robustness; one means no "
-      f"change. Data: {R.source('probes090', 'results/remesh_afix/reduced_full.json')}, "
-      f"{R.source('probes090', 'results/remesh_afix_dtt/reduced_full.json')}. {{#tbl-airfrans-discretization}}")
+      f"change. Data: {R.source('probes090', 'results/remesh_afeag/reduced_full.json')}. {{#tbl-airfrans-discretization}}")
 ```
 
 ## What this dataset does not say {#sec-airfrans-limits}

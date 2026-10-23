@@ -57,11 +57,11 @@ def airfoil(ax, J, color=BASELINE, lw=1.2):
     ax.plot(J["xy"][:, 0], J["xy"][:, 1], color=color, lw=lw, zorder=1)
 
 import standing as S, records as R
-_QA = R.load("probes090", "results/qpop_afix/reduced.json")
-_qa = lambda m: [sum(_QA[f"r090fix_af_isla_seed{s}"]["ratio_to_native_h"][m][f] for s in (42, 43)) / 2
+_QA = R.load("probes090", "results/qpop_afeag/reduced.json")
+_qa = lambda m: [sum(_QA[f"r090eag_af_isla_seed{s}"]["ratio_to_native_h"][m][f] for s in (42, 43)) / 2
                  for f in ("pressure_l2", "velocity_l2", "nut_l2")]
 QP_CHUNKS = _qa("chunks4")                                   # four chunks ÷ one request, AirfRANS, interacting ISLA
-QP_SUBS = sorted((m for m in _QA["r090fix_af_isla_seed42"]["ratio_to_native_h"] if m.startswith("sub")), key=lambda m: -int(m[3:]))
+QP_SUBS = sorted((m for m in _QA["r090eag_af_isla_seed42"]["ratio_to_native_h"] if m.startswith("sub")), key=lambda m: -int(m[3:]))
 QP_SMALL = [x for m in QP_SUBS for x in _qa(m)]
 ```
 
@@ -1478,13 +1478,13 @@ a learned fraction of the total boundary measure split equally among them,
 so they help form the slices and their anchors, and the prediction at one
 point depends on which other points are in the request. That dependence is
 the price of letting the interior shape the latent partition, and it is a
-limit with no knob: on the AirfRANS interior task, with checkpoints trained
-with the compiled path after its fault was fixed, sending the same points in
+limit with no knob: on the AirfRANS interior task, with the AirfRANS standing's
+checkpoints, trained without compilation, sending the same points in
 four chunks raises the error
 `{python} f"{min(QP_CHUNKS):.2f}"`-fold to `{python} f"{max(QP_CHUNKS):.2f}"`-fold,
 and queries of at most `{python} f"{int(QP_SUBS[0][3:]):,}"` points raise it
 `{python} f"{min(QP_SMALL):.1f}"`-fold to `{python} f"{max(QP_SMALL):.0f}"`-fold
-(@sec-query-population, with the In-flight note on those checkpoints). ISLA-DTT
+(@sec-query-population). ISLA-DTT
 (`query_independent=True`) makes the points **read-only**: they carry no
 routing mass, so at every layer they read the slices the boundary formed
 and never write into them, and after every layer each point also reads
