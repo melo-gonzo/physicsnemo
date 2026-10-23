@@ -23,6 +23,7 @@ import pytest
 import torch
 
 from physicsnemo.experimental.models.isla import ISLA
+from physicsnemo.experimental.models.isla.geometry import exact_boundary_geometry
 from physicsnemo.experimental.models.isla.heads import _levi_civita, _pseudovectors
 from test.experimental.models.isla._meshes import (
     cloud,
@@ -169,9 +170,16 @@ def test_two_dimensional_gradients_and_interior_task():
     o1 = _run(mq, mesh, drv, q)
     o2 = _run(mq, transform(mesh, rq), drv @ rq.T, q @ rq.T)
     assert o1["p"].shape == (50,) and o1["v"].shape == (50, 2)
-    ### (float32: the rotation moves a point 3e-4 from the wall by 2e-4 of its distance)
-    torch.testing.assert_close(o2["p"], o1["p"], rtol=1e-4, atol=5e-5)
-    torch.testing.assert_close(o2["v"], o1["v"] @ rq.T, rtol=1e-4, atol=5e-5)
+    ### float32: the rotation's rounding moves a query's distance by at most
+    ### E = 2 u (|x| + max |v|) (u = eps / 2), so the soft-log distance channel by at
+    ### most E / |d|: up to 3e-3 at a query 3e-4 from the wall
+    dist, _ = exact_boundary_geometry(q, mesh.points, mesh.cells)
+    bound = torch.finfo(q.dtype).eps * (q.norm(dim=-1) + mesh.points.norm(dim=-1).max())
+    rel = bound / dist.abs()
+    for got, want in ((o2["p"], o1["p"]), (o2["v"], o1["v"] @ rq.T)):
+        r = rel.reshape(-1, *[1] * (want.ndim - 1))
+        tol = 1e-5 + 1e-4 * want.abs() + r * want.abs().max()
+        assert ((got - want).abs() <= tol).all(), (got - want).abs().max()
 
 
 def test_two_dimensional_rank_inputs_keep_the_contracts():
