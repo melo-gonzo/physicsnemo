@@ -177,12 +177,18 @@ def _canonical_cells(points, cells):
     rotation of a cell's vertex list, so the closest points computed on it are too;
     a winding flip changes only the parity, which carries the orientation."""
     k = cells.shape[1]
-    order = torch.arange(k, device=cells.device).expand_as(cells)
+    vert, slot = list(cells.unbind(1)), [torch.full_like(cells[:, 0], i) for i in range(k)]
+    ### A stable sort per coordinate, as argsort's (NaN last), by adjacent swaps of
+    ### strictly smaller keys: elementwise, where a sort along rows of length k is not.
     for j in reversed(range(points.shape[1])):
-        key = points[cells.gather(1, order), j]
-        order = order.gather(1, torch.argsort(key, dim=1, stable=True))
-    inversions = sum((order[:, a] > order[:, b]).long() for a in range(k) for b in range(a + 1, k))
-    return cells.gather(1, order), 1 - 2 * (inversions % 2)
+        key = [points[v, j] for v in vert]
+        for a in (a for p in range(k - 1) for a in range(k - 1 - p)):
+            x, y = key[a], key[a + 1]
+            swap = (y < x) | (x.isnan() & ~y.isnan())
+            for col in (vert, slot, key):
+                col[a], col[a + 1] = torch.where(swap, col[a + 1], col[a]), torch.where(swap, col[a], col[a + 1])
+    inversions = sum((slot[a] > slot[b]).long() for a in range(k) for b in range(a + 1, k))
+    return torch.stack(vert, 1), 1 - 2 * (inversions % 2)
 
 
 def _closest_weights(q, simplex):
