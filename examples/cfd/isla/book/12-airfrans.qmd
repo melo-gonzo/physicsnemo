@@ -727,7 +727,7 @@ print("Post hoc reading, on AirfRANS only: the fitted, narrow scale of ISLA's Re
       "scaled; the declared physical scales are the same in all three models. Whether the fixed scale holds on a second dataset is "
       f"the open question of @sec-oq-reynolds. Data: {R.source('af_extrap', 'lre.json')}, {R.source('af_extrap', 'LRE.md')}, "
       f"{R.source('af_extrap', 'stats/afx_fits.json')}, {R.source('af_extrap', 'posthoc.json')}; the controls' scorer reduction is "
-      f"{R.source('af_extrap', 'reduce_lre.py')}.")
+      "scratch/isla-af-extrap-2026-10-21/reduce_lre.py.")
 ```
 
 ### Where ISLA's accuracy here comes from {#sec-airfrans-attribution}

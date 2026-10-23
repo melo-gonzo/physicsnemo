@@ -88,7 +88,6 @@ RECORDS = {
             "stats/clamp_bounds.json",
             "LRE.md",
             "lre.json",
-            "reduce_lre.py",
         ],
     ),
 }
