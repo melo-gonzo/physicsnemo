@@ -1057,6 +1057,80 @@ def test_float32_tie_keeps_its_side_off_the_wall():
     assert torch.equal(_gradient(d2, u2), -_gradient(d, u))
 
 
+@pytest.mark.parametrize("surface", ["sphere", "torus"])
+def test_float32_points_within_the_bound_are_on_the_wall(surface):
+    """Float32 meshes as built (an icosphere, a torus) in a generic pose, at their
+    vertices, their cells' edge midpoints and centroids (on the surface to float32
+    rounding: up to 7e-8 off it in float64, within the closest cell's error bound)
+    and at centroids moved up to 1e-5 along the cell's normal: every point on the
+    surface is on the wall, d = 0 and u the least-norm normal, never 0 (under a fixed
+    cutoff of 1e-12 the midpoints were off it, with a float32 closest point equal to
+    the query: u = 0); off the wall d keeps the side the point was moved to; a
+    winding flip negates d and sign(d) u bitwise, and renumbering the vertices and
+    reordering the cells leave d and u bitwise."""
+    if surface == "sphere":
+        m = sphere_icosahedral.load(radius=1.0, subdivisions=3)
+    else:
+        m = torus.load(n_major=48, n_minor=24)
+    pts = (m.points.double() @ orthogonal(3, 7).T).float()
+    tri = pts[m.cells].double()
+    n = torch.nn.functional.normalize(
+        torch.linalg.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0], dim=-1), dim=-1
+    )
+    g = torch.Generator().manual_seed(0)
+    s = 1e-5 * (2 * torch.rand(m.n_cells, 1, dtype=D, generator=g) - 1)
+    q = torch.cat(
+        [
+            pts,
+            pts[m.cells[:, :2]].mean(1),
+            pts[m.cells].mean(1),
+            (tri.mean(1) + s * n).float(),
+        ]
+    )
+    d, u = exact_boundary_geometry(q, pts, m.cells)
+    wall, moved = d == 0, slice(q.shape[0] - m.n_cells, None)
+    assert wall[: moved.start].all() and not wall[moved].all()
+    assert (u[wall].norm(dim=-1) > 0.5).all()
+    assert torch.equal(
+        torch.sign(d[moved][~wall[moved]]), torch.sign(s[~wall[moved], 0]).float()
+    )
+    d2, u2 = exact_boundary_geometry(
+        q, pts, _flipped(Mesh(points=pts, cells=m.cells)).cells
+    )
+    assert torch.equal(d2, -d) and torch.equal(_gradient(d2, u2), -_gradient(d, u))
+    perm = torch.randperm(pts.shape[0], generator=g)
+    inv = torch.empty_like(perm)
+    inv[perm] = torch.arange(pts.shape[0])
+    cells = inv[m.cells][torch.randperm(m.n_cells, generator=g)].roll(1, -1)
+    d3, u3 = exact_boundary_geometry(q, pts[perm], cells)
+    assert torch.equal(d3, d) and torch.equal(u3, u)
+
+
+@pytest.mark.parametrize("dim", [2, 3])
+def test_float64_points_beyond_the_bound_are_off_the_wall(dim):
+    """A posed float64 box, at its vertices, its cells' edge midpoints and
+    centroids, and at its centroids moved along the outward normal by a quarter of
+    the closest cell's error bound E and by four times it (E ~ 3e-15 here): the
+    first are on the wall (d = 0, u the least-norm normal), the last off it, with d
+    its distance and u the normal, since float64 resolves them (a fixed cutoff of
+    1e-12 put every point within 1e-12 on the wall)."""
+    mesh, q, nu = _box_wall(dim)
+    R, t = orthogonal(dim, 7), torch.arange(1, dim + 1, dtype=D) / 3
+    moved, q, nu = transform(mesh, R, t), q @ R.T + t, nu @ R.T
+    rows = slice(mesh.n_points, mesh.n_points + mesh.n_cells)
+    c, n = q[rows], nu[rows]
+    coef = (1 + 3 * dim + 4) * torch.finfo(D).eps / 2
+    e = coef * (c.norm(dim=-1) + moved.points[moved.cells].norm(dim=-1).amax(-1))
+    d, u = _geometry(
+        torch.cat([q, c + e[:, None] / 4 * n, c + 4 * e[:, None] * n]), moved
+    )
+    k = q.shape[0] + c.shape[0]
+    assert torch.equal(d[:k], torch.zeros_like(d[:k]))
+    assert torch.allclose(u[: q.shape[0]], nu, atol=1e-12, rtol=0)
+    assert ((d[k:] - 4 * e).abs() <= e).all()
+    assert torch.allclose(u[k:], n, atol=1e-12, rtol=0)
+
+
 def _least_norm(c, tol: float = 1e-14):
     """The point of the convex hull of each row of ``c`` ``(n, K, d)`` closest to
     the origin, by enumeration in float64: every face of at most d of the vectors
