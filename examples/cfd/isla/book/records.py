@@ -14,10 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The book's one reader of the study records under ``results/campaigns_2026-10-22/<topic>/``.
+"""The book's one reader of the study records under ``results/campaigns_<date>/<topic>/``.
 
 Those files are unmodified copies of the lanes' records (index and md5s: ``RECORDS.md`` beside them, written by
-``copy_records_2026-10-22.py``). A chapter reads a number from them through this module, so a figure or a sentence
+``copy_records_<date>.py``). A topic is read from the newest folder that holds it (``FOLDER``). A chapter reads a number from them through this module, so a figure or a sentence
 updates when the record does::
 
     import records as R
@@ -32,12 +32,19 @@ import json
 import re
 from pathlib import Path
 
-REC = Path(__file__).resolve().parent.parent / "results" / "campaigns_2026-10-22"
+RESULTS = Path(__file__).resolve().parent.parent / "results"
+
+#: topics copied again into a newer folder -> that folder; every other topic is in campaigns_2026-10-22
+FOLDER = {
+    "attrib090": "campaigns_2026-10-23",
+    "ref090": "campaigns_2026-10-23",
+    "af_extrap": "campaigns_2026-10-23",
+}
 
 
 def path(topic: str, name: str) -> Path:
     """The record's file; raises if it is missing."""
-    p = REC / topic / name
+    p = RESULTS / FOLDER.get(topic, "campaigns_2026-10-22") / topic / name
     if not p.exists():
         raise FileNotFoundError(f"no study record at {p}")
     return p
@@ -45,7 +52,7 @@ def path(topic: str, name: str) -> Path:
 
 def source(topic: str, name: str) -> str:
     """The record's path as captions print it."""
-    return f"results/campaigns_2026-10-22/{topic}/{name}"
+    return f"results/{FOLDER.get(topic, 'campaigns_2026-10-22')}/{topic}/{name}"
 
 
 def load(topic: str, name: str):

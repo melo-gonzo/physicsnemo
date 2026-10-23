@@ -66,7 +66,7 @@ print(
     "**ISLA is a slice-attention transformer built to generalize: to predict the field on geometries, enclosures, inflow "
     "conditions and Reynolds numbers outside its training family, which is what design asks of a surrogate.** It is exactly "
     "equivariant to rigid motions and consistent under a change of mesh, by construction, and it computes its own scales from each "
-    "case, so its training data are spent on the physics rather than on frames, resolutions and units. "
+    "case, so a similarity of the problem leaves its internal states unchanged. "
     "AeroZoo, whose held-out splits take a whole enclosure family, geometry bank, inflow layout or Reynolds range out of training, "
     "is the book's test of generalization; @sec-aerozoo-why makes the case for it, and @sec-aerozoo gives ISLA's standing there. "
     "On AeroZoo both baselines end as about a zero predictor on pressure, so a pressure comparison there is a comparison with "
