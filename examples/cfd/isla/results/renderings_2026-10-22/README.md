@@ -88,6 +88,8 @@ and has `Training completed` in its `train.log`; every scorer record is at epoch
 | `deepjebpp_von_mises_090.png`, `deepjebpp_displacement_090.png`; `arrays/deepjebpp_60073.npz`, `arrays/render_cloud_deepjebpp.json` | DeepJEB++ test bracket 60073 (611-092-IS06_hor), three-quarter view, on its FEM surface (50,024 triangles, one per scored cell) | dump row 9 (job 336070), rows 10, 11 reused; `python render_cloud.py <s>/dump <png> <arrays> deepjebpp,shift_suv deepjebpp=<s>/geom/deepjebpp_611-092-IS06_hor_surface shift_suv=<s>/geom/shift_suv_00187_merged_surfaces.stl.pmsh` |
 | `shift_suv_cp_090.png`; `arrays/shift_suv_00184.npz`, `arrays/render_cloud_shift_suv.json` | SHIFT-SUV validation case 00184 (run 00187), left side, orthographic, on its STL (5,010,474 triangles) | dump rows 18, 19, 20 (jobs 336069, 336070); same command |
 | `routing/r090_dr_isla_seed42_s00079.{npz,json}`, `routing/r090eag_t2dz_isla_seed42_s00238.{npz,json}` | trained routing of ISLA 0.9.0 on DrivAerML Surface 00079 (200,000 tokens) and Tensile2d 00238 (462 boundary tokens, 9,547 prediction points), schema of `../renderings_2026-10-18/routing/` plus `n_query` and `probe_metrics` in the json: the probe's own scorer row, equal to the standing's record to 1.0e-6 on DrivAerML (the probe runs the blocks eagerly, the scorer compiled them) and exactly on Tensile2d | `scripts/slices_probe_090.py`, a port of `slices_probe_a2.py` to 0.9.0's forward (the scorer's `infer.py` through `dump_wrap.py`, `model.compile_blocks=false compile=false`, read-only hooks), via `PROBES=dr,t2d sbatch routing.sbatch`, LHR job 336200; then `python thin_routing.py <s>/routing/<tag>/<tag>.npz ../routing/<tag>.npz` |
+| `lug_von_mises_090.png`; `arrays/lug_00633.npz`, `arrays/render_2d_lug.json` | lug test case 00633, top face (the 1,060 nodes at z = thickness of the 12,720 scored nodes), von Mises [MPa] | dump row 12 (job 343286), row 13 (job 336070), row 14 reused; `python render_2d.py <s>/dump <png> <arrays> lug` |
+| `routing/r090eag_lug_isla_seed42_s00633.{npz,json}` | trained routing of the eager-trained lug ISLA 0.9.0 on test case 00633 (7,520 boundary tokens, 12,720 prediction points, all stored); the probe's own row equals the scorer's to 3e-6 | `PROBES=lug sbatch routing.sbatch`, LHR job 343287; `thin_routing.py` (copied unchanged) |
 | `cost_sweep_ref_090_gb300_bf16.json` | training-step time (median, p10, p90 of 25 steps after 8 warm-up steps) and peak allocated memory against token count, the method of `../renderings_2026-10-18/cost_sweep_ref_a2_gb300_bf16.json`: DrivAerML Surface 25k-800k cells for ISLA 0.9.0, GeoTransolver 256 and Transolver 512 x 16 (fair drive); DrivAerML Volume 100k-400k prediction points for ISLA 0.9.0 and ISLA-DTT 0.9.0; the tail arm `isla_surface_090_codeR090` | `scripts/bench_step_090.py` via `scripts/cost.sbatch`, LHR job 336005; `python cost_reduce.py` |
 
 `thin_routing.py` copies a probe of at most 60,000 tokens unchanged (Tensile2d). The
@@ -126,6 +128,7 @@ is the prediction points only (the A2 sweep had N boundary cells plus N predicti
 | | displacement | 0.150 | 0.115 | 0.165 | |
 | Tensile2d 00238 | stress | 0.0082 | 0.0060 | 0.0071 | 26 of 100 |
 | | displacement | 0.0051 | 0.0059 | 0.0044 | |
+| lug 00633 | von Mises | 0.00090 | 0.00153 | 0.00192 | 101 of 600 |
 
 The DeepJEB++ case was the median under the nearest-token form and is in ISLA 0.9.0's
 worst quartile; it was kept so the figure differs from the 2026-10-18 one only in the
@@ -141,8 +144,7 @@ mostly overhead, by up to 22% (Transolver at 25k: 67 against 86 ms).
 
 ## Pending
 
-- Phase 2: AirfRANS (`airfrans_pressure_090.png`, `airfrans_velocity_090.png`), the lug
-  (`lug_von_mises_090.png`) and their routing probes, once `r090eag_af_isla_seed42` and
-  `r090eag_lug_isla_seed42` finish and are scored into `evals_r090eag` (dump rows 6 and
-  12; the baseline rows 7, 8 and 13 are dumped, job 336070;
-  `PROBES=lug,af sbatch routing.sbatch`).
+- Phase 2, AirfRANS (`airfrans_pressure_090.png`, `airfrans_velocity_090.png`) and its
+  routing probe, once `r090eag_af_isla_seed42` finishes and is scored into
+  `evals_r090eag` (dump row 6; the baseline rows 7 and 8 are dumped, job 336070;
+  `PROBES=af sbatch routing.sbatch`).

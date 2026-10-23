@@ -288,6 +288,7 @@ def rel_l2(pred, true):
 # a REUSE:<row> row is the 2026-10-18 dump of that row (same run, case and command; LHR job 275252), its checkpoint gone.
 # (Jobs 336002-336004 ran only their first row: sbatch --export split ONLY at its commas; the rest ran in 336068-336070.)
 DUMP_JOB = {
+    12: 343286,
     0: 336002,
     4: 336003,
     23: 336004,
