@@ -30,8 +30,10 @@ STANDING below is the one table a later update edits: per dataset the run stem, 
 the case count and the status. A status of "in_flight" writes the in-flight text beside the numbers ("in_flight": {"what",
 "replacement"}, read by book/standing.py as "These numbers come from <what>. <replacement> is being measured ...").
 "Fix-trained" rows are trained with the compiled training path after its fault (pytorch/pytorch#195845) was fixed;
-"eager-trained" rows are trained without compilation. When the eager-trained AirfRANS and lug rows land: copy their score
-files into the scores folder, set the stem, evals folder and status "final" here, and rerun.
+"eager-trained" rows are trained without compilation; the AirfRANS and lug ISLA rows are eager-trained, the Tensile2d rows too.
+"isla_runs" names each arm's training path. An ISLA-DTT arm that a running experiment will replace carries "arm_in_flight"
+({arm name: {"what", "replacement"}}, read by book/standing.py as Standing.arm_in_flight): when its rows land, copy their
+score files into the scores folder, set its stem and evals folder in DTT, drop it from ARM_FLIGHT, and rerun.
 
 DEGENERATE marks a protocol that changes no arm's input: its cells keep the scorer's numbers under "scored" and carry
 "mean": null with the reason, and the file's "degenerate" key says why. On the DrivAerML Volume task ISLA draws its boundary
