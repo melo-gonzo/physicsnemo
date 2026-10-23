@@ -130,8 +130,9 @@ print("- **Not that discretization consistency is an exact invariance at every t
       "A different surface for the same body, a watertight STL in place of the CFD wall, moves the prediction next to the wall "
       "(@sec-limits-boundary-law).")
 print("- **Not that the interior lead is unconditional** (@sec-limits-interior).")
-print("- **Not that ISLA extrapolates across a flow regime or transfers zero-shot to a new geometry family better than the "
-      "baselines** (@sec-limits-regime, @sec-limits-transfer).")
+print("- **Not that ISLA extrapolates across a flow regime, or that it transfers zero-shot to a new geometry family better than "
+      "the baselines in general.** On SHIFT-SUV it transfers better than Transolver from estates to fastbacks on wall shear only; on "
+      "pressure, and in the reverse direction, the two show no difference (@sec-limits-regime, @sec-limits-transfer).")
 print("- **Not that the HiLiftAeroML numbers are test-set numbers** (@sec-limits-validation).")
 print("- **Not that the scaling law, the cell-count saturation or the capacity floor are measured at the reference configuration.** "
       "They are measured on smaller ISLAs and read for slopes and floors (@sec-capacity, @sec-oq-scaling).")
@@ -411,14 +412,20 @@ n_cells, n_ok = len(XR["cells"]), sum(v["verdict"] != "no difference" for v in X
 AZ_HELD = AZS["held_out"]
 zpen = {s: az_cell("ISLA", "velocity_l2", s)["mean"] / az_cell("ISLA", "velocity_l2")["mean"] for s in AZ_HELD}
 gt_above = sum(az_ratio("GeoTransolver", "velocity_l2", s) > 1 for s in AZ_HELD)
-print("**Zero-shot transfer to a new geometry family is measured twice, and neither measurement says that ISLA transfers better.** "
+XB = X["part_b"]["stage1"]
+gap = lambda a: XB["quantities"][f"G/lead/{a}/wss_l2"]["value"]
+gcmp = XB["comparisons"]["D_G/lead/wss_l2"]
+print("**Zero-shot transfer to a new geometry family is measured twice: on SHIFT-SUV, ISLA transfers better than Transolver on wall "
+      "shear from estates to fastbacks and alike on pressure; on AeroZoo the measurement does not say that ISLA transfers better.** "
       "SHIFT-SUV's standing models, trained and tested on estates, scored on the fastback family none of them saw: every model's "
       f"fastback pressure error is {span([pen[(a, 'pressure_l2')] for a in S.ARCHS])} times its estate error, and on wall shear ISLA's is {pen[('ISLA', 'wss_l2')]:.2f} times against "
       f"{pen[('GeoTransolver', 'wss_l2')]:.2f} and {pen[('Transolver', 'wss_l2')]:.2f}, so ISLA degrades less on fastback wall shear. The "
       f"registered summary of the four cells reads *{XR['summary']}*: {n_ok} of {n_cells} cells separate (the two wall-shear cells, "
       f"each labelled *{wss_cells['GeoTransolver']}* by the registered rule), where the rule needs a majority (@sec-shift-suv-xfam). "
-      "Whether that wall-shear gap is the transfer or fastback wall shear being harder for the baselines in their own family is "
-      "@sec-oq-transfer. On AeroZoo, whose held-out splits hold out a geometry bank, an enclosure family, a boundary-condition layout or "
+      "Against ISLA and Transolver trained on fastbacks, ISLA's estate-trained wall-shear error is "
+      f"{gap('isla'):.2f} times the in-family fastback error and Transolver's {gap('t'):.2f} times (Transolver ÷ ISLA "
+      f"{gcmp['ratio_T_over_ISLA']:.3f}, geometric seed means, {gcmp['z']:.1f} standard errors, *{gcmp['verdict']}*), and fastbacks are not harder in "
+      "themselves, so most of the wall-shear gap is transfer; GeoTransolver and the reverse direction are @sec-oq-transfer. On AeroZoo, whose held-out splits hold out a geometry bank, an enclosure family, a boundary-condition layout or "
       f"a Reynolds range, ISLA's velocity error on a held-out split is {min(zpen.values()):.1f} to {max(zpen.values()):.0f} times its "
       f"`{AZ_IN}` error, and GeoTransolver ÷ ISLA on velocity is above one on {gt_above} of the {len(AZ_HELD)} held-out splits, against a "
       "GeoTransolver whose velocity is not converged at the last epoch; on pressure both baselines are about a zero predictor "
@@ -446,8 +453,9 @@ AZ_SPLITS = AZS["splits"]
 q_dtt = SEEDS * len(AZ_SPLITS) * lane_gpuh("aerozoo", "ISLA-DTT")
 # ISLA with the fixed Reynolds scale on AeroZoo's `reynolds` split, priced at the `full` lane (an upper bound: the split trains on fewer cases)
 q_rey = SEEDS * lane_gpuh("aerozoo")
-# the reverse SHIFT-SUV direction: ISLA and Transolver trained on fastbacks, priced at the estate lanes
-q_transfer = SEEDS * (lane_gpuh("shift_suv") + lane_gpuh("shift_suv", "Transolver"))
+# two more seeds of the fastback-trained SHIFT-SUV ISLA and Transolver, priced at the training cost the first two measured
+q_transfer = sum(map(float, re.search(r"training ISLA ([\d.]+) \+ ([\d.]+), Transolver ([\d.]+) \+ ([\d.]+)",
+                                      " ".join(R.load("suv_xfam_b", "RESULTS_B.md").split())).groups()))
 # the tie rule's experiment as MEDIAL-TIE's design prices it (eager-trained lug and Tensile2d, two seeds each)
 DESIGN = " ".join(R.load("medial_tie", "DESIGN.md").split())
 q_ties = int(re.search(r"TIE costs about .*?\*\*(\d+) GPU-h\*\*", DESIGN).group(1))
@@ -476,7 +484,7 @@ rows = [
     ("Do the closest-feature ties carry the lug's posed growth? (@sec-oq-ties)", "a tie rule that does not depend on the search, retrained on the lug and Tensile2d and scored posed against the same base, by the reading rule of its design", f"{q_ties} (the design's figure)"),
     ("Can the fold sign and the token draw be made exact in float32? (@sec-oq-precision)", "a fold-robust sign and a draw ordered by the mesh's connectivity, with the float32-against-float64 comparison of the same cases rescored", "scoring only for the gap"),
     ("How large is ISLA-DTT's tree error at $\\theta = 1$ where its forest's frame ties? (@sec-oq-dtt-frame)", "ISLA-DTT scored rotated and translated, and under boundary redraws, on cases whose boundary has near-equal principal variances", "scoring only"),
-    ("Does ISLA degrade less on fastback wall shear because of the transfer? (@sec-oq-transfer)", "ISLA and Transolver trained on fastbacks and scored on estates", fmt_h(q_transfer)),
+    ("Does ISLA's transfer advantage on SHIFT-SUV wall shear hold against GeoTransolver, and in the reverse direction? (@sec-oq-transfer)", "GeoTransolver trained on fastbacks and scored on both families; for the reverse direction, more seeds of the fastback-trained ISLA and Transolver", f"{fmt_h(q_transfer)} for two more seeds of each"),
 ]
 if HELD:
     rows.append((f"How do the architectures compare on {names(sorted({k for k, _ in HELD}))} {' and '.join(ST[k].fields[f] for k, f in HELD)} measured alike?",
@@ -505,7 +513,6 @@ print(": The open questions, the measurement that would settle each, and its cos
 #| label: para-oq-dtt
 #| output: asis
 AFS = ST["airfrans"]
-AF_DTT = AFS.arm_in_flight("ISLA-DTT")
 dtt = {f: AFS.ratio("ISLA-DTT", f) for f in AFS.ds.headline}
 dtt_v = {f: AFS.verdict("ISLA-DTT", f) for f in AFS.ds.headline}
 c_i, c_d = S.cost("aerozoo", "ISLA"), S.cost("aerozoo", "ISLA-DTT")
@@ -517,7 +524,7 @@ print("**The open question is whether the read-only form, whose prediction at a 
       f"its median step is {c_d['step_seconds'] / c_i['step_seconds']:.1f} times the interacting form's and its peak memory "
       f"{c_d['peak_gib'] / c_i['peak_gib']:.2f} times (@tbl-ref-cost). On the AirfRANS interior task at the reference configuration, "
       "ISLA-DTT ÷ ISLA reads " + f3(dtt.values(), 3) + " (" + " / ".join(FW[f] for f in dtt)
-      + (f"; across training paths: {AF_DTT['what']}" if AF_DTT else "") + "): ISLA "
+      + "; ratios of arithmetic seed means): ISLA "
       + ", ".join(f"{v} ISLA-DTT on {FW[f]}" for f, v in dtt_v.items())
       + f" (@sec-airfrans-dtt-reference); outside its training bands the two forms' penalties read *no difference* on {r3n} of the "
       f"{len(r3)} cells (@sec-limits-regime). One planar dataset does not settle the question. The decisive data are AeroZoo's "
@@ -529,7 +536,6 @@ print("**The open question is whether the read-only form, whose prediction at a 
       f"Cost: {len(AZ_SPLITS)} splits × two seeds of ISLA-DTT, at most {fmt_h(q_dtt)} GPU-hours.")
 print()
 print(S.in_flight_callout(AZ_DTT["in_flight"]))
-print(S.in_flight_callout(AF_DTT))
 ```
 
 ### Do ISLA's declared scales add accuracy where the Reynolds number varies widely? {#sec-oq-scales}
@@ -720,13 +726,20 @@ print("**The open question is how large ISLA-DTT's tree error is at $\\theta = 1
 ```{python}
 #| label: para-oq-transfer
 #| output: asis
-print("**The open question is whether ISLA degrades less on fastback wall shear because it transfers better, or because fastback wall "
-      "shear is harder for the baselines in their own family.** Trained on estates and scored zero-shot on fastbacks, ISLA's wall-shear "
-      f"error grows {pen[('ISLA', 'wss_l2')]:.2f} times against {pen[('GeoTransolver', 'wss_l2')]:.2f} and "
-      f"{pen[('Transolver', 'wss_l2')]:.2f}, and the registered summary reads *{XR['summary']}* (@sec-limits-transfer). What would "
-      "settle it: ISLA and Transolver trained on fastbacks, scored in their own family and on estates, so that each architecture's "
-      "fastback error in family sets the floor its zero-shot error is read against. "
-      f"Cost: {fmt_h(q_transfer)} GPU-hours, priced at the estate lanes.")
+rev = {f: XB["comparisons"][f"D_R/lead/{f}"] for f in ("pressure_l2", "wss_l2")}
+est_spread = [max(v) / min(v) - 1 for a in XB["E"].values() for f in ("pressure_l2", "wss_l2")
+              for v in [a["fastback"]["est_test"][f]["per_seed"].values()]]
+print("**The open question is whether ISLA's transfer advantage on SHIFT-SUV wall shear holds against GeoTransolver, and in the "
+      "reverse direction.** Trained on estates and scored zero-shot on fastbacks, ISLA's wall-shear error is "
+      f"{gap('isla'):.2f} times what ISLA trained on fastbacks reaches there, against {gap('t'):.2f} for Transolver, and the "
+      f"registered rule reads *{gcmp['verdict']}* (@sec-limits-transfer). The reverse direction, the fastback-trained models scored "
+      "on estates, gives Transolver ÷ ISLA " + " / ".join(f"{rev[f]['ratio_T_over_ISLA']:.3f} ({rev[f]['z']:.1f} standard errors)"
+                                                       for f in rev)
+      + f" on pressure / wall shear, *{rev['wss_l2']['verdict']}*, because the two seeds of each fastback-trained model differ by "
+      f"{100 * min(est_spread):.0f} to {100 * max(est_spread):.0f}% on estates. What would settle it: GeoTransolver trained on "
+      "fastbacks and scored on both families, read by the same registered rules, for the first part; for the second, more seeds of "
+      f"the fastback-trained models. Cost: {fmt_h(q_transfer)} GPU-hours for two more seeds of each, at the training cost the first "
+      "two measured.")
 print()
 print(S.in_flight_callout(X["part_b"]["in_flight"]))
 ```

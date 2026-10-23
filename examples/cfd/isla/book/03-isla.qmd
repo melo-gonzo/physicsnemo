@@ -1564,7 +1564,6 @@ plt.show()
 #| label: para-isla-dtt-standing
 #| output: asis
 _AF = S.Standing("airfrans")
-_d = _AF.arm_in_flight("ISLA-DTT")
 _v = {f: _AF.verdict("ISLA-DTT", f) for f in _AF.ds.headline}
 _by = {}
 for f, v in _v.items():
@@ -1573,11 +1572,9 @@ print("Read-only points give up the coupling that lets the interior shape the pa
       "settle which form is better. On the AirfRANS interior task at the reference configuration, interacting ISLA "
       + ", and ".join(f"{v} ISLA-DTT on {' and '.join(fs)}" for v, fs in _by.items())
       + " (ISLA-DTT ÷ ISLA " + " / ".join(f"{_AF.ratio('ISLA-DTT', f):.3f}" for f in _AF.ds.headline) + " on "
-      + " / ".join(_AF.fields[f] for f in _AF.ds.headline) + f", seed means" + (f", across training paths: {_d['what']}" if _d else "")
-      + f"; {_AF.source}). Which interior form is ISLA's "
+      + " / ".join(_AF.fields[f] for f in _AF.ds.headline) + f", a ratio of arithmetic seed means; {_AF.source}). Which interior form is ISLA's "
       "reference is decided on AeroZoo's held-out splits, and it is an open question (@sec-oq-dtt); the interior standings "
       "of Part IV are of the interacting form.\n")
-print(S.in_flight_callout(_d))
 _azd = S.aerozoo()["arms"]["ISLA-DTT 512 with 512 slices"].get("in_flight")
 if _azd:
     print(S.in_flight_callout({"what": "ISLA against ISLA-DTT on AirfRANS alone",

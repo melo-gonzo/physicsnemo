@@ -118,14 +118,6 @@ plt.show()
 ```
 
 ```{python}
-#| label: callout-shifts-dtt-in-flight
-#| output: asis
-_d = S.Standing("airfrans").arm_in_flight("ISLA-DTT")
-print(S.in_flight_callout({"what": f"the AirfRANS ISLA-DTT mark of @fig-standing-shifts: {_d['what']}",
-                           "replacement": _d["replacement"]} if _d else None))
-```
-
-```{python}
 #| label: para-standing-invariances
 #| output: asis
 SOLIDS = ("tensile2d", "lug", "deepjeb")
@@ -196,7 +188,7 @@ HO = AZ["held_out"]
 AZP = {m: sum(AZ["arms"][AZ["isla_arm"]]["splits"][sp]["pressure_l2"][m] for sp in HO) / len(HO) for m in ("mean", "median")}
 assert min(AZP.values()) >= AZ["zero_predictor"], AZP
 print("**Scored on families they never saw, the three architectures degrade alike on SHIFT-SUV pressure, ISLA degrades "
-      "less on SHIFT-SUV wall shear, and on AeroZoo pressure both baselines are about a zero predictor and ISLA's held-out "
+      "less on SHIFT-SUV wall shear, by better transfer than Transolver's, and on AeroZoo pressure both baselines are about a zero predictor and ISLA's held-out "
       f"error, {AZP['mean']:.3f} (median {AZP['median']:.3f}) over the six splits, is at or above the zero predictor's "
       f"{AZ['zero_predictor']:.1f}.** Two datasets score models outside the family they trained on. SHIFT-SUV's standing "
       "models, trained on estates, are scored zero-shot on the fastback test cases; the *penalty* of a model is its fastback "
@@ -212,11 +204,15 @@ XF = S.suv_xfam()
 PEN = XF["R2"]["fb_test"]["penalties"]
 pen = lambda a, f: PEN[f"{next(n for n in XF['arms'] if n.split()[0] == a)}/{f}"]["P_geo"]
 pp = sorted({f"{pen(a, 'pressure_l2'):.2f}" for a in S.ARCHS})
+G = lambda a: XF["part_b"]["stage1"]["quantities"][f"G/lead/{a}/wss_l2"]["value"]
 print(f"On SHIFT-SUV, the fastback pressure error is {' to '.join(pp[::len(pp) - 1] if len(pp) > 1 else pp)} times the estate error for all three "
       f"architectures. On wall shear it is {pen('ISLA', 'wss_l2'):.2f} times for ISLA, against {pen('GeoTransolver', 'wss_l2'):.2f} "
       f"for GeoTransolver and {pen('Transolver', 'wss_l2'):.2f} for Transolver, so ISLA degrades less on fastback wall shear "
       "(geometric means over two seeds, the fastback test split). The registered summary over the four cells, pressure and "
       f"wall shear against each baseline, is \"{XF['R2']['fb_test']['summary']}\" (@sec-shift-suv). "
+      "Against models trained on fastbacks, which do as well there as the estate-trained models do on estates, ISLA's "
+      f"estate-trained wall-shear error is {G('isla'):.2f} times the in-family fastback error, against Transolver's {G('t'):.2f} (geometric means over two seeds, the fastback test split): "
+      "ISLA transfers better on wall shear, and the two lose alike on fastback pressure (@sec-shift-suv-xfam). "
       "Data: results/char/shift_suv_xfam_090.json.")
 print()
 print(S.in_flight_callout(XF["part_b"]["in_flight"]))

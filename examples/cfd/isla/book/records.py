@@ -39,6 +39,7 @@ FOLDER = {
     "attrib090": "campaigns_2026-10-23",
     "ref090": "campaigns_2026-10-23",
     "af_extrap": "campaigns_2026-10-23",
+    "suv_xfam_b": "campaigns_2026-10-23",
 }
 
 
