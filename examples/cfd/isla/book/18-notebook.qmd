@@ -40432,7 +40432,9 @@ case).
   over the surface (TOKEN-DRAW, header). The canonical frame was kept under the bar fixed in TOKEN-DRAW's task (at least 10 times fewer pose changes on the
   non-degenerate cases, at under 2 percent of AeroZoo's 0.51 s step): every non-degenerate AeroZoo case (37 to 1,621 times),
   DrivAerML run_2 (73 times) and the pool (39 times) pass it, and DrivAerML run_1 (7.2 times) does not. The lane asked the
-  supervisor whether the bar means every case or the pool, and the frame was committed as c2db0445e (TOKEN-DRAW 4).
+  supervisor whether the bar means every case or the pool. The supervisor read it on the pool and approved the frame on
+  principle, on the condition that its cost at DrivAerML's size come down, which TOKEN-COST met (72 to 5.1 ms at 17.7M
+  cells). The frame is c2db0445e (TOKEN-DRAW 3a, 4).
 - The on-wall test derived from the precision, `D_min - E_min <= 0` (DESIGN m.4, approved; n).
 - The tie band keeps the unit roundoff of the queries as given (DESIGN o, supervisor 2026-10-22): the model's geometry is a
   function of its inputs, values and dtype, and cannot know that a caller cast float32 data to float64. The float32 against
@@ -40692,7 +40694,7 @@ that row invalid and the read incomplete as registered.
 `reynolds={'mean': 6.0, 'std': 1.0}`, z over one epoch's training batches spans -2.7533 to 1.0402, the training split's own
 extremes, and the resolved config equals A's but for the dataset, the run id and the output and checkpoint paths. Its
 epoch-0 median step, 0.655 s, matches A's 0.651 and 0.644 s. The two lanes were submitted at 01:53 EDT 2026-10-23 (346117,
-346118). Cost about 188 GPU-h against the brief's 300. The read is expected about 2026-10-24 midday if the lanes start by
-06:00 EDT 2026-10-23.
+346118), and both have trained since. Cost about 188 GPU-h against the brief's 300. The read is expected about
+2026-10-24 midday.
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-geo-nb-2026-10-23/SECOND_READ_LREAZ.md).*
