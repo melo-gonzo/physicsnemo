@@ -444,8 +444,6 @@ fmt_h = lambda h: f"{h:,.0f}" if h < 1000 else f"{h / 1000:.1f} thousand"
 AZ_SPLITS = AZS["splits"]
 # ISLA-DTT on every AeroZoo split, each split priced at the `full` lane (an upper bound: every held-out split trains on fewer cases)
 q_dtt = SEEDS * len(AZ_SPLITS) * lane_gpuh("aerozoo", "ISLA-DTT")
-# the separating arm on AirfRANS, priced at the ISLA lane
-q_scales = SEEDS * lane_gpuh("airfrans")
 # the two Reynolds training controls, priced at the full AirfRANS training set (an upper bound: the split trains on fewer cases)
 q_rey = 2 * SEEDS * lane_gpuh("airfrans")
 # the reverse SHIFT-SUV direction: ISLA and Transolver trained on fastbacks, priced at the estate lanes
@@ -471,7 +469,7 @@ AZ_DTT = AZS["arms"][next(n for n in AZS["arms"] if n.startswith("ISLA-DTT"))]
 #| output: asis
 rows = [
     ("Should ISLA-DTT be ISLA's only interior form? (@sec-oq-dtt)", "ISLA-DTT ÷ ISLA on velocity and pressure on `full` and each AeroZoo held-out split under the benchmark protocol, at equal size, read by the rule registered for it", f"at most {fmt_h(q_dtt)}"),
-    ("Do ISLA's own scales or the standardization of its global input carry its AirfRANS gain? (@sec-oq-scales)", "the arm without the scales, reading a standardized inlet speed, on AirfRANS", fmt_h(q_scales)),
+    ("Do ISLA's declared scales add accuracy where the Reynolds number varies widely? (@sec-oq-scales)", "ISLA with and without its scales, the latter reading a standardized global input, on a dataset whose Reynolds number varies widely, such as AeroZoo", "not priced"),
     ("Why does ISLA extrapolate worse below the training Reynolds band? (@sec-oq-reynolds)", "ISLA trained with a dataset-independent log-Reynolds scale, and ISLA trained with a linear Reynolds number standardized on the training side, on the AirfRANS Reynolds split; AeroZoo's `reynolds` split as the second dataset", f"at most {fmt_h(q_rey)}; AeroZoo in the first row"),
     ("Are ISLA's crossflow and non-box failures on AeroZoo limits of the architecture? (@sec-oq-aerozoo)", "ISLA-DTT on the same splits; for the non-box family, a training set whose velocity scales cover the ducts'", "in the first row"),
     ("Why does ISLA not hold the outlet at its prescribed pressure on the crossflow layout? (@sec-oq-outlet)", "the predicted gauge pressure on the outlet faces against the prescribed zero, on every split and for both forms", "scoring only"),
@@ -532,7 +530,7 @@ print(S.in_flight_callout(AZ_DTT["in_flight"]))
 print(S.in_flight_callout("airfrans"))
 ```
 
-### ISLA's own scales against the standardized global input {#sec-oq-scales}
+### Do ISLA's declared scales add accuracy where the Reynolds number varies widely? {#sec-oq-scales}
 
 ```{python}
 #| label: para-oq-scales
@@ -540,19 +538,20 @@ print(S.in_flight_callout("airfrans"))
 AT = [R.md_table("attrib090", "relaunch_native.md", "af / isla (native)", i) for i in range(3)]
 arm = lambda t, a: next(r_ for r_ in t if r_["arm"] == a)
 step = [R.num(arm(t, "CONT")["÷ B"]) for t in AT]
-phi = [R.num(arm(t, "NOSC")["φ"]) for t in AT]
-print("**The open question is which of two changes carries ISLA's gain on AirfRANS: its own physical scales, or the standardization of "
-      "its global input.** Against an earlier form of its code, trained and scored alike, ISLA's error on the AirfRANS interior task is "
-      f"lower by a factor of {f3(step)} (pressure / velocity / eddy viscosity). An arm that removes ISLA's scales, the inlet speed "
-      "$U$, the length unit $L$, the Reynolds number built from them and eddy viscosity in units of $U L$, gives back a share "
-      f"{f3(phi)} of that step. That arm also reads the raw inlet speed where ISLA reads a standardized log Reynolds number, so the "
-      "scales together with the standardized global input carry the gain, and the measurement does not say which one does "
-      "(@sec-airfrans-attribution); it also changes the precision of the output head. What would settle it: the arm without the scales reading a standardized inlet speed, two seeds, "
-      "trained and scored like the others. Every arm of the ablation, the base included, trained on the compiled path after its fault "
-      f"was fixed. Cost: {fmt_h(q_scales)} GPU-hours. Data: {R.source('attrib090', 'relaunch_native.md')}.")
-print()
-print(S.in_flight_callout({"what": "an ablation whose arm without ISLA's scales also reads the raw, unstandardized inlet speed",
-                           "replacement": "The arm without the scales that reads a standardized inlet speed"}))
+std = [R.num(arm(t, "NOSCSTD")["÷ B"]) for t in AT]
+phi = [R.num(arm(t, "NOSCSTD")["φ"]) for t in AT]
+assert all(arm(t, "NOSCSTD")["moves (R1)"] == "no" for t in AT)
+print("**On AirfRANS, standardizing ISLA's global input carries its gain over an earlier form of its code, and its declared scales add "
+      "nothing measurable; whether they add accuracy where the Reynolds number varies widely is untested.** Against that earlier form, "
+      f"trained and scored alike, ISLA's error on the AirfRANS interior task is lower by a factor of {f3(step)} (pressure / velocity / "
+      "eddy viscosity). An arm without the scales that reads the inlet speed standardized, as the baselines read it, has "
+      f"{f3(std, 3)} times ISLA's error, a share {f3(phi)} of that step and no measurable effect on any field (each ratio exp(Δ), of "
+      "geometric seed means), so by the rule registered for it standardizing the global input carries the step "
+      "(@sec-airfrans-attribution). On AirfRANS the viscosity is constant and $L$ nearly so, so the log Reynolds number the scales form "
+      "is close to a monotone reparametrization of the inlet speed, and the scales can add little there beyond a standardized input. "
+      "What would settle it: ISLA with and without its scales, the latter reading a standardized global input, on a dataset whose "
+      "Reynolds number varies widely, such as AeroZoo, two seeds each. Every arm of the ablation, the base included, trained on the "
+      f"compiled path after its fault was fixed. Data: {R.source('attrib090', 'relaunch_native.md')}.")
 ```
 
 ### Reynolds extrapolation below the training band {#sec-oq-reynolds}
