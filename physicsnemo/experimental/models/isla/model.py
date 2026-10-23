@@ -1648,7 +1648,7 @@ class ISLA(Module):
                     offsets.append(offsets[-1] + m.n_points)
                 points = torch.cat([m.points.to(q_points.device, q_points.dtype) for m in meshes])
                 cells = torch.cat([m.cells.to(q_points.device) + o for m, o in zip(meshes, offsets)])
-                dist, direction = exact_boundary_geometry(q_points, points, cells, eps=EPS)
+                dist, direction = exact_boundary_geometry(q_points, points, cells)
             query["wall_distance"], query["wall_direction"] = dist, direction
             ### The boundary tokens: the sample of the cells (sample_boundary_cells),
             ### each kept cell with its Horvitz-Thompson measure. A uniform start
@@ -1768,7 +1768,7 @@ class ISLA(Module):
         query = None
         if query_points is not None:
             geometry = [
-                exact_boundary_geometry(query_points[i], surface_points[i], surface_cells[i], eps=EPS)
+                exact_boundary_geometry(query_points[i], surface_points[i], surface_cells[i])
                 for i in range(b)
             ]
             query = TensorDict(

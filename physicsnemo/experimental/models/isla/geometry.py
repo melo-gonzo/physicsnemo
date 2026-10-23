@@ -925,16 +925,15 @@ def _closest_candidates(
     cells: torch.Tensor,
     parity: torch.Tensor,
     face_normals: torch.Tensor,
-    eps: float,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """The closest-feature search (no gradient): for every query the cell of its
     closest point ``(Q,)``, whether several features tie for it ``(Q,)``, at a tie
     the least-norm point of the hull of their directions ``(Q, d)``, the sign of the
     distance from the winding number of the cells (:func:`_winding_sign`) ``(Q,)``,
-    and whether the query is on the surface (its closest distance at most ``eps``)
-    ``(Q,)``; see :func:`exact_boundary_geometry`. ``cells`` in canonical order
-    with their orientations ``parity`` (:func:`_canonical_cells`), the normals in
-    the queries' precision.
+    and whether the query is on the surface (below) ``(Q,)``; see
+    :func:`exact_boundary_geometry`. ``cells`` in canonical order with their
+    orientations ``parity`` (:func:`_canonical_cells`), the normals in the queries'
+    precision.
 
     Every candidate distance is computed in float64 on the canonical cell; the
     features tie when their distances are equal within the error bound ``E_k =
@@ -946,7 +945,9 @@ def _closest_candidates(
     vertex or an edge, every cell sharing that feature reaches the same point
     (otherwise a neighbouring cell holds a closer point of the same patch, as
     beside the foot of the perpendicular on a cell next to the vertex), except on
-    the surface, where every cell within the bound holds the query. A tie's
+    the surface, where every cell within the bound holds the query. The query is
+    on the surface when its closest cell's distance interval reaches 0, ``D_min -
+    E_min <= 0``: its coordinates cannot tell it from a point of the surface. A tie's
     directions are the unit vectors from the surface to the query, and on the
     surface the unit normals of the tied cells that have one (with none, the query
     keeps its closest cell's normal), whose least-norm point is taken odd in
@@ -1011,7 +1012,7 @@ def _closest_candidates(
     first = torch.full((nq,), li.shape[0], dtype=torch.long, device=dev).scatter_reduce(
         0, li, torch.where(dist == d_min[li], pair, li.shape[0]), "amin"
     )
-    idx, on_wall = pk[first], d_min <= eps
+    idx, on_wall = pk[first], d_min - err[first] <= 0
     ### The feature of each closest point (a vertex, an edge, or -1 for a cell's
     ### interior), and whether all of its cells reach it.
     n_vertices = points.shape[0]
@@ -1073,7 +1074,7 @@ def _closest_candidates(
 
 
 @_closest_candidates.register_fake
-def _(query_points, points, cells, parity, face_normals, eps):
+def _(query_points, points, cells, parity, face_normals):
     nq = query_points.shape[0]
     return (
         query_points.new_empty(nq, dtype=torch.long),
@@ -1088,7 +1089,6 @@ def _closest_features(
     query_points: Float[torch.Tensor, "queries dim"],
     points: Float[torch.Tensor, "vertices dim"],
     cells: Int[torch.Tensor, "cells dim"],
-    eps: float,
 ):
     """The closest surface point of each query and its feature: the point
     ``(Q, d)``, whether it is interior to its cell ``(Q,)``, the cell's unit
@@ -1105,7 +1105,7 @@ def _closest_features(
         q, y = query_points, points
         if q.dtype in (torch.float16, torch.bfloat16):
             q, y = q.float(), y.float()
-        idx, tied, tie_u, sign, on_wall = _closest_candidates(q, y, cells, parity, all_n.to(q.dtype), eps)
+        idx, tied, tie_u, sign, on_wall = _closest_candidates(q, y, cells, parity, all_n.to(q.dtype))
         corners = cells[idx]  # (Q, d)
         weights = _closest_weights(query_points.double(), points.double()[corners])
     simplex = points[corners]  # (Q, d, d)
@@ -1121,8 +1121,6 @@ def exact_boundary_geometry(
     query_points: Float[torch.Tensor, "queries dim"],
     points: Float[torch.Tensor, "vertices dim"],
     cells: Int[torch.Tensor, "cells dim"],
-    *,
-    eps: float = 1e-12,
 ) -> tuple[Float[torch.Tensor, " queries"], Float[torch.Tensor, "queries dim"]]:
     r"""Signed distance and direction from a boundary surface to each query.
 
@@ -1153,8 +1151,9 @@ def exact_boundary_geometry(
     open surface is signed by the standard threshold :math:`w = 1/2` (on the side
     of :math:`\sigma`). :math:`u` is the direction from the surface to the query
     (``sign(0) = +1``). A query on
-    the surface (:math:`\lvert x - p \rvert \le` ``eps``, in float64) takes
-    :math:`d = 0` and the same rule with the directions replaced by the unit
+    the surface (its float64 distance within the error bound of that distance,
+    :func:`_closest_candidates`: its coordinates cannot tell it from a point of
+    the surface) takes :math:`d = 0` and the same rule with the directions replaced by the unit
     normals of the cells that hold it (below): the cell's normal inside a cell,
     the least-norm point of the hull of the normals of the cells sharing an edge
     or a vertex. Coincident vertices are welded
@@ -1191,7 +1190,7 @@ def exact_boundary_geometry(
             f"the exact boundary geometry is implemented in two and three dimensions; got {query_points.shape[-1]}"
         )
     closest, on_cell, face_n, tied, tie_u, sign, tie_dist, on_wall = _closest_features(
-        query_points, points, cells, eps
+        query_points, points, cells
     )
     diff = query_points - closest
     dist = diff.norm(dim=-1)
@@ -1199,7 +1198,7 @@ def exact_boundary_geometry(
     u = torch.where(
         on_cell[:, None],
         torch.where((plane >= 0)[:, None], face_n, -face_n),
-        diff / dist.clamp_min(eps)[:, None],
+        diff / dist.clamp_min(torch.finfo(dist.dtype).tiny)[:, None],
     )
     u = torch.where(on_wall[:, None], face_n, u)
     u = torch.where(tied[:, None], tie_u, u)
