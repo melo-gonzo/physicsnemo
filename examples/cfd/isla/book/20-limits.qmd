@@ -153,9 +153,9 @@ print("- **Not that ISLA extrapolates across a flow regime, or that it transfers
 print("- **Not that every standing is of ISLA reading its whole boundary.** ISLA's configurations read every piece of the "
       "boundary the DrivAerML and AirfRANS files store, but the standings' checkpoints on the DrivAerML Volume and Surface "
       "tasks, SHIFT-SUV, HiLiftAeroML and AirfRANS were trained with the body alone (@sec-standing-geometry); SHIFT-SUV's "
-      f"files, and all but {HL_BUT} of HiLiftAeroML's, store no other piece, and the recipe has no ISLA configuration for "
-      "SHIFT-SUV; Peter approved building the missing pieces of both in the recipe (@sec-limits-whole-boundary, "
-      "@sec-oq-whole-boundary).")
+      f"files, and all but {HL_BUT} of HiLiftAeroML's, store no other piece; the recipe now builds SHIFT-SUV's box and "
+      "HiLiftAeroML's inlet and outlet and the configurations read them, while those two standings still come from checkpoints "
+      "trained with the body alone (@sec-limits-whole-boundary, @sec-oq-whole-boundary).")
 print("- **Not that the HiLiftAeroML numbers are test-set numbers** (@sec-limits-validation).")
 print("- **Not that the scaling law, the cell-count saturation or the capacity floor are measured at the reference configuration.** "
       "They are measured on smaller ISLAs and read for slopes and floors (@sec-capacity, @sec-oq-scaling).")
@@ -505,16 +505,16 @@ import yaml
 WB_CFG = {"isla_volume_aerozoo": ["AeroZoo"], "isla_lug": ["the GINOT bracket lug"], "isla_tensile2d": ["PLAID Tensile2d"],
           "isla_surface_deepjebpp": ["DeepJEB++"], "isla_volume": ["the DrivAerML Volume task"],
           "isla_volume_airfrans": ["the AirfRANS interior task"], "isla_surface": ["the DrivAerML Surface task"],
-          "isla_surface_highlift": ["HiLiftAeroML"]}
+          "isla_surface_highlift": ["HiLiftAeroML"], "isla_surface_shift_suv": ["SHIFT-SUV"]}
 FKW = {n: yaml.safe_load((S.RECIPE / "conf" / "model" / f"{n}.yaml").read_text())["forward_kwargs"] for n in WB_CFG}
 BND = {n: list(f["boundary_meshes"]) for n, f in FKW.items()}
 PRED = {n: f["prediction_boundaries"]["literal"] for n, f in FKW.items() if "prediction_boundaries" in f}
-# SHIFT-SUV's dataset files read the vehicle alone, while the surface configuration also reads the tunnel's four pieces
-SUV_DS = (S.RECIPE / "datasets" / "shift_suv_surface.yaml").read_text()
-assert "domain_boundaries" not in SUV_DS and set(BND["isla_surface"]) > {"vehicle"}
+# SHIFT-SUV's box and HiLiftAeroML's inlet and outlet are built by the first transform of their dataset files
+FIRST_T = {d: yaml.safe_load((S.RECIPE / "datasets" / f"{d}.yaml").read_text()) for d in ("shift_suv_surface", "highlift_surface")}
+FIRST_T = {d: str(y["pipeline"]["transforms"][0]) if "pipeline" in y else str(y["transforms"][0]) for d, y in FIRST_T.items()}
+assert "AddBoxBoundaries" in FIRST_T["shift_suv_surface"] and "AddHemisphereBoundaries" in FIRST_T["highlift_surface"], FIRST_T
 multi = [n for n in WB_CFG if len(BND[n]) > 1]
-body = [n for n in WB_CFG if len(BND[n]) == 1]
-assert [d for n in body for d in WB_CFG[n]] == ["HiLiftAeroML"], body
+assert multi == list(WB_CFG), [n for n in WB_CFG if n not in multi]
 lst = lambda names: ", ".join(names[:-1]) + " and " + names[-1] if len(names) > 1 else names[0]
 NUMW = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine"}
 # ISLA's length unit with the body alone and with the whole stored boundary (BOUNDARY-AUDIT section 4; AF-WHOLE section 3)
@@ -526,18 +526,19 @@ WB_L = {"drv": re.search(r"full resolution\) \| ([\d.]+-[\d.]+) m \(median [\d.]
 WB_L["drv"] = (WB_L["drv"][0].replace("-", " to "), WB_L["drv"][1])
 WB_L["af"] = (WB_L["af"][0].replace("-", " to "), WB_L["af"][1])
 print("**ISLA's input is the whole boundary of the PDE domain, every piece a dataset stores, each by name with its condition type; "
-      f"the recipe's configurations read it on {NUMW[sum(map(len, WB_CFG.values()))]} of the nine tasks, and SHIFT-SUV has none.** "
+      f"the recipe's configurations read it on all {NUMW[sum(map(len, WB_CFG.values()))]} tasks, and on HiLiftAeroML every piece "
+      "but the symmetry plane.** "
       "A steady boundary-value problem is well posed only with data on all of its boundary. A wall the model is not given can reach "
       "its prediction only indirectly, through where the prediction points lie, which ties the prediction to the dataset's frame "
       "rather than to the problem. On " + lst([d for n in multi for d in WB_CFG[n]]) + " the configuration reads the boundary as "
-      "named pieces (" + "; ".join(f"{WB_CFG[n][0]}: " + ", ".join(f"`{b}`" for b in BND[n]) for n in multi) + "), and on "
-      f"HiLiftAeroML one mesh, the wing (`{BND[body[0]][0]}`), the only piece all but {HL_BUT} of its files store. A surface task "
+      "named pieces (" + "; ".join(f"{WB_CFG[n][0]}: " + ", ".join(f"`{b}`" for b in BND[n]) for n in multi) + "). A surface task "
       "reads every boundary it is given and predicts at the cells of those it names (`prediction_boundaries`, required: "
       + lst([f"{WB_CFG[n][0]} names " + ", ".join(f"`{b}`" for b in PRED[n]) for n in PRED])
       + "), so on the DrivAerML Surface task the tunnel's four pieces are read as conditions only. SHIFT-SUV's files store the "
-      "vehicle alone. The surface configuration reads the tunnel's four pieces beside it, and on these files the recipe's "
-      "path resolver raises a `KeyError` on each of the missing paths; the recipe does not train ISLA on the vehicle alone. Peter approved building the rest "
-      "of its boundary in the recipe (@sec-oq-whole-boundary). The standings' checkpoints were trained with the body alone on the "
+      f"vehicle alone, and all but {HL_BUT} of HiLiftAeroML's the wing alone; the recipe builds the rest as the first transform of "
+      "their dataset files, SHIFT-SUV's CFD box (`AddBoxBoundaries`) and HiLiftAeroML's inlet and outlet (`AddHemisphereBoundaries`), "
+      "which `isla_surface_shift_suv` and `isla_surface_highlift` read (@sec-oq-whole-boundary). HiLiftAeroML's symmetry plane is "
+      "the one piece no configuration reads. The standings' checkpoints were trained with the body alone on the "
       "DrivAerML tasks, SHIFT-SUV, HiLiftAeroML and AirfRANS (@sec-standing-geometry), so those standings are of ISLA reading "
       "part of its boundary. On the DrivAerML Volume task ISLA's far-field eddy-viscosity error follows the height above the "
       "floor (@sec-oq-far-field). Because ISLA's length unit $L$ is the RMS pairwise distance of the whole given boundary "
@@ -1054,6 +1055,15 @@ HL_HOLE = (sci(float(re.search(r"The area ratio is ([\d.]+)", HLD4).group(1)) - 
            re.search(r"one hole of [\d,]+ in² on every root, [\d-]+ in² \(([\d.]+) %\) less", HLD4).group(1),
            *re.search(r"([\d.]+) % of LHC001's outline lies within 0\.5 in of one and (\d+) % within 2 in", HLD4).groups())
 assert HL_HOLE[-1] == "100"
+# BC-SUPPLY: the far field's radius, the freestream census and the baselines' unchanged inputs
+BCS_ = " ".join(R.load("bc_supply", "REPORT.md").split())
+BCSU_R = re.search(r"radius ([\d.]+) in, `n_theta`", BCS_).group(1)
+BCSU_NU, BCSU_CASES = re.search(r"The census found (\d+) distinct `U_inf` vectors, bit for bit, over all ([\d,]+) cases", BCS_).groups()
+BCSU_NU = {"10": "ten"}.get(BCSU_NU, BCSU_NU)
+BCSU_BASE = re.findall(r"\*\*(\d+) of \1 items are bitwise equal\*\*|\*\*(\d+) of \2 bitwise\*\*", BCS_)
+BCSU_BASE = [a or b for a, b in BCSU_BASE]
+assert BCSU_BASE == ["60", "24"], BCSU_BASE
+HL_R = re.search(r"The stored interiors and curator's 2 files use [\d,.]+ in \(([\d.]+) MAC\)", " ".join(R.load("bc_sidecar", "REPORT.md").split())).group(1)
 print("**Read from every dataset's files, the boundary falls in two classes; the open question is whether the SHIFT-SUV and "
       "HiLiftAeroML standings move when ISLA reads the pieces of their domains' boundaries that their files do not store.** ISLA reads every stored piece of the "
       "boundary, each by name with its condition type (@sec-limits-whole-boundary).")
@@ -1072,11 +1082,17 @@ print("- **Read whole.** On AeroZoo, the GINOT bracket lug, PLAID Tensile2d, Dee
       "`freestream`, whose prescribed value is the inlet velocity ISLA already reads, with the dataset unchanged (@sec-data-airfrans).")
 print(f"- **Not stored.** SHIFT-SUV's {SUV_N} files store the vehicle alone, open at the tyre contact patches, inside an interior "
       f"that fills the box {SUV_BOX}; its ground, side walls, roof, inlet and outlet are not stored, and no published source found "
-      "gives the side walls', the roof's or the outlet's condition. The recipe has no ISLA configuration for SHIFT-SUV, since its "
-      "surface configuration reads the tunnel's four pieces, which these files lack (@sec-limits-whole-boundary). HiLiftAeroML "
+      "gives the side walls', the roof's or the outlet's condition. The recipe builds the box as the first transform of SHIFT-SUV's "
+      "dataset files (`AddBoxBoundaries`), and `isla_surface_shift_suv` reads it beside the vehicle, its five pieces named by "
+      "role with no claimed condition type (@sec-limits-whole-boundary). HiLiftAeroML "
       f"stores the wing alone on {HL[0]} of its {HL[1]} files; the other two hold an inlet, an outlet and a symmetry plane built by "
       "the same curation pipeline as DrivAerML's box. The dataset's paper puts the far field on a hemisphere of radius about "
-      f"{HL_PAPER} mean aerodynamic chords, while the stored interiors reach {HL_MAC} chords. Its symmetry plane is a disk "
+      f"{HL_PAPER} mean aerodynamic chords, while the stored interiors reach {HL_MAC} chords. The recipe builds the inlet and the "
+      f"outlet as the first transform of its dataset file (`AddHemisphereBoundaries`), as the curation pipeline built them: at "
+      f"radius {BCSU_R} in ({HL_R} mean aerodynamic chords), split by each case's stored freestream, of which the "
+      f"{BCSU_CASES} cases store {BCSU_NU} distinct vectors, one per angle of attack. On the two files that store a far field "
+      "the built inlet and outlet equal the stored ones bit for bit, in points and in oriented cells; only the order differs, "
+      "since the stored order is the curation pipeline's permutation. Its symmetry plane is a disk "
       "with the wing's root cut out. On the one geometry checked whose root is closed, the hole the wing's own root cells "
       f"bound matches the stored plane's to {HL_HOLE[0]} in relative area. On {HL_HOLE[1]} geometries checked whose roots are "
       f"open, every edge of the cells on the plane together covers only {HL_HOLE[2]} to {HL_HOLE[3]}% of the closed root's "
@@ -1091,29 +1107,32 @@ print(f"- **Not stored.** SHIFT-SUV's {SUV_N} files store the vehicle alone, ope
 print()
 # the far-field radius the stored interiors and curator's two synthesized files use (BC-SIDECAR, decision 4)
 HL_R = re.search(r"The stored interiors and curator's 2 files use [\d,.]+ in \(([\d.]+) MAC\)", " ".join(R.load("bc_sidecar", "REPORT.md").split())).group(1)
-print("**Peter approved building the missing pieces in the recipe, as the supervisor proposed.** Asked whether SHIFT-SUV's "
-      "CFD box and HiLiftAeroML's far field without its symmetry plane may be added, Peter answered: "
+print("**Peter approved building the missing pieces in the recipe, as the supervisor proposed, and the recipe builds them.** "
+      "Asked whether SHIFT-SUV's CFD box and HiLiftAeroML's far field without its symmetry plane may be added, Peter answered: "
       "\"Yes, of course you can do that\". "
-      f"The approved supply builds SHIFT-SUV's box from constants: on every one of its {SUV_ALL} files the stored interior fills the same box, "
+      f"The recipe builds SHIFT-SUV's box from constants: on every one of its {SUV_ALL} files the stored interior fills the same box, "
       f"with CFD nodes on all six of its planes and its floor {SUV_GR[0]} to {SUV_GR[1]} mm below the vehicle's lowest point, so a "
       "recipe transform can build the inlet, the outlet, the floor, the side walls and the roof on each case, before any pose or "
       "centering, and leave the dataset as it is; the five pieces claim no condition type, since no source gives the walls', "
-      "the roof's or the outlet's. It takes HiLiftAeroML's inlet and outlet from the curation pipeline's own generator at the "
+      "the roof's or the outlet's. It takes HiLiftAeroML's inlet and outlet from the curation pipeline's own generator, its "
+      "arithmetic copied unchanged, at the "
       f"radius the stored interiors use, {HL_R} mean aerodynamic chords, read beside the wing with its duplicated root cells "
       "dropped (@sec-data-hilift). Its symmetry plane stays out: each open root's missing strip rebuilt from its own unused "
       "vertices in outline order, with no chosen radius, and checked against the stored hole on the closed root, is what would "
-      "add it. What would settle the question: each standing retrained with ISLA reading those pieces, two seeds, scored "
-      "beside the standing as it is. "
+      "add it. GeoTransolver's and Transolver's inputs and targets are bitwise unchanged by both transforms "
+      f"({BCSU_BASE[0]} of {BCSU_BASE[0]} items with the box, {BCSU_BASE[1]} of {BCSU_BASE[1]} with the inlet and outlet). Both "
+      "standings were trained reading the body alone, and the final reference rerun retrains them with these pieces. What would "
+      "settle the question: each standing retrained with ISLA reading those pieces, two seeds, scored beside the standing as "
+      "it is. "
       "Cost: not priced, because the configurations set the runs. "
       f"Data: {R.source('boundary_audit', 'REPORT.md')} (sections 1, 2 and 5), {R.source('setup_research', 'SETUP.md')}, "
       f"{R.source('bc_sidecar', 'FINAL_REPORT.md')}, {R.source('bc_sidecar', 'REPORT.md')} (decision 4), "
-      f"{R.source('hl_dup', 'RESULTS.md')} (section 4).")
+      f"{R.source('hl_dup', 'RESULTS.md')} (section 4); {R.source('bc_supply', 'REPORT.md')} (sections 2 and 3).")
 ```
 
 ::: {.callout-note title="In flight"}
-This question rests on the SHIFT-SUV and HiLiftAeroML standings, trained with the body alone. Canonical ISLA's
-configurations for both with the pieces above, and a rebuild of HiLiftAeroML's open root outlines from their stored
-vertices that needs no chosen radius, are being built, and the ledger (@sec-ledger) tracks them.
+HiLiftAeroML's symmetry plane is not read. A rebuild of its open root outlines from their stored vertices that needs
+no chosen radius is being built, and the ledger (@sec-ledger) tracks it.
 :::
 
 ### The near-wall channel under the whole boundary {#sec-oq-nearwall}
