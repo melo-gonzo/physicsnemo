@@ -1,0 +1,47 @@
+03-isla: 22 cells, 0 differ
+04-invariances: 26 cells, 0 differ
+05-forward-pass: 41 cells, 2 differ
+=== code-interior
+--- 
++++ 
+@@ -50,0 +51,6 @@
++padded = _pad_tokens(tokens, TOKEN_ALIGNMENT)
++### The end of the real tokens when padding follows them, None when nothing was
++### padded: then every read below is that of the unpadded token set.
++n_real = None if padded is tokens else tokens.batch_size[1]
++tokens = padded
++_hint_token_axis(tokens.batch_size[1], self._token_widths)
+
+=== code-read-only
+--- 
++++ 
+@@ -16 +16 @@
+-        h_b, h_p = h[:, :n_boundary], h[:, n_boundary:]
++        h_b, h_p = h[:, :n_boundary], h[:, n_boundary:n_real]
+@@ -20 +20,2 @@
+-        h = torch.cat([h_b, h_p + delta.view_as(h_p)], dim=1)
++        parts = [h_b, h_p + delta.view_as(h_p)]
++        h = torch.cat(parts if n_real is None else [*parts, h[:, n_real:]], dim=1)
+
+06-using-isla: 32 cells, 1 differ
+=== tbl-using-contracts
+--- 
++++ 
+@@ -3 +3 @@
+-| rotation by 0.7 rad and translation by (3, -2) | 6.5e-15 | 2.0e-15 |
++| rotation by 0.7 rad and translation by (3, -2) | 6.4e-15 | 2.2e-15 |
+@@ -5,3 +5,3 @@
+-| geometry scaled by 7 (measures scale with it) | 1.7e-15 | 6.5e-16 |
+-| measures scaled by 5, geometry unchanged | 1.2e-15 | 5.6e-16 |
+-| every cell split into two coincident halves | 1.4e-15 | 5.6e-16 |
++| geometry scaled by 7 (measures scale with it) | 1.4e-15 | 7.0e-16 |
++| measures scaled by 5, geometry unchanged | 1.3e-15 | 5.9e-16 |
++| every cell split into two coincident halves | 1.4e-15 | 6.0e-16 |
+
+09-drivaerml: 35 cells, 0 differ
+10-hilift: 28 cells, 0 differ
+12-airfrans: 35 cells, 0 differ
+19-capacity: 35 cells, 0 differ
+20-limits: 33 cells, 0 differ
+index: 6 cells, 0 differ
+total differing cells 3

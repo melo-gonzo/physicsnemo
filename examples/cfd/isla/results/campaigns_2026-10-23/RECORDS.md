@@ -33,6 +33,10 @@ source. Do not edit by hand.
 | `dtt_fast_compile/` | DTT-FAST, piece COMPILE: ISLA-DTT's compiled blocks certified against eager, and the bf16 casts Inductor leaves out | `scratch/isla-dtt-fast-2026-10-23/compile/` |
 | `dtt_fast_verify_fusedread/` | DTT-FAST, piece FUSEDREAD verified independently: pair lists, precision and the GB300 step | `scratch/isla-dtt-fast-2026-10-23/verify_fusedread/` |
 | `dtt_fast_integration/` | DTT-FAST, integration pass 1: the tree walk, tree build and fused read on ISLA 0.11.0 behind one execution attribute | `scratch/isla-dtt-fast-2026-10-23/integration/` |
+| `boundary_merge/` | MERGE-PREP: the token padding and the whole boundary with the surface task merged into ISLA 0.11.0, checked and timed | `scratch/isla-merge-prep-2026-10-24/` |
+| `dtt_pose/` | DTT-POSE: why ISLA-DTT's forest depends on pose and precision, and the design that removes it | `scratch/isla-dtt-pose-2026-10-24/` |
+| `dtt_pose_exp/` | DTT-POSE-EXP: ISLA-DTT retrained with DTT-POSE's forest on the lug and AirfRANS, the pre-registration | `scratch/isla-dtt-pose-exp-2026-10-24/` |
+| `geo_thin/` | GEO-THIN: thin cells of nonzero area in the exact geometry, the census of the stored meshes and the design | `scratch/isla-geo-thin-2026-10-24/` |
 
 | topic | file | source | md5 |
 | --- | --- | --- | --- |
@@ -195,3 +199,13 @@ source. Do not edit by hand.
 | dtt_fast_compile | REPORT.md | scratch/isla-dtt-fast-2026-10-23/compile/REPORT.md | 296118e95eab0cc507c6bc77ad8ab104 |
 | dtt_fast_verify_fusedread | VERIFY.md | scratch/isla-dtt-fast-2026-10-23/verify_fusedread/VERIFY.md | 3547c3068a6ef54d514468ea1a7d4364 |
 | dtt_fast_integration | RESULTS.md | scratch/isla-dtt-fast-2026-10-23/integration/RESULTS.md | cd508ec6241c605c2464c0f4541ef70b |
+| boundary_merge | REPORT.md | scratch/isla-merge-prep-2026-10-24/REPORT.md | 511537a48ee5f289a38f253978a7b050 |
+| boundary_merge | FINAL_REPORT.md | scratch/isla-merge-prep-2026-10-24/FINAL_REPORT.md | 1a67141eff23bbe060cf5e50b0bdf536 |
+| boundary_merge | book/BOOK_CHANGES.md | scratch/isla-merge-prep-2026-10-24/book/BOOK_CHANGES.md | bf07eb9c2fd38aafec43369c1d2adcfe |
+| boundary_merge | results/TIMING.md | scratch/isla-merge-prep-2026-10-24/results/TIMING.md | e0f06a4a592bc54c93a3c5aab23c478f |
+| boundary_merge | results/book_diff_7213_vs_17c9df5c0.txt | scratch/isla-merge-prep-2026-10-24/results/book_diff_7213_vs_17c9df5c0.txt | 61c79e81a7ceb411c7ce765f361e7d30 |
+| dtt_pose | DESIGN.md | scratch/isla-dtt-pose-2026-10-24/DESIGN.md | 8420670e9d9f67957d4c4d7ab05d3599 |
+| dtt_pose | MECHANISMS.md | scratch/isla-dtt-pose-2026-10-24/MECHANISMS.md | 2e89f066f0578021a466e768f5c76bc0 |
+| dtt_pose_exp | PREREG.md | scratch/isla-dtt-pose-exp-2026-10-24/PREREG.md | 2f46a10cc7cc9f3f8ba9a39c98cb6d39 |
+| geo_thin | DESIGN.md | scratch/isla-geo-thin-2026-10-24/DESIGN.md | f7f8ed6849f68cc8a4584989afb1a27e |
+| geo_thin | RESULTS.md | scratch/isla-geo-thin-2026-10-24/RESULTS.md | 6daa28650f27ed75c455c12e89fbd25d |

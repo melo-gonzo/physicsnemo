@@ -300,6 +300,32 @@ RECORDS = {
         "DTT-FAST, integration pass 1: the tree walk, tree build and fused read on ISLA 0.11.0 behind one execution attribute",
         ["RESULTS.md"],
     ),
+    "boundary_merge": (
+        "isla-merge-prep-2026-10-24",
+        "MERGE-PREP: the token padding and the whole boundary with the surface task merged into ISLA 0.11.0, checked and timed",
+        [
+            "REPORT.md",
+            "FINAL_REPORT.md",
+            "book/BOOK_CHANGES.md",
+            "results/TIMING.md",
+            "results/book_diff_7213_vs_17c9df5c0.txt",
+        ],
+    ),
+    "dtt_pose": (
+        "isla-dtt-pose-2026-10-24",
+        "DTT-POSE: why ISLA-DTT's forest depends on pose and precision, and the design that removes it",
+        ["DESIGN.md", "MECHANISMS.md"],
+    ),
+    "dtt_pose_exp": (
+        "isla-dtt-pose-exp-2026-10-24",
+        "DTT-POSE-EXP: ISLA-DTT retrained with DTT-POSE's forest on the lug and AirfRANS, the pre-registration",
+        ["PREREG.md"],
+    ),
+    "geo_thin": (
+        "isla-geo-thin-2026-10-24",
+        "GEO-THIN: thin cells of nonzero area in the exact geometry, the census of the stored meshes and the design",
+        ["DESIGN.md", "RESULTS.md"],
+    ),
 }
 
 
