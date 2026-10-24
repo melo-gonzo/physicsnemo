@@ -1646,7 +1646,13 @@ class ISLA(Module):
                 conditions together carry the outputs names them all). Their
                 order does not matter. It owns no parameters: the head reads the
                 same tokens whichever boundaries carry the outputs, only the rows
-                it returns differ. ``None`` for an interior task.
+                it returns differ. The prediction is a quadrature over the cells
+                given for these boundaries (the request), so a request must cover
+                the body: on DrivAerML Surface, half a car's cells raise the
+                pressure and wall-shear errors 10 to 18 times. A larger request,
+                or the mean of several, lowers the error: the spread between
+                requests falls about as one over the square root of their cell
+                count. ``None`` for an interior task.
             global_data: The case's per-case fields, a TensorDict (or mapping)
                 with the ``global_schema`` fields as leaves (a rank-0 field a
                 scalar, a rank-1 field a ``(dim,)`` vector); extra leaves are
