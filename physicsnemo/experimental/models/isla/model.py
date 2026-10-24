@@ -482,8 +482,11 @@ class ISLA(Module):
     executed, not what it computes (:meth:`resolve_geo_kernel`). The
     ``tree_walk`` attribute (``"auto"``; set ``"reference"`` or ``"fast"`` to
     force one) selects how ISLA-DTT's forest walk runs, not the pairs it returns
-    (``tree_read.resolve_walk``). Each is an execution choice, not a constructor
-    argument: checkpoints do not store it, and a loaded model starts at ``"auto"``.
+    (``tree_read.resolve_walk``), and the ``tree_build`` attribute (likewise) how
+    its boundary forest is built, not what it is
+    (:func:`~physicsnemo.experimental.models.isla.tree_build.resolve_tree_build`).
+    Each is an execution choice, not a constructor argument: checkpoints do not
+    store it, and a loaded model starts at ``"auto"``.
     So is ``tree_read_checkpoint`` (ISLA-DTT only; ``"off"``): under gradient,
     ``"read"`` recomputes each block's boundary read in backward instead of keeping
     its per-pair tensors, and ``"block"`` recomputes each block together with its
@@ -947,6 +950,9 @@ class ISLA(Module):
         ### Activation recompute of the read ("off", "read" or "block"; see the class
         ### docstring, *Execution*): an execution choice, writable, not in the state dict.
         self.tree_read_checkpoint = "off"
+        ### How the forest is built, not what it is (tree_build.py): an execution
+        ### choice like geo_kernel, "auto" resolving to the fast build on CUDA.
+        self.tree_build = "auto"
         self.kernel_basis = None
         self.kernel_reads = None
         if self.query_independent:
@@ -1728,6 +1734,7 @@ class ISLA(Module):
             theta=self._tree_read_theta,
             eps=EPS,
             walk=self.tree_walk,
+            build=self.tree_build,
         )
 
     def _forward_tensors(
