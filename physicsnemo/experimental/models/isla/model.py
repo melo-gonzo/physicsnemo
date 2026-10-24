@@ -1906,7 +1906,9 @@ class ISLA(Module):
         ### every token otherwise. The head frame builds its slice anchors from ALL
         ### tokens (r, log_w and h).
         out = tokens if query is None else tokens[:, n_boundary:]
-        return self._head(out, self._frame_anchors(h, log_w, r) if self.needs_frame else None)
+        ### The frame is built after the head's coefficients: autograd accumulates the
+        ### gradient of h over its consumers in the order they were built.
+        return self._head(out, (lambda: self._frame_anchors(h, log_w, r)) if self.needs_frame else None)
 
     def _boundary_tokens(self, boundary: TensorDict, g_unit: torch.Tensor, gauge: torch.Tensor | None):
         """The boundary tokens' state over ``(B, N)`` (:meth:`_forward_tokens`), the
@@ -2024,7 +2026,8 @@ class ISLA(Module):
     def _head(self, out: TensorDict, frame) -> TensorDict:
         """The declared outputs of the tokens ``out`` (their ``h``, ``r``, ``n_hat`` and
         ``g_hat``), with the head frame's ``(prototypes, anchors)``
-        (:meth:`_frame_anchors`; ``None`` without outputs of rank 1 or more)."""
+        (:meth:`_frame_anchors`, or a callable returning them; ``None`` without outputs
+        of rank 1 or more)."""
         K, dim = self.n_global_vectors, self.dim
         ### With declared scales or output_stats the head and the assembly run in the
         ### parameters' precision under autocast: bf16's relative step (4e-3) would be
@@ -2043,7 +2046,7 @@ class ISLA(Module):
         ### Head frame: the radial basis vector is the direction from the token's
         ### soft slice anchor (measure-weighted mean of token positions), not
         ### from a centroid; translation covariant.
-        protos_f, z_f = frame
+        protos_f, z_f = frame() if callable(frame) else frame
         b_f = torch.softmax(self.frame_assign.logits(out["h"], protos_f), dim=-1)
         r_out = out["r"]
         u = r_out - torch.einsum("bns,bsc->bnc", b_f, z_f).to(r_out.dtype)
