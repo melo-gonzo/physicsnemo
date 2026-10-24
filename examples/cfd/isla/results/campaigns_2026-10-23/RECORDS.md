@@ -37,6 +37,7 @@ source. Do not edit by hand.
 | `dtt_pose/` | DTT-POSE: why ISLA-DTT's forest depends on pose and precision, and the design that removes it | `scratch/isla-dtt-pose-2026-10-24/` |
 | `dtt_pose_exp/` | DTT-POSE-EXP: ISLA-DTT retrained with DTT-POSE's forest on the lug and AirfRANS, the pre-registration | `scratch/isla-dtt-pose-exp-2026-10-24/` |
 | `geo_thin/` | GEO-THIN: thin cells of nonzero area in the exact geometry, the census of the stored meshes and the design | `scratch/isla-geo-thin-2026-10-24/` |
+| `dtt_fast_final/` | DTT-FAST, pass 2: ISLA-DTT's training step before and after on GB300, against interacting ISLA, and its surface form | `scratch/isla-dtt-fast-2026-10-23/final/` |
 | `hl_dup/` | HL-DUP: HiLiftAeroML's duplicated wing cells, their census and effect on the standing (stage 1, revised after its second read) and the stage-2 registration | `scratch/isla-hl-dup-2026-10-24/` |
 
 | topic | file | source | md5 |
@@ -210,6 +211,7 @@ source. Do not edit by hand.
 | dtt_pose_exp | PREREG.md | scratch/isla-dtt-pose-exp-2026-10-24/PREREG.md | 2f46a10cc7cc9f3f8ba9a39c98cb6d39 |
 | geo_thin | DESIGN.md | scratch/isla-geo-thin-2026-10-24/DESIGN.md | f7f8ed6849f68cc8a4584989afb1a27e |
 | geo_thin | RESULTS.md | scratch/isla-geo-thin-2026-10-24/RESULTS.md | 6daa28650f27ed75c455c12e89fbd25d |
+| dtt_fast_final | TABLE.md | scratch/isla-dtt-fast-2026-10-23/final/TABLE.md | a6f352dfc32a342dc1f95a90bba69c17 |
 | hl_dup | PREREG.md | scratch/isla-hl-dup-2026-10-24/PREREG.md | 072b6b1c3ac1b59df729eadda9f04e40 |
 | hl_dup | RESULTS.md | scratch/isla-hl-dup-2026-10-24/RESULTS.md | e1ac7e097098562bef96b41f5744910a |
 | hl_dup | NOTEBOOK_DRAFT.md | scratch/isla-hl-dup-2026-10-24/NOTEBOOK_DRAFT.md | 0c2f575b17dc0036ca525c1c97eefba9 |
