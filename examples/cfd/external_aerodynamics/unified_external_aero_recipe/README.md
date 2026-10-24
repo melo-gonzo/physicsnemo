@@ -379,7 +379,16 @@ shapes, so a new mesh size does not recompile it (see `isla_volume.yaml` for
 the first compile's cost and the one exception); the per-block
 `compile_blocks` is off. For
 ISLA-DTT (`model.query_independent=true`), whose boundary read breaks the graph, set
-`compile=false model.compile_blocks=true` instead.
+`compile=false model.compile_blocks=true` instead. ISLA-DTT trains in chunks of
+prediction points, with the unchunked step's gradients up to summation order:
+the boundary side runs once, then under a pointwise loss (huber, mse,
+relative_mse) the points 100,000 at a time, which on DrivAerML Volume at 200,000
+points lowers the peak memory by 60 GiB at the same step time. Under relative_l2
+and case_relative_l2 every point is one chunk, which is faster and leaner than
+the unchunked step, when its peak memory, predicted from the walk's pair count
+and the point count once the boundary side has run, fits the device on every
+rank; otherwise the step takes two passes over chunks of 100,000. A float16 run
+(under its GradScaler) keeps the unchunked step.
 
 **Learning rate.** 3.75e-4 at `hidden: 512`, pinned in every ISLA config
 (the recipe default of 3e-3 drives ISLA to a mean-field plateau within five
