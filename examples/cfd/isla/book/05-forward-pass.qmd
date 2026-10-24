@@ -245,7 +245,10 @@ print(": The boundary conditions of the recipe's ISLA configurations, read from 
       "class as the page renders, conditions in the stored (sorted) order. The input-layer columns are $1 + K + n_\\beta + S$ "
       "(the constant, the $K$ normal-direction cosines, the invariants of the condition's own fields, the $S$ global "
       "scalars); a condition's vectors are its rank-1 fields, and the shared channels number as many as the widest "
-      "condition has. How to read this: a condition without fields still has its own input layer; the table does not "
+      "condition has. Each configuration reads every piece of the domain's boundary its dataset stores: the DrivAerML "
+      "configurations the vehicle and the wind tunnel's four other pieces, the AirfRANS one the airfoil and the far field "
+      "`freestream`. The standings' checkpoints were trained with configurations that read the body alone "
+      "(@sec-standing-geometry). How to read this: a condition without fields still has its own input layer; the table does not "
       "show the labels by which the lug, Tensile2d and DeepJEB++ datasets mark their conditions inside one mesh, which a "
       "recipe transform splits into these meshes before the model sees them (@sec-isla-inputs).")
 ```
@@ -257,8 +260,11 @@ mesh stores one, else its geometric measure). Before any token is chosen,
 the model computes every cell's seed scalars (stage 2) in its condition's
 columns of one block layout over all declared conditions, so the cells of
 every condition form one token set of fixed width (`_condition_tokens`). A
-surface task predicts at the cells it is given, so every cell is a token,
-with $w_i = \lvert C_i \rvert$. An interior task draws its $N$ tokens from
+surface task reads every cell it is given as a token, with $w_i = \lvert
+C_i \rvert$, and predicts at the cells of the boundaries its
+`prediction_boundaries` names: on the DrivAerML Surface task the vehicle,
+with the wind tunnel's floor, walls, inlet and outlet read as conditions
+only. An interior task draws its $N$ tokens from
 the cells inside the forward pass and gives each the measure it stands for
 (@sec-arch-boundary-draw).
 
@@ -307,7 +313,7 @@ by them before stage 2, and multiplies the outputs by them after stage 5
 (@sec-using-scales).
 
 ::: {.callout-note collapse="true" title="Stage 1 in the code"}
-Each condition's cells become rows of one token set in `forward`; the length unit is one function of the full-resolution cells, and the frame is a few lines of `_forward_tokens` (the token state then stores `r = points / gauge`): no center survives either.
+Each condition's cells become rows of one token set in `forward`, and a surface task's prediction boundaries pick the rows the head returns (`out_rows`, left unset when every given boundary is named); the length unit is one function of the full-resolution cells, and the frame is a few lines of `_forward_tokens` (the token state then stores `r = points / gauge`): no center survives either.
 
 ```{python}
 #| label: code-stage-1
@@ -328,8 +334,8 @@ cell kept with a probability proportional to its measure and carrying the
 measure it stands for.** An interior task predicts at the prediction
 points, so its boundary tokens are a quadrature of the surface, and the
 model draws that quadrature itself (`sample_boundary_cells`). A surface task
-predicts at every cell it is given and samples none; it accepts only the
-default `boundary_tokens`.
+reads every cell it is given, samples none and predicts at the cells of its
+prediction boundaries; it accepts only the default `boundary_tokens`.
 
 The draw has three steps. The budget $B$ (`boundary_tokens`) is shared over
 the given conditions by water filling: equal shares, a condition with fewer
@@ -1174,7 +1180,7 @@ one point depends on the other points of the request (@sec-isla-contracts;
 measured in @sec-interior-companion).
 
 ::: {.callout-note collapse="true" title="The interior task in the code"}
-The prediction points' tokens are built and appended before the slice layers run; ISLA-DTT's passive measure bias and boundary read are the two branches on `query_independent`.
+The prediction points' tokens are built and appended before the slice layers run, and the token set is padded to a multiple of `TOKEN_ALIGNMENT` with tokens of no measure (`_pad_tokens`, @sec-using-cost); ISLA-DTT's passive measure bias and boundary read are the two branches on `query_independent`.
 
 ```{python}
 #| label: code-interior
@@ -1363,20 +1369,52 @@ coincident vertices, and none of the 16.65 million cells of that boundary has
 zero area (results/campaigns_2026-10-23/geo_fast/FINAL_REPORT.md;
 results/campaigns_2026-10-23/geo_degen/RESULTS.md).
 
-Two inputs remain limits of the search. A thin cell of nonzero area, a
-sliver whose third vertex sits just off the line of the other two, can still
-make it raise or return a farther cell: on float64 soups of slivers $10^{-13}$
-off the line (relative), 8 of 10 soups raise, and with the bound that drops
-cells by their plane turned off, 3 of 14,000 queries get a farther point.
-Cells that overlap in one plane, of zero area or not, change the direction
-at ties, since each joins the tie set: on a closed box with triangles of
-nonzero area added inside its faces, 891 of 9,768 float32 queries change
-their direction (results/campaigns_2026-10-23/geo_degen/RESULTS.md, check b).
+Three kinds of input remain limits of the search, and a census of every
+stored boundary mesh counts where they occur. **A thin cell of nonzero
+area**, a sliver or a needle whose altitude over its longest edge is a small
+fraction $\rho$ of that edge, can make the search raise, return a farther
+cell or a wrong distance, or take a point on the wall as off it. Three steps
+read float64 values as accurate where on such a cell they are not: the
+float32 lower bound decides each edge plane's outward side by a rounded
+sign test, the float64 test drops a cell whose computed distance exceeds
+the search radius, and the closest point's barycentric weights, ratios of
+determinants of size $\rho^2$ built from products of order one, move the
+point along the face by about the unit roundoff over $\rho^2$, relative to
+the cell. On a cube with a thin cap or needle in one face, rotated and
+shifted, queries fail from $\rho \approx 10^{-6}$ in float32 and
+$\rho \approx 10^{-3}$ in float64, and on float64 soups of slivers
+$10^{-13}$ off the line 8 of 10 soups raise. No stored dataset is exposed:
+of 310,545 queries of the recipe's draws checked against an exact rational
+brute force, none is wrong, in float32 or float64, under the reference
+search or the fast one. Adversarial float64 queries on the thinnest faces of
+the stored AeroZoo meshes do raise, a device-side assert on CUDA, while the
+same queries in float32 are answered correctly, and the recipe queries in
+float32. **Cells that overlap in one plane**, of zero area or not, change
+the direction at ties, since each joins the tie set: on a closed box with
+triangles of nonzero area added inside its faces, 891 of 9,768 float32
+queries change their direction, and a cell reversed inside a face cancels
+in the winding number by the fold rule and flips the sign of the distance
+near it. The stored meshes hold no coplanar fold and no overlap in an axis
+plane; AeroZoo's recipe dump has 4 near folds, $3 \times 10^{-4}$ rad from
+flat, and the recipe's queries near them get bitwise the same distance and
+direction without the thinner cell. **T-junctions**, vertices that lie on
+another cell's edge, number 110 on 74 edges of the tunnel floor of the
+DrivAerML Volume task's whole boundary: none of the 200,000 queries of a
+draw has its closest point at one, and with every cell over such an edge
+split at its T-junctions the distance, the direction and the sign are
+bitwise unchanged at all of them (results/campaigns_2026-10-23/geo_degen/RESULTS.md,
+check b; results/campaigns_2026-10-23/geo_thin/RESULTS.md, A1 to A3 and T-junctions).
 
 ::: {.callout-note title="In flight"}
-These limits are those of the search as it is. A census of thin and
-overlapping cells in every dataset's meshes, and a fix, are being measured,
-and the ledger (@sec-ledger) tracks it.
+These limits are those of the search as it is. A fix for thin cells,
+approved by the supervisor, certifies each of the three steps against IEEE
+float64 rounding: edge planes oriented by the cell's vertex order, with the
+cell's normal certified; a float64 ball test that keeps a cell unless its
+distance less a certified bound on the closest point's error exceeds the
+radius; and an accurate closest point, computed in the frame of the cell's
+longest edge, wherever that bound says the usual one may be wrong. It is
+being built and checked, and the ledger (@sec-ledger) tracks it.
+Overlapping coplanar cells and T-junctions stay limits.
 :::
 
 **No step of this geometry is left to the order of a search or to the sign
@@ -1387,7 +1425,16 @@ u_q$ bitwise. What rounding still decides is which features join a tie set,
 since a feature joins when its distance lies within the rounding bound of the
 least; and where the normals of a tie nearly coincide, as on a structured
 mesh's split faces, their least-norm point is ill-conditioned, so its float32
-and float64 values differ. @sec-medial-ties measures what the geometry does
+and float64 values differ. It is Hölder-continuous of order 1/2 in the
+normals: where two of them are within about the square root of their
+rounding of each other, rounding picks which of them the least-norm point
+rests on, and the value is the least-norm point either way. On the lug and
+Tensile2d, a random one-ulp move of every float32 vertex changes the
+direction at tied queries by at most $3.9 \times 10^{-5}$ and
+$6.4 \times 10^{-6}$, at most 2.6 times the normals' own change, and changes
+the set of normals it rests on at no persisting tie; which queries tie is
+itself decided by rounding (the lug's 1,639 tied queries become about
+5,800), with the direction continuous through it (results/campaigns_2026-10-23/geo_thin/RESULTS.md, A4). @sec-medial-ties measures what the geometry does
 to the contracts, and @sec-standing-geometry gives the geometry the
 standings' checkpoints were trained with.
 
@@ -1728,24 +1775,37 @@ that keeps nothing per pair between the forward and backward passes
 
 **Under bfloat16 autocast, as in training, the forest is built from rounded
 coordinates.** The two products `points @ frame` in `BoundaryForest.build`
-and `point_pairs` run under the caller's autocast and return bfloat16, the
-16-bit format training runs in. The trees' coordinates and boxes and the
-node measures are then bfloat16, while the box diameters and the walk's box
-table stay float32, so a bfloat16 training step and a float32 score of the
-same case build different forests. On the AirfRANS interior task and the
+and `point_pairs` run under the caller's autocast, which casts both factors
+to bfloat16, the 16-bit format training runs in, and rounds the product to
+it. The trees' coordinates and boxes and the node measures are then
+bfloat16, while the box diameters and the walk's box table stay float32, so
+a bfloat16 training step and a float32 score of the same case build
+different forests. The node measures are the denominators of every node's
+mean key and value, which bfloat16 scales by up to $2^{-9}$, and they shift
+the nodes' log measures by up to $2^{-9}$, so a node no longer reads exactly
+as its cells do on a constant. On the AirfRANS interior task and the
 lug, 82% and 99% of the points get a different list, and reading the
 training forest changes the float32 native error by 0.2 to 0.7% (pressure
 level). That forest is not pose-invariant: on the rotated and translated
 lug, reading it gives 1.90 times the error of reading the float32 forest
 (1.95 and 1.85, seeds 42 and 43), and on AirfRANS 1.012 to 1.033 times.
-Which of two causes dominates is not separated: the products taken about
-the origin of the raw coordinates rather than the frame's center, or the
-cast to bfloat16 of the raw coordinates over the length unit before the
-product (results/campaigns_2026-10-23/dtt_knobs/CODE_FACTS.md, section 1;
-results/campaigns_2026-10-23/dtt_knobs/treeprec/treeprec_table.md).
+Each of the two candidate causes breaks pose on its own. With the octant
+labels held at the native float32 ones, the float32 product about the
+origin of the raw coordinates, rounded to bfloat16, changes the list of
+every posed point of the lug and of 87% (the median over cases) of
+AirfRANS's, and the cast of the two factors to bfloat16 before the product
+does the same; the same product about the boundary's centroid, rounded to
+bfloat16, changes the list of one point (the median over cases) on the lug
+and four on AirfRANS. The canonical frame itself moves with the body to
+rounding: posed and native canonical coordinates of the lug differ by at
+most $2.6 \times 10^{-7}$ of its extent, and no axis changes sign
+(results/campaigns_2026-10-23/dtt_knobs/treeprec/treeprec_table.md;
+results/campaigns_2026-10-23/dtt_pose/MECHANISMS.md, sections 1 and 2).
 
 ::: {.callout-note title="In flight"}
-This limit is that of the code as it is. A fix is being designed, and the
+This limit is that of the code as it is. The forest built outside autocast
+(below) removes it and changes ISLA-DTT's function; ISLA-DTT retrained with
+it on the lug and the AirfRANS interior task is being measured, and the
 ledger (@sec-ledger) tracks it.
 :::
 
@@ -1765,27 +1825,65 @@ only at the size of the tree's error, which vanishes as $\theta \to 0$. So
 can the octant split, at a normal component that is zero but for rounding
 in that frame: its sign, and so the cell's tree, then rests on rounding.
 
-**On the lug, rounding decides the octant of most cells, at least in
-bfloat16.** In the forest's frame, 84% of the lug's cells (the median over
-cases, 76 to 91%) have a normal component below $10^{-5}$, measured under
-bfloat16 autocast (the float32 share was not measured), so the
-sign test that picks their octant reads a rounding residue, natively as
-well as posed. ISLA-DTT's posed error on the lug, scored in float32 at
+**On the lug, rounding decides the octant of most cells and the box test of
+many pairs, in float32 as in bfloat16.** The lug's faces are parallel to its
+principal axes, so most of its normals have components that are exactly zero
+in the forest's frame, and the stored ones are rounding residues: 86% of the
+lug's cells (the median over 24 test cases, 78 to 90%) have a smallest
+component below the bound on its rounding error from the cell's float32
+vertices, so the sign test that picks their octant reads rounding, natively
+as well as posed. Posed against native, 11% of the cells (4 to 20%) change
+octant and every point's list changes; built with the native octant labels,
+the posed forest gives 94% of the points their native list back. Most of the
+rest are exact ties of the box test: the lug's prediction points are its
+hexahedral mesh's nodes, commensurate with its boundary cells, so at
+$\theta = 1$ the test is an exact equality for many pairs, and a change of
+$\theta$ by a factor $1 \pm 10^{-6}$ changes 6.7% of the lists, against
+0.001% on AirfRANS. ISLA-DTT's posed error on the lug, scored in float32 at
 $\theta = 1$, is 1.53 and 1.98 times its native error (seeds 42 and 43),
 the posed lists hold 1.29 times the pairs, and at $\theta = 0$, where no
-cluster forms, posed and native agree to $10^{-4}$. That the pose flips
-those signs and so builds another forest is inferred, not tested: the posed
-octant labels were not compared with the native ones, no tie-breaking rule
-was tried, and near-ties of the frame itself (third moments of about
-$10^{-6}$ against the code's tie threshold of $10^{-9}$) are not excluded.
-On the AirfRANS interior task posed equals native to 0.25% at every
-opening angle, with the same pair counts
-(results/campaigns_2026-10-23/dtt_knobs/CODE_FACTS.md, section 2;
+cluster forms, posed and native agree to $10^{-4}$. The frame is not the
+cause: the third moments of its two nearly symmetric axes, about
+$10^{-6}$, move under pose by at most $1.1 \times 10^{-7}$, so the code's
+tie threshold of $10^{-9}$ decides no sign. On the AirfRANS interior task no
+normal has a component below $10^{-5}$, 0 to 8 cells change octant, and
+posed equals native to 0.25% at every opening angle, with the same pair
+counts (results/campaigns_2026-10-23/dtt_pose/MECHANISMS.md, sections 1 and 3;
 results/campaigns_2026-10-23/dtt_knobs/sens/sens_table.md).
 
+**A forest that depends on the boundary alone is designed and measured on a
+prototype.** The design, approved by the supervisor, changes five things.
+The forest is built and walked outside autocast, in the inputs' precision.
+Its coordinates are taken about the boundary's measure-weighted centroid in
+float64, the frame kept in float64, and rounded once. Its orientation
+classes are the $2d$ faces of the cube, the axis of a normal's largest
+component in the frame with that component's sign, in place of the $2^d$
+sign octants; a component within twice the bound on its rounding (the
+cell's own bound from its vertices, plus the frame's rotation under the
+rounding of its inputs) of the largest counts as tied, and the face goes
+to the lowest tied axis. The box test admits a node only when it is
+separated with the arithmetic's error included, so an exact tie of the
+test opens the node in every pose. And each token carries its normal's
+error bound into the forest. A face holds normals with $\lvert n_k \rvert
+\geq 1/\sqrt d$, the bound an octant gives, so the coherence test still
+admits every node at $\theta = 1$, and a normal and its negative still land
+in different trees. On the prototype, an ISLA-DTT forward with random
+weights on 12 lug cases changes under pose by $1.6 \times 10^{-7}$
+relative (the median; float32 roundoff), against $2.1 \times 10^{-6}$ with
+the octant forest; under bfloat16 autocast the forest is bitwise the
+float32 one on every case probed on the lug, AirfRANS and the DrivAerML
+Volume task; a DrivAerML Volume point reads 17% fewer pairs (586 against
+706); and interacting ISLA, which builds no forest, is bitwise unchanged.
+No rule removes a generic residual: posing in float32 moves every input by
+its rounding, so a few cells per case sit within rounding of a face's edge
+or a Morton grid line, which leaves 0.52% of the pairs unmatched on the
+DrivAerML Volume task (results/campaigns_2026-10-23/dtt_pose/DESIGN.md, sections 2, 3 and 6).
+
 ::: {.callout-note title="In flight"}
-This limit is that of the code as it is. A fix is being designed, and the
-ledger (@sec-ledger) tracks it.
+This limit is that of the code as it is. The forest above removes it and
+changes ISLA-DTT's function; ISLA-DTT retrained with it on the lug and the
+AirfRANS interior task, read for native accuracy by a registered rule, is
+being measured, and the ledger (@sec-ledger) tracks it.
 :::
 
 $\theta$ is a constant of the class (`TREE_READ_THETA`), not
@@ -2217,16 +2315,30 @@ it fuses (its `emulate_precision_casts` option is off), so a compiled
 bfloat16 block rounds fewer intermediates and its outputs differ from
 eager's by up to $5.8 \times 10^{-2}$ relative. Their error against float64
 is no larger than eager's on the block outputs, and on the gradients it is
-1.0 to 1.4 times eager's in every group of parameters. The supervisor's
-policy for every compiled ISLA region is this one: Inductor's default casts,
-certified block by block against eager at $10^{-5}$ in float32 and at
-roundoff in float64, with a bfloat16 check that the region's error against
-float64 stays within 1.5 times eager's. The current blocks are kept under
-it, although their largest float32 deviation, on AeroZoo, is
-$1.5 \times 10^{-5}$, and one bfloat16 scalar, the loss of a randomly
-initialized DrivAerML model with the whole boundary, reads 1.70 times
-eager's distance (results/campaigns_2026-10-23/dtt_fast_compile/RESULTS.md,
-section 2).
+1.0 to 1.4 times eager's in every group of parameters
+(results/campaigns_2026-10-23/dtt_fast_compile/RESULTS.md, section 2).
+
+**The supervisor's policy certifies a compiled region against eager's own
+sensitivity, tensor group by tensor group.** It holds for every compiled
+ISLA region: Inductor's default casts, certified block by block on real
+checkpoints against float64 eager on the same inputs, per tensor group (the
+block outputs and each group of parameter gradients). In each precision a
+compiled region's distance to float64 may exceed eager's by at most eager's
+own change under a one-ulp perturbation of the region's inputs, measured; in
+float64 the two agree at roundoff; a scalar loss is reported beside and
+never gated, since its eager error can sit near zero by chance. A fixed
+bound fails an ill-conditioned block however accurate its compiled path,
+as AeroZoo's first block, whose eager float32 output is itself
+$8.5 \times 10^{-4}$ from float64, and a bare ratio to eager's distance
+fails where eager happens to sit within an ulp of float64, as on the
+AirfRANS checkpoint of seed 42.
+
+::: {.callout-note title="In flight"}
+These numbers compare the compiled blocks with eager. Whether the current
+compiled blocks meet the supervisor's policy, per tensor group against
+eager's own one-ulp change, has not been measured, and the ledger
+(@sec-ledger) tracks it.
+:::
 
 **Where a training step's time goes.** @fig-arch-step-breakdown takes one
 warm training step of ISLA and of ISLA-DTT apart on AeroZoo, on one node of
@@ -2384,7 +2496,7 @@ WHAT = {
     "global_schema": ("1, 2, 3d, 5", "per-case fields of rank 0 or 1, read from `global_data` by name: each rank-1 field is a global direction $\\hat g_k$ (one seed cosine, one relational cosine, two basis vectors); each rank-0 field widens the seed; a field may declare `units`, `scale`, `velocity_scale` or the `role` `density` or `viscosity` (@sec-using-scales)"),
     "reynolds": ("1, 2", "`{mean, std}`, the standardization of $\\log_{10}(U L / \\nu)$ over a split's training cases, appended to the global scalars as one column; required with a global of the role `viscosity` and refused without one; a dataset constant, which the recipe fills from the dataset file (@sec-using-scales)"),
     "output_stats": ("5", "`{name: {mean, std}}`, the dataset's constant standardization of each output after its units are restored, so the model returns the standardized targets the loss compares; a vector's mean is zero (@sec-using-scales)"),
-    "interior": ("modes", "the task: `False` predicts at every boundary cell it is given and takes no prediction points; `True` draws its boundary tokens inside the model and predicts at the prediction points, which join the slice layers as tokens with their exact geometry against the full-resolution surface (@sec-arch-modes); implemented in two and three dimensions"),
+    "interior": ("modes", "the task: `False` reads every boundary cell it is given, predicts at the cells of the boundaries `forward` names in `prediction_boundaries` and takes no prediction points; `True` draws its boundary tokens inside the model and predicts at the prediction points, which join the slice layers as tokens with their exact geometry against the full-resolution surface (@sec-arch-modes); implemented in two and three dimensions"),
     "query_independent": ("modes, after each layer", "interior task only: `True` is ISLA-DTT, with read-only prediction points (no routing mass) that read the boundary cells through the forest at $\\theta = 1$ after every slice layer (@sec-arch-passive-decoder); rank-2 boundary fields are refused with it"),
     "boundary_tokens": ("1, modes", "interior task only: the number of boundary tokens per case, drawn inside the model from the full-resolution boundary (the budget water-filled over the conditions, each cell drawn with probability proportional to its measure by a systematic draw along the Morton order, each kept cell carrying its Horvitz–Thompson measure; a random start in training, $u = 1/2$ in evaluation; @sec-arch-boundary-draw); a surface task reads every cell and accepts only the default"),
     "hidden": ("all", "the width $D$"),

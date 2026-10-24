@@ -24,6 +24,14 @@ import standing as S
 import records as R
 from standing import fmt_ratio
 RES = Path("..") / "results"
+
+
+def sci(x):
+    """3.9e-5 as $3.9 \\times 10^{-5}$."""
+    m, e = f"{x:.1e}".split("e")
+    return f"${float(m):g} \\times 10^{{{int(e)}}}$"
+
+
 ST = {k: S.Standing(k) for k in S.available()}
 # the numbers of this chapter that no single record holds (results/campaigns_2026-10-23/book_E/limits_090_2026-10-23.py)
 LIM_SRC = "results/campaigns_2026-10-23/book_E/limits_090.json"
@@ -129,9 +137,9 @@ print(f"- **Not that ISLA's pose invariance is exact on every mesh.** Rotated an
       f"rounding picks the direction; retrained with the class's tie rule, it is {TX_PN:.4f} times native (@sec-limits-ties). What "
       "rounding still decides in the class's geometry is @sec-oq-precision. "
       "ISLA-DTT's far-field read has limits of its own: a tie of its forest's frame moves the read only by the tree's error, "
-      "but on the lug its posed error is not its native error, most likely because rounding decides the octant of most "
-      "cells' normals (inferred, not tested), and "
-      "under bfloat16 training its forest is built from rounded coordinates (@sec-arch-tree-read, @sec-oq-dtt-frame).")
+      "but on the lug, where rounding decides the octant of most cells' normals and many exact ties of the forest's box "
+      "test, its posed error is not its native error, and under bfloat16 training its forest is built from rounded "
+      "coordinates (@sec-arch-tree-read, @sec-oq-dtt-frame).")
 print("- **Not that discretization consistency is an exact invariance at every token count.** Under exact re-meshing of the boundary "
       "ISLA's prediction does not move (@sec-limits-boundary-law); under a change of sampling law its residual is quadrature variance "
       "that shrinks with the cell count (@sec-principle), and a token budget far below the boundary's own cell count is not invariant. "
@@ -142,10 +150,11 @@ print("- **Not that ISLA extrapolates across a flow regime, or that it transfers
       "the baselines in general.** On SHIFT-SUV it transfers better than GeoTransolver and Transolver from estates to fastbacks on "
       "wall shear only; on pressure the three transfer alike, and in the reverse direction two seeds show no difference against "
       "either baseline (@sec-limits-regime, @sec-limits-transfer).")
-print("- **Not that every standing is of ISLA reading its whole boundary.** On the DrivAerML Volume and Surface tasks, SHIFT-SUV, "
-      "HiLiftAeroML and AirfRANS the standings' configuration reads the body alone; the configurations that read the rest of the "
-      "stored boundary on the DrivAerML tasks and AirfRANS have no standing, and SHIFT-SUV's files, and all but "
-      f"{HL_BUT} of HiLiftAeroML's, store no other piece (@sec-limits-whole-boundary).")
+print("- **Not that every standing is of ISLA reading its whole boundary.** ISLA's configurations read every piece of the "
+      "boundary the DrivAerML and AirfRANS files store, but the standings' checkpoints on the DrivAerML Volume and Surface "
+      "tasks, SHIFT-SUV, HiLiftAeroML and AirfRANS were trained with the body alone (@sec-standing-geometry); SHIFT-SUV's "
+      f"files, and all but {HL_BUT} of HiLiftAeroML's, store no other piece, and the recipe has no ISLA configuration for "
+      "SHIFT-SUV (@sec-limits-whole-boundary).")
 print("- **Not that the HiLiftAeroML numbers are test-set numbers** (@sec-limits-validation).")
 print("- **Not that the scaling law, the cell-count saturation or the capacity floor are measured at the reference configuration.** "
       "They are measured on smaller ISLAs and read for slopes and floors (@sec-capacity, @sec-oq-scaling).")
@@ -352,6 +361,9 @@ LG = ST["lug"]
 per_seed = [p / n for p, n in zip(LG.seeds("ISLA", "von_mises_l2", "posed"), LG.seeds("ISLA", "von_mises_l2"))]
 ATT = " ".join(R.load("attrib090", "RESULTS.md").split())
 n_tie, pct_tie = re.search(r"on \*\*([\d,]+) interior nodes \(([\d.]+) % of the interior", ATT).groups()
+# the tie direction under a one-ulp move of every float32 vertex (GEO-THIN, A4)
+GTR = " ".join(R.load("geo_thin", "RESULTS.md").split())
+TIE_DU = [sci(float(x)) for x in re.search(r"max ([\d.e-]+) \(lug\), ([\d.e-]+) \(Tensile2d\)", GTR).groups()]
 print(f"**Rotated and translated, ISLA's error stays within {100 * worst:.1f}% of native on {of_fin(exact)} final "
       f"standings, and on the GINOT bracket lug it is {lug:.2f} times native ({f3(per_seed)} per seed), which the class's tie rule "
       f"brings to {TX_PN:.4f}.** On the lug's structured mesh {n_tie} "
@@ -364,11 +376,13 @@ print(f"**Rotated and translated, ISLA's error stays within {100 * worst:.1f}% o
       f"only the geometry changed, reads posed ÷ native {TX_PN:.4f} (a ratio of seed means), against "
       f"{1 + TXL['P']['von_mises_l2']['e_B']:.3f} for the standing's checkpoints on the same reading, and its native error is "
       f"{TXL['N']['von_mises_l2']['r']:.3f} times theirs, which the registered test reads as "
-      f"\"{TXL['N']['von_mises_l2']['verdict']}\" (@sec-lug-ties). Whether that direction is well conditioned where the "
-      "tied normals nearly coincide is open (@sec-oq-ties). On PLAID "
+      f"\"{TXL['N']['von_mises_l2']['verdict']}\" (@sec-lug-ties). Where the tied normals nearly coincide the direction "
+      "is continuous in them, of order one half: on the lug and Tensile2d a one-ulp move of every vertex changes it by at "
+      f"most {TIE_DU[0]} and {TIE_DU[1]} (@sec-arch-interior-geometry). On PLAID "
       "Tensile2d, whose prediction points include the nodes of its boundary polyline, posed ÷ native is "
       f"{f3([ST['tensile2d'].shift('ISLA', f, 'posed') for f in ST['tensile2d'].ds.headline], 4)}. Data: {LG.source}; "
-      f"{R.source('attrib090', 'RESULTS.md')} (section 4); {R.source('tie_exp', 'read/results.json')}.")
+      f"{R.source('attrib090', 'RESULTS.md')} (section 4); {R.source('tie_exp', 'read/results.json')}; "
+      f"{R.source('geo_thin', 'RESULTS.md')} (A4).")
 print()
 print(S.in_flight_callout("lug"))
 print('::: {.callout-note title="In flight"}\nThe lug standing\'s posed ÷ native comes from checkpoints trained with the '
@@ -435,7 +449,7 @@ print("**On a surface task the requested cells are also ISLA's view of the body,
       f"({sq(lambda d: d['err_ratio_to_200k']['50000'])}), and at 800,000 cells the error is "
       f"{sq(lambda d: d['err_ratio_to_200k']['800000'])} times the scored one (car-mean errors, per seed). A request that leaves part "
       f"of the body out breaks the prediction: half the car alone raises the error on that half {min(half):.0f} to {max(half):.0f} times. "
-      "So a surface request covers the body (@sec-using-sampler). By the labels registered before the probe, the wall-shear dependence "
+      "So a surface request covers the body, as the docstring of `prediction_boundaries` states (@sec-using-sampler). By the labels registered before the probe, the wall-shear dependence "
       f"reads *request-coupled beyond quadrature*, because $s(800{{,}}000) / s(200{{,}}000)$ is {', '.join(f'{x:.3f}' for x in s800)} "
       "on its two seeds, not below the pure law's 0.500, and pressure, whose spread falls slightly faster than that law, takes neither "
       f"label; read after the fact, every exponent lies within {dev:.3f} of $-1/2$, the rate of a Monte Carlo quadrature. Data: "
@@ -488,13 +502,17 @@ print("**Zero-shot transfer to a new geometry family is measured twice: on SHIFT
 import yaml
 WB_CFG = {"isla_volume_aerozoo": ["AeroZoo"], "isla_lug": ["the GINOT bracket lug"], "isla_tensile2d": ["PLAID Tensile2d"],
           "isla_surface_deepjebpp": ["DeepJEB++"], "isla_volume": ["the DrivAerML Volume task"],
-          "isla_volume_airfrans": ["the AirfRANS interior task"], "isla_surface": ["the DrivAerML Surface task", "SHIFT-SUV"],
+          "isla_volume_airfrans": ["the AirfRANS interior task"], "isla_surface": ["the DrivAerML Surface task"],
           "isla_surface_highlift": ["HiLiftAeroML"]}
-BND = {n: list(yaml.safe_load((S.RECIPE / "conf" / "model" / f"{n}.yaml").read_text())["forward_kwargs"]["boundary_meshes"])
-       for n in WB_CFG}
+FKW = {n: yaml.safe_load((S.RECIPE / "conf" / "model" / f"{n}.yaml").read_text())["forward_kwargs"] for n in WB_CFG}
+BND = {n: list(f["boundary_meshes"]) for n, f in FKW.items()}
+PRED = {n: f["prediction_boundaries"]["literal"] for n, f in FKW.items() if "prediction_boundaries" in f}
+# SHIFT-SUV's dataset files read the vehicle alone, while the surface configuration also reads the tunnel's four pieces
+SUV_DS = (S.RECIPE / "datasets" / "shift_suv_surface.yaml").read_text()
+assert "domain_boundaries" not in SUV_DS and set(BND["isla_surface"]) > {"vehicle"}
 multi = [n for n in WB_CFG if len(BND[n]) > 1]
 body = [n for n in WB_CFG if len(BND[n]) == 1]
-n_body = sum(len(WB_CFG[n]) for n in body)
+assert [d for n in body for d in WB_CFG[n]] == ["HiLiftAeroML"], body
 lst = lambda names: ", ".join(names[:-1]) + " and " + names[-1] if len(names) > 1 else names[0]
 NUMW = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine"}
 # ISLA's length unit with the body alone and with the whole stored boundary (BOUNDARY-AUDIT section 4; AF-WHOLE section 3)
@@ -506,23 +524,25 @@ WB_L = {"drv": re.search(r"full resolution\) \| ([\d.]+-[\d.]+) m \(median [\d.]
 WB_L["drv"] = (WB_L["drv"][0].replace("-", " to "), WB_L["drv"][1])
 WB_L["af"] = (WB_L["af"][0].replace("-", " to "), WB_L["af"][1])
 print("**ISLA's input is the whole boundary of the PDE domain, every piece a dataset stores, each by name with its condition type; "
-      f"on {NUMW[n_body]} of the {NUMW[sum(map(len, WB_CFG.values()))]} tasks its configuration reads the body alone.** A steady "
-      "boundary-value problem is well posed only with data on all of its boundary. A wall the model is not given can reach its "
-      "prediction only indirectly, through where the prediction points lie, which ties the prediction to the dataset's frame rather "
-      "than to the problem. On " + lst([d for n in multi for d in WB_CFG[n]]) + " the configuration reads the boundary as named "
-      "pieces (" + "; ".join(f"{WB_CFG[n][0]}: " + ", ".join(f"`{b}`" for b in BND[n]) for n in multi) + "). On "
-      + lst([d for n in body for d in WB_CFG[n]]) + " it reads one mesh, the body ("
-      + ", ".join(sorted({f"`{BND[n][0]}`" for n in body})) + "), and every standing on those tasks was trained that way, so those "
-      "standings are of ISLA reading part of its boundary. On the DrivAerML tasks and AirfRANS the data hold more of the "
-      "boundary, and configurations that read all of it are built and have no standing; SHIFT-SUV's files, and all but "
-      f"{HL_BUT} of HiLiftAeroML's, store the body alone (@sec-oq-whole-boundary). On the DrivAerML Volume task ISLA's far-field eddy-viscosity error follows "
-      "the height above the floor (@sec-oq-far-field). A surface task predicts at every cell it is given, so on a surface task "
-      "the domain's walls enter only through a task form that names the boundaries it predicts at and reads the others as "
-      "conditions, which is built and has no standing. Because ISLA's length unit $L$ is the RMS pairwise distance of the whole given boundary "
+      f"the recipe's configurations read it on {NUMW[sum(map(len, WB_CFG.values()))]} of the nine tasks, and SHIFT-SUV has none.** "
+      "A steady boundary-value problem is well posed only with data on all of its boundary. A wall the model is not given can reach "
+      "its prediction only indirectly, through where the prediction points lie, which ties the prediction to the dataset's frame "
+      "rather than to the problem. On " + lst([d for n in multi for d in WB_CFG[n]]) + " the configuration reads the boundary as "
+      "named pieces (" + "; ".join(f"{WB_CFG[n][0]}: " + ", ".join(f"`{b}`" for b in BND[n]) for n in multi) + "), and on "
+      f"HiLiftAeroML one mesh, the wing (`{BND[body[0]][0]}`), the only piece all but {HL_BUT} of its files store. A surface task "
+      "reads every boundary it is given and predicts at the cells of those it names (`prediction_boundaries`, required: "
+      + lst([f"{WB_CFG[n][0]} names " + ", ".join(f"`{b}`" for b in PRED[n]) for n in PRED])
+      + "), so on the DrivAerML Surface task the tunnel's four pieces are read as conditions only. SHIFT-SUV's files store the "
+      "vehicle alone. The surface configuration reads the tunnel's four pieces beside it, and the recipe refuses that pairing, "
+      "since the pieces it is told to read are missing; it does not train ISLA on the vehicle alone. How SHIFT-SUV gets the rest "
+      "of its boundary is open (@sec-oq-whole-boundary). The standings' checkpoints were trained with the body alone on the "
+      "DrivAerML tasks, SHIFT-SUV, HiLiftAeroML and AirfRANS (@sec-standing-geometry), so those standings are of ISLA reading "
+      "part of its boundary. On the DrivAerML Volume task ISLA's far-field eddy-viscosity error follows the height above the "
+      "floor (@sec-oq-far-field). Because ISLA's length unit $L$ is the RMS pairwise distance of the whole given boundary "
       f"(@sec-isla-frame), reading the domain's walls changes $L$ too: on the DrivAerML Volume task it is {WB_L['drv'][0]} m with the "
       f"vehicle alone and {WB_L['drv'][1]} m with the whole boundary, and on AirfRANS {WB_L['af'][0]} chords with the airfoil alone "
       f"and {WB_L['af'][1]} chords with the far field, on every case. Data: the recipe's "
-      f"`conf/model/isla_*.yaml` (`forward_kwargs.boundary_meshes`), {R.source('boundary_audit', 'REPORT.md')} (section 4), "
+      f"`conf/model/isla_*.yaml` (`forward_kwargs`), {R.source('boundary_audit', 'REPORT.md')} (section 4), "
       f"{R.source('af_whole', 'PREREG.md')} (section 3).")
 ```
 
@@ -586,13 +606,14 @@ rows = [
     ("Does a fixed scale of ISLA's Reynolds input hold beyond AirfRANS? (@sec-oq-reynolds)", "ISLA trained with the fixed log-Reynolds scale on AeroZoo's `reynolds` split, read against ISLA with the fitted scale", f"at most {fmt_h(q_rey)}"),
     ("Are ISLA's crossflow and non-box failures on AeroZoo limits of the architecture? (@sec-oq-aerozoo)", "ISLA-DTT on the same splits; for the non-box family, a training set whose velocity scales cover the ducts'", "in the first row"),
     ("Why does ISLA not hold the outlet at its prescribed pressure on the crossflow layout? (@sec-oq-outlet)", "the predicted gauge pressure on the outlet faces against the prescribed zero, on every split and for both forms", "scoring only"),
-    ("Is the class's tie direction well conditioned where the tied normals nearly coincide? (@sec-oq-ties)", "the class's "
-     "on-wall directions at the nodes of the lug's split faces compared between a lug and its rotated and translated copy, "
-     "geometry only", "none (a geometry probe)"),
+    ("Does a certified treatment of thin cells change any output of ISLA's geometry on the stored datasets? (@sec-oq-ties)",
+     "the certified geometry against the current one on every dataset's recipe draws: every distance, direction, sign and "
+     "gradient, under both search kernels", "none (a geometry check)"),
     ("Does what rounding still decides in the class's geometry move a trained model? (@sec-oq-precision)", "the standings "
      "retrained with the class's geometry, scored rotated and translated, and in float32 against float64 on the AeroZoo cases of "
      "the float32 comparison", "the standings' training with the class's geometry, then scoring"),
-    ("How large is ISLA-DTT's tree error at $\\theta = 1$ where its forest's frame ties, or where rounding decides a cell's octant? (@sec-oq-dtt-frame)", "ISLA-DTT scored rotated and translated, and under boundary redraws, on cases whose boundary has near-equal principal variances; on the lug, the posed forest's octant labels compared with the native ones", "scoring only"),
+    ("How large is ISLA-DTT's tree error at $\\theta = 1$ where its forest's frame ties? (@sec-oq-dtt-frame)", "ISLA-DTT scored rotated and translated, and under boundary redraws, on cases whose boundary has near-equal principal variances", "scoring only"),
+    ("What signs the canonical frame of a nearly mirror-symmetric boundary? (@sec-oq-frame-sign)", "a sign rule that is a function of the boundary alone where an axis's third moment lies within its rounding, or a draw and a forest that do not depend on the sign, checked on mirror-symmetric boundaries and on the lug in every pose", "none for the check; a change of the draw changes every interior model's input"),
     ("Does a cheaper or a finer read pay once ISLA-DTT is trained with it? (@sec-oq-dtt-theta)", "ISLA-DTT trained on AirfRANS at $\\theta$ = 2, 0.5 and 0, with a read after every second layer, and with 8 basis functions, against the $\\theta = 1$ model, two seeds each, under its standing's protocol", f"about {fmt_h(q_knobs[0])} to {fmt_h(q_knobs[1])}"),
     ("Does ISLA transfer better on SHIFT-SUV from fastbacks to estates? (@sec-oq-transfer)", "two more seeds of each of the three fastback-trained models, scored on both families and read by the same registered rules", f"{fmt_h(q_transfer)}"),
     ("Does ISLA's far-field eddy-viscosity error on the DrivAerML Volume task come from the ground and domain walls it is not given? (@sec-oq-far-field)",
@@ -600,7 +621,7 @@ rows = [
      f"{L_REF:g} m from the car",
      f"{fmt_h(q_floor)} (single-case runs)"),
     ("How do SHIFT-SUV and HiLiftAeroML get the pieces of their domains' boundaries that their files do not store? (@sec-oq-whole-boundary)",
-     "the missing pieces supplied as a new version beside each dataset, then each standing that reads the body alone retrained with the whole boundary, two seeds",
+     "the missing pieces supplied beside each dataset, never as a change to it, then each standing retrained with ISLA reading the whole boundary, two seeds",
      "not priced (the supply sets the runs)"),
     ("Does a quarter of the slices cost nothing beyond AirfRANS? (@sec-oq-slices)",
      "ISLA with 128 slices against the standing's 512 on a three-dimensional dataset, two seeds, read for harm by the AirfRANS rule",
@@ -772,34 +793,37 @@ print("**The open question is why ISLA does not hold the outlet at its prescribe
       f"for both forms. Cost: scoring only. Data: {R.source('az_diag', 'pdiag/pdiag.tsv')}.")
 ```
 
-### The tie direction where normals nearly coincide {#sec-oq-ties}
+### Thin cells and the tie direction in the exact geometry {#sec-oq-ties}
 
 ```{python}
 #| label: para-oq-ties
 #| output: asis
-TXR = " ".join(R.load("tie_exp", "RESULTS.md").split())
-A7 = re.search(r"At (\d+) of about ([\d.]+)M on-wall nodes \|u32 - uref\| reaches ([\d.e-]+)", TXR).groups()
-n_pose = sum(all(abs(ST[k].shift("ISLA", f, "posed") - 1) <= 0.002 for f in ST[k].ds.headline) for k in FIN)
-print("**The open question is whether the class's tie direction is well conditioned where the tied directions nearly coincide.** "
-      "At a closest-feature tie the class takes the least-norm point of the hull of the tied directions, and on the wall the same "
-      "point of the hull of the unit normals of the cells that hold the point (@sec-arch-interior-geometry). Retrained with that "
-      f"rule, ISLA's posed ÷ native on the lug is {TX_PN:.4f}, against {lug:.2f} for the standing (@sec-limits-ties). The routine "
-      "returns the exact least-norm point of the directions it receives, but where they form tight clusters that point amplifies "
-      "their rounding. On the lug's split hexahedral faces, whose normals fall into tight clusters, with the normals computed at the "
-      f"queries' precision the float32 and the exact on-wall directions differ by up to {A7[2]} at {A7[0]} of about {A7[1]} million "
-      "on-wall nodes. The class computes those normals in float64 from the coordinates as given, so a float32 and a float64 run on "
-      "the same inputs read the same normals; a rigid motion still rounds the coordinates, and the point amplifies that rounding. The bar the other standings set is posed ÷ native "
-      f"within 0.002 of one on every headline field, which {n_pose} of the {len(FIN)} final standings meet. What would settle it: "
-      "the class's on-wall directions at the nodes of the split faces, compared between a lug and its rotated and translated "
-      "copy; ISLA trained with those normals at the queries' precision, the worse-conditioned case, already reads posed ÷ "
-      f"native {TX_PN:.4f}. Cost: none, a geometry probe. Data: "
-      f"{R.source('tie_exp', 'RESULTS.md')}; {R.source('tie_exp', 'read/results.json')}.")
+GTR = " ".join(R.load("geo_thin", "RESULTS.md").split())
+GT_Q = re.search(r"\| float32, reference and fast \| [^|]+\| ([\d,]+) \|", GTR).group(1)
+GT_R = re.search(r"\|du\| / \|dn\| \(the normals' own change\) at most ([\d.]+)", GTR).group(1)
+print("**The tie direction where tied normals nearly coincide is measured, and the open question left in the exact geometry is "
+      "whether a certified treatment of thin cells changes any output on stored data.** At a closest-feature tie the class takes "
+      "the least-norm point of the hull of the tied directions, and on the wall the same point of the hull of the unit normals "
+      "of the cells that hold the point (@sec-arch-interior-geometry). Where those normals nearly coincide the point is "
+      "continuous in them, of order one half, and rounding decides which of them it rests on, with the same value either way. "
+      f"On the lug and Tensile2d a one-ulp move of every float32 vertex changes the direction at tied queries by at most "
+      f"{TIE_DU[0]} and {TIE_DU[1]}, at most {GT_R} times the normals' own change, and the set of normals it rests on changes at "
+      f"no persisting tie. Retrained with the class's rule, ISLA's posed ÷ native on the lug is {TX_PN:.4f} (@sec-limits-ties). "
+      "Thin cells are another matter. Three steps of the search read float64 values as accurate where on a cell much thinner "
+      "than it is long they are not, and adversarial float64 queries on the thinnest faces of the stored AeroZoo meshes make it "
+      "raise, where the same queries in float32 are answered correctly; the recipe's own queries are float32, and none of "
+      f"{GT_Q} of them, checked against an exact rational brute force in both precisions and under both search kernels, is "
+      "wrong (@sec-arch-interior-geometry). A fix certifies each step against IEEE float64 rounding and keeps the current "
+      "arithmetic, bitwise, wherever its certificate holds. What would settle it: the certified geometry against the current one "
+      "on every dataset's recipe draws, every distance, direction, sign and gradient, under both kernels; an unchanged output "
+      "everywhere leaves the stored datasets' inputs as they are. Cost: none, a geometry check. Data: "
+      f"{R.source('geo_thin', 'RESULTS.md')} (A2, A2b, A4); {R.source('geo_thin', 'DESIGN.md')}; {R.source('tie_exp', 'RESULTS.md')}.")
 ```
 
 ::: {.callout-note title="In flight"}
-This question rests on the lug's retrained posed ÷ native and on float32 against float64 on-wall
-directions. The class's on-wall directions on the lug's split faces, compared between poses, are being
-measured, and the ledger (@sec-ledger) tracks it.
+This question rests on the census of the stored meshes and the adversarial queries. The certified
+geometry, checked against the current one on every dataset's recipe draws, is being measured, and the
+ledger (@sec-ledger) tracks it.
 :::
 
 ### What rounding still decides in the geometry {#sec-oq-precision}
@@ -847,43 +871,68 @@ EXACT = {f: [R.num(SENS(f"r090eag_af_dtt_seed{s} native")["t0"][f"{f}_l2 (/ref)"
          for f in ("pressure", "velocity", "nut")}
 LPN = {k: [R.num(SENS(f"r090fix_lug_dtt_seed{s}: posed / native")[k]["von_mises_l2"]) for s in (42, 43)] for k in ("ref", "t0")}
 LPP = R.num(SENS("r090fix_lug_dtt_seed42: posed / native")["ref"]["pairs ratio"])
-NEAR0 = float(re.search(r"lug median ([\d.]+) \(range", " ".join(R.load("dtt_knobs", "sens/sens_table.md").split())).group(1))
-print("**The open question is how large ISLA-DTT's tree error is at $\\theta = 1$ where its forest's frame ties, or where rounding "
-      "decides the octant of a cell's normal.** ISLA uses "
+print("**The open question is how large ISLA-DTT's tree error is at $\\theta = 1$ where its forest's frame ties.** ISLA uses "
       "no frame and no center: every position enters as a difference from a slice anchor (@sec-isla-frame). ISLA-DTT's Barnes–Hut "
       "forest groups its clusters, for speed alone, in a canonical frame the boundary carries: the measure-weighted centroid of the "
       "sampled cells and the principal axes of their measure-weighted covariance, each signed so that the third moment along it is "
       "positive (`tree_read.canonical_frame`). That frame moves with a rigid motion, so in exact arithmetic the forest, and with it "
       "every point's list of far clusters at a finite opening angle $\\theta$, is the same in every pose. Where two principal "
-      "variances are equal, or the third moment along an axis vanishes, the axis or its sign is decided by rounding (the code then "
-      "takes the sign of whichever of the dataset's axes it overlaps most); where a cell's normal has a component that is zero but "
-      "for rounding in that frame, so is the sign octant that picks its tree; and a rotation can regroup the clusters. A redraw of "
-      "the boundary moves the centroid and the moments by quadrature noise, which regroups clusters near a tie as well. A "
-      "regrouping moves the read only by the tree's error, an approximation that vanishes as $\\theta \\to 0$. The size of that "
-      "approximation is measured under refinement of the AirfRANS airfoil: splitting every segment in two or four, or refining its "
-      f"front more finely than its rear, changes ISLA-DTT's pressure error by a factor of {f3(t1, 3)} at the trained $\\theta = 1$ "
-      f"and {f3(t0, 4)} at $\\theta = 0$, on weights trained at $\\theta = 1$ (the ISLA-DTT pair trained with the compiled path "
-      "before its fault was fixed). On the standing's pair the exact read has "
+      "variances are equal, or the third moment along an axis vanishes, the axis or its sign is decided by rounding "
+      "(@sec-oq-frame-sign), and a rotation can regroup the clusters. A redraw of the boundary moves the centroid and the moments "
+      "by quadrature noise, which regroups clusters near a tie as well. A regrouping moves the read only by the tree's error, an "
+      "approximation that vanishes as $\\theta \\to 0$. The size of that approximation is measured under refinement of the "
+      "AirfRANS airfoil: splitting every segment in two or four, or refining its front more finely than its rear, changes "
+      f"ISLA-DTT's pressure error by a factor of {f3(t1, 3)} at the trained $\\theta = 1$ and {f3(t0, 4)} at $\\theta = 0$, on "
+      "weights trained at $\\theta = 1$ (the ISLA-DTT pair trained with the compiled path before its fault was fixed). On the "
+      "standing's pair the exact read has "
       + "{} times the error at $\\theta = 1$ on pressure, {} on velocity and {} on eddy viscosity".format(
           *(" / ".join(f"{v:.2f}" for v in EXACT[f]) for f in ("pressure", "velocity", "nut")))
       + " (seeds 42 / 43), so pricing a small $\\theta$ needs a model trained there (@sec-oq-dtt-theta). On the lug the "
-      f"approximation is not small: {100 * NEAR0:.0f}% of its cells have a normal component below $10^{{-5}}$ in the forest's frame "
-      "(measured in bfloat16), and, on the code that pair trained with, ISLA-DTT's posed error at $\\theta = 1$ is "
+      "frame is not tied, but the forest as the code builds it lets rounding decide the sign octant of most cells' normals and "
+      "many exact ties of its box test (@sec-arch-tree-read): ISLA-DTT's posed error at $\\theta = 1$ is "
       f"{' and '.join(f'{v:.2f}' for v in LPN['ref'])} times its native error (seeds 42 and 43), with {LPP:.2f} times the pairs "
-      f"posed, while at $\\theta = 0$ the two agree (posed ÷ native {' and '.join(f'{v:.4f}' for v in LPN['t0'])}). Whether the octant split's sign "
-      "test on those components or a near-tie of the frame itself regroups the clusters is not separated (@sec-arch-tree-read). "
-      "On boundaries with near-equal principal variances the error at $\\theta = 1$ is not measured. What would settle it: "
-      "ISLA-DTT's checkpoints scored rotated and translated and under boundary redraws on cases whose principal variances are "
-      "nearly equal, such as AeroZoo's sphere bodies and spherical enclosures, against the same scorings on cases with a "
-      "well-separated frame, and, on the lug, the posed forest's octant labels compared with the native ones under a "
-      f"tie-breaking rule. Cost: scoring only. Data: {LIM_SRC}, from {R.source('probes090', 'RESULTS.md')} (section 4b); "
-      f"{R.source('dtt_knobs', 'sens/sens_table.md')}; {R.source('dtt_knobs', 'CODE_FACTS.md')} (section 2).")
+      f"posed, while at $\\theta = 0$ the two agree (posed ÷ native {' and '.join(f'{v:.4f}' for v in LPN['t0'])}). On boundaries "
+      "with near-equal principal variances the error at $\\theta = 1$ is not measured. What would settle it: ISLA-DTT's "
+      "checkpoints scored rotated and translated and under boundary redraws on cases whose principal variances are nearly "
+      "equal, such as AeroZoo's sphere bodies and spherical enclosures, against the same scorings on cases with a "
+      f"well-separated frame. Cost: scoring only. Data: {LIM_SRC}, from {R.source('probes090', 'RESULTS.md')} (section 4b); "
+      f"{R.source('dtt_knobs', 'sens/sens_table.md')}; {R.source('dtt_pose', 'MECHANISMS.md')} (sections 1 and 3).")
 ```
 
 ::: {.callout-note title="In flight"}
-The lug's posed ÷ native here comes from ISLA-DTT's forest as the code builds it. A fix is being designed,
-and the ledger (@sec-ledger) tracks it.
+The lug's posed ÷ native here comes from ISLA-DTT's forest as the code builds it. ISLA-DTT retrained
+with a forest built outside autocast, in centered float64 canonical coordinates with cube-face classes
+(@sec-arch-tree-read), on the lug and the AirfRANS interior task is being measured, and the ledger
+(@sec-ledger) tracks it.
 :::
+
+### The sign of the canonical frame on a nearly mirror-symmetric boundary {#sec-oq-frame-sign}
+
+```{python}
+#| label: para-oq-frame-sign
+#| output: asis
+from physicsnemo.experimental.models.isla.tree_read import CANONICAL_SKEW_TIE
+MEC = " ".join(R.load("dtt_pose", "MECHANISMS.md").split())
+SK = re.search(r"skews ([\d.e-]+) and ([\d.e-]+) \(median\), reproduced under pose to ([\d.e-]+) \(max ([\d.e-]+)", MEC).groups()
+SKB = re.search(r"is ([\d.e-]+) / ([\d.e-]+), above the skew in (\d+) / (\d+) of 24 cases", MEC).groups()
+print("**The open question is what signs the canonical frame of a boundary that is nearly its own mirror image.** The frame of "
+      "`canonical_frame`, which the interior task's token draw orders its cells in (@sec-arch-boundary-draw) and ISLA-DTT's forest "
+      "is built in (@sec-arch-tree-read), signs each principal axis so that the measure-weighted third moment of the positions "
+      f"along it, over the axis's variance to the power 3/2, is positive. Below `CANONICAL_SKEW_TIE` = {sci(CANONICAL_SKEW_TIE)} it "
+      "takes instead the sign of whichever of the dataset's axes the principal axis overlaps most, which stays fixed while the "
+      "body turns, so there the frame need not move with a rigid motion. On the lug the two nearly symmetric axes have third moments of "
+      f"{sci(float(SK[0]))} and {sci(float(SK[1]))} (medians over 24 test cases), which a rigid motion moves by at most "
+      f"{sci(float(SK[3]))}, so the threshold decides no sign there and the frame moves with the body to rounding. A threshold "
+      "derived from the arithmetic would not keep that: a first-order bound on the rounding of the third moment, about "
+      f"{sci(float(SKB[0]))} and {sci(float(SKB[1]))} on those axes, exceeds the moment itself on {SKB[2]} and {SKB[3]} of the 24 "
+      "cases, so it would send the lug to the fallback and make its frame depend on the pose. No rule that depends on the boundary "
+      "alone can sign an axis of an exactly mirror-symmetric boundary, which is its own mirror image, so a principled threshold "
+      "needs another fallback, and since the token draw reads the same frame, changing it changes interacting ISLA's input as well "
+      "as ISLA-DTT's forest. What would settle it: a sign rule, or a draw and a forest that do not depend on the sign, checked on "
+      "exactly and nearly mirror-symmetric boundaries and on the lug in every pose, the frame's columns and the drawn cells "
+      "compared posed against native. Cost: none for the check; a rule that changes the draw changes every interior model's "
+      f"input. Data: {R.source('dtt_pose', 'MECHANISMS.md')} (section 1); {R.source('dtt_pose', 'DESIGN.md')} (section 5).")
+```
 
 ### ISLA-DTT's read, retrained {#sec-oq-dtt-theta}
 
@@ -973,7 +1022,8 @@ print("**The open question is whether ISLA's far-field eddy-viscosity error on t
       f"wind tunnel ($x$ from {TUN[0]} to {TUN[1]} m, $y$ from {TUN[2]} to {TUN[3]} m, {TUN[4]} m high), its floor at the vehicle's "
       f"lowest point. On {GR['off']} of the 484 files the four sit {GR['mm']:.1f} mm below the CFD mesh, whose lowest nodes meet the "
       "vehicle's lowest point on every file; the configurations that read them first translate them so that the ground meets that "
-      f"point, which moves the other {GR['match']} by nothing. The standing's ISLA reads the vehicle alone, while GeoTransolver and "
+      f"point, which moves the other {GR['match']} by nothing. ISLA's configuration reads them, its standing's checkpoints were "
+      "trained with the vehicle alone, and GeoTransolver and "
       "Transolver read each point's coordinates (@tbl-model-inputs). What would settle it: the single-case run repeated with all four of those meshes, the domain's whole "
       "boundary as on AeroZoo, added to ISLA's boundary as named meshes, two seeds, beside two seeds of the same run without them, "
       "read on the far-field eddy-viscosity error and on the velocity error. The readout measures the effect of the four meshes and "
@@ -1009,32 +1059,41 @@ SUV_BOX = re.search(r"interior bounding box \| (x [^|]+? m) \(", SU).group(1).re
 HL_MAC = re.search(r"reaches about ([\d.]+-[\d.]+) MAC", SU).group(1).replace("-", " to ")
 HL_PAPER = re.search(r"radius of ≈(\d+) × MAC", SU).group(1)
 AF_CROP = re.search(r"nodes in about (\[[^\]]+\] x \[[^\]]+\]) chords", BA).group(1).replace(" x ", " × ")
-print("**Read from every dataset's files, the boundary falls in three classes; the open question is how SHIFT-SUV and HiLiftAeroML "
+print("**Read from every dataset's files, the boundary falls in two classes; the open question is how SHIFT-SUV and HiLiftAeroML "
       "get the pieces of their domains' boundaries that their files do not store.** ISLA reads every stored piece of the "
       "boundary, each by name with its condition type (@sec-limits-whole-boundary).")
 print()
-print("- **Read whole.** On AeroZoo, the GINOT bracket lug, PLAID Tensile2d and DeepJEB++ ISLA's configuration reads every stored "
-      "piece, by its condition name.")
-print("- **Stored in the data, and read by configurations without a standing.** The DrivAerML files store, beside the vehicle, the four faces of "
-      "the tunnel box built from the dataset's documented tunnel (@sec-oq-far-field); configurations that read them on both DrivAerML "
-      f"tasks are built. The AirfRANS files store the airfoil and an interior cropped to about {AF_CROP} chords; the crop's edges are "
-      "not a boundary of the PDE, since the flow crosses them and no condition is stored on them. The far field is not in the "
-      "converted files but in the release's own `_freestream.vtp` on every case, 200 chords out, and a configuration reads it from there as the condition `freestream`, "
-      "whose prescribed value is the inlet velocity ISLA already reads, with the dataset unchanged (@sec-data-airfrans).")
+# SHIFT-SUV's box on every file (BC-SIDECAR's check)
+BCS = " ".join(R.load("bc_sidecar", "FINAL_REPORT.md").split())
+SUV_ALL = re.search(r"I checked all ([\d,]+) files", BCS).group(1)
+SUV_GR = re.search(r"ground lies ([\d.]+)-([\d.]+) mm below", BCS).groups()
+assert "CFD nodes on all six planes" in BCS and SUV_ALL == SUV_N
+print("- **Read whole.** On AeroZoo, the GINOT bracket lug, PLAID Tensile2d, DeepJEB++, both DrivAerML tasks and the AirfRANS "
+      "interior task ISLA's configuration reads every stored piece, by its condition name. The DrivAerML files store, beside the "
+      "vehicle, the four faces of the tunnel box built from the dataset's documented tunnel (@sec-oq-far-field). The AirfRANS "
+      f"files store the airfoil and an interior cropped to about {AF_CROP} chords; the crop's edges are not a boundary of the PDE, "
+      "since the flow crosses them and no condition is stored on them. The far field is not in the converted files but in the "
+      "release's own `_freestream.vtp` on every case, 200 chords out, and the dataset file reads it from there as the condition "
+      "`freestream`, whose prescribed value is the inlet velocity ISLA already reads, with the dataset unchanged (@sec-data-airfrans).")
 print(f"- **Not stored.** SHIFT-SUV's {SUV_N} files store the vehicle alone, open at the tyre contact patches, inside an interior "
       f"that fills the box {SUV_BOX}; its ground, side walls, roof, inlet and outlet are not stored, and no published source found "
-      "gives the side walls', the roof's or the outlet's condition. HiLiftAeroML stores the wing alone on "
-      f"{HL[0]} of its {HL[1]} files; the other two hold an inlet, an outlet and a symmetry plane built by the same curation pipeline "
-      f"as DrivAerML's box. The dataset's paper puts the far field on a hemisphere of radius about {HL_PAPER} mean aerodynamic chords, "
-      f"while the stored interiors reach {HL_MAC} chords.")
+      "gives the side walls', the roof's or the outlet's condition. The recipe has no ISLA configuration for SHIFT-SUV, since its "
+      "surface configuration reads the tunnel's four pieces, which these files lack (@sec-limits-whole-boundary). HiLiftAeroML "
+      f"stores the wing alone on {HL[0]} of its {HL[1]} files; the other two hold an inlet, an outlet and a symmetry plane built by "
+      "the same curation pipeline as DrivAerML's box. The dataset's paper puts the far field on a hemisphere of radius about "
+      f"{HL_PAPER} mean aerodynamic chords, while the stored interiors reach {HL_MAC} chords.")
 print()
 print("What would settle it: the missing pieces supplied, built from the documented domain and the stored interior as DrivAerML's "
-      "are, or extracted from the raw CFD meshes, as a new version beside each dataset, never as a change to it; HiLiftAeroML's "
-      "radius and SHIFT-SUV's undocumented conditions are choices the supply must make; then each standing retrained with ISLA "
-      "reading the whole boundary, two seeds, scored beside the standing as it is. A surface task that reads the domain's walls also "
-      "needs the task form that predicts only at the boundaries it names (@sec-limits-whole-boundary). Cost: the retraining is not "
-      "priced, because the supply sets the runs. "
-      f"Data: {R.source('boundary_audit', 'REPORT.md')} (sections 1, 2 and 5), {R.source('setup_research', 'SETUP.md')}.")
+      "are, or extracted from the raw CFD meshes, beside each dataset, never as a change to it; then each standing retrained with "
+      "ISLA reading the whole boundary, two seeds, scored beside the standing as it is. For SHIFT-SUV the supervisor proposes "
+      f"building the box in the recipe from constants: on every one of its {SUV_ALL} files the stored interior fills the same box, "
+      f"with CFD nodes on all six of its planes and its floor {SUV_GR[0]} to {SUV_GR[1]} mm below the vehicle's lowest point, so a "
+      "recipe transform can build the inlet, the outlet, the floor, the side walls and the roof on each case, before any pose or "
+      "centering, and leave the dataset as it is. Whether SHIFT-SUV's pieces are supplied that way, and with which conditions on "
+      "the walls, the roof and the outlet, is Peter's decision. HiLiftAeroML's far-field radius is a choice its supply must make. "
+      "Cost: the retraining is not priced, because the supply sets the runs. "
+      f"Data: {R.source('boundary_audit', 'REPORT.md')} (sections 1, 2 and 5), {R.source('setup_research', 'SETUP.md')}, "
+      f"{R.source('bc_sidecar', 'FINAL_REPORT.md')}.")
 ```
 
 ### A quarter of the slices {#sec-oq-slices}
