@@ -366,6 +366,39 @@ RECORDS = {
         "DTT-FAST, BF16-DIAG: where the chunked step's bf16 excess on AirfRANS comes from, its remedy, and the one-ulp yardstick",
         ["REPORT.md", "RESULTS.md"],
     ),
+    "az_decide_final": (
+        "isla-az-decide-2026-10-21",
+        "AZ-DECIDE, final: AeroZoo's compliant standings of four architectures, the registered read of ISLA against ISLA-DTT, and its context",
+        [
+            "RESULTS.md",
+            "tables_final.md",
+            "percase_final.md",
+            "nonbox_scales_final.md",
+            "QUERYPOP090_FOR_12F.md",
+            "CROSS_DATASET_INPUTS.md",
+            "reynolds/RESULTS_reynolds.md",
+        ],
+    ),
+    "e1_az": (
+        "isla-headnorm-2026-10-18",
+        "E1-AZ: the head normalization against ISLA 0.9.0 on compliant AeroZoo's nonbox split, the registered verdict",
+        ["RESULTS_AZ_2026-10-22.md"],
+    ),
+    "lre_az": (
+        "isla-lre-az-2026-10-23",
+        "LRE-AZ: ISLA on AeroZoo with the fixed Reynolds scale against its fitted constants, registered and read",
+        ["RESULTS.md", "tables.md", "lreaz.json", "posthoc.md", "PREREG.md"],
+    ),
+    "geo_band_phase0": (
+        "isla-geo-band-2026-10-24",
+        "GEO-BAND, phase 0: the whole-boundary geometry call re-timed on GB300 at the merged head",
+        ["PHASE0.md", "lhr/timing_table.md"],
+    ),
+    "kernel_tests": (
+        "isla-kernel-tests-2026-10-24",
+        "KERNEL-TESTS: the five CUDA tests that failed after the token padding, their cause and the fix",
+        ["FINAL_REPORT.md", "RESULTS.md"],
+    ),
 }
 
 
@@ -374,6 +407,7 @@ KEPT = {
     ("dtt_fast_integration", "RESULTS.md"): "cd508ec6241c605c2464c0f4541ef70b",
     ("geo_thin", "DESIGN.md"): "f7f8ed6849f68cc8a4584989afb1a27e",
     ("geo_thin", "RESULTS.md"): "6daa28650f27ed75c455c12e89fbd25d",
+    ("dtt_fast_final", "TABLE.md"): "a6f352dfc32a342dc1f95a90bba69c17",
 }
 
 
