@@ -31,7 +31,7 @@ D = torch.float64
 
 @pytest.mark.parametrize("task", ["surface", "interior", "interior_dtt"])
 def test_token_padding_leaves_outputs_and_gradients_unchanged(task, monkeypatch):
-    """At token counts that are not multiples of 8, the outputs and every parameter
+    """At token counts that are not multiples of TOKEN_ALIGNMENT, the outputs and every parameter
     gradient equal those of the unpadded network (alignment 1) to float64 roundoff,
     and the outputs keep the given count."""
     torch.manual_seed(0)

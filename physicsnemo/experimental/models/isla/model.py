@@ -294,6 +294,7 @@ from numbers import Real
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from jaxtyping import Float
 from tensordict import TensorDict
 
@@ -355,10 +356,12 @@ BOUNDARY_TOKENS = 200_000
 #: that inference is deterministic.
 EVAL_START = 0.5
 #: The token axis is completed to a multiple of this count by padding tokens
-#: (:func:`_pad_tokens`): the slice blocks' GEMMs whose leading dimension is the
-#: token count run on cuBLAS's fast kernels only when that dimension spans a
-#: multiple of 16 bytes, 8 elements of bfloat16.
-TOKEN_ALIGNMENT = 8
+#: (:func:`_pad_tokens`). On CUDA in bfloat16 the slice blocks' GEMMs that reduce
+#: over the token axis run on cuBLAS's fast kernels only when its rows span a
+#: multiple of 16 bytes (8 tokens), and the LayerNorm backward's weight-gradient
+#: reduction over more than 65,536 rows takes its aligned path only for a multiple
+#: of its 32-row tile.
+TOKEN_ALIGNMENT = 32
 
 
 ### Inductor options of the compiled slice blocks (compile_blocks). Mix-order
@@ -404,12 +407,15 @@ def _pad_tokens(tokens: TensorDict, alignment: int) -> TensorDict:
     order of the longer reductions."""
     b, n = tokens.batch_size
     pad = -n % alignment
-    filler = TensorDict(
-        {k: v.new_zeros(b, pad, *v.shape[2:]) for k, v in tokens.items()},
-        batch_size=[b, pad],
-    )
-    filler.set("log_w", tokens["log_w"].new_full((b, pad, 1), -math.inf))
-    return torch.cat([tokens, filler], dim=1)
+
+    ### F.pad rather than a concatenated block of pad tokens: under dynamic shapes
+    ### a separate (B, pad, .) tensor makes torch.compile guard on pad == 0.
+    def fill(v, value=0.0):
+        return F.pad(v, (0, 0) * (v.dim() - 2) + (0, pad), value=value)
+
+    padded = TensorDict({k: fill(v) for k, v in tokens.items()}, batch_size=[b, n + pad])
+    padded.set("log_w", fill(tokens["log_w"], -math.inf))
+    return padded
 
 
 def _log_count(n: int, like: torch.Tensor) -> float | torch.Tensor:
