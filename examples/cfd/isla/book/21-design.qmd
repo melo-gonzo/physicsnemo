@@ -187,8 +187,8 @@ three.
   solution, so a fixed axis carries no information about the PDE, only about how the cases were
   posed. ISLA takes directions the physics names and positions only as differences
   (@sec-pose-prior). ISLA-DTT's far-field forest groups cells for speed in a canonical frame the
-  boundary carries, so it moves with the problem; where its axes tie, a regrouping moves the read
-  only by the tree's error, which vanishes as $\theta \to 0$ (@sec-oq-dtt-frame).
+  boundary carries, so it moves with the problem; where its axes tie, or where rounding decides the
+  sign octant of a cell's normal, a regrouping moves the read only by the tree's error, which vanishes as $\theta \to 0$ (@sec-oq-dtt-frame).
 - **No mesh-density shortcuts.** A solver integrates over the surface; it does not count the
   cells the mesher placed in a region. Every sum in ISLA is a quadrature with the cells' measure
   weights, so a region's influence is its area, not its cell count (@sec-isla-quadrature).

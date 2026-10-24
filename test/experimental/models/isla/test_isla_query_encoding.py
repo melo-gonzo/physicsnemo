@@ -93,9 +93,11 @@ def _ingested(model: ISLA, mesh: Mesh, q: torch.Tensor):
     h1 = model.qt.seed.register_forward_pre_hook(
         lambda mod, args: seen.__setitem__("feat", args[0].detach().clone())
     )
+    ### The query tokens follow the boundary tokens (every cell of these small
+    ### meshes is kept); padding tokens may follow them.
     h2 = model.blocks[0].register_forward_pre_hook(
         lambda mod, args: seen.__setitem__(
-            "dir", args[3][:, -q.shape[0] :].detach().clone()
+            "dir", args[3][:, mesh.n_cells : mesh.n_cells + q.shape[0]].detach().clone()
         )
     )
     try:
