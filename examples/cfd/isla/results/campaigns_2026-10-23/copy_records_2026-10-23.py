@@ -409,6 +409,18 @@ RECORDS = {
         "FREEZE-PLAN: the final reference rerun re-planned with ISLA-DTT as the default interior form, its lanes, cost and calendar",
         ["FINAL_RERUN_PLAN.md"],
     ),
+    "bc_supply": (
+        "isla-bc-supply-2026-10-24",
+        "BC-SUPPLY: SHIFT-SUV's box and HiLiftAeroML's inlet and outlet built in the recipe, the deduplicated wing, their checks and cost",
+        [
+            "REPORT.md",
+            "FINAL_REPORT.md",
+            "book/BOOK_CHANGES.md",
+            "out/hl_val_368914.jsonl",
+            "out/move_369235.jsonl",
+            "gb/smoke_summary.txt",
+        ],
+    ),
 }
 
 

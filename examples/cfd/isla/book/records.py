@@ -81,6 +81,7 @@ FOLDER = {
     "kernel_tests": "campaigns_2026-10-23",
     "slices_drv": "campaigns_2026-10-23",
     "freeze_plan": "campaigns_2026-10-23",
+    "bc_supply": "campaigns_2026-10-23",
 }
 
 

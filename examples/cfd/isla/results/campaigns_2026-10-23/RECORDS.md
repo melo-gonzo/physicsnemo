@@ -50,6 +50,7 @@ source. Do not edit by hand.
 | `kernel_tests/` | KERNEL-TESTS: the five CUDA tests that failed after the token padding, their cause and the fix | `scratch/isla-kernel-tests-2026-10-24/` |
 | `slices_drv/` | SLICES-DRV: ISLA with 128 slices against the 512-slice DrivAerML Volume standing | `scratch/isla-slices-drv-2026-10-24/` |
 | `freeze_plan/` | FREEZE-PLAN: the final reference rerun re-planned with ISLA-DTT as the default interior form, its lanes, cost and calendar | `scratch/isla-freeze-plan-2026-10-24/` |
+| `bc_supply/` | BC-SUPPLY: SHIFT-SUV's box and HiLiftAeroML's inlet and outlet built in the recipe, the deduplicated wing, their checks and cost | `scratch/isla-bc-supply-2026-10-24/` |
 
 | topic | file | source | md5 |
 | --- | --- | --- | --- |
@@ -263,3 +264,9 @@ source. Do not edit by hand.
 | slices_drv | PREREG.md | scratch/isla-slices-drv-2026-10-24/PREREG.md | 88e36cd7e36232773f080309f7935c77 |
 | slices_drv | farfield/farfield_table.md | scratch/isla-slices-drv-2026-10-24/farfield/farfield_table.md | f993d7713536e50a78f5dcf80421ca53 |
 | freeze_plan | FINAL_RERUN_PLAN.md | scratch/isla-freeze-plan-2026-10-24/FINAL_RERUN_PLAN.md | 33026a229946ed9ca393cd72225b088f |
+| bc_supply | REPORT.md | scratch/isla-bc-supply-2026-10-24/REPORT.md | 5c3bac05e27f68f8e34a73f372126d24 |
+| bc_supply | FINAL_REPORT.md | scratch/isla-bc-supply-2026-10-24/FINAL_REPORT.md | e0bfcecce4b125b13dd5577a1304eaf0 |
+| bc_supply | book/BOOK_CHANGES.md | scratch/isla-bc-supply-2026-10-24/book/BOOK_CHANGES.md | 509bc87c771038f7ee009923cbb6f96f |
+| bc_supply | out/hl_val_368914.jsonl | scratch/isla-bc-supply-2026-10-24/out/hl_val_368914.jsonl | cb5c0f152fa98f934c19db5388714c68 |
+| bc_supply | out/move_369235.jsonl | scratch/isla-bc-supply-2026-10-24/out/move_369235.jsonl | 195c322778304c0866e0ba53a08be8d2 |
+| bc_supply | gb/smoke_summary.txt | scratch/isla-bc-supply-2026-10-24/gb/smoke_summary.txt | c6a833c753006178ce4beb9a249d707b |
