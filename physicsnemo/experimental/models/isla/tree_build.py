@@ -279,11 +279,10 @@ def forest_tables(
     bins = torch.zeros(_DEPTH_BINS, dtype=torch.long, device=device)
     bins.index_add_(0, (leaf_depth - count + 1).clamp_max(_DEPTH_BINS - 1), starts_here)
     bins.index_add_(0, leaf_depth.clamp_max(_DEPTH_BINS - 1), -starts_here)
-    stats = torch.cat([cells_per, nodes_per, depth_per, torch.cumsum(bins, 0)]).tolist()
+    stats = torch.cat([cells_per, nodes_per, torch.cumsum(bins, 0)]).tolist()
     cells_per_h = stats[:n_oct]
     nodes_per_h = stats[n_oct : 2 * n_oct]
-    depth_per_h = stats[2 * n_oct : 3 * n_oct]
-    internal_per_depth = stats[3 * n_oct :]
+    internal_per_depth = stats[2 * n_oct :]
     if internal_per_depth[_DEPTH_BINS - 2]:
         return None
     m_total = sum(nodes_per_h)
@@ -319,8 +318,9 @@ def forest_tables(
     internal = torch.nonzero_static(~is_leaf, size=n_internal)[:, 0]
     internal = internal[torch.argsort(path[internal], stable=True)]
     internal = internal[torch.argsort(depth[internal], stable=True, descending=True)]
-    by_depth = list(torch.split(internal, [c for c in reversed(internal_per_depth) if c]))[::-1]
-    levels = [(nodes, left[nodes], right[nodes]) for nodes in reversed(by_depth)]
+    sizes = [c for c in reversed(internal_per_depth) if c]
+    by_depth = list(torch.split(internal, sizes))[::-1]
+    levels = list(zip(*(torch.split(x, sizes) for x in (internal, left[internal], right[internal]))))
 
     ### Boxes in the frame, from the sorted points: exact minima and maxima.
     topo = LBVHTopology(
@@ -355,13 +355,14 @@ def forest_tables(
         a += cells_per_h[k]
         c_bounds.append(a)
         m_bounds.append(m_bounds[-1] + nodes_per_h[k])
-    area_prefix, prefix = [], []
+    ### Each tree's scans written in place after its leading zero.
+    sorted_w64 = sorted_w.double()
+    area_prefix = sorted_w64.new_zeros(n + len(trees_h))
+    prefix = weighted.new_zeros(weighted.shape[1], n + len(trees_h))
     for t in range(len(trees_h)):
         a, b = c_bounds[t], c_bounds[t + 1]
-        area_prefix.append(F.pad(torch.cumsum(sorted_w[a:b].double(), dim=0), (1, 0)))
-        prefix.append(F.pad(torch.cumsum(weighted[a:b].t(), dim=1), (1, 0)))
-    area_prefix = torch.cat(area_prefix)
-    prefix = torch.cat(prefix, dim=1)
+        torch.cumsum(sorted_w64[a:b], dim=0, out=area_prefix[a + t + 1 : b + t + 1])
+        torch.cumsum(weighted[a:b].t(), dim=1, out=prefix[:, a + t + 1 : b + t + 1])
     ordinal = torch.cumsum(cells_per > 0, 0) - 1
     starts = range_start + ordinal[tree]
     ends = starts + range_count
@@ -378,45 +379,50 @@ def forest_tables(
     node_measure = total_64.to(points_f.dtype)
 
     ### One ClusterTree per octant over its slice of the table (local ids), for the
-    ### reference walk.
+    ### reference walk: each field made for the whole table (row by row, so each tree's
+    ### rows are its own computation's) and sliced per tree.
     by_octant = torch.argsort(octant, stable=True)
     local = torch.empty_like(cells)
     local[by_octant] = torch.arange(n, device=device) - tree_start[octant[by_octant]]
-    trees, tree_cells, diameter_sq = [], [], []
+    node_offset = F.pad(torch.cumsum(nodes_per[torch.nonzero_static(cells_per, size=len(trees_h))[:, 0]], 0), (1, 0))
+    tree_rs = range_start - tree_start[tree]
+    tree_m0 = node_offset[ordinal[tree]]
+    tree_left = torch.where(is_leaf, -1, left - tree_m0)
+    tree_right = torch.where(is_leaf, -1, right - tree_m0)
+    leaf_start = torch.where(is_leaf, tree_rs, -1)
+    leaf_count = torch.where(is_leaf, range_count, 0)
+    diameter_sq = (aabb_max - aabb_min).pow(2).sum(dim=-1)
+    source_order = local[cells]
+    source_points = points_f[by_octant]
+    root_ids = torch.zeros(len(trees_h), dtype=torch.long, device=device)
+    trees, tree_cells = [], []
     for t, k in enumerate(trees_h):
         a, b = c_bounds[t], c_bounds[t + 1]
         ma, mb = m_bounds[t], m_bounds[t + 1]
-        sel = by_octant[a:b]
-        leaf = is_leaf[ma:mb]
-        rs = range_start[ma:mb] - a
-        lo, hi = aabb_min[ma:mb], aabb_max[ma:mb]
-        diameter_sq.append((hi - lo).pow(2).sum(dim=-1))
         trees.append(
             ClusterTree(
-                node_aabb_min=lo,
-                node_aabb_max=hi,
-                node_diameter_sq=diameter_sq[-1],
-                node_left_child=torch.where(leaf, -1, left[ma:mb] - ma),
-                node_right_child=torch.where(leaf, -1, right[ma:mb] - ma),
-                leaf_start=torch.where(leaf, rs, -1),
-                leaf_count=torch.where(leaf, range_count[ma:mb], 0),
-                node_range_start=rs,
+                node_aabb_min=aabb_min[ma:mb],
+                node_aabb_max=aabb_max[ma:mb],
+                node_diameter_sq=diameter_sq[ma:mb],
+                node_left_child=tree_left[ma:mb],
+                node_right_child=tree_right[ma:mb],
+                leaf_start=leaf_start[ma:mb],
+                leaf_count=leaf_count[ma:mb],
+                node_range_start=tree_rs[ma:mb],
                 node_range_count=range_count[ma:mb],
                 node_total_area=node_measure[ma:mb],
-                sorted_source_order=local[cells[a:b]],
-                source_points=points_f[sel],
-                max_depth=torch.full((), depth_per_h[k], dtype=torch.long, device=device),
-                root_ids=torch.zeros(1, dtype=torch.long, device=device),
+                sorted_source_order=source_order[a:b],
+                source_points=source_points[a:b],
+                max_depth=depth_per[k],
+                root_ids=root_ids[t : t + 1],
                 batch_size=torch.Size([]),
             )
         )
-        tree_cells.append(sel)
+        tree_cells.append(by_octant[a:b])
     return {
         "trees": trees,
         "tree_cells": tree_cells,
-        "node_offset": F.pad(
-            torch.cumsum(nodes_per[torch.nonzero_static(cells_per, size=len(trees_h))[:, 0]], 0), (1, 0)
-        ),
+        "node_offset": node_offset,
         "cells": cells,
         "range_start": range_start,
         "range_count": range_count,
@@ -427,7 +433,7 @@ def forest_tables(
         "levels": levels,
         "aabb_min": aabb_min,
         "aabb_max": aabb_max,
-        "diameter_sq": torch.cat(diameter_sq),
+        "diameter_sq": diameter_sq,
         "center": center,
         "mean_n": mean_n,
         "vecs": node_vecs,

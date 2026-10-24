@@ -92,6 +92,7 @@ within 10% of this forest, which builds five times faster and shares its tree wi
 GLOBE).
 """
 
+import contextlib
 import dataclasses
 import logging
 import math
@@ -392,18 +393,28 @@ class BoundaryForest:
         how, not what (:func:`resolve_walk`): the fast walk gives the same lists in
         the same order. Lists past Warp's array limit are walked by the reference
         under ``"auto"`` and refused under ``"fast"``."""
+        return self.frame_pairs(points.detach() @ self.frame, theta, walk)
+
+    def frame_pairs(
+        self, points_f: torch.Tensor, theta: float | None = None, walk: str = "auto", count_only: bool = False
+    ) -> tuple[torch.Tensor, torch.Tensor, int] | int:
+        """:meth:`point_pairs` of points already in the trees' coordinates
+        (``points.detach() @ frame``, in the dtype the product gives); with
+        ``count_only`` the number of pairs alone, which the fast walk counts without
+        making the lists (so past Warp's limit on the lists too)."""
         theta = self.theta if theta is None else float(theta)
-        points_f = points.detach() @ self.frame  # the trees' coordinates
-        if resolve_walk(walk, points, theta, self) == "fast":
-            pairs = walk_pairs(self, points_f, theta)
+        if resolve_walk(walk, points_f, theta, self) == "fast":
+            pairs = walk_pairs(self, points_f, theta, count_only)
             if pairs is not None:
                 return pairs
             if walk == "fast":
-                raise ValueError(f"the fast walk's arrays for {points.shape[0]} points pass Warp's 2**31 elements")
-            key = (points.device.type, "reference past Warp's array limit")
+                raise ValueError(f"the fast walk's arrays for {points_f.shape[0]} points pass Warp's 2**31 elements")
+            key = (points_f.device.type, "reference past Warp's array limit")
             if key not in _WALKS_LOGGED:
                 _WALKS_LOGGED.add(key)
-                logger.info("ISLA tree walk=auto walks %d points by the reference: past Warp's array limit", points.shape[0])
+                logger.info(
+                    "ISLA tree walk=auto walks %d points by the reference: past Warp's array limit", points_f.shape[0]
+                )
         qs, ss, n_node = [], [], 0
         for t, tree in enumerate(self.trees):
             a, b = int(self.node_offset[t]), int(self.node_offset[t + 1])
@@ -414,6 +425,8 @@ class BoundaryForest:
             ss += [self.tree_cells[t][plan.near_source_ids], self.n_cells + a + plan.far_source_node_ids]
             n_node += plan.n_far
         qi, si = torch.cat(qs), torch.cat(ss)
+        if count_only:
+            return int(qi.shape[0])
         order = torch.argsort(qi, stable=True)
         return qi[order], si[order], n_node
 
@@ -648,16 +661,22 @@ class TreeReadWalk:
     basis: per case the pairs ``(qi, si, n_node)`` sorted by point, the inputs of their
     invariants (:func:`tree_pair_invariants`) and the sources' log measures.
     :func:`walk_range_pairs` assembles the pairs of any range of points from it;
-    ``kernel`` is the read's implementation (:func:`tree_read_walk`)."""
+    ``kernel`` is the read's implementation (:func:`tree_read_walk`). A walk made
+    with ``walk_points=False`` has no lists (``None`` per case) and keeps what
+    :func:`walk_points_range` walks a range of points with: per case the points in
+    the forest's frame, the walk's implementation and the autocast state."""
 
     forests: list[BoundaryForest]
-    lists: list[tuple[torch.Tensor, torch.Tensor, int]]
+    lists: list[tuple[torch.Tensor, torch.Tensor, int] | None]
     geometry: list[dict]
     src_logm: list[torch.Tensor]
     omega: torch.Tensor  # (B * N,) the cells' measure fractions
     n_cells: int
     n_queries: int
     kernel: str
+    points_f: list[torch.Tensor] | None = None
+    walk: str = "auto"
+    autocast: tuple[bool, torch.dtype] | None = None
 
 
 def tree_read_pairs(basis: _KernelBasis, **inputs) -> TreeReadPairs:
@@ -682,6 +701,7 @@ def tree_read_walk(
     walk: str = "auto",
     build: str = "auto",
     kernel: str = "reference",
+    walk_points: bool = True,
 ) -> TreeReadWalk:
     r"""Walk the tree read's forests for a batch of cases.
 
@@ -705,13 +725,14 @@ def tree_read_walk(
     :mod:`fused_read`, and the basis is built after the plan from its indices, the
     same values with the invariants rebuilt in backward:
     :func:`_chunked_basis_from_plan`, by one fused kernel per chunk where
-    :func:`fused_basis.supported` holds).
+    :func:`fused_basis.supported` holds). With ``walk_points=False`` no point is
+    walked here: :func:`walk_points_range` walks any range of them later.
     """
     b, nq, d = query_r.shape
     n = boundary_r.shape[1]
     tiny = torch.finfo(torch.float32).tiny
     has_vecs = boundary_vecs is not None and bool(boundary_vecs.shape[2])
-    forests, lists, geometries, src_logms = [], [], [], []
+    forests, lists, geometries, src_logms, points_fs = [], [], [], [], []
     for i in range(b):
         with torch.no_grad():
             omega = torch.exp(log_frac[i])
@@ -725,7 +746,9 @@ def tree_read_walk(
                 eps=eps,
                 build=build,
             )
-            qi, si, n_node = forest.point_pairs(query_r[i], walk=walk)
+            points_f = query_r[i].detach() @ forest.frame
+            points_fs.append(points_f)
+            lists.append(forest.frame_pairs(points_f, walk=walk) if walk_points else None)
             node_measure = forest.measure.to(log_frac.dtype)
         src_r = torch.cat([boundary_r[i], forest.center.to(boundary_r.dtype)])
         src_n = torch.cat([boundary_n[i], forest.normal.to(boundary_n.dtype)])
@@ -746,9 +769,9 @@ def tree_read_walk(
             "eps": eps,
         }
         forests.append(forest)
-        lists.append((qi, si, n_node))
         geometries.append(geometry)
         src_logms.append(src_logm)
+    device = query_r.device.type
     return TreeReadWalk(
         forests=forests,
         lists=lists,
@@ -758,7 +781,42 @@ def tree_read_walk(
         n_cells=n,
         n_queries=nq,
         kernel=kernel,
+        points_f=None if walk_points else points_fs,
+        walk=walk,
+        autocast=(torch.is_autocast_enabled(device), torch.get_autocast_dtype(device)),
     )
+
+
+@contextlib.contextmanager
+def _walk_context(walk: TreeReadWalk):
+    """No gradient, and the autocast state :func:`tree_read_walk` ran in: the opening
+    test's dtypes follow the autocast state (:func:`resolve_walk`)."""
+    enabled, dtype = walk.autocast
+    with torch.no_grad(), torch.autocast(walk.omega.device.type, dtype=dtype, enabled=enabled):
+        yield
+
+
+def walk_points_range(walk: TreeReadWalk, start: int, stop: int) -> TreeReadWalk:
+    """The walk of the points ``start`` to ``stop`` of a walk made without its lists
+    (``tree_read_walk(walk_points=False)``), numbered from ``start``, with those
+    points' geometry: each forest walked for those points alone, from the same
+    coordinates in its frame and in the same autocast state, so each point's list is
+    the one the walk of every point gives it, in the same order, and
+    :func:`walk_range_pairs` of the result is the pairs of that range."""
+    with _walk_context(walk):
+        lists = [f.frame_pairs(p[start:stop], walk=walk.walk) for f, p in zip(walk.forests, walk.points_f)]
+    rows = ("query_r", "query_n", "query_wall")
+    geometry = [{**g, **{k: g[k][start:stop] for k in rows}} for g in walk.geometry]
+    return dataclasses.replace(walk, lists=lists, geometry=geometry, n_queries=stop - start, points_f=None)
+
+
+def walk_pair_count(walk: TreeReadWalk) -> int:
+    """The number of pairs of every point of ``walk``; for a walk made without its
+    lists, counted by each forest's walk without making them."""
+    if walk.points_f is None:
+        return sum(int(qi.shape[0]) for qi, _, _ in walk.lists)
+    with _walk_context(walk):
+        return sum(f.frame_pairs(p, walk=walk.walk, count_only=True) for f, p in zip(walk.forests, walk.points_f))
 
 
 def walk_range_pairs(

@@ -871,6 +871,48 @@ def test_tree_read_cuda_fused_and_compiled_training_path():
     )
 
 
+@pytest.mark.parametrize(
+    "device",
+    ["cpu", pytest.param("cuda", marks=cuda_only)],
+)
+def test_pair_plan_is_the_histogram_plan_and_builds_without_a_host_sync(device):
+    """The plan's offsets and stable permutation equal a histogram of each index and a
+    stable sort of the source indices, field by field and in dtype, for 64- and 32-bit
+    indices, with points and sources that have no pairs (the last ones among them); on
+    CUDA it builds without a host sync."""
+    from physicsnemo.experimental.models.isla.segment_softmax import PairPlan
+
+    g = torch.Generator().manual_seed(4)
+    n_q, n_b = 300, 5000
+    counts = torch.randint(0, 900, (n_q,), generator=g)
+    counts[::7] = 0
+    counts[-3:] = 0
+    qi = torch.repeat_interleave(torch.arange(n_q), counts).to(device)
+    bj = torch.randint(0, n_b - 40, (qi.shape[0],), generator=g).to(device)
+    bj[: qi.shape[0] // 3] = 17  # one source read by a third of the pairs
+
+    def offsets(idx, n):
+        o = idx.new_zeros(n + 1)
+        o[1:] = torch.cumsum(torch.bincount(idx, minlength=n), 0)
+        return o
+
+    for qi, bj in ((qi, bj), (qi.int(), bj.int())):
+        perm = torch.argsort(bj, stable=True)
+        ref = (offsets(qi, n_q), perm, offsets(bj, n_b), qi[perm])
+        if device == "cuda":
+            torch.cuda.synchronize()
+            torch.cuda.set_sync_debug_mode("error")
+            try:
+                plan = PairPlan.build(qi, bj, n_q, n_b)
+            finally:
+                torch.cuda.set_sync_debug_mode("default")
+        else:
+            plan = PairPlan.build(qi, bj, n_q, n_b)
+        got = (plan.q_offsets, plan.perm, plan.b_offsets, plan.qi_by_b)
+        for name, a, b in zip(("q_offsets", "perm", "b_offsets", "qi_by_b"), got, ref):
+            assert a.dtype == b.dtype and torch.equal(a, b), (name, qi.dtype)
+
+
 @cuda_only
 @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16], ids=["fp32", "bf16"])
 def test_fused_segment_softmax_read_matches_eager(dtype):
@@ -1760,6 +1802,62 @@ def test_query_chunks_need_query_independent_points():
         m.query_chunks(
             boundary_meshes={"wall": mesh}, prediction_points=q, global_data={"g": drv}
         )
+
+
+@pytest.mark.parametrize(
+    "device,walk,autocast",
+    [
+        ("cpu", "reference", False),
+        ("cpu", "fast", False),
+        pytest.param("cuda", "auto", False, marks=cuda_only),
+        pytest.param("cuda", "auto", True, marks=cuda_only),
+    ],
+    ids=["cpu-reference", "cpu-fast", "cuda", "cuda-bf16_autocast"],
+)
+def test_walk_of_a_range_of_points_is_those_rows_of_the_walk_of_every_point(
+    device, walk, autocast
+):
+    """A walk made without its lists (``walk_points=False``, as ISLA.query_chunks makes
+    it) walks a range of points on demand (``walk_points_range``, here outside the
+    autocast it was made in): its lists are those points' rows of the walk of every
+    point, raw and in order (numbered from the range's start), with their node counts
+    and geometry rows; ``walk_pair_count`` counts every point's pairs without the
+    lists."""
+    dt = torch.float32 if device == "cuda" else D
+    pts, nrm, w, g = (t.to(device, dt) for t in cloud(500, seed=3))
+    q = cloud(150, seed=7, scale=(4.0,) * 3)[0].to(device, dt)
+    kw = dict(
+        query_r=q[None],
+        query_n=torch.nn.functional.normalize(q, dim=-1)[None],
+        query_wall=0.1
+        + torch.rand(1, 150, generator=torch.Generator().manual_seed(1)).to(device, dt),
+        boundary_r=pts[None],
+        boundary_n=nrm[None],
+        boundary_vecs=None,
+        log_frac=torch.log(w / w.sum())[None],
+        g_unit=torch.nn.functional.normalize(g, dim=-1)[None, None],
+        theta=0.5,
+        eps=1e-12,
+        walk=walk,
+    )
+    with torch.autocast(device, dtype=torch.bfloat16, enabled=autocast):
+        full = tree_read.tree_read_walk(**kw)
+        lazy = tree_read.tree_read_walk(walk_points=False, **kw)
+    assert lazy.lists == [None]
+    qi, si, n_node = full.lists[0]
+    assert 0 < n_node < qi.numel()
+    assert (
+        tree_read.walk_pair_count(lazy) == tree_read.walk_pair_count(full) == qi.numel()
+    )
+    for start, stop in ((0, 150), (40, 110), (149, 150)):
+        part = tree_read.walk_points_range(lazy, start, stop)
+        a, b = torch.searchsorted(qi, qi.new_tensor([start, stop])).tolist()
+        pq, ps, pn = part.lists[0]
+        assert torch.equal(pq, qi[a:b] - start) and torch.equal(ps, si[a:b])
+        assert pn == int((si[a:b] >= full.n_cells).sum())
+        assert part.n_queries == stop - start
+        for k in ("query_r", "query_n", "query_wall"):
+            assert torch.equal(part.geometry[0][k], full.geometry[0][k][start:stop])
 
 
 def _basis_case(dim, n_vecs, n_pairs=20000, seed=0):

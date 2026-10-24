@@ -285,15 +285,20 @@ def _opening_dtypes(forest, theta_sq: float) -> tuple[torch.dtype, torch.dtype, 
     return box.dtype, sq.dtype, (sq.sum(dim=0) * theta_sq).dtype
 
 
-def walk_pairs(forest, points_f: torch.Tensor, theta: float) -> tuple[torch.Tensor, torch.Tensor, int] | None:
+def walk_pairs(
+    forest, points_f: torch.Tensor, theta: float, count_only: bool = False
+) -> tuple[torch.Tensor, torch.Tensor, int] | int | None:
     """Every point's list ``(qi, si, n_node)`` for the points ``points_f`` ``(Q, d)`` in
     the forest's frame at ``theta > 0``, equal to the reference's
     (:meth:`BoundaryForest.point_pairs`) entry for entry; one host read, of the sizes.
-    ``None`` when an array would pass Warp's limit (:func:`walk_fits`)."""
+    ``None`` when an array would pass Warp's limit (:func:`walk_fits`). With
+    ``count_only`` the count pass alone: the lists' length."""
     device = forest.aabb_min.device
     n_q, d = points_f.shape
     n_t = int(forest.node_offset.shape[0]) - 1
     if n_q == 0 or n_t == 0:
+        if count_only:
+            return 0
         empty = torch.empty(0, dtype=torch.long, device=device)
         return empty, empty.clone(), 0
     if n_q * max(d, n_t) >= WARP_MAX_ELEMENTS:
@@ -334,6 +339,8 @@ def walk_pairs(forest, points_f: torch.Tensor, theta: float) -> tuple[torch.Tens
     seg_end = (n_near + n_far).cumsum(0)
     visit_end = n_visit.cumsum(0)
     n_pairs, n_node, n_scratch = torch.stack([seg_end[-1], n_far.sum(), visit_end[-1]]).tolist()
+    if count_only:
+        return n_pairs
     if max(n_pairs, n_scratch) >= WARP_MAX_ELEMENTS:
         return None
     qi = torch.empty(n_pairs, dtype=torch.long, device=device)
