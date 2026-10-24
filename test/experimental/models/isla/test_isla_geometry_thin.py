@@ -380,3 +380,49 @@ def test_certified_normal():
         assert sin2 <= Fraction(float(delta[k])) ** 2
     unsure = delta > torch.finfo(torch.float32).eps / 2
     assert not unsure[rho >= 1e-6].any() and unsure[rho <= 1e-12].all()
+
+
+@pytest.mark.parametrize("device", _DEVICES)
+@pytest.mark.parametrize("dtype", [torch.float32, D])
+def test_switch_on_ordinary_cell_changes_nothing_visible(dtype, device, monkeypatch):
+    """On a large cell of ordinary shape (rho about 0.4, as DrivAerML's tunnel floor)
+    the guard covers on-wall queries, and the switch to the accurate point fires
+    where the two points differ by rounding alone. The search's internal weights then
+    differ by an ulp or two, but d, u and their gradients in the queries and the
+    vertices are bitwise those of the unswitched path."""
+    p0 = torch.tensor(
+        [[0.2, -0.6, -0.0171], [1.1, -0.4, -0.0171], [0.5, 0.3, -0.0171]],
+        dtype=dtype,
+        device=device,
+    )
+    c = torch.tensor([[0, 1, 2]], device=device)
+    g = torch.Generator().manual_seed(0)
+    b = torch.rand(4000, 3, dtype=D, generator=g)
+    q0 = ((b / b.sum(1, keepdim=True)) @ p0.double().cpu()).to(dtype).to(device)
+    search = geometry._closest_candidates
+    weights = []
+
+    def recorded(*args):
+        out = search(*args)
+        weights.append(out[5].clone())
+        return out
+
+    monkeypatch.setattr(geometry, "_closest_candidates", recorded)
+
+    def run():
+        q, p = q0.clone().requires_grad_(), p0.clone().requires_grad_()
+        d, u = exact_boundary_geometry(q, p, c)
+        probe = (
+            torch.randn(u.shape, generator=torch.Generator().manual_seed(1), dtype=D)
+            .to(dtype)
+            .to(device)
+        )
+        gq, gp = torch.autograd.grad(d.sum() + (u * probe).sum(), (q, p))
+        return d, u, gq, gp
+
+    switched = run()
+    monkeypatch.setattr(geometry, "_FOOT_UNITS", -float("inf"))
+    unswitched = run()
+    assert bool((weights[0] != weights[1]).any(-1).any())
+    for a, b_ in zip(switched, unswitched):
+        assert torch.equal(a, b_)

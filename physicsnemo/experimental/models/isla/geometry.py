@@ -213,7 +213,11 @@ def _closest_weights(q, simplex, flat=None):
     12) u64 (|x| + R_k)`` of the accurate point's (:func:`_accurate_weights`), within
     ``12`` units of the exact one (``_FOOT_UNITS``), so that Ericson's is within the
     tie bound's arithmetic share, 13 units; otherwise it takes the accurate point.
-    At every pair below the guard, Ericson's weights stand, bitwise."""
+    At every pair below the guard, Ericson's weights stand, bitwise. The guard is
+    certified (``K`` is derived, :data:`_ERICSON_K`); the switch is not: its 12 and 13
+    units are first-order estimates (worst cases 77 and about 17.5 units; the largest
+    errors observed against exact rational arithmetic, 2.03 units for the accurate
+    point)."""
     if q.shape[-1] == 2:
         t = _segment_t(q, simplex[:, 0], simplex[:, 1])
         return torch.stack([1 - t, t], -1)
@@ -374,7 +378,9 @@ def _cross_expansion(v0, v1, v2, i, j):
 _ERICSON_K = 168.0
 
 #: The tie bound's arithmetic share in three dimensions, ``(3 d + 4) u64 (|x| + R_k)``
-#: (:func:`_closest_candidates_impl`), in units of ``u64 (|x| + R_k)``.
+#: (:func:`_closest_candidates_impl`), in units of ``u64 (|x| + R_k)``: a first-order
+#: estimate, not a worst case (an edge point's first-order worst case, as
+#: ``_FOOT_UNITS``' step 5 counts it, is ``14.5 u l + 3 u R_k``, about 17.5 units).
 _ERICSON_UNITS = 13
 
 #: The bound on the accurate point's distance error (:func:`_accurate_weights`), in
@@ -1683,7 +1689,11 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     features tie when their distances are equal within the error bound ``E_k =
     (u + (3 d + 4) u_64)(|x| + max_{v in k} |v|)`` of the distance to cell ``k``,
     ``u`` the unit roundoff of the queries' precision (the rounding of the
-    coordinates) and ``u_64`` float64's (the arithmetic): cell ``k`` ties when
+    coordinates) and ``u_64`` float64's (the arithmetic; its share, ``(3 d + 4)``
+    units, is a first-order estimate, not a worst case: the first-order worst case
+    of an edge point alone is about 17.5 units, ``_ERICSON_UNITS``; for float32
+    queries the share is 2.4e-8 of the bound, for float64 ones it decides): cell
+    ``k`` ties when
     ``D_k - E_k <= min_j (D_j + E_j)``, i.e. when it may be the closest one, and
     its closest point is a local minimum of the distance on the surface: on a
     vertex or an edge, every cell sharing that feature reaches the same point
