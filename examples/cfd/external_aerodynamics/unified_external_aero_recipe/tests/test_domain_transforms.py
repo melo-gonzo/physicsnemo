@@ -326,3 +326,118 @@ def test_flip_boundary_orientation_reverses_the_named_boundaries():
     )
     with pytest.raises(KeyError, match="'outlet'"):
         FlipBoundaryOrientation(boundaries=["outlet"]).apply_to_domain(domain)
+
+
+def _tunnel_case(ground: float, roof: float, lowest: float) -> DomainMesh:
+    """A DrivAerML-like case: a body whose lowest point is at z = lowest, interior nodes
+    from lowest to lowest + 20, and the four box meshes with their ground at z = ground
+    and their roof at z = roof (float32, as stored)."""
+
+    def rect(corners):
+        return Mesh(
+            points=torch.tensor(corners), cells=torch.tensor([[0, 1, 2], [0, 2, 3]])
+        )
+
+    x0, x1, y0, y1, xb = -40.0, 80.0, -22.0, 22.0, -2.339
+    walls = {
+        "no_slip": rect(
+            [[xb, y0, ground], [x1, y0, ground], [x1, y1, ground], [xb, y1, ground]]
+        ),
+        "slip": rect([[x0, y0, roof], [x0, y1, roof], [x1, y1, roof], [x1, y0, roof]]),
+        "inlet": rect(
+            [[x0, y0, ground], [x0, y1, ground], [x0, y1, roof], [x0, y0, roof]]
+        ),
+        "outlet": rect(
+            [[x1, y0, ground], [x1, y0, roof], [x1, y1, roof], [x1, y1, ground]]
+        ),
+    }
+    body = Mesh(
+        points=torch.tensor(
+            [[0.0, -1.0, lowest], [3.0, -1.0, lowest + 0.1], [1.0, 1.0, 1.1]]
+        ),
+        cells=torch.tensor([[0, 1, 2]]),
+    )
+    interior = Mesh(
+        points=torch.tensor(
+            [[x0, y0, lowest], [x1, y1, lowest + 20.0], [0.0, 0.0, 0.5]]
+        )
+    )
+    return DomainMesh(
+        interior=interior,
+        boundaries={"vehicle": body, **walls},
+        global_data={"L_ref": torch.tensor(5.0)},
+    )
+
+
+def test_place_ground_under_body_moves_the_box_onto_the_cfd_domain():
+    """On a case stored 2.4 mm low (ground -0.32, roof 19.68, wheels at -0.317597) the four
+    box meshes move up by the body's lowest z minus the ground's, in float32: the ground lands
+    on the wheels and the roof on the interior's highest node exactly, x, y and the cells stay;
+    the body, the interior and global_data are the inputs'. A matching case moves by zero."""
+    from domain_transforms import PlaceGroundUnderBody
+
+    walls = ["no_slip", "slip", "inlet", "outlet"]
+    t = PlaceGroundUnderBody(ground="no_slip", body="vehicle", boundaries=walls)
+    lowest = -0.317597  # the stored vehicle's lowest z, as float32
+    low = _tunnel_case(-0.32, 19.68, lowest)
+    out = t.apply_to_domain(low)
+    zmin = float(low.interior.points[:, 2].min())
+    zmax = float(low.interior.points[:, 2].max())
+    assert zmax == 19.682403564453125
+    for name in walls:
+        before, after = low.boundaries[name], out.boundaries[name]
+        assert torch.equal(after.points[:, :2], before.points[:, :2])
+        assert torch.equal(after.cells, before.cells)
+        dz = after.points[:, 2].double() - before.points[:, 2].double()
+        assert float(dz.min()) > 0.0024 and float(dz.max()) < 0.00241
+    ### Ground on the wheels, roof (here all of slip) on the highest node, the end walls between.
+    for name, (lo, hi) in {
+        "no_slip": (zmin, zmin),
+        "slip": (zmax, zmax),
+        "inlet": (zmin, zmax),
+        "outlet": (zmin, zmax),
+    }.items():
+        z = out.boundaries[name].points[:, 2]
+        assert (float(z.min()), float(z.max())) == (lo, hi), name
+    assert (
+        out.boundaries["vehicle"] is low.boundaries["vehicle"]
+        and out.interior is low.interior
+    )
+    assert torch.equal(out.global_data["L_ref"], torch.tensor(5.0))
+    ### A matching file (the 187): zero shift, every point as stored.
+    ok = _tunnel_case(lowest, zmax, lowest)
+    same = t.apply_to_domain(ok)
+    for name in walls:
+        assert torch.equal(same.boundaries[name].points, ok.boundaries[name].points)
+    ### A ground above the body moves down onto it.
+    high = t.apply_to_domain(_tunnel_case(-0.30, 19.70, lowest))
+    assert float(high.boundaries["no_slip"].points[:, 2].max()) == zmin
+    assert t(low.interior) is low.interior  # a bare Mesh passes through
+
+
+def test_place_ground_under_body_refuses_what_it_cannot_place():
+    """A tilted ground, a missing boundary, a ground outside the moved set or a body inside it
+    are refused rather than guessed."""
+    from domain_transforms import PlaceGroundUnderBody
+
+    walls = ["no_slip", "slip", "inlet", "outlet"]
+    case = _tunnel_case(-0.32, 19.68, -0.317597)
+    pts = case.boundaries["no_slip"].points.clone()
+    pts[0, 2] += 1e-3
+    tilted = Mesh(points=pts, cells=case.boundaries["no_slip"].cells)
+    bad = DomainMesh(
+        interior=case.interior, boundaries={**case.boundaries, "no_slip": tilted}
+    )
+    t = PlaceGroundUnderBody(ground="no_slip", body="vehicle", boundaries=walls)
+    with pytest.raises(ValueError, match="not one plane"):
+        t.apply_to_domain(bad)
+    with pytest.raises(KeyError, match="'roof'"):
+        PlaceGroundUnderBody(
+            ground="no_slip", body="vehicle", boundaries=[*walls, "roof"]
+        ).apply_to_domain(case)
+    with pytest.raises(ValueError, match="among the boundaries"):
+        PlaceGroundUnderBody(ground="floor", body="vehicle", boundaries=walls)
+    with pytest.raises(ValueError, match="must not be among"):
+        PlaceGroundUnderBody(
+            ground="no_slip", body="vehicle", boundaries=[*walls, "vehicle"]
+        )
