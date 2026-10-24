@@ -13,17 +13,24 @@ source. Do not edit by hand.
 | `cap_audit/` | CAP-AUDIT: capacity floors of the three architectures, phases 1, 1b and 2 | `scratch/isla-cap-audit-2026-10-20/` |
 | `floor_drv/` | FLOOR-DRV: ISLA on one DrivAerML Volume car with the domain's four boundary meshes, the pre-registration | `scratch/isla-floor-drv-2026-10-23/` |
 | `az_compliant/` | AeroZoo under the benchmark protocol: the registered rule for ISLA against ISLA-DTT (PREREG_v2 sections 12(f) and 13) | `scratch/isla-az-compliant-2026-10-19/` |
+| `boundary_audit/` | BOUNDARY-AUDIT: what each dataset stores of its domain's boundary, and the whole boundary's cost on DrivAerML Volume | `scratch/isla-boundary-audit-2026-10-23/` |
+| `drv_ground/` | DRV-GROUND: the DrivAerML domain meshes' ground offset on all 484 files, and the recipe transform that places it | `scratch/isla-drv-ground-2026-10-23/` |
+| `setup_research/` | SETUP-RESEARCH: the CFD domains of DrivAerML, SHIFT-SUV and HiLiftAeroML, and where their boundary pieces come from | `scratch/isla-setup-research-2026-10-23/` |
+| `af_whole/` | AF-WHOLE: ISLA and ISLA-DTT reading the AirfRANS far field, the pre-registration and its facts before training | `scratch/isla-af-whole-2026-10-23/` |
+| `surface_bc/` | SURFACE-BC: a surface task that reads the whole boundary and predicts at the boundaries it names, built and timed | `scratch/isla-surface-bc-2026-10-23/` |
+| `surfqpop/` | SURF-QPOP: how a DrivAerML Surface prediction depends on the other requested cells | `scratch/isla-surf-probe-2026-10-23/` |
+| `slices_af/` | SLICES-AF: ISLA with 128 slices against the 512-slice AirfRANS standing | `scratch/isla-slices-2026-10-23/` |
 
 | topic | file | source | md5 |
 | --- | --- | --- | --- |
-| attrib090 | RESULTS.md | scratch/isla-attrib090-2026-10-21/RESULTS.md | 12b0b6e6177e03fc2b1449655c03b4cb |
+| attrib090 | RESULTS.md | scratch/isla-attrib090-2026-10-21/RESULTS.md | e01a94de29d14f876636ea92b553bcb5 |
 | attrib090 | results_native.json | scratch/isla-attrib090-2026-10-21/results_native.json | 3f92835ce703e13a5f72641fa6cf241e |
-| attrib090 | results2_native.json | scratch/isla-attrib090-2026-10-21/results2_native.json | aca0df21fb1babdacd80e472e6f1d414 |
-| attrib090 | results2_posed.json | scratch/isla-attrib090-2026-10-21/results2_posed.json | 56ace95286ccc10a034684d99f353dcf |
+| attrib090 | results2_native.json | scratch/isla-attrib090-2026-10-21/results2_native.json | 1c58aa8828c6210a71b4df7836af782b |
+| attrib090 | results2_posed.json | scratch/isla-attrib090-2026-10-21/results2_posed.json | 5b55f04bb3089f81fbf89f461cbbb8a5 |
 | attrib090 | results_native_eager.json | scratch/isla-attrib090-2026-10-21/results_native_eager.json | 80be6f1a18d5b622ec9ee5c56a6c5e1a |
 | attrib090 | results_posed_eager.json | scratch/isla-attrib090-2026-10-21/results_posed_eager.json | 4d5713853c3c7e758c18586f61dd06ff |
-| attrib090 | relaunch_native.md | scratch/isla-attrib090-2026-10-21/relaunch_native.md | 70b25245a1903680968915d510d51d8c |
-| attrib090 | relaunch_posed.md | scratch/isla-attrib090-2026-10-21/relaunch_posed.md | e90c61bdd684b3a3dd5af7991834c286 |
+| attrib090 | relaunch_native.md | scratch/isla-attrib090-2026-10-21/relaunch_native.md | 69a5d34836fe28e5cde2095a48b2c9ce |
+| attrib090 | relaunch_posed.md | scratch/isla-attrib090-2026-10-21/relaunch_posed.md | 0d0d4af949234d07ab56dd763686c8e3 |
 | attrib090 | arch_lug.md | scratch/isla-attrib090-2026-10-21/arch_lug.md | ec7191a56c0dace45f1d7921252c4a95 |
 | attrib090 | arch_tensile2d.md | scratch/isla-attrib090-2026-10-21/arch_tensile2d.md | cac94bc8495b8073dd30098b83d0a3bf |
 | attrib090 | arch_airfrans.md | scratch/isla-attrib090-2026-10-21/arch_airfrans.md | abbf8c160dafe0b13cd5890f7026f73f |
@@ -97,3 +104,27 @@ source. Do not edit by hand.
 | cap_audit | tables/probes/probe_bc_cap_drv_isla_rd_s43.json | scratch/isla-cap-audit-2026-10-20/tables/probes/probe_bc_cap_drv_isla_rd_s43.json | 739aa09d766de52e7cc23e9e24b7d354 |
 | floor_drv | PREREG.md | scratch/isla-floor-drv-2026-10-23/PREREG.md | d04462aa4944a95c74182a236e745f53 |
 | az_compliant | PREREG_v2.md | scratch/isla-az-compliant-2026-10-19/PREREG_v2.md | ebd75524aa08dc4f1b01bacea8ac8cc7 |
+| boundary_audit | REPORT.md | scratch/isla-boundary-audit-2026-10-23/REPORT.md | 6453db585bc7db322fea6dd9079466ee |
+| boundary_audit | BASELINE_PARITY.md | scratch/isla-boundary-audit-2026-10-23/BASELINE_PARITY.md | 83a080c957808105f150931ef3ba8050 |
+| boundary_audit | cost_table_isla.md | scratch/isla-boundary-audit-2026-10-23/cost_table_isla.md | 89412ee864d3716906c908457287f483 |
+| boundary_audit | cost_table_dtt.md | scratch/isla-boundary-audit-2026-10-23/cost_table_dtt.md | 4a7a31c361c0aa5ba447934736bfd73c |
+| boundary_audit | cost_seed_table.md | scratch/isla-boundary-audit-2026-10-23/cost_seed_table.md | 81fef88b5a9ecbacbe0f6ae4658ea3cb |
+| drv_ground | FINAL_REPORT.md | scratch/isla-drv-ground-2026-10-23/FINAL_REPORT.md | 47b99575ba65b94ef7a483c6d55aaaa8 |
+| drv_ground | classify_summary.txt | scratch/isla-drv-ground-2026-10-23/classify_summary.txt | 9998d780babbae027c338e74cc92d338 |
+| drv_ground | check_summary.txt | scratch/isla-drv-ground-2026-10-23/check_summary.txt | 5294b1ae9cfc5040e72655b3294dcd8f |
+| drv_ground | offset_runs.txt | scratch/isla-drv-ground-2026-10-23/offset_runs.txt | 45459f48543ec2ef1bfe09433a81a8e9 |
+| setup_research | SETUP.md | scratch/isla-setup-research-2026-10-23/SETUP.md | e715bbf2ad0a52d0c8e84c67d425930f |
+| af_whole | PREREG.md | scratch/isla-af-whole-2026-10-23/PREREG.md | 2f67af124c696b3b68273ccbaa6abc6b |
+| af_whole | FACTS.md | scratch/isla-af-whole-2026-10-23/FACTS.md | 8984de36791f7efdd709dc9d49e76f57 |
+| surface_bc | REPORT.md | scratch/isla-surface-bc-2026-10-23/REPORT.md | 5b4c561932cd417d60061761c0f9535c |
+| surface_bc | DESIGN.md | scratch/isla-surface-bc-2026-10-23/DESIGN.md | 77ab73f69eb096b1b3ee8c77b668361b |
+| surface_bc | cost_table.md | scratch/isla-surface-bc-2026-10-23/cost_table.md | 95e063d222ba37b050af8e86e04114cf |
+| surfqpop | RESULTS.md | scratch/isla-surf-probe-2026-10-23/RESULTS.md | 0f3d21e88e94ad66bf6d0cb3de86abef |
+| surfqpop | PREREG.md | scratch/isla-surf-probe-2026-10-23/PREREG.md | aadf31792e8f25b5df3611b5382e00ca |
+| surfqpop | results/out/reduced.json | scratch/isla-surf-probe-2026-10-23/results/out/reduced.json | 8ff273b3f13f9fbf6fd47384ee054746 |
+| surfqpop | results/out/tables.md | scratch/isla-surf-probe-2026-10-23/results/out/tables.md | 42ab3103ca2b1eed5147a694b99911e6 |
+| slices_af | RESULTS.md | scratch/isla-slices-2026-10-23/RESULTS.md | 53b1cdc26aa2e79e2c927fc9b76cf711 |
+| slices_af | PREREG.md | scratch/isla-slices-2026-10-23/PREREG.md | 0f5c94ff00aaa5b3ed90728ff05757fb |
+| slices_af | reading.md | scratch/isla-slices-2026-10-23/reading.md | 9d73e2c6a8a39d354bb0e38094932849 |
+| slices_af | reading.json | scratch/isla-slices-2026-10-23/reading.json | b7c3e76fbd71c97a1619e058e395a88a |
+| slices_af | nearwall/nearwall_table.md | scratch/isla-slices-2026-10-23/nearwall/nearwall_table.md | 8d69f64113cd92de5d7c4292020e56e4 |
