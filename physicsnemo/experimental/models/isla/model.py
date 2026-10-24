@@ -297,7 +297,6 @@ import torch
 import torch.nn as nn
 from jaxtyping import Float
 from tensordict import TensorDict
-from torch.utils.checkpoint import checkpoint
 
 from physicsnemo.core.meta import ModelMetaData
 from physicsnemo.core.module import Module
@@ -489,10 +488,6 @@ class ISLA(Module):
     reference. The forest and the pairs are the same either way, the read the
     same up to summation order. Each is an execution choice, not a constructor
     argument: checkpoints do not store it, and a loaded model starts at ``"auto"``.
-    So is ``tree_read_checkpoint`` (ISLA-DTT only; ``"off"``): under gradient,
-    ``"read"`` recomputes each block's boundary read in backward instead of keeping
-    its per-pair tensors, and ``"block"`` recomputes each block together with its
-    read; the forward pass is the same, the gradients equal to roundoff.
 
     Args:
         output_schema: Output fields, a rank spec per name. Each field is a leaf of
@@ -946,9 +941,6 @@ class ISLA(Module):
         ### tests set to 0 for the exact read). Registered after everything else, so
         ### every other model owns exactly the parameters it has without the read.
         self._tree_read_theta = TREE_READ_THETA
-        ### Activation recompute of the read ("off", "read" or "block"; see the class
-        ### docstring, *Execution*): an execution choice, writable, not in the state dict.
-        self.tree_read_checkpoint = "off"
         ### tree_read_kernel names the implementation of the tree read, as geo_kernel
         ### does the geometry region's: "reference" (the per-octant cluster trees,
         ### GLOBE's walk, the kernel term a matmul read by segment_softmax.py) or
@@ -1931,7 +1923,6 @@ class ISLA(Module):
         ### n_boundary counts the boundary tokens only: the kernel reads update
         ### the tokens appended below.
         n_boundary = n
-        kernel_pairs = None
         if query is not None:
             query_points = query["points"]
             nq = query_points.shape[1]
@@ -1983,29 +1974,16 @@ class ISLA(Module):
 
         h, log_w, r = tokens["h"], tokens["log_w"], tokens["r"]
         vecs, tens = tokens.get("vecs", None), tokens.get("tens", None)
-        recompute = "off"
-        if self.kernel_reads is not None and torch.is_grad_enabled():
-            recompute = self.tree_read_checkpoint
-            if recompute not in ("off", "read", "block"):
-                raise ValueError(f"tree_read_checkpoint must be 'off', 'read' or 'block', not {recompute!r}")
-
-        def layer(h, block, read):
+        for i, block in enumerate(self._block_callables()):
             h = block(h, log_w, r, tokens["n_hat"], tokens["g_hat"], EPS, vecs, tens, geo_kernel=geo_kernel)
-            if read is None:
-                return h
-            ### The points' residual update from the boundary cells' states at this
-            ### depth; the boundary tokens (and so the slices) are untouched.
-            h_b, h_p = h[:, :n_boundary], h[:, n_boundary:]
-            args = (h_b.reshape(-1, h.shape[-1]), h_p.reshape(-1, h.shape[-1]), kernel_pairs)
-            delta = checkpoint(read, *args, use_reentrant=False) if recompute == "read" else read(*args)
-            return torch.cat([h_b, h_p + delta.view_as(h_p)], dim=1)
-
-        reads = self.kernel_reads if self.kernel_reads is not None else [None] * len(self.blocks)
-        for block, read in zip(self._block_callables(), reads):
-            if recompute == "block":
-                h = checkpoint(layer, h, block, read, use_reentrant=False)
-            else:
-                h = layer(h, block, read)
+            if self.kernel_reads is not None:
+                ### The points' residual update from the boundary cells' states at this
+                ### depth; the boundary tokens (and so the slices) are untouched.
+                h_b, h_p = h[:, :n_boundary], h[:, n_boundary:]
+                delta = self.kernel_reads[i](
+                    h_b.reshape(-1, h.shape[-1]), h_p.reshape(-1, h.shape[-1]), kernel_pairs
+                )
+                h = torch.cat([h_b, h_p + delta.view_as(h_p)], dim=1)
         tokens.set("h", h)
 
         ### The tokens the head reads: the prediction points in the interior mode,
