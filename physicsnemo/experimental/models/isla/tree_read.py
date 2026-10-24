@@ -99,7 +99,6 @@ from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from tensordict import TensorDict
 from torch.utils.checkpoint import checkpoint
 
@@ -140,20 +139,6 @@ TREE_READ_LEAF_SIZE = 4
 #: Pairs per chunk of the kernel-basis evaluation (memory only; each chunk's
 #: invariants are built once, its MLP activations are rebuilt in backward).
 TREE_READ_PAIR_CHUNK = 1 << 22
-
-#: Inductor options of the read's compiled projections (``compile_blocks``): mix-order
-#: reduction off, as for the slice blocks (``model._BLOCK_COMPILE_OPTIONS``).
-_READ_COMPILE_OPTIONS = {"triton.mix_order_reduction": False}
-_COMPILED: dict = {}
-
-
-def _compiled(fn):
-    """``fn`` through :func:`torch.compile` with dynamic shapes, built once per function.
-    Parameters enter as arguments, so one graph serves every block and every point count
-    (sizes 0 and 1 aside, which torch.compile specializes)."""
-    if fn not in _COMPILED:
-        _COMPILED[fn] = torch.compile(fn, dynamic=True, options=_READ_COMPILE_OPTIONS)
-    return _COMPILED[fn]
 
 
 #: Below this measure-weighted normalized third moment along a principal axis, the
@@ -858,8 +843,7 @@ class _TreeKernelRead(nn.Module):
     which keeps nothing per pair between forward and backward). ``forward(h_b, h_q,
     pairs)`` with the boundary and point states flattened over the batch returns the
     points' residual update; the output projection starts at zero, so the read starts
-    as no update. ``compiled`` (``compile_blocks``) runs the LayerNorms with the key,
-    value and query maps and the output projection through :func:`torch.compile`.
+    as no update.
     """
 
     def __init__(self, hidden: int) -> None:
@@ -875,27 +859,21 @@ class _TreeKernelRead(nn.Module):
         self.out = nn.Linear(w, hidden, bias=False)
         nn.init.zeros_(self.out.weight)
 
-    def forward(self, h_b, h_q, pairs: TreeReadPairs, compiled: bool = False):
-        return self.read(self.sources(h_b, pairs, compiled), h_q, pairs, compiled)
+    def forward(self, h_b, h_q, pairs: TreeReadPairs):
+        return self.read(self.sources(h_b, pairs), h_q, pairs)
 
-    def sources(self, h_b, pairs: TreeReadPairs | TreeReadWalk, compiled: bool = False):
+    def sources(self, h_b, pairs: TreeReadPairs | TreeReadWalk):
         """The virtual sources' keys and values at this depth, ``(sources, H KC + W)``,
         from the boundary states ``h_b``."""
-        if compiled:
-            nb = self.norm_b
-            kv = _compiled(_source_states)(
-                h_b, nb.weight, nb.bias, nb.eps, self.key.weight, self.value.weight, self.value.bias
-            )
-        else:
-            hb = self.norm_b(h_b)
-            v_c, k_c = self.value(hb), self.key(hb)
+        hb = self.norm_b(h_b)
+        v_c, k_c = self.value(hb), self.key(hb)
         ### The virtual sources, case by case: the cells, then the forest's node means
         ### of the keys and values together (one scatter and one sweep per case).
         n = pairs.n_cells
         kv_parts = []
         for i, forest in enumerate(pairs.forests):
             sl = slice(i * n, (i + 1) * n)
-            kv_c = kv[sl] if compiled else torch.cat([k_c[sl], v_c[sl]], dim=-1)
+            kv_c = torch.cat([k_c[sl], v_c[sl]], dim=-1)
             means = (
                 fused_read.fused_node_means
                 if pairs.kernel == "fused" and fused_read.node_means_supported(kv_c)
@@ -904,14 +882,10 @@ class _TreeKernelRead(nn.Module):
             kv_parts += [kv_c, means(kv_c, forest, pairs.omega[sl])]
         return torch.cat(kv_parts)
 
-    def read(self, kv_src, h_q, pairs: TreeReadPairs, compiled: bool = False):
+    def read(self, kv_src, h_q, pairs: TreeReadPairs):
         """The points' residual update from the sources' keys and values (:meth:`sources`)."""
         nh, c, kc = KERNEL_READ_HEADS, KERNEL_READ_WIDTH // KERNEL_READ_HEADS, KERNEL_READ_KEY
-        if compiled:
-            nq = self.norm_q
-            q = _compiled(_query_states)(h_q, nq.weight, nq.bias, nq.eps, self.query.weight).view(-1, nh, kc)
-        else:
-            q = self.query(self.norm_q(h_q)).view(-1, nh, kc)
+        q = self.query(self.norm_q(h_q)).view(-1, nh, kc)
         k_src = kv_src[:, : nh * kc].reshape(-1, nh, kc)
         v_src = kv_src[:, nh * kc :].reshape(-1, nh, c)
         ### The pairs' kernel terms at this block: the shared basis through the block's
@@ -945,20 +919,4 @@ class _TreeKernelRead(nn.Module):
             read = segment_softmax_read(
                 ker, pairs.log_m, q, k_src, v_src, pairs.plan, scale=1.0 / math.sqrt(kc)
             )
-        if compiled:
-            return _compiled(_out_projection)(read, self.out.weight, h_q.dtype)
         return self.out(read.reshape(-1, nh * c).to(h_q.dtype))
-
-
-def _source_states(h_b, ln_w, ln_b, ln_eps: float, w_key, w_value, b_value):
-    """The cells' keys and values ``[k | v]`` from their states (:class:`_TreeKernelRead`)."""
-    hb = F.layer_norm(h_b, (h_b.shape[-1],), ln_w, ln_b, ln_eps)
-    return torch.cat([F.linear(hb, w_key), F.linear(hb, w_value, b_value)], dim=-1)
-
-
-def _query_states(h_q, ln_w, ln_b, ln_eps: float, w_query):
-    return F.linear(F.layer_norm(h_q, (h_q.shape[-1],), ln_w, ln_b, ln_eps), w_query)
-
-
-def _out_projection(read, w_out, dtype: torch.dtype):
-    return F.linear(read.reshape(read.shape[0], -1).to(dtype), w_out)

@@ -171,8 +171,7 @@ def _with_exact_read(model):
     ref._tree_read_pairs = _exact_pairs
     for read in ref.kernel_reads:
         read.forward = types.MethodType(
-            lambda self, h_b, h_q, tok, **kw: _exact_read(ref, self, h_b, h_q, tok),
-            read,
+            lambda self, h_b, h_q, tok: _exact_read(ref, self, h_b, h_q, tok), read
         )
     return ref
 
@@ -1695,51 +1694,6 @@ def test_query_chunks_need_query_independent_points():
         m.query_chunks(
             boundary_meshes={"wall": mesh}, prediction_points=q, global_data={"g": drv}
         )
-
-
-def test_compile_blocks_compiles_the_reads_projections_as_eager_computes_them():
-    """Under ``compile_blocks`` the boundary read's LayerNorms and projections run
-    compiled, in the forward and in :meth:`ISLA.query_chunks`: outputs and every
-    parameter's gradient equal the eager model's to float64 roundoff."""
-    m_e = _model(3, TREE_READ_THETA).double()
-    m_c = _model(3, TREE_READ_THETA, compile_blocks=True).double()
-    m_c.load_state_dict(m_e.state_dict())
-    mesh, drv, q = _case()
-    kw = {
-        "boundary_meshes": {"wall": mesh},
-        "prediction_points": points_mesh(q),
-        "global_data": {"g": drv},
-    }
-    w = torch.linspace(-1, 1, q.shape[0], dtype=D)
-
-    def loss_of(out, rows):
-        return (out["p"] * w[rows]).sum() + out["v"].square().sum()
-
-    def grads(m):
-        g = {n: p.grad.clone() for n, p in m.named_parameters()}
-        m.zero_grad(set_to_none=True)
-        return g
-
-    tree_read._COMPILED.clear()
-    runs = []
-    for m in (m_e, m_c):
-        torch.manual_seed(3)
-        out = outputs(m(**kw))
-        loss_of(out, slice(None)).backward()
-        runs.append(({k: v.detach() for k, v in out.items()}, grads(m)))
-    torch.manual_seed(3)
-    runs.append((_chunked_step(m_c, kw, loss_of, 37), grads(m_c)))
-    assert set(tree_read._COMPILED) == {
-        tree_read._source_states,
-        tree_read._query_states,
-        tree_read._out_projection,
-    }
-    (out_e, grad_e), *compiled = runs
-    scale = max(float(g.abs().max()) for g in grad_e.values())
-    for out, grad in compiled:
-        assert same(out, out_e, atol=1e-12)
-        for name, g in grad_e.items():
-            assert torch.allclose(grad[name], g, rtol=1e-9, atol=1e-12 * scale), name
 
 
 def _basis_case(dim, n_vecs, n_pairs=20000, seed=0):

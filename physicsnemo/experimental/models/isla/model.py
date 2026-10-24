@@ -618,9 +618,7 @@ class ISLA(Module):
             (default ``False``). The compiled function is the block's forward,
             built at the first forward pass, so parameter names, checkpoints and
             the eager path are unchanged; the fused geometry kernel stays a
-            custom-op leaf. With ``query_independent`` the boundary read's
-            LayerNorms and projections compile too (dynamic shapes, one graph
-            for every block). Compiles once per distinct token count (the
+            custom-op leaf. Compiles once per distinct token count (the
             reporting protocol's fixed sample compiles once); with a token count
             that changes every case, leave it off. On four GB300 ranks at
             200,000 cells it cut the training step by 19 to 35% and peak memory
@@ -1343,11 +1341,6 @@ class ISLA(Module):
             ]
         return self._block_forwards
 
-    def _reads_compiled(self) -> bool:
-        """Whether the boundary reads run their projections compiled (``compile_blocks``
-        outside a whole-model compile)."""
-        return self.compile_blocks and not torch.compiler.is_compiling()
-
     def _block_read_callables(self):
         """The slice blocks' passive reads (:meth:`_SliceBlock.read`), compiled as
         :meth:`_block_callables` compiles their forwards."""
@@ -2051,10 +2044,7 @@ class ISLA(Module):
                 ### depth; the boundary tokens (and so the slices) are untouched.
                 h_b, h_p = h[:, :n_boundary], h[:, n_boundary:n_real]
                 delta = self.kernel_reads[i](
-                    h_b.reshape(-1, h.shape[-1]),
-                    h_p.reshape(-1, h.shape[-1]),
-                    kernel_pairs,
-                    compiled=self._reads_compiled(),
+                    h_b.reshape(-1, h.shape[-1]), h_p.reshape(-1, h.shape[-1]), kernel_pairs
                 )
                 parts = [h_b, h_p + delta.view_as(h_p)]
                 h = torch.cat(parts if n_real is None else [*parts, h[:, n_real:]], dim=1)
@@ -2271,8 +2261,7 @@ class _QueryChunks:
                 h, log_w, r, tokens["n_hat"], tokens["g_hat"], EPS, vecs, tens, geo_kernel=self.geo_kernel, slices=True
             )
             self.slices.append(tuple(self._leaf(t) for t in slices))
-            kv = model.kernel_reads[i].sources(h.reshape(-1, h.shape[-1]), self.walk, model._reads_compiled())
-            self.sources.append(self._leaf(kv))
+            self.sources.append(self._leaf(model.kernel_reads[i].sources(h.reshape(-1, h.shape[-1]), self.walk)))
         self.frame = (
             tuple(self._leaf(t) for t in model._frame_anchors(h, log_w, r)) if model.needs_frame else None
         )
@@ -2301,7 +2290,7 @@ class _QueryChunks:
                 h, self.slices[i], q_tokens["r"], q_tokens["n_hat"], q_tokens["g_hat"], EPS, vecs, tens,
                 geo_kernel=self.geo_kernel,
             )  # fmt: skip
-            delta = m.kernel_reads[i].read(self.sources[i], h.reshape(-1, h.shape[-1]), pairs, m._reads_compiled())
+            delta = m.kernel_reads[i].read(self.sources[i], h.reshape(-1, h.shape[-1]), pairs)
             h = h + delta.view_as(h)
         q_tokens.set("h", h)
         fields = m._redimensionalize(m._head(q_tokens, self.frame), self.scales)
