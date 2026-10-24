@@ -407,6 +407,10 @@ def _pad_tokens(tokens: TensorDict, alignment: int) -> TensorDict:
     order of the longer reductions."""
     b, n = tokens.batch_size
     pad = -n % alignment
+    ### In eager mode an aligned count keeps the tokens as they are. A compiled graph
+    ### always pads: a test of pad == 0 would guard the dynamic token count on it.
+    if not torch.compiler.is_compiling() and pad == 0:
+        return tokens
 
     ### F.pad rather than a concatenated block of pad tokens: under dynamic shapes
     ### a separate (B, pad, .) tensor makes torch.compile guard on pad == 0.
@@ -1932,8 +1936,11 @@ class ISLA(Module):
                 kernel_pairs = self._tree_read_pairs(tokens, q_tokens, s[..., 0].abs(), g_unit)
             tokens = torch.cat([tokens, q_tokens], dim=1)
             _hint_token_axis(n + nq, self._token_widths)
-        n_tokens = tokens.batch_size[1]
-        tokens = _pad_tokens(tokens, TOKEN_ALIGNMENT)
+        padded = _pad_tokens(tokens, TOKEN_ALIGNMENT)
+        ### The end of the real tokens when padding follows them, None when nothing was
+        ### padded: then every read below is that of the unpadded token set.
+        n_real = None if padded is tokens else tokens.batch_size[1]
+        tokens = padded
         _hint_token_axis(tokens.batch_size[1], self._token_widths)
 
         h, log_w, r = tokens["h"], tokens["log_w"], tokens["r"]
@@ -1943,17 +1950,21 @@ class ISLA(Module):
             if self.kernel_reads is not None:
                 ### The points' residual update from the boundary cells' states at this
                 ### depth; the boundary tokens (and so the slices) are untouched.
-                h_b, h_p, h_pad = h[:, :n_boundary], h[:, n_boundary:n_tokens], h[:, n_tokens:]
+                h_b, h_p = h[:, :n_boundary], h[:, n_boundary:n_real]
                 delta = self.kernel_reads[i](
                     h_b.reshape(-1, h.shape[-1]), h_p.reshape(-1, h.shape[-1]), kernel_pairs
                 )
-                h = torch.cat([h_b, h_p + delta.view_as(h_p), h_pad], dim=1)
+                parts = [h_b, h_p + delta.view_as(h_p)]
+                h = torch.cat(parts if n_real is None else [*parts, h[:, n_real:]], dim=1)
         tokens.set("h", h)
 
         ### The tokens the head reads: the prediction points in the interior mode,
         ### every token otherwise. The head frame builds its slice anchors from ALL
         ### tokens (r, log_w and h).
-        out = tokens[:, :n_tokens] if query is None else tokens[:, n_boundary:n_tokens]
+        if query is not None:
+            out = tokens[:, n_boundary:n_real]
+        else:
+            out = tokens if n_real is None else tokens[:, :n_real]
         ### With declared scales or output_stats the head and the assembly run in the
         ### parameters' precision under autocast: bf16's relative step (4e-3) would be
         ### carried into the physical outputs (Pa pressure) by the redimensionalization.

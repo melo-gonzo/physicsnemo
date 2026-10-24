@@ -19,6 +19,7 @@ no measure that nothing reads leave every output and gradient unchanged."""
 
 import pytest
 import torch
+from torch.utils._python_dispatch import TorchDispatchMode
 
 import physicsnemo.experimental.models.isla.model as isla_model
 from physicsnemo.experimental.models import ISLA
@@ -80,3 +81,50 @@ def test_token_padding_leaves_outputs_and_gradients_unchanged(task, monkeypatch)
     assert grad8.keys() == grad1.keys()
     for k in grad1:
         assert torch.allclose(grad8[k], grad1[k], atol=1e-11, rtol=1e-10), k
+
+
+class _AtenOps(TorchDispatchMode):
+    """The names of the aten operators that run under it."""
+
+    def __init__(self):
+        super().__init__()
+        self.names = set()
+
+    def __torch_dispatch__(self, func, types, args=(), kwargs=None):
+        self.names.add(func.overloadpacket.__name__)
+        return func(*args, **(kwargs or {}))
+
+
+@pytest.mark.parametrize("task", ["surface", "interior"])
+def test_an_aligned_token_count_runs_no_padding(task):
+    """In eager mode, at a multiple of TOKEN_ALIGNMENT tokens, the forward and backward
+    run no padding op (an unaligned count does), so they are those of the network
+    without padding."""
+    nq = 0 if task == "surface" else 32
+    m = ISLA(
+        output_schema=PV,
+        boundary_schemas={"wall": {}},
+        global_schema=G,
+        hidden=32,
+        n_layers=2,
+        n_slices=8,
+        interior=task == "interior",
+    ).double()
+
+    def ops(n_boundary):
+        pts, nrm, w, drv = cloud(n_boundary)
+        q = torch.randn(nq, 3, dtype=D) if nq else None
+        with _AtenOps() as mode:
+            out = outputs(
+                m(
+                    boundary_meshes={"wall": soup(pts, nrm, w)},
+                    prediction_points=q,
+                    global_data={"g": drv},
+                )
+            )
+            sum(v.sum() for v in out.values()).backward()
+        return mode.names
+
+    aligned = 4 * isla_model.TOKEN_ALIGNMENT
+    assert "constant_pad_nd" in ops(aligned - nq + 1)
+    assert "constant_pad_nd" not in ops(aligned - nq)
