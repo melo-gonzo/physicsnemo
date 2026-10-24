@@ -295,21 +295,23 @@ _POINTWISE_LOSSES = ("huber", "mse", "relative_mse")
 ### ISLA-DTT's step over a chunk of prediction points, by precision: its peak
 ### reserved memory above the memory allocated once the boundary side and the walk
 ### have run, in GiB per million of the chunk's walk pairs and per 100,000 of its
-### points, and the margin, the fit's intercept plus its largest held-out residual.
-### Least squares on GB300 over DrivAerML Volume (vehicle, whole boundary) and
-### AeroZoo at 200,000 tokens with the fused read: one chunk of every point and
-### chunks of a half to a quarter of them, in one pass (huber) and in two
-### (relative_l2, case_relative_l2, within the one-pass rows' residuals), the
-### largest point count of each dataset held out. bfloat16: 30 rows at 100k-600k
-### points and 9 held out at 500k-800k (intercept 2.56 GiB, held out up to 3.62
-### above the fit); float32: 12 at 50k-200k and 6 at 150k-250k (2.74, 3.78). Every
-### row's peak is within its prediction. Each peak was measured over a few steps
-### after empty_cache, so fragmentation over a long run is not in it. Refit
-### (fit_rule.py of DTT-FAST RULE, on cost_rule.py's rows) when the read's or the
-### blocks' memory changes.
+### points, and the margin. Least squares on GB300 over DrivAerML Volume (the
+### vehicle alone, the whole boundary) and AeroZoo at 200,000 tokens with the fused
+### read and its fused backward, each chunk's points walked when it runs: one chunk
+### of every point and chunks of a half to a quarter of them, in one pass (huber)
+### and in two (relative_l2, case_relative_l2, within the one-pass rows'
+### residuals), the largest point count of each dataset held out. bfloat16: 20 rows
+### at 100k-600k points and 7 held out at 500k-800k, the margin the intercept (4.05
+### GiB) plus the largest held-out residual (3.47 above the fit); float32 without an
+### intercept, which holds out three times closer than with one: 10 rows at
+### 50k-200k and 6 held out at 150k-250k, the margin the largest residual of any row
+### (3.93 above the fit). Every row's peak is within its prediction. Each peak was
+### measured over a few steps after empty_cache, so fragmentation over a long run
+### is not in it. Refit (fit_rule.py of DTT-FAST RULE, on cost_rule.py's rows) when
+### the read's or the blocks' memory changes.
 _CHUNK_GIB: dict[str, tuple[float, float, float]] = {
-    "bfloat16": (0.0753, 24.40, 6.2),
-    "float32": (0.160, 44.02, 6.6),
+    "bfloat16": (0.136, 23.25, 7.6),
+    "float32": (0.231, 44.97, 4.0),
 }
 
 _LOGGER = logging.getLogger("training.step")

@@ -306,17 +306,17 @@ def test_chunk_rule_decides_from_sizes(monkeypatch, caplog):
     pairs, its points and the memory allocated after the boundary side; the fewest
     chunks that fit the capacity, each with its share of the pairs, and the passes
     by loss, logged at the first decision and on change."""
-    ### Held-out steps on a GB300 (275.0 GiB free and reserved; DTT-FAST RULE jobs
-    ### 368672, 368728): a chunk's walk pairs and points, GiB allocated at the
-    ### decision and the step's peak reserved GiB, which the prediction covers
-    ### within the device.
+    ### Held-out steps on a GB300 (275.0 GiB free and reserved; DTT-FAST integration
+    ### job 370118): a chunk's walk pairs and points, GiB allocated at the decision
+    ### and the step's peak reserved GiB, which the prediction covers within the
+    ### device.
     for pairs, points, allocated, reserved, precision in (
-        (417_882_241, 600_000, 79.28, 263.28, "bfloat16"),  # DrivAerML vehicle
-        (209_094_835, 300_000, 79.28, 173.33, "bfloat16"),  # the same in 2 chunks
-        (425_319_791, 500_000, 79.36, 238.91, "bfloat16"),  # whole boundary
-        (85_131_592, 400_000, 74.26, 182.65, "bfloat16"),  # AeroZoo 800k in 2 chunks
-        (138_943_574, 200_000, 112.19, 221.38, "float32"),  # DrivAerML vehicle
-        (126_352_902, 150_000, 112.01, 204.76, "float32"),  # whole boundary
+        (209_094_835, 300_000, 73.06, 178.38, "bfloat16"),  # vehicle, 2 chunks
+        (425_319_791, 500_000, 73.06, 251.19, "bfloat16"),  # whole boundary
+        (85_131_592, 400_000, 71.76, 182.52, "bfloat16"),  # AeroZoo 800k, two passes
+        (138_943_574, 200_000, 110.12, 235.67, "float32"),  # DrivAerML vehicle
+        (126_352_902, 150_000, 110.13, 210.54, "float32"),  # whole boundary
+        (52_608_716, 250_000, 108.78, 231.31, "float32"),  # AeroZoo
     ):
         peak = train._chunk_peak_gib(pairs, points, allocated, precision)
         assert reserved <= peak < 275.0
