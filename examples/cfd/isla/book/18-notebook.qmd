@@ -41561,6 +41561,28 @@ Cost: 2.22 of 4 GPU-h (GB300 short jobs 367557, 367780, 367888, 367990 and 36804
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-geothin-2026-10-24/SECOND_READ_GEOTHIN.md).*
 
+## 2026-10-24 — Peter approves building SHIFT-SUV's CFD box and HiLiftAeroML's far field without its symmetry plane in the recipe; lane BC-SUPPLY builds both into canonical ISLA {#sec-nb-supply-approved}
+
+**The question.** The supervisor asked Peter at 02:07 EDT 2026-10-24, on BC-SIDECAR's results (@sec-nb-bc-sidecar): "may I
+add SHIFT-SUV's CFD box now, and HiLift's far field without its symmetry plane?" The proposal: SHIFT-SUV's box from
+constants, x −40 to 80 m, y −20 to 20 m, z −0.024 to 19.976 m, with pieces inlet, outlet, floor, side walls and roof that
+claim no condition type; HiLiftAeroML's inlet and outlet from curator's generator at the stored radius of 88.95 mean
+aerodynamic chords.
+
+**Peter's answer** (10:21 EDT 2026-10-24): "Yes, of course you can do that".
+
+**What follows.** SHIFT-SUV's and HiLiftAeroML's missing pieces no longer wait on Peter. Lane BC-SUPPLY, launched by the
+supervisor, builds both into canonical ISLA as recipe transforms, the datasets unchanged, with HL-DUP's deduplication of
+the wing's root cells (@sec-nb-hl-dup). HiLiftAeroML's symmetry plane stays out while a rebuild of each open root's
+outline from its stored vertices, needing no chosen radius, is prototyped. The SHIFT-SUV and HiLiftAeroML standings stay
+0.9.0's, trained on the body alone, until they are retrained with the pieces.
+
+**For the book.** 20's `sec-oq-whole-boundary` states Peter's approval and the pieces, with one In-flight callout; 11 and
+07 state the approval for SHIFT-SUV, 11 with an In-flight callout; 21's design row and 20's review list follow; 14 adds
+BC-SUPPLY and gives HL-DUP the outline prototype.
+
+*Read by the supervisor on 2026-10-24; added after this batch's second read, so not second-read.*
+
 ## 2026-10-22 — MECH-090: on Tensile2d the fixed compiled path's float32 gradients sit at a one-ulp eager floor, and pytorch/pytorch#195845 added a unit-dependent sink to ISLA's slice-state softmax (registered emulations not confirmed; a post-smoke emulation matches) {#sec-nb-mech090}
 
 **Question.** REF-090's Tensile2d control (@sec-nb-ref090-t2d-control) read (b) by its registered weighing, in which A2
