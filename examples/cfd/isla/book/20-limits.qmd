@@ -94,6 +94,9 @@ FW = {"pressure_l2": "pressure", "velocity_l2": "velocity", "nut_l2": "eddy visc
 f3 = lambda xs, d=2: " / ".join(f"{x:.{d}f}" for x in xs)
 span = lambda xs, d=2: f"{min(xs):.{d}f}" if f"{min(xs):.{d}f}" == f"{max(xs):.{d}f}" else f"{min(xs):.{d}f} to {max(xs):.{d}f}"
 SEEDW = {2: "two", 3: "three", 4: "four"}
+# HiLiftAeroML files that store more of the domain's boundary than the wing (BOUNDARY-AUDIT section 1)
+_hl = [int(x.replace(",", "")) for x in re.search(r"only the wing on ([\d,]+) of ([\d,]+) files", " ".join(R.load("boundary_audit", "REPORT.md").split())).groups()]
+HL_BUT = {1: "one", 2: "two", 3: "three"}.get(_hl[1] - _hl[0], f"{_hl[1] - _hl[0]:,}")
 ```
 
 ## What this book does not claim {#sec-not-claimed}
@@ -134,7 +137,9 @@ print("- **Not that ISLA extrapolates across a flow regime, or that it transfers
       "wall shear only; on pressure the three transfer alike, and in the reverse direction two seeds show no difference against "
       "either baseline (@sec-limits-regime, @sec-limits-transfer).")
 print("- **Not that every standing is of ISLA reading its whole boundary.** On the DrivAerML Volume and Surface tasks, SHIFT-SUV, "
-      "HiLiftAeroML and AirfRANS its configuration reads the body alone (@sec-limits-whole-boundary).")
+      "HiLiftAeroML and AirfRANS the standings' configuration reads the body alone; the configurations that read the rest of the "
+      "stored boundary on the DrivAerML tasks and AirfRANS have no standing, and SHIFT-SUV's files, and all but "
+      f"{HL_BUT} of HiLiftAeroML's, store no other piece (@sec-limits-whole-boundary).")
 print("- **Not that the HiLiftAeroML numbers are test-set numbers** (@sec-limits-validation).")
 print("- **Not that the scaling law, the cell-count saturation or the capacity floor are measured at the reference configuration.** "
       "They are measured on smaller ISLAs and read for slopes and floors (@sec-capacity, @sec-oq-scaling).")
@@ -390,9 +395,36 @@ print("**Measured on three datasets, the dependence is large where the request d
       f"times. On AeroZoo `full`, on {QP['aerozoo_cases'][0]} of its {QP['aerozoo_cases'][1]} test cases, halving, chunking and far-field "
       f"companions move the error by at most {100 * z_benign:.0f}%, and single points raise it {z_sub1[0]:.1f} to {z_sub1[1]:.1f} times "
       "over its five fields, from native errors large enough to compress the ratios. ISLA-DTT's error moves by at most "
-      f"{QP['dtt_max_abs_dev']:.0e} in every mode on AirfRANS, float32 roundoff. A dependence with no knob that converges is a limit of "
-      "the interacting form, not an approximation (@sec-airfrans-query-population, @sec-interior-query-tokens, @sec-aerozoo-request). "
-      f"Data: {LIM_SRC}, from {R.source('probes090', 'results')}.")
+      f"{QP['dtt_max_abs_dev']:.0e} in every mode on AirfRANS, float32 roundoff. On the interior task, a dependence with no knob that "
+      "converges is a limit of the interacting form, not an approximation (@sec-airfrans-query-population, @sec-interior-query-tokens, "
+      f"@sec-aerozoo-request). Data: {LIM_SRC}, from {R.source('probes090', 'results')}.")
+```
+
+```{python}
+#| label: para-limits-surface-request
+#| output: asis
+SQR = R.load("surfqpop", "results/out/reduced.json")
+SQ = {s: SQR[f"r090_dr_isla_seed{s}"]["fields"] for s in (42, 43)}
+SQF = ("pressure", "wss")
+sq = lambda fn: " / ".join(", ".join(f"{fn(SQ[s][f]):.3f}" for s in SQ) for f in SQF)
+half = [d[k]["ratio"] for s in SQ for d in SQ[s].values() for k in ("q3_low_x", "q3_high_x")]
+s800 = [SQ[s]["wss"]["spread"]["800000"] / SQ[s]["wss"]["spread"]["200000"] for s in SQ]
+dev = max(abs(SQ[s][f]["slope"] + 0.5) for s in SQ for f in SQF)
+print("**On a surface task the requested cells are also ISLA's view of the body, so a surface prediction depends on the request too, "
+      "through a quadrature error that shrinks as the request grows.** On the DrivAerML Surface task (the standing's checkpoints, all "
+      f"{SQR['r090_dr_isla_seed42']['n_cases']} validation cars, float32), the spread between two independent requests' predictions on "
+      f"the cells they share falls as $N^b$ from 50,000 to 800,000 cells, with $b$ = {sq(lambda d: d['slope'])} on pressure / wall shear "
+      "(seeds 42, 43; a least-squares fit of log spread on log $N$), and at the scored 200,000 cells one request's noise is "
+      f"{sq(lambda d: d['delta']['200000'] / d['err_uniform']['200000'])} of the error. Four disjoint 50,000-cell requests that together "
+      f"cover the body raise the error {sq(lambda d: d['q2_ratio'])} times over one 200,000-cell request, as one 50,000-cell request does "
+      f"({sq(lambda d: d['err_ratio_to_200k']['50000'])}), and at 800,000 cells the error is "
+      f"{sq(lambda d: d['err_ratio_to_200k']['800000'])} times the scored one (car-mean errors, per seed). A request that leaves part "
+      f"of the body out breaks the prediction: half the car alone raises the error on that half {min(half):.0f} to {max(half):.0f} times. "
+      "So a surface request covers the body (@sec-using-sampler). By the labels registered before the probe, the wall-shear dependence "
+      f"reads *request-coupled beyond quadrature*, because $s(800{{,}}000) / s(200{{,}}000)$ is {', '.join(f'{x:.3f}' for x in s800)} "
+      "on its two seeds, not below the pure law's 0.500, and pressure, whose spread falls slightly faster than that law, takes neither "
+      f"label; read after the fact, every exponent lies within {dev:.3f} of $-1/2$, the rate of a Monte Carlo quadrature. Data: "
+      f"{R.source('surfqpop', 'results/out/reduced.json')}, {R.source('surfqpop', 'RESULTS.md')}.")
 ```
 
 ### Cross-family transfer {#sec-limits-transfer}
@@ -450,6 +482,14 @@ body = [n for n in WB_CFG if len(BND[n]) == 1]
 n_body = sum(len(WB_CFG[n]) for n in body)
 lst = lambda names: ", ".join(names[:-1]) + " and " + names[-1] if len(names) > 1 else names[0]
 NUMW = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine"}
+# ISLA's length unit with the body alone and with the whole stored boundary (BOUNDARY-AUDIT section 4; AF-WHOLE section 3)
+BA = " ".join(R.load("boundary_audit", "REPORT.md").split())
+AFW = {r_["quantity"]: r_ for r_ in R.md_table("af_whole", "PREREG.md", "3. Facts before training")}
+_afl = AFW["ISLA's L (`ISLA._gauge`, float64)"]
+WB_L = {"drv": re.search(r"full resolution\) \| ([\d.]+-[\d.]+) m \(median [\d.]+\) \| ([\d.]+)-[\d.]+ m", BA).groups(),
+        "af": (_afl["airfoil only (standing)"].split(" (")[0], re.search(r"[\d.]+", _afl["airfoil + far field (W)"]).group(0))}
+WB_L["drv"] = (WB_L["drv"][0].replace("-", " to "), WB_L["drv"][1])
+WB_L["af"] = (WB_L["af"][0].replace("-", " to "), WB_L["af"][1])
 print("**ISLA's input is the whole boundary of the PDE domain, every piece a dataset stores, each by name with its condition type; "
       f"on {NUMW[n_body]} of the {NUMW[sum(map(len, WB_CFG.values()))]} tasks its configuration reads the body alone.** A steady "
       "boundary-value problem is well posed only with data on all of its boundary. A wall the model is not given can reach its "
@@ -457,12 +497,18 @@ print("**ISLA's input is the whole boundary of the PDE domain, every piece a dat
       "than to the problem. On " + lst([d for n in multi for d in WB_CFG[n]]) + " the configuration reads the boundary as named "
       "pieces (" + "; ".join(f"{WB_CFG[n][0]}: " + ", ".join(f"`{b}`" for b in BND[n]) for n in multi) + "). On "
       + lst([d for n in body for d in WB_CFG[n]]) + " it reads one mesh, the body ("
-      + ", ".join(sorted({f"`{BND[n][0]}`" for n in body})) + "), and those standings are of ISLA reading part of its boundary. "
-      "On the DrivAerML Volume task the case files also store the floor strip, the slip walls, the inlet and the outlet, and "
-      "ISLA's far-field eddy-viscosity error follows the height above that floor (@sec-oq-far-field). What the other datasets "
-      "store beyond the body is @sec-oq-whole-boundary. Because ISLA's length unit $L$ is the RMS pairwise distance of the whole "
-      "given boundary (@sec-isla-frame), reading the domain's walls changes $L$ too. Data: the recipe's `conf/model/isla_*.yaml` "
-      "(`forward_kwargs.boundary_meshes`).")
+      + ", ".join(sorted({f"`{BND[n][0]}`" for n in body})) + "), and every standing on those tasks was trained that way, so those "
+      "standings are of ISLA reading part of its boundary. On the DrivAerML tasks and AirfRANS the data hold more of the "
+      "boundary, and configurations that read all of it are built and have no standing; SHIFT-SUV's files, and all but "
+      f"{HL_BUT} of HiLiftAeroML's, store the body alone (@sec-oq-whole-boundary). On the DrivAerML Volume task ISLA's far-field eddy-viscosity error follows "
+      "the height above the floor (@sec-oq-far-field). A surface task predicts at every cell it is given, so on a surface task "
+      "the domain's walls enter only through a task form that names the boundaries it predicts at and reads the others as "
+      "conditions, which is built and has no standing. Because ISLA's length unit $L$ is the RMS pairwise distance of the whole given boundary "
+      f"(@sec-isla-frame), reading the domain's walls changes $L$ too: on the DrivAerML Volume task it is {WB_L['drv'][0]} m with the "
+      f"vehicle alone and {WB_L['drv'][1]} m with the whole boundary, and on AirfRANS {WB_L['af'][0]} chords with the airfoil alone "
+      f"and {WB_L['af'][1]} chords with the far field, on every case. Data: the recipe's "
+      f"`conf/model/isla_*.yaml` (`forward_kwargs.boundary_meshes`), {R.source('boundary_audit', 'REPORT.md')} (section 4), "
+      f"{R.source('af_whole', 'PREREG.md')} (section 3).")
 ```
 
 ## Open questions, and what would settle each {#sec-open-questions}
@@ -532,9 +578,12 @@ rows = [
      "ISLA trained on one car with fresh draws, with the domain's whole boundary (the floor strip, the slip walls, the inlet and the outlet) added as named boundary meshes, against the same run without them, two seeds each, read on the error more than "
      f"{L_REF:g} m from the car",
      f"{fmt_h(q_floor)} (single-case runs)"),
-    ("What does each dataset store of its domain's boundary beyond the body, and what does reading it change? (@sec-oq-whole-boundary)",
-     "a read of each dataset's stored boundary pieces and their condition types; then each standing whose configuration reads the body alone retrained with every stored piece, two seeds",
-     "not priced (what each dataset stores sets the runs)"),
+    ("How do SHIFT-SUV and HiLiftAeroML get the pieces of their domains' boundaries that their files do not store? (@sec-oq-whole-boundary)",
+     "the missing pieces supplied as a new version beside each dataset, then each standing that reads the body alone retrained with the whole boundary, two seeds",
+     "not priced (the supply sets the runs)"),
+    ("Does a quarter of the slices cost nothing beyond AirfRANS? (@sec-oq-slices)",
+     "ISLA with 128 slices against the standing's 512 on a three-dimensional dataset, two seeds, read for harm by the AirfRANS rule",
+     "not priced"),
 ]
 if HELD:
     rows.append((f"How do the architectures compare on {names(sorted({k for k, _ in HELD}))} {' and '.join(ST[k].fields[f] for k, f in HELD)} measured alike?",
@@ -816,6 +865,17 @@ print("**The open question is whether ISLA also transfers better on SHIFT-SUV fr
 #| label: para-oq-far-field
 #| output: asis
 FAR = next(r for r in R.md_table("cap_audit", "tables/resid_drv_partB.md", "drv heldout nut (rd) - wall") if r["region"] == "[1,inf)")
+# the domain's stored pieces: their tunnel box (SETUP-RESEARCH), their ground offset (DRV-GROUND), the cost of reading them (BOUNDARY-AUDIT)
+SU = " ".join(R.load("setup_research", "SETUP.md").split())
+TUN = re.search(r"BoxTunnelBoundaries\(x_min=(-?\d+), x_max=(\d+), y_min=(-?\d+), y_max=(\d+), z_height=(\d+)", SU).groups()
+TUN = tuple(t.replace("-", "−") for t in TUN)
+CS = R.load("drv_ground", "classify_summary.txt")
+GR = {"match": int(re.search(r"group match: (\d+) files", CS).group(1)), "off": int(re.search(r"group offset: (\d+) files", CS).group(1)),
+      "mm": 1e3 * float(re.search(r"rule tz: \{([\d.]+): \d+\}", CS.split("group offset")[1]).group(1))}
+assert GR["match"] + GR["off"] == 484
+SEEDQ = re.search(r"takes ([\d.]+-[\d.]+) s of the ([\d.]+-[\d.]+) s whole-boundary call \((\d+) ms body only\)", BA).groups()
+SEEDQ = (SEEDQ[0].replace("-", " to "),) + SEEDQ[1:]
+WB_STEP = re.search(r"\| 0\.9\.0 \| ISLA \| [^|]+\| [^|]+\| \*\*([\d.]+)x\*\* \| [^|]+\| [^|]+\| [^|]+\| \*\*([\d.]+)x\*\*", BA).groups()
 PA = R.load("cap_audit", "tables/probes/probe_a.json")
 pc = lambda k: f"{100 * min(c[k] for c in PA):.0f} to {100 * max(c[k] for c in PA):.0f}%"
 print("**The open question is whether ISLA's far-field eddy-viscosity error on the DrivAerML Volume task comes from the boundaries "
@@ -824,17 +884,26 @@ print("**The open question is whether ISLA's far-field eddy-viscosity error on t
       f"those {R.num(FAR['weight %']):.1f}% of the points hold {R.num(FAR['ISLA excess %']):.0f}% of the amount by which its squared "
       f"error exceeds Transolver's; neither halving its width or depth nor quartering its slices moves it (@sec-single-case-floor). On that car and "
       f"{len(PA) - 1} validation cars the height above the floor explains {pc('r2_z')} of the far-field variance, the streamwise "
-      f"distance from the inlet {pc('r2_x')}. Every case file stores the floor strip, the slip walls, the inlet and the outlet as "
-      "meshes, and ISLA on this task reads the vehicle alone, while GeoTransolver and Transolver read each point's coordinates "
-      "(@tbl-model-inputs). What would settle it: the single-case run repeated with all four of those meshes, the domain's whole "
+      f"distance from the inlet {pc('r2_x')}. Every case file stores, beside the vehicle, the four other pieces of the domain's "
+      "boundary as meshes without fields: `no_slip`, the ground under and behind the car; `slip`, the sides, the roof and the "
+      "ground upstream; `inlet` and `outlet`. They are the faces of a box the dataset's curation pipeline built from the documented "
+      f"wind tunnel ($x$ from {TUN[0]} to {TUN[1]} m, $y$ from {TUN[2]} to {TUN[3]} m, {TUN[4]} m high), its floor at the vehicle's "
+      f"lowest point. On {GR['off']} of the 484 files the four sit {GR['mm']:.1f} mm below the CFD mesh, whose lowest nodes meet the "
+      "vehicle's lowest point on every file; the configurations that read them first translate them so that the ground meets that "
+      f"point, which moves the other {GR['match']} by nothing. The standing's ISLA reads the vehicle alone, while GeoTransolver and "
+      "Transolver read each point's coordinates (@tbl-model-inputs). What would settle it: the single-case run repeated with all four of those meshes, the domain's whole "
       "boundary as on AeroZoo, added to ISLA's boundary as named meshes, two seeds, beside two seeds of the same run without them, "
       "read on the far-field eddy-viscosity error and on the velocity error. The readout measures the effect of the four meshes and "
       "decides nothing about the input, which is the domain's whole boundary on every dataset (@sec-limits-whole-boundary). Cost: "
       "with the four meshes ISLA's step takes "
       f"{fd_step[2]} times as long ({fd_step[0]} against {fd_step[1]} s), so the {('two', 'three', 'four')[SEEDS * 2 - 2]} "
-      f"single-case runs take one {fd_gpus}-GPU node for about {fd_hours} hours, {fmt_h(q_floor)} GPU-hours. "
+      f"single-case runs take one {fd_gpus}-GPU node for about {fd_hours} hours, {fmt_h(q_floor)} GPU-hours. Almost all of the "
+      "added time is one query, the one that seeds the closest-cell search of ISLA's geometry, and not the 5,054 added cells: in "
+      f"training on a GB300 in bfloat16 it takes {SEEDQ[0]} s of the whole-boundary geometry call, against {SEEDQ[2]} ms with the "
+      f"vehicle alone, and without it ISLA's step with the whole boundary is {WB_STEP[1]} times its step with the vehicle alone. "
       f"Data: {R.source('cap_audit', 'tables/resid_drv_partB.md')}, {R.source('cap_audit', 'tables/probes/probe_a.json')}, "
-      f"{R.source('floor_drv', 'PREREG.md')} (section 8).")
+      f"{R.source('floor_drv', 'PREREG.md')} (section 8), {R.source('boundary_audit', 'REPORT.md')} (section 4), "
+      f"{R.source('setup_research', 'SETUP.md')} (section 0), {R.source('drv_ground', 'classify_summary.txt')}.")
 ```
 
 ::: {.callout-note title="In flight"}
@@ -847,20 +916,63 @@ domain's four other boundary meshes is being measured, and the ledger (@sec-ledg
 ```{python}
 #| label: para-oq-whole-boundary
 #| output: asis
-print("**The open question is what each dataset stores of its domain's boundary beyond the body, and what reading all of it changes.** "
-      "ISLA reads every stored piece of the boundary, each by name with its condition type, and on "
-      + lst([d for n in body for d in WB_CFG[n]]) + " its configuration reads the body alone (@sec-limits-whole-boundary). On the "
-      "DrivAerML Volume task the case files store the four other pieces of the domain's boundary (@sec-oq-far-field). Which further "
-      "pieces, if any, the other datasets' files store, such as the far field of the AirfRANS domain, the book does not measure. What "
-      "would settle it: a read of each dataset's files for every stored boundary piece and its condition type, against what each ISLA "
-      "configuration reads; then each standing whose dataset stores more retrained with ISLA reading all of it, two seeds, scored beside "
-      "the standing as it is. A piece a dataset does not store is a gap of the dataset; the model cannot supply it. Cost: the read needs "
-      "no training; the retraining is not priced, because what each dataset stores sets the runs.")
+HL = re.search(r"only the wing on ([\d,]+) of ([\d,]+) files", BA).groups()
+SUV_N = re.search(r"open at the tyre patches\) on all ([\d,]+) files", BA).group(1)
+SUV_BOX = re.search(r"interior bounding box \| (x [^|]+? m) \(", SU).group(1).replace(" -", " −")
+HL_MAC = re.search(r"reaches about ([\d.]+-[\d.]+) MAC", SU).group(1).replace("-", " to ")
+HL_PAPER = re.search(r"radius of ≈(\d+) × MAC", SU).group(1)
+AF_CROP = re.search(r"nodes in about (\[[^\]]+\] x \[[^\]]+\]) chords", BA).group(1).replace(" x ", " × ")
+print("**Read from every dataset's files, the boundary falls in three classes; the open question is how SHIFT-SUV and HiLiftAeroML "
+      "get the pieces of their domains' boundaries that their files do not store.** ISLA reads every stored piece of the "
+      "boundary, each by name with its condition type (@sec-limits-whole-boundary).")
+print()
+print("- **Read whole.** On AeroZoo, the GINOT bracket lug, PLAID Tensile2d and DeepJEB++ ISLA's configuration reads every stored "
+      "piece, by its condition name.")
+print("- **Stored in the data, and read by configurations without a standing.** The DrivAerML files store, beside the vehicle, the four faces of "
+      "the tunnel box built from the dataset's documented tunnel (@sec-oq-far-field); configurations that read them on both DrivAerML "
+      f"tasks are built. The AirfRANS files store the airfoil and an interior cropped to about {AF_CROP} chords; the crop's edges are "
+      "not a boundary of the PDE, since the flow crosses them and no condition is stored on them. The far field is not in the "
+      "converted files but in the release's own `_freestream.vtp` on every case, 200 chords out, and a configuration reads it from there as the condition `freestream`, "
+      "whose prescribed value is the inlet velocity ISLA already reads, with the dataset unchanged (@sec-data-airfrans).")
+print(f"- **Not stored.** SHIFT-SUV's {SUV_N} files store the vehicle alone, open at the tyre contact patches, inside an interior "
+      f"that fills the box {SUV_BOX}; its ground, side walls, roof, inlet and outlet are not stored, and no published source found "
+      "gives the side walls', the roof's or the outlet's condition. HiLiftAeroML stores the wing alone on "
+      f"{HL[0]} of its {HL[1]} files; the other two hold an inlet, an outlet and a symmetry plane built by the same curation pipeline "
+      f"as DrivAerML's box. The dataset's paper puts the far field on a hemisphere of radius about {HL_PAPER} mean aerodynamic chords, "
+      f"while the stored interiors reach {HL_MAC} chords.")
+print()
+print("What would settle it: the missing pieces supplied, built from the documented domain and the stored interior as DrivAerML's "
+      "are, or extracted from the raw CFD meshes, as a new version beside each dataset, never as a change to it; HiLiftAeroML's "
+      "radius and SHIFT-SUV's undocumented conditions are choices the supply must make; then each standing retrained with ISLA "
+      "reading the whole boundary, two seeds, scored beside the standing as it is. A surface task that reads the domain's walls also "
+      "needs the task form that predicts only at the boundaries it names (@sec-limits-whole-boundary). Cost: the retraining is not "
+      "priced, because the supply sets the runs. "
+      f"Data: {R.source('boundary_audit', 'REPORT.md')} (sections 1, 2 and 5), {R.source('setup_research', 'SETUP.md')}.")
+```
+
+### A quarter of the slices {#sec-oq-slices}
+
+```{python}
+#| label: para-oq-slices
+#| output: asis
+SL = R.load("slices_af", "reading.json")["native"]
+SLC = {r_["measure"].split(",")[0]: R.num(r_["S ÷ B"]) for r_ in R.md_table("slices_af", "RESULTS.md", "R3, cost")}
+assert all(SL[f]["label"] == "no change" for f in FW)
+print("**The open question is whether ISLA with a quarter of its slices costs nothing in accuracy beyond AirfRANS.** On the AirfRANS "
+      "interior task, ISLA with 128 slices in place of the reference's 512, trained and scored as the standing, has "
+      + " / ".join(f"{SL[f]['ratio']:.3f}" for f in FW) + " times the standing's test error on " + " / ".join(FW.values())
+      + " (ratios of arithmetic seed means, two seeds each), and no field moves by the rule registered for the test, which needed "
+      "the ratio below 0.90 or above 1.10 with the log ratio beyond two standard errors. Its training step "
+      f"is {SLC['smoke 354977']:.2f} of the reference's and its peak memory {SLC['smoke: peak allocated per rank']:.2f}. AirfRANS "
+      "runs ISLA's unfused geometry, where the tensors over tokens and slices dominate the step, so the saving on a "
+      "three-dimensional dataset, whose geometry runs fused, is not measured. What would settle it: ISLA with 128 slices "
+      "against the standing's 512 on a three-dimensional dataset, two seeds, read for harm by the same rule. Cost: not priced. "
+      f"Data: {R.source('slices_af', 'RESULTS.md')}, {R.source('slices_af', 'reading.json')}.")
 ```
 
 ::: {.callout-note title="In flight"}
-These are the pieces ISLA's configurations read. What each dataset stores of its boundary, piece by piece with its
-condition type, is being measured, and the ledger (@sec-ledger) tracks it.
+These numbers come from one planar dataset. ISLA with 128 slices against the standing's 512 on the DrivAerML Volume task is being
+measured, and the ledger (@sec-ledger) tracks it.
 :::
 
 ```{python}

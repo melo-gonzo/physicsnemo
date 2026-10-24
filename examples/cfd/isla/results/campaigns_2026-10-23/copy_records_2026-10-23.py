@@ -143,6 +143,62 @@ RECORDS = {
         "AeroZoo under the benchmark protocol: the registered rule for ISLA against ISLA-DTT (PREREG_v2 sections 12(f) and 13)",
         ["PREREG_v2.md"],
     ),
+    "boundary_audit": (
+        "isla-boundary-audit-2026-10-23",
+        "BOUNDARY-AUDIT: what each dataset stores of its domain's boundary, and the whole boundary's cost on DrivAerML Volume",
+        [
+            "REPORT.md",
+            "BASELINE_PARITY.md",
+            "cost_table_isla.md",
+            "cost_table_dtt.md",
+            "cost_seed_table.md",
+        ],
+    ),
+    "drv_ground": (
+        "isla-drv-ground-2026-10-23",
+        "DRV-GROUND: the DrivAerML domain meshes' ground offset on all 484 files, and the recipe transform that places it",
+        [
+            "classify_summary.txt",
+            "check_summary.txt",
+            "offset_runs.txt",
+        ],
+    ),
+    "setup_research": (
+        "isla-setup-research-2026-10-23",
+        "SETUP-RESEARCH: the CFD domains of DrivAerML, SHIFT-SUV and HiLiftAeroML, and where their boundary pieces come from",
+        ["SETUP.md"],
+    ),
+    "af_whole": (
+        "isla-af-whole-2026-10-23",
+        "AF-WHOLE: ISLA and ISLA-DTT reading the AirfRANS far field, the pre-registration and its facts before training",
+        ["PREREG.md", "FACTS.md"],
+    ),
+    "surface_bc": (
+        "isla-surface-bc-2026-10-23",
+        "SURFACE-BC: a surface task that reads the whole boundary and predicts at the boundaries it names, built and timed",
+        ["REPORT.md", "DESIGN.md", "cost_table.md"],
+    ),
+    "surfqpop": (
+        "isla-surf-probe-2026-10-23",
+        "SURF-QPOP: how a DrivAerML Surface prediction depends on the other requested cells",
+        [
+            "RESULTS.md",
+            "PREREG.md",
+            "results/out/reduced.json",
+            "results/out/tables.md",
+        ],
+    ),
+    "slices_af": (
+        "isla-slices-2026-10-23",
+        "SLICES-AF: ISLA with 128 slices against the 512-slice AirfRANS standing",
+        [
+            "RESULTS.md",
+            "PREREG.md",
+            "reading.md",
+            "reading.json",
+            "nearwall/nearwall_table.md",
+        ],
+    ),
 }
 
 

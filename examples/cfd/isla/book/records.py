@@ -44,6 +44,13 @@ FOLDER = {
     "cap_audit": "campaigns_2026-10-23",
     "floor_drv": "campaigns_2026-10-23",
     "az_compliant": "campaigns_2026-10-23",
+    "boundary_audit": "campaigns_2026-10-23",
+    "drv_ground": "campaigns_2026-10-23",
+    "setup_research": "campaigns_2026-10-23",
+    "af_whole": "campaigns_2026-10-23",
+    "surface_bc": "campaigns_2026-10-23",
+    "surfqpop": "campaigns_2026-10-23",
+    "slices_af": "campaigns_2026-10-23",
 }
 
 

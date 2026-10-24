@@ -8,6 +8,11 @@ from palette import *
 import standing as S
 import json, statistics, glob as _glob
 from pathlib import Path
+import re
+import records as R
+# HiLiftAeroML files that store more of the domain's boundary than the wing (BOUNDARY-AUDIT section 1)
+_hl = [int(x.replace(",", "")) for x in re.search(r"only the wing on ([\d,]+) of ([\d,]+) files", " ".join(R.load("boundary_audit", "REPORT.md").split())).groups()]
+HL_BUT = {1: "one", 2: "two", 3: "three"}.get(_hl[1] - _hl[0], f"{_hl[1] - _hl[0]:,}")
 from matplotlib.colors import TwoSlopeNorm
 RES = Path("..") / "results"
 J = lambda p: json.load(open(RES / p))
@@ -281,7 +286,7 @@ plt.show()
 
 ### Files, conversion and normalization {#sec-data-hilift}
 
-**1,800 cases on a full grid of 180 geometries by ten angles, in imperial units, with curated manifests for every split.** Each case is a `geo_LHC<nnn>_AoA_<a>` directory; the recipe reads the boundary tensordict (`geo_LHC*/*.pdmsh/_tensordict/boundaries/vehicle`) and merges the parent's `global_data` (`U_inf`, `p_inf`, `rho_inf`, `T_inf`, `L_ref`). Units are slug, inch, second and Rankine; the figures convert positions to meters for display only. The targets are the projected averages `PROJ(AVG(P))`, `PROJ(AVG(T))`, `PROJ(AVG(RHO))`, `PROJ(AVG(U))` and `AVG(TAU_WALL)` on the surface cells, nondimensionalized from the case's `global_data`, renamed `pressure`, `temperature`, `density`, `velocity` and `tau_wall`, and standardized with fixed constants in the dataset yaml (pressure mean −0.5 and standard deviation 1; temperature 1.00 / 0.002; density 1.0 / 0.02; velocity 0.20; wall shear 0.003). A case has about 290 million surface cells, the largest surface in the book, so a 200,000-cell draw is a $10^{-3}$ sample of it. Every split is a curated manifest of one pinned revision of the dataset.
+**1,800 cases on a full grid of 180 geometries by ten angles, in imperial units, with curated manifests for every split.** Each case is a `geo_LHC<nnn>_AoA_<a>` directory; the recipe reads the boundary tensordict (`geo_LHC*/*.pdmsh/_tensordict/boundaries/vehicle`) and merges the parent's `global_data` (`U_inf`, `p_inf`, `rho_inf`, `T_inf`, `L_ref`). Units are slug, inch, second and Rankine; the figures convert positions to meters for display only. The targets are the projected averages `PROJ(AVG(P))`, `PROJ(AVG(T))`, `PROJ(AVG(RHO))`, `PROJ(AVG(U))` and `AVG(TAU_WALL)` on the surface cells, nondimensionalized from the case's `global_data`, renamed `pressure`, `temperature`, `density`, `velocity` and `tau_wall`, and standardized with fixed constants in the dataset yaml (pressure mean −0.5 and standard deviation 1; temperature 1.00 / 0.002; density 1.0 / 0.02; velocity 0.20; wall shear 0.003). A case has about 290 million surface cells, the largest surface in the book, so a 200,000-cell draw is a $10^{-3}$ sample of it. All but `{python} HL_BUT` files store the wing alone, without the far field or the symmetry plane of the CFD domain, so every model here reads the body alone (@sec-oq-whole-boundary). Every split is a curated manifest of one pinned revision of the dataset.
 
 ## What is measured {#sec-de-setup}
 
