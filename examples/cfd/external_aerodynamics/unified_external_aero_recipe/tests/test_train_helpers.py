@@ -190,11 +190,15 @@ def test_isla_training_on_thin_triangles(device):
         ("case_relative_l2", True),
     ],
 )
-def test_chunked_forward_backward_equals_the_unchunked_step(loss_type, measured):
-    """ISLA-DTT's chunked step (one pass for a pointwise loss, two otherwise): the
-    loss, its fields, the metrics and every parameter's gradient of forward_pass and
-    its backward, from the same token draw."""
+def test_chunked_forward_backward_equals_the_unchunked_step(
+    loss_type, measured, monkeypatch
+):
+    """ISLA-DTT's chunked step (one pass for a pointwise loss, two otherwise; one
+    pass for one chunk, and two over chunks of _QUERY_CHUNK when one chunk runs out
+    of memory): the loss, its fields, the metrics and every parameter's gradient of
+    forward_pass and its backward, from the same token draw."""
     from physicsnemo.experimental.models.isla import ISLA
+    from physicsnemo.experimental.models.isla import model as isla_model
 
     g = torch.Generator().manual_seed(0)
     tri = torch.randn(60, 3, 3, generator=g, dtype=torch.float64)
@@ -230,6 +234,7 @@ def test_chunked_forward_backward_equals_the_unchunked_step(loss_type, measured)
         global_schema={"U_inf_dir": {"rank": 1}},
         interior=True,
         query_independent=True,
+        boundary_tokens=40,
         hidden=16,
         n_layers=2,
         n_slices=4,
@@ -245,24 +250,42 @@ def test_chunked_forward_backward_equals_the_unchunked_step(loss_type, measured)
     )
     ref[0].backward()
     grads = {k: p.grad.clone() for k, p in model.named_parameters()}
-    model.zero_grad(set_to_none=True)
-    torch.manual_seed(1)
-    out = train.chunked_forward_backward(
-        batch, model, "float32", lc, mc, target_config=target_config, chunk=17
-    )
-    for a, b in zip(out, ref):
-        torch.testing.assert_close(a, b.detach(), rtol=1e-5, atol=1e-7)
     scale = max(float(v.abs().max()) for v in grads.values())
-    for k, p in model.named_parameters():
-        torch.testing.assert_close(
-            p.grad, grads[k], rtol=1e-4, atol=1e-6 * scale, msg=k
+
+    def check(chunk):
+        model.zero_grad(set_to_none=True)
+        torch.manual_seed(1)
+        out = train.chunked_forward_backward(
+            batch, model, "float32", lc, mc, target_config=target_config, chunk=chunk
         )
+        for a, b in zip(out, ref):
+            torch.testing.assert_close(a, b.detach(), rtol=1e-5, atol=1e-7)
+        for k, p in model.named_parameters():
+            torch.testing.assert_close(
+                p.grad, grads[k], rtol=1e-4, atol=1e-6 * scale, msg=k
+            )
+
+    check(17)
+    check(n)
+    call = isla_model._QueryChunks.__call__
+
+    def out_of_memory_above_17(self, start, stop):
+        if stop - start > 17:
+            raise torch.OutOfMemoryError("one chunk of every point")
+        return call(self, start, stop)
+
+    monkeypatch.setattr(isla_model._QueryChunks, "__call__", out_of_memory_above_17)
+    monkeypatch.setattr(train, "_QUERY_CHUNK", 17)
+    if loss_type in train._POINTWISE_LOSSES:
+        with pytest.raises(torch.OutOfMemoryError):
+            check(n)
+    else:
+        check(n)
 
 
-def test_query_chunk_chunks_isla_dtt_under_one_pass_losses(monkeypatch):
-    """ISLA-DTT takes chunks of _QUERY_CHUNK points under a one-pass loss when the
-    batch has more points than that, and the unchunked step otherwise; an
-    interacting ISLA never chunks."""
+def test_query_chunk_chunks_isla_dtt_under_every_loss(monkeypatch):
+    """ISLA-DTT takes chunks of _QUERY_CHUNK points under a pointwise loss and every
+    point in one chunk under any other; an interacting ISLA never chunks."""
     from physicsnemo.experimental.models.isla import ISLA
 
     def isla(query_independent):
@@ -281,14 +304,10 @@ def test_query_chunk_chunks_isla_dtt_under_one_pass_losses(monkeypatch):
 
     monkeypatch.setattr(train, "_QUERY_CHUNK", 17)
     dtt, interacting = isla(True), isla(False)
-    for loss_type in ("huber", "mse", "relative_mse"):
+    for loss_type, chunk in (("huber", 17), ("relative_mse", 17), ("relative_l2", 50)):
         lc = SimpleNamespace(loss_type=loss_type)
-        assert train._query_chunk(dtt, batch(50), lc) == 17
-        assert train._query_chunk(dtt, batch(17), lc) is None
+        assert train._query_chunk(dtt, batch(50), lc) == chunk
         assert train._query_chunk(interacting, batch(50), lc) is None
-    for loss_type in ("relative_l2", "case_relative_l2"):
-        lc = SimpleNamespace(loss_type=loss_type)
-        assert train._query_chunk(dtt, batch(50), lc) is None
 
 
 ### ---------------------------------------------------------------------------
