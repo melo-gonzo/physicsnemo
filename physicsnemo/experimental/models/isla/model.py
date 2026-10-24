@@ -1867,6 +1867,7 @@ class ISLA(Module):
         ### n_boundary counts the boundary tokens only: the kernel reads update
         ### the tokens appended below.
         n_boundary = n
+        kernel_pairs = None
         if query is not None:
             query_points = query["points"]
             nq = query_points.shape[1]
