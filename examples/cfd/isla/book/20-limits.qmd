@@ -154,7 +154,8 @@ print("- **Not that every standing is of ISLA reading its whole boundary.** ISLA
       "boundary the DrivAerML and AirfRANS files store, but the standings' checkpoints on the DrivAerML Volume and Surface "
       "tasks, SHIFT-SUV, HiLiftAeroML and AirfRANS were trained with the body alone (@sec-standing-geometry); SHIFT-SUV's "
       f"files, and all but {HL_BUT} of HiLiftAeroML's, store no other piece, and the recipe has no ISLA configuration for "
-      "SHIFT-SUV (@sec-limits-whole-boundary).")
+      "SHIFT-SUV; Peter approved building the missing pieces of both in the recipe (@sec-limits-whole-boundary, "
+      "@sec-oq-whole-boundary).")
 print("- **Not that the HiLiftAeroML numbers are test-set numbers** (@sec-limits-validation).")
 print("- **Not that the scaling law, the cell-count saturation or the capacity floor are measured at the reference configuration.** "
       "They are measured on smaller ISLAs and read for slopes and floors (@sec-capacity, @sec-oq-scaling).")
@@ -534,8 +535,8 @@ print("**ISLA's input is the whole boundary of the PDE domain, every piece a dat
       + lst([f"{WB_CFG[n][0]} names " + ", ".join(f"`{b}`" for b in PRED[n]) for n in PRED])
       + "), so on the DrivAerML Surface task the tunnel's four pieces are read as conditions only. SHIFT-SUV's files store the "
       "vehicle alone. The surface configuration reads the tunnel's four pieces beside it, and on these files the recipe's "
-      "path resolver raises a `KeyError` on each of the missing paths; the recipe does not train ISLA on the vehicle alone. How SHIFT-SUV gets the rest "
-      "of its boundary is open (@sec-oq-whole-boundary). The standings' checkpoints were trained with the body alone on the "
+      "path resolver raises a `KeyError` on each of the missing paths; the recipe does not train ISLA on the vehicle alone. Peter approved building the rest "
+      "of its boundary in the recipe (@sec-oq-whole-boundary). The standings' checkpoints were trained with the body alone on the "
       "DrivAerML tasks, SHIFT-SUV, HiLiftAeroML and AirfRANS (@sec-standing-geometry), so those standings are of ISLA reading "
       "part of its boundary. On the DrivAerML Volume task ISLA's far-field eddy-viscosity error follows the height above the "
       "floor (@sec-oq-far-field). Because ISLA's length unit $L$ is the RMS pairwise distance of the whole given boundary "
@@ -606,9 +607,12 @@ rows = [
     ("Does a fixed scale of ISLA's Reynolds input hold beyond AirfRANS? (@sec-oq-reynolds)", "ISLA trained with the fixed log-Reynolds scale on AeroZoo's `reynolds` split, read against ISLA with the fitted scale", f"at most {fmt_h(q_rey)}"),
     ("Are ISLA's crossflow and non-box failures on AeroZoo limits of the architecture? (@sec-oq-aerozoo)", "ISLA-DTT on the same splits; for the non-box family, a training set whose velocity scales cover the ducts'", "in the first row"),
     ("Why does ISLA not hold the outlet at its prescribed pressure on the crossflow layout? (@sec-oq-outlet)", "the predicted gauge pressure on the outlet faces against the prescribed zero, on every split and for both forms", "scoring only"),
-    ("Does a certified treatment of thin cells change any output of ISLA's geometry on the stored datasets? (@sec-oq-ties)",
-     "the certified geometry against the current one on every dataset's recipe draws: every distance, direction, sign and "
-     "gradient, under both search kernels", "none (a geometry check)"),
+    ("Can the tie and on-wall bands of ISLA's geometry be derived worst cases that do not depend on the pose? (@sec-oq-ties)",
+     "bands derived as worst cases for every pair, measured about the boundary's centroid with the vertex term kept at the "
+     "stored coordinates' rounding, the closest point computed in the boundary's centered frame, and a certified test of "
+     "distinct directions, checked against an exact rational brute force and on the lug in every pose, with every changed "
+     "output counted on every dataset's recipe draws",
+     "none for the check; a changed tie or on-wall decision changes the interior models' inputs"),
     ("Does what rounding still decides in the class's geometry move a trained model? (@sec-oq-precision)", "the standings "
      "retrained with the class's geometry, scored rotated and translated, and in float32 against float64 on the AeroZoo cases of "
      "the float32 comparison", "the standings' training with the class's geometry, then scoring"),
@@ -620,8 +624,8 @@ rows = [
      "ISLA trained on one car with fresh draws, with the domain's whole boundary (the floor strip, the slip walls, the inlet and the outlet) added as named boundary meshes, against the same run without them, two seeds each, read on the error more than "
      f"{L_REF:g} m from the car",
      f"{fmt_h(q_floor)} (single-case runs)"),
-    ("How do SHIFT-SUV and HiLiftAeroML get the pieces of their domains' boundaries that their files do not store? (@sec-oq-whole-boundary)",
-     "the missing pieces supplied beside each dataset, never as a change to it, then each standing retrained with ISLA reading the whole boundary, two seeds",
+    ("Do the SHIFT-SUV and HiLiftAeroML standings move when ISLA reads the pieces of their domains' boundaries that their files do not store? (@sec-oq-whole-boundary)",
+     "the missing pieces built in the recipe, SHIFT-SUV's box from constants and HiLiftAeroML's inlet and outlet at the stored far-field radius, the datasets unchanged; then each standing retrained with ISLA reading them, two seeds",
      "not priced (the supply sets the runs)"),
     ("Does the whole boundary cost ISLA near-wall accuracy through its distance channel? (@sec-oq-nearwall)",
      "ISLA trained on AirfRANS with its far field, read near the wall against the standing; if it reads a harm there, the viscous softening trained on the same configuration with only the channel changed, two seeds",
@@ -796,39 +800,59 @@ print("**The open question is why ISLA does not hold the outlet at its prescribe
       f"for both forms. Cost: scoring only. Data: {R.source('az_diag', 'pdiag/pdiag.tsv')}.")
 ```
 
-### Thin cells and the tie direction in the exact geometry {#sec-oq-ties}
+### The tie and on-wall bands in the exact geometry {#sec-oq-ties}
 
 ```{python}
 #| label: para-oq-ties
 #| output: asis
-GTR = " ".join(R.load("geo_thin", "RESULTS.md").split())
-GT_Q = re.search(r"\| float32, reference and fast \| [^|]+\| ([\d,]+) \|", GTR).group(1)
+GTR = " ".join(R.load("geo_thin_final", "RESULTS.md").split())
+GTD = " ".join(R.load("geo_thin_final", "DESIGN.md").split())
 GT_R = re.search(r"\|du\| / \|dn\| \(the normals' own change\) at most ([\d.]+)", GTR).group(1)
-print("**The tie direction where tied normals nearly coincide is measured, and the open question left in the exact geometry is "
-      "whether a certified treatment of thin cells changes any output on stored data.** At a closest-feature tie the class takes "
-      "the least-norm point of the hull of the tied directions, and on the wall the same point of the hull of the unit normals "
-      "of the cells that hold the point (@sec-arch-interior-geometry). Where those normals nearly coincide the point is "
-      "continuous in them, of order one half, and rounding decides which of them it rests on; either way the result is the "
-      "least-norm point of the rounded normals. "
-      f"On the lug and Tensile2d a one-ulp move of every float32 vertex changes the direction at tied queries by at most "
-      f"{TIE_DU[0]} and {TIE_DU[1]}, at most {GT_R} times the normals' own change, and the set of normals it rests on changes at "
-      f"no persisting tie. Retrained with the class's rule, ISLA's posed ÷ native on the lug is {TX_PN:.4f} (@sec-limits-ties). "
-      "Thin cells are another matter. Three steps of the search read float64 values as accurate where on a cell much thinner "
-      "than it is long they are not, and adversarial float64 queries on the thinnest faces of the stored AeroZoo meshes make it "
-      "raise, where the same queries in float32 are answered correctly; the recipe's own queries are float32, and none of "
-      f"{GT_Q} of them, checked against an exact rational brute force in both precisions and under both search kernels, is "
-      "wrong (@sec-arch-interior-geometry). A fix gives the edge planes and the float64 ball test certified bounds on "
-      "IEEE float64 rounding, computes an accurate closest point where the bound requires it, and keeps the current "
-      "arithmetic, bitwise, on every cell without the defect. What would settle it: the certified geometry against the current one "
-      "on every dataset's recipe draws, every distance, direction, sign and gradient, under both kernels; an unchanged output "
-      "everywhere leaves the stored datasets' inputs as they are. Cost: none, a geometry check. Data: "
-      f"{R.source('geo_thin', 'RESULTS.md')} (A2, A2b, A4); {R.source('geo_thin', 'DESIGN.md')}; {R.source('tie_exp', 'RESULTS.md')}.")
+SHARE = re.search(r"so the share is 13 u64 / \(u32 \+ 13 u64\) = ([\d.]+e-\d+) of it", GTD).group(1)
+EDGE_WC = re.search(r"about ([\d.]+) units for an edge point alone", GTD).group(1)
+GAP = re.search(r"Gap over band ([\d.]+) \(untied: u the face normal\) against ([\d.]+) \(tied", GTR).groups()
+DU, NODES = re.search(r"\|du\| = ([\d.]+) at that one node of ([\d,]+), which is the whole forward excess", GTR).groups()
+TIED = re.search(r"tied ([\d,]+) against ([\d,]+) on case 1884", GTR).groups()
+# the largest move at the membership flips over the three cases, band-edge node aside (FINAL_REPORT; RESULTS' cA row)
+MEM_DU = re.search(r"from bitwise normal ties, with \|du\| <= ([\d.]+e-\d+)", " ".join(R.load("geo_thin_final", "FINAL_REPORT.md").split())).group(1)
+assert re.search(rf"\| cA: abs x replaced by abs\(x - c\) \| {MEM_DU} \(0\)", GTR)
+assert re.search(r"On case 1909 nine mid-plane nodes", GTR)
+print("**The open question is whether the tie and on-wall bands of the exact geometry can be derived worst cases that do not "
+      "depend on the pose.** Each cell's distance carries the band $E_k = (u + 13 u_{64})(\\lvert x \\rvert + R_k)$, with $u$ the queries' unit roundoff, "
+      "$u_{64} = 2^{-53}$ and $R_k$ the cell's greatest vertex norm: a feature joins a closest-feature tie when its distance "
+      "less its band is at most the least sum of a distance and its band, and a point counts as on the wall when the least "
+      "distance is within its band of zero (@sec-arch-interior-geometry). Two parts of it are not "
+      "derived. Its arithmetic share, 13 units of $u_{64}(\\lvert x \\rvert + R_k)$, is a first-order estimate; the "
+      f"first-order worst case for an edge point alone is about {EDGE_WC} units. For float32 queries, and bfloat16 ones cast to "
+      f"float32, that share is {sci(float(SHARE))} of the band; for float64 queries rounding may decide a tie or "
+      "an on-wall call at the $10^{-15}$ relative level. And $\\lvert x \\rvert$ and $R_k$ are distances from the origin of the "
+      "raw coordinates, so a translation changes the band. On the lug's test case 1884 one node of "
+      f"{NODES} has a gap between its two nearest features of {GAP[0]} times the sum of their bands natively and {GAP[1]} times "
+      "it posed, so "
+      f"it ties in one pose only and its direction moves by {DU}. Measuring $\\lvert x \\rvert$ about the boundary's centroid "
+      "removes that flip. Measuring $R_k$ about it as well makes the band smaller than the stored float32 coordinates' own "
+      "rounding, and on case 1909 nine nodes of the plate's mid-plane, tied natively, untie posed, with their direction moving "
+      "by 1: a band that does not depend on the pose must still cover the stored coordinates' rounding. Which nodes tie "
+      f"changes under the pose at thousands of nodes per lug case as well ({TIED[0]} tied natively against {TIED[1]} posed on "
+      "case 1884), through a bitwise test of distinct directions at planar stars, with the direction moving by at most "
+      f"{sci(float(MEM_DU))} there. The direction at a tie is itself well measured where tied normals nearly coincide: a "
+      f"one-ulp move of every float32 vertex of the lug and Tensile2d changes it by at most {TIE_DU[0]} and {TIE_DU[1]}, at "
+      f"most {GT_R} times the normals' own change, and retrained with the class's rule, ISLA's posed ÷ native on the lug is "
+      f"{TX_PN:.4f} (@sec-limits-ties). What would settle the question: bands derived as worst cases for every pair, with "
+      "$\\lvert x \\rvert$ measured about the boundary's centroid and the vertex term kept at the stored coordinates' "
+      "rounding, the closest point computed in the boundary's centered frame, and a certified test of distinct directions in "
+      "place of the bitwise one, checked against an exact rational brute force on the adversarial sets and on the lug in "
+      "every pose, with every distance, direction, sign and decision that changes counted on every dataset's recipe draws. "
+      "Cost: none for the check; a changed tie or on-wall decision changes the interior models' inputs. Data: "
+      f"{R.source('geo_thin_final', 'RESULTS.md')} (A4, \"Fourth limit\"); {R.source('geo_thin_final', 'DESIGN.md')} "
+      f"(Amendment); {R.source('tie_exp', 'RESULTS.md')}.")
 ```
 
 ::: {.callout-note title="In flight"}
-This question rests on the census of the stored meshes and the adversarial queries. The certified
-geometry, checked against the current one on every dataset's recipe draws, is being measured, and the
-ledger (@sec-ledger) tracks it.
+This question rests on the class's bands, whose arithmetic share is a first-order estimate and which are measured
+from the origin of the raw coordinates. Bands derived as worst cases, measured about the boundary's centroid, with
+the closest point computed in a centered frame, are being measured, and the ledger (@sec-ledger) tracks it; a
+certified test of distinct directions is not part of that measurement.
 :::
 
 ### What rounding still decides in the geometry {#sec-oq-precision}
@@ -1075,8 +1099,8 @@ HL_HOLE = (sci(float(re.search(r"The area ratio is ([\d.]+)", HLD4).group(1)) - 
            re.search(r"one hole of [\d,]+ in² on every root, [\d-]+ in² \(([\d.]+) %\) less", HLD4).group(1),
            *re.search(r"([\d.]+) % of LHC001's outline lies within 0\.5 in of one and (\d+) % within 2 in", HLD4).groups())
 assert HL_HOLE[-1] == "100"
-print("**Read from every dataset's files, the boundary falls in two classes; the open question is how SHIFT-SUV and HiLiftAeroML "
-      "get the pieces of their domains' boundaries that their files do not store.** ISLA reads every stored piece of the "
+print("**Read from every dataset's files, the boundary falls in two classes; the open question is whether the SHIFT-SUV and "
+      "HiLiftAeroML standings move when ISLA reads the pieces of their domains' boundaries that their files do not store.** ISLA reads every stored piece of the "
       "boundary, each by name with its condition type (@sec-limits-whole-boundary).")
 print()
 # SHIFT-SUV's box on every file (BC-SIDECAR's check)
@@ -1107,23 +1131,35 @@ print(f"- **Not stored.** SHIFT-SUV's {SUV_N} files store the vehicle alone, ope
       f"and vertices gives a hole {HL_HOLE[8]}% smaller than the closed root's, but only at a closing scale chosen above the "
       "vertex spacing (1.5 spacings), a radius the program does not use, so no construction of the symmetry plane from these "
       "files is robust. The supervisor declined to use the closed root's outline as a root section shared by every "
-      "geometry, so the HiLiftAeroML configuration reads no symmetry plane; it waits on Peter's answer on how the missing "
-      "pieces are supplied and on a rebuild of each open root's strip that needs no chosen radius.")
+      "geometry, so HiLiftAeroML's symmetry plane stays out of its configuration until each open root's strip is rebuilt "
+      "in a way that needs no chosen radius.")
 print()
-print("What would settle it: the missing pieces supplied, built from the documented domain and the stored interior as DrivAerML's "
-      "are, or extracted from the raw CFD meshes, beside each dataset, never as a change to it; then each standing retrained with "
-      "ISLA reading the whole boundary, two seeds, scored beside the standing as it is. For SHIFT-SUV the supervisor proposes "
-      f"building the box in the recipe from constants: on every one of its {SUV_ALL} files the stored interior fills the same box, "
+# the far-field radius the stored interiors and curator's two synthesized files use (BC-SIDECAR, decision 4)
+HL_R = re.search(r"The stored interiors and curator's 2 files use [\d,.]+ in \(([\d.]+) MAC\)", " ".join(R.load("bc_sidecar", "REPORT.md").split())).group(1)
+print("**Peter approved building the missing pieces in the recipe, as the supervisor proposed.** Asked whether SHIFT-SUV's "
+      "CFD box and HiLiftAeroML's far field without its symmetry plane may be added, Peter answered: "
+      "\"Yes, of course you can do that\". "
+      f"The approved supply builds SHIFT-SUV's box from constants: on every one of its {SUV_ALL} files the stored interior fills the same box, "
       f"with CFD nodes on all six of its planes and its floor {SUV_GR[0]} to {SUV_GR[1]} mm below the vehicle's lowest point, so a "
       "recipe transform can build the inlet, the outlet, the floor, the side walls and the roof on each case, before any pose or "
-      "centering, and leave the dataset as it is. Whether SHIFT-SUV's pieces are supplied that way, and with which conditions on "
-      "the walls, the roof and the outlet, is Peter's decision. HiLiftAeroML's far-field radius is a choice its supply must make; for its symmetry "
-      "plane, each open root's missing strip rebuilt from its own unused vertices in outline order, with no chosen "
-      "radius, and checked against the stored hole on the closed root. "
-      "Cost: the retraining is not priced, because the supply sets the runs. "
+      "centering, and leave the dataset as it is; the five pieces claim no condition type, since no source gives the walls', "
+      "the roof's or the outlet's. It takes HiLiftAeroML's inlet and outlet from the curation pipeline's own generator at the "
+      f"radius the stored interiors use, {HL_R} mean aerodynamic chords, read beside the wing with its duplicated root cells "
+      "dropped (@sec-data-hilift). Its symmetry plane stays out: each open root's missing strip rebuilt from its own unused "
+      "vertices in outline order, with no chosen radius, and checked against the stored hole on the closed root, is what would "
+      "add it. What would settle the question: each standing retrained with ISLA reading those pieces, two seeds, scored "
+      "beside the standing as it is. "
+      "Cost: not priced, because the configurations set the runs. "
       f"Data: {R.source('boundary_audit', 'REPORT.md')} (sections 1, 2 and 5), {R.source('setup_research', 'SETUP.md')}, "
-      f"{R.source('bc_sidecar', 'FINAL_REPORT.md')}, {R.source('hl_dup', 'RESULTS.md')} (section 4).")
+      f"{R.source('bc_sidecar', 'FINAL_REPORT.md')}, {R.source('bc_sidecar', 'REPORT.md')} (decision 4), "
+      f"{R.source('hl_dup', 'RESULTS.md')} (section 4).")
 ```
+
+::: {.callout-note title="In flight"}
+This question rests on the SHIFT-SUV and HiLiftAeroML standings, trained with the body alone. Canonical ISLA's
+configurations for both with the pieces above, and a rebuild of HiLiftAeroML's open root outlines from their stored
+vertices that needs no chosen radius, are being built, and the ledger (@sec-ledger) tracks them.
+:::
 
 ### The near-wall channel under the whole boundary {#sec-oq-nearwall}
 

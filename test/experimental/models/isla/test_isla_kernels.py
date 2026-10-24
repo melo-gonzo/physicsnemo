@@ -343,8 +343,49 @@ def test_query_independent_interior_fused_and_compiled_blocks_match_eager():
 ### fused kernel is a leaf of the graph); the 2-D models and those without a global
 ### direction run that region. The compiled blocks turn mix-order reduction off. These
 ### tests run the eager region at a size where it would fuse, in float32 (it never fuses
-### float64), at token counts that are and are not multiples of 4.
+### float64), at token counts that are and are not multiples of 4. ISLA's forward pads
+### the token axis to a multiple of TOKEN_ALIGNMENT (32), so the compiled blocks of a
+### default forward never see such a count; the padding is not the fix, and the tests
+### turn it off (an alignment of 1) so that the compiled blocks see the input's count.
 MIX = {**REF, "n_layers": 1, "n_slices": 512}
+
+
+def _record_block_tokens(model):
+    """The token count of every call of ``model``'s compiled blocks, recorded from now on."""
+    seen = []
+
+    def recorded(forward):
+        def call(h, *args, **kwargs):
+            seen.append(h.shape[1])
+            return forward(h, *args, **kwargs)
+
+        return call
+
+    model._block_forwards = [recorded(f) for f in model._block_callables()]
+    return seen
+
+
+@pytest.mark.parametrize("device", ["cpu", pytest.param("cuda", marks=cuda_only)])
+@pytest.mark.parametrize("task", ["surface", "interior_dtt"])
+def test_compile_blocks_see_an_aligned_token_count(task, device):
+    """A padded forward gives the compiled blocks a multiple of TOKEN_ALIGNMENT tokens at a
+    token count that is not one."""
+    from physicsnemo.experimental.models.isla import model
+
+    kw = {} if task == "surface" else {"interior": True, "query_independent": True}
+    torch.manual_seed(0)
+    opt = ISLA(**{**REF, "n_layers": 1, **kw}, compile_blocks=True).to(device)
+    inputs, _ = _boundary(301, device=device)
+    if task == "surface":
+        n, call = 301, dict(prediction_boundaries=["wall"])
+    else:
+        q = torch.randn(7, 3, generator=torch.Generator().manual_seed(5)).to(device)
+        n, call = 308, dict(prediction_points=q)
+    assert n % model.TOKEN_ALIGNMENT
+    seen = _record_block_tokens(opt)
+    with torch.no_grad():
+        opt(**inputs, **call)
+    assert seen == [n + -n % model.TOKEN_ALIGNMENT], seen
 
 
 def _mix_pair(**kw):
@@ -388,10 +429,13 @@ def _forced_on_error(run, **kw):
 
 @cuda_only
 @pytest.mark.parametrize("n", [12000, 12001, 12002, 12003])
-def test_compile_blocks_float32_matches_eager_at_every_token_count(n):
+def test_compile_blocks_float32_matches_eager_at_every_token_count(n, monkeypatch):
     """compile_blocks reproduces the eager model in float32 (outputs and gradients) at
     every token count, at a size where Inductor's mix-order reduction would fuse, and
     builds no mix-order kernel."""
+    from physicsnemo.experimental.models.isla import model
+
+    monkeypatch.setattr(model, "TOKEN_ALIGNMENT", 1)
     inputs, tgt = _boundary(n)
 
     def forced_on(ref, opt):
@@ -402,19 +446,24 @@ def test_compile_blocks_float32_matches_eager_at_every_token_count(n):
     if n % 4:
         assert err > 5e-6, err  # forced on, the bug shows at this size
     ref, opt = _mix_pair()
+    seen = _record_block_tokens(opt)
     ### Without the fix on GB300 (torch 2.12): output error 5.7e-5 at n = 12001 and one
     ### mix-order kernel; with it, 2.7e-7 and none.
     _assert_same(ref, opt, torch.float32, 5e-6, 5e-5, n=n)
     assert torch._inductor.metrics.codegen_mix_order_reduction == 0
+    assert seen == [n], seen
 
 
 @cuda_only
 @pytest.mark.parametrize("nq", [6001, 6002])
-def test_compile_blocks_query_independent_float32_at_every_token_count(nq):
+def test_compile_blocks_query_independent_float32_at_every_token_count(nq, monkeypatch):
     """ISLA-DTT under compile_blocks in float32, at a size where mix-order reduction would
     fuse and a total token count (6000 boundary cells + nq queries) that is not a multiple
     of 4: the compiled model reproduces the eager one, and its prediction at a fixed set of
     queries does not depend on the other queries of the request."""
+    from physicsnemo.experimental.models.isla import model
+
+    monkeypatch.setattr(model, "TOKEN_ALIGNMENT", 1)
     inputs, _ = _boundary(6000)
     q = torch.randn(nq, 3, generator=torch.Generator().manual_seed(5)).cuda() * 3.0
 
@@ -426,6 +475,7 @@ def test_compile_blocks_query_independent_float32_at_every_token_count(nq):
     err = _forced_on_error(forced_on, interior=True, query_independent=True)
     assert err > 5e-6, err  # forced on, the bug shows at this size
     ref, opt = _mix_pair(interior=True, query_independent=True)
+    seen = _record_block_tokens(opt)
     with torch.no_grad():
         o_ref = _flat(outputs(ref(**inputs, prediction_points=q)))
         o_opt = _flat(outputs(opt(**inputs, prediction_points=q)))
@@ -433,3 +483,4 @@ def test_compile_blocks_query_independent_float32_at_every_token_count(nq):
     assert _rel(o_opt, o_ref) < 5e-6, _rel(o_opt, o_ref)
     assert _rel(alone, o_opt[:1000]) < 5e-6, _rel(alone, o_opt[:1000])
     assert torch._inductor.metrics.codegen_mix_order_reduction == 0
+    assert seen == [6000 + nq, 7000], seen
