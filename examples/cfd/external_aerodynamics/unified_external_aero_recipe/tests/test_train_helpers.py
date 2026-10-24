@@ -143,6 +143,7 @@ def test_isla_training_on_thin_triangles(device):
         "mesh",
         {
             "boundary_meshes": {"vehicle": "boundaries.vehicle"},
+            "prediction_boundaries": {"literal": ["vehicle"]},
             "global_data": "global_data",
         },
         targets,

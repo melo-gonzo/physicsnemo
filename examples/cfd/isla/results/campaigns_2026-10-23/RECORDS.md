@@ -33,6 +33,16 @@ source. Do not edit by hand.
 | `dtt_fast_compile/` | DTT-FAST, piece COMPILE: ISLA-DTT's compiled blocks certified against eager, and the bf16 casts Inductor leaves out | `scratch/isla-dtt-fast-2026-10-23/compile/` |
 | `dtt_fast_verify_fusedread/` | DTT-FAST, piece FUSEDREAD verified independently: pair lists, precision and the GB300 step | `scratch/isla-dtt-fast-2026-10-23/verify_fusedread/` |
 | `dtt_fast_integration/` | DTT-FAST, integration pass 1: the tree walk, tree build and fused read on ISLA 0.11.0 behind one execution attribute | `scratch/isla-dtt-fast-2026-10-23/integration/` |
+| `boundary_merge/` | MERGE-PREP: the token padding and the whole boundary with the surface task merged into ISLA 0.11.0, checked and timed | `scratch/isla-merge-prep-2026-10-24/` |
+| `dtt_pose/` | DTT-POSE: why ISLA-DTT's forest depends on pose and precision, and the design that removes it | `scratch/isla-dtt-pose-2026-10-24/` |
+| `dtt_pose_exp/` | DTT-POSE-EXP: ISLA-DTT retrained with DTT-POSE's forest on the lug and AirfRANS, the pre-registration | `scratch/isla-dtt-pose-exp-2026-10-24/` |
+| `geo_thin/` | GEO-THIN: thin cells of nonzero area in the exact geometry, the census of the stored meshes and the design | `scratch/isla-geo-thin-2026-10-24/` |
+| `dtt_fast_final/` | DTT-FAST, pass 2: ISLA-DTT's training step before and after on GB300, against interacting ISLA, and its surface form | `scratch/isla-dtt-fast-2026-10-23/final/` |
+| `nearwall/` | NEARWALL: ISLA's near-wall distance channel under the whole boundary, its exposure, response and precision, and the design | `scratch/isla-nearwall-2026-10-24/` |
+| `hl_dup/` | HL-DUP: HiLiftAeroML's duplicated wing cells, their census and effect on the standing (stage 1, revised after its second read) and the stage-2 registration | `scratch/isla-hl-dup-2026-10-24/` |
+| `geo_thin_final/` | GEO-THIN, final: the thin-cell fix as merged, its amended design (what is derived and what is estimated), checks, cost and limits | `scratch/isla-geo-thin-2026-10-24/` |
+| `nearwall_final/` | NEARWALL, final: the comment fix as merged, the contingency drafted for AF-WHOLE and the geometry note | `scratch/isla-nearwall-2026-10-24/` |
+| `dtt_fast_bf16diag/` | DTT-FAST, BF16-DIAG: where the chunked step's bf16 excess on AirfRANS comes from, its remedy, and the one-ulp yardstick | `scratch/isla-dtt-fast-2026-10-23/bf16diag/` |
 
 | topic | file | source | md5 |
 | --- | --- | --- | --- |
@@ -195,3 +205,32 @@ source. Do not edit by hand.
 | dtt_fast_compile | REPORT.md | scratch/isla-dtt-fast-2026-10-23/compile/REPORT.md | 296118e95eab0cc507c6bc77ad8ab104 |
 | dtt_fast_verify_fusedread | VERIFY.md | scratch/isla-dtt-fast-2026-10-23/verify_fusedread/VERIFY.md | 3547c3068a6ef54d514468ea1a7d4364 |
 | dtt_fast_integration | RESULTS.md | scratch/isla-dtt-fast-2026-10-23/integration/RESULTS.md | cd508ec6241c605c2464c0f4541ef70b |
+| boundary_merge | REPORT.md | scratch/isla-merge-prep-2026-10-24/REPORT.md | 511537a48ee5f289a38f253978a7b050 |
+| boundary_merge | FINAL_REPORT.md | scratch/isla-merge-prep-2026-10-24/FINAL_REPORT.md | 1a67141eff23bbe060cf5e50b0bdf536 |
+| boundary_merge | book/BOOK_CHANGES.md | scratch/isla-merge-prep-2026-10-24/book/BOOK_CHANGES.md | bf07eb9c2fd38aafec43369c1d2adcfe |
+| boundary_merge | results/TIMING.md | scratch/isla-merge-prep-2026-10-24/results/TIMING.md | e0f06a4a592bc54c93a3c5aab23c478f |
+| boundary_merge | results/book_diff_7213_vs_17c9df5c0.txt | scratch/isla-merge-prep-2026-10-24/results/book_diff_7213_vs_17c9df5c0.txt | 61c79e81a7ceb411c7ce765f361e7d30 |
+| dtt_pose | DESIGN.md | scratch/isla-dtt-pose-2026-10-24/DESIGN.md | 8420670e9d9f67957d4c4d7ab05d3599 |
+| dtt_pose | MECHANISMS.md | scratch/isla-dtt-pose-2026-10-24/MECHANISMS.md | 2e89f066f0578021a466e768f5c76bc0 |
+| dtt_pose_exp | PREREG.md | scratch/isla-dtt-pose-exp-2026-10-24/PREREG.md | 2f46a10cc7cc9f3f8ba9a39c98cb6d39 |
+| geo_thin | DESIGN.md | scratch/isla-geo-thin-2026-10-24/DESIGN.md | f7f8ed6849f68cc8a4584989afb1a27e |
+| geo_thin | RESULTS.md | scratch/isla-geo-thin-2026-10-24/RESULTS.md | 6daa28650f27ed75c455c12e89fbd25d |
+| dtt_fast_final | TABLE.md | scratch/isla-dtt-fast-2026-10-23/final/TABLE.md | a6f352dfc32a342dc1f95a90bba69c17 |
+| nearwall | DESIGN.md | scratch/isla-nearwall-2026-10-24/DESIGN.md | 1ff494b61dd700bb27f6eb9a56eae851 |
+| nearwall | RESULTS.md | scratch/isla-nearwall-2026-10-24/RESULTS.md | 43888a105e71484145e06785ce13fb70 |
+| nearwall | REVIEW_DESIGN.md | scratch/isla-nearwall-2026-10-24/REVIEW_DESIGN.md | 08b552800c395fd6c49a0c7e26a7f2f1 |
+| hl_dup | PREREG.md | scratch/isla-hl-dup-2026-10-24/PREREG.md | 072b6b1c3ac1b59df729eadda9f04e40 |
+| hl_dup | RESULTS.md | scratch/isla-hl-dup-2026-10-24/RESULTS.md | e1ac7e097098562bef96b41f5744910a |
+| hl_dup | NOTEBOOK_DRAFT.md | scratch/isla-hl-dup-2026-10-24/NOTEBOOK_DRAFT.md | 0c2f575b17dc0036ca525c1c97eefba9 |
+| hl_dup | REVIEW_STAGE1.md | scratch/isla-hl-dup-2026-10-24/REVIEW_STAGE1.md | 17357946600875a1a44b10705b1b88b8 |
+| hl_dup | REVISION_NOTE.md | scratch/isla-hl-dup-2026-10-24/REVISION_NOTE.md | 7883e89de248a357e1024831e8553c04 |
+| hl_dup | HANDOFF_HLDUP.md | scratch/isla-hl-dup-2026-10-24/HANDOFF_HLDUP.md | d8fbfbee0c2401f7a6dca072bd78f9ee |
+| hl_dup | FINAL_REPORT.md | scratch/isla-hl-dup-2026-10-24/FINAL_REPORT.md | 74bc30896f511fcd9513fb01eb935e9f |
+| geo_thin_final | FINAL_REPORT.md | scratch/isla-geo-thin-2026-10-24/FINAL_REPORT.md | fd0d43090cc369e7dfb3bee51778cdc6 |
+| geo_thin_final | DESIGN.md | scratch/isla-geo-thin-2026-10-24/DESIGN.md | be6a283c8a973088cc6348ad8fd706f8 |
+| geo_thin_final | RESULTS.md | scratch/isla-geo-thin-2026-10-24/RESULTS.md | 50924a0e8a2c5441117b05cde4d8a4fb |
+| nearwall_final | FINAL_REPORT.md | scratch/isla-nearwall-2026-10-24/FINAL_REPORT.md | 163bf7637092883b4ef1ace0d29ba33b |
+| nearwall_final | PREREG_CONTINGENCY.md | scratch/isla-nearwall-2026-10-24/PREREG_CONTINGENCY.md | 26856eb98d681596301c37bdb7d3ae0d |
+| nearwall_final | GEOMETRY_NOTE.md | scratch/isla-nearwall-2026-10-24/GEOMETRY_NOTE.md | 6318e44c3819cbceb854772ba6e6254e |
+| dtt_fast_bf16diag | REPORT.md | scratch/isla-dtt-fast-2026-10-23/bf16diag/REPORT.md | 0cba3be885275a1e86191deec4089ad4 |
+| dtt_fast_bf16diag | RESULTS.md | scratch/isla-dtt-fast-2026-10-23/bf16diag/RESULTS.md | 8a8ad8b4de7f050e7ecd0f5db9b70e76 |

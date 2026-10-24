@@ -291,16 +291,28 @@ plt.show()
 ```{python}
 #| label: para-data-hilift-duplicates
 #| output: asis
-BCS = " ".join(R.load("bc_sidecar", "REPORT.md").split())
-DUP = re.search(r"About (\d+) M duplicated cells on (\d+) of (\d+) sampled geometries inflate HiLift's surface measures and "
-                r"draws \(about (\d+) % of uniform draws; ([\d-]+) % of the area\)", BCS).groups()
-DUPM, DUPN, DUPF = re.search(r"hold ([\d.]+-[\d.]+) M duplicated cells, copies of only ([\d,]+-[\d,]+) distinct cells\. "
-                             r".*?The duplicates are (\d+) % of the cells", BCS).groups()
-print(f"Most wings store many of their cells more than once. On the five geometries examined cell by cell, "
-      f"{DUPM.replace('-', ' to ')} million cells are copies of only {DUPN.replace('-', ' to ')} distinct cells, "
-      f"{DUPF}% of the cells; copies on that scale are on {DUP[1]} of the {DUP[2]} geometries sampled, about {DUP[3]}% of a "
-      f"uniform draw of cells and {DUP[4].replace('-', ' to ')}% of the summed wing area. The recipe reads the cells as stored, so the copies enter the "
-      f"surface measures and the cell draws ({R.source('bc_sidecar', 'REPORT.md')}, sections 3 and 5).")
+HLD = " ".join(R.load("hl_dup", "RESULTS.md").split())
+CEN = re.search(r"\*Root kind\*, (\d+) of (\d+) cases.*?Per case: ([\d.]+)-([\d.]+) M extra copies \(median [\d.]+ M; "
+                r"([\d.]+)-([\d.]+) % of the cells\) of ([\d,]+)-([\d,]+) distinct cells.*?\*\*([\d.]+)-([\d.]+) % of the summed "
+                r"wing area \(median ([\d.]+) %\)\*\*", HLD).groups()
+EXPO = R.md_table("hl_dup", "RESULTS.md", "2. Exposure")
+_share = next(r for r in EXPO if "Horvitz" in r["per case, after the full transform chain"])
+_gauge = next(r for r in EXPO if "length unit" in r["per case, after the full transform chain"])
+DUP_SHARE = R.num(_share["mean"])
+print(f"**Nearly every wing stores copies of its root.** On {CEN[0]} of the {CEN[1]} cases examined cell by cell, all 180 "
+      f"geometries among them, the wing stores {CEN[2]} to {CEN[3]} million extra copies of only {CEN[6]} to {CEN[7]} distinct "
+      f"cells at its root, {CEN[4]} to {CEN[5]}% of its cells and {CEN[8]} to {CEN[9]}% of its summed area (median {CEN[10]}%); "
+      "each copy carries the solution of its first copy, to float32 rounding. The recipe draws cells as stored, so on the "
+      f"scored cases the copies carry {DUP_SHARE:.0f}% of the Horvitz–Thompson measure of the drawn cells (the mean over "
+      "cases), the measure ISLA's routing and length unit read and the scorer weights by; without them ISLA's length unit is "
+      f"{R.num(_gauge['min']):.2f} to {R.num(_gauge['max']):.2f} times its value with them. The supervisor decided, on "
+      "principle, that the canonical HiLiftAeroML configuration drop the copies in the recipe and leave the dataset as it "
+      "is: a reader option draws over the stored cells and drops the extra copies it draws, keeping each kept cell's "
+      "Horvitz–Thompson factor, from a per-case mask that stores a fingerprint of its source file and is refused on a "
+      "mismatch. The recipe of this book reads the copies, and the standing below is of checkpoints trained and scored "
+      "with them (@sec-de-result). The mask caches the result of a recipe correction and no model reads it, which the supervisor reads as "
+      "allowed under Peter's boundary-only input ruling; Peter may veto that reading. "
+      f"Data: {R.source('hl_dup', 'RESULTS.md')} (sections 1 and 2), {R.source('hl_dup', 'PREREG.md')} (the amendment).")
 ```
 
 ## What is measured {#sec-de-setup}
@@ -403,9 +415,9 @@ print(f"**At the 510-case rung, on the native mesh, {both(HL, HL_F)}; on the uni
 ```
 
 ::: {.callout-note title="In flight"}
-These numbers come from the wing meshes as stored, with their duplicated cells, which @sec-data-hilift counts on a
-sample of the geometries. A census of the duplicates in every scored case, and the same checkpoints scored with them
-excluded, are being measured, and the ledger (@sec-ledger) tracks it.
+These numbers come from checkpoints trained and scored on the wing meshes as stored, with their duplicated root cells
+(@sec-data-hilift). ISLA, GeoTransolver and Transolver trained and scored with the copies dropped are being measured,
+and the ledger (@sec-ledger) tracks it.
 :::
 
 ```{python}
@@ -540,6 +552,32 @@ print("**ISLA's pressure deficit to GeoTransolver is a few cases at stall; its d
       "percent, and the deficit is read for its concentration, not for its size to the percent. Every number here is the native "
       f"pressure or wall-shear error per case, seed means, against the unit-direction baselines. Data: {HL.source} (`case_level`); "
       f"{R.source('hilift090', 'RESULTS_HL090.md')} (the analyses beside its registered rule).")
+```
+
+```{python}
+#| label: para-hilift-duplicates-standing
+#| output: asis
+SC = {(r["field"], r["protocol"].split()[0]): r for r in R.md_table("hl_dup", "RESULTS.md", "3. Effect")}
+ARCH3 = ("ISLA", "GeoTransolver", "Transolver")
+up = lambda f, a, x, y: R.num(SC[(f, x)][a]) / R.num(SC[(f, y)][a]) - 1
+RC = ("GT / ISLA (s42, s43)", "T / ISLA (s42, s43)")
+rb = {(f, c): R.num(SC[(f, "b")][c]) for f in ("pressure", "wall shear") for c in RC}
+moved = max(abs(R.num(SC[(f, "b")][c]) - R.num(SC[(f, "a")][c])) for f, c in rb)
+pb = [up("pressure", a, "b", "a") for a in ARCH3]
+print("**Taken out of the metric, the copies leave the ranking as it is; taken out of the input as well, they raise ISLA's "
+      "error far more than the baselines'.** Scored on the same predictions with the copies excluded from the metric, "
+      "the native pressure error of ISLA, GeoTransolver and Transolver rises "
+      + (f"{100 * min(pb):.0f}%" if f"{100 * min(pb):.0f}" == f"{100 * max(pb):.0f}" else f"{100 * min(pb):.0f} to {100 * max(pb):.0f}%")
+      + f" alike (ISLA's from "
+      f"{R.num(SC[('pressure', 'a')]['ISLA']):.4f} to {R.num(SC[('pressure', 'b')]['ISLA']):.4f}), and baseline ÷ ISLA moves by "
+      f"at most {moved:.3f} on pressure and wall shear: GeoTransolver ÷ ISLA is {rb[('pressure', RC[0])]:.3f} on pressure and "
+      f"{rb[('wall shear', RC[0])]:.3f} on wall shear, Transolver ÷ ISLA {rb[('pressure', RC[1])]:.3f} and "
+      f"{rb[('wall shear', RC[1])]:.3f} (seed means, 180 validation cases, float32). With the copies removed from the input "
+      "too, a shift from the data these checkpoints trained on, ISLA's pressure error rises a further "
+      f"{100 * up('pressure', 'ISLA', 'c', 'b'):.0f}%, GeoTransolver's {100 * up('pressure', 'GeoTransolver', 'c', 'b'):.0f}% and "
+      f"Transolver's {100 * up('pressure', 'Transolver', 'c', 'b'):.0f}%: ISLA reads the cell measures the copies distort, and "
+      "the baselines do not. That measures the trained checkpoints' sensitivity to the copies, not the accuracy of models "
+      f"trained without them. Data: {R.source('hl_dup', 'RESULTS.md')} (section 3).")
 ```
 
 ## Studies on this dataset {#sec-data-efficiency}

@@ -121,10 +121,12 @@ BC = "boundary cells: position, normal, measure weight"
 NT = "prediction points as tokens, with their exact wall distance and direction to the boundary meshes"
 GP = "per point: coordinates centered on the case, unit normal"
 GV = "per point: coordinates, the stored `sdf` and `sdf_normals`; no boundary mesh"
-# the stored pieces of the domain's boundary beyond the body, read by configurations that have no standing (@sec-oq-whole-boundary)
-DRV_DOM = ("; the standing's ISLA reads the vehicle alone, and a configuration that also reads the four other stored pieces of "
-           "the domain's boundary (`no_slip`, `slip`, `inlet`, `outlet`, named conditions without fields){} is built and has no standing")
-DRV_DOM_S, DRV_DOM_V = DRV_DOM.format(", predicting at the vehicle's cells alone,"), DRV_DOM.format("")
+# the stored pieces of the domain's boundary beyond the body, read by ISLA's configurations; the standings'
+# checkpoints were trained without them (@sec-standing-geometry)
+DRV_DOM = ("; ISLA's configuration also reads the four other stored pieces of the domain's boundary (`no_slip`, "
+           "`slip`, `inlet`, `outlet`, named conditions without fields){}, and the standing's checkpoints were trained "
+           "with the vehicle alone (@sec-standing-geometry)")
+DRV_DOM_S, DRV_DOM_V = DRV_DOM.format(", predicting at the vehicle's cells alone"), DRV_DOM.format("")
 MI = [
     ("drivaerml_surface", f"{BC}; `U_inf_dir`, $(1, 0, 0)$ on every car{DRV_DOM_S}", f"{GP}; `U_inf_dir`, $(1, 0, 0)$ on every car",
      "the same, with `U_inf_dir` concatenated to every point", "the same"),
@@ -132,12 +134,13 @@ MI = [
      "the same per-point fields, with `U_inf_dir` concatenated", "the same globals; the baselines read the stored distance field, ISLA computes the exact distance to the full-resolution surface"),
     ("hilift", f"{BC}; `U_inf_dir`, angle of attack 4 to 22°", f"{GP}; `U_inf_dir`, angle of attack 4 to 22°",
      "the same, with `U_inf_dir` concatenated", "the same"),
-    ("shift_suv", f"{BC}; `U_inf_dir`, constant", f"{GP}; `U_inf_dir`, constant",
+    ("shift_suv", f"{BC}, the vehicle alone, as the standing's checkpoints were trained; `U_inf_dir`, constant", f"{GP}; `U_inf_dir`, constant",
      "the same, with `U_inf_dir` concatenated", "the same"),
     ("airfrans", f"{BC}; {NT}; the inlet velocity `U_inf` as the velocity source of its declared scales: its direction, and as the one "
-     "scalar the Reynolds number from its magnitude, the airfoil's length unit and the configuration's constant kinematic viscosity, "
-     "log-standardized by dataset constants; the standing's ISLA reads the airfoil alone, and a configuration that also reads the "
-     "far field from the release's `_freestream.vtp` (the condition `freestream`, without fields) is built and has no standing",
+     "scalar the Reynolds number from its magnitude, the length unit of the given boundary and the configuration's "
+     "constant kinematic viscosity, log-standardized by dataset constants; ISLA's configuration also reads the far "
+     "field from the release's `_freestream.vtp` (the condition `freestream`, without fields), and the standing's "
+     "checkpoints were trained with the airfoil alone (@sec-standing-geometry)",
      f"{GV}; `U_inf_dir` and the inlet speed standardized over the training airfoils, read by the context projector",
      "the same per-point fields, with the same two globals concatenated",
      "the same information; the baselines also predict an out-of-plane velocity component, which leaves their velocity error "
@@ -643,7 +646,7 @@ in @sec-limits.
 |---|---|---|---|
 | DrivAerML (Surface, Volume) | native files of the dataset release | `datasets/drivaer_ml_surface.yaml`, `drivaer_ml_volume_reference.yaml` | `conf/model/isla_surface.yaml`, `isla_volume.yaml` |
 | HiLiftAeroML | native files | `datasets/highlift_surface.yaml` | `conf/model/isla_surface_highlift.yaml` |
-| SHIFT-SUV | native files | `datasets/shift_suv_surface.yaml` and the two family files | `conf/model/isla_surface.yaml` |
+| SHIFT-SUV | native files | `datasets/shift_suv_surface.yaml` and the two family files | none; Peter approved building the CFD box in the recipe (the standing's checkpoints were trained with `isla_surface.yaml` on the vehicle alone; @sec-oq-whole-boundary) |
 | AirfRANS | `results/campaigns_2026-09-21/af/airfrans_convert.py` | `datasets/airfrans_uvolume_2d.yaml` (ISLA), `airfrans_uvolume.yaml` (the baselines) | `conf/model/isla_volume_airfrans.yaml` |
 | AeroZoo | native files of the dataset release | `datasets/aerozoo_uvolume.yaml` and its six held-out-split files, which hold the benchmark protocol's physical PDE inputs only (@sec-data-aerozoo) | `conf/model/isla_volume_aerozoo.yaml` |
 | PLAID Tensile2d | `results/campaigns_2026-09-22/datasets/plaid_tensile2d_convert.py` | `results/campaigns_2026-10-02/char/datasets/plaid_tensile2d.yaml` | `conf/model/isla_tensile2d.yaml` |
@@ -716,7 +719,10 @@ are held out per checkpoint but do not confirm a result across the whole set of 
 
 **Every standing's ISLA checkpoints were trained with ISLA 0.9.0, whose interior geometry differs from the class's in four
 steps, and the class refuses those checkpoints (@sec-using-checkpoint).** The parameters and the network are the same; the
-forward differs only in how a prediction point's wall geometry is built and how the boundary tokens are drawn. On a surface
+forward differs only in how a prediction point's wall geometry is built and how the boundary tokens are drawn. On the DrivAerML tasks,
+SHIFT-SUV, AirfRANS and HiLiftAeroML they were trained with configurations that read the body alone (the
+vehicle, the airfoil, the wing); on AeroZoo, the lug, Tensile2d and DeepJEB++ with every stored piece. The recipe's configurations read every stored piece of the domain's boundary, so on
+the DrivAerML tasks and AirfRANS they read more than the standings were trained with (@sec-limits-whole-boundary). On a surface
 task, which computes no wall geometry and draws no tokens, the four steps do not arise. @tbl-standing-geometry lists them.
 
 | step | the standings' checkpoints (ISLA 0.9.0) | the class (@sec-arch-interior-geometry, @sec-arch-boundary-draw) |

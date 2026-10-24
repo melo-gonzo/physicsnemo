@@ -115,6 +115,8 @@ def _make_inputs(device, query: bool = False, seed: int = 1234) -> dict:
         inputs["prediction_points"] = (torch.randn(40, 3, generator=gen) * 2.0).to(
             device
         )
+    else:
+        inputs["prediction_boundaries"] = ["wall"]
     return inputs
 
 

@@ -187,8 +187,9 @@ three.
   solution, so a fixed axis carries no information about the PDE, only about how the cases were
   posed. ISLA takes directions the physics names and positions only as differences
   (@sec-pose-prior). ISLA-DTT's far-field forest groups cells for speed in a canonical frame the
-  boundary carries, so it moves with the problem; where its axes tie, or where rounding decides the
-  sign octant of a cell's normal, a regrouping moves the read only by the tree's error, which vanishes as $\theta \to 0$ (@sec-oq-dtt-frame).
+  boundary carries, so it moves with the problem; where its axes tie, a regrouping moves the read only by the tree's error, which vanishes as $\theta \to 0$; where
+  rounding decides a cell's octant or a box test, as on the lug, the code as it is builds another forest in another
+  pose (@sec-arch-tree-read, @sec-oq-dtt-frame).
 - **No mesh-density shortcuts.** A solver integrates over the surface; it does not count the
   cells the mesher placed in a region. Every sum in ISLA is a quadrature with the cells' measure
   weights, so a region's influence is its area, not its cell count (@sec-isla-quadrature).
@@ -279,7 +280,7 @@ LEDGER = [
     ("The surface output is one Mesh", "the surface task returns one point-cloud `Mesh` at the given conditions' cells, the conditions in sorted order and each condition's cells in its mesh's order; `torch.split` by the conditions' cell counts gives each condition's rows",
      "the output is one field over the boundary, and the recipe's loss, metrics and inference consume one set of targets over points", "a mapping of meshes per condition, which moves the concatenation into the recipe and a condition-keyed target set into every dataset",
      "@sec-using-conditions; DeepJEB++'s scored points are put in the prediction order by `reorder_interior` (@sec-using-recipe-conditions)"),
-    ("The whole boundary of the domain (recipe)", "ISLA reads every stored piece of the PDE domain's boundary as a named boundary mesh with its condition type; the configurations of AeroZoo, the lug, Tensile2d and DeepJEB++ read several named pieces, and those of the DrivAerML Volume and Surface tasks, SHIFT-SUV, HiLiftAeroML and AirfRANS, which the standings trained with, the body alone; configurations that read the rest of what the DrivAerML and AirfRANS data store are built, a surface task among them predicting only at the boundaries it names, and SHIFT-SUV's files, and nearly all of HiLiftAeroML's, store the body alone (@sec-limits-whole-boundary, @sec-oq-whole-boundary)",
+    ("The whole boundary of the domain (recipe)", "ISLA reads every stored piece of the PDE domain's boundary as a named boundary mesh with its condition type; the configurations of AeroZoo, the lug, Tensile2d and DeepJEB++ read their named pieces, those of the DrivAerML Volume and Surface tasks the vehicle and the tunnel's four other pieces, the AirfRANS one the airfoil and the far field, and a surface task predicts only at the boundaries it names; nearly all of HiLiftAeroML's files store the wing alone, and SHIFT-SUV's store the vehicle alone, and no ISLA configuration of the recipe reads SHIFT-SUV; Peter approved building SHIFT-SUV's CFD box and HiLiftAeroML's far field in the recipe; the standings were trained with the body alone (@sec-standing-geometry, @sec-limits-whole-boundary, @sec-oq-whole-boundary)",
      "a boundary-value problem is well posed only with data on its whole boundary; a wall the model is not given reaches it only through where its points lie, a dependence on the dataset's frame", "the body alone, with the domain's other walls left to the positions of the points",
      "@sec-limits-whole-boundary, @sec-oq-far-field, @sec-oq-whole-boundary"),
     ("Orientation as a recipe transform (recipe)", "the model reads every cell's normal as given and signs its distances by it; a dataset file reverses a boundary wound away from the prediction points' domain with `FlipBoundaryOrientation`, set per dataset",

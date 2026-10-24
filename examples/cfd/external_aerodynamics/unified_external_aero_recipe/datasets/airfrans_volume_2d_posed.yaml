@@ -28,17 +28,25 @@
 # interior points, the airfoil polyline, the in-plane boundary normals, the SDF normals and the velocity target carry two
 # components and the model runs its native two-dimensional path (pair with conf/model/isla_volume_airfrans.yaml, dim: 2).
 # Everything else (reader, non-dimensionalization, nut normalization, splits, targets) is airfrans_volume.yaml verbatim.
+# AF-WHOLE (2026-10-23): ISLA reads the whole boundary of the PDE domain, the airfoil and the far field. The case
+# files store the airfoil and the release's cropped interior; the far field (the freestream condition on the outer
+# curve, 200 chords out) is the raw release's <case>/<case>_freestream.vtp under raw_datadir, read by the reader as
+# boundary `freestream`, geometry only (its U, p and nut are solution values), in the interior's plane z = 0.
 train_datadir: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/airfrans_pdmsh
 manifest: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/airfrans_pdmsh/manifest.json
+raw_datadir: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/airfrans/Dataset
 pipeline:
   reader:
-    _target_: ${dp:CaseKeyDomainMeshReader}   # CHAR-PROTOCOLS posed: DomainMeshReader + the per-case `case_key` FixedRandomPose seeds from
+    _target_: ${dp:CaseKeyVtkBoundaryDomainMeshReader}   # CHAR-PROTOCOLS posed: DomainMeshReader + the per-case `case_key` FixedRandomPose seeds from
     path: ${train_datadir}
     pattern: "airFoil2D_SST_*/*.pdmsh"
     subsample_n_points: ${sampling_resolution}   # interior queries (each case has ~177k points)
     subsample_n_cells: ${sampling_resolution}    # larger than any airfoil's ~1,000 segments: the boundary is kept whole
     drop_interior_cells: true
     drop_in_file_boundaries: false
+    vtk_boundaries:                   # AF-WHOLE: the far field from the raw release, beside the file's airfoil
+      freestream: ${raw_datadir}/{case}/{case}_freestream.vtp
+    vtk_plane_axis: 2                 # the release stores its slice at z = 0.5; the case files at z = 0
   transforms:
     - _target_: ${dp:FixedRandomPose}   # CHAR-PROTOCOLS posed: deterministic per-case pose, first so everything downstream sees it
       salt: 0
@@ -73,6 +81,11 @@ targets:
 # (examples/cfd/isla/results/aerozoo_dataset/isla_constants_fit.py, code 6c3aac5a8), 2026-10-20.
 # The same as airfrans_volume_2d.yaml's: the same train cases, and L, U and nut / (U L) do not depend on the pose or
 # on the boundary or interior draw (the airfoil is kept whole).
+# AF-WHOLE (2026-10-23): refit with the far field, so L is the RMS pairwise distance of the airfoil and the far
+# field (305.3 chords on every case; the airfoil's alone 0.41-0.44): the same fit on full_train (800 cases), from LHR
+# cpu-short job 361288 (isla_constants_fit.py airfrans on all 1,000 cases, branch psharpe/isla-whole-boundary)
+# and airfrans_fit per split (examples/cfd/isla/results/aerozoo_dataset/airfrans_whole_constants_fits.json). The values below
+# replace the airfoil-only fit the comment above describes.
 isla_constants:
-  reynolds: {mean: 6.205, std: 0.1347}
-  output_scale: {nut: 7.511e-05}
+  reynolds: {mean: 9.065, std: 0.1338}
+  output_scale: {nut: 1.045e-07}

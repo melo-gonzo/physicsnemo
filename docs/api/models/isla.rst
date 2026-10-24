@@ -69,11 +69,15 @@ Mesh API
 case per call, no batch axis. The boundary is a mapping of
 :class:`~physicsnemo.mesh.Mesh` objects keyed by declared boundary-condition
 name (each a ``Mesh[dim - 1, dim]`` whose cells have normals); the per-case data is
-a ``TensorDict`` or mapping; for an interior task (``interior=True``) the
-prediction points are a point-cloud ``Mesh``, of which only the points are
-read, or a bare ``(N, dim)`` tensor. The result is a point-cloud ``Mesh``
-whose ``point_data`` holds the declared outputs (on a surface task at the
-given conditions' cells, the conditions in sorted name order). Every constructor argument
+a ``TensorDict`` or mapping. Both tasks read every boundary they are given;
+where the outputs are is the second argument: for an interior task
+(``interior=True``) the prediction points, a point-cloud ``Mesh``, of which only
+the points are read, or a bare ``(N, dim)`` tensor; for a surface task the names
+of the boundaries at whose cells the outputs are predicted
+(``prediction_boundaries``), the other boundaries being read as conditions only.
+The result is a point-cloud ``Mesh`` whose ``point_data`` holds the declared
+outputs (on a surface task at the prediction boundaries' cells, those boundaries
+in sorted name order). Every constructor argument
 and every ``forward`` input is keyword-only. The reference configuration on a
 surface task is the class defaults (``hidden=512``, ``n_layers=12``,
 ``n_slices=512``), as the recipe configures it:
@@ -82,14 +86,15 @@ surface task is the class defaults (``hidden=512``, ``n_layers=12``,
 
     model = ISLA(
         output_schema={"pressure": {"rank": 0}, "wss": {"rank": 1}},  # a scalar and a vector field
-        boundary_schemas={"vehicle": {}},  # one boundary condition, no per-cell fields
+        boundary_schemas={"vehicle": {}, "floor": {}, "inlet": {}},  # conditions without per-cell fields
         global_schema={"U_inf_dir": {"rank": 1}},  # one global direction
     )
     out = model(
-        boundary_meshes={"vehicle": surface},       # Mesh[2, 3], cells with normals
+        boundary_meshes={"vehicle": surface, "floor": floor, "inlet": inlet},  # Mesh[2, 3] each
+        prediction_boundaries=["vehicle"],          # the outputs live on the vehicle
         global_data={"U_inf_dir": direction},       # (3,)
     )
-    out.point_data["pressure"]                      # (N,), one per boundary cell
+    out.point_data["pressure"]                      # (N,), one per vehicle cell
     out.point_data["wss"]                           # (N, 3)
 
 A tensor-valued target is declared with its rank

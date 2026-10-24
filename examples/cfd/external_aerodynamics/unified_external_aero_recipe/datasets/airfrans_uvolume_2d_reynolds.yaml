@@ -37,17 +37,25 @@
 # interior points, the airfoil polyline, the in-plane boundary normals, the SDF normals and the velocity target carry two
 # components and the model runs its native two-dimensional path (pair with conf/model/isla_volume_airfrans.yaml, dim: 2).
 # Everything else (reader, non-dimensionalization, nut normalization, splits, targets) is airfrans_volume.yaml verbatim.
+# AF-WHOLE (2026-10-23): ISLA reads the whole boundary of the PDE domain, the airfoil and the far field. The case
+# files store the airfoil and the release's cropped interior; the far field (the freestream condition on the outer
+# curve, 200 chords out) is the raw release's <case>/<case>_freestream.vtp under raw_datadir, read by the reader as
+# boundary `freestream`, geometry only (its U, p and nut are solution values), in the interior's plane z = 0.
 train_datadir: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/airfrans_pdmsh
 manifest: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/airfrans_pdmsh/manifest.json
+raw_datadir: /scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/airfrans/Dataset
 pipeline:
   reader:
-    _target_: ${dp:DomainMeshReader}
+    _target_: ${dp:VtkBoundaryDomainMeshReader}
     path: ${train_datadir}
     pattern: "airFoil2D_SST_*/*.pdmsh"
     # No reader caps: the interior (156k to 210k points) and the airfoil polyline are read whole; the
     # interior draw is the first transform's.
     drop_interior_cells: true
     drop_in_file_boundaries: false
+    vtk_boundaries:                   # AF-WHOLE: the far field from the raw release, beside the file's airfoil
+      freestream: ${raw_datadir}/{case}/{case}_freestream.vtp
+    vtk_plane_axis: 2                 # the release stores its slice at z = 0.5; the case files at z = 0
   transforms:
     - _target_: ${dp:SubsampleMesh}   # AF-UNIFORM: a uniform random ${sampling_resolution} interior points, before anything reads them
       n_points: ${sampling_resolution}  # n_points reaches every sub-mesh: the airfoil (at most 1,217 points) is below it and kept whole
@@ -80,6 +88,11 @@ targets:
 # (examples/cfd/isla/results/aerozoo_dataset/isla_constants_fit.py, code 6c3aac5a8), 2026-10-20.
 # The same as airfrans_volume_2d.yaml's: the same train cases, and L, U and nut / (U L) do not depend on the pose or
 # on the boundary or interior draw (the airfoil is kept whole).
+# AF-WHOLE (2026-10-23): refit with the far field, so L is the RMS pairwise distance of the airfoil and the far
+# field (305.3 chords on every case; the airfoil's alone 0.41-0.44): the same fit on reynolds_train (504 cases), from LHR
+# cpu-short job 361288 (isla_constants_fit.py airfrans on all 1,000 cases, branch psharpe/isla-whole-boundary)
+# and airfrans_fit per split (examples/cfd/isla/results/aerozoo_dataset/airfrans_whole_constants_fits.json). The values below
+# replace the airfoil-only fit the comment above describes.
 isla_constants:   # AF-EXTRAP: refit on the 504 reynolds_train cases (job 309151); the comment above describes the full-split fit
-  reynolds: {mean: 6.223, std: 0.06224}
-  output_scale: {nut: 7.460e-05}
+  reynolds: {mean: 9.084, std: 0.06181}
+  output_scale: {nut: 1.038e-07}

@@ -63,6 +63,7 @@ def test_token_padding_leaves_outputs_and_gradients_unchanged(task, monkeypatch)
             m(
                 boundary_meshes={"wall": mesh},
                 prediction_points=q,
+                prediction_boundaries=None if q is not None else ["wall"],
                 global_data={"g": drv},
             )
         )
@@ -119,6 +120,7 @@ def test_an_aligned_token_count_runs_no_padding(task):
                 m(
                     boundary_meshes={"wall": soup(pts, nrm, w)},
                     prediction_points=q,
+                    prediction_boundaries=None if nq else ["wall"],
                     global_data={"g": drv},
                 )
             )

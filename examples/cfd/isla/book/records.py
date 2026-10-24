@@ -64,6 +64,16 @@ FOLDER = {
     "dtt_fast_compile": "campaigns_2026-10-23",
     "dtt_fast_verify_fusedread": "campaigns_2026-10-23",
     "dtt_fast_integration": "campaigns_2026-10-23",
+    "boundary_merge": "campaigns_2026-10-23",
+    "dtt_pose": "campaigns_2026-10-23",
+    "dtt_pose_exp": "campaigns_2026-10-23",
+    "geo_thin": "campaigns_2026-10-23",
+    "hl_dup": "campaigns_2026-10-23",
+    "dtt_fast_final": "campaigns_2026-10-23",
+    "nearwall": "campaigns_2026-10-23",
+    "geo_thin_final": "campaigns_2026-10-23",
+    "nearwall_final": "campaigns_2026-10-23",
+    "dtt_fast_bf16diag": "campaigns_2026-10-23",
 }
 
 

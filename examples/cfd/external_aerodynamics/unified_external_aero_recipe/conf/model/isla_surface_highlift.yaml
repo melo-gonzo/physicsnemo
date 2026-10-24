@@ -46,6 +46,7 @@ compile_options:
 forward_kwargs:
   boundary_meshes:
     vehicle: boundaries.vehicle       # Mesh[2, 3]; centroids, normals and measures are read from it
+  prediction_boundaries: {literal: [vehicle]}   # the outputs are predicted at the wing's cells (the files store no other boundary)
   global_data: global_data            # the case's TensorDict; the model selects its declared leaves
 
 model:
