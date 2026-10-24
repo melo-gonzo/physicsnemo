@@ -256,7 +256,7 @@ def forest_tables(
     cells = by_code[torch.argsort(octant[by_code], stable=True)]
     sorted_codes = codes[cells].contiguous()
     pos_tree = octant[cells].contiguous()
-    cells_per = torch.bincount(octant, minlength=n_oct)
+    cells_per = torch.zeros(n_oct, dtype=torch.long, device=device).index_add_(0, octant, torch.ones_like(octant))
     tree_end = torch.cumsum(cells_per, 0)
     tree_start = tree_end - cells_per
 
@@ -410,7 +410,9 @@ def forest_tables(
     return {
         "trees": trees,
         "tree_cells": tree_cells,
-        "node_offset": torch.tensor(m_bounds, device=device),
+        "node_offset": F.pad(
+            torch.cumsum(nodes_per[torch.nonzero_static(cells_per, size=len(trees_h))[:, 0]], 0), (1, 0)
+        ),
         "cells": cells,
         "range_start": range_start,
         "range_count": range_count,
