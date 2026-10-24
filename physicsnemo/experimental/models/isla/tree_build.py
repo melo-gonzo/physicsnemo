@@ -58,9 +58,11 @@ logger = logging.getLogger(__name__)
 #: Bits of a node key below the depth: the node's first sorted position.
 _START_BITS = 40
 #: Depth bins of the one readback; a forest with internal nodes at depth
-#: ``_DEPTH_BINS - 2`` (whose children's paths would not fit an int64 key) is left to
-#: the reference build.
+#: ``_DEPTH_BINS - 2`` is left to the reference build (one level short of what a
+#: node's 6-bit key depth and int64 path hold).
 _DEPTH_BINS = 64
+#: Cells the build takes: Warp's thread ids are int32.
+_MAX_CELLS = 2**31
 
 _LOGGED: set = set()
 
@@ -71,6 +73,8 @@ def resolve_tree_build(build: str, points: torch.Tensor) -> str:
     dimension is 2 or 3, else the reference. Logged once per (device type, choice)."""
     if build not in ("auto", "reference", "fast"):
         raise ValueError(f"build must be 'auto', 'reference' or 'fast', got {build!r}")
+    if build == "fast" and points.shape[-1] not in _MORTON_SPREAD_STEPS:
+        raise ValueError(f"the fast build does not take {points.shape[-1]}-D points")
     if build != "auto":
         return build
     ok = points.is_cuda and HAS_WARP and points.shape[-1] in (2, 3)
@@ -243,10 +247,10 @@ def forest_tables(
     """The fields of :class:`~.tree_read.BoundaryForest` that its trees make, with the
     nodes' raw mean normal as ``mean_n``, for the cells at lab ``points`` ``(N, d)``
     (``points_f`` in the boundary's frame, ``octant`` their normals' octants), or
-    ``None`` where the reference build must make them (no cells, or a tree too deep
-    for a node path)."""
+    ``None`` where the reference build must make them (no cells, ``_MAX_CELLS`` or
+    more, or a tree too deep for a node path)."""
     n, d = points_f.shape
-    if n == 0 or leaf_size < 1:
+    if n == 0 or n >= _MAX_CELLS or leaf_size < 1:
         return None
     device = points.device
     n_oct = 2**d

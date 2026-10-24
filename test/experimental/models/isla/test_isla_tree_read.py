@@ -973,6 +973,33 @@ def test_tree_build_auto_resolves_to_the_reference_off_cuda():
     assert all(torch.equal(v, fast[k]) for k, v in ref.items())
 
 
+def test_fast_forest_build_refuses_what_it_cannot_build(monkeypatch):
+    """A forced "fast" build refuses a dimension it has no Morton code for ("auto"
+    picks the reference there), and from its cell limit (Warp's int32 thread ids) on
+    it leaves the forest to the reference build."""
+    import physicsnemo.experimental.models.isla.tree_build as tree_build
+
+    with pytest.raises(ValueError, match="does not take 4-D points"):
+        tree_build.resolve_tree_build("fast", torch.zeros(4, 4))
+    assert tree_build.resolve_tree_build("auto", torch.zeros(4, 4)) == "reference"
+    tables = []
+
+    def spy(*args, **kwargs):
+        tables.append(tree_build.forest_tables(*args, **kwargs))
+        return tables[-1]
+
+    monkeypatch.setattr(tree_read, "forest_tables", spy)
+    pts, nrm, w, _ = cloud(300, d=3, seed=5, dtype=torch.float32)
+    for limit in (301, 300):
+        monkeypatch.setattr(tree_build, "_MAX_CELLS", limit)
+        forests = [
+            BoundaryForest.build(pts, w, nrm, None, theta=1.0, leaf_size=4, build=b)
+            for b in ("reference", "fast")
+        ]
+        assert not _forest_differences(*forests)
+    assert tables[0] is not None and tables[1] is None
+
+
 @cuda_only
 @_PRECISIONS
 @pytest.mark.parametrize("dim", [3, 2])
