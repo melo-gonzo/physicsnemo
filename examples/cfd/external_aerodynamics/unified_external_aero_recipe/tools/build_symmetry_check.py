@@ -41,9 +41,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from dedup import connectivity_fingerprint, points_fingerprint  # noqa: E402
-from symmetry import check_root, load_root_cap, read_memmap_mesh  # noqa: E402
+from symmetry import (  # noqa: E402
+    RECORD_FORMAT,
+    check_root,
+    load_root_cap,
+    read_memmap_mesh,
+)
 
-FORMAT = "hl-symmetry-check/1"
 #: The stored wing below a case folder.
 WING = "*.pdmsh/_tensordict/boundaries/vehicle"
 #: The part lines' keys that describe the cap, not the case (kept out of the record's cases).
@@ -160,7 +164,7 @@ def merge(a, root: Path) -> None:
             f"unknown ones (e.g. {unknown[:5]})"
         )
     record = {
-        "format": FORMAT,
+        "format": RECORD_FORMAT,
         "dataset_root": str(root),
         "cap": {
             "file": cap.file,

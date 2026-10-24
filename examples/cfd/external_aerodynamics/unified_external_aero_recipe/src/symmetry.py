@@ -42,7 +42,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from dedup import CHUNK
+from dedup import CHUNK, connectivity_fingerprint, points_fingerprint
 
 #: The source STL files below the dataset root; the first in sorted order is read.
 STL_GLOB = "geo_*/*.stl.pmsh"
@@ -320,3 +320,44 @@ def check_root(points, cells, cap: RootCap, y_eps: float = 1e-3) -> dict:
         result["max_edge_distance"] is None or result["max_edge_distance"] <= cap.tau
     )
     return result
+
+
+#: The record's format (``tools/build_symmetry_check.py``).
+RECORD_FORMAT = "hl-symmetry-check/1"
+
+
+@functools.lru_cache(maxsize=None)
+def load_check_record(path: str) -> dict:
+    """The record of ``tools/build_symmetry_check.py`` at ``path``, read once per process."""
+    record = json.loads(Path(path).read_text())
+    if record.get("format") != RECORD_FORMAT:
+        raise ValueError(
+            f"{path}: format {record.get('format')!r}, expected {RECORD_FORMAT!r}"
+        )
+    return record
+
+
+def recorded_verdict(
+    record: dict, cap: RootCap, case: str, points, cells, y_eps: float = 1e-3
+) -> dict:
+    """``case``'s entry of the record, after checking that the record was made with this cap,
+    tolerance and ``y_eps`` and that the case's connectivity and points fingerprints match it."""
+    made = (record["cap"]["md5"], record["tolerance"]["tau"], record["cap"]["y_eps"])
+    if made != (cap.md5, cap.tau, y_eps):
+        raise ValueError(
+            f"symmetry check record: made with cap md5, tau and y_eps {made}, not the loaded "
+            f"{(cap.md5, cap.tau, y_eps)}"
+        )
+    if case not in record["cases"]:
+        raise KeyError(f"symmetry check record: no verdict for case {case!r}")
+    entry = record["cases"][case]
+    for key, got in (
+        ("connectivity_fingerprint", connectivity_fingerprint(cells)),
+        ("points_fingerprint", points_fingerprint(points)),
+    ):
+        if entry[key] != got:
+            raise ValueError(
+                f"symmetry check record: case {case!r} was checked on another wing ({key} "
+                f"{entry[key]!r}, this case {got!r}); rebuild the record"
+            )
+    return entry

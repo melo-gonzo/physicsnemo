@@ -32,6 +32,13 @@ train_datadir: ${dataset_paths.highlift_aero_ml}
 # manifest: <path to a {train, val} manifest JSON built from the dataset-root
 #           manifest's curated split lists (e.g. full_train / full_val)>
 
+# The hemisphere of the PDE domain's far field, given to both AddSymmetryPlane (its equator) and
+# AddHemisphereBoundaries (its inlet and outlet) from here, so the plane's seam is theirs bit for bit.
+hemisphere:
+  radius: 24533.41796875
+  n_theta: 64
+  n_phi: 32
+
 pipeline:
   reader:
     _target_: ${dp:MeshReaderWithGlobalData}
@@ -46,6 +53,22 @@ pipeline:
     # (checked against each case's connectivity at every load). See src/dedup.py.
     drop_duplicate_cells: true
     duplicate_cell_masks: ${dataset_paths.highlift_aero_ml_duplicate_masks}
+    # The symmetry plane y = 0, the third boundary of the PDE domain, which no case file stores:
+    # the hemisphere's equatorial disk minus the wing's root section, whose outline is the closed
+    # root cap of the dataset's own source STL (the first geo_*/*.stl.pmsh, accepted only with one
+    # of the two cap keys below; Peter's ruling of 2026-10-24). Built in the reader from the whole
+    # stored wing, in raw inches, for each case whose own stored root lies on that outline (every
+    # on-plane vertex and open edge within the tolerance derived in src/symmetry.py), as the record
+    # of tools/build_symmetry_check.py states (checked against each case's fingerprints at every
+    # load); a case that fails gets no plane, logged. See AddSymmetryPlane.
+    whole_surface_transforms:
+      - _target_: ${dp:AddSymmetryPlane}
+        radius: ${hemisphere.radius}
+        n_theta: ${hemisphere.n_theta}
+        n_phi: ${hemisphere.n_phi}
+        cap_root: ${train_datadir}
+        cap_md5: [d3b5c68bdac50aa7c0cc688443795dc2, 480578a2e673fc572e0b2d3194442721]
+        check_record: ${dataset_paths.highlift_aero_ml_symmetry_check}
   augmentations:
     - _target_: ${dp:RandomRotateMesh}
       axes: ["z"]
@@ -74,14 +97,13 @@ pipeline:
     # wrote them with. Every case of an angle of attack stores the same U_inf, bit for bit, so the
     # 1,800 cases have 10 far fields, each equal to curator's own. Built first, in the
     # files' raw inches, so every transform and pose below moves it with the wing. The symmetry
-    # plane y = 0 is not built: its hole at the wing root needs the root's outline, and the stored
-    # roots are open on every geometry but LHC001 (a rebuild of the outline from the stored
-    # vertices is being prototyped), so no case reads one until it can be built for every case.
-    # Models that read only `interior` and `boundaries.vehicle` see what they saw before.
+    # plane y = 0 is built in the reader (AddSymmetryPlane above), beside the wing, so the same
+    # transforms move it. Models that read only `interior` and `boundaries.vehicle` see what they
+    # saw before.
     - _target_: ${dp:AddHemisphereBoundaries}
-      radius: 24533.41796875
-      n_theta: 64
-      n_phi: 32
+      radius: ${hemisphere.radius}
+      n_theta: ${hemisphere.n_theta}
+      n_phi: ${hemisphere.n_phi}
     # Unit freestream direction as a NEW global leaf U_inf_dir (U_inf stays
     # physical). Consumed as the unit global vector input by ISLA
     # (global_schema: U_inf_dir); inert for models that do not declare it.
