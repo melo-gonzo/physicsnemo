@@ -58,6 +58,12 @@ FOLDER = {
     "geo_fast": "campaigns_2026-10-23",
     "align8": "campaigns_2026-10-23",
     "bc_sidecar": "campaigns_2026-10-23",
+    "geo_degen": "campaigns_2026-10-23",
+    "fast_merge": "campaigns_2026-10-23",
+    "dtt_knobs": "campaigns_2026-10-23",
+    "dtt_fast_compile": "campaigns_2026-10-23",
+    "dtt_fast_verify_fusedread": "campaigns_2026-10-23",
+    "dtt_fast_integration": "campaigns_2026-10-23",
 }
 
 

@@ -271,7 +271,8 @@ condition's cells (centroid, normal, measure, and the invariants of its declared
 declared condition, so that the cells of all conditions, and the in-model
 draw's sample of them, are one token set with static widths) and the
 prediction points are TensorDicts concatenated into one token state over
-``(batch, token)``, the field inputs enter the invariants and the head's
+``(batch, token)`` (completed to a multiple of :data:`TOKEN_ALIGNMENT` tokens by
+padding tokens of no measure that nothing reads), the field inputs enter the invariants and the head's
 coefficients leave as the output fields through cached, schema-ordered
 :class:`~tensordict.PackLayout` objects, and the output ``Mesh`` is built from them.
 With ``query_independent=False`` the whole model, ``Mesh`` inputs and output
@@ -295,6 +296,7 @@ from numbers import Real
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from jaxtyping import Float
 from tensordict import TensorDict
 
@@ -357,6 +359,13 @@ BOUNDARY_TOKENS = 200_000
 #: The systematic draw's start in evaluation mode (the middle of its range), so
 #: that inference is deterministic.
 EVAL_START = 0.5
+#: The token axis is completed to a multiple of this count by padding tokens
+#: (:func:`_pad_tokens`). On CUDA in bfloat16 the slice blocks' GEMMs that reduce
+#: over the token axis run on cuBLAS's fast kernels only when its rows span a
+#: multiple of 16 bytes (8 tokens), and the LayerNorm backward's weight-gradient
+#: reduction over more than 65,536 rows takes its aligned path only for a multiple
+#: of its 32-row tile.
+TOKEN_ALIGNMENT = 32
 
 
 ### Inductor options of the compiled slice blocks (compile_blocks). Mix-order
@@ -392,6 +401,29 @@ def _hint_token_axis(n, widths) -> None:
     if torch.compiler.is_compiling():
         for k in widths:
             torch._check(k * n % n == 0)
+
+
+def _pad_tokens(tokens: TensorDict, alignment: int) -> TensorDict:
+    """``tokens`` ``(B, N)`` followed by ``-N mod alignment`` padding tokens: every
+    field zero and the log-weight ``-inf``. Like passive tokens they hold no measure
+    in any softmax over points, so no other token reads them, and no output is read
+    from them: every output and gradient is the unpadded one up to the summation
+    order of the longer reductions."""
+    b, n = tokens.batch_size
+    pad = -n % alignment
+    ### In eager mode an aligned count keeps the tokens as they are. A compiled graph
+    ### always pads: a test of pad == 0 would guard the dynamic token count on it.
+    if not torch.compiler.is_compiling() and pad == 0:
+        return tokens
+
+    ### F.pad rather than a concatenated block of pad tokens: under dynamic shapes
+    ### a separate (B, pad, .) tensor makes torch.compile guard on pad == 0.
+    def fill(v, value=0.0):
+        return F.pad(v, (0, 0) * (v.dim() - 2) + (0, pad), value=value)
+
+    padded = TensorDict({k: fill(v) for k, v in tokens.items()}, batch_size=[b, n + pad])
+    padded.set("log_w", fill(tokens["log_w"], -math.inf))
+    return padded
 
 
 def _log_count(n: int, like: torch.Tensor) -> float | torch.Tensor:
@@ -1978,8 +2010,9 @@ class ISLA(Module):
         unit (``None``: measured on the given boundary tokens).
         Returns the declared outputs over the ``(B, N_out)`` tokens the head reads.
 
-        The token state is one TensorDict over ``(B, N)``, the boundary tokens
-        then the prediction-point tokens, with fields ``h``, ``r``, ``n_hat``,
+        The token state is one TensorDict over ``(B, N)``, the boundary tokens,
+        the prediction-point tokens, then the padding tokens that complete ``N``
+        to a multiple of :data:`TOKEN_ALIGNMENT` (:func:`_pad_tokens`), with fields ``h``, ``r``, ``n_hat``,
         ``g_hat``, ``log_w`` and the block-level ``vecs`` and ``tens``; the slice
         blocks take its tensors (module docstring, *Data layout*).
         """
@@ -1995,6 +2028,12 @@ class ISLA(Module):
                 kernel_pairs = self._tree_read_pairs(tokens, q_tokens, q_wall, g_unit)
             tokens = torch.cat([tokens, q_tokens], dim=1)
             _hint_token_axis(n + q_tokens.shape[1], self._token_widths)
+        padded = _pad_tokens(tokens, TOKEN_ALIGNMENT)
+        ### The end of the real tokens when padding follows them, None when nothing was
+        ### padded: then every read below is that of the unpadded token set.
+        n_real = None if padded is tokens else tokens.batch_size[1]
+        tokens = padded
+        _hint_token_axis(tokens.batch_size[1], self._token_widths)
 
         h, log_w, r = tokens["h"], tokens["log_w"], tokens["r"]
         vecs, tens = tokens.get("vecs", None), tokens.get("tens", None)
@@ -2003,17 +2042,21 @@ class ISLA(Module):
             if self.kernel_reads is not None:
                 ### The points' residual update from the boundary cells' states at this
                 ### depth; the boundary tokens (and so the slices) are untouched.
-                h_b, h_p = h[:, :n_boundary], h[:, n_boundary:]
+                h_b, h_p = h[:, :n_boundary], h[:, n_boundary:n_real]
                 delta = self.kernel_reads[i](
                     h_b.reshape(-1, h.shape[-1]), h_p.reshape(-1, h.shape[-1]), kernel_pairs
                 )
-                h = torch.cat([h_b, h_p + delta.view_as(h_p)], dim=1)
+                parts = [h_b, h_p + delta.view_as(h_p)]
+                h = torch.cat(parts if n_real is None else [*parts, h[:, n_real:]], dim=1)
         tokens.set("h", h)
 
         ### The tokens the head reads: the prediction points in the interior mode,
         ### every token otherwise. The head frame builds its slice anchors from ALL
         ### tokens (r, log_w and h).
-        out = tokens if query is None else tokens[:, n_boundary:]
+        if query is not None:
+            out = tokens[:, n_boundary:n_real]
+        else:
+            out = tokens if n_real is None else tokens[:, :n_real]
         ### The frame is built after the head's coefficients: autograd accumulates the
         ### gradient of h over its consumers in the order they were built.
         return self._head(out, (lambda: self._frame_anchors(h, log_w, r)) if self.needs_frame else None)

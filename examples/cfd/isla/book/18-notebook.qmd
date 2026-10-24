@@ -40483,6 +40483,10 @@ Cost: 7.76 GPU-h of a 30 GPU-h cap, in 16 jobs (359447 to 363922). fb263fa29 alo
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-tie-2026-10-24/SECOND_READ_TIE.md).*
 
+**Later (2026-10-24).** GEO-DEGEN's fix went onto psharpe/isla-geo-fast, and the supervisor merged the fast path with it
+into psharpe/isla as 7213c70c5 at 04:53 EDT; the fast path is the default where Triton imports on CUDA
+(@sec-nb-geo-degen, @sec-nb-geo-fast-merged).
+
 ## 2026-10-24 — TIE-EXP read as registered: the tie rules restore exact flip symmetry on the lug and Tensile2d, cost no native accuracy on either, and carry most of the lug's pose sensitivity (posed ÷ native 1.456 to 1.0019); the registered decision rule reads adopt {#sec-nb-tie-exp-read}
 
 **The read.** Registered read of PREREG.md section 4 with amendments A1 to A9 (final md5 f0e70cb2;
@@ -40701,6 +40705,349 @@ reference on every check, replaces those costs where CUDA and Triton are present
 zero-area cells; its own step is 1.36 times the standings' on the DrivAerML vehicle case (@sec-nb-geo-fast).
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-tie-2026-10-24/SECOND_READ_TIE.md).*
+
+## 2026-10-24 — DTT-KNOBS stage 1, inference only: on its trained checkpoints ISLA-DTT's opening angle acts as a trained constant (the exact read scores 1.8 to 4.7 times worse than θ = 1), a cheaper read saves time only at car scale (400,000 DrivAerML Volume points fit one GB300 at θ ≥ 1.5 and not at θ = 1, where the memory fit puts the limit at 349,000), the read's inference-time slack is in its kernel basis, and the gap to interacting ISLA is one of fit that no inference-time setting of the read explains {#sec-nb-dtt-knobs-stage1}
+
+**Question.** Peter's ruling of 23:26 EDT 2026-10-23: "If we can make ISLA-DTT practical in the long term, that would be
+awesome" (@sec-nb-surface-bc).
+Which of its boundary read's settings trade accuracy for cost, and where does its accuracy gap to interacting ISLA come
+from? Stage 1 trains nothing: it reads the trained checkpoints at other settings and prices the read. Nothing is adopted.
+
+**Design** (scratch/isla-dtt-knobs-2026-10-23/, STAGE1.md and six child reports). The checkpoints are the AirfRANS pair
+r090eag_af_dtt (eager-trained, the standing's ISLA-DTT arm) and the lug pair r090fix_lug_dtt, seeds 42 and 43, each trained
+at θ = 1 with leaves of 4 cells, read against r090eag_af_isla and r090fix_lug_isla. Every read ran on the code its run
+trained with, in float32, on the standing's sets in the scorer's order (AirfRANS `full_test`, 200 cases; lug `test`, 600),
+native and posed; a setting changed only on a copy of the model in the probe's process. Gate: each harness reproduced the
+standing's per-run scores before any other number was read, and every scoring part passed (AirfRANS within 1.8e-6
+relative; lug 0.00221933 / 0.00183431 against the standing's 0.002219 / 0.001834). The cost model, which scores nothing,
+ran random weights and bfloat16 training steps on psharpe/isla-geo-bundle code with the whole boundary. There was no
+acceptance bar beyond the gate.
+21.76 GPU-h of the 30-GPU-h cap on LHR; production jobs 363160 and 364211 (sensitivity), 363435 and 364009 (cost), 363020
+and 363328 (capacity), 363336, 363640 and 363641 (read order), 363147, 363156 and 363365 (gap), 364468 (forest precision).
+
+**Result 1: θ acts as a trained constant.** Read natively, both datasets score best at θ = 1 on every field and both
+seeds, the error rises on both sides of θ = 1, and the exact read is the worst native setting (sens/sens_table.md):
+
+| θ | AirfRANS pressure | AirfRANS velocity (in-plane) | AirfRANS eddy viscosity | lug von Mises |
+|---|---|---|---|---|
+| 0 (exact) | 2.71 / 2.36 | 1.79 / 2.04 | 3.54 / 4.68 | 4.62 / 3.47 |
+| 0.25 | 2.07 / 1.86 | 1.58 / 1.73 | 3.17 / 3.98 | 2.90 / 2.53 |
+| 0.5 | 1.41 / 1.40 | 1.18 / 1.23 | 1.27 / 1.44 | 1.97 / 2.00 |
+| 0.75 | 1.07 / 1.03 | 1.03 / 1.05 | 1.04 / 1.08 | 1.24 / 1.29 |
+| 1.25 | 1.18 / 1.20 | 1.04 / 1.07 | 1.07 / 1.07 | 1.39 / 1.41 |
+| 1.5 | 1.35 / 1.35 | 1.10 / 1.14 | 1.16 / 1.17 | 2.12 / 1.94 |
+| 2 | 1.86 / 1.91 | 1.30 / 1.33 | 1.38 / 1.44 | 3.20 / 2.79 |
+
+Each entry is the native error at θ ÷ the same checkpoint's error at θ = 1, seeds 42 / 43, float32, eager. This is E2
+seen from the other side: checkpoints trained with the dense read moved 2 to 20 times when read through the tree, and these
+tree-trained ones move 1.8 to 4.7 times when read exactly. So the knob rule's test, whether the error converges as θ
+tightens, needs models trained at each θ. The leaf size is not shown to be trained in: leaves of 2 or 8 cells change
+AirfRANS by at most 0.1 %; on the lug, leaf 8 changes it by at most 0.8 % and leaf 2 by +2 % (seed 42) and +33 % (seed
+43). Pairs per point at θ = 1 / 2 / 0.5 / 0 are 21.6 / 15.0 / 34.7 / 1,007 on AirfRANS and 118 / 54 / 300 /
+6,525 on the lug, yet the eager forward time is flat for every θ > 0 (AirfRANS 475 to 498 ms, lug 195 to 252 ms; the exact
+read 751 and 353 ms).
+
+**Result 2: a cheaper read pays only at car scale** (cost/cost_table.md). Pairs per point follow A θ^-p leaf^-r (log2 N −
+c) for cluster nodes plus a near-cell term; on DrivAerML p = 0.91, and on the volume datasets nodes are 93 to 99 % of
+pairs at leaf 4. The step costs 5.16 ms and 0.265 GiB per million pairs per block on DrivAerML (held-out memory error at
+most 0.4 %). At 400,000 prediction points on the DrivAerML Volume task with the whole boundary, a GB300 (274 GiB usable)
+ran θ = 3 (1,837 ms / 248 GiB), θ = 2 (2,070 / 260) and θ = 1.5 (2,734 / 273, at the limit); θ = 1 ran out of memory, and
+the memory fit puts θ = 1.25 at 285 GiB. By that fit, the largest counts that fit are 349,000 at θ = 1, 380,000 at 1.25,
+431,000 at 2 and 462,000 at 3 (projections, not runs). The settings that fit take 2.3 to 3.4 times interacting ISLA's
+796 ms at 400,000 (measured with the car alone). The normal-coherence test is vacuous
+at θ ≥ 0.919 in 3D and 0.765 in 2D, because inside one sign octant |mean n| ≥ 1/√d; no node is refused at θ ≥ 1
+on any dataset; below that bound θ tightens two tests at once.
+
+**Result 3: at inference, the read's slack is in the kernel basis** (cap/cap_table.md; inference ablations of models
+trained with every read and head, not retrains). The 16-function basis has effective rank 4 on AirfRANS and 1.5 on the
+lug. Projected onto 8 directions it costs 1.11 / 1.28 times on AirfRANS and 1.9 / 3.6 times on the lug. Keeping the 4
+strongest heads costs 6 to 9 times, although they carry 55 to 100 % of each block's update energy. Every read carries
+part of the trained model, except the lug's first two (blocks 0 and 1), which are unused in both seeds. Reading after
+every second block costs 15.5 / 11.5 times on AirfRANS and 21 / 31 times on the lug, the best of the forms with at most 6
+reads. The 12 per-block reads alone are 9 % of the AirfRANS step and 26 % of the lug's (eager, with the shared forest, walk
+and basis still running, so lower bounds).
+
+**Result 4: at θ = 1 the read is far from the exact read** (order/order_table.md, AirfRANS, 50 cases per seed). Each
+block's read update differs from the exact read on the same states by 3.9 to 27 % (median over points), mostly through the
+clusters' mean values. The difference falls slowly where the model reads, as θ^0.33 to θ^0.69 from θ = 2 to 0.5,
+and the median reaches 1 % only at θ 0.08 to 0.26 (pooled over seeds). A second-order cluster correction (H1) has a worse
+median than the monopole's at every θ ≥ 1 in every block (1.01 to 3.81 times at θ = 1) and a worse p95 at every θ ≥ 0.5;
+end to end at θ = 1 it scores 5.6 to 24 times worse. No H1 kernel is worth building unless a model retrained with it beats
+the monopole at θ ≥ 1.
+
+**Result 5: the gap to interacting ISLA is one of fit** (gap/gap_table.md, treeprec/treeprec_table.md). ISLA-DTT ÷ ISLA on
+the first 200 / 600 training cases is 0.987 / 1.083 / 1.413 on AirfRANS (pressure / velocity / eddy viscosity) and 1.434 on
+the lug, against 0.994 / 1.129 / 1.342 and 1.394 on test; the AirfRANS training subset covers Re 2 to 3e6 only, and the
+test's low-Re quartile reads alike. On AirfRANS the gap is a smooth bias, not per-point tree noise, except eddy viscosity
+beyond 0.1 chord, where its gap sits (roughness 0.076 / 0.112): in-plane velocity is 1.95 / 1.99 times ISLA's error in
+the wake (seeds 42 / 43), and eddy viscosity 1.48 / 2.47 times beyond one chord, where ISLA-DTT's own two seeds differ by
+1.72 times. The eddy-viscosity gap's share in the wake rests on seed 43 (wake ratios 1.02 / 1.35). Near the wall eddy
+viscosity is 1.20 times but carries at most 5 % of the gap. On the lug the float32 gap covers 96 % of cases and sits 90 %
+on surface nodes. Scored in bfloat16 the lug's two forms read level (1.043 [1.096, 0.989]), mostly because bfloat16
+read-out noise (about 0.0033, twice the float32 errors) compresses the gap toward 1; ISLA-DTT is still worse in 73 % of
+cases and on the surface (1.11). This says nothing on whether bfloat16 training causes the gap.
+Ruled out as causes: every inference-time θ (beyond one chord the gap is smallest at θ = 1, 1.41 / 1.72 / 2.05, against
+1.64 / 1.91 / 2.22 at 0.5); the bfloat16 training forest, whose reading widens the gap slightly (lug 1.394 to 1.399,
+AirfRANS eddy viscosity 1.342 to 1.351); and the stored signed distance and the old query embedding (ATTRIB-090 §3c).
+C_f = 0.131 / 0.121 (pressure / eddy viscosity) of ISLA-DTT's bundle cost stays unattributed; DK-GAP's reading that the
+gap is mostly not a bundle effect is a reading, since C_f on eddy viscosity could be about 40 % of log(1.342) = 0.294.
+Whether a retrained finer read closes the gap is untested.
+
+**Two code facts found on the way** (CODE_FACTS.md; handed to DTT-POSE, no fix proposed). Under bfloat16 training the
+forest is built from bfloat16-rounded coordinates: `points @ frame` in `BoundaryForest.build` and `point_pairs` runs under
+the caller's autocast, so the trees' coordinates, boxes and node measures are bfloat16, while the box diameters and the
+walk's box table stay float32. Every float32 score therefore reads a different forest: 82 % of AirfRANS points and 99 % of
+lug points get a different list, and native error moves by 0.2 to 0.7 % (pressure level). The bfloat16 forest is not
+pose-invariant: on the lug's posed set it doubles the error (1.90 [1.95, 1.85]); which of two candidate mechanisms
+dominates is untested. Second, the lug's posed float32 score differs from native at every θ > 0 (1.53 / 1.98 at θ = 1,
+1.0000 at θ = 0, with 1.29 times the pairs posed). 84 % of the lug's cells have a normal component below 1e-5 in the
+canonical frame (measured under bfloat16 autocast in job 364211; the float32 share was not measured), so their sign
+octant rests on rounding residues. That the pose flips those signs and so builds a different forest is inferred, not
+tested: posed octant labels were not compared, no tie-break was tried, and the frame's own near-ties (skews about 1.2e-6
+against the 1e-9 threshold) are not excluded.
+
+**Consequence.** An inference probe cannot price a retrain: θ is trained in, and the capacity ablations rank models
+trained with every read and head. Stage 2 is pre-registered and was not yet run when stage 1 was read: retrained AirfRANS arms at θ = 2 and θ = 0.5,
+reads after every second block, a kernel basis of 8, the exact read, and ISLA-DTT without scales on a standardized inlet
+speed, each against the standing's pair (scratch/isla-dtt-knobs-2026-10-23/PREREG.md, md5 84a25280: about 1,010 GPU-h
+without the exact read, which adds about 330 to 390 GPU-h and is submitted only if its smoke prices it at 300 or less;
+the supervisor's amendment moved that gate to 400, @sec-nb-dtt-knobs-prereg).
+The θ = 2, 1, 0.5, 0 arms form the knob rule's ladder: if the error falls toward the exact-trained model's as θ
+tightens, the tree read earns its credit as a convergent approximation; if the exact-trained model is no better, θ is a
+pure cost knob on AirfRANS. The second dataset waits for the AirfRANS reads.
+
+**For the book.** No standing changes. The DTT ledger row gains the trained-constant reading and the two code facts; 05
+states what θ and the forest's precision do on a trained model; 04 and 20 read the exact read's error ratio on the
+standing's own pair; 19 adds the DrivAerML Volume memory ladder; 12 and 16 say where the gap sits; 20 gains the open
+question of a retrained read (@sec-oq-dtt-theta), and 05 states the two code facts as limits of the code as it is, each
+with an In-flight callout for DTT-POSE (records copied to results/campaigns_2026-10-23/dtt_knobs/).
+
+Summary second-read in scratch/isla-dtt-knobs-2026-10-23/STAGE1_REVIEW.md; each child report second-read in its own
+REVIEW.md and revised; this entry drafted by DTT-KNOBS (NOTEBOOK_DRAFT_STAGE1.md, md5 293fbd0b), second-read in
+NOTEBOOK_REVIEW.md and revised.
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-geofast-2026-10-24/SECOND_READ_GEOFAST.md).*
+
+## 2026-10-24 — GEO-DEGEN: a cell of zero area is read as the segment or point its vertices span, bitwise unchanged on every input without one and correct on 291,100 degenerate queries, where the base raised on 38 sets; thin cells of nonzero area and overlapping coplanar cells remain limits {#sec-nb-geo-degen}
+
+**Question.** GEO-FAST found that the reference geometry raises, or silently returns a farther cell, on cells with two
+coincident vertices (@sec-nb-geo-fast). The supervisor's decision (the supervisor's, not Peter's): fix it, do not refuse
+such meshes; a zero-area cell is the set its vertices span, never supplies a normal or an on-wall direction, and adds
+nothing to the winding number. Can the reference and the fast path both do that without changing any output on a mesh
+that has no such cell? Lane GEO-DEGEN, branch psharpe/isla-geo-fast. Records: scratch/isla-geo-degen-2026-10-24/DESIGN.md
+(md5 18c7bec9), RESULTS.md (md5 f151d5ea), FINAL_REPORT.md (md5 c7d099c3); copies in
+results/campaigns_2026-10-23/geo_degen/.
+
+**What was built** (a9592e9a3, the fix; 1086cf42e, covered cells left out; no new custom op, ISLA's version unchanged).
+
+- The flag (`_zero_area`) tests the cross product for exact zero: a float64 filter with Shewchuk's error bound clears most
+  cells, and the cells it leaves get exact products summed as a nonoverlapping expansion. There is no tolerance constant.
+  It is exact for all float32 coordinates and for float64 magnitudes in [2^-485, 2^510].
+- A flagged cell gets NaN planes and corners, so no lower bound of the ball search drops it, and its closest point is the
+  nearer of the two edges between consecutive canonical vertices. (GEO-FAST's "longest edge" rule was right in distance,
+  but at a T-junction it made a feature no mesh cell shares, which changed the direction at 91 of 2,964 queries.)
+- In the exact phase and at ties a flagged cell contributes its distinct vertices and edges, has no normal and parity 0 in
+  the winding number. An on-wall query held only by zero-area cells takes d = 0 and u = 0, the least-norm element of the
+  generalized gradient.
+- A zero-area cell lying along the edges or at a vertex of other cells is dropped by an index test, so the outputs are
+  bitwise those of the mesh without it.
+- The fast path runs the same code on the same values, with the flag permuted into the tree order.
+
+**Checks** (RESULTS.md; every comparison bitwise unless a bound is named).
+
+| check | where | result |
+|---|---|---|
+| a, unchanged on inputs without a zero-area cell, against 0570fc6c8 under a renamed op (op outputs, w, d, u, gradients) | CPU, 50 cases; GB300 365177, 102 cases (DrivAerML vehicle and whole boundary, AeroZoo, 20 lug cases, AirfRANS, Tensile2d) | 0 of 427,884 and 0 of 2,265,906 queries differ, under each kernel |
+| b, correct on degenerate input, against an independent float64 brute force | CPU and GB300, 152 set-and-precision runs, 1,919 zero-area cells | 291,100 queries: 0 raises, 0 non-finite, 0 distances beyond 8 u(\|x\| + R), 0 wrong cells, 0 wrong signs of 239,824, 0 bad of 3,024 queries held only by zero-area cells; the base on the same sets: 38 sets raise, 4,629 distances beyond the bound, 3,999 wrong cells, 14 wrong signs |
+| b, covered cells added to closed meshes | CPU and GB300 | 0 of 110,948 queries change |
+| c, fast against reference | GB300, 86 runs and the degenerate sets | 0 of 1,958,096 and 0 of 291,100 queries differ; 0 of 520,761 in the forced-fast GPU tests |
+| d, tests | LHR cpu-short 365178; GB300 365177 | ISLA test directory 358 passed, 100 skipped, 0 failed; the new test_isla_geometry_degenerate.py (18 CPU and 16 CUDA tests, 13 of the CPU tests fail at 0570fc6c8); GPU geometry, tree-read, geometry-fast and degenerate files 208 passed, 1 skipped, forced and under `auto` |
+
+: GEO-DEGEN's checks of the zero-area fix. {#tbl-nb-geo-degen}
+
+**Cost.** On the DrivAerML Volume task's whole boundary (16.65 million cells, 200,000 queries, GB300) the flag takes
+2.4 ms; the geometry call goes from 406 to 412 ms under the reference kernel and from 340.5 to 341.1 ms under the fast
+kernel. Real dumps hold no zero-area cell (0 of 16,652,301 on DrivAerML), and GEO-FAST found no cell with two coincident
+vertices in 36,136,773, so no trained result changes.
+
+**Two limits that stay as they were at the base** (RESULTS.md, "Out of scope"; reported to the supervisor at 02:10 EDT).
+
+- Thin cells of nonzero area: on float64 soups of 8 slivers whose middle vertex sits a relative 1e-13 off the line, 8 of
+  10 soups raise IndexError (1e-16: 10 of 10); float32 slivers and float64 at 1e-10 and above give 0 of 14,000 wrong. With
+  the plane bound turned off none raise, but 3 of 14,000 queries get a farther point. A fix changes outputs on inputs
+  without zero-area cells, so it is a lane of its own; the lane proposes a per-cell certified plane bound and the closest
+  point taken as the least of the face projection and the three edge points. The float32 cast of TIE-FIX's midpoint is such
+  a thin cell (5 of 1,646 queries, as at the base).
+- Overlapping coplanar cells change the direction at ties: zero-area cells inside a face but off its edges, kept as
+  segments, change 905 of 9,768 float32 queries, and the control, triangles of nonzero area in the same place, changes 891
+  at the head and at 0570fc6c8 alike.
+
+The supervisor launched GEO-THIN at 04:18 EDT for both, with a census of every dataset's meshes.
+
+Cost: 0.66 GPU-h of the 4 GPU-h cap (364908, 365177; CPU jobs 364909, 365178).
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-geofast-2026-10-24/SECOND_READ_GEOFAST.md).*
+
+## 2026-10-24 — DTT-KNOBS stage 2 registered and approved: ISLA-DTT retrained on AirfRANS with a cheaper or a finer read (θ = 2, θ = 0.5, a read after every second block, a basis of 8, the exact read) and without scales on a standardized inlet speed, each against the standing's pair by rules R1 to R5; caps 1,050 GPU-h and 400 for the exact read {#sec-nb-dtt-knobs-prereg}
+
+**Question.** Stage 1 found that every inference-time change of ISLA-DTT's read is worse on checkpoints trained at
+θ = 1 (@sec-nb-dtt-knobs-stage1), so only retraining can say what a setting costs. Q1: does ISLA-DTT trained with a cheaper
+read predict as well as the standing? Q2, Peter's knob rule: retrained at θ = 2, 1, 0.5 and 0, does the error converge as
+θ tightens, or is θ a pure cost knob? Q3: does a finer read narrow the gap to interacting ISLA in the wake and beyond one
+chord? Q4: does ISLA-DTT without ISLA's scales but with the inlet speed standardized read like the reference ISLA-DTT
+(ATTRIB-090's B)? Record: scratch/isla-dtt-knobs-2026-10-23/PREREG.md (approved as md5 84a25280; md5 e601d4af with the
+amendment appended), second-read in PREREG_REVIEW.md; copies in results/campaigns_2026-10-23/dtt_knobs/.
+
+**What was seen before registering** (PREREG section 2). All of stage 1, including every inference-time number on the
+control's checkpoints (θ = 2 costs 1.30 to 1.91 times at inference, θ = 0.5 1.18 to 1.44, the exact read 1.79 to 4.68;
+every second read, mean-replaced, 15.5 / 11.5 times; the basis projected onto 8 directions 1.11 / 1.28); the control's
+and interacting ISLA's scores in full; ATTRIB-090's results; DK-GAP's regional table; the control lanes' step times and
+link history. No stage-2 arm existed.
+
+**Arms** (AirfRANS, the standing's eager protocol, two seeds each; each snapshot is the control's code with one change).
+
+| priority | arm | the one change | trained | control |
+|---|---|---|---|---|
+| 1 | K-THETA2 | `TREE_READ_THETA = 2.0` | eager | r090eag_af_dtt 42 / 43 |
+| 2 | K-THETA05 | `TREE_READ_THETA = 0.5`, the coherence test kept | eager | r090eag_af_dtt |
+| 3 | K-B1 | the tree read only after 1-based blocks 2, 4, ..., 12 | eager | r090eag_af_dtt |
+| 4 | K-BASIS8 | `KERNEL_READ_BASIS = 8`, heads unchanged | eager | r090eag_af_dtt |
+| 5 | K-EXACT | `TREE_READ_THETA = 0.0`, the exact read | eager | r090eag_af_dtt |
+| 6 | DTT-NOSC-STD | ATTRIB-090's NOSC-STD configuration with read-only prediction points | fix-trained | r090fix_af_dtt (ATTRIB-090's B) |
+
+: DTT-KNOBS stage 2's arms (PREREG section 3). {#tbl-nb-dtt-knobs-arms}
+
+The arms keep stage 1's two code facts, as the control does, so each comparison is within one code. Scoring is the
+control's: float32, the 200 `full_test` cases, the final checkpoint, eager, native and posed (area is degenerate on
+AirfRANS and not scored), with checks of epoch, case count, snapshot and dataset before any row is read.
+
+**Rules** (PREREG section 5; CM is the case-mean relative L2, native, per field: pressure, in-plane velocity, eddy
+viscosity).
+
+- R1, each of arms 1 to 5 against the control: D = ln(seed-mean CM of the arm ÷ that of the control), SE from both pairs'
+  two-seed spreads; helps if D < ln 0.90 and |D| > 2 SE, harms if D > ln 1.10 and |D| > 2 SE, otherwise no change; a
+  sub-bar flag at ratios beyond 1.03 or 0.97 with both seeds on one side.
+- R2, the ladder of Peter's knob rule, from the R1 labels at θ = 2, 0.5 and 0: converges, pure cost knob (sub-label free
+  to θ = 2), exact read worse, or mixed, per field and overall by two of three fields.
+- R3, decision use for the cheaper arms: no harm on any field and no up flag makes an arm a candidate for the scope freeze
+  as a free cost cut; K-B1 changes where the model reads, so its adoption also needs Peter's word.
+- R4, the far-field gap: in-plane velocity in the wake and eddy viscosity beyond one chord, narrows or widens by R1's shape
+  on the regional errors.
+- R5, DTT-NOSC-STD against B and against DTT-NOSC, by ATTRIB-090's test (|Δ| ≥ 2 SE and an effect of at least 5%), read as
+  whether standardization removes DTT-NOSC's loss.
+
+Twelve predictions with probabilities are in PREREG section 6 (for example, K-THETA2 no harm on all three fields, p 0.45).
+
+**The supervisor's amendment before submission** (03:40 EDT 2026-10-24, before any stage-2 job; the supervisor's, not
+Peter's). Arms 1 to 4 and 6 approved with a cap of 1,050 GPU-h; K-EXACT trains eager only, so the whole ladder is on one
+training path, and is submitted only if its smoke projects the pair at or below 400 GPU-h and its peak memory at or below
+200 GiB; its cap is 400 GPU-h, stage 2's 1,450 in all; up to 12 lanes at once, in priority order; R2's fix-trained clause is
+void. The rules and predictions are unchanged.
+
+**Smokes** (366116 and 366117, read 05:08 to 05:15 EDT): every unit passed its registered checks; the projected pairs are
+217 GPU-h at θ = 2, 0.5 and with a basis of 8, 205 for K-B1, 136 for DTT-NOSC-STD and 310 for K-EXACT at 84.7 GiB reserved,
+so K-EXACT passes the amended gate. Arms 1 to 4 and 6 project 992 GPU-h against the 1,050 cap.
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-geofast-2026-10-24/SECOND_READ_GEOFAST.md).*
+
+## 2026-10-24 — DTT-FAST, piece COMPILE: ISLA-DTT's compiled blocks are certified against eager block by block (float32 within 1.5e-5, float64 at roundoff), and Inductor leaves out the bfloat16 casts inside them, so compiled bfloat16 blocks round fewer intermediates than eager, with block outputs no farther from float64 than eager's; one policy for every compiled region, the supervisor's {#sec-nb-compiled-casts}
+
+**Question.** Peter's ruling of 23:26 EDT 2026-10-23 makes ISLA-DTT's speed a priority ("If we can make ISLA-DTT practical
+in the long term, that would be awesome", @sec-nb-surface-bc). What does `compile_blocks` compile in an ISLA-DTT step, does
+it compute eager's function, and can more of the read be compiled? Lane DTT-FAST, piece COMPILE, reference f13eb5ce0.
+Records: scratch/isla-dtt-fast-2026-10-23/compile/RESULTS.md (md5 884f4b23) and REPORT.md; copies in
+results/campaigns_2026-10-23/dtt_fast_compile/.
+
+**The map.** `compile_blocks` compiles only the 12 slice blocks (the fused geometry kernel is a custom-op leaf inside them;
+the eager geometry region of two-dimensional cases is traced into them). The whole read runs eager: the forest, walk and
+plan, the pair invariants and basis MLP, `node_means`, the read's LayerNorms and projections, the kernel term and the
+segment softmax; so do the geometry call and the head.
+
+**The certification** (RESULTS.md section 2; AeroZoo `azc_full_dtt` and AirfRANS `r090eag_af_dtt`, seeds 42 and 43, each
+block on the eager float32 run's own inputs at full size, beside float64 eager; gradients at 20,000 tokens and points).
+
+- Float32: the compiled blocks agree with eager to 1.5e-5 relative or better, the largest on AeroZoo, where the first
+  block's eager float32 output is itself 8.5e-4 from float64.
+- Float64: every output and parameter gradient at roundoff, 2.3e-13 relative or better.
+- Bfloat16: the compiled blocks' outputs are no farther from float64 than eager's (AeroZoo seed 42, 8.2e-2 against
+  1.4e-1), and their output fields and parameter gradients are 1.0 to 1.4 times eager's distance to float64 in every
+  group. One scalar sits higher: on the DrivAerML whole boundary at random initialization the bfloat16 loss reads 1.70,
+  with every tensor group at 1.13 or below.
+- Float32 gradients: on AirfRANS seed 42 the compiled path's are 2.0 to 2.3 times eager's distance to float64 (3.4 on the
+  loss), because eager sits unusually close to float64 there and 2 to 3 float32 ulps double the distance; elsewhere 1.0 to
+  1.6.
+- Pair lists are equal in every case and precision.
+
+**The cast finding** (RESULTS.md section 4). Inductor by default leaves out the round trip to bfloat16 between the operations
+it fuses (`emulate_precision_casts=False`), so the compiled blocks do not round where eager does: their bfloat16 outputs
+differ from eager's by up to 5.8e-2 relative (AeroZoo block 0), against 5.0e-3 with the casts kept. Every result trained
+with compiled blocks used them as they are. The lane's `block_precision_casts.patch` restores eager's rounding points; it is free on
+three-dimensional cases but adds 11 to 14% to the AirfRANS step and 5% to the lug's, and changes the function every
+checkpoint trained under. The lane recommends against it. Its read patch (`compile_read.patch`: the read's projections,
+`node_means` and the basis compiled, 3 to 7% of the model step and 1 to 8 GiB of peak) compiles with the casts kept.
+
+**The policy** (the supervisor's, 2026-10-24, LANE_RULES "Compiled regions"): one policy for every compiled ISLA region, old
+and new: Inductor's default casts (no `emulate_precision_casts`), certified block by block against eager at a maximum
+deviation of 1e-5 in float32 and at roundoff in float64, plus a bfloat16 check that the region's error against float64
+stays within 1.5 times eager's. The current blocks are kept, although their largest float32 deviation, on AeroZoo, is 1.5e-5 and the bfloat16 loss of
+the randomly initialized DrivAerML whole-boundary model reads 1.70 times eager's distance; the read patch is not merged,
+and under this policy it would compile without the emulated casts.
+
+Cost: 4.79 of 6 GPU-h (eight GB300 jobs, 363857 to 365445; cpu-short 365063).
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-geofast-2026-10-24/SECOND_READ_GEOFAST.md).*
+
+## 2026-10-24 — The exact geometry's fast path merged with the zero-area fix (7213c70c5): the default on CUDA where Triton imports, bitwise the reference; under it the step is 1.07 to 1.40 times 0.9.0's on a body alone, against 1.06 to 1.53 under the reference; the supervisor reads Peter's ruling on the fast path as met {#sec-nb-geo-fast-merged}
+
+**The merge.** Lane FAST-MERGE merged psharpe/isla (045dd14fe) into psharpe/isla-geo-fast (1086cf42e) as 5219f2e8f, with no
+conflicts and no other change; the supervisor merged it into psharpe/isla as 7213c70c5 at 04:53 EDT 2026-10-24. ISLA stays
+0.11.0 (`_version` 11), every test-data file is unchanged, and pyproject.toml and uv.lock are untouched. Records:
+scratch/isla-fast-merge-2026-10-24/REPORT.md (md5 edff7045), FINAL_REPORT.md, lhr/timing_table.md (md5 c32ba428); copies in
+results/campaigns_2026-10-23/fast_merge/.
+
+**Bitwise checks on the merged head** (GB300 365757; each side prints the op it ran).
+
+- Against 1e7f03d7d, the merged 0.11.0 reference, under a renamed op: every op output, w, d, u and their gradients, float32
+  and float64, 0 of 2,265,906 queries differ over 102 runs, under the reference kernel and under the fast kernel.
+- Fast against reference: 0 of 1,958,096 queries over 86 runs (adversarial sets and every dump, tie sets included); 0 of
+  291,100 on the degenerate sets, whose totals equal GEO-DEGEN's; 0 of 521,081 in the forced-fast GPU tests.
+- `geometry_kernel="auto"` resolves to the fast search on the GB300, and to the reference with Triton blocked, reported
+  absent or patched off, and on the CPU; it is resolved once, logged once, absent from the state dict and the `.mdlus`.
+- Tests: the ISLA test directory on CPU 362 passed, 100 skipped, 0 failed (365758); GPU geometry, tree-read, fast,
+  degenerate and release files 241 passed, 1 skipped, forced and under `auto`; the recipe tests 523 passed, 12 skipped
+  locally (on LHR 2 fail with the sbatch environment's `SLURM_NPROCS` TypeError, at both parents alike).
+
+**The cost** (GB300 365898, GEO-FAST's protocol: REF-090 settings, bfloat16, eager, the GPUs rotated between passes, each
+pass the median after five warm-up calls or steps; the base 0.9.0 in two passes, the head under each kernel in three; each
+cell below is the median of its passes, none dropped).
+
+| case (prediction points / boundary cells) | geometry call: 0.9.0 / reference / fast [ms] | step: 0.9.0 / reference / fast [ms] | step ÷ 0.9.0's: reference / fast |
+|---|--:|--:|--:|
+| AirfRANS 2-D (100,000 / 1,018) | 11.7 / 30.2 / 29.9 | 365 / 386 / 392 | 1.06 / 1.07 |
+| lug (9,808 / 6,488) | 7.9 / 44.6 / 36.7 | 141 / 182 / 173 | 1.29 / 1.23 |
+| AeroZoo (200,000 / 501,802) | 18.1 / 105.0 / 83.0 | 506 / 595 / 578 | 1.18 / 1.14 |
+| DrivAerML Volume, vehicle (200,000 / 16,953,702) | 98.0 / 371.6 / 303.9 | 568 / 868 / 796 | 1.53 / 1.40 |
+| DrivAerML Volume, whole boundary (200,000 / 16,958,756) | 2,420.7 / 436.3 / 355.9 | 2,898 / 932 / 849 | 0.32 / 0.29 |
+
+: The geometry's cost at the merged head, medians of the passes. {#tbl-nb-geo-fast-merged}
+
+The fast search cuts the three-dimensional geometry call by 18 to 21% and the step by 3 to 9%; in two dimensions both
+kernels run the same segment search. One AirfRANS fast pass took 458 ms a step against 392 and 386 in the other two, with
+the same geometry call; the lane's own table (lhr/book_table.md, means of passes 1 and 2) reads 425 ms there and it
+recommends 389 ms from passes 1 and 3, but the median of all three keeps every pass. Peak memory is the same under both
+kernels to 0.1 GiB.
+
+**Peter's ruling, read as met by the supervisor.** His words of 2026-10-23 (17:08 EDT): "If the speedup experiment works, then add an optional fast
+path (like our other kernels, where we default iff triton is installed), and then remove the documented limitation / change
+it." The fast path is optional, the default exactly where Triton imports on CUDA, and bitwise the reference. The fast path
+cuts the cost but does not remove it on the body-only tasks, so 06 changes the documented cost rather than removing it: the
+default's numbers are the fast path's, and the reference's apply where Triton is absent (@sec-using-cost). Its In-flight
+callout is cut, and 05 states what the class does with a zero-area cell, with GEO-THIN's limits in its place
+(@sec-arch-interior-geometry).
+
+Cost: 1.95 of 3 GPU-h (365757, 365898; cpu-short 365758, 365934, 366144).
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-geofast-2026-10-24/SECOND_READ_GEOFAST.md).*
 
 ## 2026-10-22 — MECH-090: on Tensile2d the fixed compiled path's float32 gradients sit at a one-ulp eager floor, and pytorch/pytorch#195845 added a unit-dependent sink to ISLA's slice-state softmax (registered emulations not confirmed; a post-smoke emulation matches) {#sec-nb-mech090}
 
