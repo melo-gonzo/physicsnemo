@@ -367,11 +367,20 @@ class BoundaryForest:
         separated from the point and its normals are coherent, so each point's list
         holds every cell exactly once, as itself or inside one node. ``walk`` names
         how, not what (:func:`resolve_walk`): the fast walk gives the same lists in
-        the same order."""
+        the same order. Lists past Warp's array limit are walked by the reference
+        under ``"auto"`` and refused under ``"fast"``."""
         theta = self.theta if theta is None else float(theta)
         points_f = points.detach() @ self.frame  # the trees' coordinates
         if resolve_walk(walk, points, theta, self) == "fast":
-            return walk_pairs(self, points_f, theta)
+            pairs = walk_pairs(self, points_f, theta)
+            if pairs is not None:
+                return pairs
+            if walk == "fast":
+                raise ValueError(f"the fast walk's arrays for {points.shape[0]} points pass Warp's 2**31 elements")
+            key = (points.device.type, "reference past Warp's array limit")
+            if key not in _WALKS_LOGGED:
+                _WALKS_LOGGED.add(key)
+                logger.info("ISLA tree walk=auto walks %d points by the reference: past Warp's array limit", points.shape[0])
         qs, ss, n_node = [], [], 0
         for t, tree in enumerate(self.trees):
             a, b = int(self.node_offset[t]), int(self.node_offset[t + 1])

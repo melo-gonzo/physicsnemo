@@ -580,6 +580,31 @@ def test_tree_walk_resolution_and_the_models_walks_agree():
     )
 
 
+def test_fast_walk_falls_back_to_the_reference_past_its_limits(monkeypatch):
+    """A forest too deep for the count pass's stack is walked by the reference under
+    ``auto`` and refused under a forced ``"fast"``; so are lists past Warp's array
+    limit, found after the count pass."""
+    import physicsnemo.experimental.models.isla.tree_walk as tree_walk
+
+    pts, nrm, w, _ = cloud(300, d=3, seed=1)
+    q, _, _, _ = cloud(40, d=3, seed=2, scale=(3.0,) * 3)
+    f = BoundaryForest.build(pts, w, nrm, None, theta=1.0)
+    qi, si, n_node = f.point_pairs(q, walk="reference")
+    on_cuda = types.SimpleNamespace(is_cuda=True, device=torch.device("cuda"))
+    assert tree_read.resolve_walk("auto", on_cuda, 1.0, f) == "fast"
+    with monkeypatch.context() as m:
+        m.setattr(tree_walk, "WALK_STACK", len(f.levels) + 1)
+        assert tree_read.resolve_walk("auto", on_cuda, 1.0, f) == "reference"
+        with pytest.raises(ValueError, match="does not take this forest"):
+            tree_read.resolve_walk("fast", q, 1.0, f)
+    monkeypatch.setattr(tree_walk, "WARP_MAX_ELEMENTS", qi.numel())
+    with pytest.raises(ValueError, match="Warp's 2\\*\\*31"):
+        f.point_pairs(q, walk="fast")
+    monkeypatch.setattr(tree_read, "resolve_walk", lambda *a: "fast")
+    qi_a, si_a, n_node_a = f.point_pairs(q)
+    assert torch.equal(qi_a, qi) and torch.equal(si_a, si) and n_node_a == n_node
+
+
 @pytest.mark.parametrize("improper", [False, True], ids=["rotation", "reflection"])
 def test_forest_and_every_list_are_the_same_in_every_pose_at_finite_theta(improper):
     """The trees live in the boundary's own frame (principal axes signed by the third

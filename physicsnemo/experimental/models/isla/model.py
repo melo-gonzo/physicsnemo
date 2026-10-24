@@ -474,9 +474,11 @@ class ISLA(Module):
 
     **Execution.** The ``geo_kernel`` attribute (``"auto"``; set ``"eager"`` or
     ``"fused"`` to force one) selects how the per-layer geometry region is
-    executed, not what it computes (:meth:`resolve_geo_kernel`). It is an
-    execution choice, not a constructor argument: checkpoints do not store it,
-    and a loaded model starts at ``"auto"``.
+    executed, not what it computes (:meth:`resolve_geo_kernel`). The
+    ``tree_walk`` attribute (``"auto"``; set ``"reference"`` or ``"fast"`` to
+    force one) selects how ISLA-DTT's forest walk runs, not the pairs it returns
+    (``tree_read.resolve_walk``). Each is an execution choice, not a constructor
+    argument: checkpoints do not store it, and a loaded model starts at ``"auto"``.
 
     Args:
         output_schema: Output fields, a rank spec per name. Each field is a leaf of

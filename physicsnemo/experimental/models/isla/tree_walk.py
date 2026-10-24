@@ -53,6 +53,8 @@ wp.set_module_options({"fuse_fp": False, "enable_backward": False})
 #: by the reference (:func:`walk_fits`).
 WALK_STACK = 96
 _walk_stack = wp.types.vector(length=WALK_STACK, dtype=wp.int32)
+#: Warp refuses an array of this many elements or more (:func:`walk_fits`).
+WARP_MAX_ELEMENTS = 2**31
 
 
 @wp.func
@@ -108,8 +110,7 @@ def _is_far(
     point to the box summed over the axes in torch's order, times ``theta_sq``, above
     the squared diagonal, and the node coherent; a NaN gap is never far. ``mode``
     packs the roundings of the differences, the squares and the sum and product
-    (bits 0-1, 2-3, 4-5; see :func:`_low`) and the order of the three squares'
-    sum (bit 6: ``(s0 + s2) + s1``, else ``(s0 + s1) + s2``)."""
+    (bits 0-1, 2-3, 4-5; see :func:`_low`)."""
     zero = type(theta_sq)(0.0)
     s0 = _gap_sq(pts, q, lo, hi, m, d, 0, mode, zero)
     s1 = _gap_sq(pts, q, lo, hi, m, d, 1, mode, zero)
@@ -117,8 +118,6 @@ def _is_far(
     if d == 3:
         s2 = _gap_sq(pts, q, lo, hi, m, d, 2, mode, zero)
     dist_sq = (s0 + s1) + s2
-    if (mode >> 6) & 1:
-        dist_sq = (s0 + s2) + s1
     low = (mode >> 4) & 3
     far = bool(False)
     if _low(_low(dist_sq, low) * theta_sq, low) > diam_sq[m]:
@@ -256,13 +255,14 @@ def _fill_kernel(
 
 #: The kernels' rounding (:func:`_low`) for each dtype a step of the test runs in.
 _LOW = {torch.bfloat16: 1, torch.float16: 2}
-#: Whether torch sums three squares as ``(s0 + s2) + s1`` on the device type.
-_SUM_02_FIRST = {"cpu": False, "cuda": False}
 
 
 def walk_fits(forest) -> bool:
     """The forest is two- or three-dimensional, its depth fits the count pass's stack
-    and its boxes are floating point."""
+    and its boxes are floating point. The walk's arrays (the points' coordinates, the
+    per-thread counts, the pairs and the scratch) must also each stay below Warp's
+    ``WARP_MAX_ELEMENTS`` (2**31); the pairs' and the scratch's sizes are known only
+    after the count pass, so :func:`walk_pairs` checks them and returns ``None``."""
     fields = (forest.aabb_min, forest.aabb_max, forest.diameter_sq)
     return (
         forest.aabb_min.shape[1] in (2, 3)
@@ -285,22 +285,24 @@ def _opening_dtypes(forest, theta_sq: float) -> tuple[torch.dtype, torch.dtype, 
     return box.dtype, sq.dtype, (sq.sum(dim=0) * theta_sq).dtype
 
 
-def walk_pairs(forest, points_f: torch.Tensor, theta: float) -> tuple[torch.Tensor, torch.Tensor, int]:
+def walk_pairs(forest, points_f: torch.Tensor, theta: float) -> tuple[torch.Tensor, torch.Tensor, int] | None:
     """Every point's list ``(qi, si, n_node)`` for the points ``points_f`` ``(Q, d)`` in
     the forest's frame at ``theta > 0``, equal to the reference's
-    (:meth:`BoundaryForest.point_pairs`) entry for entry; one host read, of the sizes."""
+    (:meth:`BoundaryForest.point_pairs`) entry for entry; one host read, of the sizes.
+    ``None`` when an array would pass Warp's limit (:func:`walk_fits`)."""
     device = forest.aabb_min.device
     n_q, d = points_f.shape
     n_t = int(forest.node_offset.shape[0]) - 1
     if n_q == 0 or n_t == 0:
         empty = torch.empty(0, dtype=torch.long, device=device)
         return empty, empty.clone(), 0
+    if n_q * max(d, n_t) >= WARP_MAX_ELEMENTS:
+        return None
     ### Reduced-precision values are widened exactly to float32 and the kernels round
     ### where torch's kernels round.
     dtype, sq_dtype, sum_dtype = _opening_dtypes(forest, theta * theta)
     work = torch.float64 if dtype == torch.float64 else torch.float32
     mode = _LOW.get(dtype, 0) | _LOW.get(sq_dtype, 0) << 2 | _LOW.get(sum_dtype, 0) << 4
-    mode |= _SUM_02_FIRST.get(device.type, False) << 6
     lo = forest.aabb_min.to(dtype)
     pts = points_f.detach().to(dtype)
     scalar = wp.float64 if work == torch.float64 else wp.float32
@@ -332,6 +334,8 @@ def walk_pairs(forest, points_f: torch.Tensor, theta: float) -> tuple[torch.Tens
     seg_end = (n_near + n_far).cumsum(0)
     visit_end = n_visit.cumsum(0)
     n_pairs, n_node, n_scratch = torch.stack([seg_end[-1], n_far.sum(), visit_end[-1]]).tolist()
+    if max(n_pairs, n_scratch) >= WARP_MAX_ELEMENTS:
+        return None
     qi = torch.empty(n_pairs, dtype=torch.long, device=device)
     si = torch.empty(n_pairs, dtype=torch.long, device=device)
     scratch = torch.empty(n_scratch, dtype=torch.int32, device=device)
