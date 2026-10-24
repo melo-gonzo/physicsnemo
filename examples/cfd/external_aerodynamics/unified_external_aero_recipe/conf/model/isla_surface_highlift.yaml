@@ -16,11 +16,22 @@
 # limitations under the License.
 
 # ISLA, surface task, on the HiLift wing datasets (highlift_surface_*): the reference configuration of isla_surface.yaml
-# with the wings' five cell targets (pressure, temperature, density scalars; velocity and wall shear vectors).
+# with the wings' five cell targets (pressure, temperature, density scalars; velocity and wall shear vectors), reading
+# the wing (its duplicated cells dropped by the dataset's reader) and the hemisphere far field the dataset builds
+# (AddHemisphereBoundaries: inlet, outlet), and predicting at the wing's cells.
+# The domain's third boundary, the symmetry plane y = 0, is absent: its hole at the wing root needs the root's
+# outline, and the stored roots are open on every geometry but LHC001, so it cannot be built for every case (a
+# rebuild of the root outline from the stored vertices is being prototyped).
+# The far field points into the fluid; the stored wing is wound into the body (its signed volume is negative on the
+# 4 cases checked), so it is reversed for ISLA only, as isla_surface.yaml reverses DrivAerML's vehicle.
 
 # The mesh contract, measure and frame notes are those of isla_surface.yaml.
 input_type: mesh
 output_type: mesh
+
+dataset_append_transforms:
+  - _target_: ${dp:FlipBoundaryOrientation}
+    boundaries: [vehicle]
 
 # Learning rate: 3.75e-4, the reference configuration's rate (REF-80 verdict,
 # 2026-10-04), which is the width rule lr = 1e-3 x 192 / hidden at hidden 512.
@@ -44,9 +55,11 @@ compile_options:
     triton.mix_order_reduction: false
 
 forward_kwargs:
-  boundary_meshes:
-    vehicle: boundaries.vehicle       # Mesh[2, 3]; centroids, normals and measures are read from it
-  prediction_boundaries: {literal: [vehicle]}   # the outputs are predicted at the wing's cells (the files store no other boundary)
+  boundary_meshes:                    # Mesh[2, 3] each; centroids, normals and measures are read from them
+    vehicle: boundaries.vehicle       # the subsampled wing, with its Horvitz-Thompson measures
+    inlet: boundaries.inlet           # the hemisphere's upstream half, whole, as the dataset builds it
+    outlet: boundaries.outlet         # its downstream half
+  prediction_boundaries: {literal: [vehicle]}   # the outputs are predicted at the wing's cells only
   global_data: global_data            # the case's TensorDict; the model selects its declared leaves
 
 model:
@@ -59,6 +72,8 @@ model:
     tau_wall: {rank: 1}
   boundary_schemas:              # the boundary conditions by name, each with its own per-cell fields
     vehicle: {}                  # the wing surface, a no-slip wall: no per-cell fields
+    inlet: {}                    # the far field's pieces carry no field: each condition is its name
+    outlet: {}
   global_schema:
     U_inf_dir: {rank: 1}         # a rank-1 global input, read from global_data.U_inf_dir; normalized to a unit direction inside the model
   hidden: 512                  # the reference configuration (REF-80 verdict, 2026-10-04): most accurate under 80 GiB per GPU on DrivAerML Surface and the 210-wing rung; equal to the class defaults

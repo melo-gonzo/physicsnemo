@@ -25,6 +25,7 @@ Each model YAML supplies a `forward_kwargs:` block that maps the model's
 Spec value semantics:
 
 - Strings are dotted paths into the source, walked via getattr-then-getitem
+  (a TensorDict's own key first, so a key named like a method resolves to it)
   (e.g., ``"interior.points"``, ``"boundaries.vehicle.cell_data.normals"``,
   ``"global_data.U_inf"``). The empty string ``""`` and the literal ``"."``
   resolve to the source itself.
@@ -88,6 +89,11 @@ def walk_path(source: Any, path: str) -> Any:
 
     obj = source
     for part in path.split("."):
+        ### A TensorDict's own key wins over its attributes: a boundary or field may
+        ### be named like a TensorDict method (SHIFT-SUV's ``floor``).
+        if isinstance(obj, TensorDict) and part in obj.keys():
+            obj = obj[part]
+            continue
         try:
             obj = getattr(obj, part)
         except AttributeError:
