@@ -127,7 +127,7 @@ if HAS_TRITON:
             inv += (s0 > s2).to(tl.int64) + (s1 > s2).to(tl.int64)
             tl.store(vert_out + K * c + 2, v2, mask=m)
         tl.store(parity_out + c, 1 - 2 * (inv % 2), mask=m)
-    ### The float64 arithmetic of the thin-cell guard, each operation as torch's CUDA
+    ### The float64 arithmetic of the closest weights, each operation as torch's CUDA
     ### kernels evaluate it, launched without contraction (enable_fp_fusion=False): a
     ### sum over the last axis of three is ((x0 + x2) + x1) + 0 and one over the vertex
     ### axis ((x0 + x1) + x2) + 0 (identity 0: never -0), a norm the root of ((x0^2 +
@@ -268,11 +268,16 @@ if HAS_TRITON:
     @triton.jit
     def _load_rows(q_ptr, s_ptr, r, m):
         """The queries ``(x, y, z)`` and the triangles ``((x, y, z),) * 3`` of rows ``r``."""
-        q = (tl.load(q_ptr + 3 * r, mask=m, other=0.0), tl.load(q_ptr + 3 * r + 1, mask=m, other=0.0), tl.load(q_ptr + 3 * r + 2, mask=m, other=0.0))
+        q = (
+            tl.load(q_ptr + 3 * r, mask=m, other=0.0),
+            tl.load(q_ptr + 3 * r + 1, mask=m, other=0.0),
+            tl.load(q_ptr + 3 * r + 2, mask=m, other=0.0),
+        )
         s = ()
         for k in tl.static_range(3):
             v = s_ptr + 9 * r + 3 * k
-            s = s + ((tl.load(v, mask=m, other=0.0), tl.load(v + 1, mask=m, other=0.0), tl.load(v + 2, mask=m, other=0.0)),)
+            x = tl.load(v, mask=m, other=0.0), tl.load(v + 1, mask=m, other=0.0), tl.load(v + 2, mask=m, other=0.0)
+            s = s + (x,)
         return q, s
 
     @triton.jit
@@ -281,15 +286,15 @@ if HAS_TRITON:
 
     @triton.jit
     def _closest_weights_kernel(
-        q_ptr, s_ptr, flat_ptr, out, guarded, count, n, HAS_FLAT: tl.constexpr, KAPPA: tl.constexpr, ERRBOUND: tl.constexpr,
-        BLOCK: tl.constexpr,
+        q_ptr, s_ptr, flat_ptr, out, guarded, count, n, HAS_FLAT: tl.constexpr, KAPPA: tl.constexpr,
+        ERRBOUND: tl.constexpr, BLOCK: tl.constexpr,
     ):
         """The closest weights of each row, as
         :func:`~physicsnemo.experimental.models.isla.geometry._closest_weights` in three
         dimensions (``KAPPA`` is ``_ERICSON_K u64``), but Ericson's on the guarded rows,
         which it appends to ``guarded`` (``count`` of them) for :func:`_accurate_kernel`;
         a block with no zero-area row skips the segments."""
-        r = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
+        r = (tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)).to(tl.int64)
         m = r < n
         q, s = _load_rows(q_ptr, s_ptr, r, m)
         zero = tl.zeros([BLOCK], dtype=tl.float64)
@@ -320,9 +325,11 @@ if HAS_TRITON:
         kappa = tl.where(rho_low > 0, (1.0 / (rho_low * rho_low * longest)) * KAPPA, _INF)
         ### the guard: _ericson_error not below one unit, but a zero-area row
         dist = _distance(q, w, s)
-        l2 = _amax(_amax(_dot(_sub(q, s[0]), _sub(q, s[0])), _dot(_sub(q, s[1]), _sub(q, s[1]))), _dot(_sub(q, s[2]), _sub(q, s[2])))
+        y = (_sub(q, s[0]), _sub(q, s[1]), _sub(q, s[2]))
+        l2 = _amax(_amax(_dot(y[0], y[0]), _dot(y[1], y[1])), _dot(y[2], y[2]))
         delta = kappa * l2
-        eps = tl.where(dist > delta, tl.minimum(delta, delta * delta / (2 * (dist - delta)), propagate_nan=tl.PropagateNan.ALL), delta)
+        far = tl.minimum(delta, delta * delta / (2 * (dist - delta)), propagate_nan=tl.PropagateNan.ALL)
+        eps = tl.where(dist > delta, far, delta)
         eps = tl.where(delta <= longest, eps, _INF)
         guard = ~(eps < _unit(q, s)) & m
         if HAS_FLAT:
@@ -351,9 +358,13 @@ if HAS_TRITON:
         total = tl.load(count)
         if tl.program_id(0) * BLOCK < total:
             m = i < total
-            r = tl.load(guarded + i, mask=m, other=0)
+            r = tl.load(guarded + i, mask=m, other=0).to(tl.int64)
             q, s = _load_rows(q_ptr, s_ptr, r, m)
-            w = (tl.load(out + 3 * r, mask=m, other=0.0), tl.load(out + 3 * r + 1, mask=m, other=0.0), tl.load(out + 3 * r + 2, mask=m, other=0.0))
+            w = (
+                tl.load(out + 3 * r, mask=m, other=0.0),
+                tl.load(out + 3 * r + 1, mask=m, other=0.0),
+                tl.load(out + 3 * r + 2, mask=m, other=0.0),
+            )
             zero = tl.zeros([BLOCK], dtype=tl.float64)
             ### the edge points on (0, 1), (0, 2), (1, 2) ...
             t = _segment_t(q, s[0], s[1])
@@ -433,17 +444,19 @@ def closest_weights(q, simplex, flat, reference, ericson_k, switch_units, orient
     :func:`~physicsnemo.experimental.models.isla.geometry._closest_weights` of
     triangles: Ericson's weights, the edge points recomputed, the thin-cell guard and
     the accurate point of each guarded pair, the zero-area cells' segments) by two
-    Triton kernels on CUDA, the second on the guarded pairs alone, from the reference's constants ``_ERICSON_K``,
-    ``_SWITCH_UNITS`` and ``_ORIENT_ERRBOUND``."""
+    Triton kernels on CUDA, the second on the guarded pairs alone, from the
+    reference's constants ``_ERICSON_K``, ``_SWITCH_UNITS`` and ``_ORIENT_ERRBOUND``;
+    by the reference itself where an input is not contiguous (its sums over a strided
+    axis may take another order)."""
     n = q.shape[0]
-    if not _usable(q) or n == 0:
+    contiguous = q.is_contiguous() and simplex.is_contiguous() and (flat is None or flat.is_contiguous())
+    if not _usable(q) or n == 0 or not contiguous:
         return reference(q, simplex, flat)
     out = torch.empty_like(q)
     guarded = torch.empty(n, dtype=torch.int32, device=q.device)
     count = torch.zeros(1, dtype=torch.int32, device=q.device)
-    q, simplex = q.contiguous(), simplex.contiguous()
     _closest_weights_kernel[(triton.cdiv(n, _CELL_BLOCK),)](
-        q, simplex, q if flat is None else flat.contiguous(), out, guarded, count, n, HAS_FLAT=flat is not None,
+        q, simplex, q if flat is None else flat, out, guarded, count, n, HAS_FLAT=flat is not None,
         KAPPA=ericson_k * 2.0**-53, ERRBOUND=orient_errbound, BLOCK=_CELL_BLOCK, enable_fp_fusion=False,
     )
     ### (a program per block of rows that may be guarded; those past the count return)
