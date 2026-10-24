@@ -965,3 +965,47 @@ def test_tree_read_fused_matches_the_reference_on_cuda(autocast):
             d_ref = max(float((b[k] - e[k]).abs().max()) for k in keys) / scale
             print(f"{grp}: fused {d_fused:.2e}, reference {d_ref:.2e}")
             assert d_fused <= 2 * d_ref + floor, grp
+
+
+@cuda_only
+def test_fused_reads_sum_their_basis_gradients_as_autograd_does():
+    """Fused reads of one basis that share its sink sum their basis gradients in place
+    bitwise as autograd sums them when each read passes its own (bfloat16, the
+    running sum rounded after every read), and the step leaves no memory behind."""
+    from physicsnemo.experimental.models.isla.fused_read import (
+        basis_sink,
+        fused_kernel_read,
+    )
+    from physicsnemo.experimental.models.isla.segment_softmax import PairPlan
+
+    dev, bf = torch.device("cuda"), torch.bfloat16
+    g = torch.Generator(device=dev).manual_seed(5)
+    n_q, n_b, h, kc, c, f = 300, 400, 8, 4, 8, 16
+    counts = torch.randint(1, 600, (n_q,), generator=g, device=dev)
+    qi = torch.repeat_interleave(torch.arange(n_q, device=dev), counts)
+    bj = torch.randint(0, n_b, (qi.shape[0],), generator=g, device=dev)
+    plan = PairPlan.build(qi, bj, n_q, n_b)
+    logm = -8 * torch.rand(qi.shape[0], generator=g, device=dev)
+    reads = [
+        [
+            torch.randn(*s, generator=g, device=dev).to(bf)
+            for s in ((h, f), (n_q, h, kc), (n_b, h, kc), (n_b, h, c))
+        ]
+        for _ in range(3)
+    ]
+    basis0 = torch.randn(qi.shape[0], f, generator=g, device=dev).to(bf)
+    base = torch.cuda.memory_allocated()
+    grads = []
+    for shared in (True, False):
+        basis = basis0.clone().requires_grad_(True)
+        sink = basis_sink(basis) if shared else None
+        out = sum(
+            fused_kernel_read(basis, *r[:1], logm, *r[1:], plan, 0.5, sink=sink)
+            for r in reads
+        )
+        out.square().sum().backward()
+        grads.append(basis.grad)
+        del basis, sink, out
+    assert torch.equal(grads[0], grads[1])
+    del grads
+    assert torch.cuda.memory_allocated() == base

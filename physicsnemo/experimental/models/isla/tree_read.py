@@ -396,6 +396,7 @@ class TreeReadPairs:
     n_queries: int
     n_pairs_node: int  # (point, node) pairs over every case
     kernel: str = "reference"  # the blocks' read: "reference" or "fused" (fused_read.py)
+    basis_sink: tuple | None = None  # the fused reads' shared basis gradient (fused_read.basis_sink)
 
     @property
     def n_pairs(self) -> int:
@@ -650,9 +651,10 @@ def tree_read_pairs(
         )
     for a, e, q_off, s_off, geometry in deferred:
         bases.append(_chunked_basis_from_plan(basis, plan_all, a, e, q_off, s_off, geometry))
+    basis_all = torch.cat(bases)
     return TreeReadPairs(
         plan=plan_all,
-        basis=torch.cat(bases),
+        basis=basis_all,
         log_m=torch.cat(logms),
         omega=torch.exp(log_frac).reshape(-1),
         forests=forests,
@@ -661,6 +663,7 @@ def tree_read_pairs(
         n_queries=nq,
         n_pairs_node=n_pairs_node,
         kernel=kernel,
+        basis_sink=fused_read.basis_sink(basis_all) if kernel == "fused" else None,
     )
 
 
@@ -724,6 +727,7 @@ class _TreeKernelRead(nn.Module):
                 v_src,
                 pairs.plan,
                 scale=1.0 / math.sqrt(kc),
+                sink=pairs.basis_sink,
             )
         else:
             ker = pairs.basis @ self.kernel.weight.t().to(pairs.basis.dtype)
