@@ -342,9 +342,14 @@ each condition's cells in the Morton (Z-order, a space-filling curve) order
 of their centroids, each cell an interval as long as its probability, and
 the cells under the points $u, u + 1, u + 2, \dots$ are kept: *systematic
 sampling*, a single random start $u$ for the whole case. The Morton order is
-taken along the dataset's axes, so once a boundary is subsampled a rotated
-case draws other cells; @sec-isla-contracts states what that does to the pose
-contract. @fig-arch-boundary-draw
+taken in the boundary's canonical frame (its measure-weighted centroid and
+principal axes over every cell), and the centroids and measures it reads are
+computed in float64 from the mesh's coordinates as given, so a float32 and a
+float64 run on the same inputs keep the same cells. A rotated case draws the
+same cells up to the rounding of its coordinates across the grid lines of the
+Morton code, and more of them change where the boundary's principal moments
+nearly tie, which turns the frame; @sec-isla-contracts states what that does
+to the pose contract. @fig-arch-boundary-draw
 runs the class's own draw on the airfoil.
 
 ```{python}
@@ -1187,26 +1192,37 @@ for every draw of the boundary tokens, and they are continuous through the
 surface.** Stage 3 needs a direction at every token, and the input layer
 above needs a distance to the wall. Both are computed inside the model and
 never taken as inputs; the model reads no stored signed-distance field.
-Picture a point a hair off an airfoil whose tokens kept every fifth panel:
+That is Peter's boundary-only input ruling, to "just pass in the
+full-resolution boundary surfaces and ONLY that": the boundary meshes
+are the model's one geometric input, and every geometric quantity is
+computed from them inside the forward pass. Picture a point a hair off an airfoil whose tokens kept every fifth panel:
 the nearest kept token is up to a few panels away, but the nearest point of
 the airfoil is directly below the point. The model therefore searches the
 surface itself, the union of the cells of every given boundary mesh at full
 resolution, for the closest point $p_q$ to $x_q$: point to face, never point
 to centroid (`exact_boundary_geometry`).
 
-The distance is signed by the pseudo-normal $\hat N_q$ of the feature $p_q$
-lies on: the cell's normal inside a cell; on an edge or a vertex the sum of
-the normals of the cells that share it, angle-weighted at a vertex in three
-dimensions (the construction of Bærentzen and Aanæs). The pseudo-normal
-gets the sign right behind a sharp trailing edge and at a concave corner,
-where the normal of the one closest cell would flip it. The distance is
-positive on the side the cells' normals point to; the recipe orients each
-dataset's boundary with a transform set per dataset file
-(`FlipBoundaryOrientation`). The direction $u_q$ points from the surface to
-the point: the closest cell's normal turned toward the point when $p_q$ is
-inside a cell, the unit difference otherwise. The token then reads the
-distance in length units and the direction times the sign of the distance,
-which is the gradient of the signed distance. @fig-arch-exact-geometry
+The distance is signed by the generalized winding number $w(x_q)$ of the
+oriented cells (Jacobson, Kavan and Sorkine-Hornung), the solid angle the
+cells subtend at the point over that of a sphere: $\sigma$ inside a closed
+surface and 0 outside it, with $\sigma = \pm 1$ the sign of the volume the
+cells enclose. So $\sigma / 2 - w$ is $+1/2$ on the side the normals point to and $-1/2$ on the
+other, whichever way they point. The sign needs no closest feature, so it is
+right behind a sharp trailing edge, at a concave corner and at a fold, where
+cells meet back to back: the two sheets of a zero-thickness fold cancel in
+$w$, and both of its sides take the sign of the region around it. An open
+surface is signed by the threshold $w = 1/2$. The distance is positive on the
+side the cells' normals point to; the recipe orients each dataset's boundary
+with a transform set per dataset file (`FlipBoundaryOrientation`). The
+direction $u_q$ points from the surface to the point: the closest cell's
+normal turned toward the point when $p_q$ is inside a cell, the unit
+difference otherwise. Where several features tie for the closest point, as
+on the medial surface (a plate's mid-plane, a corner's bisector), $u_q$ is
+the point of the convex hull of their directions closest to the origin: the
+least-norm element of the Clarke generalized gradient of the distance, the
+midpoint of two directions and zero where they cancel. The token then reads
+the distance in length units and the direction times the sign of the
+distance, which is the gradient of the signed distance where it has one. @fig-arch-exact-geometry
 draws both on the airfoil, with the class's own functions.
 
 ```{python}
@@ -1262,13 +1278,15 @@ for sp in ("top", "right"): ax.spines[sp].set_visible(False)
 plt.show()
 ```
 
-In symbols, with $\hat n_f$ the normal of the cell $f$ that holds $p_q$:
+In symbols, with $\hat n_f$ the normal of the cell $f$ that holds $p_q$ and
+$u_k$ the directions of the tied features $k$:
 
 $$
-\delta_q \equiv \operatorname{sign}\big((x_q - p_q) \cdot \hat N_q\big)\, \lvert x_q - p_q \rvert,
+\delta_q \equiv \operatorname{sign}\big(\tfrac{\sigma}{2} - w(x_q)\big)\, \lvert x_q - p_q \rvert,
 \qquad
 u_q \equiv \begin{cases}
-  \operatorname{sign}(\delta_q)\, \hat n_f & p_q \text{ inside the cell } f, \\
+  \operatorname{sign}\big((x_q - p_q) \cdot \hat n_f\big)\, \hat n_f & p_q \text{ inside the cell } f, \\
+  \operatorname*{arg\,min}_{v \in \operatorname{conv}\{u_k\}} \lvert v \rvert & \text{at a tie,} \\
   (x_q - p_q) / \lvert x_q - p_q \rvert & \text{otherwise,}
 \end{cases}
 $$
@@ -1279,10 +1297,15 @@ s_q \equiv \delta_q / L, \qquad
 \hat\nu_q \equiv \operatorname{sign}(\delta_q)\, u_q, \quad \operatorname{sign}(0) \equiv +1 .
 $$
 
-A point on the surface ($\lvert x_q - p_q \rvert$ at most `EPS`) takes
-$\delta_q = 0$ and $u_q = \hat N_q$; coincident vertices are welded first, so
-a surface stored in pieces, one mesh per condition, has the pseudo-normals
-of the surface it describes. Inside a cell $\hat\nu_q = \hat n_f$ on both
+A point on the surface, whose float64 distance lies within the rounding
+bound of that distance (its coordinates cannot tell it from a point of the
+surface), takes $\delta_q = 0$ and the same rule with the unit normals of the
+cells that hold it in place of the directions: the cell's normal inside a
+cell, the least-norm point of the hull of the normals of the cells sharing an
+edge or a vertex, with the normals computed in float64 from the coordinates
+as given. Coincident vertices are welded first, so a surface stored in
+pieces, one mesh per condition, has the connectivity of the surface it
+describes. Inside a cell $\hat\nu_q = \hat n_f$ on both
 sides of the wall, and $\operatorname{asinh}(s / \varepsilon)$ is $s /
 \varepsilon$ near zero and $\operatorname{sign}(s) \log(2 \lvert s \rvert /
 \varepsilon)$ far from it (`soft_log_length`): the code of a point is
@@ -1305,27 +1328,44 @@ since $L$ is computed from the full-resolution boundary before the draw
 (stage 1).
 
 The search runs in `forward`, where the meshes are, before the draw, at the
-points' precision and outside autocast. In three dimensions it is a Warp
-bounding-volume-hierarchy query over the triangles (a torch custom
-operator, in float32, whose closest cell differs from the exact one only at
-a tie at float32 resolution); in two it is an exact brute force over the
-segments, chunked over the points (`_closest_cell`). The interior task is
-implemented in two and three dimensions. The search runs without gradient;
+points' precision and outside autocast (`_closest_features`, which calls the
+torch custom operator `_closest_candidates`). Every candidate distance is
+computed in float64 on the cell's vertices in the lexicographic order of
+their positions, with an error bound $E_k$ from the coordinates' rounding and
+the arithmetic's, and a cell ties when its interval $[D_k - E_k, D_k + E_k]$
+reaches the least upper end and its closest point is a local minimum of the
+distance on the surface. In three dimensions a float32 traversal of a
+bounding-volume hierarchy over the cells, the model's own cell tree, finds a
+nearest cell, whose exact distance plus its bound bounds the closest
+distance, and a second traversal of the same tree returns every cell within
+that radius; the winding number reads the same tree, with Barill et al.'s
+far-field expansion of distant nodes and exact float64 solid angles near the
+point. In two dimensions a brute force over the segments, chunked over the
+points, keeps the candidates. The interior task is implemented in two and
+three dimensions. The search runs without gradient;
 the closest point is then rebuilt from its cell's vertices with the
 barycentric weights of its region of the cell (computed in float64), so
 $\delta_q$ and $u_q$ are differentiable in the points and the vertex
-positions.
+positions. A cell of zero area, whose vertices coincide, is not handled: the
+search can raise on it or return a farther cell. None of the 36 million
+cells of the real cases checked is such a cell.
 
-**Two choices in this geometry are made by rounding.** At a point equally
-far from two or more features of the surface, such as a node on the
-mid-thickness plane of a plate, the search keeps the first closest feature
-it meets, so the order of the mesh's vertices picks $u_q$. At a fold of the
-surface, where cells meet back to back, the pseudo-normal that signs
-$\delta_q$ is a sum of unit normals that cancels exactly, so roundoff picks
-the sign, which is ill-posed even in exact arithmetic. Neither has a
-convergent knob; @sec-medial-ties measures both, and a tie rule that reads
-every feature within float32 resolution of the minimum is an open question
-(@sec-oq-ties).
+::: {.callout-note title="In flight"}
+This limit is that of the search as it is. A search that reads a cell of zero area as the set
+its vertices span is being checked, and the ledger (@sec-ledger) tracks it.
+:::
+
+**No step of this geometry is left to the order of a search or to the sign
+of a cancelling sum.** The direction at a tie is a function of the tie set
+alone, not of the order of the vertices, the cells or the search, and a flip
+of the boundary's winding negates $\delta_q$ and $\operatorname{sign}(\delta_q)\,
+u_q$ bitwise. What rounding still decides is which features join a tie set,
+since a feature joins when its distance lies within the rounding bound of the
+least; and where the normals of a tie nearly coincide, as on a structured
+mesh's split faces, their least-norm point is ill-conditioned, so its float32
+and float64 values differ. @sec-medial-ties measures what the geometry does
+to the contracts, and @sec-standing-geometry gives the geometry the
+standings' checkpoints were trained with.
 
 ```{python}
 #| label: para-arch-sdf-configs
@@ -1473,7 +1513,7 @@ print("ISLA reads no stored signed distance, and putting it back has no measurab
 #| output: asis
 listing("model.py", "ISLA.forward", start="### The points' geometry from the boundary surface", end="### The boundary tokens: the sample")
 listing("geometry.py", "exact_boundary_geometry")
-listing("geometry.py", "_closest_cell")
+listing("geometry.py", "_closest_features")
 listing("geometry.py", "soft_log_length")
 ```
 :::

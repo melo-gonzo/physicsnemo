@@ -98,9 +98,9 @@ under the scoring over its own native error.
 #|   is no change. How to read this: these are changes of each model's own
 #|   error, not comparisons between models; a baseline mark at 20 means its
 #|   error is twenty times its native error. ISLA's one mark away from one is
-#|   the lug's; nodes of the lug that lie equally close to two surface
-#|   features of the exact geometry are a candidate cause, not isolated
-#|   (@sec-lug). Data: results/char/*_090.json.
+#|   the lug's, from nodes of the lug that lie equally close to two surface
+#|   features, whose direction the order of the search set in the geometry
+#|   the checkpoints trained with (@sec-lug-ties). Data: results/char/*_090.json.
 #| fig-height: 6.4
 #| code-fold: true
 fig, axes = plt.subplots(2, 1, figsize=(8, 6.2), gridspec_kw=dict(hspace=0.35, height_ratios=[2.6, 1.0]))

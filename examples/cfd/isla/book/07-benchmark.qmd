@@ -712,6 +712,54 @@ reference configuration is scored on them. Because those test sets cover every g
 are held out per checkpoint but do not confirm a result across the whole set of experiments (@sec-limits).
 :::
 
+## The geometry behind the standings {#sec-standing-geometry}
+
+**Every standing's ISLA checkpoints were trained with ISLA 0.9.0, whose interior geometry differs from the class's in four
+steps, and the class refuses those checkpoints (@sec-using-checkpoint).** The parameters and the network are the same; the
+forward differs only in how a prediction point's wall geometry is built and how the boundary tokens are drawn. On a surface
+task, which computes no wall geometry and draws no tokens, the four steps do not arise. @tbl-standing-geometry lists them.
+
+| step | the standings' checkpoints (ISLA 0.9.0) | the class (@sec-arch-interior-geometry, @sec-arch-boundary-draw) |
+|---|---|---|
+| the direction at a closest-feature tie | the first tied feature the float32 search meets | the least-norm point of the hull of the tied features' directions, a function of the tie set alone |
+| the sign of the wall distance | the closest feature's pseudo-normal, which cancels at a fold of the surface | the generalized winding number of the oriented cells |
+| the token draw | a Morton order along the dataset's axes, on centroids in the mesh's precision | a Morton order in the boundary's canonical frame, on float64 centroids and measures |
+| a point on the wall | a fixed cutoff of its distance, with float32 normals | its float64 distance within its own rounding bound, with float64 normals |
+
+: The interior geometry of the standings' ISLA checkpoints against the class's. How to read this: every other part of the
+forward is the same in both columns; the class's version history is the comment above `__model_checkpoint_version__` in
+`physicsnemo/experimental/models/isla/model.py`. {#tbl-standing-geometry}
+
+```{python}
+#| label: para-standing-geometry
+#| output: asis
+import re
+import records as R
+TR = " ".join(R.load("tie_exp", "RESULTS.md").split())
+fs = re.search(r"Fold sign: 0 sign changes on the lug \((\d+) cases\) and Tensile2d \((\d+) cases\)", TR).groups()
+kept = re.search(r"the maximum is ([\d,]+) against ([\d,]+)\)", TR).groups()
+assert "gray-zone count 0" in TR and "A3's condition is not met as registered" in TR
+TX = R.load("tie_exp", "read/results.json")
+nrm = re.search(r"float64 cell normals: within A7's bound of ([\d.e-]+) at (\d+) lug nodes", TR).groups()
+print("**On the GINOT bracket lug and PLAID Tensile2d the two geometries differ in effect only at closest-feature ties, and "
+      f"there the class's rule leaves {100 * TX['lug']['P']['von_mises_l2']['ratio']:.1f}% of the lug's posed excess, at no native "
+      "cost.** On those two datasets the winding-number sign "
+      f"changes the sign of no node of the lug's {fs[0]} test cases or Tensile2d's {fs[1]}, every boundary cell is kept by the "
+      f"draw (at most {kept[0]} cells against a budget of {kept[1]}), no query lies where the on-wall rule could move it, and "
+      f"the float64 normals move the on-wall direction of {nrm[1]} lug nodes by at most {nrm[0]}. ISLA trained with the class's "
+      "tie rule there, two seeds each, reads posed ÷ native "
+      f"{1 + TX['lug']['P']['von_mises_l2']['e_TIE']:.4f} on the lug against the standing's "
+      f"{1 + TX['lug']['P']['von_mises_l2']['e_B']:.3f} (ratios of seed means; the excess is posed ÷ native minus one), and its "
+      f"native error is {TX['lug']['N']['von_mises_l2']['r']:.3f} times the lug standing's and "
+      f"{TX['t2d']['N']['displacement_l2']['r']:.3f} times that of seeds 42 and 43 of the four-seed Tensile2d standing "
+      "(ratios of seed means; @sec-medial-ties). Its registration stated that the experiment stands for the class's whole "
+      "geometry on these datasets only once a repeat of the fold-sign count was recorded in it before any result; that "
+      "condition is not met as registered, since the repeat was recorded late, after the first result, though it ran before "
+      "any run of the experiment existed. On the other datasets the standings' inputs differ from the class's at ties, at "
+      "folds and, where a boundary has more cells than the token budget, in the drawn cells; how much that moves each "
+      f"standing is not measured. Data: {R.source('tie_exp', 'RESULTS.md')}; {R.source('tie_exp', 'read/results.json')}.")
+```
+
 ## The nearest-token form {#sec-checkpoint-form}
 
 **Some figures of trained ISLA (renderings of predictions, trained routing) and some study instruments are of an earlier
@@ -727,7 +775,7 @@ beside it.
 | slice reads | the normalized slice reads | the normalized slice reads (@sec-isla-normalized-reads) |
 | boundary conditions | one boundary schema shared by every condition: a labelled boundary is one mesh, its condition a one-hot label among each cell's fields | one boundary mesh per named condition, each with its own input layer and a learned offset, so a condition's identity is in the parameters; no label is read (@sec-isla-inputs) |
 | boundary tokens | drawn by the datapipe before the forward call; the model reads the sample it is given | drawn inside the forward call from the full-resolution meshes: in proportion to measure, water-filled across the conditions, systematic along a space-filling order, each kept cell carrying its Horvitz–Thompson measure; a fixed start at evaluation |
-| a prediction point's wall geometry | the distance and direction to the nearest *sampled* boundary token, signed by that token's normal | the exact closest point on the full-resolution boundary meshes, signed by the pseudo-normal, encoded continuously through the surface; the same for every draw of the boundary tokens (@sec-exact-geometry-draw) |
+| a prediction point's wall geometry | the distance and direction to the nearest *sampled* boundary token, signed by that token's normal | the exact closest point on the full-resolution boundary meshes, signed by the generalized winding number, encoded continuously through the surface; the same for every draw of the boundary tokens (@sec-exact-geometry-draw) |
 | stored signed distance | on AirfRANS, Tensile2d and the lug, the dataset's `sdf` and `sdf_normals` read as a prediction-point input | none read |
 | length unit $L$ | the RMS pairwise distance of the boundary cells the model is given, each cell at its centroid; on the interior task, of the datapipe's sample | the RMS pairwise distance of the full-resolution boundary, computed before the draw, each cell with its own second moment: exact for the meshed boundary and the same for every draw (@sec-isla-frame) |
 | scales | none declared; on AirfRANS the inlet direction and the raw inlet speed in m/s as a global scalar | the scales the AirfRANS and AeroZoo configurations declare, computed per case from the boundary and the global inputs; none declared elsewhere (@sec-using-scales) |

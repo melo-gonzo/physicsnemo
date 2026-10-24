@@ -40394,6 +40394,314 @@ DrivAerML Volume standing, scratch/isla-slices-drv-2026-10-24/).
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-night-2026-10-24/SECOND_READ_NIGHT.md).*
 
+## 2026-10-23 to 2026-10-24 — GEO-FAST: a fast path for the bundle's exact geometry, bitwise equal to the reference on every check (0 of 2,043,456 GB300 queries differ), cuts the added step on the DrivAerML Volume vehicle case from 1.49 to 1.36 times the base's; the reference's search seed moves to its own cell tree, which takes the whole-boundary step from 2.94 s to 0.92 s; a zero-area-cell defect of the reference is found on synthetic meshes, in none of the 26 real cases dumped (0 of 36,136,773 cells), and is being fixed {#sec-nb-geo-fast}
+
+**Question.** Peter's ruling of 2026-10-23 (17:08 EDT) on the geometry robustness bundle (@sec-nb-canonical-rulings):
+"Then, start a parallel thread where we try to make it faster with a fused kernel. Correctness is most important; correct +
+fast is even better. If the speedup experiment works, then add an optional fast path (like our other kernels, where we
+default iff triton is installed), and then remove the documented limitation / change it." Can the exact geometry get a fast
+path that makes the same discrete decisions as the reference, chosen automatically where CUDA and Triton are present? Lane
+GEO-FAST, branch psharpe/isla-geo-fast (pushed, not merged). Design: scratch/isla-geo-fast-2026-10-23/DESIGN.md (md5
+4e38af75), approved by the supervisor at 19:48 EDT with the supervisor's change to its decision 3: the seed fix goes into the
+reference path first, as its own commit. Records: RESULTS.md (md5 cd9aae8a), FINAL_REPORT.md (md5 ffdbf2d2) and JOBS.md there.
+
+**Where the time went.** With the DrivAerML tunnel box read beside the vehicle, the geometry call took 2,376 ms at the
+candidate (f13eb5ce0) and 2,057 ms at the standings' code, against 339 and 92 ms for the vehicle alone; 2,010 ms of it was
+the Warp mesh query that only seeds the search radius, because Warp's default tree build degenerates on a box 24 m long
+around a car (DESIGN section 0). ISLA's own cell tree does not.
+
+**What was built** (RESULTS.md, Commits).
+
+| commit | what |
+|---|---|
+| fb263fa29 | the reference's search radius seeded by a float32 nearest-cell traversal of its own cell tree, not by the per-call Warp mesh query; bitwise in every output against f13eb5ce0 |
+| b30ff5c33 | the fast op `physicsnemo::isla_closest_candidates_fast` (the tree in preorder, built by one kernel; a ball search on it; the winding number on packed node records), `exact_boundary_geometry(kernel=)` and `ISLA.geometry_kernel` |
+| 543400873 | the weld scan and the canonical cells in Triton (`geometry_fast.py`); `auto` takes the fast path when the points are on CUDA and Triton imports, and logs the choice once |
+| 0570fc6c8 | the fast path builds the lower-bound planes as the reference does (a Warp planes kernel had differed on cells with coincident vertices) |
+
+ISLA's version and its refusal of earlier state dicts are unchanged by these commits. A joined ball-and-winding traversal
+was built and dropped (job 362005): on CUDA its winding number was not bitwise, from fused multiply-adds placed differently
+by the compiler, with no speed gain.
+
+**Correctness, all bitwise** (RESULTS.md, Correctness; 0 differences required, 0 found).
+
+- C1, the head's reference path against f13eb5ce0 (the reference loaded under a renamed op): the six op outputs, `w`, `d`,
+  `u` and their gradients; 0 differing queries of 427,884 on CPU (50 sets) and 0 of 2,043,456 on GB300 (98 sets: DrivAerML
+  Volume with the vehicle and with the whole boundary, AeroZoo, the 20 lug cases and an AeroZoo case at 20,000 queries, each
+  in float32 and float64).
+- C2 and C3, the fast path against the reference: candidate pairs, so the tie sets, tie groups and directions, op outputs,
+  `w`, `d`, `u` and gradients; 0 of 1,952,096 queries on GB300 (84 sets, 32 of them adversarial: on-wall points in both
+  precisions, posed and offset copies, medial axes, near-duplicate normals, soups, a fold, repeated cells) and 0 of 160,074
+  on CPU (36 sets).
+- C6, one trained ISLA 0.9.0 checkpoint per dataset (AirfRANS, Tensile2d, the lug, AeroZoo, DrivAerML Volume): every output
+  field bitwise equal, in float32 and under bf16 autocast (job 363375).
+- Tests: the whole ISLA test directory on CPU, 340 passed and 84 skipped (f13eb5ce0: 321 and 52; the new test file adds 19
+  CPU and 32 CUDA-only tests); on GB300 the geometry, tree-read and fast-geometry files, 174 passed and 1 skipped, both with
+  the fast path forced and under `auto`, with a plugin comparing both ops at all 291 calls (442,077 queries, 0 differences).
+- One non-bitwise observation, of the reference itself: on CPU with 8 threads its float32 vertex gradient differs from run
+  to run (680 of 20,000 AirfRANS rows; 0 at one thread).
+
+**Timing** (GB300, LHR 363375, one node, two passes with the GPUs rotated; RESULTS.md, Timing; bfloat16, eager, medians
+after five warm-up calls or steps; base = the standings' code, head = 0570fc6c8 under the reference and under `auto`).
+
+| case | geometry call base | f13eb5ce0 | head, reference | head, auto (fast) | step base | f13eb5ce0 | head, reference | head, fast |
+|---|---|---|---|---|---|---|---|---|
+| AirfRANS 2-D (100k / 1,018) | 13.1 / 10.2 ms | 30.5 / 30.5 | 30.5 / 30.8 | 30.5 / 29.1 | 367 / 361 ms | 463 / 382 | 389 / 385 | 389 / 382 |
+| lug (9.8k / 6,488) | 7.5 / 7.3 | 46.3 / 42.7 | 43.5 / 43.7 | 35.4 / 36.1 | 141 / 136 | 183 / 172 | 177 / 177 | 172 / 175 |
+| AeroZoo (200k / 0.50M) | 18.2 / 17.1 | 96.2 / 94.2 | 104.4 / 98.2 | 81.6 / 82.8 | 505 / 503 | 587 / 581 | 603 / 583 | 577 / 577 |
+| DrivAerML Volume, vehicle (200k / 16.95M) | 97.5 / 98.5 | 373.6 / 372.0 | 366.0 / 360.6 | 296.0 / 295.4 | 570 / 577 | 851 / 858 | 862 / 843 | 786 / 776 |
+| DrivAerML Volume, whole boundary (200k / 16.96M) | 2,423 / 2,441 | 2,778 / 2,758 | 421.7 / 423.9 | 351.5 / 349.0 | 2,936 / 2,935 | 3,270 / 3,247 | 928 / 920 | 847 / 839 |
+
+: The geometry call and the training step, pass 1 / pass 2 (prediction points / boundary cells per case). {#tbl-nb-geo-fast}
+
+- Step against the base, mean of passes: AirfRANS 1.06 at the head under either kernel (the two-dimensional path is
+  unchanged); the lug 1.28 at f13eb5ce0 and 1.25 with the fast path; AeroZoo 1.16 and 1.15; DrivAerML Volume with the vehicle
+  1.49 and 1.36; with the whole boundary 1.11 at f13eb5ce0 and 0.29 with the fast path, 0.31 on the head's reference path.
+- Peak memory of the training process is the same for every version. The geometry call's own peak on DrivAerML Volume is
+  18.3 GiB at f13eb5ce0, 16.8 on the head's reference path and 17.7 on the fast path.
+- On the DrivAerML vehicle case the fast path reached 296 ms against the design's estimate of about 210 ms, because the
+  exact phase was not written in Triton (35 to 45 ms at that size); the optional 2-D kernel was not built either.
+
+**What it means** (FINAL_REPORT.md). The fast path cuts the bundle's added step on the vehicle-only DrivAerML Volume case by
+about a quarter, from +49 to +36 percent, and by less elsewhere. The larger change on the whole boundary comes from the
+reference: every ISLA version paid about 2 s per call there, and fb263fa29 removes it. The lane's confidence in the
+correctness rests on every check being exact; its timings agree within 3 percent with an earlier run (job 362819).
+
+**A defect of the reference, found by GEO-FAST** (RESULTS.md, reported to the supervisor 01:08 EDT 2026-10-24). On a cell
+with two coincident vertices the reference raises an IndexError, or on CUDA a device-side assert, or silently returns a
+farther cell: the ball search's lower bound mishandles such a cell (torch's cross product of two equal vectors is 6e-18, not
+0), and so does `_closest_weights` in the vertex order (b, b, a). On degenerate soups 5 of 40 float32 sets raise and 260 of
+35,000 float32 queries are silently wrong; in float64 33 of 40 raise and 80 of 7,000 are wrong. In the real cases dumped
+there are 0 such cells in 36,136,773 (26 cases). The fast path reproduces the reference's behaviour on them exactly. The
+supervisor's decision (the supervisor's, not Peter's), as GEO-DEGEN's design quotes it: fix it, do not refuse such meshes;
+a zero-area cell is the set its vertices span, never supplies a normal or an on-wall direction, and adds nothing to the
+winding number (scratch/isla-geo-degen-2026-10-24/DESIGN.md). Lane GEO-DEGEN builds the fix on psharpe/isla-geo-fast and
+checks it on GB300; the fast path merges after it.
+
+Cost: 7.76 GPU-h of a 30 GPU-h cap, in 16 jobs (359447 to 363922). fb263fa29 alone went into ISLA with the bundle
+(@sec-nb-geo-adopted).
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-tie-2026-10-24/SECOND_READ_TIE.md).*
+
+## 2026-10-24 — TIE-EXP read as registered: the tie rules restore exact flip symmetry on the lug and Tensile2d, cost no native accuracy on either, and carry most of the lug's pose sensitivity (posed ÷ native 1.456 to 1.0019); the registered decision rule reads adopt {#sec-nb-tie-exp-read}
+
+**The read.** Registered read of PREREG.md section 4 with amendments A1 to A9 (final md5 f0e70cb2;
+@sec-nb-tie-exp-prereg), 01:43 EDT 2026-10-24, by `launcher/read_tie.py` on local copies of the scorer and probe files.
+Records: scratch/isla-tie-2026-10-22/RESULTS.md (md5 4c2cbd59), read/results.md (md5 1da6c577), read/results.json, JOBS.md.
+The tie rules are MEDIAL-TIE's (TIE-FIX 19fb0a754): off the wall, a closest-feature tie takes the least-norm element of the
+Clarke generalized gradient; on the wall, a node takes the least-norm point of the hull of its incident cells' unit normals.
+B is the eager-trained standing on the lug and seeds 42 and 43 of the four-seed eager-trained Tensile2d standing
+(r090eag_lug_isla and r090eag_t2dz_isla, seeds 42 and 43); TIE is B's lanes on code_tie2,
+B's snapshot with only geometry.py and tree_read.py of 19fb0a754. Every row is at epoch 500, float32, fully eager, at
+200,000 cells, on the lug's 600 test cases and Tensile2d's 100.
+
+| rule | dataset | numbers | verdict |
+|---|---|---|---|
+| F | lug | TIE median d_F 1.38e-7 / 1.41e-7 (s42 / s43; max 4.1e-7); B beside: 1.40e-4 / 1.56e-4 | **exact flip symmetry restored** |
+| F | Tensile2d | TIE d_F exactly 0 in every field, both seeds; B beside: displacement 8e-7, stress 1.4e-6, q 2.7-3.0e-5 | (same verdict, both datasets) |
+| N | lug | von Mises: B 0.00138 / 0.00177 (mean 0.00157), TIE 0.00139 / 0.00177 (0.00158); r 1.004, log r +0.004; sigma = max(0.036, s_pool 0.176) = 0.176 | **no cost** |
+| N | Tensile2d | displacement: B 0.00783 / 0.00629, TIE 0.00628 / 0.00806; r 1.016, log r +0.016; sigma = max(0.232, 0.166) = 0.232 | **no cost** |
+| N (beside) | Tensile2d | stress r 1.034 (sigma 0.330), plastic strain r 0.991 (sigma 0.303) | no cost, no cost |
+| P | lug | B posed / native 1.456 (e_B +0.456; per seed 1.246 / 1.619); TIE 1.0019 (e_TIE +0.0019; 1.0024 / 1.0015); e_TIE / e_B 0.004; guard log(1 + e_B) 0.376 > 2 x 0.036 | **the medial ties carry most of the lug's pose sensitivity** |
+| P control | Tensile2d | displacement posed / native: B 0.9999, TIE 0.9999; abs(log ratio) 0.0000, within 2 sigma (0.464) | as predicted (not a verdict) |
+
+: TIE-EXP's registered verdicts (RESULTS.md). *r* = TIE ÷ B on seed means, above one meaning TIE's error is larger; *e* =
+posed ÷ native − 1 per arm, from seed means; *d_F* the compensated flip residual (A1), median over cases. {#tbl-nb-tie-exp}
+
+- **Decision rule** (MEDIAL-TIE DESIGN f): F passes and N is not "cost" on either dataset, so the rule's condition to
+  **adopt** is met. As registered, adoption needs section d's kernel or a per-mesh cache, because the search adds 26
+  percent to the lug's step; P says that the 2026-10-18 note's other options (a nematic encoding, a soft minimum) are not
+  needed for the lug's pose sensitivity. A per-mesh cache is excluded by Peter's boundary-only input ruling as the
+  supervisor applies it (no per-case geometry cache); the bundle went in at its measured cost under Peter's ruling of
+  2026-10-23, with GEO-FAST's fast path to follow (@sec-nb-geo-fast, @sec-nb-geo-adopted).
+- **Predictions** (PREREG section 5): gate (i) passed (p 0.85); F restored (0.65); N "no cost" on both datasets (0.70 on the
+  lug, 0.90 on Tensile2d); P "most" (0.40); the Tensile2d control within 2 sigma (0.95); gate (ii) passed on the lug at
+  1.4e-7 (0.70).
+
+**Beside the verdicts, not registered rules.**
+
+- Per-seed pairing on the lug: TIE ÷ B native is 1.008 for seed 42 and 1.002 for seed 43. The arms share seeds and data
+  order, so each TIE seed lands within 1 percent of its B seed; the N rule's sigma (0.176) comes from the 0.25 spread
+  between seeds in log, the same for both arms.
+- The pose excess is gone at every seed (1.0024 and 1.0015, against 1.246 and 1.619): the float32 floor of an equivariant
+  model, on a posed set that rotates and translates every input (not degenerate).
+- **A3's condition is not met as registered.** A3 stated the whole-bundle assumption for code_tie2 only once FOLD-SIGN's
+  repeat against 19fb0a754 was recorded in the PREREG before results; it was recorded only in A9, after the first arm
+  result. The transfer to the whole bundle is "recorded late (A9); the repeat ran before any arm existed": the fold sign
+  changes 0 signs on the lug (600 cases) and Tensile2d (100 cases), against both d3d9da49d and 19fb0a754 (LHR 341328 and
+  341486; rerun by GEO-AUDIT in 346922_10, 347401 and 347555); the token draw keeps every boundary cell on both datasets
+  (at most 8,568 cells against 200,000); ONWALL's rule (A8) has a gray-zone count of 0. So on these two datasets TIE stands
+  for the whole geometry bundle, by that late record.
+- Transfers measured before the arms: TIE-FIX2 (34654e01d) gives 0 uncertified rows and 0 bitwise differences in 5,143,196
+  rows; GEO-BUNDLE's float64 cell normals stay within A7's bound of 2.1e-5 at 190 lug nodes.
+- The supervisor-approved deviation A7 stands as recorded at registration: at 190 of about 3.8 million lug on-wall nodes
+  the float32 direction differs from the exact one by up to 2.1e-5, because the least-norm point is ill-conditioned at the
+  near-duplicate normals of the lug's split hexahedral faces. The routine is exact on its inputs; the conditioning goes to
+  the design agenda.
+- Blinding: the lane opened none of the supervisor's blinded files before the read; B's lug rows were first read there.
+  TIE-EXP's blinding ended with this read.
+
+Cost: 206.1 GPU-h of the 220 GPU-h cap (arms 201.1 in 18 links, first links 342513 to 342516; gate and pre-steps 2.6;
+smokes 0.9; scoring 1.0, jobs 345741 and 364216; the F probes 0.4, jobs 345742 and 364217).
+
+The chapters take the result in 04 (@sec-medial-ties), 07 (@sec-standing-geometry), 16 (@sec-lug-ties) and 20
+(@sec-limits-ties, @sec-oq-ties), with In-flight callouts in 04, 16 and 20 on the lug standing's posed numbers, which
+standings trained with the class's geometry replace.
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-tie-2026-10-24/SECOND_READ_TIE.md).*
+
+## 2026-10-24 — BC-SIDECAR: SHIFT-SUV's CFD box is the same on all 1,991 files and is built in the recipe; HiLiftAeroML's far field is reproduced by curator's generator, but its symmetry plane is blocked: 20 of 21 sampled wings store about 19 M duplicated cells and an open root {#sec-nb-bc-sidecar}
+
+**Question.** Can the pieces of the domain's boundary that SHIFT-SUV and HiLiftAeroML do not store be built as DrivAerML's
+were, under Peter's ruling of 2026-10-23 that canonical ISLA reads the whole boundary, and the program's rule, from his words of
+2026-10-17, that a dataset is never modified
+to supply a missing piece (@sec-nb-canonical-rulings, @sec-nb-boundary-audit)? Lane BC-SIDECAR prototyped the supervisor's
+supply plan, which Peter has not yet approved, on branch psharpe/isla-bc-sidecar (456b19260 and 12fce7bfc, pushed, not
+merged). Records: scratch/isla-bc-sidecar-2026-10-23/REPORT.md (md5 5954c6c2), FINAL_REPORT.md, JOBS.md.
+
+**SHIFT-SUV** (REPORT section 1; cpu-short 363013 and 363014, all 1,991 files, 996 estate and 995 fastback).
+
+- On every file the interior's exact float32 bounding box is x −40 to 80 m, y −20 to 20 m, z −0.024 to 19.976 m, with CFD
+  nodes on all six planes, and every file stores only `boundaries/vehicle`. The ground lies 1.1436 to 1.1463 mm below the
+  vehicle's lowest point (median 1.1448 mm).
+- `AddBoxBoundaries` builds the box from these constants (curator's 20 × 20 grid per face, normals into the fluid) as the
+  first transform of the five SHIFT-SUV dataset files, so every pose and CenterMesh moves it with the vehicle. The pieces are
+  `inlet`, `outlet`, `floor`, `side_walls` and `roof`; only the inflow and the moving floor are documented.
+  `isla_surface_shift_suv.yaml` reads the box and predicts at the vehicle. A fix in `walk_path`: `boundaries.floor` had
+  resolved to `TensorDict.floor`, a method.
+- Tests: the whole ISLA test directory passes (280 passed, 47 skipped; 363573); the recipe tests give 554 passed, 12 skipped
+  and 2 failed (363575), the 2 failing with the same message on the base (362118).
+
+**HiLiftAeroML** (REPORT section 3).
+
+- On the two files that store it (LHC001_AoA_10 and _12), curator's generator reproduces the inlet and the outlet exactly
+  (0.0 coordinate difference, the same oriented cells) and the symmetry disk up to 7 or 8 cells, which come from curator's
+  order-dependent walk of the hole's loop (on AoA_12 the hole is 612,114 against 612,119 in²).
+- On the five other cases built, the symmetry planes are invalid: curator's walk of the wing's root finds 927 to 960 small
+  loops, and the disks' hole areas are −5,158 to +1,704 in² against about 612,000.
+- The cause is the wing as stored: those geometries hold 18.7 to 19.4 M duplicated cells, copies of only 25,500 to 25,800
+  distinct cells, 7 percent of the cells and 119 k to 1.62 M in² of the 1.79 to 3.32 M in² summed wing area. With the
+  duplicates dropped the root is still open (about 812 chains of open edges on y = 0). Of 21 geometries sampled, only
+  LHC001 has a root that closes into one loop.
+- Cost per case: 7 to 40 s wall, 27 to 73 CPU-s and 17 to 19 GB peak; about 27 process CPU-h for all 1,800 cases. Dropping
+  the duplicates adds 5 to 8 minutes and 31 to 36 GB per case.
+
+**Smokes** (GB300 363460, 20 steps, losses finite). SHIFT-SUV 164.5 ms and 65.4 GB with the vehicle alone against 196.1 ms
+and 67.5 GB with the box (1.19 times, the unaligned token count; @sec-nb-align8). HiLiftAeroML on LHC030_AoA_4, plumbing
+only, since its symmetry plane is the invalid one: 682 against 675 ms.
+
+**Decisions that remain Peter's** (REPORT section 5): whether to report the duplicated cells to the dataset's owners and
+correct for them in the recipe; a lane to repair the wing root or build the hole another way, or a HiLiftAeroML run with the
+far field alone; where the HiLiftAeroML sidecar lives and what its pieces are called; the far field's radius (88.95 mean
+aerodynamic chords stored, about 75 in the paper); SHIFT-SUV's piece names, and whether to ask for the undocumented
+conditions on its walls, roof and outlet. The supply of both sidecars waits on Peter's answer.
+
+**What follows.** The duplicates enter HiLiftAeroML's surface measures and draws (about 7 percent of a uniform draw, 7 to 50
+percent of the summed area). Lane HL-DUP (scratch/isla-hl-dup-2026-10-24/, launched by the supervisor 02:06 EDT 2026-10-24)
+measures whether they move the HiLiftAeroML standing: a cpu-short census of the scored cases and short-QoS inference of the
+standing's checkpoints with the duplicates excluded. Chapter 10 states the duplicates with an In-flight callout on the
+standing.
+
+Cost: 19 cpu-short jobs (16.3 core-h) and one short-QoS GB300 job (0.23 GPU-h).
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-tie-2026-10-24/SECOND_READ_TIE.md).*
+
+## 2026-10-24 — ALIGN8: a token count that is not a multiple of 8 costs 20 to 40 percent per step in bfloat16 on GB300, and a multiple of 8 that is not one of 32 about 8 percent, from the slice attention's token-axis matrix products and LayerNorm's backward pass; the standings are mostly aligned, so the stake is 1 to 3 percent of the rerun; a padding fix equal to roundoff is built, not merged {#sec-nb-align8}
+
+**Question.** SURFACE-BC measured about 45 ms, 20 percent, per eager bfloat16 step on GB300 at a token count that is not a
+multiple of 8 (@sec-nb-surface-bc). Does that hold in the standings' configuration, what causes it, and does padding remove
+it? Records: scratch/isla-align8-2026-10-23/FINAL_REPORT.md (01:55 EDT 2026-10-24), results/repro_table.md and
+exposure/exposure_gpuh.md there.
+
+**Reproduction** (GB300, bfloat16, step in ms; base 32fa15389, fix e60be94d4 at j = 1 to 7 tokens added).
+
+| case, path | N0 | base N0 | base odd N | base even N, not mod 8 | fix | odd / fix |
+|---|---|---|---|---|---|---|
+| DrivAerML Surface, eager | 200,000 | 349 | 470 | 422 | 351 | 1.34 |
+| DrivAerML Surface, compile_blocks | 200,000 | 219 | 313 | 268 | 223 | 1.40 |
+| AeroZoo, eager | 400,000 | 723 | 966 | 872 | 731 | 1.32 |
+| AirfRANS ISLA, eager (standing) | 100,992 | 662 | 727 | 701 | 668 | 1.09 |
+| AirfRANS ISLA-DTT, eager (standing) | 100,992 | 820 | 891 | 863 | 833 | 1.07 |
+
+: ALIGN8's reproduction (FINAL_REPORT.md; full table results/repro_table.md). {#tbl-nb-align8}
+
+- Odd counts cost +32 to +40 percent, even counts not a multiple of 8 about +20 percent, eager and with the blocks compiled
+  alike; the forward pass alone loses 6 to 27 percent. The small cases (the lug, Tensile2d, DeepJEB++) are launch-bound and
+  their wall times too noisy to resolve it; profiled GPU time gives +5 percent on the lug at N + 1 and +8.6 percent on
+  Tensile2d, and under 1 percent on DeepJEB++.
+- **Cause** (results/gemm_362691.jsonl and the profiles): the slice attention's matrix products along the token axis (the
+  slice pooling, the prototype attention and its value sum), for which cuBLAS leaves its sm103 kernels for slower ones when
+  the token stride is not 16 bytes; and LayerNorm's backward pass, whose weight-gradient reduction takes its aligned path
+  above 65,536 rows only when N is a multiple of 32 (1.49 to 2.54 ms per call), which is why an 8-aligned count (200,008)
+  still cost 377 against 350 ms.
+- **Exposure.** N is fixed per case. AeroZoo (all seven splits), DrivAerML Volume (vehicle or whole boundary), DrivAerML
+  Surface (vehicle) and SHIFT-SUV are multiples of 32 on every case. AirfRANS (87 percent of cases misaligned), AirfRANS
+  with its far field (74 percent), the lug (64), Tensile2d (89), DeepJEB++ (75) and DrivAerML Surface with the whole
+  boundary (100 percent, 205,054 tokens) are not; with four ranks waiting on the slowest, 98 to 100 percent of their steps
+  are exposed. The GPU-h at stake: about 28 measured and at most about 70 per two-seed set, 1 to 3 percent of a 2,500 to
+  4,000 GPU-h rerun. A count one off on AeroZoo would cost +32 percent per step, about 1,100 to 2,200 GPU-h on REF-090's
+  AeroZoo lanes.
+- **Fix** (psharpe/isla-align8, pushed, not merged; 0fef70a42 pads to a multiple of 8, e60be94d4 to `TOKEN_ALIGNMENT = 32`):
+  `_forward_tokens` appends −N mod 32 padding tokens, every field zero and log-weight −inf, as passive tokens are; they hold
+  no mass in any softmax over points, and the tree read and the head read only the real tokens. No parameter, no flag, the
+  state dict unchanged. Padded against unpadded on CPU: at most 1.2e-6 on outputs and 3.4e-5 on gradients in float32, 2.3e-15
+  and 7.1e-14 in float64. The ISLA test directory gives 276 passed and 47 skipped (363324 to 363326). With the fix every j
+  runs at the aligned time (DrivAerML Surface eager 470 to 351 ms, AeroZoo 966 to 731 ms), and at j = 0 it costs at most +1
+  percent.
+
+The lane recommends merging e60be94d4 before the final rerun, as cheap insurance on AeroZoo and DrivAerML; the merge is the
+supervisor's. Chapter 06 states the cost (@sec-using-cost). Cost: 5.86 GPU-h of a 6 GPU-h cap (362691, 362753, 363327 and
+363671, the last cancelled at 55 minutes; cpu-short 362791 to 362793, 363324 to 363326, 362817 and 362818).
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-tie-2026-10-24/SECOND_READ_TIE.md).*
+
+## 2026-10-24 — The geometry robustness bundle is ISLA's geometry: merged as ISLA 0.11.0 (1e7f03d7d), with the cell-tree seed of the search radius; every standing was trained with 0.9.0, whose checkpoints 0.11.0 refuses; its cost on GB300 is 1.06 to 1.49 times the standings' step on a body alone {#sec-nb-geo-adopted}
+
+**The adoption.** Peter's ruling of 2026-10-23 (17:08 EDT): "Adopt it, and then document the cost." Adoption waited on
+TIE-EXP's registered decision rule: Peter's words name the accuracy condition (N not "cost"), and the supervisor kept the
+flip test F as a condition (@sec-nb-canonical-rulings). TIE-EXP read "exact flip symmetry restored" and "no cost" on both
+datasets (@sec-nb-tie-exp-read), so both conditions are met. Lane BUNDLE-MERGE merged the bundle, GEO-FAST's seed fix
+fb263fa29 and psharpe/isla (d1bb2e887) on psharpe/isla-geo-bundle and bumped the version (ce598a72d); the supervisor merged it
+into psharpe/isla as 1e7f03d7d at 02:22 EDT 2026-10-24. It does not hold GEO-FAST's fast path (b30ff5c33 and later).
+Records: scratch/isla-bundle-merge-2026-10-24/REPORT.md and FINAL_REPORT.md, and the version-history comment above
+`__model_checkpoint_version__` in physicsnemo/experimental/models/isla/model.py.
+
+**What ISLA 0.11.0 is.** Least-norm tie directions, the winding-number sign of the wall distance, the float64
+canonical-frame token draw, the on-wall rule, float64 cell normals and the cell-tree seed of the search radius, with the
+same parameters and a new forward (@sec-nb-geo-bundle, @sec-nb-geo-fast).
+
+- `__model_checkpoint_version__` goes from 0.9.0 to 0.11.0 and `_version` from 9 to 11. 0.10.0 is skipped: it names the
+  unmerged head-frame candidate, whose checkpoints exist, so each version string names one model.
+- The check is unchanged (`version != ISLA._version`), so state dicts of versions 1, 8, 9 and 10 are refused on every
+  loading path, with no shim or upgrade path; a new test refuses a torch version-9 state dict through `Module.load`,
+  `load_state_dict` and a DDP-style wrapper.
+- `isla_default_v1.mdlus` was regenerated by the procedure in test_isla_release.py's docstring: its 59 tensors are bitwise
+  equal to the old file's, and only `mdlus_file_version` and the root state-dict version change. No golden output changed.
+- Tests: the ISLA directory on LHR cpu-short (364583), 325 passed, 52 skipped, 0 failed; on GB300 (364584) the
+  interior-geometry, tree-read and release files pass with no CUDA test skipped; the recipe tests locally 523 passed, 12
+  skipped, 0 failed (on LHR 2 fail with the environment's `SLURM_NPROCS` TypeError, as on surface-bc's run 362050). 0.14
+  GPU-h.
+
+**What it means for the book.** Every standing was trained with ISLA 0.9.0, and 0.11.0 refuses those checkpoints by
+design; the final reference rerun trains 0.11.0. On the lug and Tensile2d TIE-EXP stands for the whole bundle, by the late
+record of its A3 condition; on the other datasets the standings' inputs differ from 0.11.0's at closest-feature ties, at
+folds and, where a boundary has more cells than the token budget, in the drawn cells, by an amount not measured. The chapters
+now describe 0.11.0's geometry (05 @sec-arch-interior-geometry and @sec-arch-boundary-draw, 03, 04, 06) and state the
+standings' geometry once, in 07 (@sec-standing-geometry); 0.9.0's limits at ties and folds are cut from 20 and replaced by
+what rounding still decides (@sec-oq-ties, @sec-oq-precision), and the candidate-geometry callouts in 04 and 20 are cut.
+
+**The cost, as Peter asked.** The merged path is GEO-FAST's reference path (the commits after fb263fa29 add only the fast
+path; RESULTS.md of scratch/isla-geo-fast-2026-10-23, Timing, the "head, reference" column against "base", the standings'
+code). On GB300 in bfloat16, eager, the training step is 1.06 times the standings' on AirfRANS (387 against 364 ms, means of
+two passes), 1.28 on the lug (177 against 138), 1.18 on AeroZoo (593 against 504) and 1.49 on DrivAerML Volume with the
+vehicle (852 against 574); with the DrivAerML tunnel box it is 0.31 times (924 against 2,936 ms), since the seed fix removes
+the Warp query that cost about 2 s per call at every earlier version. Peak memory of the training process is unchanged.
+Chapter 06 gives the table (@sec-using-cost) with an In-flight callout: GEO-FAST's fast path, bitwise equal to this
+reference on every check, replaces those costs where CUDA and Triton are present once it merges, after GEO-DEGEN's fix for
+zero-area cells; its own step is 1.36 times the standings' on the DrivAerML vehicle case (@sec-nb-geo-fast).
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-tie-2026-10-24/SECOND_READ_TIE.md).*
+
 ## 2026-10-22 — MECH-090: on Tensile2d the fixed compiled path's float32 gradients sit at a one-ulp eager floor, and pytorch/pytorch#195845 added a unit-dependent sink to ISLA's slice-state softmax (registered emulations not confirmed; a post-smoke emulation matches) {#sec-nb-mech090}
 
 **Question.** REF-090's Tensile2d control (@sec-nb-ref090-t2d-control) read (b) by its registered weighing, in which A2
@@ -41117,12 +41425,13 @@ case).
 
 **Decisions, as the records give them.**
 
-- No per-case geometry cache: the model takes only the boundary meshes. DV-COST's task also allowed no caches across forward
+- No per-case geometry cache (the supervisor's extension, 2026-10-22, of Peter's boundary-only input ruling of 2026-10-17,
+  "just pass in the full-resolution boundary surfaces and ONLY that"): the model takes only the boundary meshes. DV-COST's task also allowed no caches across forward
   calls, and at DrivAerML Volume size a cache would hold several GB per case (DESIGN p.4 (f); excluded, q).
 - The fold sign by the generalized winding number (DESIGN i.1, k).
 - The token draw computed in float64 from the input mesh, on a Morton grid in the boundary's canonical frame. The supervisor
-  rejected breadth-first and Cuthill-McKee orders, which depend on the cells' numbering and need a per-mesh cache that the
-  boundary-only input ruling excludes, and hashed priority sampling, which depends on the numbering and is not stratified
+  rejected breadth-first and Cuthill-McKee orders, which depend on the cells' numbering and need a per-mesh cache, which the
+  supervisor's application of Peter's boundary-only input ruling excludes, and hashed priority sampling, which depends on the numbering and is not stratified
   over the surface (TOKEN-DRAW, header). The canonical frame was kept under the bar fixed in TOKEN-DRAW's task (at least 10 times fewer pose changes on the
   non-degenerate cases, at under 2 percent of AeroZoo's 0.51 s step): every non-degenerate AeroZoo case (37 to 1,621 times),
   DrivAerML run_2 (73 times) and the pool (39 times) pass it, and DrivAerML run_1 (7.2 times) does not. The lane asked the
@@ -41145,6 +41454,9 @@ case).
 whole has not been trained. TIE-EXP retrains the tie rules (19fb0a754) on the lug and Tensile2d (@sec-nb-tie-exp-prereg), and
 its amendments A3 and A8 carry that test to the fold sign and the on-wall rule on those two datasets through the
 counts above. The chapters state 0.9.0's geometry, with an in-flight callout in 04 and 20.
+
+**Later (2026-10-24).** Adopted under Peter's ruling of 2026-10-23 after TIE-EXP read adopt, and merged with GEO-FAST's seed
+fix as ISLA 0.11.0 (1e7f03d7d; @sec-nb-tie-exp-read, @sec-nb-geo-adopted).
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-geo-nb-2026-10-23/SECOND_READ_GEO.md).*
 
@@ -41336,6 +41648,10 @@ rules jointly, never to one of them.
 
 **Launch.** The four arms were submitted at 21:10 EDT on code_tie2 (342513 to 342516) with the rules unchanged. No TIE score
 is read before the registered read, about 2026-10-24; the registry expects the arms to end by 2026-10-25.
+
+**Later (2026-10-24).** Read as registered at 01:43 EDT: F "exact flip symmetry restored", N "no cost" on the lug and
+Tensile2d, P "the medial ties carry most of the lug's pose sensitivity"; the decision rule reads adopt, and A3's condition is
+not met as registered (@sec-nb-tie-exp-read).
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-geo-nb-2026-10-23/SECOND_READ_TIE.md).*
 
