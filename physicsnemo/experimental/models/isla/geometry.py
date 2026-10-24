@@ -203,7 +203,7 @@ def _canonical_cells(points, cells):
     return torch.stack(vert, 1), 1 - 2 * (inversions % 2)
 
 
-def _closest_weights(q, simplex, flat=None):
+def _closest_weights(q, simplex, flat=None, fast=False):
     """The barycentric weights ``(P, d)`` of the point of each simplex closest to
     its query (Ericson 2005, Sec. 5.1.5), exact zeros outside the face region; call
     in float64 (the face-region weights are ratios of Gram determinants that cancel
@@ -224,10 +224,15 @@ def _closest_weights(q, simplex, flat=None):
     accurate point. At every pair below the guard, Ericson's weights stand,
     bitwise. Both branches are certified: the guard by ``K`` (:data:`_ERICSON_K`),
     the switch by a band of at least ``_SWITCH_UNITS + _FOOT_UNITS``, each a worst
-    case. ``unit`` is measured in the frame of ``q`` and ``simplex``."""
+    case. ``unit`` is measured in the frame of ``q`` and ``simplex``. ``fast`` computes
+    the weights of triangles by two Triton kernels on CUDA, bitwise these
+    (:func:`~physicsnemo.experimental.models.isla.geometry_fast.closest_weights`)."""
     if q.shape[-1] == 2:
         t = _segment_t(q, simplex[:, 0], simplex[:, 1])
         return torch.stack([1 - t, t], -1)
+    if fast:
+        constants = (_ERICSON_K, _SWITCH_UNITS, _ORIENT_ERRBOUND)
+        return geometry_fast.closest_weights(q, simplex, flat, _closest_weights, *constants)
     w = _closest_point_weights(q, simplex)
     edge = (w > 0).sum(-1) == 2
     ends = torch.tensor([[1, 2], [0, 2], [0, 1]], device=q.device)[(w[edge] == 0).to(torch.int8).argmax(-1)]
@@ -477,11 +482,12 @@ _SWITCH_UNITS = 1
 #: ``1 + 2 u`` units). The centring adds the rounding of ``x - c`` and ``v - c``, one
 #: unit (none for float32 inputs whose exponents lie within 29 bits of ``c``'s), and
 #: the second-order terms and the band's own float64 evaluation two more (rounding is
-#: monotone, so ``fl(D - E) <= fl(D + E)`` needs no margin): 91 in three dimensions,
-#: 17 in two. Torch evaluates each operation by itself (no fused multiply-add, which
-#: would only remove roundings in the bounds; :func:`_two_product` and
-#: :func:`_two_sum` need it absent). Float64 inputs are covered where every product
-#: stays normal, about ``|v| < 1e76`` with nonzero differences above ``1e-76``.
+#: monotone, so ``fl(D - E) <= fl(D + E)`` needs no margin): 91 in three dimensions.
+#: In two, an edge point's 15 units, the centring's 1 and one more: 17. Torch evaluates
+#: each operation by itself (no fused multiply-add, which would only remove roundings in
+#: the bounds; :func:`_two_product` and :func:`_two_sum` need it absent). Float64 inputs
+#: are covered where every product stays normal, about ``|v| < 1e76`` with nonzero
+#: differences above ``1e-76``.
 _BAND_UNITS = {2: 17, 3: _SWITCH_UNITS + _FOOT_UNITS + 3}
 
 
@@ -1837,15 +1843,19 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     exact distance plus its error bound bounds the closest distance, and a second
     traversal of the same BVH returns the cells within that radius; in two
     a brute force in the queries' precision, on the centred coordinates, keeps the
-    segments within its own rounding (``32 u (|x'| + max |v'|)`` on each side, against
-    a worst case of 14.5 units: the distance to a segment 12, the comparison's square
-    and root 2.5) and the error bounds of the least. The winding
+    segments within its own rounding (``40 u (|x'| + max |v'|)`` on each side, with
+    room over a first-order count of 33.5 units: the brute-force distance 14, the
+    centred copies' rounding 1, the comparison's square and root 2.5, and the
+    arithmetic share of the least's bound 16) and the error bounds of the least. The winding
     number takes the same BVH in three dimensions, unless cells repeat.
 
     ``fast`` changes how the three-dimensional candidates and the winding number are
     traversed, not what they are: the same tree in depth-first preorder with its
     cells in leaf order (:func:`_preorder_cell_tree`), the ball search alone on it,
-    and the winding number on packed node records (:func:`_packed_winding_sum`)."""
+    and the winding number on packed node records (:func:`_packed_winding_sum`); and
+    it computes the closest weights (:func:`_closest_weights`: Ericson's, the
+    thin-cell guard and the accurate point) by two Triton kernels on CUDA, bitwise the
+    torch code's."""
     nq, dim = query_points.shape
     dev = query_points.device
     q64, simplex = query_points.double(), points.double()[cells]
@@ -1914,7 +1924,7 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
         else:
             tree = _cell_tree(s_ord)
             seed = order[_nearest_cells(query_c, s_ord, tree)]
-        w0 = _closest_weights(q64, simplex[seed], flat[seed] if any_flat else None)
+        w0 = _closest_weights(q64, simplex[seed], flat[seed] if any_flat else None, fast)
         bound = (q64 - (w0[..., None] * simplex[seed]).sum(1)).norm(dim=-1) + band(torch.arange(nq, device=dev), seed)
         ### (padded by twice the bound, the kernel's float64 distances against these,
         ### and by the rounding of its box test)
@@ -1936,14 +1946,14 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
                 tree = _cell_tree(s_rep)
     else:
         w_sum = None
-        rounding = 32 * torch.finfo(query_points.dtype).eps / 2 * (q_norm + reach.max())
+        rounding = 40 * torch.finfo(query_points.dtype).eps / 2 * (q_norm + reach.max())
         li, pk = _segment_candidates(query_c, points_c, cells, (2 * (rounding + err_max)).to(query_points.dtype))
     ### In the order of (query, cell), so the first minimum is the least cell index.
     f = cells.shape[0]
     key = (li * f + pk).sort().values
     li, pk = key // f, key % f
     tri = simplex[pk]
-    w = _closest_weights(q64[li], tri, flat[pk] if any_flat else None)
+    w = _closest_weights(q64[li], tri, flat[pk] if any_flat else None, fast)
     diff = q64[li] - (w[..., None] * tri).sum(1)
     dist = diff.norm(dim=-1)
     err = band(li, pk)
@@ -2218,7 +2228,8 @@ def exact_boundary_geometry(
 
     ``kernel`` names the implementation of the search, not what it computes:
     ``"reference"`` defines it, and ``"fast"`` gives the same outputs bitwise
-    from a faster traversal in three dimensions (:func:`_closest_candidates_impl`).
+    from a faster traversal in three dimensions and, on CUDA with Triton, the
+    closest points' weights fused into two kernels (:func:`_closest_candidates_impl`).
     """
     if query_points.shape[-1] not in (2, 3):
         raise NotImplementedError(
