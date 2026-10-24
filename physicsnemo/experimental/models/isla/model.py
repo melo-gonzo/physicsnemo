@@ -480,15 +480,15 @@ class ISLA(Module):
     **Execution.** The ``geo_kernel`` attribute (``"auto"``; set ``"eager"`` or
     ``"fused"`` to force one) selects how the per-layer geometry region is
     executed, not what it computes (:meth:`resolve_geo_kernel`). The
-    ``tree_walk`` attribute (``"auto"``; set ``"reference"`` or ``"fast"`` to
-    force one) selects how ISLA-DTT's forest walk runs, not the pairs it returns
-    (``tree_read.resolve_walk``), and the ``tree_build`` attribute (likewise) how
-    its boundary forest is built, not what it is
-    (:func:`~physicsnemo.experimental.models.isla.tree_build.resolve_tree_build`).
-    The ``tree_read_kernel`` attribute does the same for ISLA-DTT's boundary read
-    (``"auto"``, ``"reference"`` or ``"fused"``; :meth:`resolve_tree_read_kernel`).
-    Each is an execution choice, not a constructor argument: checkpoints do not
-    store it, and a loaded model starts at ``"auto"``.
+    ``tree_read_kernel`` attribute does the same for ISLA-DTT's tree read: under
+    ``"auto"`` each of its pieces (the forest build, the walk, the read with its
+    node means) runs its fast kernel where that piece's requirements hold
+    (:func:`~physicsnemo.experimental.models.isla.tree_build.resolve_tree_build`,
+    ``tree_read.resolve_walk``, :meth:`resolve_tree_read_kernel`), each choice
+    logged once, and its reference otherwise; ``"reference"`` runs every piece's
+    reference. The forest and the pairs are the same either way, the read the
+    same up to summation order. Each is an execution choice, not a constructor
+    argument: checkpoints do not store it, and a loaded model starts at ``"auto"``.
     So is ``tree_read_checkpoint`` (ISLA-DTT only; ``"off"``): under gradient,
     ``"read"`` recomputes each block's boundary read in backward instead of keeping
     its per-pair tensors, and ``"block"`` recomputes each block together with its
@@ -815,9 +815,6 @@ class ISLA(Module):
         ### can run and to "eager" otherwise; the blocks read the resolved name.
         ### Writable: tests and debugging set "eager" or "fused" to force one.
         self.geo_kernel = "auto"
-        ### tree_walk names the implementation of ISLA-DTT's forest walk, not its pairs
-        ### (tree_read.resolve_walk): "auto", "reference" or "fast".
-        self.tree_walk = "auto"
         self.n_slices = int(n_slices)
         ### Each boundary condition's fields, each set with its own invariant layout
         ### (_InputSet). A condition's block vectors and tensors reach the slice
@@ -952,14 +949,13 @@ class ISLA(Module):
         ### Activation recompute of the read ("off", "read" or "block"; see the class
         ### docstring, *Execution*): an execution choice, writable, not in the state dict.
         self.tree_read_checkpoint = "off"
-        ### How the forest is built, not what it is (tree_build.py): an execution
-        ### choice like geo_kernel, "auto" resolving to the fast build on CUDA.
-        self.tree_build = "auto"
-        ### tree_read_kernel names the implementation of the read, as geo_kernel does
-        ### the geometry region's: "reference" (the kernel term a matmul, read by
-        ### segment_softmax.py) or "fused" (fused_read.py: the kernel term computed
-        ### inside the read, nothing per pair kept but the basis); "auto" resolves to
-        ### "fused" on CUDA with Triton (resolve_tree_read_kernel). Writable.
+        ### tree_read_kernel names the implementation of the tree read, as geo_kernel
+        ### does the geometry region's: "reference" (the per-octant cluster trees,
+        ### GLOBE's walk, the kernel term a matmul read by segment_softmax.py) or
+        ### "auto", where the forest build (tree_build.py), the walk (tree_walk.py)
+        ### and the read (fused_read.py: the kernel term computed inside the read,
+        ### nothing per pair kept but the basis) each take their fast path where
+        ### their own requirements hold. Writable.
         self.tree_read_kernel = "auto"
         self.kernel_basis = None
         self.kernel_reads = None
@@ -1238,14 +1234,16 @@ class ISLA(Module):
     def resolve_tree_read_kernel(self, points: torch.Tensor) -> str:
         """The ISLA-DTT read's implementation this forward pass will use.
 
-        ``"reference"`` or ``"fused"`` when the ``tree_read_kernel`` attribute forces
-        it; under the default (``"auto"``) the fused read when ``points`` is on CUDA, not
+        ``"reference"`` when the ``tree_read_kernel`` attribute is ``"reference"``;
+        under the default (``"auto"``) ``"fused"`` when ``points`` is on CUDA, not
         float64, and Triton is importable, else the reference read. Both compute the
         same read up to summation order. The decision is cached per device and dtype
         and logged once.
         """
+        if self.tree_read_kernel == "reference":
+            return "reference"
         if self.tree_read_kernel != "auto":
-            return self.tree_read_kernel
+            raise ValueError(f"tree_read_kernel must be 'auto' or 'reference', not {self.tree_read_kernel!r}")
         key = (points.device.type, points.device.index, points.dtype)
         cached = getattr(self, "_tree_read_kernel_cache", None)
         if cached is not None and cached[0] == key:
@@ -1775,9 +1773,9 @@ class ISLA(Module):
             g_unit=g_unit,
             theta=self._tree_read_theta,
             eps=EPS,
-            walk=self.tree_walk,
-            build=self.tree_build,
             kernel=self.resolve_tree_read_kernel(q_r),
+            walk=self.tree_read_kernel,
+            build=self.tree_read_kernel,
         )
 
     def _forward_tensors(

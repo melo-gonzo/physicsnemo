@@ -558,10 +558,10 @@ def test_fast_walk_opening_test_is_the_references_at_the_threshold(
     assert torch.equal(fast, ref)
 
 
-def test_tree_walk_resolution_and_the_models_walks_agree():
+def test_tree_walk_resolution_and_the_models_walks_agree(monkeypatch):
     """``auto`` walks by the reference on CPU and at theta 0, a forced walk is kept and
-    an unknown one refused; the model's ``tree_walk`` reaches the walk, and its two
-    walks give the same pairs, so the same outputs bitwise."""
+    an unknown one refused; the model's two walks (the resolver patched to force
+    each) give the same pairs, so the same outputs bitwise."""
     pts, nrm, w, _ = cloud(300, d=3, seed=1)
     f = BoundaryForest.build(pts, w, nrm, None, theta=1.0)
     assert tree_read.resolve_walk("auto", pts, 1.0, f) == "reference"
@@ -573,7 +573,7 @@ def test_tree_walk_resolution_and_the_models_walks_agree():
     mesh, drv, q = _sphere_case(n=1500, nq=120)
     runs = {}
     for walk in ("reference", "fast"):
-        tree.tree_walk = walk
+        monkeypatch.setattr(tree_read, "resolve_walk", lambda *a, w=walk: w)
         runs[walk] = outputs(_run(tree, mesh, drv, q))
     assert all(
         torch.equal(runs["fast"][k], runs["reference"][k]) for k in runs["reference"]
@@ -1213,10 +1213,10 @@ def test_fast_forest_build_is_the_reference_forest(dim, dtype, autocast):
     _check_fast_build(dim, dtype, "cpu", autocast)
 
 
-def test_tree_build_auto_resolves_to_the_reference_off_cuda():
-    """``tree_build`` is an execution choice: "auto" by default, the reference build
-    off CUDA, a forced "fast" gives the model the same outputs, and an unknown name
-    is refused."""
+def test_tree_build_auto_resolves_to_the_reference_off_cuda(monkeypatch):
+    """The build's "auto" is the reference build off CUDA, a forced "fast" (the
+    resolver patched) gives the model the same outputs, and an unknown name is
+    refused."""
     from physicsnemo.experimental.models.isla.tree_build import resolve_tree_build
 
     pts = torch.zeros(4, 3)
@@ -1225,12 +1225,40 @@ def test_tree_build_auto_resolves_to_the_reference_off_cuda():
     with pytest.raises(ValueError, match="build must be"):
         resolve_tree_build("gpu", pts)
     m = _tree(3, 1.0)
-    assert m.tree_build == "auto" and "tree_build" not in m.state_dict()
     mesh, drv, q = _case(n=400, nq=60)
     ref = outputs(_run(m, mesh, drv, q))
-    m.tree_build = "fast"
+    monkeypatch.setattr(tree_read, "resolve_tree_build", lambda *a: "fast")
     fast = outputs(_run(m, mesh, drv, q))
     assert all(torch.equal(v, fast[k]) for k, v in ref.items())
+
+
+def test_tree_read_kernel_is_the_tree_reads_one_execution_attribute(monkeypatch):
+    """``tree_read_kernel`` is an execution choice, not in the state dict: "auto" by
+    default hands "auto" to the forest build and the walk, "reference" hands them
+    "reference" and keeps the reference read, and any other name is refused."""
+    seen = []
+    build, walk = tree_read.resolve_tree_build, tree_read.resolve_walk
+    monkeypatch.setattr(
+        tree_read, "resolve_tree_build", lambda b, *a: seen.append(b) or build(b, *a)
+    )
+    monkeypatch.setattr(
+        tree_read, "resolve_walk", lambda w, *a: seen.append(w) or walk(w, *a)
+    )
+    m = _tree(3, 1.0)
+    keys = list(m.state_dict())
+    mesh, drv, q = _case(n=400, nq=60)
+    assert m.tree_read_kernel == "auto"
+    for mode in ("auto", "reference"):
+        m.tree_read_kernel = mode
+        seen.clear()
+        _run(m, mesh, drv, q)
+        assert len(seen) == 2 and set(seen) == {mode}
+        assert m.resolve_tree_read_kernel(q) == "reference"
+    assert list(m.state_dict()) == keys
+    for bad in ("fused", "fast"):
+        m.tree_read_kernel = bad
+        with pytest.raises(ValueError, match="tree_read_kernel must be"):
+            _run(m, mesh, drv, q)
 
 
 def test_fast_forest_build_refuses_what_it_cannot_build(monkeypatch):
@@ -1291,11 +1319,14 @@ def _step_grads(m, mesh, drv, q, autocast=False):
     return {k: v.detach().double().cpu() for k, v in out.items()}, grads
 
 
-def test_tree_read_kernel_resolves_to_the_reference_on_cpu_and_its_basis_flow_is_exact():
+def test_tree_read_kernel_resolves_to_the_reference_on_cpu_and_its_basis_flow_is_exact(
+    monkeypatch,
+):
     """On CPU ``tree_read_kernel="auto"`` resolves to the reference read. Forcing
-    ``"fused"`` there keeps the reference read (the fused kernels need CUDA) but builds
-    the basis as the fused path does, from the plan with the invariants rebuilt in
-    backward: outputs and every gradient bitwise equal to the reference's."""
+    ``"fused"`` there (the resolver patched) keeps the reference read (the fused
+    kernels need CUDA) but builds the basis as the fused path does, from the plan
+    with the invariants rebuilt in backward: outputs and every gradient bitwise equal
+    to the reference's."""
     m = _model(3, 0.5).double()
     mesh, drv, q = _case()
     assert m.tree_read_kernel == "auto" and m.resolve_tree_read_kernel(q) == "reference"
@@ -1304,7 +1335,7 @@ def test_tree_read_kernel_resolves_to_the_reference_on_cpu_and_its_basis_flow_is
     torch.set_num_threads(1)
     try:
         ref = _step_grads(m, mesh, drv, q)
-        m.tree_read_kernel = "fused"
+        monkeypatch.setattr(ISLA, "resolve_tree_read_kernel", lambda self, p: "fused")
         fused = _step_grads(m, mesh, drv, q)
     finally:
         torch.set_num_threads(threads)
