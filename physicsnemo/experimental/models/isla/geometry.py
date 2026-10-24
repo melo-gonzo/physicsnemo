@@ -217,15 +217,14 @@ def _closest_weights(q, simplex, flat=None):
     On a thin triangle Ericson's face-region weights move the point along the face
     by up to :func:`_ericson_error`. A pair where that bound reaches one unit of the
     arithmetic, ``u64 (|x| + R_k)`` (``R_k`` the cell's greatest vertex norm), is
-    guarded: it keeps Ericson's weights only where its distance is within ``(13 -
-    12) u64 (|x| + R_k)`` of the accurate point's (:func:`_accurate_weights`), within
-    ``12`` units of the exact one (``_FOOT_UNITS``), so that Ericson's is within the
-    tie bound's arithmetic share, 13 units; otherwise it takes the accurate point.
-    At every pair below the guard, Ericson's weights stand, bitwise. The guard is
-    certified (``K`` is derived, :data:`_ERICSON_K`); the switch is not: its 12 and 13
-    units are first-order estimates (worst cases 77 and about 17.5 units; the largest
-    errors observed against exact rational arithmetic, 2.03 units for the accurate
-    point)."""
+    guarded: it keeps Ericson's weights only where its distance is within one unit
+    (``_SWITCH_UNITS``) of the accurate point's (:func:`_accurate_weights`), within
+    87 units of the exact one (``_FOOT_UNITS``), so that Ericson's is within the tie
+    bound's arithmetic share, 91 units (``_BAND_UNITS``); otherwise it takes the
+    accurate point. At every pair below the guard, Ericson's weights stand,
+    bitwise. Both branches are certified: the guard by ``K`` (:data:`_ERICSON_K`),
+    the switch by a band of at least ``_SWITCH_UNITS + _FOOT_UNITS``, each a worst
+    case. ``unit`` is measured in the frame of ``q`` and ``simplex``."""
     if q.shape[-1] == 2:
         t = _segment_t(q, simplex[:, 0], simplex[:, 1])
         return torch.stack([1 - t, t], -1)
@@ -246,7 +245,7 @@ def _closest_weights(q, simplex, flat=None):
     rows = guard.nonzero()[:, 0]
     if rows.numel():
         acc, d_acc = _accurate_weights(q[rows], simplex[rows])
-        switch = (d_acc - dist[rows]).abs() > (_ERICSON_UNITS - _FOOT_UNITS) * unit[rows]
+        switch = (d_acc - dist[rows]).abs() > _SWITCH_UNITS * unit[rows]
         w[rows] = torch.where(switch[:, None], acc, w[rows])
     if flat is not None:
         v0, v1, v2 = simplex.unbind(1)
@@ -340,9 +339,11 @@ def _cross_expansion(v0, v1, v2, i, j):
 #: Ericson's float64 closest point on a triangle of nonzero area is misplaced by at
 #: most ``Delta = K u l^2 / (rho^2 L)`` (``u = 2^-53``, ``L`` the longest edge, ``rho =
 #: 2 A / L^2``, ``l`` the greatest distance from the query to a vertex) wherever
-#: ``Delta <= L``. First-order rounding analysis of :func:`_triangle_distance2` and
+#: ``Delta <= L``. Rounding analysis of :func:`_triangle_distance2` and
 #: :func:`_closest_point_weights` as coded, each operation ``(1 + delta)``, ``|delta|
-#: <= u``:
+#: <= u``. A term rounded ``n`` times carries a factor ``1 + theta_n``, ``|theta_n| <=
+#: n u / (1 - n u)`` exactly (Higham 2002, Lemma 3.1), so each count below is a worst
+#: case, with no dropped term:
 #:
 #: 1. ``d1 .. d6``: an edge vector ``s`` (``ab``, ``ac``, ``|s| <= L``) dotted with a
 #:    query offset ``t`` (``ap``, ``bp``, ``cp``, ``|t| <= l``): two differences, a
@@ -368,33 +369,36 @@ def _cross_expansion(v0, v1, v2, i, j):
 #: 5. ``u l <= 1.5 u l^2 / (rho^2 L)``, as ``rho^2 <= 3 / 4`` and ``L <= 2 l``; so
 #:    ``|d~ - d| <= (66 + 1.5 * 23.5) / (1 - theta) u l^2 / (rho^2 L) = 101.25 / (1 -
 #:    theta) u l^2 / (rho^2 L)``. Where ``Delta <= L``, ``theta <= 66 / K + 3 u``, and
-#:    ``K = 101.25 / (1 - 66 / K)`` gives ``K = 167.25``: 168.
+#:    ``K = 101.25 / (1 - 66 / K)`` gives ``K = 167.25`` (the ``5 u L D`` of step 3 is
+#:    ``3 u L D`` on the face, where ``sum |v_i| = D``; harmlessly over-counted). The
+#:    one denominator that
+#:    cancels, ``denom~``, is kept as ``(1 - theta) D``, so its amplification is in
+#:    the bound; the products of two error terms (``(5 u L l)^2`` against ``20 u L^2
+#:    l^2``) add at most ``3e-15`` relative: 168 is a worst case.
 #: 6. A region decided wrongly by rounding: an exact face point taken on the edge
 #:    ``ab`` has ``vc <= |Dvc|``, so it lies within ``(vc / D) L <= 22 u l^2 / (rho^2
 #:    L) + u L`` of that edge; an exact edge point taken on the face is beyond the
 #:    plane's foot, which step 3 bounds; vertex and edge regions confused with each
 #:    other cost ``O(u l)`` (``sqrt(75) u l`` at most); each within ``Delta``.
 #:
-#: The point moves along the face (step 3), so for a face-region point ``d~^2 = d^2 +
-#: |P' - P|^2`` and ``|d~ - d| <= min(Delta, Delta^2 / (2 (d~ - Delta)))``
-#: (:func:`_ericson_error`). ``rho`` is replaced by its certified lower bound
-#: (:func:`_thin_bounds`), which only raises ``Delta``; the relative rounding of
-#: ``kappa``, ``Delta`` and ``eps`` themselves (a few ``u``) is within the margin of
-#: ``K`` over 166.8. The point the weights of :func:`_closest_point_weights` denote,
-#: ``a + w_b ab + w_c ac``, is bounded alike; their sum's rounding and the closest
-#: point's assembly from the vertices are the arithmetic share of the tie bound.
+#: The misplacement (steps 3 and 6) is along the face, so for a face-region point
+#: ``d(P')^2 = d^2 + |P' - P|^2`` and ``d(P') - d <= min(Delta, Delta^2 / (2 (d(P') -
+#: Delta)))`` (:func:`_ericson_error`): that form bounds the in-plane part only. Step
+#: 4's roundings are linear in ``u l`` and do not shrink with the height; they are the
+#: arithmetic share of the tie bound (``_BAND_UNITS``), as are the weights' sum and the
+#: point's assembly from the vertices. :func:`_ericson_error` reads the computed
+#: distance, up to ``a`` units above ``d(P')`` (9.5 on the face, 17.5 on an edge), so
+#: its value below one unit certifies the in-plane error to ``(1 + sqrt(1 + 8 a)) /
+#: 2`` units, at most 4.9 (6.4 on an edge), which the share counts. ``rho`` is
+#: replaced by its certified lower bound (:func:`_thin_bounds`), which only raises
+#: ``Delta``; the relative rounding of ``kappa``, ``Delta`` and ``eps`` themselves (a
+#: few ``u``) is within the margin of ``K`` over 167.25.
 _ERICSON_K = 168.0
 
-#: The tie bound's arithmetic share in three dimensions, ``(3 d + 4) u64 (|x| + R_k)``
-#: (:func:`_closest_candidates_impl`), in units of ``u64 (|x| + R_k)``: a first-order
-#: estimate, not a worst case (an edge point's first-order worst case, as
-#: ``_FOOT_UNITS``' step 5 counts it, is ``14.5 u l + 3 u R_k``, about 17.5 units).
-_ERICSON_UNITS = 13
-
 #: The bound on the accurate point's distance error (:func:`_accurate_weights`), in
-#: units of ``u64 (|x| + R_k)``. First-order rounding analysis as coded (``y = x -
-#: A``, ``l`` the greatest distance from ``x`` to a vertex, ``|y| <= l``, ``L = |B -
-#: A|`` the longest edge, ``F`` the exact foot):
+#: units of ``u64 (|x| + R_k)``. Rounding analysis as coded (``y = x - A``, ``l`` the
+#: greatest distance from ``x`` to a vertex, ``|y| <= l``, ``L = |B - A|`` the longest
+#: edge, ``F`` the exact foot):
 #:
 #: 1. The cross product, rounded once from its exact expansion (the partial sums of
 #:    its smaller terms lie below an ulp of the largest): ``u`` per component. Its
@@ -406,23 +410,79 @@ _ERICSON_UNITS = 13
 #: 3. ``y`` ``u l``, each dot product ``3 u l``: ``s1`` and ``h`` err by ``9.5 u l``,
 #:    ``s2`` by ``19 u l``.
 #: 4. ``hc`` (``8 u`` relative) and the division: the point's offset along ``m``,
-#:    ``lambda_C hc``, errs by ``19 u l + 9 u L``. ``tc`` errs by ``9.5 u L``; the
-#:    offset along ``e``, ``lambda_B |B - A| + lambda_C tc``, by ``9.5 u l + 10.5 u L``
-#:    (the error of ``lambda_C`` along ``e`` cancels in ``lambda_B``). So ``A +
-#:    lambda_B (B - A) + lambda_C (C - A)`` lies in the plane within ``delta = 28.5 u
-#:    l + 19.5 u L`` of ``F``, and the sum of the weights (``2 u``) and the assembly
-#:    from the vertices (``3 u``) move it by ``5 u R_k`` more.
-#: 5. The face candidate's distance ``|h|`` errs by ``9.5 u l``, and where rounding
-#:    admits a foot outside the face it lies within ``delta`` of it: ``38 u l + 19.5 u
-#:    L``. An edge point (:func:`_segment_t`, ``11 u l`` along the edge; its assembly
-#:    ``3 u R_k``; the difference and the norm ``3.5 u l``): ``14.5 u l + 3 u R_k``.
-#:    The least of the candidates errs by at most the largest of their errors.
-#: 6. With ``l <= |x| + R_k`` and ``L <= 2 R_k``: at most ``77 u64 (|x| + R_k)``.
+#:    ``lambda_C hc``, errs by ``19 u l + 9 lambda_C u L``. ``tc`` errs by ``9.5 u L``;
+#:    the offset along ``e``, ``lambda_B |B - A| + lambda_C tc``, by ``9.5 u l + (10.5
+#:    lambda_C + 5.5 lambda_B) u L``: ``tc``'s error and the product's rounding times
+#:    ``lambda_C``, and the difference, the division and ``|B - A|``'s rounding, which
+#:    scale with ``lambda_B |B - A| = s1 - lambda_C tc``; the error of ``lambda_C``
+#:    along ``e`` cancels in ``lambda_B``. On an admitted face ``lambda_B + lambda_C <=
+#:    1 + u``, so ``A + lambda_B (B - A) + lambda_C (C - A)`` lies in the plane within
+#:    ``delta = 28.5 u l + 19.5 u L`` of ``F``; ``lambda_A >= 0`` is decided from
+#:    rounded weights, so the point may lie ``u L`` beyond ``BC``; and the sum of the
+#:    weights (``2 u``) and the assembly from the vertices (``3 u``) move it by ``5 u
+#:    R_k`` more.
+#: 5. An admitted face: ``|h|`` errs by ``9.5 u l``, and a foot admitted just outside
+#:    the face lies within ``delta + u L`` of it: ``38 u l + 20.5 u L``, 79 units. A
+#:    face whose exact foot ``F`` lies inside but which rounding rejects (some weight
+#:    below 0): the exact distance is ``|h|``, the computed one the least edge
+#:    candidate, at most ``sqrt(h^2 + s^2)`` plus an edge point's error (``14.5 u l + 3
+#:    u R_k``, ``_BAND_UNITS``), ``s <= delta + u L`` the distance from ``F`` to the
+#:    face's boundary: ``43 u l + 20.5 u L + 3 u R_k``. In this branch the weights are
+#:    not bounded, but their error across ``AC`` is damped by ``hc / |AC|`` and across
+#:    ``BC`` it stays within the same linear bound (``s <= hc``). An edge candidate
+#:    alone errs as an edge point.
+#: 6. With ``l <= |x| + R_k`` and ``L <= 2 R_k`` (both in the frame the arithmetic
+#:    runs in): at most ``87 u64 (|x| + R_k)``, the rejected face's.
 #:
-#: That worst case is not 12: the 12 is the design's figure, above the largest
-#: error observed against exact rational arithmetic (2.03, over 600,000 pairs of
-#: slivers, caps and needles, for the distance recomputed from the weights).
-_FOOT_UNITS = 12
+#: Each count is a worst case, as ``_ERICSON_K``'s: on an admitted face no term is
+#: divided by a quantity that rounding can make small (``lambda_C`` multiplies only
+#: ``tc``'s error), so the products of two error terms add at most ``1.1e-14``
+#: relative. The largest error observed against exact rational arithmetic is 2.03
+#: units (600,000 pairs of slivers, caps and needles).
+_FOOT_UNITS = 87
+
+#: The switch threshold of a guarded pair (:func:`_closest_weights`), in units of
+#: ``u64 (|x| + R_k)``: the pair keeps Ericson's point where its distance is within
+#: this of the accurate point's, so within ``_SWITCH_UNITS + _FOOT_UNITS`` of the
+#: exact one. Any threshold is certified by a band that covers both branches
+#: (``_BAND_UNITS``); a larger one keeps Ericson's point on more pairs and widens the
+#: band.
+_SWITCH_UNITS = 1
+
+#: The tie bound's arithmetic share, ``C u64 (|x'| + R'_k)``, by dimension
+#: (:func:`_closest_candidates_impl`; primes the boundary's centred frame, in which
+#: the arithmetic runs): a worst case of the float64 pair distance ``|x - sum_i w_i
+#: v_i|``, in units of ``u64 (|x'| + R'_k)``, over every path the weights of
+#: :func:`_closest_weights` take (each count as ``_FOOT_UNITS``'):
+#:
+#: - Ericson's point on a pair below the guard: its in-plane misplacement (at most
+#:   4.9 units, ``_ERICSON_K``), the weights' divisions and their sum's rounding (3),
+#:   the assembly from the vertices (3), the difference and the norm (3.5), and
+#:   Ericson's linear roundings: at most 18.4 units.
+#: - An edge point (:func:`_segment_t`): ``|t~ - t| |s| <= 11 u l`` along the edge
+#:   (``s = b - a``, ``t |s| <= l``), the assembly ``3 u R_k``, the difference and the
+#:   norm ``3.5 u l``: ``14.5 u l + 3 u R_k``, 17.5 units, plus Ericson's region test
+#:   on the guard (6.4): 24. In two dimensions, with two-term dot products, ``12 u l +
+#:   3 u R_k``: 15 units, the only path there.
+#: - A vertex: the difference and the norm and the guard, 10 units.
+#: - A zero-area triangle: an edge point, and the choice between its two edges
+#:   (``_segment_distance2``, ``16.5 u l`` each): 51 units.
+#: - A guarded pair switched to the accurate point, its distance recomputed from the
+#:   weights: ``32 u l + 19.5 u L + 5 u R_k`` on an admitted face (76 units), and as
+#:   ``_FOOT_UNITS`` after a rejected face (87).
+#: - A guarded pair that keeps Ericson's point: ``_SWITCH_UNITS + _FOOT_UNITS``, 88.
+#:
+#: The kept guarded pair's is the greatest, so the band covers the switch by
+#: construction (``fl(|d_acc - d~|) <= 1`` unit implies the exact difference is within
+#: ``1 + 2 u`` units). The centring adds the rounding of ``x - c`` and ``v - c``, one
+#: unit (none for float32 inputs whose exponents lie within 29 bits of ``c``'s), and
+#: the second-order terms and the band's own float64 evaluation two more (rounding is
+#: monotone, so ``fl(D - E) <= fl(D + E)`` needs no margin): 91 in three dimensions,
+#: 17 in two. Torch evaluates each operation by itself (no fused multiply-add, which
+#: would only remove roundings in the bounds; :func:`_two_product` and
+#: :func:`_two_sum` need it absent). Float64 inputs are covered where every product
+#: stays normal, about ``|v| < 1e76`` with nonzero differences above ``1e-76``.
+_BAND_UNITS = {2: 17, 3: _SWITCH_UNITS + _FOOT_UNITS + 3}
 
 
 def _thin_bounds(simplex: torch.Tensor):
@@ -1682,6 +1742,50 @@ def _oriented_areas(simplex: torch.Tensor, parity: torch.Tensor):
     return area, torch.where((area * (centroid - g)).sum() >= 0, 1.0, -1.0)
 
 
+def _centroid(simplex: torch.Tensor, flat=None) -> torch.Tensor:
+    """The measure-weighted centroid ``(d,)`` of the cells ``simplex`` ``(F, d, d)``
+    (float64; the zero-area ones ``flat`` weigh 0), a function of the set of cells,
+    bitwise, whatever their order: each cell's measure and measure-weighted midpoint
+    in float64, summed exactly in int64 fixed point (each column scaled so that ``F``
+    times its greatest magnitude stays below ``2^62``, then truncated). The origin
+    when every measure is 0."""
+    if simplex.shape[-1] == 3:
+        m = torch.linalg.cross(simplex[:, 1] - simplex[:, 0], simplex[:, 2] - simplex[:, 0], dim=-1).norm(dim=-1)
+    else:
+        m = (simplex[:, 1] - simplex[:, 0]).norm(dim=-1)
+    if flat is not None:
+        m = torch.where(flat, 0.0, m)
+    vals = torch.cat([m[:, None], m[:, None] * simplex.mean(1)], 1)
+    scale = vals.abs().amax(0) * vals.shape[0]
+    e = torch.frexp(scale.clamp_min(torch.finfo(torch.float64).tiny)).exponent
+    tot = torch.ldexp(torch.ldexp(vals, 62 - e).trunc().long().sum(0).double(), e - 62)
+    if not bool(tot[0] > 0):
+        return simplex.new_zeros(simplex.shape[-1])
+    return tot[1:] / tot[0]
+
+
+def _certified_tied(tq: torch.Tensor, c: torch.Tensor, tau: torch.Tensor, nq: int) -> torch.Tensor:
+    """Per query ``(nq,)``, whether its tie rows (``tq`` ``(P,)``, sorted) hold two
+    directions ``c`` ``(P, d)`` farther apart than the sum of their bounds ``tau``
+    ``(P,)``. Chunked over the queries."""
+    tied = torch.zeros(nq, dtype=torch.bool, device=c.device)
+    if tq.numel() == 0:
+        return tied
+    ids, counts = torch.unique_consecutive(tq, return_counts=True)
+    start = torch.cumsum(counts, 0) - counts
+    for k in torch.unique(counts).tolist():
+        if k < 2:
+            continue
+        here = (counts == k).nonzero()[:, 0]
+        for s in range(0, here.shape[0], 65536):
+            h = here[s : s + 65536]
+            rows = start[h, None] + torch.arange(k, device=c.device)
+            cc, tt = c[rows], tau[rows]
+            dist = (cc[:, :, None] - cc[:, None, :]).norm(dim=-1)
+            tied[ids[h]] = (dist > tt[:, :, None] + tt[:, None, :]).flatten(1).any(1)
+    return tied
+
+
 def _closest_candidates_impl(query_points, points, cells, parity, face_normals, fast: bool):
     """The closest-feature search (no gradient): for every query the cell of its
     closest point ``(Q,)``, whether several features tie for it ``(Q,)``, at a tie
@@ -1693,15 +1797,22 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     :func:`exact_boundary_geometry`. ``cells`` in canonical order with their
     orientations ``parity`` (:func:`_canonical_cells`), the normals in float64.
 
-    Every candidate distance is computed in float64 on the canonical cell; the
-    features tie when their distances are equal within the error bound ``E_k =
-    (u + (3 d + 4) u_64)(|x| + max_{v in k} |v|)`` of the distance to cell ``k``,
-    ``u`` the unit roundoff of the queries' precision (the rounding of the
-    coordinates) and ``u_64`` float64's (the arithmetic; its share, ``(3 d + 4)``
-    units, is a first-order estimate, not a worst case: the first-order worst case
-    of an edge point alone is about 17.5 units, ``_ERICSON_UNITS``; for float32
-    queries the share is 2.4e-8 of the bound, for float64 ones it decides): cell
-    ``k`` ties when
+    The search runs in the boundary's centred frame: every float64 coordinate less
+    ``c``, the measure-weighted centroid of its distinct cells (:func:`_centroid`),
+    rounded to the queries' precision (so float32 inputs centre exactly), so its
+    arithmetic scales with the boundary's size, not with its distance from the
+    origin. The exact predicates (:func:`_zero_area`) and the normals stay on the
+    coordinates as given. Every candidate distance is computed in float64 on the
+    canonical cell; the features tie when their distances are equal within the
+    error bound ``E_k = u (|x| + R_k) + C u_64 (|x'| + R'_k)`` of the distance to
+    cell ``k`` (``R_k = max_{v in k} |v|``; primes in the centred frame). Its first
+    term is the rounding of the coordinates as they were given, ``u`` the unit
+    roundoff of the queries' precision, so it is measured in the frame they were
+    given in: a case posed far from the origin is rounded more coarsely, and a term
+    measured about ``c`` would no longer bound it. Its second is float64's
+    arithmetic in the frame it runs in, ``C`` a worst case (``_BAND_UNITS``: 91 in
+    three dimensions, 17 in two; for float32 queries 1.7e-7 of the bound, for
+    float64 ones it decides). Cell ``k`` ties when
     ``D_k - E_k <= min_j (D_j + E_j)``, i.e. when it may be the closest one, and
     its closest point is a local minimum of the distance on the surface: on a
     vertex or an edge, every cell sharing that feature reaches the same point
@@ -1712,17 +1823,23 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     E_min <= 0``: its coordinates cannot tell it from a point of the surface. A tie's
     directions are the unit vectors from the surface to the query, and on the
     surface the unit normals of the tied cells that have one (with none, the query
-    keeps its closest cell's normal), whose least-norm point is taken odd in
-    them (half its value at the normals less its value at their negations), so a
-    winding flip negates it bitwise.
+    keeps its closest cell's normal). The query is tied when two of them are
+    certified distinct, farther apart than the sum of their bounds ``tau = sqrt(2)
+    s`` (2 where ``s >= 1``), ``s`` a bound on the sine of the angle between a
+    computed direction and the exact one of the inputs as given (below); the
+    least-norm point is then taken over all of the tie's directions, odd in them on
+    the surface (half its value at the normals less its value at their negations),
+    so a winding flip negates it bitwise.
 
     The exact search runs on candidate pairs that contain every cell with
     ``D_k - max_j E_j`` within that bound. In three dimensions a Warp traversal of a
     BVH over the cells finds a cell nearest in float32 (:func:`_nearest_cells`), whose
     exact distance plus its error bound bounds the closest distance, and a second
     traversal of the same BVH returns the cells within that radius; in two
-    a brute force in the queries' precision keeps the segments within its own
-    rounding (``32 u (|x| + max |v|)`` on each side) of the least. The winding
+    a brute force in the queries' precision, on the centred coordinates, keeps the
+    segments within its own rounding (``32 u (|x'| + max |v'|)`` on each side, against
+    a worst case of 14.5 units: the distance to a segment 12, the comparison's square
+    and root 2.5) and the error bounds of the least. The winding
     number takes the same BVH in three dimensions, unless cells repeat.
 
     ``fast`` changes how the three-dimensional candidates and the winding number are
@@ -1744,9 +1861,6 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
             cells, parity, face_normals, simplex, flat = (x[kept] for x in (cells, parity, face_normals, simplex, flat))
             any_flat = bool(flat.any())
     face_n, tree = face_normals.double(), None
-    coef = torch.finfo(query_points.dtype).eps / 2 + (3 * dim + 4) * torch.finfo(torch.float64).eps / 2
-    reach, q_norm = simplex.norm(dim=-1).amax(-1), q64.norm(dim=-1)
-    err_max = coef * (q_norm + reach.max())
     ### The winding number is the surface's, not the cell list's: identical oriented
     ### cells count once. The cells go in the sorted order of their keys, so a surface
     ### stored with repeated cells has the same BVH, and the same far field, as the
@@ -1767,6 +1881,21 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
         rows = rows[order]
         new = (rows[1:] != rows[:-1]).any(-1)
     rep = order[torch.cat([new.new_ones(1), new])]
+    ### The band: the storage term on the magnitudes as given, the arithmetic's on
+    ### the centred ones. The float32 copies the BVH and the 2-D brute force read are
+    ### the centred coordinates cast once.
+    u_in, u64 = torch.finfo(query_points.dtype).eps / 2, torch.finfo(torch.float64).eps / 2
+    given_reach, given_q = simplex.norm(dim=-1).amax(-1), q64.norm(dim=-1)
+    origin = _centroid(simplex[rep], flat[rep] if any_flat else None).to(query_points.dtype).double()
+    q64, simplex = q64 - origin, simplex - origin
+    query_c, points_c = q64.to(query_points.dtype), (points.double() - origin).to(points.dtype)
+    reach, q_norm = simplex.norm(dim=-1).amax(-1), q64.norm(dim=-1)
+    share = _BAND_UNITS[dim] * u64
+
+    def band(qi, ki):
+        return u_in * (given_q[qi] + given_reach[ki]) + share * (q_norm[qi] + reach[ki])
+
+    err_max = u_in * (given_q + given_reach.max()) + share * (q_norm + reach.max())
     s_rep, p_rep = simplex[rep], parity[rep].to(q64)
     ### (no normal, no area, no solid angle: its parity 0 in the winding number)
     if any_flat:
@@ -1781,12 +1910,12 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
         winding = None
         if fast:
             tree, leaf_order, s_leaf = _preorder_cell_tree(s_ord)
-            seed = order[leaf_order[_nearest_cells(query_points, s_leaf, tree)]]
+            seed = order[leaf_order[_nearest_cells(query_c, s_leaf, tree)]]
         else:
             tree = _cell_tree(s_ord)
-            seed = order[_nearest_cells(query_points, s_ord, tree)]
+            seed = order[_nearest_cells(query_c, s_ord, tree)]
         w0 = _closest_weights(q64, simplex[seed], flat[seed] if any_flat else None)
-        bound = (q64 - (w0[..., None] * simplex[seed]).sum(1)).norm(dim=-1) + coef * (q_norm + reach[seed])
+        bound = (q64 - (w0[..., None] * simplex[seed]).sum(1)).norm(dim=-1) + band(torch.arange(nq, device=dev), seed)
         ### (padded by twice the bound, the kernel's float64 distances against these,
         ### and by the rounding of its box test)
         radius = (bound + 3 * err_max) * (1 + 1e-12)
@@ -1808,7 +1937,7 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     else:
         w_sum = None
         rounding = 32 * torch.finfo(query_points.dtype).eps / 2 * (q_norm + reach.max())
-        li, pk = _segment_candidates(query_points, points, cells, (2 * (rounding + err_max)).to(query_points.dtype))
+        li, pk = _segment_candidates(query_c, points_c, cells, (2 * (rounding + err_max)).to(query_points.dtype))
     ### In the order of (query, cell), so the first minimum is the least cell index.
     f = cells.shape[0]
     key = (li * f + pk).sort().values
@@ -1817,7 +1946,7 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     w = _closest_weights(q64[li], tri, flat[pk] if any_flat else None)
     diff = q64[li] - (w[..., None] * tri).sum(1)
     dist = diff.norm(dim=-1)
-    err = coef * (q_norm[li] + reach[pk])
+    err = band(li, pk)
     inf = dist.new_full((nq,), torch.inf)
     d_min = inf.scatter_reduce(0, li, dist, "amin")
     upper = inf.scatter_reduce(0, li, dist + err, "amin")
@@ -1884,13 +2013,31 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     )
     wall = on_wall[tq]
     tc = torch.where(wall[:, None], wall_n[pk[tie]], tc)
-    ### A tie is two or more distinct directions (the cells sharing a vertex or an
-    ### edge give its direction bitwise).
-    head = torch.full((nq,), tq.shape[0], dtype=torch.long, device=dev).scatter_reduce(
-        0, tq, torch.arange(tq.shape[0], device=dev), "amin"
-    )
-    distinct = (tc != tc[head[tq]]).any(-1).long()
-    tied = torch.zeros(nq, dtype=torch.long, device=dev).scatter_reduce(0, tq, distinct, "amax").bool()
+    ### A tie is two certified-distinct directions, |c_i - c_j| > tau_i + tau_j, tau =
+    ### sqrt(2) s (the chord of a sine error s < 1; else 2). A cell's normal: its
+    ### vertices each within eta = u |v| of the exact ones (their storage rounding),
+    ### so |dX| <= 4 eta L + 4 eta^2 against the certified |X| - |E| (Shewchuk), with
+    ### the float64 normal's own bound (delta) and its normalization. A direction from
+    ### a point: the point within the band E_k (and Ericson's misplacement on a
+    ### face), over D_k.
+    pt = pk[tie]
+    st = simplex[pt]
+    eta = u_in * given_reach[pt]
+    if dim == 3:
+        delta_t, kappa_t, longest_t = _thin_bounds(st)
+        size = torch.linalg.cross(st[:, 1] - st[:, 0], st[:, 2] - st[:, 0], dim=-1).norm(dim=-1)
+        s_n = (4 * eta * longest_t + 4 * eta * eta) / (size * (1 - delta_t)) + delta_t + 4 * u64
+        mis = kappa_t * (q64[tq][:, None] - st).square().sum(-1).amax(-1)
+    else:
+        length = (st[:, 1] - st[:, 0]).norm(dim=-1)
+        s_n = 2 * eta / (length - 2 * eta) + 4 * u64
+        mis = torch.zeros_like(length)
+    s_n = torch.where(s_n >= 0, s_n, torch.inf)
+    e_t, d_t = err[tie], dist[tie]
+    s_p = torch.where(d_t > 0, (e_t + 4 * u64 * d_t) / d_t, torch.inf)
+    s_c = s_n + torch.where(d_t > 0, (mis + e_t) / d_t, torch.inf)
+    s = torch.where(wall, s_n, torch.where(on_cell, s_c, s_p))
+    tied = _certified_tied(tq, tc, torch.where(s < 1, 2.0**0.5 * s, 2.0), nq)
     if any_flat:
         ### On a zero-area closest cell the direction is the tie's over the cells
         ### that hold the query and have a normal: theirs, or 0 with none (the
@@ -1947,8 +2094,10 @@ def _closest_features(
     cells: Int[torch.Tensor, "cells dim"],
     kernel: str = "reference",
 ):
-    """The closest surface point of each query and its feature: the point
-    ``(Q, d)``, whether it is interior to its cell ``(Q,)``, the cell's unit
+    """The closest surface point of each query and its feature: the offset ``x -
+    p`` from the point ``(Q, d)``, evaluated in float64 as ``(x - v_0) - sum_{i > 0}
+    w_i (v_i - v_0)`` from the coordinates as given and rounded once to the queries'
+    precision, whether the point is interior to its cell ``(Q,)``, the cell's unit
     normal ``(Q, d)``, at a closest-feature tie (:func:`_closest_candidates`)
     whether there is one ``(Q,)`` and the direction ``(Q, d)``, the sign of the
     distance ``(Q,)``, at a tie the distance ``(Q,)``, and whether the query is on the
@@ -1974,13 +2123,14 @@ def _closest_features(
         idx, tied, tie_u, sign, on_wall, weights = search(q, y, cells, parity, n64)
         corners = cells[idx]  # (Q, d)
     simplex = points[corners]  # (Q, d, d)
-    closest = (weights.to(simplex.dtype)[..., None] * simplex).sum(1)
+    s64 = simplex.double()
+    diff = ((query_points.double() - s64[:, 0]) - (weights[:, 1:, None] * (s64[:, 1:] - s64[:, :1])).sum(1)).to(query_points.dtype)
     on_cell = (weights > 0).all(-1)
     dtype = query_points.dtype
     ### (in float64: off the surface a lower precision can round it to 0, losing the sign)
     tie_dist = (query_points.double() - (weights[..., None] * simplex.double()).sum(1)).norm(dim=-1).to(dtype)
     face_n = torch.where(on_wall[:, None], n64[idx].to(dtype), all_n[idx])
-    return closest, on_cell, face_n, tied, tie_u.to(dtype), sign.to(dtype), tie_dist, on_wall
+    return diff, on_cell, face_n, tied, tie_u.to(dtype), sign.to(dtype), tie_dist, on_wall
 
 
 def exact_boundary_geometry(
@@ -2052,11 +2202,19 @@ def exact_boundary_geometry(
     cells re-oriented so their normals follow the map), :math:`d` scaling
     with the geometry.
 
-    The search runs without gradient; the closest point is then rebuilt from
-    its cell's vertices with the barycentric weights of its Voronoi region
-    (computed in float64, Ericson 2005, Sec. 5.1.5), so :math:`d` and
-    :math:`u` are differentiable in the query and the vertex positions, with
-    the gradient of the envelope theorem (at a tie, :math:`u` carries none).
+    Every decision (a tie, the query on the surface) is certified against the
+    inputs' own rounding: the error bound is the rounding of the coordinates as
+    given in the queries' precision plus a worst case of the float64 arithmetic,
+    which runs in the boundary's centred frame (its measure-weighted centroid as
+    the origin), so a boundary far from the origin costs the arithmetic nothing;
+    and directions tie only where they are certified distinct.
+
+    The search runs without gradient; the offset :math:`x - p` is then rebuilt
+    from the query and its cell's vertices with the barycentric weights of its
+    Voronoi region (computed in float64, Ericson 2005, Sec. 5.1.5), in float64,
+    and rounded once to the queries' precision, so :math:`d` and :math:`u` are
+    differentiable in the query and the vertex positions, with the gradient of
+    the envelope theorem (at a tie, :math:`u` carries none).
 
     ``kernel`` names the implementation of the search, not what it computes:
     ``"reference"`` defines it, and ``"fast"`` gives the same outputs bitwise
@@ -2066,10 +2224,9 @@ def exact_boundary_geometry(
         raise NotImplementedError(
             f"the exact boundary geometry is implemented in two and three dimensions; got {query_points.shape[-1]}"
         )
-    closest, on_cell, face_n, tied, tie_u, sign, tie_dist, on_wall = _closest_features(
+    diff, on_cell, face_n, tied, tie_u, sign, tie_dist, on_wall = _closest_features(
         query_points, points, cells, kernel
     )
-    diff = query_points - closest
     dist = diff.norm(dim=-1)
     plane = (diff * face_n).sum(-1)  # the distance on a cell's interior, signed by its normal
     u = torch.where(

@@ -51,7 +51,7 @@ MORE = [(S.Standing(k), a) for k in KEYS for a in S.ARCHS if S.Standing(k).n_see
 seed_txt = "Seed means over two seeds" + ("" if not MORE else " (" + "; ".join(
     f"{S._COUNT[s.n_seeds(a)]} for {a} on {s.ds.short}" for s, a in MORE) + ")")
 print(": The standing of the three reference configurations on every dataset with a standing artifact: ISLA's "
-      "relative L2 error (@sec-metrics) on the native mesh, each baseline's error divided by ISLA's, and ISLA's own error when every test case "
+      "(interacting ISLA 0.9.0) relative L2 error (@sec-metrics) on the native mesh, each baseline's error divided by ISLA's, and ISLA's own error when every test case "
       f"is rotated and translated, over its native error. {seed_txt}, float32, the validation or test split of "
       "each dataset (@sec-splits). The words apply the book's seed rule: a lead needs every seed of one architecture below every "
       "seed of the other and the seed means at least 3% apart. "
@@ -70,6 +70,7 @@ for k in KEYS:
     if s.in_flight:
         print(S.in_flight_callout({"what": f"{s.in_flight['what']}, on {INS(s)}",
                                    "replacement": s.in_flight["replacement"]}))
+print(S.interior_form_callout(KEYS))
 ```
 
 ## The two invariances, measured {#sec-standing-invariances}
@@ -228,7 +229,7 @@ AF = ("velocity_l2", "pressure_l2")
 cell = lambda a, sp, f: AZ["arms"][ARM[a]]["splits"][sp][f]
 out = ["| | " + " | ".join(f"{AZ['fields'][f]}: mean / median" for f in AF) + " |", "|---|" + "---:|" * len(AF)]
 for a in ("ISLA", "GeoTransolver"):
-    out.append(f"| {S.CONFIG[a]}, six-split mean | " + " | ".join(
+    out.append(f"| {S.CONFIG[a]}{' (interacting ISLA 0.9.0)' if a == 'ISLA' else ''}, six-split mean | " + " | ".join(
         f"{sum(cell(a, sp, f)['mean'] for sp in HO) / len(HO):.3f} / {sum(cell(a, sp, f)['median'] for sp in HO) / len(HO):.3f}"
         for f in AF) + " |")
 out.append("| the zero predictor | " + " | ".join(f"{AZ['zero_predictor']:.1f}" for f in AF) + " |")
@@ -244,13 +245,17 @@ print(f": AeroZoo, the {({**S._COUNT, 6: 'six', 7: 'seven'})[len(HO)]} held-out 
       "which receives no inlet value, is scored on the "
       f"`full` split only and is {AZ['arms'][ARM['Transolver']]['note']}. How to read this: on pressure the comparison is with "
       "predicting zero, whose error is 1.0; the per-split numbers, ISLA's failures on two held-out families and the reasons are "
-      "in @sec-aerozoo. Data: results/char/aerozoo_090.json.")
+      "in @sec-aerozoo. Data: results/char/aerozoo_090_final.json.")
 ```
 
 ```{python}
 #| label: para-standing-aerozoo-in-flight
 #| output: asis
-print(S.in_flight_callout("aerozoo"))
+_dA = {n.split()[0]: a for n, a in AZ["arms"].items()}
+print(S.form_callout("on these six splits its error averages " + " and ".join(
+    f"{sum(_dA['ISLA-DTT']['splits'][sp][f]['mean'] / _dA['ISLA']['splits'][sp][f]['mean'] for sp in HO) / len(HO):.3f} times "
+    f"interacting ISLA's on {AZ['fields'][f]}" for f in AF) + " (@sec-aerozoo-form)",
+    what="interacting ISLA 0.9.0, GeoTransolver and Transolver"))
 ```
 
 ## What the standing compares, and what it does not {#sec-standing-scope}

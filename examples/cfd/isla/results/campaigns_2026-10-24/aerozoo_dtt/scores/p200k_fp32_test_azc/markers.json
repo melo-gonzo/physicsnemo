@@ -1,0 +1,61 @@
+{
+ "source": "/home/psharpe/gh/physicsnemo/scratch/isla-az-decide-2026-10-21/scores/p200k_fp32_test_azc/<run>/{SNAPSHOT_USED,.done}",
+ "runs": {
+  "azc_bank_zero_to_cad_dtt_seed42": {
+   "SNAPSHOT_USED": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_r090",
+   ".done": ""
+  },
+  "azc_bank_zero_to_cad_dtt_seed43": {
+   "SNAPSHOT_USED": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_r090",
+   ".done": ""
+  },
+  "azc_blobs_dtt_seed42": {
+   "SNAPSHOT_USED": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_r090",
+   ".done": ""
+  },
+  "azc_blobs_dtt_seed43": {
+   "SNAPSHOT_USED": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_r090",
+   ".done": ""
+  },
+  "azc_full_dtt_seed42": {
+   "SNAPSHOT_USED": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_r090",
+   ".done": ""
+  },
+  "azc_full_dtt_seed43": {
+   "SNAPSHOT_USED": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_r090",
+   ".done": ""
+  },
+  "azc_nonbox_dtt_seed42": {
+   "SNAPSHOT_USED": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_r090",
+   ".done": ""
+  },
+  "azc_nonbox_dtt_seed43": {
+   "SNAPSHOT_USED": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_r090",
+   ".done": ""
+  },
+  "azc_profile_crossflow_dtt_seed42": {
+   "SNAPSHOT_USED": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_r090",
+   ".done": ""
+  },
+  "azc_profile_crossflow_dtt_seed43": {
+   "SNAPSHOT_USED": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_r090",
+   ".done": ""
+  },
+  "azc_profile_dual_inlet_dtt_seed42": {
+   "SNAPSHOT_USED": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_r090",
+   ".done": ""
+  },
+  "azc_profile_dual_inlet_dtt_seed43": {
+   "SNAPSHOT_USED": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_r090",
+   ".done": ""
+  },
+  "azc_reynolds_dtt_seed42": {
+   "SNAPSHOT_USED": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_r090",
+   ".done": ""
+  },
+  "azc_reynolds_dtt_seed43": {
+   "SNAPSHOT_USED": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_r090",
+   ".done": ""
+  }
+ }
+}

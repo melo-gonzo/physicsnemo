@@ -74,6 +74,16 @@ FOLDER = {
     "geo_thin_final": "campaigns_2026-10-23",
     "nearwall_final": "campaigns_2026-10-23",
     "dtt_fast_bf16diag": "campaigns_2026-10-23",
+    "az_decide_final": "campaigns_2026-10-23",
+    "e1_az": "campaigns_2026-10-23",
+    "lre_az": "campaigns_2026-10-23",
+    "geo_band_phase0": "campaigns_2026-10-23",
+    "kernel_tests": "campaigns_2026-10-23",
+    "slices_drv": "campaigns_2026-10-23",
+    "freeze_plan": "campaigns_2026-10-23",
+    "bc_supply": "campaigns_2026-10-23",
+    "geo_band_final": "campaigns_2026-10-23",
+    "band_merge": "campaigns_2026-10-23",
 }
 
 

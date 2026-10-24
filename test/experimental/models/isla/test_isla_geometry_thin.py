@@ -137,8 +137,9 @@ def _check(q, p, c, device):
     """Against the brute force: ``|d|`` within ``8 u (|x| + R)`` off the wall, the
     closest cell within the op's tie bound of the closest distance, and the query on
     the wall exactly when the brute force's distance says so (below ``E / 2`` it must
-    be, beyond ``2 E`` it must not, ``E = (u + 13 u64)(|x| + R)``); and the fast
-    search gives the reference's outputs and gradients bitwise."""
+    be, beyond ``2 E`` it must not, ``E = u (|x| + R) + C u64 (|x'| + R')``, primes
+    in the boundary's centred frame, ``C`` the derived ``_BAND_UNITS``); and the
+    fast search gives the reference's outputs and gradients bitwise."""
     dtype = q.dtype
     u = torch.finfo(dtype).eps / 2
     tri = p.double()[c]
@@ -159,15 +160,21 @@ def _check(q, p, c, device):
     d, _, _, _, idx, on_wall = (t.cpu() for t in out["reference"])
     xs = q.double().norm(dim=-1)
     reach = tri.norm(dim=-1).amax(-1)
-    e_all = (u + 13 * U64) * (xs + reach.max())
+    origin = geometry._centroid(tri).to(dtype).double()
+    xc = (q.double() - origin).norm(dim=-1)
+    reach_c = (tri - origin).norm(dim=-1).amax(-1)
+    share = geometry._BAND_UNITS[3] * U64
+
+    def band(i, k):
+        return u * (float(xs[i]) + float(reach[k])) + share * (
+            float(xc[i]) + float(reach_c[k])
+        )
+
+    e_all = u * (xs + reach.max()) + share * (xc + reach_c.max())
     bad_d = ~on_wall & ((d.double().abs() - exact).abs() > 8 * u * (xs + reach.max()))
     assert int(bad_d.sum()) == 0
     e_near = torch.tensor(
-        [
-            (u + 13 * U64) * (float(xs[i]) + min(float(reach[k]) for k in holders[i]))
-            for i in range(q.shape[0])
-        ],
-        dtype=D,
+        [min(band(i, k) for k in holders[i]) for i in range(q.shape[0])], dtype=D
     )
     assert int((on_wall & (exact > 2 * e_all)).sum()) == 0
     assert int((~on_wall & (exact <= 0.5 * e_near)).sum()) == 0
@@ -176,7 +183,7 @@ def _check(q, p, c, device):
     for i in range(q.shape[0]):
         k = int(idx[i])
         if k not in holders[i]:
-            e_k = (u + 13 * U64) * (float(xs[i]) + float(reach[k]))
+            e_k = band(i, k)
             wrong += float(
                 _exact_d2(q[i].double().tolist(), tri[k].tolist())
             ) ** 0.5 - float(exact[i]) > e_k + float(e_near[i])
@@ -336,9 +343,13 @@ def test_coplanar_cap_changes_nothing(h, dtype, device):
         d0, _ = exact_boundary_geometry(*args, base.to(device))
         d, _ = exact_boundary_geometry(*args, c.to(device))
         scale = (q + shift).norm(dim=-1) + (p + shift).norm(dim=-1).max()
+        qs, ps = (x.double().cpu() for x in args)
+        origin = geometry._centroid(ps[c]).to(dtype).double()
+        scale_c = (qs - origin).norm(dim=-1) + (ps - origin).norm(dim=-1).max()
         d, d0 = d.double().cpu(), d0.double().cpu()
         wall = (d == 0) | (d0 == 0)
-        tol = torch.where(wall, 2 * (u + 13 * U64), 8 * u) * scale
+        share = geometry._BAND_UNITS[3] * U64
+        tol = torch.where(wall, 2 * (u * scale + share * scale_c), 8 * u * scale)
         assert ((d - d0).abs() <= tol).all()
 
 
@@ -421,7 +432,7 @@ def test_switch_on_ordinary_cell_changes_nothing_visible(dtype, device, monkeypa
         return d, u, gq, gp
 
     switched = run()
-    monkeypatch.setattr(geometry, "_FOOT_UNITS", -float("inf"))
+    monkeypatch.setattr(geometry, "_SWITCH_UNITS", float("inf"))
     unswitched = run()
     assert bool((weights[0] != weights[1]).any(-1).any())
     for a, b_ in zip(switched, unswitched):

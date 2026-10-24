@@ -809,9 +809,14 @@ python src/train.py model=geotransolver_surface dataset=highlift_surface \
     training.num_epochs=200 sampling_resolution=100000 \
     dataloader.prefetch_factor=4 dataloader.num_workers=4
 
-# HiLift surface (ISLA reference configuration)
+# HiLift surface (ISLA reference configuration), reading the wing and the hemisphere far
+# field the dataset builds (AddHemisphereBoundaries: inlet, outlet)
 python src/train.py model=isla_surface_highlift dataset=highlift_surface \
     training.num_epochs=200 sampling_resolution=100000
+
+# SHIFT-SUV surface, ISLA reading the vehicle and the CFD box the dataset builds
+# (AddBoxBoundaries: inlet, outlet, floor, side_walls, roof)
+python src/train.py model=isla_surface_shift_suv dataset=shift_suv_surface
 
 # HiLift volume
 python src/train.py model=geotransolver_volume_highlift dataset=highlift_volume \

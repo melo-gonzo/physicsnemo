@@ -319,6 +319,21 @@ The three architectures run at their reference configurations, the one configura
 They are not matched in parameters, memory or time; @tbl-drivaerml-configs states all three.
 
 ```{python}
+#| label: para-drivaerml-slices
+#| output: asis
+import records as R
+# ISLA with 128 slices against the Volume standing's 512 (SLICES-DRV, registered reading)
+_SLD = {r_["field"]: r_ for r_ in R.md_table("slices_drv", "reading.md") if r_["protocol"] == "native"}
+assert all(r_["label"] == "no change" and r_["sub-bar flag"] == "none" for r_ in _SLD.values())
+_SLDC = {r_["measure"].split(",")[0]: R.num(r_["S ÷ B"]) for r_ in R.md_table("slices_drv", "RESULTS.md", "R3, cost")}
+print("With 128 slices in place of 512, ISLA's Volume-task errors are " + " / ".join(_SLD[f]["S ÷ B"] for f in ("pressure_l2", "velocity_l2", "nut_l2"))
+      + " of this configuration's on pressure / velocity / eddy viscosity (ratios of arithmetic seed means, two seeds each; no field "
+      f"moves by the rule registered for the test) at {_SLDC['smoke 363505']:.3f} of the training step and "
+      f"{_SLDC['smoke: peak allocated per rank']:.3f} of the peak memory; this is interacting ISLA, the reference keeps 512 slices, and 128 "
+      f"slices is untested on ISLA-DTT, the surface task and the solids (@sec-oq-slices). Data: {R.source('slices_drv', 'reading.md')}.")
+```
+
+```{python}
 #| label: para-surface-request
 #| output: asis
 import records as R
@@ -576,7 +591,11 @@ print(f"**On the DrivAerML Volume task {clause(VOL, 'pressure_l2')} on interior 
 ```{python}
 #| label: make-tbl-drivaerml-volume-protocols
 #| output: asis
-print(VOL.table("tbl-drivaerml-volume-protocols", "The DrivAerML Volume task, 435 training cars, 48 validation cars, 200,000 boundary cells and 200,000 interior points per car"))
+print(VOL.table("tbl-drivaerml-volume-protocols", "The DrivAerML Volume task (ISLA: interacting ISLA 0.9.0), 435 training cars, 48 validation cars, 200,000 boundary cells and 200,000 interior points per car"))
+_DA = json.load(open(RES / "campaigns_2026-10-22" / "book_C" / "drivaerml_volume_studies.json"))["dtt_instrument"]["arms"]
+print(S.form_callout("on this task it is measured only on a study configuration with the raw slice reads, where its error is "
+                     + " / ".join(f"{_DA['DTT']['mean'][f] / _DA['I']['mean'][f]:.2f}" for f in VOL_F)
+                     + " times interacting ISLA's on pressure / velocity / eddy viscosity (@sec-interior-read-only)"))
 ```
 
 ```{python}
@@ -818,7 +837,7 @@ print(f"**ISLA-DTT makes every interior prediction a function of its point and t
       f"{(N_DTT - N_ISLA) / 1e6:.1f} million parameters to ISLA's {N_ISLA / 1e6:.0f} million (counted from the two models as the page "
       "renders). Everything else is held equal in @tbl-interior-read-only, including the middle row, which keeps the read-only points and "
       "removes the boundary read. The study ran on a smaller-budget instrument with the raw slice reads, so its ratios are read for the "
-      "mechanism; the choice between the two forms is an open question (@sec-oq-dtt).")
+      "mechanism. ISLA-DTT is ISLA's default interior form on the principle of @sec-aerozoo-form, not on these ratios.")
 ```
 
 ```{python}
@@ -937,6 +956,6 @@ print("The cause is that ISLA's interior points carry routing mass: they write i
 
 Questions this dataset raises and leaves open:
 
-- **ISLA or ISLA-DTT on the interior?** On this task ISLA-DTT is measured only on a study configuration with the raw slice reads (@tbl-interior-read-only), where it trades some accuracy for exact query independence. Which form the interior tasks use is decided on AeroZoo (@sec-oq-dtt).
+- **ISLA-DTT at the reference configuration.** ISLA's default interior form is ISLA-DTT (@sec-aerozoo-form), but on this task it is measured only on a study configuration with the raw slice reads (@tbl-interior-read-only), where it trades some accuracy for exact query independence; how it compares at the reference configuration is unmeasured here.
 - **How much of ISLA's far-field error is the missing ground?** Trained on a single car, ISLA misses the eddy viscosity far from the car, whose level there follows the height above the floor, a boundary the standing's checkpoints were trained without (@sec-single-case-floor). ISLA's configuration reads the floor strip, the slip walls, the inlet and the outlet that the case files store as named boundary meshes (@sec-limits-whole-boundary); how much of that error they remove is @sec-oq-far-field.
 - **How precisely must the wall be given?** The watertight STL raises ISLA's error only near the wall, where it differs from the CFD wall by about the chord error of its tessellation (@sec-interior-boundary-law). Whether the on-wall nodes' distance channel causes that rise is untested; a probe that moves only those nodes' distance would settle it.

@@ -450,10 +450,10 @@ def _refuse_earlier_state_dict(module, state_dict, prefix, local_metadata, *args
     ``load_state_dict``), not only ``Module.from_checkpoint``, which checks the
     recorded version. Two marks tell an earlier state dict: the parameter layout
     before 0.7.0 (the shared seed embedding ``embed.0``, the prediction points'
-    ``qt.type_offset`` and ``qt.embed``), and, for 0.7.0 to 0.9.0, whose layout is
+    ``qt.type_offset`` and ``qt.embed``), and, for 0.7.0 to 0.11.0, whose layout is
     the current one, the state-dict version torch records for every module
-    (``ISLA._version``, 1 before 0.8.0, 8 for 0.8.0, 9 for 0.9.0, and 10 for the
-    unmerged head-frame candidate 0.10.0). A state dict rebuilt without
+    (``ISLA._version``, 1 before 0.8.0, 8 for 0.8.0, 9 for 0.9.0, 10 for the
+    unmerged head-frame candidate 0.10.0 and 11 for 0.11.0). A state dict rebuilt without
     torch's metadata (a dict comprehension over it) carries no version and is read
     by its layout alone."""
     old = sorted(
@@ -481,8 +481,10 @@ def _refuse_earlier_state_dict(module, state_dict, prefix, local_metadata, *args
             "the interior task measured on the drawn tokens in place of the full-resolution "
             "boundary; before 0.11.0, the geometry without least-norm tie directions, the "
             "winding-number sign of the wall distance, the float64 canonical-frame token "
-            "draw, the on-wall rule and float64 cell normals; state-dict version 10 is the "
-            "unmerged head-frame candidate 0.10.0), and ISLA keeps no upgrade path; "
+            "draw, the on-wall rule and float64 cell normals; before 0.12.0, the exact "
+            "geometry's first-order tie and on-wall bands and its arithmetic in the caller's "
+            "frame; state-dict version 10 is the unmerged head-frame candidate 0.10.0), and "
+            "ISLA keeps no upgrade path; "
             "load it with the code that wrote it, or retrain"
         )
 
@@ -698,15 +700,19 @@ class ISLA(Module):
     ### canonical-frame token draw, the on-wall rule, float64 cell normals, and the
     ### cell-tree seed of the search radius; same parameters, new forward). 0.10.0
     ### is skipped: it names the unmerged head-frame candidate, whose checkpoints
-    ### exist, so each version string names one model. No earlier checkpoint loads:
-    ### ISLA is unreleased and keeps no upgrade paths.
-    __model_checkpoint_version__ = "0.11.0"
+    ### exist, so each version string names one model. 0.12.0: the exact geometry's
+    ### derived, frame-robust tie and on-wall bands (the inputs' storage rounding plus
+    ### a worst case of the float64 arithmetic in the boundary's centred frame,
+    ### certified-distinct tie directions, the offset x - p formed in float64; same
+    ### parameters, new forward). No earlier checkpoint loads: ISLA is unreleased and
+    ### keeps no upgrade paths.
+    __model_checkpoint_version__ = "0.12.0"
     #: torch's state-dict version of the module (``nn.Module._version``, recorded in
-    #: every state dict's metadata): 1 before 0.8.0, 8 for 0.8.0, 9 for 0.9.0 and 10
-    #: for the head-frame candidate, so a state dict of 0.7.0 to 0.10.0, whose
-    #: parameter layout is the current one, is told apart and refused on load
+    #: every state dict's metadata): 1 before 0.8.0, 8 for 0.8.0, 9 for 0.9.0, 10 for
+    #: the head-frame candidate and 11 for 0.11.0, so a state dict of 0.7.0 to 0.11.0,
+    #: whose parameter layout is the current one, is told apart and refused on load
     #: (:func:`_refuse_earlier_state_dict`).
-    _version = 11
+    _version = 12
 
     def __init__(
         self,

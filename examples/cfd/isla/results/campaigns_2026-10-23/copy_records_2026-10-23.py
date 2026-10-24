@@ -366,6 +366,81 @@ RECORDS = {
         "DTT-FAST, BF16-DIAG: where the chunked step's bf16 excess on AirfRANS comes from, its remedy, and the one-ulp yardstick",
         ["REPORT.md", "RESULTS.md"],
     ),
+    "az_decide_final": (
+        "isla-az-decide-2026-10-21",
+        "AZ-DECIDE, final: AeroZoo's compliant standings of four architectures, the registered read of ISLA against ISLA-DTT, and its context",
+        [
+            "RESULTS.md",
+            "tables_final.md",
+            "percase_final.md",
+            "nonbox_scales_final.md",
+            "QUERYPOP090_FOR_12F.md",
+            "CROSS_DATASET_INPUTS.md",
+            "reynolds/RESULTS_reynolds.md",
+        ],
+    ),
+    "e1_az": (
+        "isla-headnorm-2026-10-18",
+        "E1-AZ: the head normalization against ISLA 0.9.0 on compliant AeroZoo's nonbox split, the registered verdict",
+        ["RESULTS_AZ_2026-10-22.md"],
+    ),
+    "lre_az": (
+        "isla-lre-az-2026-10-23",
+        "LRE-AZ: ISLA on AeroZoo with the fixed Reynolds scale against its fitted constants, registered and read",
+        ["RESULTS.md", "tables.md", "lreaz.json", "posthoc.md", "PREREG.md"],
+    ),
+    "geo_band_phase0": (
+        "isla-geo-band-2026-10-24",
+        "GEO-BAND, phase 0: the whole-boundary geometry call re-timed on GB300 at the merged head",
+        ["PHASE0.md", "lhr/timing_table.md"],
+    ),
+    "kernel_tests": (
+        "isla-kernel-tests-2026-10-24",
+        "KERNEL-TESTS: the five CUDA tests that failed after the token padding, their cause and the fix",
+        ["FINAL_REPORT.md", "RESULTS.md"],
+    ),
+    "slices_drv": (
+        "isla-slices-drv-2026-10-24",
+        "SLICES-DRV: ISLA with 128 slices against the 512-slice DrivAerML Volume standing",
+        ["RESULTS.md", "reading.md", "PREREG.md", "farfield/farfield_table.md"],
+    ),
+    "freeze_plan": (
+        "isla-freeze-plan-2026-10-24",
+        "FREEZE-PLAN: the final reference rerun re-planned with ISLA-DTT as the default interior form, its lanes, cost and calendar",
+        ["FINAL_RERUN_PLAN.md"],
+    ),
+    "bc_supply": (
+        "isla-bc-supply-2026-10-24",
+        "BC-SUPPLY: SHIFT-SUV's box and HiLiftAeroML's inlet and outlet built in the recipe, the deduplicated wing, their checks and cost",
+        [
+            "REPORT.md",
+            "FINAL_REPORT.md",
+            "book/BOOK_CHANGES.md",
+            "out/hl_val_368914.jsonl",
+            "out/move_369235.jsonl",
+            "gb/smoke_summary.txt",
+        ],
+    ),
+    "geo_band_final": (
+        "isla-geo-band-2026-10-24",
+        "GEO-BAND: the exact geometry's derived tie and on-wall bands in the boundary's centred frame (ISLA 0.12.0), their derivation, its independent re-derivation, the pose and native effects, the trained-model check and the cost",
+        [
+            "FINAL_REPORT.md",
+            "RESULTS.md",
+            "DERIVATION.md",
+            "INFER_CHECK.md",
+            "REVIEW_DERIVATION.md",
+            "DESIGN.md",
+        ],
+    ),
+    "band_merge": (
+        "isla-band-merge-2026-10-24",
+        "BAND-MERGE: the ISLA 0.12.0 version commit for GEO-BAND and its test review",
+        [
+            "FINAL_REPORT.md",
+            "REVIEW_TESTS.md",
+        ],
+    ),
 }
 
 
@@ -374,6 +449,7 @@ KEPT = {
     ("dtt_fast_integration", "RESULTS.md"): "cd508ec6241c605c2464c0f4541ef70b",
     ("geo_thin", "DESIGN.md"): "f7f8ed6849f68cc8a4584989afb1a27e",
     ("geo_thin", "RESULTS.md"): "6daa28650f27ed75c455c12e89fbd25d",
+    ("dtt_fast_final", "TABLE.md"): "a6f352dfc32a342dc1f95a90bba69c17",
 }
 
 
