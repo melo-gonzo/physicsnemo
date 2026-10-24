@@ -351,7 +351,7 @@ from physicsnemo.experimental.models.isla.tree_read import (
     _TreeKernelRead,
     kernel_geo_width,
     tree_read_walk,
-    walk_pair_count,
+    walk_pair_counts,
     walk_points_range,
     walk_range_pairs,
 )
@@ -2371,10 +2371,10 @@ class _QueryChunks:
         return int(self.query.shape[1])
 
     @functools.cached_property
-    def n_pairs(self) -> int:
-        """The number of (point, source) pairs every prediction point reads, counted
-        without making the lists."""
-        return walk_pair_count(self.walk)
+    def pair_counts(self) -> torch.Tensor:
+        """The number of (point, source) pairs each prediction point reads ``(Q,)``,
+        counted without making the lists."""
+        return walk_pair_counts(self.walk)
 
     def _leaf(self, t: torch.Tensor) -> torch.Tensor:
         leaf = t.detach().requires_grad_(t.requires_grad)

@@ -1821,7 +1821,7 @@ def test_walk_of_a_range_of_points_is_those_rows_of_the_walk_of_every_point(
     it) walks a range of points on demand (``walk_points_range``, here outside the
     autocast it was made in): its lists are those points' rows of the walk of every
     point, raw and in order (numbered from the range's start), with their node counts
-    and geometry rows; ``walk_pair_count`` counts every point's pairs without the
+    and geometry rows; ``walk_pair_counts`` counts each point's pairs without the
     lists."""
     dt = torch.float32 if device == "cuda" else D
     pts, nrm, w, g = (t.to(device, dt) for t in cloud(500, seed=3))
@@ -1846,9 +1846,9 @@ def test_walk_of_a_range_of_points_is_those_rows_of_the_walk_of_every_point(
     assert lazy.lists == [None]
     qi, si, n_node = full.lists[0]
     assert 0 < n_node < qi.numel()
-    assert (
-        tree_read.walk_pair_count(lazy) == tree_read.walk_pair_count(full) == qi.numel()
-    )
+    counts = tree_read.walk_pair_counts(lazy)
+    assert torch.equal(counts, tree_read.walk_pair_counts(full))
+    assert torch.equal(counts, torch.bincount(qi, minlength=150))
     for start, stop in ((0, 150), (40, 110), (149, 150)):
         part = tree_read.walk_points_range(lazy, start, stop)
         a, b = torch.searchsorted(qi, qi.new_tensor([start, stop])).tolist()

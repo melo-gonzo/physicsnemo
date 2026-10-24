@@ -362,7 +362,7 @@ def _one_chunk_fits(
     the ranks decides, so that every rank takes the same step. The decision is
     logged at its first call and when it changes."""
     global _one_chunk_logged
-    n_pairs = chunks.n_pairs
+    n_pairs = int(chunks.pair_counts.sum())
     allocated = 0.0
     if device.type == "cuda":
         allocated = torch.cuda.memory_allocated(device) / 2**30

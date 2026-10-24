@@ -397,11 +397,11 @@ class BoundaryForest:
 
     def frame_pairs(
         self, points_f: torch.Tensor, theta: float | None = None, walk: str = "auto", count_only: bool = False
-    ) -> tuple[torch.Tensor, torch.Tensor, int] | int:
+    ) -> tuple[torch.Tensor, torch.Tensor, int] | torch.Tensor:
         """:meth:`point_pairs` of points already in the trees' coordinates
         (``points.detach() @ frame``, in the dtype the product gives); with
-        ``count_only`` the number of pairs alone, which the fast walk counts without
-        making the lists (so past Warp's limit on the lists too)."""
+        ``count_only`` each point's number of pairs ``(Q,)`` alone, which the fast walk
+        counts without making the lists (so past Warp's limit on the lists too)."""
         theta = self.theta if theta is None else float(theta)
         if resolve_walk(walk, points_f, theta, self) == "fast":
             pairs = walk_pairs(self, points_f, theta, count_only)
@@ -426,7 +426,7 @@ class BoundaryForest:
             n_node += plan.n_far
         qi, si = torch.cat(qs), torch.cat(ss)
         if count_only:
-            return int(qi.shape[0])
+            return torch.bincount(qi, minlength=points_f.shape[0])
         order = torch.argsort(qi, stable=True)
         return qi[order], si[order], n_node
 
@@ -810,11 +810,12 @@ def walk_points_range(walk: TreeReadWalk, start: int, stop: int) -> TreeReadWalk
     return dataclasses.replace(walk, lists=lists, geometry=geometry, n_queries=stop - start, points_f=None)
 
 
-def walk_pair_count(walk: TreeReadWalk) -> int:
-    """The number of pairs of every point of ``walk``; for a walk made without its
-    lists, counted by each forest's walk without making them."""
+def walk_pair_counts(walk: TreeReadWalk) -> torch.Tensor:
+    """The number of pairs of each point of ``walk`` ``(Q,)``, summed over the cases;
+    for a walk made without its lists, counted by each forest's walk without making
+    them."""
     if walk.points_f is None:
-        return sum(int(qi.shape[0]) for qi, _, _ in walk.lists)
+        return sum(torch.bincount(qi, minlength=walk.n_queries) for qi, _, _ in walk.lists)
     with _walk_context(walk):
         return sum(f.frame_pairs(p, walk=walk.walk, count_only=True) for f, p in zip(walk.forests, walk.points_f))
 
