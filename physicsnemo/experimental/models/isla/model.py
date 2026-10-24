@@ -1211,8 +1211,9 @@ class ISLA(Module):
         use (``kernel`` of :func:`exact_boundary_geometry`).
 
         ``"reference"`` or ``"fast"`` when the ``geometry_kernel`` attribute forces it;
-        under the default (``"auto"``) the fast search when ``points`` is on CUDA, else
-        the reference. The decision is cached per device and logged once.
+        under the default (``"auto"``) the fast search when ``points`` is on CUDA and
+        Triton is importable (its weld and canonical-cell kernels), else the
+        reference. The decision is cached per device and logged once.
         """
         if self.geometry_kernel != "auto":
             return self.geometry_kernel
@@ -1220,11 +1221,15 @@ class ISLA(Module):
         cached = getattr(self, "_geometry_kernel_cache", None)
         if cached is not None and cached[0] == key:
             return cached[1]
-        chosen = "fast" if points.is_cuda else "reference"
+        from .geometry_fast import HAS_TRITON
+
+        chosen = "fast" if points.is_cuda and HAS_TRITON else "reference"
         if torch.compiler.is_compiling():
             return chosen
         self._geometry_kernel_cache = (key, chosen)
-        logger.info("ISLA geometry_kernel=auto resolved to %r on %s", chosen, points.device)
+        logger.info(
+            "ISLA geometry_kernel=auto resolved to %r on %s (cuda=%s, triton=%s)", chosen, points.device, points.is_cuda, HAS_TRITON
+        )
         return chosen
 
     def _block_callables(self):

@@ -25,7 +25,7 @@ repeated surfaces, at ties, on the wall and in float32 and float64.
 import pytest
 import torch
 
-from physicsnemo.experimental.models.isla import geometry
+from physicsnemo.experimental.models.isla import geometry, geometry_fast
 from physicsnemo.experimental.models.isla.geometry import exact_boundary_geometry
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.primitives.surfaces import cube_surface
@@ -208,4 +208,41 @@ def test_geometry_kernel_auto_resolves_to_the_reference_off_cuda_and_honors_expl
     assert all(torch.equal(ya[k], yf[k]) for k in ya)
     assert auto._geometry_kernel_cache[1] == "reference"
     if torch.cuda.is_available():
-        assert auto.resolve_geometry_kernel(q.cuda()) == "fast"
+        assert auto.resolve_geometry_kernel(q.cuda()) == (
+            "fast" if geometry_fast.HAS_TRITON else "reference"
+        )
+
+
+_TRITON_CUDA = pytest.mark.skipif(
+    not (torch.cuda.is_available() and geometry_fast.HAS_TRITON),
+    reason="CUDA and Triton",
+)
+
+
+@_TRITON_CUDA
+@pytest.mark.parametrize("n", [1, 5, 1023, 1024, 1025, 70000])
+def test_run_start_kernel_equals_the_torch_scan(n):
+    g = torch.Generator().manual_seed(n)
+    new = torch.rand(n, generator=g) < torch.rand(1, generator=g)
+    new[0] = True
+    ref = torch.cummax(torch.where(new, torch.arange(n), 0), 0).values
+    assert torch.equal(geometry_fast.run_start(new.cuda()).cpu(), ref)
+
+
+@_TRITON_CUDA
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+@pytest.mark.parametrize("d, k", [(2, 2), (3, 3), (3, 2), (2, 3)])
+def test_canonical_cells_kernel_equals_the_torch_sort(d, k, dtype):
+    """Ties, signed zeros, NaN and repeated vertices: the same order and parity."""
+    g = torch.Generator().manual_seed(d * 10 + k)
+    v = 700
+    pts = torch.randint(0, 4, (v, d), generator=g).to(dtype) * 0.5
+    pts[torch.rand(v, d, generator=g) < 0.03] = float("nan")
+    pts[torch.rand(v, d, generator=g) < 0.05] = -0.0
+    cells = torch.randint(0, v, (5000, k), generator=g)
+    cells[:50, 1] = cells[:50, 0]
+    ref = geometry._canonical_cells(pts, cells)
+    out = geometry_fast.canonical_cells(
+        pts.cuda(), cells.cuda(), geometry._canonical_cells
+    )
+    assert all(torch.equal(a.cpu(), b) and a.dtype == b.dtype for a, b in zip(out, ref))

@@ -29,6 +29,7 @@ import warp as wp
 from jaxtyping import Float, Int
 
 from physicsnemo.core.function_spec import FunctionSpec
+from physicsnemo.experimental.models.isla import geometry_fast
 from physicsnemo.experimental.models.isla.tree_read import canonical_frame, frame_coordinates
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.geometry._cell_normals import compute_cell_normals
@@ -137,6 +138,7 @@ def cell_second_moments(mesh) -> torch.Tensor:
 
 def _weld(
     points: Float[torch.Tensor, "vertices dim"],
+    run_start=None,
 ) -> Int[torch.Tensor, " vertices"]:
     """For every vertex, the index of one representative of the vertices at
     bitwise the same position (a stable lexicographic sort; static shapes), so
@@ -148,9 +150,12 @@ def _weld(
         order = order[torch.argsort(points[order, k], stable=True)]
     s = points[order]
     new = torch.cat([s.new_ones(1, dtype=torch.bool), (s[1:] != s[:-1]).any(-1)])
-    first = torch.cummax(
-        torch.where(new, torch.arange(n, device=points.device), 0), 0
-    ).values
+    if run_start is None:
+        first = torch.cummax(
+            torch.where(new, torch.arange(n, device=points.device), 0), 0
+        ).values
+    else:
+        first = run_start(new)
     return torch.zeros_like(order).index_copy(0, order, order[first])
 
 
@@ -597,7 +602,61 @@ def _preorder_cell_tree(simplex: torch.Tensor):
     return (left, right, escape, levels, leaf_cell, *_tree_boxes(s_sorted, left, right, levels, leaf_cell)), order, s_sorted
 
 
-def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.Tensor, tree, winding=None):
+@wp.func
+def _plane_row(m: wp.vec3d, p: wp.vec3d) -> wp.vec4f:
+    return wp.vec4f(wp.float32(m[0]), wp.float32(m[1]), wp.float32(m[2]), wp.float32(wp.dot(m, p)))
+
+
+@wp.func
+def _edge_plane(p0: wp.vec3d, p1: wp.vec3d, opp: wp.vec3d, n: wp.vec3d) -> wp.vec4f:
+    m = wp.cross(p1 - p0, n)
+    m = m / wp.length(m)
+    if wp.dot(m, opp - p0) > wp.float64(0.0):
+        m = -m
+    return _plane_row(m, p0)
+
+
+@wp.kernel
+def _cell_planes_kernel(corners: wp.array(dtype=wp.vec3d), planes: wp.array(dtype=wp.vec4f)):
+    """The rows of :func:`_ball_candidates`'s lower bound for cell ``tid``: its unit
+    normal and its edges' outward unit normals in its plane, with their offsets
+    (float64, NaN on a degenerate cell, then float32)."""
+    i = wp.int64(wp.tid())
+    a = corners[i * wp.int64(3)]
+    b = corners[i * wp.int64(3) + wp.int64(1)]
+    c = corners[i * wp.int64(3) + wp.int64(2)]
+    n = wp.cross(b - a, c - a)
+    n = n / wp.length(n)
+    j = i * wp.int64(4)
+    planes[j] = _plane_row(n, a)
+    planes[j + wp.int64(1)] = _edge_plane(a, b, c, n)
+    planes[j + wp.int64(2)] = _edge_plane(b, c, a, n)
+    planes[j + wp.int64(3)] = _edge_plane(c, a, b, n)
+
+
+def _cell_planes(simplex: torch.Tensor) -> torch.Tensor:
+    """The rows of the lower bound of :func:`_ball_candidates` for the cells ``simplex``
+    ``(F, 3, 3)``, ``(4 F, 4)`` float32, by one Warp kernel. They may round
+    differently from the torch rows, by float64's resolution, far below the float32
+    rounding the bound is padded for: every cell the float64 test keeps stays within
+    the bound either way, so the candidates are the same."""
+    planes = torch.empty(4 * simplex.shape[0], 4, dtype=torch.float32, device=simplex.device)
+    device, stream = FunctionSpec.warp_launch_context(simplex)
+    with FunctionSpec.warp_stream_scope(stream):
+        wp.init()
+        wp.launch(
+            _cell_planes_kernel,
+            dim=simplex.shape[0],
+            inputs=[wp.from_torch(simplex.reshape(-1, 3).contiguous(), dtype=wp.vec3d), wp.from_torch(planes, dtype=wp.vec4f)],
+            device=device,
+            stream=stream,
+        )
+    return planes
+
+
+def _ball_candidates(
+    query: torch.Tensor, radius: torch.Tensor, simplex: torch.Tensor, tree, winding=None, planes=None, reach=None
+):
     """The (query, cell) pairs ``(P,)``, ``(P,)`` of every cell of ``simplex`` ``(F,
     3, 3)`` within ``radius`` ``(Q,)`` of its query ``(Q, 3)``, all float64: a Warp
     traversal of the BVH ``tree`` over the cells (:func:`_cell_tree`),
@@ -608,20 +667,23 @@ def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.T
     traversed in Morton order, so neighbouring threads visit neighbouring nodes.
     With ``winding`` (:func:`_winding_moments` on the same tree), the first pass
     also sums the solid angles (:func:`_ball_winding_kernel`), returned as a third
-    output ``(Q,)``, the winding number times ``4 pi``."""
+    output ``(Q,)``, the winding number times ``4 pi``. ``planes``
+    (:func:`_cell_planes`) and ``reach`` (the greatest norm of a vertex) when the
+    caller has them."""
     dev = query.device
     left, _, escape, _, leaf_cell, lo, hi = tree
     ### Each cell's unit normal and its edges' outward unit normals in its plane,
     ### with their offsets: a point's distance to the cell is at least the root sum
     ### of squares of its height over the plane and of its largest edge offset.
-    a, b, c = simplex.unbind(1)
-    n = torch.nn.functional.normalize(torch.linalg.cross(b - a, c - a, dim=-1), dim=-1, eps=0.0)
-    rows_ = [torch.cat([n, (n * a).sum(-1, keepdim=True)], -1)]
-    for p0, p1, opp in ((a, b, c), (b, c, a), (c, a, b)):
-        m = torch.nn.functional.normalize(torch.linalg.cross(p1 - p0, n, dim=-1), dim=-1, eps=0.0)
-        m = torch.where(((m * (opp - p0)).sum(-1, keepdim=True) > 0), -m, m)
-        rows_.append(torch.cat([m, (m * p0).sum(-1, keepdim=True)], -1))
-    planes = torch.stack(rows_, 1).float().reshape(-1, 4)
+    if planes is None:
+        a, b, c = simplex.unbind(1)
+        n = torch.nn.functional.normalize(torch.linalg.cross(b - a, c - a, dim=-1), dim=-1, eps=0.0)
+        rows_ = [torch.cat([n, (n * a).sum(-1, keepdim=True)], -1)]
+        for p0, p1, opp in ((a, b, c), (b, c, a), (c, a, b)):
+            m = torch.nn.functional.normalize(torch.linalg.cross(p1 - p0, n, dim=-1), dim=-1, eps=0.0)
+            m = torch.where(((m * (opp - p0)).sum(-1, keepdim=True) > 0), -m, m)
+            rows_.append(torch.cat([m, (m * p0).sum(-1, keepdim=True)], -1))
+        planes = torch.stack(rows_, 1).float().reshape(-1, 4)
     q32 = query.float()
     ### (the query's own rounding, then a relative pad far above float32's on the
     ### box test's few operations)
@@ -629,7 +691,8 @@ def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.T
     r32 = r32.nextafter(r32.new_tensor(torch.inf))
     ### (the lower bound's float32 rounding: the products and offsets, against the
     ### coordinates' magnitude)
-    reach = simplex.norm(dim=-1).amax()
+    if reach is None:
+        reach = simplex.norm(dim=-1).amax()
     reach32 = ((r32.double() + 16 * torch.finfo(torch.float32).eps * (query.norm(dim=-1) + reach)) * (1 + 1e-5)).float()
     device, stream = FunctionSpec.warp_launch_context(query)
     fixed = [
@@ -1200,7 +1263,9 @@ def _packed_winding_sum(query: torch.Tensor, simplex: torch.Tensor, parity: torc
     device, stream = FunctionSpec.warp_launch_context(query)
     with FunctionSpec.warp_stream_scope(stream):
         wp.init()
-        nodes = wp.empty(left.shape[0], dtype=_WindingNode, device=device)
+        size = wp.types.type_size_in_bytes(_WindingNode)
+        buffer = torch.empty(left.shape[0] * size, dtype=torch.uint8, device=query.device)
+        nodes = wp.array(ptr=buffer.data_ptr(), dtype=_WindingNode, shape=(left.shape[0],), device=device)
         wp.launch(
             _pack_winding_kernel,
             dim=left.shape[0],
@@ -1222,8 +1287,6 @@ def _packed_winding_sum(query: torch.Tensor, simplex: torch.Tensor, parity: torc
             device=device,
             stream=stream,
         )
-        ### (freed on the stream that read it)
-        del nodes
     return out
 
 
@@ -1363,12 +1426,22 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     ### cells count once. The cells go in the sorted order of their keys, so a surface
     ### stored with repeated cells has the same BVH, and the same far field, as the
     ### surface stored once (a stable lexicographic sort, as in _weld).
-    rows = torch.cat([cells, parity[:, None]], 1)
-    order = torch.arange(rows.shape[0], device=dev)
-    for k in reversed(range(rows.shape[1])):
-        order = order[torch.argsort(rows[order, k], stable=True)]
-    rows = rows[order]
-    rep = order[torch.cat([rows.new_ones(1, dtype=torch.bool), (rows[1:] != rows[:-1]).any(-1)])]
+    if fast:
+        ### (the same order by two stable sorts of keys that pack adjacent columns)
+        low = cells[:, -1] * 2 + (parity > 0)
+        high = cells[:, 0] * points.shape[0] + cells[:, 1] if dim == 3 else cells[:, 0]
+        order = torch.argsort(low, stable=True)
+        order = order[torch.argsort(high[order], stable=True)]
+        low, high = low[order], high[order]
+        new = (low[1:] != low[:-1]) | (high[1:] != high[:-1])
+    else:
+        rows = torch.cat([cells, parity[:, None]], 1)
+        order = torch.arange(rows.shape[0], device=dev)
+        for k in reversed(range(rows.shape[1])):
+            order = order[torch.argsort(rows[order, k], stable=True)]
+        rows = rows[order]
+        new = (rows[1:] != rows[:-1]).any(-1)
+    rep = order[torch.cat([new.new_ones(1), new])]
     s_rep, p_rep = simplex[rep], parity[rep].to(q64)
     oriented = _oriented_areas(s_rep, p_rep)
     if dim == 3:
@@ -1389,7 +1462,7 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
         ### and by the rounding of its box test)
         radius = (bound + 3 * err_max) * (1 + 1e-12)
         if fast:
-            li, pk, _ = _ball_candidates(q64, radius, s_leaf, tree)
+            li, pk, _ = _ball_candidates(q64, radius, s_leaf, tree, planes=_cell_planes(s_leaf), reach=reach.max())
             pk = order[leaf_order[pk]]
             if not once:
                 tree, leaf_order, s_leaf = _preorder_cell_tree(s_rep)
@@ -1532,7 +1605,10 @@ def _closest_features(
     :func:`exact_boundary_geometry`. ``kernel`` names the search's implementation."""
     search = {"reference": _closest_candidates, "fast": _closest_candidates_fast}[kernel]
     points = points.to(query_points.dtype)
-    cells, parity = _canonical_cells(points, _weld(points)[cells])
+    if kernel == "fast":
+        cells, parity = geometry_fast.canonical_cells(points, _weld(points, geometry_fast.run_start)[cells], _canonical_cells)
+    else:
+        cells, parity = _canonical_cells(points, _weld(points)[cells])
     cell_points = points[cells]
     all_n = parity[:, None].to(points.dtype) * compute_cell_normals(cell_points[:, 1:] - cell_points[:, :1])
     ### The normals the on-wall rule and the tie directions read, in float64 from the
