@@ -53,6 +53,8 @@ source. Do not edit by hand.
 | `bc_supply/` | BC-SUPPLY: SHIFT-SUV's box and HiLiftAeroML's inlet and outlet built in the recipe, the deduplicated wing, their checks and cost | `scratch/isla-bc-supply-2026-10-24/` |
 | `geo_band_final/` | GEO-BAND: the exact geometry's derived tie and on-wall bands in the boundary's centred frame (ISLA 0.12.0), their derivation, its independent re-derivation, the pose and native effects, the trained-model check and the cost | `scratch/isla-geo-band-2026-10-24/` |
 | `band_merge/` | BAND-MERGE: the ISLA 0.12.0 version commit for GEO-BAND and its test review | `scratch/isla-band-merge-2026-10-24/` |
+| `default_dtt/` | DEFAULT-DTT: ISLA-DTT the default interior form, its tests, smokes and query-independence check | `scratch/isla-default-dtt-2026-10-24/` |
+| `dtt_default_int/` | DTT-DEFAULT-INT: the default switch integrated with ISLA 0.12.0, and its fixture test reworked | `scratch/isla-dtt-default-int-2026-10-24/` |
 
 | topic | file | source | md5 |
 | --- | --- | --- | --- |
@@ -280,3 +282,7 @@ source. Do not edit by hand.
 | geo_band_final | DESIGN.md | scratch/isla-geo-band-2026-10-24/DESIGN.md | 15bdc0a3c638b066752f1e96afdc42d8 |
 | band_merge | FINAL_REPORT.md | scratch/isla-band-merge-2026-10-24/FINAL_REPORT.md | dae15af49551846dbd1df3a330c5f14b |
 | band_merge | REVIEW_TESTS.md | scratch/isla-band-merge-2026-10-24/REVIEW_TESTS.md | dfae97e0f29472178221cee3fea9b34c |
+| default_dtt | FINAL_REPORT.md | scratch/isla-default-dtt-2026-10-24/FINAL_REPORT.md | dd59de3344620187d373fbf7c8c4a327 |
+| default_dtt | BOOK_CHANGES.md | scratch/isla-default-dtt-2026-10-24/BOOK_CHANGES.md | 13b94d1b279ae7006b5ba3a6eab8485e |
+| default_dtt | BOOK_SENTENCES_v2.md | scratch/isla-default-dtt-2026-10-24/BOOK_SENTENCES_v2.md | d28e0fcaff3fb5688185a116520f3046 |
+| dtt_default_int | FINAL_REPORT.md | scratch/isla-dtt-default-int-2026-10-24/FINAL_REPORT.md | 3377379b0a7d0322d0d9e951e6c76b7f |

@@ -441,6 +441,22 @@ RECORDS = {
             "REVIEW_TESTS.md",
         ],
     ),
+    "default_dtt": (
+        "isla-default-dtt-2026-10-24",
+        "DEFAULT-DTT: ISLA-DTT the default interior form, its tests, smokes and query-independence check",
+        [
+            "FINAL_REPORT.md",
+            "BOOK_CHANGES.md",
+            "BOOK_SENTENCES_v2.md",
+        ],
+    ),
+    "dtt_default_int": (
+        "isla-dtt-default-int-2026-10-24",
+        "DTT-DEFAULT-INT: the default switch integrated with ISLA 0.12.0, and its fixture test reworked",
+        [
+            "FINAL_REPORT.md",
+        ],
+    ),
 }
 
 
