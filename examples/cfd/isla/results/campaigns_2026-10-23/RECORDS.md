@@ -215,3 +215,5 @@ source. Do not edit by hand.
 | hl_dup | NOTEBOOK_DRAFT.md | scratch/isla-hl-dup-2026-10-24/NOTEBOOK_DRAFT.md | 0c2f575b17dc0036ca525c1c97eefba9 |
 | hl_dup | REVIEW_STAGE1.md | scratch/isla-hl-dup-2026-10-24/REVIEW_STAGE1.md | 17357946600875a1a44b10705b1b88b8 |
 | hl_dup | REVISION_NOTE.md | scratch/isla-hl-dup-2026-10-24/REVISION_NOTE.md | 7883e89de248a357e1024831e8553c04 |
+| hl_dup | HANDOFF_HLDUP.md | scratch/isla-hl-dup-2026-10-24/HANDOFF_HLDUP.md | d8fbfbee0c2401f7a6dca072bd78f9ee |
+| hl_dup | FINAL_REPORT.md | scratch/isla-hl-dup-2026-10-24/FINAL_REPORT.md | 74bc30896f511fcd9513fb01eb935e9f |

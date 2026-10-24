@@ -335,6 +335,8 @@ RECORDS = {
             "NOTEBOOK_DRAFT.md",
             "REVIEW_STAGE1.md",
             "REVISION_NOTE.md",
+            "HANDOFF_HLDUP.md",
+            "FINAL_REPORT.md",
         ],
     ),
 }
