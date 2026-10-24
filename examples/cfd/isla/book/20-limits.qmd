@@ -1062,6 +1062,13 @@ SUV_BOX = re.search(r"interior bounding box \| (x [^|]+? m) \(", SU).group(1).re
 HL_MAC = re.search(r"reaches about ([\d.]+-[\d.]+) MAC", SU).group(1).replace("-", " to ")
 HL_PAPER = re.search(r"radius of ≈(\d+) × MAC", SU).group(1)
 AF_CROP = re.search(r"nodes in about (\[[^\]]+\] x \[[^\]]+\]) chords", BA).group(1).replace(" x ", " × ")
+# HiLiftAeroML's symmetry-plane hole from each wing's own data (HL-DUP section 4)
+HLD4 = " ".join(R.load("hl_dup", "RESULTS.md").split()).split("## 4.")[1].split("## 5.")[0]
+HL_HOLE = (sci(float(re.search(r"The area ratio is ([\d.]+)", HLD4).group(1)) - 1),
+           {5: "five"}[len(re.search(r"\*\*The five broken roots\*\* \(([^)]+)\)", HLD4).group(1).split(", "))],
+           *re.search(r"the coverage is still ([\d.]+)-([\d.]+) % within 0\.5 in", HLD4).groups(),
+           *re.search(r"The other ([\d,]+)-([\d,]+) per root belong to no cell", HLD4).groups(),
+           re.search(r"one hole of [\d,]+ in² on every root, [\d-]+ in² \(([\d.]+) %\) less", HLD4).group(1))
 print("**Read from every dataset's files, the boundary falls in two classes; the open question is how SHIFT-SUV and HiLiftAeroML "
       "get the pieces of their domains' boundaries that their files do not store.** ISLA reads every stored piece of the "
       "boundary, each by name with its condition type (@sec-limits-whole-boundary).")
@@ -1084,7 +1091,14 @@ print(f"- **Not stored.** SHIFT-SUV's {SUV_N} files store the vehicle alone, ope
       "surface configuration reads the tunnel's four pieces, which these files lack (@sec-limits-whole-boundary). HiLiftAeroML "
       f"stores the wing alone on {HL[0]} of its {HL[1]} files; the other two hold an inlet, an outlet and a symmetry plane built by "
       "the same curation pipeline as DrivAerML's box. The dataset's paper puts the far field on a hemisphere of radius about "
-      f"{HL_PAPER} mean aerodynamic chords, while the stored interiors reach {HL_MAC} chords.")
+      f"{HL_PAPER} mean aerodynamic chords, while the stored interiors reach {HL_MAC} chords. Its symmetry plane is a disk "
+      "with the wing's root cut out. Where the root is closed, the hole the wing's own root cells bound matches the stored "
+      f"plane's to {HL_HOLE[0]} in relative area. On {HL_HOLE[1]} geometries checked whose roots are open, every edge of the "
+      f"cells on the plane together covers only {HL_HOLE[2]} to {HL_HOLE[3]}% of that root outline, while the wing's stored "
+      f"vertices on the plane cover all of it, {HL_HOLE[4]} to {HL_HOLE[5]} of them per root in no cell: what is missing is "
+      "the root's triangles, not its geometry. A closing of each case's own edges and vertices gives a hole "
+      f"{HL_HOLE[6]}% smaller than the closed root's, but only at a closing scale chosen above the vertex spacing, so no "
+      "construction of the symmetry plane from these files is yet robust.")
 print()
 print("What would settle it: the missing pieces supplied, built from the documented domain and the stored interior as DrivAerML's "
       "are, or extracted from the raw CFD meshes, beside each dataset, never as a change to it; then each standing retrained with "
@@ -1096,7 +1110,7 @@ print("What would settle it: the missing pieces supplied, built from the documen
       "the walls, the roof and the outlet, is Peter's decision. HiLiftAeroML's far-field radius is a choice its supply must make. "
       "Cost: the retraining is not priced, because the supply sets the runs. "
       f"Data: {R.source('boundary_audit', 'REPORT.md')} (sections 1, 2 and 5), {R.source('setup_research', 'SETUP.md')}, "
-      f"{R.source('bc_sidecar', 'FINAL_REPORT.md')}.")
+      f"{R.source('bc_sidecar', 'FINAL_REPORT.md')}, {R.source('hl_dup', 'RESULTS.md')} (section 4).")
 ```
 
 ### A quarter of the slices {#sec-oq-slices}

@@ -41247,6 +41247,90 @@ Cost: GB300 short and cpu-short jobs within GEO-THIN's cap of 8 GPU-h; its JOBS.
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-boundary-2026-10-24/SECOND_READ_BOUNDARY.md).*
 
+## 2026-10-24 — HL-DUP stage 1, revised after its second read: HiLiftAeroML's wing stores about 18.9 million copies of about 25,700 root cells on 266 of 268 cases, carrying about 42 percent of the drawn measure; excluded from the metric, the ranking holds; removed from the input, ISLA's pressure error rises 41 percent and the baselines' 5 to 6; stage 2, the three architectures retrained without the copies, registered with the supervisor's amendment {#sec-nb-hl-dup}
+
+**Question.** BC-SIDECAR found about 19 million duplicated cells on sampled HiLiftAeroML wings (@sec-nb-bc-sidecar). Lane
+HL-DUP, launched by the supervisor at 02:06 EDT 2026-10-24, counted them on every geometry and asked what they do to the
+HiLiftAeroML standing. Records: scratch/isla-hl-dup-2026-10-24/RESULTS.md (md5 e1ac7e09, revised at 08:22 EDT after the
+second read REVIEW_STAGE1.md, md5 17357946, whose seven fixes REVISION_NOTE.md, md5 7883e89d, lists; the first version is
+RESULTS_v1.md, 3ae5c54d), NOTEBOOK_DRAFT.md (0c2f575b) and PREREG.md (072b6b1c, with the supervisor's amendment); copies
+in results/campaigns_2026-10-23/hl_dup/.
+
+**The census** (exact: each cell's sorted vertex triple, grouped by a lexsort; 275 reads, 268 distinct cases, all 180
+geometries, the 180 scored validation cases among them).
+
+- Root kind, on 266 of 268 cases: 18.57 to 19.45 million extra copies per case (median 18.89 M; 6.4 to 7.5% of the cells)
+  of 25,425 to 25,974 distinct root cells, up to 491,701 copies of one triangle; 3.6 to 52.7% of the summed wing area
+  (median 46.3%). Every copy repeats its first copy's vertex indices, and its fields equal the first copy's to float32
+  rounding.
+- Pair kind, on LHC001 at angles 10 and 12 only: about 6.6 M cells each stored twice with reversed orientation, 134 in² in
+  all. BC-SIDECAR had sampled LHC001 at angle 10, which is why it reported LHC001 as the exception.
+- Exposure in the standing's own pipeline (all 180 scored cases): the copies are 6.4 to 7.5% of the about 200,000 drawn
+  cells and carry 42.1% of their Horvitz–Thompson measure (mean; median 47.0%, minimum 3.2%), the measure the scorer
+  weights by; without them ISLA's length unit is 0.772 to 1.186 times its value with them.
+
+**Effect on the standing** (inference only, GB300 366726; the standing's code, recipe, scorer and checkpoints; (a) equals
+the stored scores to 1.5e-5 relative on the five headline fields; seed means, 180 cases, float32).
+
+| field | protocol | ISLA | GeoTransolver | Transolver | GeoTransolver ÷ ISLA | Transolver ÷ ISLA |
+|---|---|--:|--:|--:|--:|--:|
+| pressure | (a) as scored | 0.04272 | 0.03902 | 0.03941 | 0.913 | 0.923 |
+| pressure | (b) copies out of the metric | 0.05888 | 0.05400 | 0.05443 | 0.917 | 0.924 |
+| pressure | (c) copies out of the input too (a shift) | 0.08324 | 0.05652 | 0.05784 | 0.679 | 0.695 |
+| wall shear | (a) | 0.09634 | 0.08903 | 0.08783 | 0.924 | 0.912 |
+| wall shear | (b) | 0.10273 | 0.09473 | 0.09335 | 0.922 | 0.909 |
+| wall shear | (c) | 0.13829 | 0.09635 | 0.09524 | 0.697 | 0.689 |
+
+: HL-DUP's rescoring of the HiLiftAeroML standing (RESULTS.md section 3). {#tbl-nb-hl-dup}
+
+- (b) raises every arm's pressure error by about 38% and its wall-shear error by about 6%, and moves baseline ÷ ISLA by
+  at most 0.004 on pressure and wall shear (at most 0.009 on any field and seed): the copies in the metric do not explain
+  ISLA's deficit, and the ranking holds.
+- (c) against (b) costs ISLA 41% on pressure and 35% on wall shear, GeoTransolver 5% / 2% and Transolver 6% / 2%. ISLA
+  reads the cell measures the copies distort; the baselines do not. Per case that damage correlates only weakly with the
+  copies' measure share (r = 0.06 to 0.12) or with the change of ISLA's length unit (r = −0.10 / −0.11), as rederived
+  against (b) after the second read. (c) measures the trained checkpoints' sensitivity, not models trained without the
+  copies.
+
+**The symmetry plane, as revised.** On the clean LHC001 root the wing's own root cells bound curator's stored hole to an
+area ratio of 1.0000011 (Hausdorff 0.011 in). On five broken roots no construction from the wing's cells works. The second
+read found that "about 30 percent of the outline is missing once the duplicates go" went beyond the evidence, since
+deduplication removes no edge. Rechecked: every on-plane edge, open, shared and non-manifold, still covers only 69.4 to
+69.6% of the outline, while the stored vertices at the plane cover all of it, 2,937 to 2,959 of them per broken root in no
+cell. So the root's triangles are missing, not its geometry. A closing of each case's own open edges and on-plane vertices
+gives one hole of 611,842 in², 0.048% short of LHC001's, but only at 1.5 times the vertex-spacing scale; a robust rebuild
+of the root strip is not done. Using LHC001's outline as a shared root section stays declined (the supervisor).
+
+**Stage 2, registered** (PREREG md5 072b6b1c, approved by the supervisor at 06:44 EDT with an amendment before
+submission). Arms: ISLA 0.9.0, GeoTransolver and Transolver (unit drive) at the standing's settings, two seeds each,
+trained and scored on the wing with the copies dropped by a recipe reader option, `drop_duplicate_cells`, in the shared
+dataset configuration: the cyclic draw over all stored cells as today, the drawn copies dropped, each kept cell's
+Horvitz–Thompson factor kept, about 186,000 of 200,000 cells kept. Rule: seed-mean baseline ÷ ISLA on pressure and wall
+shear against stage 1's (b); narrows or widens if it moves by at least 0.03 on both fields for both baselines with both
+seeds on that side, unchanged if every move is within 0.03, else mixed. Predictions (the lane's): unchanged 0.50, narrows
+0.30. The supervisor's amendment:
+
+- The per-case duplicate mask is a cache of a recipe data correction that no model reads, so under Peter's boundary-only
+  input ruling of 2026-10-17 it is allowed: the supervisor's reading, which Peter may veto (LANE_RULES "Boundary-only
+  input"). Each mask stores a fingerprint of its source (the cell count and the md5 of 1,024 strided connectivity rows),
+  checked at every load and refused on a mismatch; the builder lives in the recipe's src with an exact mask-free path and
+  a test.
+- The deduplication goes into the canonical HiLiftAeroML configuration on principle, the supervisor's decision; stage 2
+  measures its effect on all three architectures and sets the book's HiLiftAeroML standing, and its verdict does not
+  decide adoption.
+- Cap 320 GPU-h and 50 core-h.
+
+Progress: the transform and the mask builder are on psharpe/isla-hl-dedup (add3da918, not merged; recipe tests 528
+passed); 690 masks built and fingerprinted (367046, 367047); every smoke passed (185,445 to 186,058 cells kept; projected
+about 270 GPU-h); the six lanes went in at 08:23 to 08:24 EDT (367678, 367679, 367681, 367682, 367686, 367687).
+
+**For the book.** 10 states the census, the supervisor's decision and reading, and the rescoring, with an In-flight
+callout on the standing for the retrain; 20's sec-oq-whole-boundary states the symmetry plane as revised.
+
+Cost: stage 1 1.27 GPU-h and about 22 core-h; stage 2 within its cap.
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-boundary-2026-10-24/SECOND_READ_BOUNDARY.md).*
+
 ## 2026-10-24 — The whole boundary merged with the surface task (2b15490b2): canonical ISLA reads every stored piece of the domain's boundary by name with its condition type, a surface task names the boundaries it predicts at, bitwise 0.11.0 wherever every given boundary is named; SHIFT-SUV has no ISLA configuration {#sec-nb-boundary-merged}
 
 **The rulings.** Peter, 17:08 EDT 2026-10-23: "not only CAN it read the whole boundary - it SHOULD read the whole
