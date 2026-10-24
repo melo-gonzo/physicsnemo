@@ -321,29 +321,34 @@ def test_isla_surface_shift_suv_reads_the_box_and_predicts_at_the_vehicle():
     assert pred["pressure"].shape == (12,) and pred["wss"].shape == (12, 3)
 
 
-def test_isla_surface_highlift_whole_reads_the_sidecar_and_predicts_at_the_wing():
-    """HiLift with the whole boundary: the model reads the wing and the sidecar's inlet, outlet
-    and symmetry plane, predicts at the wing's cells only, and reverses the wing's winding (into
-    the body as stored) for ISLA only."""
-    names = ("vehicle", "inlet", "outlet", "symmetry")
-    cfg = _compose("isla_surface_highlift_whole", "highlift_surface_whole", *SMALL)
+def test_isla_surface_highlift_reads_the_far_field_and_predicts_at_the_wing():
+    """HiLift: the model reads the wing and the inlet and outlet of the far field its dataset builds
+    (AddHemisphereBoundaries; no symmetry plane), predicts at the wing's cells only, and reverses
+    the wing's winding (into the body as stored) for ISLA only."""
+    from domain_transforms import AddHemisphereBoundaries
+
+    names = ("vehicle", "inlet", "outlet")
+    cfg = _compose("isla_surface_highlift", "highlift_surface", *SMALL)
     assert cfg.forward_kwargs.boundary_meshes == {n: f"boundaries.{n}" for n in names}
     assert OmegaConf.to_container(cfg.model.boundary_schemas) == {n: {} for n in names}
+    assert OmegaConf.to_container(cfg.forward_kwargs.prediction_boundaries) == {
+        "literal": ["vehicle"]
+    }
     appended = OmegaConf.to_container(cfg.dataset_append_transforms, resolve=False)
     assert [t["boundaries"] for t in appended] == [["vehicle"]]
-    body = _compose("isla_surface_highlift", "highlift_surface", *SMALL)
-    assert OmegaConf.to_container(cfg.model.output_schema) == OmegaConf.to_container(
-        body.model.output_schema
-    )
-    walls = {
-        name: ComposeQuadratureMeasure()(_wall(axis, c, up))
-        for name, axis, c, up in zip(
-            names[1:], (0, 0, 1), (-4.0, 4.0, -3.0), (True, False, True)
+    ds = OmegaConf.load(_RECIPE_ROOT / "datasets" / "highlift_surface.yaml")
+    built = OmegaConf.to_container(ds.pipeline.transforms, resolve=False)[0]
+    assert str(built["_target_"]) == "${dp:AddHemisphereBoundaries}"
+    far = AddHemisphereBoundaries(radius=4.0, n_theta=6, n_phi=3)(
+        Mesh(
+            points=torch.zeros(1, 3),
+            global_data={"U_inf": torch.tensor([0.98, 0.0, 0.17])},
         )
-    }
-    targets = _targets("highlift_surface_whole")
+    ).boundaries
+    targets = _targets("highlift_surface")
     domain = _surface_sample(
-        {k: () if v == "scalar" else (3,) for k, v in targets.items()}, walls
+        {k: () if v == "scalar" else (3,) for k, v in targets.items()},
+        {n: ComposeQuadratureMeasure()(far[n]) for n in far.keys()},
     )
     batch, out, pred = _run(cfg, domain, targets)
     assert set(batch["forward_kwargs"]["boundary_meshes"]) == set(names)

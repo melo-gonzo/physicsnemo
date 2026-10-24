@@ -43,6 +43,9 @@ Recipe-local datapipe components that the library does not provide.
   2.4 mm low on 297 of 484 case files, moved onto the CFD mesh's domain.
 - :class:`AddBoxBoundaries`: the faces of a box-shaped domain a case file does
   not store (SHIFT-SUV's), built from constants.
+- :class:`AddHemisphereBoundaries`: the far field of a hemispherical half-model
+  domain a case file does not store (HiLift's inlet and outlet), built from
+  constants and the case's freestream as physicsnemo-curator built it.
 - Physical-input AeroZoo: :class:`StandardizeGlobalLeaf`, a global PDE
   parameter standardized by per-dataset constants, and :class:`MergeBoundaries`,
   the boundaries' faces as one token set for a tensor-input model.
@@ -60,6 +63,7 @@ import zlib
 from collections.abc import Sequence
 from typing import Literal
 
+import numpy as np
 import torch
 from tensordict import TensorDict
 
@@ -2077,6 +2081,206 @@ class AddBoxBoundaries(MeshTransform):
 
     def extra_repr(self) -> str:
         return f"bounds={self.bounds.tolist()}, faces={self.faces}, n_per_side={self.n_per_side}"
+
+
+### The two functions below are physicsnemo-curator's, from
+### src/physicsnemo_curator/domains/mesh/boundaries/_geometry.py at commit ee6aeda (its boundaries
+### code as of 60ed919, 2026-06-08, which wrote HiLift's two stored far fields), copied with their
+### arithmetic and tie rule unchanged so that their output is curator's bit for bit; only the
+### docstrings are shortened.
+
+
+def _curator_build_hemisphere(
+    radius: float, n_theta: int = 64, n_phi: int = 32
+) -> tuple[Mesh, torch.Tensor]:
+    """curator's ``build_hemisphere``: a triangulated hemisphere ``y >= 0`` centred at the origin,
+    the equator on ``y = 0``, every normal toward the origin; and its equator's point indices."""
+    if n_theta < 3:
+        msg = f"need n_theta >= 3, got {n_theta=}"
+        raise ValueError(msg)
+    if n_phi < 2:
+        msg = f"need n_phi >= 2, got {n_phi=}"
+        raise ValueError(msg)
+
+    phi = torch.linspace(0.0, torch.pi / 2, n_phi)
+    theta = torch.linspace(0.0, 2.0 * torch.pi, n_theta + 1)[:-1]
+
+    pole = torch.tensor([[0.0, radius, 0.0]])
+    rings: list[torch.Tensor] = []
+    for r in range(n_phi - 1):
+        p = phi[r + 1].item()
+        ring_y = 0.0 if r == n_phi - 2 else radius * np.cos(p)
+        ring_xz_radius = radius * np.sin(p)
+        rx = ring_xz_radius * torch.cos(theta)
+        rz = ring_xz_radius * torch.sin(theta)
+        rings.append(torch.stack([rx, torch.full_like(rx, ring_y), rz], dim=-1))
+
+    points = torch.cat([pole, *rings], dim=0).float()
+
+    cell_rows: list[list[int]] = []
+    for i in range(n_theta):
+        i_next = (i + 1) % n_theta
+        cell_rows.append([0, 1 + i, 1 + i_next])
+    for r in range(n_phi - 2):
+        ring_r = 1 + r * n_theta
+        ring_r1 = 1 + (r + 1) * n_theta
+        for i in range(n_theta):
+            i_next = (i + 1) % n_theta
+            v00 = ring_r + i
+            v01 = ring_r + i_next
+            v10 = ring_r1 + i
+            v11 = ring_r1 + i_next
+            cell_rows.append([v00, v10, v01])
+            cell_rows.append([v01, v10, v11])
+
+    cells = torch.tensor(cell_rows, dtype=torch.int64)
+
+    p0_all = points[cells[:, 0]]
+    p1_all = points[cells[:, 1]]
+    p2_all = points[cells[:, 2]]
+    centroids_all = (p0_all + p1_all + p2_all) / 3.0
+    normals_all = torch.linalg.cross(p1_all - p0_all, p2_all - p0_all)
+    dots = (centroids_all * normals_all).sum(dim=-1)
+    if bool((dots > 0).all()):
+        cells = cells[:, [0, 2, 1]]
+        dots = -dots
+    if not bool((dots < 0).all().item()):
+        n_outward = int((dots > 0).sum().item())
+        msg = f"hemisphere triangulation has mixed winding: {n_outward}/{cells.shape[0]} cells point outward."
+        raise RuntimeError(msg)
+
+    mesh = Mesh(points=points, cells=cells)
+    equator_indices = torch.arange(points.shape[0] - n_theta, points.shape[0])
+    return mesh, equator_indices
+
+
+def _curator_split_by_freestream(
+    hemisphere: Mesh, u_inf: torch.Tensor
+) -> tuple[Mesh, Mesh]:
+    """curator's ``split_by_freestream``: the cells with ``dot(centroid, U_inf) <= 0`` (the inlet,
+    upstream) and the rest (the outlet), each without its unused points."""
+    if tuple(u_inf.shape) != (3,):
+        msg = f"u_inf must be shape (3,), got {tuple(u_inf.shape)}"
+        raise ValueError(msg)
+
+    centroids = hemisphere.cell_centroids
+    direction = u_inf / u_inf.norm()
+    dots = centroids @ direction.to(centroids.dtype)
+
+    inlet_idx = (dots <= 0).nonzero(as_tuple=True)[0]
+    outlet_idx = (dots > 0).nonzero(as_tuple=True)[0]
+
+    inlet = hemisphere.slice_cells(inlet_idx).clean(
+        merge_points=False, remove_duplicate_cells=False, remove_unused_points=True
+    )
+    outlet = hemisphere.slice_cells(outlet_idx).clean(
+        merge_points=False, remove_duplicate_cells=False, remove_unused_points=True
+    )
+    return inlet, outlet
+
+
+@register()
+class AddHemisphereBoundaries(MeshTransform):
+    r"""Add the far field of a hemispherical half-model domain that a case file does not store (2026-10-24).
+
+    HiLiftAeroML's CFD domain is the half space ``y >= 0`` inside a hemisphere centred at the
+    origin of the case files' raw coordinates; 1,798 of its 1,800 files store the wing alone. This
+    transform builds the hemisphere's two far-field boundaries as physicsnemo-curator's
+    ``HemisphereBoundaries`` built them for the two files that store them: curator's triangulated
+    hemisphere of ``radius`` (``n_theta`` azimuthal and ``n_phi`` polar divisions, every normal
+    toward the origin, into the fluid), split cell by cell by the sign of the centroid's component
+    along the case's own freestream ``global_data[freestream_field]``: ``inlet`` upstream (``<= 0``),
+    ``outlet`` downstream. Only constants and that one stored vector enter it, never the wing. The
+    hemisphere is built in float32 on the CPU, as curator built it, then moved to the surface's
+    device, so it is the same wherever the pipeline runs its transforms.
+
+    On a bare ``Mesh`` (the surface a reader returns) the result is the ``DomainMesh`` that
+    ``MeshReaderWithGlobalData`` returns with ``domain_boundaries``: the surface as its interior
+    (until ``SurfaceMeshToDomainMesh``), ``inlet`` and ``outlet`` as its boundaries, the surface's
+    ``global_data`` at the domain level. On a ``DomainMesh`` they are added to its boundaries (a
+    name it has is refused). Place it first, in the files' raw coordinates and before every pose,
+    centering and scaling, so that each later transform moves the far field with the surface.
+
+    Args:
+        radius: the hemisphere's radius, in the files' units.
+        n_theta: azimuthal divisions around the ``y`` axis (curator's default).
+        n_phi: polar divisions from the pole to the equator (curator's default).
+        freestream_field: the ``global_data`` vector whose direction splits inlet from outlet.
+    """
+
+    def __init__(
+        self,
+        radius: float,
+        n_theta: int = 64,
+        n_phi: int = 32,
+        freestream_field: str = "U_inf",
+    ) -> None:
+        super().__init__()
+        if not radius > 0:
+            raise ValueError(
+                f"AddHemisphereBoundaries: radius must be > 0, got {radius!r}"
+            )
+        self.radius = float(radius)
+        self.n_theta = int(n_theta)
+        self.n_phi = int(n_phi)
+        self.freestream_field = str(freestream_field)
+
+    def _boundaries(
+        self, global_data: TensorDict, like: torch.Tensor
+    ) -> dict[str, Mesh]:
+        if self.freestream_field not in global_data.keys():
+            raise KeyError(
+                f"AddHemisphereBoundaries needs global_data[{self.freestream_field!r}], the freestream "
+                "that splits the inlet from the outlet"
+            )
+        u_inf = global_data[self.freestream_field].detach().to("cpu")
+        hemisphere, _ = _curator_build_hemisphere(
+            self.radius, n_theta=self.n_theta, n_phi=self.n_phi
+        )
+        inlet, outlet = _curator_split_by_freestream(hemisphere, u_inf)
+        return {
+            name: Mesh(
+                points=m.points.to(device=like.device, dtype=like.dtype),
+                cells=m.cells.to(device=like.device),
+            )
+            for name, m in (("inlet", inlet), ("outlet", outlet))
+        }
+
+    def __call__(self, mesh: Mesh) -> DomainMesh:  # type: ignore[override]
+        return DomainMesh(
+            interior=mesh.with_data(
+                global_data=TensorDict({}, batch_size=[], device=mesh.points.device)
+            ),
+            boundaries=self._boundaries(mesh.global_data, mesh.points),
+            global_data=mesh.global_data,
+        )
+
+    def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
+        """Add the inlet and the outlet beside the domain's boundaries."""
+        taken = [n for n in ("inlet", "outlet") if n in domain.boundary_names]
+        if taken:
+            raise ValueError(
+                f"AddHemisphereBoundaries: boundaries {taken!r} exist already"
+            )
+        gd = (
+            domain.global_data
+            if self.freestream_field in domain.global_data.keys()
+            else domain.interior.global_data
+        )
+        return DomainMesh(
+            interior=domain.interior,
+            boundaries={
+                **{n: domain.boundaries[n] for n in domain.boundary_names},
+                **self._boundaries(gd, domain.interior.points),
+            },
+            global_data=domain.global_data,
+        )
+
+    def extra_repr(self) -> str:
+        return (
+            f"radius={self.radius}, n_theta={self.n_theta}, n_phi={self.n_phi}, "
+            f"freestream_field={self.freestream_field!r}"
+        )
 
 
 @register()

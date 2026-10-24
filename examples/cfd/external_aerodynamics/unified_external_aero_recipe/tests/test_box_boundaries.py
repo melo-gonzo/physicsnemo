@@ -15,18 +15,17 @@
 # limitations under the License.
 
 """The boundaries of the PDE domain that a case file does not store: SHIFT-SUV's CFD box, built by
-``AddBoxBoundaries`` from its dataset files' constants, and HiLift's far field and symmetry plane, read
-from a boundary-only sidecar by ``MeshReaderWithGlobalData(domain_boundaries_root=...)``."""
+``AddBoxBoundaries`` from its dataset files' constants, and HiLift's far field (inlet and outlet),
+built by ``AddHemisphereBoundaries`` from its dataset file's constants and each case's freestream."""
 
+import os
 from pathlib import Path
 
 import pytest
 import torch
 from datasets import build_dataset
 from domain_transforms import AddBoxBoundaries
-from merge_global_data import MeshReaderWithGlobalData
 from omegaconf import OmegaConf
-from test_domain_transforms import _drivaer_surface_case
 
 from physicsnemo.datapipes.protocols import DatasetBase
 from physicsnemo.mesh import DomainMesh, Mesh
@@ -195,71 +194,237 @@ def test_shift_suv_pipeline_moves_the_box_with_the_vehicle(tmp_path, dataset):
     assert nearest.max() < 1e-5
 
 
-def test_surface_reader_reads_the_domain_boundaries_from_a_sidecar_root(tmp_path):
-    """With domain_boundaries_root the named boundaries are read whole from a separate directory
-    in the case files' relative layout (a boundary-only sidecar, as HiLift's far field), beside
-    the subsampled surface read from the data; the surface's draw is the same as without them."""
-    data, side = tmp_path / "data", tmp_path / "side"
-    data.mkdir()
-    source = _drivaer_surface_case(data)
-    rel = Path("run_001") / "sample.pdmsh" / "_tensordict" / "boundaries"
-    for name in ("inlet", "outlet"):
-        source.boundaries[name].save(side / rel / name)
-    kw = dict(
-        pattern="run_*/*.pdmsh/_tensordict/boundaries/vehicle",
-        subsample_n_cells=10,
-        merge_global_data_from="../../global_data",
+#: HiLift's far field (the stored data's radius, curator's divisions) and the stored U_inf of three
+#: angles of attack, bit for bit (every case of an angle stores the same vector; 10 vectors in all).
+HL_RADIUS = 24533.41796875
+HL_U_INF = {
+    4: "a50f274500000000ade93a43",
+    12: "39cf2345000000006d460b44",
+    22: "4d461b4500000000a6f07a44",
+}
+
+
+def _u_inf(aoa: int) -> torch.Tensor:
+    return torch.frombuffer(
+        bytearray(bytes.fromhex(HL_U_INF[aoa])), dtype=torch.float32
     )
-    bare = MeshReaderWithGlobalData(data, **kw)
-    whole = MeshReaderWithGlobalData(
-        data,
-        domain_boundaries=["inlet", "outlet"],
-        domain_boundaries_root=str(side),
-        **kw,
+
+
+def _hl_wing(u_inf: torch.Tensor, n_cells: int = 2000) -> Mesh:
+    """A random wing surface with HiLift's raw field names and freestream, in inches, y >= 0."""
+    g = torch.Generator().manual_seed(1)
+    return Mesh(
+        points=torch.rand(3 * n_cells, 3, generator=g)
+        * torch.tensor([2500.0, 1500.0, 600.0])
+        + torch.tensor([90.0, 0.0, 90.0]),
+        cells=torch.arange(3 * n_cells).reshape(n_cells, 3),
+        cell_data={
+            "PROJ(AVG(P))": 0.1 + 0.01 * torch.rand(n_cells, generator=g),
+            "PROJ(AVG(T))": 500.0 + torch.rand(n_cells, generator=g),
+            "PROJ(AVG(RHO))": 2e-3 + 1e-5 * torch.rand(n_cells, generator=g),
+            "PROJ(AVG(U))": torch.randn(n_cells, 3, generator=g),
+            "AVG(TAU_WALL)": 1e-4 * torch.randn(n_cells, 3, generator=g),
+        },
+        global_data={
+            "U_inf": u_inf.clone(),
+            "p_inf": torch.tensor(0.1),
+            "rho_inf": torch.tensor(2e-3),
+            "T_inf": torch.tensor(500.0),
+            "L_ref": torch.tensor(275.8),
+        },
     )
-    for r in (bare, whole):
-        r.set_generator(torch.Generator().manual_seed(7))
-    mesh, _ = bare[0]
-    domain, _ = whole[0]
-    assert torch.equal(domain.interior.points, mesh.points)
-    assert set(domain.boundary_names) == {"inlet", "outlet"}
-    for name in ("inlet", "outlet"):
-        assert torch.equal(
-            domain.boundaries[name].points, source.boundaries[name].points
+
+
+def _canonical(m: Mesh) -> tuple[torch.Tensor, torch.Tensor]:
+    """A mesh's points in sorted order and its oriented triangles as sorted rows of vertex
+    coordinates, each rotated to start at its smallest vertex: equal for two meshes that hold the
+    same points and the same oriented cells in any order."""
+    import numpy as np
+
+    p = m.points.numpy()
+    t = p[m.cells.numpy()]
+    first = np.lexsort((t[:, :, 2], t[:, :, 1], t[:, :, 0]), axis=-1)[:, 0]
+    t = np.take_along_axis(
+        t, ((first[:, None] + np.arange(3)) % 3)[:, :, None], axis=1
+    ).reshape(len(t), 9)
+    return (
+        torch.from_numpy(p[np.lexsort(p.T[::-1])]),
+        torch.from_numpy(t[np.lexsort(t.T[::-1])]),
+    )
+
+
+@pytest.mark.parametrize("aoa", sorted(HL_U_INF))
+def test_add_hemisphere_boundaries_builds_the_far_field_into_the_fluid(aoa):
+    """On a bare surface the transform returns the reader's DomainMesh shape with the inlet and
+    the outlet: together curator's whole hemisphere (64 x 32 divisions, 3,904 cells), every point
+    on the sphere of the radius with y >= 0, every normal toward the origin (into the fluid), the
+    inlet's cells upstream (centroid . U_inf <= 0) and the outlet's downstream, sharing only their
+    seam. The wing does not enter: another wing with the same U_inf gives the same far field."""
+    from domain_transforms import AddHemisphereBoundaries
+
+    u = _u_inf(aoa)
+    wing = _hl_wing(u)
+    t = AddHemisphereBoundaries(radius=HL_RADIUS)
+    out = t(wing)
+    assert isinstance(out, DomainMesh)
+    assert torch.equal(out.interior.points, wing.points)
+    assert len(out.interior.global_data.keys()) == 0
+    assert torch.equal(out.global_data["U_inf"], u)
+    assert set(out.boundary_names) == {"inlet", "outlet"}
+    inlet, outlet = out.boundaries["inlet"], out.boundaries["outlet"]
+    assert inlet.n_cells + outlet.n_cells == 64 + 2 * 64 * 30
+    direction = (u / u.norm()).double()
+    for m, upstream in ((inlet, True), (outlet, False)):
+        assert m.points.dtype == torch.float32
+        r = m.points.double().norm(dim=1)
+        torch.testing.assert_close(r, torch.full_like(r, HL_RADIUS), atol=0.02, rtol=0)
+        assert bool((m.points[:, 1] >= 0).all())
+        assert bool(((m.cell_centroids * m.cell_normals).sum(dim=1) < 0).all())
+        along = m.cell_centroids.double() @ direction
+        assert bool((along <= 0).all() if upstream else (along > 0).all())
+        assert torch.unique(m.cells).numel() == m.n_points  # no unused point
+    seam = (inlet.points[:, None, :] == outlet.points[None, :, :]).all(-1)
+    assert 0 < int(seam.sum()) < min(inlet.n_points, outlet.n_points)
+    other = t(_hl_wing(u, n_cells=50))
+    for n in ("inlet", "outlet"):
+        assert torch.equal(other.boundaries[n].points, out.boundaries[n].points)
+        assert torch.equal(other.boundaries[n].cells, out.boundaries[n].cells)
+
+
+def test_add_hemisphere_boundaries_on_a_domain_and_what_it_refuses():
+    """On a DomainMesh the inlet and outlet join its boundaries, split by the domain-level U_inf;
+    a name it has, a missing freestream and a radius <= 0 are refused."""
+    from domain_transforms import AddHemisphereBoundaries
+
+    t = AddHemisphereBoundaries(radius=HL_RADIUS)
+    wing = _hl_wing(_u_inf(12))
+    bare = t(wing)
+    domain = DomainMesh(
+        interior=bare.interior,
+        boundaries={"vehicle": wing},
+        global_data=bare.global_data,
+    )
+    both = t.apply_to_domain(domain)
+    assert set(both.boundary_names) == {"vehicle", "inlet", "outlet"}
+    for n in ("inlet", "outlet"):
+        assert torch.equal(both.boundaries[n].points, bare.boundaries[n].points)
+    with pytest.raises(ValueError, match="exist already"):
+        t.apply_to_domain(both)
+    with pytest.raises(KeyError, match="U_inf"):
+        t(Mesh(points=wing.points, cells=wing.cells))
+    with pytest.raises(ValueError, match="radius"):
+        AddHemisphereBoundaries(radius=0.0)
+
+
+def _hl_dataset_cfg(tmp_path, posed: bool):
+    cfg = OmegaConf.merge(
+        OmegaConf.load(_RECIPE_ROOT / "datasets" / "highlift_surface.yaml"),
+        {
+            "dataset_paths": {
+                "highlift_aero_ml": str(tmp_path),
+                "highlift_aero_ml_duplicate_masks": None,
+            },
+            "sampling_resolution": 1500,
+        },
+    )
+    if posed:
+        ### The posed protocol of the other datasets' _posed files: the pose right after the far
+        ### field, seeded by the case key.
+        cfg.pipeline.reader.store_case_key = True
+        transforms = OmegaConf.to_container(cfg.pipeline.transforms, resolve=False)
+        transforms.insert(
+            1, {"_target_": "${dp:FixedRandomPose}", "salt": 0, "translate": 1.0}
         )
-        assert torch.equal(domain.boundaries[name].cells, source.boundaries[name].cells)
-    with pytest.raises(FileNotFoundError, match="domain boundary 'slip'"):
-        MeshReaderWithGlobalData(
-            data, domain_boundaries=["slip"], domain_boundaries_root=str(side), **kw
-        )[0]
-    with pytest.raises(ValueError, match="none are named"):
-        MeshReaderWithGlobalData(data, domain_boundaries_root=str(side), **kw)
+        cfg.pipeline.transforms = transforms
+    return cfg
 
 
-def test_highlift_whole_reads_the_sidecar_beside_the_wing():
-    """highlift_surface_whole.yaml is highlift_surface.yaml with the far field and the symmetry
-    plane read from the sidecar root and SurfaceMeshToDomainMesh as its terminal; every other
-    step is the same."""
-    body = OmegaConf.load(_RECIPE_ROOT / "datasets" / "highlift_surface.yaml")
-    whole = OmegaConf.load(_RECIPE_ROOT / "datasets" / "highlift_surface_whole.yaml")
-    reader = OmegaConf.to_container(whole.pipeline.reader, resolve=False)
-    assert reader["domain_boundaries"] == ["inlet", "outlet", "symmetry"]
-    assert (
-        reader["domain_boundaries_root"]
-        == "${dataset_paths.highlift_aero_ml_boundaries}"
+@pytest.mark.parametrize("posed", [False, True], ids=["native", "posed"])
+def test_highlift_pipeline_moves_the_far_field_with_the_wing(tmp_path, posed):
+    """highlift_surface.yaml builds the far field first, from its constants and the case's U_inf,
+    and ends with SurfaceMeshToDomainMesh. Through its whole chain (the deduplicating reader, the
+    posed protocol's FixedRandomPose where set, the augmentations, CenterMesh and the L_ref scaling)
+    the far field undergoes the wing's rigid motion and scaling: the one similarity that maps the
+    raw far field onto the output one maps every output wing point onto a stored one."""
+    from domain_transforms import AddHemisphereBoundaries
+
+    wing = _hl_wing(_u_inf(22))
+    source = DomainMesh(
+        interior=Mesh(points=torch.zeros(0, 3)),
+        boundaries={"vehicle": wing.with_data(global_data={})},
+        global_data=wing.global_data,
     )
-    rest = {
-        k: v
-        for k, v in reader.items()
-        if k not in ("domain_boundaries", "domain_boundaries_root")
-    }
-    assert rest == OmegaConf.to_container(body.pipeline.reader, resolve=False)
-    tb = OmegaConf.to_container(body.pipeline.transforms, resolve=False)
-    tw = OmegaConf.to_container(whole.pipeline.transforms, resolve=False)
-    assert str(tw[-1]["_target_"]) == "${dp:SurfaceMeshToDomainMesh}"
-    assert str(tb[-1]["_target_"]) == "${dp:MeshToDomainMesh}"
-    assert tw[:-1] == tb[:-1]
-    assert OmegaConf.to_container(
-        whole.pipeline.augmentations, resolve=False
-    ) == OmegaConf.to_container(body.pipeline.augmentations, resolve=False)
-    assert OmegaConf.to_container(whole.targets) == OmegaConf.to_container(body.targets)
+    path = tmp_path / "geo_LHC001_AoA_22" / "domain_LHC001_AoA_22.pdmsh"
+    path.parent.mkdir(parents=True)
+    source.save(path)
+    cfg = _hl_dataset_cfg(tmp_path, posed)
+    raw_cfg = OmegaConf.to_container(cfg.pipeline.transforms, resolve=False)
+    assert str(raw_cfg[0]["_target_"]) == "${dp:AddHemisphereBoundaries}"
+    assert raw_cfg[0]["radius"] == HL_RADIUS
+    assert (raw_cfg[0]["n_theta"], raw_cfg[0]["n_phi"]) == (64, 32)
+    assert sum("AddHemisphereBoundaries" in str(t["_target_"]) for t in raw_cfg) == 1
+    assert str(raw_cfg[-1]["_target_"]) == "${dp:SurfaceMeshToDomainMesh}"
+    dataset_ = build_dataset(cfg, augment=True, device=None, num_workers=1)
+    try:
+        domain, _ = dataset_[0]
+    finally:
+        DatasetBase.close(dataset_)
+    assert set(domain.boundary_names) == {"vehicle", "inlet", "outlet"}
+    out_wing = domain.boundaries["vehicle"]
+    torch.testing.assert_close(domain.interior.points, out_wing.cell_centroids)
+    far = AddHemisphereBoundaries(radius=HL_RADIUS)(wing)
+    names = ("inlet", "outlet")
+    for n in names:
+        assert torch.equal(domain.boundaries[n].cells, far.boundaries[n].cells)
+    raw = torch.cat([far.boundaries[n].points for n in names]).double()
+    out = torch.cat([domain.boundaries[n].points for n in names]).double()
+    rc, oc = raw - raw.mean(0), out - out.mean(0)
+    u, sv, vt = torch.linalg.svd(rc.T @ oc)
+    rot = (u @ vt).T
+    scale = sv.sum() / rc.square().sum()
+    shift = out.mean(0) - scale * raw.mean(0) @ rot.T
+    torch.testing.assert_close(scale * raw @ rot.T + shift, out, atol=1e-3, rtol=0)
+    torch.testing.assert_close(
+        scale, torch.tensor(1 / 275.8, dtype=scale.dtype), atol=1e-7, rtol=0
+    )  # 1 / L_ref
+    mapped = scale * wing.points.double() @ rot.T + shift
+    nearest = torch.cdist(out_wing.points.double(), mapped).min(dim=1).values
+    assert nearest.max() < 1e-4
+
+
+_HL_ROOT = os.environ.get("HIGHLIFT_AERO_ML_ROOT")
+
+
+@pytest.mark.skipif(
+    _HL_ROOT is None,
+    reason="needs HiLiftAeroML case files (set HIGHLIFT_AERO_ML_ROOT to the dataset root)",
+)
+@pytest.mark.parametrize(
+    "case,stored",
+    [
+        ("geo_LHC001_AoA_10", "geo_LHC001_AoA_10"),
+        ("geo_LHC001_AoA_12", "geo_LHC001_AoA_12"),
+        ("geo_LHC002_AoA_10", "geo_LHC001_AoA_10"),
+    ],
+)
+def test_add_hemisphere_boundaries_reproduces_the_stored_far_field(case, stored):
+    """On real case files, the far field the transform builds from a case's own U_inf holds the
+    points and oriented cells, bit for bit, of the far field curator stored on LHC001 at the same
+    angle of attack (the stored files' order is curator's random permutation, so the comparison is
+    order-free). LHC002_AoA_10 stores no far field: its U_inf equals LHC001_AoA_10's bit for bit."""
+    from domain_transforms import AddHemisphereBoundaries
+    from tensordict import TensorDict
+
+    def pdmsh(c):
+        (p,) = sorted((Path(_HL_ROOT) / c).glob("domain_*.pdmsh"))
+        return p / "_tensordict"
+
+    u_inf = TensorDict.load_memmap(pdmsh(case) / "global_data")["U_inf"].clone()
+    built = AddHemisphereBoundaries(radius=HL_RADIUS)(
+        Mesh(points=torch.zeros(1, 3), global_data={"U_inf": u_inf})
+    )
+    for n in ("inlet", "outlet"):
+        ref = Mesh.load(pdmsh(stored) / "boundaries" / n)
+        (pg, tg), (pr, tr) = _canonical(built.boundaries[n]), _canonical(ref)
+        assert torch.equal(pg, pr), n
+        assert torch.equal(tg, tr), n

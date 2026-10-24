@@ -63,6 +63,22 @@ pipeline:
           _target_: torch.tensor
           data: [1.0, 1.0, 0.0]
   transforms:
+    # The far field of the PDE domain, which 1,798 of the 1,800 case files do not store: the
+    # hemisphere of radius 24,533.41796875 in (88.95 MAC) about the raw origin, split into inlet
+    # and outlet by the case's own stored U_inf, as physicsnemo-curator's HemisphereBoundaries
+    # wrote it for the two files that store it (LHC001_AoA_10, _12), whose inlet and outlet it
+    # reproduces bit for bit. The radius is the stored data's: the pole of those two files, and
+    # the extent of every interior the dataset stores (31 files; the paper says about 75 MAC).
+    # n_theta 64 and n_phi 32 are the divisions curator wrote them with. Built first, in the
+    # files' raw inches, so every transform and pose below moves it with the wing. The symmetry
+    # plane y = 0 is not built: its hole at the wing root needs the root's outline, and the stored
+    # roots are open on every geometry but LHC001 (a rebuild of the outline from the stored
+    # vertices is being prototyped), so no case reads one until it can be built for every case.
+    # Models that read only `interior` and `boundaries.vehicle` see what they saw before.
+    - _target_: ${dp:AddHemisphereBoundaries}
+      radius: 24533.41796875
+      n_theta: 64
+      n_phi: 32
     # Unit freestream direction as a NEW global leaf U_inf_dir (U_inf stays
     # physical). Consumed as the unit global vector input by ISLA
     # (global_schema: U_inf_dir); inert for models that do not declare it.
@@ -102,9 +118,9 @@ pipeline:
         density:     {type: scalar, mean:  1.0, std: 0.02}
         velocity:    {type: vector, mean: [0.00, 0.00, 0.00], std: 0.20}
         tau_wall:    {type: scalar, mean: [0.00, 0.00, 0.00], std: 0.003}
-    # Terminal: convert the surface Mesh into a DomainMesh per the recipe
-    # contract. cell_data_targets are auto-injected from the `targets:` block.
-    - _target_: ${dp:MeshToDomainMesh}
+    # Terminal: convert the surface into the DomainMesh of the recipe contract, beside the
+    # far field. cell_data_targets are auto-injected from the `targets:` block.
+    - _target_: ${dp:SurfaceMeshToDomainMesh}
       interior_points: cell_centroids
 
 targets:
