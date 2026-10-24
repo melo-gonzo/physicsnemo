@@ -1038,6 +1038,12 @@ print("- **Read whole.** On AeroZoo, the GINOT bracket lug, PLAID Tensile2d, Dee
       "since the flow crosses them and no condition is stored on them. The far field is not in the converted files but in the "
       "release's own `_freestream.vtp` on every case, 200 chords out, and the dataset file reads it from there as the condition "
       "`freestream`, whose prescribed value is the inlet velocity ISLA already reads, with the dataset unchanged (@sec-data-airfrans).")
+# HL-DUP's root-outline study: the source STL's root cap against the closed root's hole
+_HCT = " ".join(R.load("hl_dup_stage2", "HOLE_CRUST.md").split())
+HC = (re.search(r"(\d+) case folders \(LHC001-LHC005\) also store the source surface", _HCT).group(1),
+      re.search(r"On all (\d+) readable STLs the cap is one region", _HCT).group(1),
+      re.search(r"Hausdorff distance ([\d.]+) in to curator's stored hole", _HCT).group(1))
+assert "The design fails its own validation" in _HCT and "Every failure was caught by a check" in _HCT
 print(f"- **Not stored.** SHIFT-SUV's {SUV_N} files store the vehicle alone, open at the tyre contact patches, inside an interior "
       f"that fills the box {SUV_BOX}; its ground, side walls, roof, inlet and outlet are not stored, and no published source found "
       "gives the side walls', the roof's or the outlet's condition. The recipe builds the box as the first transform of SHIFT-SUV's "
@@ -1059,9 +1065,14 @@ print(f"- **Not stored.** SHIFT-SUV's {SUV_N} files store the vehicle alone, ope
       "root are in no cell, so what is missing is the root's triangles, not its geometry. A closing of each case's own edges "
       f"and vertices gives a hole {HL_HOLE[8]}% smaller than the closed root's, but only at a closing scale chosen above the "
       "vertex spacing (1.5 spacings), a radius the program does not use, so no construction of the symmetry plane from these "
-      "files is robust. The supervisor declined to use the closed root's outline as a root section shared by every "
-      "geometry, so HiLiftAeroML's symmetry plane stays out of its configuration until each open root's strip is rebuilt "
-      "in a way that needs no chosen radius.")
+      "files is robust. A rebuild of each open root's outline from its own vertices with no chosen radius (a constrained "
+      "nearest-neighbor crust) fails its own validation at the sharp trailing edges, and on the open roots, where distinct "
+      "stored vertices share a position on the plane, at its first check; every failure was caught by a check. The dataset's "
+      f"source STL files, stored for {HC[0]} cases, hold the root closed by a planar cap, and on each of the {HC[1]} read "
+      f"that cap matches the closed root's hole to {HC[2]} in (Hausdorff distance). Asked whether the plane may take its "
+      "root outline from that cap, applied to every case after a check that the case's own root points lie on it, Peter "
+      "answered \"Yes, that works\". So the recipe is to build HiLiftAeroML's symmetry plane at load from that cap, case by "
+      "case, and a case that fails the check gets no plane; until it does, the configuration reads no symmetry plane.")
 print()
 # the far-field radius the stored interiors and curator's two synthesized files use (BC-SIDECAR, decision 4)
 HL_R = re.search(r"The stored interiors and curator's 2 files use [\d,.]+ in \(([\d.]+) MAC\)", " ".join(R.load("bc_sidecar", "REPORT.md").split())).group(1)
@@ -1075,9 +1086,8 @@ print("**Peter approved building the missing pieces in the recipe, as the superv
       "the roof's or the outlet's. It takes HiLiftAeroML's inlet and outlet from the curation pipeline's own generator, its "
       "arithmetic copied unchanged, at the "
       f"radius the stored interiors use, {HL_R} mean aerodynamic chords, read beside the wing with its duplicated root cells "
-      "dropped (@sec-data-hilift). Its symmetry plane stays out: each open root's missing strip rebuilt from its own unused "
-      "vertices in outline order, with no chosen radius, and checked against the stored hole on the closed root, is what would "
-      "add it. GeoTransolver's and Transolver's inputs and targets are bitwise unchanged by both transforms "
+      "dropped (@sec-data-hilift). Its symmetry plane is the source STL's root cap, checked against each case's own root "
+      "points (above), which the recipe does not build yet. GeoTransolver's and Transolver's inputs and targets are bitwise unchanged by both transforms "
       f"({BCSU_BASE[0]} of {BCSU_BASE[0]} items with the box, {BCSU_BASE[1]} of {BCSU_BASE[1]} with the inlet and outlet). Both "
       "standings were trained reading the body alone, and the final reference run (@sec-ledger) retrains them with these pieces. What would "
       "settle the question: each standing retrained with ISLA reading those pieces, two seeds, scored beside the standing as "
@@ -1085,12 +1095,13 @@ print("**Peter approved building the missing pieces in the recipe, as the superv
       "Cost: not priced, because the configurations set the runs. "
       f"Data: {R.source('boundary_audit', 'REPORT.md')} (sections 1, 2 and 5), {R.source('setup_research', 'SETUP.md')}, "
       f"{R.source('bc_sidecar', 'FINAL_REPORT.md')}, {R.source('bc_sidecar', 'REPORT.md')} (decision 4), "
-      f"{R.source('hl_dup', 'RESULTS.md')} (section 4); {R.source('bc_supply', 'REPORT.md')} (sections 2 and 3).")
+      f"{R.source('hl_dup', 'RESULTS.md')} (section 4); {R.source('bc_supply', 'REPORT.md')} (sections 2 and 3); "
+      f"{R.source('hl_dup_stage2', 'HOLE_CRUST.md')}.")
 ```
 
 ::: {.callout-note title="In flight"}
-HiLiftAeroML's symmetry plane is not read. A rebuild of its open root outlines from their stored vertices that needs
-no chosen radius is being built, and the ledger (@sec-ledger) tracks it.
+HiLiftAeroML's symmetry plane is not read. The plane built at load from the source STL's root cap, checked case by case
+against each case's own root points, is being built, and the ledger (@sec-ledger) tracks it.
 :::
 
 ### The near-wall channel under the whole boundary {#sec-oq-nearwall}
