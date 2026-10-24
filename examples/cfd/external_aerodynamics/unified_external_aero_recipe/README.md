@@ -424,8 +424,10 @@ given and predicts at the cells of the boundaries named in
 `prediction_boundaries` (a `{literal: ...}` spec passes the names as they
 are): on DrivAerML Surface the vehicle, with the tunnel's inlet, outlet,
 floor and walls read as conditions only. The DrivAerML surface datasets load
-those four meshes beside the vehicle (`domain_boundaries`), whole, and move
-them with every augmentation; `SurfaceMeshToDomainMesh` puts the targets at
+those four meshes beside the vehicle (`domain_boundaries`), whole, place their
+ground through the whole vehicle's lowest point in the reader, before the
+vehicle is subsampled (`whole_surface_transforms: [PlaceGroundUnderBody]`; 297
+of the 484 files store it 2.4 mm low), and move them with every augmentation; `SurfaceMeshToDomainMesh` puts the targets at
 the vehicle's cell centroids in cell order, which is the order of the output
 Mesh's points; the dataset subsamples the vehicle to the cells it predicts at. The interior task
 (`isla_volume.yaml`, `interior: true`) adds `prediction_points: interior`,
