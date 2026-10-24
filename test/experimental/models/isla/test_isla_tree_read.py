@@ -1763,6 +1763,62 @@ def test_query_chunks_need_query_independent_points():
         )
 
 
+@pytest.mark.parametrize(
+    "device,walk,autocast",
+    [
+        ("cpu", "reference", False),
+        ("cpu", "fast", False),
+        pytest.param("cuda", "auto", False, marks=cuda_only),
+        pytest.param("cuda", "auto", True, marks=cuda_only),
+    ],
+    ids=["cpu-reference", "cpu-fast", "cuda", "cuda-bf16_autocast"],
+)
+def test_walk_of_a_range_of_points_is_those_rows_of_the_walk_of_every_point(
+    device, walk, autocast
+):
+    """A walk made without its lists (``walk_points=False``, as ISLA.query_chunks makes
+    it) walks a range of points on demand (``walk_points_range``, here outside the
+    autocast it was made in): its lists are those points' rows of the walk of every
+    point, raw and in order (numbered from the range's start), with their node counts
+    and geometry rows; ``walk_pair_count`` counts every point's pairs without the
+    lists."""
+    dt = torch.float32 if device == "cuda" else D
+    pts, nrm, w, g = (t.to(device, dt) for t in cloud(500, seed=3))
+    q = cloud(150, seed=7, scale=(4.0,) * 3)[0].to(device, dt)
+    kw = dict(
+        query_r=q[None],
+        query_n=torch.nn.functional.normalize(q, dim=-1)[None],
+        query_wall=0.1
+        + torch.rand(1, 150, generator=torch.Generator().manual_seed(1)).to(device, dt),
+        boundary_r=pts[None],
+        boundary_n=nrm[None],
+        boundary_vecs=None,
+        log_frac=torch.log(w / w.sum())[None],
+        g_unit=torch.nn.functional.normalize(g, dim=-1)[None, None],
+        theta=0.5,
+        eps=1e-12,
+        walk=walk,
+    )
+    with torch.autocast(device, dtype=torch.bfloat16, enabled=autocast):
+        full = tree_read.tree_read_walk(**kw)
+        lazy = tree_read.tree_read_walk(walk_points=False, **kw)
+    assert lazy.lists == [None]
+    qi, si, n_node = full.lists[0]
+    assert 0 < n_node < qi.numel()
+    assert (
+        tree_read.walk_pair_count(lazy) == tree_read.walk_pair_count(full) == qi.numel()
+    )
+    for start, stop in ((0, 150), (40, 110), (149, 150)):
+        part = tree_read.walk_points_range(lazy, start, stop)
+        a, b = torch.searchsorted(qi, qi.new_tensor([start, stop])).tolist()
+        pq, ps, pn = part.lists[0]
+        assert torch.equal(pq, qi[a:b] - start) and torch.equal(ps, si[a:b])
+        assert pn == int((si[a:b] >= full.n_cells).sum())
+        assert part.n_queries == stop - start
+        for k in ("query_r", "query_n", "query_wall"):
+            assert torch.equal(part.geometry[0][k], full.geometry[0][k][start:stop])
+
+
 def _basis_case(dim, n_vecs, n_pairs=20000, seed=0):
     """One case's geometry for the kernel basis (float64, CPU; two global directions,
     ``n_vecs`` rank-1 inputs per source), a random plan of ``n_pairs`` pairs and a

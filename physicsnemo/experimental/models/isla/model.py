@@ -288,6 +288,7 @@ indexes the flattened boundary tokens; the slice blocks take plain tensors.
 """
 
 import contextlib
+import functools
 import logging
 import math
 from collections.abc import Mapping
@@ -343,6 +344,8 @@ from physicsnemo.experimental.models.isla.tree_read import (
     _TreeKernelRead,
     kernel_geo_width,
     tree_read_walk,
+    walk_pair_count,
+    walk_points_range,
     walk_range_pairs,
 )
 from physicsnemo.mesh import Mesh
@@ -1762,8 +1765,8 @@ class ISLA(Module):
 
         Runs the boundary side of the forward pass once, from the same arguments:
         the case's inputs (the token draw included, which consumes the global RNG
-        as :meth:`forward` does), the boundary tokens through every block, the forest
-        and every point's walk of it. What the prediction points read of each block
+        as :meth:`forward` does), the boundary tokens through every block and the
+        forest (each chunk walks it for its own points). What the prediction points read of each block
         (its prototypes, anchors and slice states, the boundary read's keys and
         values) and the head frame's prototypes and anchors become leaves that
         accumulate gradients. The result ``chunks`` is then called as
@@ -1880,7 +1883,9 @@ class ISLA(Module):
         units)."""
         return walk_range_pairs(self.kernel_basis, self._tree_read_walk(bnd, qry, q_wall, g_unit))
 
-    def _tree_read_walk(self, bnd: TensorDict, qry: TensorDict, q_wall, g_unit) -> TreeReadWalk:
+    def _tree_read_walk(
+        self, bnd: TensorDict, qry: TensorDict, q_wall, g_unit, walk_points: bool = True
+    ) -> TreeReadWalk:
         """The forest and the points' lists of :meth:`_tree_read_pairs`, before the
         kernel basis
         (:func:`~physicsnemo.experimental.models.isla.tree_read.tree_read_walk`)."""
@@ -1901,6 +1906,7 @@ class ISLA(Module):
             kernel=self.resolve_tree_read_kernel(q_r),
             walk=self.tree_read_kernel,
             build=self.tree_read_kernel,
+            walk_points=walk_points,
         )
 
     def _forward_tensors(
@@ -2250,8 +2256,10 @@ class _QueryChunks:
         tokens, self.gauge, self.geo_kernel = model._boundary_tokens(boundary, g_unit, gauge)
         self.like, self.log_w = boundary["points"], tokens["log_w"]
         q_nhat, s, _ = model._query_geometry(query, self.gauge, self.like)
+        ### The forest now, each chunk's points walked by the chunk: the lists held are
+        ### one chunk's, and the fast walk's array limit applies to a chunk's pairs.
         self.walk = model._tree_read_walk(
-            tokens, {"r": query["points"] / self.gauge, "n_hat": q_nhat}, s[..., 0].abs(), g_unit
+            tokens, {"r": query["points"] / self.gauge, "n_hat": q_nhat}, s[..., 0].abs(), g_unit, walk_points=False
         )
         ### The boundary side's token axis completed as forward completes its own
         ### (_pad_tokens): at an unaligned count cuBLAS reduces some token-axis bf16
@@ -2276,6 +2284,12 @@ class _QueryChunks:
     def n_points(self) -> int:
         return int(self.query.shape[1])
 
+    @functools.cached_property
+    def n_pairs(self) -> int:
+        """The number of (point, source) pairs every prediction point reads, counted
+        without making the lists."""
+        return walk_pair_count(self.walk)
+
     def _leaf(self, t: torch.Tensor) -> torch.Tensor:
         leaf = t.detach().requires_grad_(t.requires_grad)
         self._roots.append(t)
@@ -2288,7 +2302,7 @@ class _QueryChunks:
         q_tokens, _ = m._query_tokens(
             self.query[:, start:stop], self.log_w, self.g_unit, self.g_scalars, self.gauge, self.like
         )
-        pairs = walk_range_pairs(m.kernel_basis, self.walk, start, stop)
+        pairs = walk_range_pairs(m.kernel_basis, walk_points_range(self.walk, start, stop))
         h = q_tokens["h"]
         vecs, tens = q_tokens.get("vecs", None), q_tokens.get("tens", None)
         for i, read in enumerate(m._block_read_callables()):

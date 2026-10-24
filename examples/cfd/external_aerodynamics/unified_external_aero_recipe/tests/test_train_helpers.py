@@ -315,12 +315,7 @@ def test_one_chunk_rule_decides_from_sizes(monkeypatch, caplog):
     ):
         peak = train._one_chunk_peak_gib(pairs, points, allocated, precision)
         assert reserved <= peak < 275.0
-    chunks = SimpleNamespace(
-        walk=SimpleNamespace(
-            lists=[(torch.zeros(600), None, 0), (torch.zeros(400), None, 0)]
-        ),
-        n_points=50,
-    )
+    chunks = SimpleNamespace(n_pairs=1000, n_points=50)
     peak = train._one_chunk_peak_gib(1000, 50, 0.0, "float32")
     cpu = torch.device("cpu")
     monkeypatch.setattr(train, "_one_chunk_logged", None)
