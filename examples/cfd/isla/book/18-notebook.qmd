@@ -40394,7 +40394,7 @@ DrivAerML Volume standing, scratch/isla-slices-drv-2026-10-24/).
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-night-2026-10-24/SECOND_READ_NIGHT.md).*
 
-## 2026-10-23 to 2026-10-24 — GEO-FAST: a fast path for the bundle's exact geometry, bitwise equal to the reference on every check (0 of 2,043,456 GB300 queries differ), cuts the added step on the DrivAerML Volume vehicle case from 1.49 to 1.36 times the base's; the reference's search seed moves to its own cell tree, which takes the whole-boundary step from 2.94 s to 0.92 s; a zero-area-cell defect of the reference is found, in no real case, and is being fixed {#sec-nb-geo-fast}
+## 2026-10-23 to 2026-10-24 — GEO-FAST: a fast path for the bundle's exact geometry, bitwise equal to the reference on every check (0 of 2,043,456 GB300 queries differ), cuts the added step on the DrivAerML Volume vehicle case from 1.49 to 1.36 times the base's; the reference's search seed moves to its own cell tree, which takes the whole-boundary step from 2.94 s to 0.92 s; a zero-area-cell defect of the reference is found on synthetic meshes, in none of the 26 real cases dumped (0 of 36,136,773 cells), and is being fixed {#sec-nb-geo-fast}
 
 **Question.** Peter's ruling of 2026-10-23 (17:08 EDT) on the geometry robustness bundle (@sec-nb-canonical-rulings):
 "Then, start a parallel thread where we try to make it faster with a fused kernel. Correctness is most important; correct +
@@ -40490,7 +40490,8 @@ Cost: 7.76 GPU-h of a 30 GPU-h cap, in 16 jobs (359447 to 363922). fb263fa29 alo
 Records: scratch/isla-tie-2026-10-22/RESULTS.md (md5 4c2cbd59), read/results.md (md5 1da6c577), read/results.json, JOBS.md.
 The tie rules are MEDIAL-TIE's (TIE-FIX 19fb0a754): off the wall, a closest-feature tie takes the least-norm element of the
 Clarke generalized gradient; on the wall, a node takes the least-norm point of the hull of its incident cells' unit normals.
-B is the eager-trained standing (r090eag_lug_isla and r090eag_t2dz_isla, seeds 42 and 43); TIE is B's lanes on code_tie2,
+B is the eager-trained standing on the lug and seeds 42 and 43 of the four-seed eager-trained Tensile2d standing
+(r090eag_lug_isla and r090eag_t2dz_isla, seeds 42 and 43); TIE is B's lanes on code_tie2,
 B's snapshot with only geometry.py and tree_read.py of 19fb0a754. Every row is at epoch 500, float32, fully eager, at
 200,000 cells, on the lug's 600 test cases and Tensile2d's 100.
 
@@ -40552,7 +40553,8 @@ standings trained with the class's geometry replace.
 ## 2026-10-24 — BC-SIDECAR: SHIFT-SUV's CFD box is the same on all 1,991 files and is built in the recipe; HiLiftAeroML's far field is reproduced by curator's generator, but its symmetry plane is blocked: 20 of 21 sampled wings store about 19 M duplicated cells and an open root {#sec-nb-bc-sidecar}
 
 **Question.** Can the pieces of the domain's boundary that SHIFT-SUV and HiLiftAeroML do not store be built as DrivAerML's
-were, under Peter's ruling of 2026-10-23 that canonical ISLA reads the whole boundary and that a dataset is never modified
+were, under Peter's ruling of 2026-10-23 that canonical ISLA reads the whole boundary, and the program's rule, from his words of
+2026-10-17, that a dataset is never modified
 to supply a missing piece (@sec-nb-canonical-rulings, @sec-nb-boundary-audit)? Lane BC-SIDECAR prototyped the supervisor's
 supply plan, which Peter has not yet approved, on branch psharpe/isla-bc-sidecar (456b19260 and 12fce7bfc, pushed, not
 merged). Records: scratch/isla-bc-sidecar-2026-10-23/REPORT.md (md5 5954c6c2), FINAL_REPORT.md, JOBS.md.
@@ -40604,7 +40606,7 @@ Cost: 19 cpu-short jobs (16.3 core-h) and one short-QoS GB300 job (0.23 GPU-h).
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-tie-2026-10-24/SECOND_READ_TIE.md).*
 
-## 2026-10-24 — ALIGN8: a token count that is not a multiple of 8 or 32 costs 20 to 40 percent per step in bfloat16 on GB300, from the slice attention's token-axis matrix products and LayerNorm's backward pass; the standings are mostly aligned, so the stake is 1 to 3 percent of the rerun; a padding fix equal to roundoff is built, not merged {#sec-nb-align8}
+## 2026-10-24 — ALIGN8: a token count that is not a multiple of 8 costs 20 to 40 percent per step in bfloat16 on GB300, and a multiple of 8 that is not one of 32 about 8 percent, from the slice attention's token-axis matrix products and LayerNorm's backward pass; the standings are mostly aligned, so the stake is 1 to 3 percent of the rerun; a padding fix equal to roundoff is built, not merged {#sec-nb-align8}
 
 **Question.** SURFACE-BC measured about 45 ms, 20 percent, per eager bfloat16 step on GB300 at a token count that is not a
 multiple of 8 (@sec-nb-surface-bc). Does that hold in the standings' configuration, what causes it, and does padding remove
@@ -41423,13 +41425,13 @@ case).
 
 **Decisions, as the records give them.**
 
-- No per-case geometry cache: the model takes only the boundary meshes, by Peter's boundary-only input ruling of 2026-10-17
-  ("just pass in the full-resolution boundary surfaces and ONLY that"). DV-COST's task also allowed no caches across forward
+- No per-case geometry cache (the supervisor's extension, 2026-10-22, of Peter's boundary-only input ruling of 2026-10-17,
+  "just pass in the full-resolution boundary surfaces and ONLY that"): the model takes only the boundary meshes. DV-COST's task also allowed no caches across forward
   calls, and at DrivAerML Volume size a cache would hold several GB per case (DESIGN p.4 (f); excluded, q).
 - The fold sign by the generalized winding number (DESIGN i.1, k).
 - The token draw computed in float64 from the input mesh, on a Morton grid in the boundary's canonical frame. The supervisor
-  rejected breadth-first and Cuthill-McKee orders, which depend on the cells' numbering and need a per-mesh cache that the
-  boundary-only input ruling (Peter's) excludes, and hashed priority sampling, which depends on the numbering and is not stratified
+  rejected breadth-first and Cuthill-McKee orders, which depend on the cells' numbering and need a per-mesh cache, which the
+  supervisor's application of Peter's boundary-only input ruling excludes, and hashed priority sampling, which depends on the numbering and is not stratified
   over the surface (TOKEN-DRAW, header). The canonical frame was kept under the bar fixed in TOKEN-DRAW's task (at least 10 times fewer pose changes on the
   non-degenerate cases, at under 2 percent of AeroZoo's 0.51 s step): every non-degenerate AeroZoo case (37 to 1,621 times),
   DrivAerML run_2 (73 times) and the pool (39 times) pass it, and DrivAerML run_1 (7.2 times) does not. The lane asked the
