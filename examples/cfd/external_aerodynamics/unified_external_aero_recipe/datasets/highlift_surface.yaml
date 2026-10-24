@@ -41,6 +41,11 @@ pipeline:
     # Walk up two levels from the boundary tensordict to the parent
     # DomainMesh's global_data and merge its keys onto each sample.
     merge_global_data_from: "../../global_data"
+    # The stored wings repeat about 25,700 root cells about 18.9 M times (about 46 % of the summed
+    # wing area); drop the extra copies, using the cached masks of tools/build_duplicate_masks.py
+    # (checked against each case's connectivity at every load). See src/dedup.py.
+    drop_duplicate_cells: true
+    duplicate_cell_masks: ${dataset_paths.highlift_aero_ml_duplicate_masks}
   augmentations:
     - _target_: ${dp:RandomRotateMesh}
       axes: ["z"]
