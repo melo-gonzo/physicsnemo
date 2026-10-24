@@ -26,11 +26,12 @@ canonical order) or a slow scan (the weld's running maximum).
 
 The closest points' weights on triangles (Ericson's, the edge points recomputed on
 their edges, the thin-cell guard and, on the guarded pairs, the accurate point and
-the switch to it, the zero-area cells' segments) run as one kernel over the pairs
+the switch to it, the zero-area cells' segments) run as two kernels
 (:func:`closest_weights`), where the torch code launches about two hundred small
-kernels. Its float64 arithmetic is the torch code's operation by operation, in the
-order torch's CUDA kernels evaluate the sums, norms and cross products, without
-contraction, so its weights are the reference's bitwise.
+ones: the first over the pairs, which lists the guarded ones, and the second over
+that list alone. Their float64 arithmetic is the torch code's operation by
+operation, in the order torch's CUDA kernels evaluate the sums, norms and cross
+products, without contraction, so the weights are the reference's bitwise.
 
 Each function falls back to the reference's torch code off CUDA or without Triton,
 so its result never depends on the path taken.
@@ -55,6 +56,7 @@ if HAS_TRITON:
 
 _SCAN_BLOCK = 1024
 _CELL_BLOCK = 256
+_ACCURATE_BLOCK = 64
 
 
 def _usable(t: torch.Tensor) -> bool:
@@ -264,21 +266,32 @@ if HAS_TRITON:
         return total
 
     @triton.jit
-    def _closest_weights_kernel(
-        q_ptr, s_ptr, flat_ptr, out, n, HAS_FLAT: tl.constexpr, KAPPA: tl.constexpr, SWITCH: tl.constexpr, ERRBOUND: tl.constexpr,
-        BLOCK: tl.constexpr,
-    ):
-        """The closest weights of each row, as
-        :func:`~physicsnemo.experimental.models.isla.geometry._closest_weights` in three
-        dimensions (``KAPPA`` is ``_ERICSON_K u64``); a block with no guarded row skips
-        the accurate point, and one with no zero-area row the segments."""
-        r = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
-        m = r < n
+    def _load_rows(q_ptr, s_ptr, r, m):
+        """The queries ``(x, y, z)`` and the triangles ``((x, y, z),) * 3`` of rows ``r``."""
         q = (tl.load(q_ptr + 3 * r, mask=m, other=0.0), tl.load(q_ptr + 3 * r + 1, mask=m, other=0.0), tl.load(q_ptr + 3 * r + 2, mask=m, other=0.0))
         s = ()
         for k in tl.static_range(3):
             v = s_ptr + 9 * r + 3 * k
             s = s + ((tl.load(v, mask=m, other=0.0), tl.load(v + 1, mask=m, other=0.0), tl.load(v + 2, mask=m, other=0.0)),)
+        return q, s
+
+    @triton.jit
+    def _unit(q, s):
+        return (_norm(q) + _amax(_amax(_norm(s[0]), _norm(s[1])), _norm(s[2]))) * _U64
+
+    @triton.jit
+    def _closest_weights_kernel(
+        q_ptr, s_ptr, flat_ptr, out, guarded, count, n, HAS_FLAT: tl.constexpr, KAPPA: tl.constexpr, ERRBOUND: tl.constexpr,
+        BLOCK: tl.constexpr,
+    ):
+        """The closest weights of each row, as
+        :func:`~physicsnemo.experimental.models.isla.geometry._closest_weights` in three
+        dimensions (``KAPPA`` is ``_ERICSON_K u64``), but Ericson's on the guarded rows,
+        which it appends to ``guarded`` (``count`` of them) for :func:`_accurate_kernel`;
+        a block with no zero-area row skips the segments."""
+        r = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
+        m = r < n
+        q, s = _load_rows(q_ptr, s_ptr, r, m)
         zero = tl.zeros([BLOCK], dtype=tl.float64)
         ### Ericson's weights, an edge point recomputed on its edge (ends after the zero)
         w = _ericson(q, s)
@@ -301,24 +314,48 @@ if HAS_TRITON:
             cross2 = cross2 + x * x
             x = ERRBOUND * (tl.abs(left) + tl.abs(right))
             bound2 = bound2 + x * x
-        length2 = (_dot(e1, e1), _dot(e2, e2), _dot(e3, e3))
-        longest2 = _amax(_amax(length2[0], length2[1]), length2[2])
+        longest2 = _amax(_amax(_dot(e1, e1), _dot(e2, e2)), _dot(e3, e3))
         longest = tl.sqrt(longest2)
         rho_low = (tl.sqrt(cross2) - tl.sqrt(bound2)) / longest2
         kappa = tl.where(rho_low > 0, (1.0 / (rho_low * rho_low * longest)) * KAPPA, _INF)
-        ### the guard: _ericson_error below one unit, or a zero-area row
+        ### the guard: _ericson_error not below one unit, but a zero-area row
         dist = _distance(q, w, s)
-        unit = _U64 * (_norm(q) + _amax(_amax(_norm(s[0]), _norm(s[1])), _norm(s[2])))
         l2 = _amax(_amax(_dot(_sub(q, s[0]), _sub(q, s[0])), _dot(_sub(q, s[1]), _sub(q, s[1]))), _dot(_sub(q, s[2]), _sub(q, s[2])))
         delta = kappa * l2
         eps = tl.where(dist > delta, tl.minimum(delta, delta * delta / (2 * (dist - delta)), propagate_nan=tl.PropagateNan.ALL), delta)
         eps = tl.where(delta <= longest, eps, _INF)
-        guard = ~(eps < unit) & m
+        guard = ~(eps < _unit(q, s)) & m
         if HAS_FLAT:
             flat = tl.load(flat_ptr + r, mask=m, other=0) != 0
             guard = guard & ~flat
-        if tl.max(guard.to(tl.int32), 0) > 0:
-            ### _accurate_weights: the edge points on (0, 1), (0, 2), (1, 2) ...
+        g = guard.to(tl.int32)
+        start = tl.atomic_add(count, tl.sum(g, 0))
+        tl.store(guarded + start + tl.cumsum(g, 0) - 1, r, mask=guard)
+        if HAS_FLAT:
+            if tl.max(flat.to(tl.int32), 0) > 0:
+                ### a zero-area cell: the nearer of its edges (0, 1) and (1, 2)
+                t1, t2 = _segment_t(q, s[0], s[1]), _segment_t(q, s[1], s[2])
+                second = _segment_distance2(q, s[1], s[2], t2) < _segment_distance2(q, s[0], s[1], t1)
+                w = _select(flat, _select(second, (zero, 1 - t2, t2), (1 - t1, t1, zero)), w)
+        for k in tl.static_range(3):
+            tl.store(out + 3 * r + k, w[k], mask=m)
+
+    @triton.jit
+    def _accurate_kernel(q_ptr, s_ptr, out, guarded, count, SWITCH: tl.constexpr, BLOCK: tl.constexpr):
+        """The guarded rows' weights (``guarded``, ``count`` of them; Ericson's in
+        ``out``) switched to the accurate point's where their distances differ by more
+        than ``SWITCH`` units, as
+        :func:`~physicsnemo.experimental.models.isla.geometry._accurate_weights` and
+        :func:`~physicsnemo.experimental.models.isla.geometry._closest_weights`."""
+        i = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
+        total = tl.load(count)
+        if tl.program_id(0) * BLOCK < total:
+            m = i < total
+            r = tl.load(guarded + i, mask=m, other=0)
+            q, s = _load_rows(q_ptr, s_ptr, r, m)
+            w = (tl.load(out + 3 * r, mask=m, other=0.0), tl.load(out + 3 * r + 1, mask=m, other=0.0), tl.load(out + 3 * r + 2, mask=m, other=0.0))
+            zero = tl.zeros([BLOCK], dtype=tl.float64)
+            ### the edge points on (0, 1), (0, 2), (1, 2) ...
             t = _segment_t(q, s[0], s[1])
             acc = (1 - t, t, zero)
             d_acc = _distance(q, acc, s)
@@ -327,6 +364,8 @@ if HAS_TRITON:
             t = _segment_t(q, s[1], s[2])
             d_acc, acc = _nearer(_distance(q, (zero, 1 - t, t), s), (zero, 1 - t, t), d_acc, acc)
             ### ... and the face's foot in the frame of its longest edge AB (the first)
+            e1, e2, e3 = _sub(s[1], s[0]), _sub(s[2], s[0]), _sub(s[2], s[1])
+            length2 = (_dot(e1, e1), _dot(e2, e2), _dot(e3, e3))
             take = (length2[1] > length2[0]) | ((length2[1] != length2[1]) & (length2[0] == length2[0]))
             best = tl.where(take, 1, 0)
             most = tl.where(take, length2[1], length2[0])
@@ -352,15 +391,9 @@ if HAS_TRITON:
             on_face = (lam_a >= 0) & (lam_b >= 0) & (lam_c >= 0)
             d_acc, acc = _nearer(tl.where(on_face, tl.abs(_dot(y, nrm)), _INF), face, d_acc, acc)
             ### the switch
-            w = _select(guard & (tl.abs(d_acc - dist) > SWITCH * unit), acc, w)
-        if HAS_FLAT:
-            if tl.max(flat.to(tl.int32), 0) > 0:
-                ### a zero-area cell: the nearer of its edges (0, 1) and (1, 2)
-                t1, t2 = _segment_t(q, s[0], s[1]), _segment_t(q, s[1], s[2])
-                second = _segment_distance2(q, s[1], s[2], t2) < _segment_distance2(q, s[0], s[1], t1)
-                w = _select(flat, _select(second, (zero, 1 - t2, t2), (1 - t1, t1, zero)), w)
-        for k in tl.static_range(3):
-            tl.store(out + 3 * r + k, w[k], mask=m)
+            switch = m & (tl.abs(d_acc - _distance(q, w, s)) > SWITCH * _unit(q, s))
+            for k in tl.static_range(3):
+                tl.store(out + 3 * r + k, acc[k], mask=switch)
 
 
 def run_start(new: torch.Tensor) -> torch.Tensor:
@@ -399,15 +432,22 @@ def closest_weights(q, simplex, flat, reference, ericson_k, switch_units, orient
     """``reference(q, simplex, flat)`` (the reference's
     :func:`~physicsnemo.experimental.models.isla.geometry._closest_weights` of
     triangles: Ericson's weights, the edge points recomputed, the thin-cell guard and
-    the accurate point of each guarded pair, the zero-area cells' segments) by one
-    Triton kernel on CUDA, from the reference's constants ``_ERICSON_K``,
+    the accurate point of each guarded pair, the zero-area cells' segments) by two
+    Triton kernels on CUDA, the second on the guarded pairs alone, from the reference's constants ``_ERICSON_K``,
     ``_SWITCH_UNITS`` and ``_ORIENT_ERRBOUND``."""
     n = q.shape[0]
     if not _usable(q) or n == 0:
         return reference(q, simplex, flat)
     out = torch.empty_like(q)
+    guarded = torch.empty(n, dtype=torch.int32, device=q.device)
+    count = torch.zeros(1, dtype=torch.int32, device=q.device)
+    q, simplex = q.contiguous(), simplex.contiguous()
     _closest_weights_kernel[(triton.cdiv(n, _CELL_BLOCK),)](
-        q.contiguous(), simplex.contiguous(), q if flat is None else flat.contiguous(), out, n, HAS_FLAT=flat is not None,
-        KAPPA=ericson_k * 2.0**-53, SWITCH=switch_units, ERRBOUND=orient_errbound, BLOCK=_CELL_BLOCK, enable_fp_fusion=False,
+        q, simplex, q if flat is None else flat.contiguous(), out, guarded, count, n, HAS_FLAT=flat is not None,
+        KAPPA=ericson_k * 2.0**-53, ERRBOUND=orient_errbound, BLOCK=_CELL_BLOCK, enable_fp_fusion=False,
+    )
+    ### (a program per block of rows that may be guarded; those past the count return)
+    _accurate_kernel[(triton.cdiv(n, _ACCURATE_BLOCK),)](
+        q, simplex, out, guarded, count, SWITCH=switch_units, BLOCK=_ACCURATE_BLOCK, num_warps=2, enable_fp_fusion=False
     )
     return out

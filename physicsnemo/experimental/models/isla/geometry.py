@@ -225,7 +225,7 @@ def _closest_weights(q, simplex, flat=None, fast=False):
     bitwise. Both branches are certified: the guard by ``K`` (:data:`_ERICSON_K`),
     the switch by a band of at least ``_SWITCH_UNITS + _FOOT_UNITS``, each a worst
     case. ``unit`` is measured in the frame of ``q`` and ``simplex``. ``fast`` computes
-    the weights of triangles by one Triton kernel on CUDA, bitwise these
+    the weights of triangles by two Triton kernels on CUDA, bitwise these
     (:func:`~physicsnemo.experimental.models.isla.geometry_fast.closest_weights`)."""
     if q.shape[-1] == 2:
         t = _segment_t(q, simplex[:, 0], simplex[:, 1])
@@ -1852,7 +1852,7 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     cells in leaf order (:func:`_preorder_cell_tree`), the ball search alone on it,
     and the winding number on packed node records (:func:`_packed_winding_sum`); and
     it computes the closest weights (:func:`_closest_weights`: Ericson's, the
-    thin-cell guard and the accurate point) by one Triton kernel on CUDA, bitwise the
+    thin-cell guard and the accurate point) by two Triton kernels on CUDA, bitwise the
     torch code's."""
     nq, dim = query_points.shape
     dev = query_points.device
@@ -2227,7 +2227,7 @@ def exact_boundary_geometry(
     ``kernel`` names the implementation of the search, not what it computes:
     ``"reference"`` defines it, and ``"fast"`` gives the same outputs bitwise
     from a faster traversal in three dimensions and, on CUDA with Triton, the
-    closest points' weights fused into one kernel (:func:`_closest_candidates_impl`).
+    closest points' weights fused into two kernels (:func:`_closest_candidates_impl`).
     """
     if query_points.shape[-1] not in (2, 3):
         raise NotImplementedError(
