@@ -37,9 +37,9 @@ the rounding points of autograd's own sum over the basis's uses (each block's
 contribution rounded, then added to the running sum and rounded again), and handed to
 the basis once, after the last read's backward (:func:`basis_sink`): no block's
 gradient is materialized beside the sum.
-The small products are broadcast sums in float32, not ``tl.dot``: on GB300 a float32
-``tl.dot`` of these shapes rounded like TF32 (basis gradients 6e-4 from float64 against
-the reference's 5e-5) even with ``input_precision="ieee"``.
+The small products are float32 broadcast sums, each over the last axis: Triton (3.7,
+GB300) turns a sum over the middle axis, ``(M, K, 1) * (1, K, N)`` summed over ``K``,
+into a ``tl.dot`` at TF32 precision (relative error 1e-3 against float64).
 """
 
 from __future__ import annotations
@@ -89,6 +89,11 @@ if HAS_TRITON:
     def _weights(w_ptr, H: tl.constexpr, F: tl.constexpr):
         """The kernel weights ``(H, F)`` in float32."""
         return tl.load(w_ptr + tl.arange(0, H)[:, None] * F + tl.arange(0, F)[None, :]).to(tl.float32)
+
+    @triton.jit
+    def _weights_t(w_ptr, H: tl.constexpr, F: tl.constexpr):
+        """The kernel weights transposed, ``(F, H)`` in float32."""
+        return tl.load(w_ptr + tl.arange(0, H)[None, :] * F + tl.arange(0, F)[:, None]).to(tl.float32)
 
     @triton.jit
     def _kernel_term(basis_ptr, p, msk, w, F: tl.constexpr):
@@ -164,6 +169,7 @@ if HAS_TRITON:
         hh = tl.arange(0, H)
         ff = tl.arange(0, F)
         w = _weights(w_ptr, H, F)
+        wt = _weights_t(w_ptr, H, F)
         q = tl.reshape(tl.load(q_ptr + s * (H * KC) + tl.arange(0, H * KC)).to(tl.float32), [H, KC])
         lse = tl.load(lse_ptr + s * H + hh)
         dsum = tl.load(dsum_ptr + s * H + hh)
@@ -201,11 +207,11 @@ if HAS_TRITON:
             dker = dz.to(basis_ptr.dtype.element_ty).to(tl.float32)
             if BASIS_GRAD:
                 dt = dbasis_ptr.dtype.element_ty
-                dbas = tl.sum(dker[:, :, None] * w[None, :, :], axis=1).to(dt).to(tl.float32)  # (BLOCK, F)
+                dbas = tl.sum(dker[:, None, :] * wt[None, :, :], axis=2).to(dt).to(tl.float32)  # (BLOCK, F)
                 rows = dbasis_ptr + p[:, None] * F + ff[None, :]
                 run = tl.load(rows, mask=msk[:, None], other=0.0).to(tl.float32)
                 tl.store(rows, (run + dbas).to(dt), mask=msk[:, None])
-            dw += tl.sum(dker[:, :, None] * bas[:, None, :], axis=0)
+            dw += tl.sum(tl.trans(dker)[:, None, :] * tl.trans(bas)[None, :, :], axis=2)
         tl.store(dq_ptr + s * (H * KC) + tl.arange(0, H * KC), tl.reshape(dq, [H * KC]))
         tl.store(dw_ptr + s * (H * F) + hh[:, None] * F + ff[None, :], dw)
 
