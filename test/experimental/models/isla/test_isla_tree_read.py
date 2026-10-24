@@ -1635,13 +1635,17 @@ def test_query_chunks_equal_the_forward_pass_and_its_gradients(theta, vectors):
     """ISLA.query_chunks (the boundary side once, the points chunk by chunk, then the
     boundary side's backward with the leaves' gradients): in training mode, from the
     same token draw, the outputs of forward and every parameter's gradient of a loss
-    summed over the points, to float64 roundoff."""
+    summed over the points, to float64 roundoff. The forward pads its token axis and
+    the chunks run unpadded."""
+    import physicsnemo.experimental.models.isla.model as isla_model
+
     extra = {"boundary_schemas": {"wall": {"tr": {"rank": 1}}}} if vectors else {}
     m = _model(3, theta, **extra).double()
     with torch.no_grad():
         for p in m.blocks.parameters():
             p.add_(0.05 * torch.randn_like(p))
     mesh, drv, q = _case()
+    assert (mesh.n_cells + q.shape[0]) % isla_model.TOKEN_ALIGNMENT
     if vectors:
         g = torch.Generator().manual_seed(4)
         data = dict(mesh.cell_data.items())
@@ -1875,7 +1879,8 @@ def test_tree_read_pairs_fused_on_cuda_builds_the_basis_in_the_fused_kernel(
     monkeypatch,
 ):
     """On CUDA ``tree_read_pairs(kernel="fused")`` builds the basis with the fused
-    basis kernel: the reference's plan, and its basis to float32 roundoff."""
+    basis kernel: the reference's plan, and its basis to float32 roundoff; so does
+    one range of points (``walk_range_pairs``, as :meth:`ISLA.query_chunks` reads)."""
     from physicsnemo.experimental.models.isla import fused_basis
 
     calls = []
@@ -1910,4 +1915,14 @@ def test_tree_read_pairs_fused_on_cuda_builds_the_basis_in_the_fused_kernel(
     assert torch.equal(ref.plan.qi.long(), fus.plan.qi.long())
     assert torch.equal(ref.plan.bj.long(), fus.plan.bj.long())
     scale = float(ref.basis.abs().max())
+    assert torch.allclose(fus.basis, ref.basis, rtol=1e-5, atol=1e-5 * scale)
+    ref = tree_read.walk_range_pairs(
+        basis, tree_read.tree_read_walk(kernel="reference", **kw), 40, 110
+    )
+    fus = tree_read.walk_range_pairs(
+        basis, tree_read.tree_read_walk(kernel="fused", **kw), 40, 110
+    )
+    assert len(calls) == 2
+    assert torch.equal(ref.plan.qi.long(), fus.plan.qi.long())
+    assert torch.equal(ref.plan.bj.long(), fus.plan.bj.long())
     assert torch.allclose(fus.basis, ref.basis, rtol=1e-5, atol=1e-5 * scale)
