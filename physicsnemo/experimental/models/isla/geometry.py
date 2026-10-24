@@ -602,61 +602,7 @@ def _preorder_cell_tree(simplex: torch.Tensor):
     return (left, right, escape, levels, leaf_cell, *_tree_boxes(s_sorted, left, right, levels, leaf_cell)), order, s_sorted
 
 
-@wp.func
-def _plane_row(m: wp.vec3d, p: wp.vec3d) -> wp.vec4f:
-    return wp.vec4f(wp.float32(m[0]), wp.float32(m[1]), wp.float32(m[2]), wp.float32(wp.dot(m, p)))
-
-
-@wp.func
-def _edge_plane(p0: wp.vec3d, p1: wp.vec3d, opp: wp.vec3d, n: wp.vec3d) -> wp.vec4f:
-    m = wp.cross(p1 - p0, n)
-    m = m / wp.length(m)
-    if wp.dot(m, opp - p0) > wp.float64(0.0):
-        m = -m
-    return _plane_row(m, p0)
-
-
-@wp.kernel
-def _cell_planes_kernel(corners: wp.array(dtype=wp.vec3d), planes: wp.array(dtype=wp.vec4f)):
-    """The rows of :func:`_ball_candidates`'s lower bound for cell ``tid``: its unit
-    normal and its edges' outward unit normals in its plane, with their offsets
-    (float64, NaN on a degenerate cell, then float32)."""
-    i = wp.int64(wp.tid())
-    a = corners[i * wp.int64(3)]
-    b = corners[i * wp.int64(3) + wp.int64(1)]
-    c = corners[i * wp.int64(3) + wp.int64(2)]
-    n = wp.cross(b - a, c - a)
-    n = n / wp.length(n)
-    j = i * wp.int64(4)
-    planes[j] = _plane_row(n, a)
-    planes[j + wp.int64(1)] = _edge_plane(a, b, c, n)
-    planes[j + wp.int64(2)] = _edge_plane(b, c, a, n)
-    planes[j + wp.int64(3)] = _edge_plane(c, a, b, n)
-
-
-def _cell_planes(simplex: torch.Tensor) -> torch.Tensor:
-    """The rows of the lower bound of :func:`_ball_candidates` for the cells ``simplex``
-    ``(F, 3, 3)``, ``(4 F, 4)`` float32, by one Warp kernel. They may round
-    differently from the torch rows, by float64's resolution, far below the float32
-    rounding the bound is padded for: every cell the float64 test keeps stays within
-    the bound either way, so the candidates are the same."""
-    planes = torch.empty(4 * simplex.shape[0], 4, dtype=torch.float32, device=simplex.device)
-    device, stream = FunctionSpec.warp_launch_context(simplex)
-    with FunctionSpec.warp_stream_scope(stream):
-        wp.init()
-        wp.launch(
-            _cell_planes_kernel,
-            dim=simplex.shape[0],
-            inputs=[wp.from_torch(simplex.reshape(-1, 3).contiguous(), dtype=wp.vec3d), wp.from_torch(planes, dtype=wp.vec4f)],
-            device=device,
-            stream=stream,
-        )
-    return planes
-
-
-def _ball_candidates(
-    query: torch.Tensor, radius: torch.Tensor, simplex: torch.Tensor, tree, winding=None, planes=None, reach=None
-):
+def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.Tensor, tree, winding=None, reach=None):
     """The (query, cell) pairs ``(P,)``, ``(P,)`` of every cell of ``simplex`` ``(F,
     3, 3)`` within ``radius`` ``(Q,)`` of its query ``(Q, 3)``, all float64: a Warp
     traversal of the BVH ``tree`` over the cells (:func:`_cell_tree`),
@@ -667,23 +613,21 @@ def _ball_candidates(
     traversed in Morton order, so neighbouring threads visit neighbouring nodes.
     With ``winding`` (:func:`_winding_moments` on the same tree), the first pass
     also sums the solid angles (:func:`_ball_winding_kernel`), returned as a third
-    output ``(Q,)``, the winding number times ``4 pi``. ``planes``
-    (:func:`_cell_planes`) and ``reach`` (the greatest norm of a vertex) when the
-    caller has them."""
+    output ``(Q,)``, the winding number times ``4 pi``. ``reach``, the greatest
+    norm of a vertex, when the caller has it."""
     dev = query.device
     left, _, escape, _, leaf_cell, lo, hi = tree
     ### Each cell's unit normal and its edges' outward unit normals in its plane,
     ### with their offsets: a point's distance to the cell is at least the root sum
     ### of squares of its height over the plane and of its largest edge offset.
-    if planes is None:
-        a, b, c = simplex.unbind(1)
-        n = torch.nn.functional.normalize(torch.linalg.cross(b - a, c - a, dim=-1), dim=-1, eps=0.0)
-        rows_ = [torch.cat([n, (n * a).sum(-1, keepdim=True)], -1)]
-        for p0, p1, opp in ((a, b, c), (b, c, a), (c, a, b)):
-            m = torch.nn.functional.normalize(torch.linalg.cross(p1 - p0, n, dim=-1), dim=-1, eps=0.0)
-            m = torch.where(((m * (opp - p0)).sum(-1, keepdim=True) > 0), -m, m)
-            rows_.append(torch.cat([m, (m * p0).sum(-1, keepdim=True)], -1))
-        planes = torch.stack(rows_, 1).float().reshape(-1, 4)
+    a, b, c = simplex.unbind(1)
+    n = torch.nn.functional.normalize(torch.linalg.cross(b - a, c - a, dim=-1), dim=-1, eps=0.0)
+    rows_ = [torch.cat([n, (n * a).sum(-1, keepdim=True)], -1)]
+    for p0, p1, opp in ((a, b, c), (b, c, a), (c, a, b)):
+        m = torch.nn.functional.normalize(torch.linalg.cross(p1 - p0, n, dim=-1), dim=-1, eps=0.0)
+        m = torch.where(((m * (opp - p0)).sum(-1, keepdim=True) > 0), -m, m)
+        rows_.append(torch.cat([m, (m * p0).sum(-1, keepdim=True)], -1))
+    planes = torch.stack(rows_, 1).float().reshape(-1, 4)
     q32 = query.float()
     ### (the query's own rounding, then a relative pad far above float32's on the
     ### box test's few operations)
@@ -1462,7 +1406,7 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
         ### and by the rounding of its box test)
         radius = (bound + 3 * err_max) * (1 + 1e-12)
         if fast:
-            li, pk, _ = _ball_candidates(q64, radius, s_leaf, tree, planes=_cell_planes(s_leaf), reach=reach.max())
+            li, pk, _ = _ball_candidates(q64, radius, s_leaf, tree, reach=reach.max())
             pk = order[leaf_order[pk]]
             if not once:
                 tree, leaf_order, s_leaf = _preorder_cell_tree(s_rep)
