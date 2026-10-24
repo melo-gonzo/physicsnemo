@@ -27,6 +27,12 @@ source. Do not edit by hand.
 | `geo_fast/` | GEO-FAST: the exact geometry's fast path, its bitwise checks and its GB300 timing, and the zero-area-cell defect | `scratch/isla-geo-fast-2026-10-23/` |
 | `align8/` | ALIGN8: the step cost of token counts that are not a multiple of 8 or 32, and the padding fix | `scratch/isla-align8-2026-10-23/` |
 | `bc_sidecar/` | BC-SIDECAR: the SHIFT-SUV box and the HiLiftAeroML far field and symmetry plane, built and checked | `scratch/isla-bc-sidecar-2026-10-23/` |
+| `geo_degen/` | GEO-DEGEN: cells of zero area read as the segment or point their vertices span, its checks and cost, and the limits left | `scratch/isla-geo-degen-2026-10-24/` |
+| `fast_merge/` | FAST-MERGE: the exact geometry's fast path merged with the zero-area fix, its bitwise checks and its GB300 timing | `scratch/isla-fast-merge-2026-10-24/` |
+| `dtt_knobs/` | DTT-KNOBS: ISLA-DTT's boundary read, its knobs and its accuracy gap (stage 1, inference only) and the stage-2 registration | `scratch/isla-dtt-knobs-2026-10-23/` |
+| `dtt_fast_compile/` | DTT-FAST, piece COMPILE: ISLA-DTT's compiled blocks certified against eager, and the bf16 casts Inductor leaves out | `scratch/isla-dtt-fast-2026-10-23/compile/` |
+| `dtt_fast_verify_fusedread/` | DTT-FAST, piece FUSEDREAD verified independently: pair lists, precision and the GB300 step | `scratch/isla-dtt-fast-2026-10-23/verify_fusedread/` |
+| `dtt_fast_integration/` | DTT-FAST, integration pass 1: the tree walk, tree build and fused read on ISLA 0.11.0 behind one execution attribute | `scratch/isla-dtt-fast-2026-10-23/integration/` |
 
 | topic | file | source | md5 |
 | --- | --- | --- | --- |
@@ -154,3 +160,38 @@ source. Do not edit by hand.
 | align8 | exposure/exposure_classes.tsv | scratch/isla-align8-2026-10-23/exposure/exposure_classes.tsv | eed81eda1832a1a4f169b1790d9b0ca9 |
 | bc_sidecar | REPORT.md | scratch/isla-bc-sidecar-2026-10-23/REPORT.md | 5954c6c2aa03d130a1897b8f91eb2f58 |
 | bc_sidecar | FINAL_REPORT.md | scratch/isla-bc-sidecar-2026-10-23/FINAL_REPORT.md | 1dd633f229de15e97177f773396ab495 |
+| geo_degen | FINAL_REPORT.md | scratch/isla-geo-degen-2026-10-24/FINAL_REPORT.md | c7d099c33ef217383f2715a19c304f6e |
+| geo_degen | RESULTS.md | scratch/isla-geo-degen-2026-10-24/RESULTS.md | f151d5eaeea4afbf2cb8db47a109d19a |
+| geo_degen | DESIGN.md | scratch/isla-geo-degen-2026-10-24/DESIGN.md | 18c7bec9e1a16210dc5f1eced9a00a9e |
+| fast_merge | REPORT.md | scratch/isla-fast-merge-2026-10-24/REPORT.md | edff7045b7ead28bf0857d3925db41b0 |
+| fast_merge | FINAL_REPORT.md | scratch/isla-fast-merge-2026-10-24/FINAL_REPORT.md | 935cc9d05af15b64fd73f6ccbec7a083 |
+| fast_merge | lhr/timing_table.md | scratch/isla-fast-merge-2026-10-24/lhr/timing_table.md | c32ba42894dd77779443c99b243b55b5 |
+| fast_merge | lhr/book_table.md | scratch/isla-fast-merge-2026-10-24/lhr/book_table.md | e4e2f81ebd5b897d8c0df164db137727 |
+| dtt_knobs | STAGE1.md | scratch/isla-dtt-knobs-2026-10-23/STAGE1.md | 1a28dc7cfb43b4ed6cab5784dc717eb8 |
+| dtt_knobs | STAGE1_REVIEW.md | scratch/isla-dtt-knobs-2026-10-23/STAGE1_REVIEW.md | 690b4c99d7129a4281ce6262c7cf91d5 |
+| dtt_knobs | PREREG.md | scratch/isla-dtt-knobs-2026-10-23/PREREG.md | e601d4af9ff793a7570af7acd9929f43 |
+| dtt_knobs | PREREG_REVIEW.md | scratch/isla-dtt-knobs-2026-10-23/PREREG_REVIEW.md | e1a362c6b3d6337fb42d39a64f043994 |
+| dtt_knobs | CODE_FACTS.md | scratch/isla-dtt-knobs-2026-10-23/CODE_FACTS.md | 31bae6f8a91a12a7770da09a3c7b0489 |
+| dtt_knobs | NOTEBOOK_DRAFT_STAGE1.md | scratch/isla-dtt-knobs-2026-10-23/NOTEBOOK_DRAFT_STAGE1.md | 293fbd0b12dde4686fadf0f0b30414a6 |
+| dtt_knobs | NOTEBOOK_REVIEW.md | scratch/isla-dtt-knobs-2026-10-23/NOTEBOOK_REVIEW.md | 64ee69144f8aa2d997079c81c144b369 |
+| dtt_knobs | NOTEBOOK_REVISION_NOTE.md | scratch/isla-dtt-knobs-2026-10-23/NOTEBOOK_REVISION_NOTE.md | 72af8b41a253c05ce89301efe2bb25af |
+| dtt_knobs | sens/REPORT.md | scratch/isla-dtt-knobs-2026-10-23/sens/REPORT.md | 1fb1c8086d02a04a343e54849f1b6d30 |
+| dtt_knobs | sens/sens_table.md | scratch/isla-dtt-knobs-2026-10-23/sens/sens_table.md | 588f626614251d31541059dfdf75bddd |
+| dtt_knobs | sens/sens_regions.md | scratch/isla-dtt-knobs-2026-10-23/sens/sens_regions.md | f3a4281d56819ffe750f9758187e4cd4 |
+| dtt_knobs | cost/REPORT.md | scratch/isla-dtt-knobs-2026-10-23/cost/REPORT.md | e8c8ce5d0d6877d34a570b8ae36f4a14 |
+| dtt_knobs | cost/cost_table.md | scratch/isla-dtt-knobs-2026-10-23/cost/cost_table.md | 645c6958f1888a17defa09bc12891545 |
+| dtt_knobs | cap/REPORT.md | scratch/isla-dtt-knobs-2026-10-23/cap/REPORT.md | 95ba4928bbeb1e3b2f6d16411cc27270 |
+| dtt_knobs | cap/cap_table.md | scratch/isla-dtt-knobs-2026-10-23/cap/cap_table.md | ae192e13fa8f22c71aa23b853e91454e |
+| dtt_knobs | order/REPORT.md | scratch/isla-dtt-knobs-2026-10-23/order/REPORT.md | 6ccfa746846449fdd421a27ab4160acb |
+| dtt_knobs | order/order_table.md | scratch/isla-dtt-knobs-2026-10-23/order/order_table.md | 5473f50155c46d64453f7e22193437ef |
+| dtt_knobs | gap/REPORT.md | scratch/isla-dtt-knobs-2026-10-23/gap/REPORT.md | 702bfaea7a18e2edc57770cb6bb8c0d7 |
+| dtt_knobs | gap/gap_table.md | scratch/isla-dtt-knobs-2026-10-23/gap/gap_table.md | 55f2df0bee09f03b54d78e064ef5d3d0 |
+| dtt_knobs | gap/gap_table_bf16.md | scratch/isla-dtt-knobs-2026-10-23/gap/gap_table_bf16.md | af8fecfdbf703563d91a50aae792b9dc |
+| dtt_knobs | gap/rough.md | scratch/isla-dtt-knobs-2026-10-23/gap/rough.md | ee1c7c32869ac1f6a465c2f9bc0caf78 |
+| dtt_knobs | treeprec/REPORT.md | scratch/isla-dtt-knobs-2026-10-23/treeprec/REPORT.md | 083b766dbcc22186a67a913cd9e1a0e6 |
+| dtt_knobs | treeprec/treeprec_table.md | scratch/isla-dtt-knobs-2026-10-23/treeprec/treeprec_table.md | a7b3e116a34ef990dad6e7f8dcdd32a1 |
+| dtt_knobs | treeprec/signtest.md | scratch/isla-dtt-knobs-2026-10-23/treeprec/signtest.md | 2bbe2cce1e8463aa627b08a0c6244e95 |
+| dtt_fast_compile | RESULTS.md | scratch/isla-dtt-fast-2026-10-23/compile/RESULTS.md | 884f4b2354d539c8ec1ad582e8c3211c |
+| dtt_fast_compile | REPORT.md | scratch/isla-dtt-fast-2026-10-23/compile/REPORT.md | 296118e95eab0cc507c6bc77ad8ab104 |
+| dtt_fast_verify_fusedread | VERIFY.md | scratch/isla-dtt-fast-2026-10-23/verify_fusedread/VERIFY.md | 3547c3068a6ef54d514468ea1a7d4364 |
+| dtt_fast_integration | RESULTS.md | scratch/isla-dtt-fast-2026-10-23/integration/RESULTS.md | cd508ec6241c605c2464c0f4541ef70b |

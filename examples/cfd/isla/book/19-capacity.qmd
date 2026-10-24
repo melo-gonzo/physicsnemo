@@ -1234,6 +1234,14 @@ both = sorted(set(VI) & set(VD))
 v2, d2 = VI[200000], VD[200000]
 DOOM = min(oom("isla_dtt_volume_090"))
 tail = [pt(TAIL, r["tokens"])["step_ms_median"] / r["step_ms_median"] - 1 for r in ok("isla_surface_090")]
+# ISLA-DTT at 400,000 prediction points on the Volume task with the whole boundary, leaves of 4 cells, by opening angle:
+# measured (in brackets in the record) where the step ran, and the memory fit's largest count that fits one GB300
+PJ = {r["read"]: r for r in R.md_table("dtt_knobs", "cost/cost_table.md", "Projection: DrivAerML Volume") if r["leaf"] == "4"}
+m400 = lambda t: re.search(r"\((\d+) / (\d+)\)", PJ[f"coupled theta {t}"]["Q 400k: ms / GiB"]).groups()
+RUN400 = {t: tuple(map(int, m400(t))) for t in ("3", "2", "1.5")}
+assert "OOM" in PJ["coupled theta 1"]["Q 400k: ms / GiB"]
+QMAX1 = PJ["coupled theta 1"]["largest Q that fits"].replace("k", ",000")
+I400 = int(re.search(r"(\d+) / \d+ at 400k", " ".join(R.load("dtt_knobs", "cost/cost_table.md").split())).group(1))
 assert all(pt(TAIL, r["tokens"])["peak_allocated_gib"] == r["peak_allocated_gib"] for r in ok("isla_surface_090"))
 print(f"Three readings follow. At {i25['tokens']:,} tokens ISLA's step ({i25['step_ms_median']:.0f} ms) is "
       f"{i25['step_ms_median'] / g25['step_ms_median']:.1f} times GeoTransolver's ({g25['step_ms_median']:.0f} ms) and "
@@ -1250,10 +1258,23 @@ print(f"Three readings follow. At {i25['tokens']:,} tokens ISLA's step ({i25['st
       + " and ".join(f"{VD[n]['step_ms_median'] / VI[n]['step_ms_median']:.2f} times ISLA's at {n:,}" for n in both)
       + " prediction points: its Barnes–Hut forest is built from each case on the host (@sec-arch-cost), and it runs out of one "
       f"GPU's memory at {DOOM:,}, where ISLA's step is {VI[DOOM]['step_ms_median']:.0f} ms at {VI[DOOM]['peak_allocated_gib']:.0f} GiB. "
+      "How far a cheaper read moves that limit was measured on the Volume task with the whole boundary (the car and the tunnel "
+      "box) at 200,000 boundary tokens, random weights, bfloat16 training steps and leaves of 4 cells: 400,000 prediction points fit one GB300 at "
+      "$\\theta \\geq 1.5$ (" + ", ".join(f"{ms:,} ms at {gib} GiB at $\\theta = {t}$" for t, (ms, gib) in RUN400.items())
+      + f") and run out of its memory at $\\theta = 1$, where the memory fit puts the largest count at {QMAX1}. The settings "
+      f"that fit take {min(ms for ms, _ in RUN400.values()) / I400:.1f} to {max(ms for ms, _ in RUN400.values()) / I400:.1f} "
+      f"times interacting ISLA's {I400} ms at 400,000, measured with the car alone. A larger $\\theta$ costs accuracy on a model "
+      "trained at $\\theta = 1$ (@sec-arch-tree-read), so these settings need models trained there (@sec-oq-dtt-theta; "
+      f"{R.source('dtt_knobs', 'cost/cost_table.md')}, the projection). "
       "ISLA's DrivAerML standing lanes trained on code that runs the compiled blocks with Inductor's mix-order reduction at its "
       f"default; timed on that code, ISLA's surface step is within {100 * max(abs(x) for x in tail):.1f}% of the one shown at every "
       "count, at the same peak memory.")
 ```
+
+::: {.callout-note title="In flight"}
+These numbers come from ISLA-DTT's read as it is. A faster read and query-chunked training are being
+measured, and the ledger (@sec-ledger) tracks it.
+:::
 
 ::: {.callout-tip title="Choosing a token budget"}
 Train at 100,000 to 200,000 cells per case: the error has saturated (@tbl-cells-ladder) and the
