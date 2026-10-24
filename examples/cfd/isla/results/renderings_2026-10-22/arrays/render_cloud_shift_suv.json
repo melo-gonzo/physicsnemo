@@ -1,0 +1,190 @@
+{
+ "sample_id": "00184_run_00187_domain",
+ "source": {
+  "suv_isla/native": {
+   "row": 18,
+   "run_id": "r090_suv_isla_seed42",
+   "dataset": "shift_suv_surface",
+   "model": "isla_surface",
+   "code": "code_r090",
+   "recipe": "recipe_r090",
+   "cells": 200000,
+   "replay": true,
+   "lhr_dump_job": 336069,
+   "dump": "$T/book_figs_2026-10-22/dump/suv_isla/native/ (copy: scratch/isla-render090-2026-10-22/dump/suv_isla/native/)",
+   "reused_2026_10_18_row": null,
+   "scorer_record": "$T/evals_r090/r090_suv_isla_seed42/native/r090_suv_isla_seed42/metrics.jsonl"
+  },
+  "suv_gt/native": {
+   "row": 19,
+   "run_id": "clud_suv_gt_seed42",
+   "dataset": "shift_suv_surface",
+   "model": "geotransolver_surface",
+   "code": "code_v20",
+   "recipe": "recipe_v8",
+   "cells": 200000,
+   "replay": true,
+   "lhr_dump_job": 336069,
+   "dump": "$T/book_figs_2026-10-22/dump/suv_gt/native/ (copy: scratch/isla-render090-2026-10-22/dump/suv_gt/native/)",
+   "reused_2026_10_18_row": null,
+   "scorer_record": "$T/evals_ud2/clud_suv_gt_seed42/native/clud_suv_gt_seed42/metrics.jsonl"
+  },
+  "suv_t/native": {
+   "row": 20,
+   "run_id": "clud_suv_t_seed42",
+   "dataset": "shift_suv_surface",
+   "model": "transolver_surface",
+   "code": "code_v20",
+   "recipe": "recipe_v8",
+   "cells": 200000,
+   "replay": true,
+   "lhr_dump_job": 336070,
+   "dump": "$T/book_figs_2026-10-22/dump/suv_t/native/ (copy: scratch/isla-render090-2026-10-22/dump/suv_t/native/)",
+   "reused_2026_10_18_row": null,
+   "scorer_record": "$T/evals_ud2/clud_suv_t_seed42/native/clud_suv_t_seed42/metrics.jsonl"
+  }
+ },
+ "n_points_scored": 200000,
+ "q_inf": 551.2500107288361,
+ "per_sample_rel_l2": {
+  "pressure_l2": {
+   "ISLA": 0.04169235751032829,
+   "GeoTransolver": 0.040512267500162125,
+   "Transolver": 0.037015583366155624
+  },
+  "wss_l2": {
+   "ISLA": 0.06055925786495209,
+   "GeoTransolver": 0.0640776976943016,
+   "Transolver": 0.06145806238055229
+  }
+ },
+ "views": {
+  "cp_left_side": {
+   "clim": [
+    -1.6121616196632385,
+    1.0149660110473633
+   ],
+   "err_clim": 0.10659009218215942
+  }
+ },
+ "mesh": {
+  "stl": "/home/psharpe/gh/physicsnemo/scratch/isla-render090-2026-10-22/geom/shift_suv_00187_merged_surfaces.stl.pmsh",
+  "n_triangles": 5010474,
+  "solved_offset_m": [
+   1.2602304220199585,
+   -0.0016275048255920172,
+   0.5834249866505463
+  ],
+  "scored_point_to_stl_centroid_m": {
+   "median": 8.886203487468824e-08,
+   "max": 6.358680610866027e-07
+  },
+  "triangle_to_nearest_scored_point_m": {
+   "median": 0.003490248916905921,
+   "p99": 0.029763722421563256
+  }
+ },
+ "point_order": {
+  "isla": "same order",
+  "gt": "same order",
+  "t": "same order"
+ },
+ "scorer_checks": [
+  {
+   "tag": "suv_isla",
+   "protocol": "native",
+   "run_id": "r090_suv_isla_seed42",
+   "sample_id": "00184_run_00187_domain",
+   "scorer_record": "$T/evals_r090/r090_suv_isla_seed42/native/r090_suv_isla_seed42/metrics.jsonl",
+   "scorer_epoch": 500,
+   "scorer_rows_for_case": 1,
+   "scorer_rows_agree": true,
+   "scorer": {
+    "pressure_l2": 0.04169235751032829,
+    "wss_x_l2": 0.048872046172618866,
+    "wss_y_l2": 0.10678690671920776,
+    "wss_z_l2": 0.07266418635845184,
+    "wss_l2": 0.06055925786495209
+   },
+   "dump": {
+    "pressure_l2": 0.04169235751032829,
+    "wss_x_l2": 0.048872046172618866,
+    "wss_y_l2": 0.10678690671920776,
+    "wss_z_l2": 0.07266418635845184,
+    "wss_l2": 0.06055925786495209
+   },
+   "rel_diff": {
+    "pressure_l2": 0.0,
+    "wss_x_l2": 0.0,
+    "wss_y_l2": 0.0,
+    "wss_z_l2": 0.0,
+    "wss_l2": 0.0
+   },
+   "max_rel_diff": 0.0
+  },
+  {
+   "tag": "suv_gt",
+   "protocol": "native",
+   "run_id": "clud_suv_gt_seed42",
+   "sample_id": "00184_run_00187_domain",
+   "scorer_record": "$T/evals_ud2/clud_suv_gt_seed42/native/clud_suv_gt_seed42/metrics.jsonl",
+   "scorer_epoch": 500,
+   "scorer_rows_for_case": 1,
+   "scorer_rows_agree": true,
+   "scorer": {
+    "pressure_l2": 0.040512267500162125,
+    "wss_x_l2": 0.05316193401813507,
+    "wss_y_l2": 0.09580167382955551,
+    "wss_z_l2": 0.08060326427221298,
+    "wss_l2": 0.0640776976943016
+   },
+   "dump": {
+    "pressure_l2": 0.040512267500162125,
+    "wss_x_l2": 0.05316193401813507,
+    "wss_y_l2": 0.09580167382955551,
+    "wss_z_l2": 0.08060326427221298,
+    "wss_l2": 0.0640776976943016
+   },
+   "rel_diff": {
+    "pressure_l2": 0.0,
+    "wss_x_l2": 0.0,
+    "wss_y_l2": 0.0,
+    "wss_z_l2": 0.0,
+    "wss_l2": 0.0
+   },
+   "max_rel_diff": 0.0
+  },
+  {
+   "tag": "suv_t",
+   "protocol": "native",
+   "run_id": "clud_suv_t_seed42",
+   "sample_id": "00184_run_00187_domain",
+   "scorer_record": "$T/evals_ud2/clud_suv_t_seed42/native/clud_suv_t_seed42/metrics.jsonl",
+   "scorer_epoch": 500,
+   "scorer_rows_for_case": 1,
+   "scorer_rows_agree": true,
+   "scorer": {
+    "pressure_l2": 0.037015583366155624,
+    "wss_x_l2": 0.0494365319609642,
+    "wss_y_l2": 0.08647310733795166,
+    "wss_z_l2": 0.082028828561306,
+    "wss_l2": 0.06145806238055229
+   },
+   "dump": {
+    "pressure_l2": 0.037015583366155624,
+    "wss_x_l2": 0.0494365319609642,
+    "wss_y_l2": 0.08647310733795166,
+    "wss_z_l2": 0.082028828561306,
+    "wss_l2": 0.06145806238055229
+   },
+   "rel_diff": {
+    "pressure_l2": 0.0,
+    "wss_x_l2": 0.0,
+    "wss_y_l2": 0.0,
+    "wss_z_l2": 0.0,
+    "wss_l2": 0.0
+   },
+   "max_rel_diff": 0.0
+  }
+ ]
+}

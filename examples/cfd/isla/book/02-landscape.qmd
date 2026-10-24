@@ -1020,7 +1020,9 @@ through a kernel per face–target pair, Transolver's slices see raw
 coordinates and count tokens, and ISLA's slices are built on GLOBE's
 principles. Every sum over the boundary is a quadrature rule. Positions
 enter only as invariants of a token against the slices' own anchors, in
-units of a length computed from the boundary. Vector
+units of a length computed from the boundary, and every declared input and
+output is made dimensionless by scales ISLA computes from each case
+(@sec-using-scales). Vector
 and tensor outputs are rebuilt at the end from a basis that moves with the
 body. The trunk between those edges is an ordinary scalar transformer of
 pre-LN blocks. How each of these works, on the same airfoil, is

@@ -1,3 +1,19 @@
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """One visual identity for every figure in the book.
 
 Import this at the top of every ``{python}`` cell that draws:
@@ -33,24 +49,24 @@ from pathlib import Path as _Path
 from matplotlib.colors import LinearSegmentedColormap
 
 # --- Architecture hues -------------------------------------------------------
-BLUE = "#2a78d6"        # ISLA (reference configuration)
+BLUE = "#2a78d6"  # ISLA (reference configuration)
 BLUE_LIGHT = "#8fbbea"  # ISLA-DTT (the query-independent interior form)
-BLUE_PALE = "#c9def5"   # ISLA ablations (hatched; never a shipped model)
-RED = "#e34948"         # GeoTransolver (surface and volume)
-RED_LIGHT = "#f2a3a2"   # GeoTransolver research variants
-AMBER = "#c98a00"       # Transolver
-AMBER_LIGHT = "#e8c46a" # Transolver research variants
+BLUE_PALE = "#c9def5"  # ISLA ablations (hatched; never a shipped model)
+RED = "#e34948"  # GeoTransolver (surface and volume)
+RED_LIGHT = "#f2a3a2"  # GeoTransolver research variants
+AMBER = "#c98a00"  # Transolver
+AMBER_LIGHT = "#e8c46a"  # Transolver research variants
 
 # --- Concept colors (architecture figures, never a data series) -------------
-VIOLET = "#4a3aa7"      # slices / anchors
-AQUA = "#1baf7a"        # queries / interior points
-GREEN = "#008300"       # satisfied contract, PASS
+VIOLET = "#4a3aa7"  # slices / anchors
+AQUA = "#1baf7a"  # queries / interior points
+GREEN = "#008300"  # satisfied contract, PASS
 INK = "#0b0b0b"
 INK2 = "#52514e"
 MUTED = "#898781"
 GRID = "#e1e0d9"
 BASELINE = "#c3c2b7"
-PAPER = "#f4f3ee"       # data boxes in flow diagrams
+PAPER = "#f4f3ee"  # data boxes in flow diagrams
 WHITE = "#ffffff"
 
 DIVERGING = LinearSegmentedColormap.from_list("book_diverging", [BLUE, "#f0efec", RED])
@@ -60,12 +76,17 @@ SEQUENTIAL = "viridis"
 # Distinct from every architecture hue. A boundary segment or face is colored by
 # the KIND of condition it carries, whatever the dataset calls it.
 BC = {
-    "value": "#7d3c98",     # a value prescribed: Dirichlet, fixed, clamped, pinned displacement
-    "flux": "#d35400",      # a flux prescribed: Neumann, traction, applied pressure, loaded face
-    "robin": "#117a65",     # a Robin (mixed) condition
-    "free": "#898781",      # free surface, wall with no data (context gray)
+    "value": "#7d3c98",  # a value prescribed: Dirichlet, fixed, clamped, pinned displacement
+    "flux": "#d35400",  # a flux prescribed: Neumann, traction, applied pressure, loaded face
+    "robin": "#117a65",  # a Robin (mixed) condition
+    "free": "#898781",  # free surface, wall with no data (context gray)
 }
-BC_LABEL = {"value": "value prescribed (Dirichlet)", "flux": "flux prescribed (Neumann)", "robin": "Robin", "free": "free surface"}
+BC_LABEL = {
+    "value": "value prescribed (Dirichlet)",
+    "flux": "flux prescribed (Neumann)",
+    "robin": "Robin",
+    "free": "free surface",
+}
 
 
 def slice_colors(n_slices: int, seed: int = 0):
@@ -77,26 +98,65 @@ def slice_colors(n_slices: int, seed: int = 0):
     perm = np.random.default_rng(seed).permutation(n_slices) % 20
     return base[perm]
 
+
 # --- Series styles ------------------------------------------------------------
 # key -> dict(label, color, marker, ls, mfc). ``mfc`` "full" fills the marker.
 # Use STYLE[key] wherever that configuration appears so the legend text is the
 # same in every chapter. Labels are the book's canonical names.
 STYLE = {
-    "isla_ref": dict(label="ISLA", color=BLUE, marker="s", ls="-", mfc="full", hatch=""),
-    "isla_dtt": dict(label="ISLA-DTT", color=BLUE_LIGHT, marker="s", ls="-.", mfc="none", hatch=""),
-    "isla_abl": dict(label="ISLA ablation (not adopted)", color=BLUE_PALE, marker="s", ls=":", mfc="none", hatch="///"),
-    "isla_hr": dict(label="ISLA at half the reference rate", color=BLUE, marker="s", ls="--", mfc="none", hatch=""),
-    "isla_dtt_hr": dict(label="ISLA-DTT at half the reference rate", color=BLUE_LIGHT, marker="s", ls=":", mfc="none", hatch=""),
-    "gt": dict(label="GeoTransolver", color=RED, marker="o", ls="-", mfc="full", hatch=""),
-    "t": dict(label="Transolver", color=AMBER, marker="^", ls="--", mfc="full", hatch=""),
+    "isla_ref": dict(
+        label="ISLA", color=BLUE, marker="s", ls="-", mfc="full", hatch=""
+    ),
+    "isla_dtt": dict(
+        label="ISLA-DTT", color=BLUE_LIGHT, marker="s", ls="-.", mfc="none", hatch=""
+    ),
+    "isla_abl": dict(
+        label="ISLA ablation (not adopted)",
+        color=BLUE_PALE,
+        marker="s",
+        ls=":",
+        mfc="none",
+        hatch="///",
+    ),
+    "isla_hr": dict(
+        label="ISLA at half the reference rate",
+        color=BLUE,
+        marker="s",
+        ls="--",
+        mfc="none",
+        hatch="",
+    ),
+    "isla_dtt_hr": dict(
+        label="ISLA-DTT at half the reference rate",
+        color=BLUE_LIGHT,
+        marker="s",
+        ls=":",
+        mfc="none",
+        hatch="",
+    ),
+    "gt": dict(
+        label="GeoTransolver", color=RED, marker="o", ls="-", mfc="full", hatch=""
+    ),
+    "t": dict(
+        label="Transolver", color=AMBER, marker="^", ls="--", mfc="full", hatch=""
+    ),
 }
 
 
 def series_kwargs(key: str, **override):
     """matplotlib ``plot`` keyword arguments for a configuration key."""
     s = STYLE[key]
-    kw = dict(color=s["color"], marker=s["marker"], ls=s["ls"], label=s["label"],
-              mfc=(s["color"] if s["mfc"] == "full" else "white"), mec=s["color"], mew=1.8, ms=7, lw=2.0)
+    kw = dict(
+        color=s["color"],
+        marker=s["marker"],
+        ls=s["ls"],
+        label=s["label"],
+        mfc=(s["color"] if s["mfc"] == "full" else "white"),
+        mec=s["color"],
+        mew=1.8,
+        ms=7,
+        lw=2.0,
+    )
     kw.update(override)
     return kw
 
@@ -104,35 +164,42 @@ def series_kwargs(key: str, **override):
 def bar_kwargs(key: str, **override):
     """matplotlib ``bar``/``barh`` keyword arguments for a configuration key."""
     s = STYLE[key]
-    kw = dict(color=s["color"], hatch=s["hatch"], edgecolor="white" if not s["hatch"] else BLUE, linewidth=0.8)
+    kw = dict(
+        color=s["color"],
+        hatch=s["hatch"],
+        edgecolor="white" if not s["hatch"] else BLUE,
+        linewidth=0.8,
+    )
     kw.update(override)
     return kw
 
 
 # --- House style ---------------------------------------------------------------
-mpl.rcParams.update({
-    "figure.dpi": 110,
-    "savefig.dpi": 200,
-    "font.size": 10,
-    "axes.edgecolor": BASELINE,
-    "axes.labelcolor": INK2,
-    "axes.titlecolor": INK,
-    "axes.titlelocation": "left",
-    "axes.titlesize": 10,
-    "axes.grid": True,
-    "axes.axisbelow": True,
-    "grid.color": GRID,
-    "grid.linewidth": 0.8,
-    "xtick.color": MUTED,
-    "ytick.color": MUTED,
-    "xtick.labelcolor": INK2,
-    "ytick.labelcolor": INK2,
-    "axes.spines.top": False,
-    "axes.spines.right": False,
-    "legend.frameon": False,
-    "axes.formatter.useoffset": False,
-    "lines.solid_capstyle": "round",
-})
+mpl.rcParams.update(
+    {
+        "figure.dpi": 110,
+        "savefig.dpi": 200,
+        "font.size": 10,
+        "axes.edgecolor": BASELINE,
+        "axes.labelcolor": INK2,
+        "axes.titlecolor": INK,
+        "axes.titlelocation": "left",
+        "axes.titlesize": 10,
+        "axes.grid": True,
+        "axes.axisbelow": True,
+        "grid.color": GRID,
+        "grid.linewidth": 0.8,
+        "xtick.color": MUTED,
+        "ytick.color": MUTED,
+        "xtick.labelcolor": INK2,
+        "ytick.labelcolor": INK2,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+        "legend.frameon": False,
+        "axes.formatter.useoffset": False,
+        "lines.solid_capstyle": "round",
+    }
+)
 
 
 # --- Helpers ---------------------------------------------------------------------
@@ -141,23 +208,50 @@ def halo(lw: float = 3.0, fg: str = WHITE):
     return [_pe.withStroke(linewidth=lw, foreground=fg)]
 
 
-def label_line(ax, x, y, text, color, dx=0.0, dy=0.0, ha="left", va="center", fontsize=9, **kw):
+def label_line(
+    ax, x, y, text, color, dx=0.0, dy=0.0, ha="left", va="center", fontsize=9, **kw
+):
     """Direct-label a series at a point instead of using a legend."""
-    return ax.annotate(text, xy=(x, y), xytext=(x + dx, y + dy), color=color, ha=ha, va=va,
-                       fontsize=fontsize, path_effects=halo(), **kw)
+    return ax.annotate(
+        text,
+        xy=(x, y),
+        xytext=(x + dx, y + dy),
+        color=color,
+        ha=ha,
+        va=va,
+        fontsize=fontsize,
+        path_effects=halo(),
+        **kw,
+    )
 
 
 def note(ax, text, loc="lower right", fontsize=8.5):
     """A small boxed reading note inside the axes (the ratios, the caveat)."""
-    pos = {"lower right": (0.985, 0.03, "right", "bottom"), "lower left": (0.015, 0.03, "left", "bottom"),
-           "upper right": (0.985, 0.97, "right", "top"), "upper left": (0.015, 0.97, "left", "top")}[loc]
-    return ax.text(pos[0], pos[1], text, transform=ax.transAxes, ha=pos[2], va=pos[3], fontsize=fontsize,
-                   color=INK2, linespacing=1.4, bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=BASELINE))
+    pos = {
+        "lower right": (0.985, 0.03, "right", "bottom"),
+        "lower left": (0.015, 0.03, "left", "bottom"),
+        "upper right": (0.985, 0.97, "right", "top"),
+        "upper left": (0.015, 0.97, "left", "top"),
+    }[loc]
+    return ax.text(
+        pos[0],
+        pos[1],
+        text,
+        transform=ax.transAxes,
+        ha=pos[2],
+        va=pos[3],
+        fontsize=fontsize,
+        color=INK2,
+        linespacing=1.4,
+        bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=BASELINE),
+    )
 
 
 def clean_axes(ax, keep_grid_axis="y"):
     """Remove ticks-only chrome from an axes used for a schematic."""
-    ax.set_xticks([]); ax.set_yticks([]); ax.grid(False)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.grid(False)
     for sp in ax.spines.values():
         sp.set_visible(False)
     ax.set_aspect("equal")
@@ -171,17 +265,28 @@ def depth_scatter(ax, xy, depth, c, s=1.5, **kw):
     """
     o = np.argsort(np.asarray(depth))
     c = np.asarray(c)
-    return ax.scatter(xy[o, 0], xy[o, 1], c=c[o] if c.ndim >= 1 and len(c) == len(o) else c, s=s, lw=0, rasterized=True, **kw)
+    return ax.scatter(
+        xy[o, 0],
+        xy[o, 1],
+        c=c[o] if c.ndim >= 1 and len(c) == len(o) else c,
+        s=s,
+        lw=0,
+        rasterized=True,
+        **kw,
+    )
 
 
 def map_axes(ax):
     """An axes that shows a geometric map: equal aspect, no grid, spines off, ticks kept for the units."""
-    ax.set_aspect("equal"); ax.grid(False)
+    ax.set_aspect("equal")
+    ax.grid(False)
     for sp in ax.spines.values():
         sp.set_visible(False)
 
 
-def joukowski(alpha_deg: float = 6.0, n_cells: int = 60, c=complex(-0.08, 0.08), frac=None):
+def joukowski(
+    alpha_deg: float = 6.0, n_cells: int = 60, c=complex(-0.08, 0.08), frac=None
+):
     """The book's running example: a Joukowski airfoil with the Kutta condition.
 
     Returns a dict with the boundary polyline ``xy`` (n_cells+1, 2), the cell
@@ -199,15 +304,22 @@ def joukowski(alpha_deg: float = 6.0, n_cells: int = 60, c=complex(-0.08, 0.08),
     Gamma = 4 * np.pi * a * np.sin(alpha + beta)
 
     def velocity(zeta):
-        dW = (np.exp(-1j * alpha) - a**2 * np.exp(1j * alpha) / (zeta - c) ** 2
-              + 1j * Gamma / (2 * np.pi * (zeta - c)))
+        dW = (
+            np.exp(-1j * alpha)
+            - a**2 * np.exp(1j * alpha) / (zeta - c) ** 2
+            + 1j * Gamma / (2 * np.pi * (zeta - c))
+        )
         return np.conj(dW / (1 - 1 / zeta**2))
 
     tf = np.linspace(0, 2 * np.pi, 4001)
-    zf = c + a * np.exp(1j * tf); zf = zf + 1 / zf
+    zf = c + a * np.exp(1j * tf)
+    zf = zf + 1 / zf
     s = np.concatenate([[0], np.cumsum(np.abs(np.diff(zf)))])
-    s_cells = np.linspace(0, s[-1], n_cells + 1) if frac is None else np.asarray(frac) * s[-1]
-    xb = np.interp(s_cells, s, zf.real); yb = np.interp(s_cells, s, zf.imag)
+    s_cells = (
+        np.linspace(0, s[-1], n_cells + 1) if frac is None else np.asarray(frac) * s[-1]
+    )
+    xb = np.interp(s_cells, s, zf.real)
+    yb = np.interp(s_cells, s, zf.imag)
     xy = np.stack([xb, yb], axis=1)
     t_mid = np.interp((s_cells[:-1] + s_cells[1:]) / 2, s, tf)
     cp_s = 1 - np.abs(velocity(c + a * 1.002 * np.exp(1j * t_mid))) ** 2
@@ -224,10 +336,16 @@ def joukowski(alpha_deg: float = 6.0, n_cells: int = 60, c=complex(-0.08, 0.08),
         zeta = np.where(inside, (z - np.sqrt(z * z - 4 + 0j)) / 2, zeta)
         return 1 - np.abs(velocity(zeta)) ** 2
 
-    return dict(xy=xy, mid=mid, nrm=nrm, w=w, cp_s=cp_s, cp_field=cp_field, alpha=alpha,
-                g_hat=np.array([np.cos(alpha), np.sin(alpha)]))
-
-
+    return dict(
+        xy=xy,
+        mid=mid,
+        nrm=nrm,
+        w=w,
+        cp_s=cp_s,
+        cp_field=cp_field,
+        alpha=alpha,
+        g_hat=np.array([np.cos(alpha), np.sin(alpha)]),
+    )
 
 
 # --- Dataset figure helpers ----------------------------------------------------
@@ -256,51 +374,124 @@ def load_samples(name):
 
 def part(a, off, i):
     """Rows of the concatenated array ``a`` that belong to sample ``i``."""
-    return a[off[i]:off[i + 1]]
+    return a[off[i] : off[i + 1]]
 
 
 def bc_segments(ax, pts, cells, kinds, lw=4.0, zorder=3):
     """Draw line cells colored by boundary-condition kind (keys of BC)."""
     from matplotlib.collections import LineCollection
+
     segs = pts[cells][:, :, :2]
-    ax.add_collection(LineCollection(segs, colors=[BC[k] for k in kinds], linewidths=lw, capstyle="butt", zorder=zorder))
+    ax.add_collection(
+        LineCollection(
+            segs,
+            colors=[BC[k] for k in kinds],
+            linewidths=lw,
+            capstyle="butt",
+            zorder=zorder,
+        )
+    )
 
 
 def field_scatter(ax, xy, v, s=3.0, signed=False, vmin=None, vmax=None):
     """A field on scattered points: the diverging map centred on zero for a signed field, viridis otherwise."""
     from matplotlib.colors import TwoSlopeNorm
+
     if signed:
         lim = max(abs(np.nanmin(v)), abs(np.nanmax(v)))
-        norm = TwoSlopeNorm(vcenter=0.0, vmin=(-lim if vmin is None else vmin), vmax=(lim if vmax is None else vmax))
-        return ax.scatter(xy[:, 0], xy[:, 1], c=v, s=s, lw=0, cmap=DIVERGING, norm=norm, rasterized=True)
-    return ax.scatter(xy[:, 0], xy[:, 1], c=v, s=s, lw=0, cmap=SEQUENTIAL, vmin=vmin, vmax=vmax, rasterized=True)
+        norm = TwoSlopeNorm(
+            vcenter=0.0,
+            vmin=(-lim if vmin is None else vmin),
+            vmax=(lim if vmax is None else vmax),
+        )
+        return ax.scatter(
+            xy[:, 0],
+            xy[:, 1],
+            c=v,
+            s=s,
+            lw=0,
+            cmap=DIVERGING,
+            norm=norm,
+            rasterized=True,
+        )
+    return ax.scatter(
+        xy[:, 0],
+        xy[:, 1],
+        c=v,
+        s=s,
+        lw=0,
+        cmap=SEQUENTIAL,
+        vmin=vmin,
+        vmax=vmax,
+        rasterized=True,
+    )
 
 
 def small_colorbar(fig, sc, ax, label, **kw):
     """A slim colorbar with a labeled quantity and unit."""
     cb = fig.colorbar(sc, ax=ax, fraction=0.035, pad=0.02, **kw)
-    cb.outline.set_visible(False); cb.ax.tick_params(labelsize=8); cb.set_label(label, fontsize=8.5)
+    cb.outline.set_visible(False)
+    cb.ax.tick_params(labelsize=8)
+    cb.set_label(label, fontsize=8.5)
     return cb
 
 
 def bc_legend(ax, kinds, loc="lower right", extra=()):
     """A legend of boundary-condition kinds (the one place the book uses a legend for BC colors)."""
     from matplotlib.lines import Line2D
-    handles = [Line2D([], [], color=BC[k], lw=4, label=BC_LABEL[k]) for k in kinds] + list(extra)
-    ax.legend(handles=handles, loc=loc, fontsize=8, frameon=True, facecolor="white", edgecolor=BASELINE)
+
+    handles = [
+        Line2D([], [], color=BC[k], lw=4, label=BC_LABEL[k]) for k in kinds
+    ] + list(extra)
+    ax.legend(
+        handles=handles,
+        loc=loc,
+        fontsize=8,
+        frameon=True,
+        facecolor="white",
+        edgecolor=BASELINE,
+    )
 
 
-
-RENDER_DIR = _Path(__file__).resolve().parent / ".." / "results" / "renderings_2026-10-18" / "arrays"
-FIELD_WORDS = {"pressure": "pressure", "pressure_l2": "pressure", "velocity": "velocity", "velocity_l2": "velocity",
-               "wss_l2": "wall shear", "nut_l2": "eddy viscosity", "von_mises_l2": "von Mises stress",
-               "displacement_l2": "displacement", "stress_l2": "stress", "q_l2": "plastic strain"}
+#: Renderings of nearest-token-form checkpoints (AirfRANS and the lug, until their standings' checkpoints are rendered).
+RENDER_DIR = (
+    _Path(__file__).resolve().parent
+    / ".."
+    / "results"
+    / "renderings_2026-10-18"
+    / "arrays"
+)
+#: Renderings of the standings' checkpoints (results/renderings_2026-10-22/README.md).
+RENDER_DIR_090 = (
+    _Path(__file__).resolve().parent
+    / ".."
+    / "results"
+    / "renderings_2026-10-22"
+    / "arrays"
+)
+FIELD_WORDS = {
+    "pressure": "pressure",
+    "pressure_l2": "pressure",
+    "velocity": "velocity",
+    "velocity_l2": "velocity",
+    "wss_l2": "wall shear",
+    "nut_l2": "eddy viscosity",
+    "von_mises_l2": "von Mises stress",
+    "displacement_l2": "displacement",
+    "stress_l2": "stress",
+    "q_l2": "plastic strain",
+}
 
 
 def case_errors(per_sample: dict, fields=None) -> str:
     """'pressure ISLA 0.0415, GeoTransolver 0.0424, Transolver 0.0406; ...' from a rendering json's per-sample relative L2."""
     fields = fields or list(per_sample)
-    return "; ".join(FIELD_WORDS.get(f, f) + " " + ", ".join(f"{a} {v:.3g}" for a, v in per_sample[f].items()) for f in fields)
+    return "; ".join(
+        FIELD_WORDS.get(f, f)
+        + " "
+        + ", ".join(f"{a} {v:.3g}" for a, v in per_sample[f].items())
+        for f in fields
+    )
 
 
 def rendering_figure(label: str, images, caption: str, nrow=None) -> None:
@@ -312,4 +503,25 @@ def rendering_figure(label: str, images, caption: str, nrow=None) -> None:
     print(caption + "\n")
     print(":::")
 
-__all__ = [n for n in dir() if not n.startswith("_") and n not in ("annotations", "mpl", "np", "plt")] + ["mpl", "np", "plt"]
+
+def rendering_in_flight(
+    baselines: str | None = None,
+    isla: str = "ISLA checkpoints of the nearest-token form (@sec-checkpoint-form)",
+) -> str:
+    """STYLE's "In flight" callout for a figure drawn from superseded checkpoints, as markdown for an ``output: asis`` cell.
+
+    ``isla`` names ISLA's checkpoints; ``baselines``, when the baseline panels are superseded too, names theirs (for example
+    "baseline checkpoints that read the freestream as a physical vector, not the standing's unit direction")."""
+    what = isla + (f", and {baselines}" if baselines else "")
+    return (
+        '::: {.callout-note title="In flight"}\n'
+        f"This figure shows predictions of {what}. Renderings of the same case from the standing's checkpoints are "
+        "being made, and the ledger (@sec-ledger) tracks them.\n:::\n"
+    )
+
+
+__all__ = [
+    n
+    for n in dir()
+    if not n.startswith("_") and n not in ("annotations", "mpl", "np", "plt")
+] + ["mpl", "np", "plt"]

@@ -1,0 +1,170 @@
+{
+ "airfrans": {
+  "sample_id": "00215_airFoil2D_SST_44.638_-2.059_2.312_4.328_1.0_17.415_airFoil2D_SST_44.638_-2.059_2.312_4.328_1.0_17.415",
+  "source": {
+   "af_isla/native": {
+    "row": 6,
+    "run_id": "r090eag_af_isla_seed42",
+    "dataset": "airfrans_uvolume_2d",
+    "model": "isla_volume_airfrans",
+    "code": "code_cmpaf_fix",
+    "recipe": "recipe_r090",
+    "cells": 100000,
+    "replay": true,
+    "lhr_dump_job": 345308,
+    "dump": "$T/book_figs_2026-10-22/dump/af_isla/native/ (copy: scratch/isla-render090-2026-10-22/dump/af_isla/native/)",
+    "reused_2026_10_18_row": null,
+    "scorer_record": "$T/evals_r090eag/r090eag_af_isla_seed42/native/r090eag_af_isla_seed42/metrics.jsonl"
+   },
+   "af_gt/native": {
+    "row": 7,
+    "run_id": "afu_ud_gt_seed42",
+    "dataset": "airfrans_uvolume_ud",
+    "model": "geotransolver_volume_airfrans",
+    "code": "code_v20",
+    "recipe": "recipe_v8ud",
+    "cells": 100000,
+    "replay": true,
+    "lhr_dump_job": 336070,
+    "dump": "$T/book_figs_2026-10-22/dump/af_gt/native/ (copy: scratch/isla-render090-2026-10-22/dump/af_gt/native/)",
+    "reused_2026_10_18_row": null,
+    "scorer_record": "$T/evals_afu_ud/afu_ud_gt_seed42/native/afu_ud_gt_seed42/metrics.jsonl"
+   },
+   "af_t/native": {
+    "row": 8,
+    "run_id": "afu_ud_t_seed42",
+    "dataset": "airfrans_uvolume_ud",
+    "model": "transolver_volume",
+    "code": "code_v20",
+    "recipe": "recipe_v8ud",
+    "cells": 100000,
+    "replay": true,
+    "lhr_dump_job": 336070,
+    "dump": "$T/book_figs_2026-10-22/dump/af_t/native/ (copy: scratch/isla-render090-2026-10-22/dump/af_t/native/)",
+    "reused_2026_10_18_row": null,
+    "scorer_record": "$T/evals_afu_ud/afu_ud_t_seed42/native/afu_ud_t_seed42/metrics.jsonl"
+   }
+  },
+  "q_inf": 996.2755437958986,
+  "U_inf": 44.63800048828125,
+  "aoa_deg": -2.059000015258789,
+  "Re": 2861410.25,
+  "n_points_scored": 100000,
+  "per_sample_rel_l2": {
+   "pressure": {
+    "ISLA": 0.011594696901738644,
+    "GeoTransolver": 0.01031843014061451,
+    "Transolver": 0.011265705339610577
+   },
+   "velocity": {
+    "ISLA": 0.005170310381799936,
+    "GeoTransolver": 0.02603481523692608,
+    "Transolver": 0.021967703476548195
+   }
+  },
+  "scorer_checks": [
+   {
+    "tag": "af_isla",
+    "protocol": "native",
+    "run_id": "r090eag_af_isla_seed42",
+    "sample_id": "00215_airFoil2D_SST_44.638_-2.059_2.312_4.328_1.0_17.415_airFoil2D_SST_44.638_-2.059_2.312_4.328_1.0_17.415",
+    "scorer_record": "$T/evals_r090eag/r090eag_af_isla_seed42/native/r090eag_af_isla_seed42/metrics.jsonl",
+    "scorer_epoch": 500,
+    "scorer_rows_for_case": 1,
+    "scorer_rows_agree": true,
+    "scorer": {
+     "pressure_l2": 0.011594696901738644,
+     "nut_l2": 0.00910030398517847,
+     "velocity_x_l2": 0.00428776303306222,
+     "velocity_y_l2": 0.011637636460363865,
+     "velocity_l2": 0.005170310381799936
+    },
+    "dump": {
+     "pressure_l2": 0.011594696901738644,
+     "nut_l2": 0.00910030398517847,
+     "velocity_x_l2": 0.00428776303306222,
+     "velocity_y_l2": 0.011637636460363865,
+     "velocity_l2": 0.005170310381799936
+    },
+    "rel_diff": {
+     "pressure_l2": 0.0,
+     "nut_l2": 0.0,
+     "velocity_x_l2": 0.0,
+     "velocity_y_l2": 0.0,
+     "velocity_l2": 0.0
+    },
+    "max_rel_diff": 0.0
+   },
+   {
+    "tag": "af_gt",
+    "protocol": "native",
+    "run_id": "afu_ud_gt_seed42",
+    "sample_id": "00215_airFoil2D_SST_44.638_-2.059_2.312_4.328_1.0_17.415_airFoil2D_SST_44.638_-2.059_2.312_4.328_1.0_17.415",
+    "scorer_record": "$T/evals_afu_ud/afu_ud_gt_seed42/native/afu_ud_gt_seed42/metrics.jsonl",
+    "scorer_epoch": 500,
+    "scorer_rows_for_case": 1,
+    "scorer_rows_agree": true,
+    "scorer": {
+     "pressure_l2": 0.01031843014061451,
+     "nut_l2": 0.01019258052110672,
+     "velocity_x_l2": 0.023113511502742767,
+     "velocity_y_l2": 0.050473038107156754,
+     "velocity_z_l2": 130.8766632080078,
+     "velocity_l2": 0.02603481523692608
+    },
+    "dump": {
+     "pressure_l2": 0.01031843014061451,
+     "nut_l2": 0.01019258052110672,
+     "velocity_x_l2": 0.023113511502742767,
+     "velocity_y_l2": 0.050473038107156754,
+     "velocity_z_l2": 130.8766632080078,
+     "velocity_l2": 0.02603481523692608
+    },
+    "rel_diff": {
+     "pressure_l2": 0.0,
+     "nut_l2": 0.0,
+     "velocity_x_l2": 0.0,
+     "velocity_y_l2": 0.0,
+     "velocity_z_l2": 0.0,
+     "velocity_l2": 0.0
+    },
+    "max_rel_diff": 0.0
+   },
+   {
+    "tag": "af_t",
+    "protocol": "native",
+    "run_id": "afu_ud_t_seed42",
+    "sample_id": "00215_airFoil2D_SST_44.638_-2.059_2.312_4.328_1.0_17.415_airFoil2D_SST_44.638_-2.059_2.312_4.328_1.0_17.415",
+    "scorer_record": "$T/evals_afu_ud/afu_ud_t_seed42/native/afu_ud_t_seed42/metrics.jsonl",
+    "scorer_epoch": 500,
+    "scorer_rows_for_case": 1,
+    "scorer_rows_agree": true,
+    "scorer": {
+     "pressure_l2": 0.011265705339610577,
+     "nut_l2": 0.009448947384953499,
+     "velocity_x_l2": 0.019134899601340294,
+     "velocity_y_l2": 0.044708799570798874,
+     "velocity_z_l2": 15.545750617980957,
+     "velocity_l2": 0.021967703476548195
+    },
+    "dump": {
+     "pressure_l2": 0.011265705339610577,
+     "nut_l2": 0.009448947384953499,
+     "velocity_x_l2": 0.019134899601340294,
+     "velocity_y_l2": 0.044708799570798874,
+     "velocity_z_l2": 15.545750617980957,
+     "velocity_l2": 0.021967703476548195
+    },
+    "rel_diff": {
+     "pressure_l2": 0.0,
+     "nut_l2": 0.0,
+     "velocity_x_l2": 0.0,
+     "velocity_y_l2": 0.0,
+     "velocity_z_l2": 0.0,
+     "velocity_l2": 0.0
+    },
+    "max_rel_diff": 0.0
+   }
+  ]
+ }
+}
