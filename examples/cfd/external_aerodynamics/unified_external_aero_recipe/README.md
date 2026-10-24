@@ -367,8 +367,7 @@ unit, so no per-dataset reference length is needed; `hidden: 512`,
 per-slice geometric invariants in backward instead of storing them (same
 forward and gradients bitwise, lower peak memory) and selects the exact fused
 Triton geometry kernel wherever it can run (CUDA) and the eager PyTorch region
-otherwise. The configs (all but `isla_volume_aerozoo`, see its comment)
-compile the whole model
+otherwise. The surface configs compile the whole model
 (`compile: true` with `compile_options` `fullgraph: true`, `dynamic: true`
 and the two options of `mode: max-autotune-no-cudagraphs`, `max_autotune` and
 `coordinate_descent_tuning`, with Inductor's mix-order reduction off: torch 2.12
@@ -377,9 +376,12 @@ padded rows to its column sums (pytorch/pytorch#195845), see
 `isla_volume_airfrans.yaml`): one graph with dynamic
 shapes, so a new mesh size does not recompile it (see `isla_volume.yaml` for
 the first compile's cost and the one exception); the per-block
-`compile_blocks` is off. For
-ISLA-DTT (`model.query_independent=true`), whose boundary read breaks the graph, set
-`compile=false model.compile_blocks=true` instead.
+`compile_blocks` is off. The interior configs are ISLA-DTT
+(`model.query_independent: true`, the class default for an interior task), whose
+boundary read breaks the whole-model graph, so they set `compile: false` and
+`model.compile_blocks: true`; `compile=true model.query_independent=false
+model.compile_blocks=false` gives interacting ISLA's whole-model compile with the
+`compile_options` kept in each file.
 
 **Learning rate.** 3.75e-4 at `hidden: 512`, pinned in every ISLA config
 (the recipe default of 3e-3 drives ISLA to a mean-field plateau within five
@@ -432,8 +434,9 @@ the vehicle's cell centroids in cell order, which is the order of the output
 Mesh's points; the dataset subsamples the vehicle to the cells it predicts at. The interior task
 (`isla_volume.yaml`, `interior: true`) adds `prediction_points: interior`,
 the dataset's interior point-cloud Mesh, and takes `boundary_meshes` at full
-resolution, its only boundary input. The prediction points join the encoder
-as interacting tokens; each one's signed distance to the boundary surface
+resolution, its only boundary input. The prediction points are ISLA-DTT's
+passive tokens (`query_independent: true`), which read the boundary without
+writing into it, so a prediction depends on its point and the boundary alone; each one's signed distance to the boundary surface
 (the cells of `boundary_meshes`) and direction from it are computed inside
 the model from the exact closest point on the cells, never read from the
 dataset, and the distance is positive on the side the cells' normals point
