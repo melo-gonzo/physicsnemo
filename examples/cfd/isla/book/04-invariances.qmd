@@ -5,7 +5,8 @@ sits or how it is turned, and it does not depend on how the boundary was meshed.
 rigid-motion equivariance, which ISLA holds to roundoff. The second gives a convergence property, discretization
 consistency, which ISLA holds in the fine-mesh limit and which decides whether a change to the architecture is adopted. This chapter states both as exact tests on the code. It then says what each one buys, draws the sampling
 laws through which the second is measured, and reads both off the standing of the three reference configurations on every
-dataset. It closes with what still moves ISLA's own error: the other prediction points of a request, a token budget below
+dataset. It closes with what still moves ISLA's own error: the other prediction points of a request (interacting ISLA's; ISLA-DTT,
+the default interior form, is independent of them), a token budget below
 the boundary's resolution, a different surface, and float32 ties in the geometry.
 
 *Before this chapter:* @sec-isla (tokens, measure weights, the length unit $L$, slices and anchors, relational invariants,
@@ -562,8 +563,8 @@ print(f"The augmented baselines learn most of the invariance: their posed ÷ nat
 
 **An interior prediction point reads its wall distance and direction from the exact closest point of the full-resolution
 surface, and the length unit is computed from that surface before the draw, so no draw of the boundary tokens moves
-either. What still moves ISLA's error is the request it is queried with, a token budget below the boundary's own
-resolution, a different surface, and three float32 steps in the geometry.** Everything else a prediction point reads
+either. What still moves ISLA's error is, for interacting ISLA, the request it is queried with, and for both forms a token budget
+below the boundary's own resolution, a different surface, and three float32 steps in the geometry.** Everything else a prediction point reads
 (slice states, anchors, routing mass) is a measure-weighted quadrature and moves only by its quadrature error
 (@sec-isla-interior). The sections below measure each on trained checkpoints at the reference configuration.
 

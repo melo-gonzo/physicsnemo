@@ -646,7 +646,7 @@ in @sec-limits.
 |---|---|---|---|
 | DrivAerML (Surface, Volume) | native files of the dataset release | `datasets/drivaer_ml_surface.yaml`, `drivaer_ml_volume_reference.yaml` | `conf/model/isla_surface.yaml`, `isla_volume.yaml` |
 | HiLiftAeroML | native files | `datasets/highlift_surface.yaml` | `conf/model/isla_surface_highlift.yaml` |
-| SHIFT-SUV | native files | `datasets/shift_suv_surface.yaml` and the two family files | none; Peter approved building the CFD box in the recipe (the standing's checkpoints were trained with `isla_surface.yaml` on the vehicle alone; @sec-oq-whole-boundary) |
+| SHIFT-SUV | native files | `datasets/shift_suv_surface.yaml` and the two family files | `conf/model/isla_surface_shift_suv.yaml`, reading the vehicle and the CFD box the dataset files build (the standing's checkpoints were trained with `isla_surface.yaml` on the vehicle alone; @sec-oq-whole-boundary) |
 | AirfRANS | `results/campaigns_2026-09-21/af/airfrans_convert.py` | `datasets/airfrans_uvolume_2d.yaml` (ISLA), `airfrans_uvolume.yaml` (the baselines) | `conf/model/isla_volume_airfrans.yaml` |
 | AeroZoo | native files of the dataset release | `datasets/aerozoo_uvolume.yaml` and its six held-out-split files, which hold the benchmark protocol's physical PDE inputs only (@sec-data-aerozoo) | `conf/model/isla_volume_aerozoo.yaml` |
 | PLAID Tensile2d | `results/campaigns_2026-09-22/datasets/plaid_tensile2d_convert.py` | `results/campaigns_2026-10-02/char/datasets/plaid_tensile2d.yaml` | `conf/model/isla_tensile2d.yaml` |

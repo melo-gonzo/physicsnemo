@@ -43,6 +43,14 @@ source. Do not edit by hand.
 | `geo_thin_final/` | GEO-THIN, final: the thin-cell fix as merged, its amended design (what is derived and what is estimated), checks, cost and limits | `scratch/isla-geo-thin-2026-10-24/` |
 | `nearwall_final/` | NEARWALL, final: the comment fix as merged, the contingency drafted for AF-WHOLE and the geometry note | `scratch/isla-nearwall-2026-10-24/` |
 | `dtt_fast_bf16diag/` | DTT-FAST, BF16-DIAG: where the chunked step's bf16 excess on AirfRANS comes from, its remedy, and the one-ulp yardstick | `scratch/isla-dtt-fast-2026-10-23/bf16diag/` |
+| `az_decide_final/` | AZ-DECIDE, final: AeroZoo's compliant standings of four architectures, the registered read of ISLA against ISLA-DTT, and its context | `scratch/isla-az-decide-2026-10-21/` |
+| `e1_az/` | E1-AZ: the head normalization against ISLA 0.9.0 on compliant AeroZoo's nonbox split, the registered verdict | `scratch/isla-headnorm-2026-10-18/` |
+| `lre_az/` | LRE-AZ: ISLA on AeroZoo with the fixed Reynolds scale against its fitted constants, registered and read | `scratch/isla-lre-az-2026-10-23/` |
+| `geo_band_phase0/` | GEO-BAND, phase 0: the whole-boundary geometry call re-timed on GB300 at the merged head | `scratch/isla-geo-band-2026-10-24/` |
+| `kernel_tests/` | KERNEL-TESTS: the five CUDA tests that failed after the token padding, their cause and the fix | `scratch/isla-kernel-tests-2026-10-24/` |
+| `slices_drv/` | SLICES-DRV: ISLA with 128 slices against the 512-slice DrivAerML Volume standing | `scratch/isla-slices-drv-2026-10-24/` |
+| `freeze_plan/` | FREEZE-PLAN: the final reference rerun re-planned with ISLA-DTT as the default interior form, its lanes, cost and calendar | `scratch/isla-freeze-plan-2026-10-24/` |
+| `bc_supply/` | BC-SUPPLY: SHIFT-SUV's box and HiLiftAeroML's inlet and outlet built in the recipe, the deduplicated wing, their checks and cost | `scratch/isla-bc-supply-2026-10-24/` |
 
 | topic | file | source | md5 |
 | --- | --- | --- | --- |
@@ -234,3 +242,31 @@ source. Do not edit by hand.
 | nearwall_final | GEOMETRY_NOTE.md | scratch/isla-nearwall-2026-10-24/GEOMETRY_NOTE.md | 6318e44c3819cbceb854772ba6e6254e |
 | dtt_fast_bf16diag | REPORT.md | scratch/isla-dtt-fast-2026-10-23/bf16diag/REPORT.md | 0cba3be885275a1e86191deec4089ad4 |
 | dtt_fast_bf16diag | RESULTS.md | scratch/isla-dtt-fast-2026-10-23/bf16diag/RESULTS.md | 8a8ad8b4de7f050e7ecd0f5db9b70e76 |
+| az_decide_final | RESULTS.md | scratch/isla-az-decide-2026-10-21/RESULTS.md | ac55a742cc244126355a787d3f37e3ba |
+| az_decide_final | tables_final.md | scratch/isla-az-decide-2026-10-21/tables_final.md | 1f291202615015dbf31c2b84fc7a3c2f |
+| az_decide_final | percase_final.md | scratch/isla-az-decide-2026-10-21/percase_final.md | 856f67b2c0f3e27391691a32a15a8e28 |
+| az_decide_final | nonbox_scales_final.md | scratch/isla-az-decide-2026-10-21/nonbox_scales_final.md | c838c9d5e975b04d2434035f1f223cbd |
+| az_decide_final | QUERYPOP090_FOR_12F.md | scratch/isla-az-decide-2026-10-21/QUERYPOP090_FOR_12F.md | 3acdf6dc08d8fe833207e094dd29f8cd |
+| az_decide_final | CROSS_DATASET_INPUTS.md | scratch/isla-az-decide-2026-10-21/CROSS_DATASET_INPUTS.md | e3a31e8ba715c4b8fb0dbe70a4fbb7a9 |
+| az_decide_final | reynolds/RESULTS_reynolds.md | scratch/isla-az-decide-2026-10-21/reynolds/RESULTS_reynolds.md | 44d33cea346a6fbabeaf593e98467178 |
+| e1_az | RESULTS_AZ_2026-10-22.md | scratch/isla-headnorm-2026-10-18/RESULTS_AZ_2026-10-22.md | 913826319bcc2c985798e4c510e4ffa8 |
+| lre_az | RESULTS.md | scratch/isla-lre-az-2026-10-23/RESULTS.md | 0e32ac357ddcc1a9322b2e57b41ae778 |
+| lre_az | tables.md | scratch/isla-lre-az-2026-10-23/tables.md | 7ff39e128f00f5543f52141e6df928c5 |
+| lre_az | lreaz.json | scratch/isla-lre-az-2026-10-23/lreaz.json | 2ec3cbd05b9dc2b0fd18e9c5c8713738 |
+| lre_az | posthoc.md | scratch/isla-lre-az-2026-10-23/posthoc.md | 5dc5f708a411e02b19b8f68f07fd7990 |
+| lre_az | PREREG.md | scratch/isla-lre-az-2026-10-23/PREREG.md | e00823cdece3ecce8cabf0c2ec3f5a34 |
+| geo_band_phase0 | PHASE0.md | scratch/isla-geo-band-2026-10-24/PHASE0.md | 3cf35c2f331938c0faf2de78eaeba261 |
+| geo_band_phase0 | lhr/timing_table.md | scratch/isla-geo-band-2026-10-24/lhr/timing_table.md | a720b5ee3c2a3fc656ba95217abaf33b |
+| kernel_tests | FINAL_REPORT.md | scratch/isla-kernel-tests-2026-10-24/FINAL_REPORT.md | f4789cdeeae4d0afdc60643e40102b70 |
+| kernel_tests | RESULTS.md | scratch/isla-kernel-tests-2026-10-24/RESULTS.md | 915e4f088d60a4891cbc98c7fb89cb7f |
+| slices_drv | RESULTS.md | scratch/isla-slices-drv-2026-10-24/RESULTS.md | b2fd11e2b478914e60f53a4b85035808 |
+| slices_drv | reading.md | scratch/isla-slices-drv-2026-10-24/reading.md | a810e1a022da3b172820066fa5d6d685 |
+| slices_drv | PREREG.md | scratch/isla-slices-drv-2026-10-24/PREREG.md | 88e36cd7e36232773f080309f7935c77 |
+| slices_drv | farfield/farfield_table.md | scratch/isla-slices-drv-2026-10-24/farfield/farfield_table.md | f993d7713536e50a78f5dcf80421ca53 |
+| freeze_plan | FINAL_RERUN_PLAN.md | scratch/isla-freeze-plan-2026-10-24/FINAL_RERUN_PLAN.md | 33026a229946ed9ca393cd72225b088f |
+| bc_supply | REPORT.md | scratch/isla-bc-supply-2026-10-24/REPORT.md | 5c3bac05e27f68f8e34a73f372126d24 |
+| bc_supply | FINAL_REPORT.md | scratch/isla-bc-supply-2026-10-24/FINAL_REPORT.md | e0bfcecce4b125b13dd5577a1304eaf0 |
+| bc_supply | book/BOOK_CHANGES.md | scratch/isla-bc-supply-2026-10-24/book/BOOK_CHANGES.md | 509bc87c771038f7ee009923cbb6f96f |
+| bc_supply | out/hl_val_368914.jsonl | scratch/isla-bc-supply-2026-10-24/out/hl_val_368914.jsonl | cb5c0f152fa98f934c19db5388714c68 |
+| bc_supply | out/move_369235.jsonl | scratch/isla-bc-supply-2026-10-24/out/move_369235.jsonl | 195c322778304c0866e0ba53a08be8d2 |
+| bc_supply | gb/smoke_summary.txt | scratch/isla-bc-supply-2026-10-24/gb/smoke_summary.txt | c6a833c753006178ce4beb9a249d707b |

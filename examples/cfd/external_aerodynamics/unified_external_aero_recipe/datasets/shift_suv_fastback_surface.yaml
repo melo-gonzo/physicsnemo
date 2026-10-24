@@ -53,6 +53,22 @@ pipeline:
           _target_: torch.tensor
           data: [1.0, 1.0, 0.0]
   transforms:
+    # The other boundaries of the PDE domain, which the case files do not store: the CFD box,
+    # x -40..80 m, y -20..20 m, z -0.024..19.976 m. It is the interior's exact bounding box,
+    # the same on all 1,991 case files, with CFD nodes on each of its six planes; the ground lies
+    # 1.14 mm below the vehicle's lowest point. Built first, in the files' raw metres, so every
+    # transform and pose below moves it with the vehicle. The inflow (uniform, 30 m/s) and the
+    # floor (a translating road) are documented; the side walls', roof's and outlet's
+    # conditions are not, so each piece is named by what it is. Models that read only `interior`
+    # and `boundaries.vehicle` see what they saw before.
+    - _target_: ${dp:AddBoxBoundaries}
+      bounds: [[-40.0, 80.0], [-20.0, 20.0], [-0.024, 19.976]]
+      faces:
+        inlet: [x_min]
+        outlet: [x_max]
+        floor: [z_min]
+        side_walls: [y_min, y_max]
+        roof: [z_max]
     # Unit freestream direction as a NEW global leaf `U_inf_dir` (`U_inf`
     # stays physical), as in shift_suv_surface.yaml: the baselines' global
     # input (geotransolver_surface.yaml, transolver_surface.yaml). Placed
@@ -79,11 +95,13 @@ pipeline:
     - _target_: ${dp:ComputeSurfaceNormals}
       store_as: cell_data
       field_name: normals
+    # Acts on every mesh of the sample, the box's pieces too: they stay whole while
+    # sampling_resolution is above their 1,444 cells (side_walls), as at 200,000.
     - _target_: ${dp:SubsampleMesh}
       n_cells: ${sampling_resolution}
     # Terminal: convert the surface Mesh into a DomainMesh per the recipe
     # contract. cell_data_targets are auto-injected from the `targets:` block.
-    - _target_: ${dp:MeshToDomainMesh}
+    - _target_: ${dp:SurfaceMeshToDomainMesh}
       interior_points: cell_centroids
 
 targets:

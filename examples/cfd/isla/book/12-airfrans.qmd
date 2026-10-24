@@ -11,6 +11,7 @@ import sys; sys.path.insert(0, ".")
 from palette import *
 import standing as S
 import records as R
+_LZ = R.load("lre_az", "lreaz.json")   # LRE-AZ: the fixed Reynolds scale on AeroZoo's `reynolds` split
 from matplotlib.collections import LineCollection
 RES = Path("..") / "results"
 J = lambda p: json.load(open(RES / p))
@@ -214,7 +215,8 @@ print(f"- **ISLA**: width 512, 12 layers, 512 slices, learning rate 3.75e-4, {PA
       + " / ".join(f"{SL[f]['ratio']:.3f}" for f in FK) + " of this configuration's on " + " / ".join(l for _, l in FIELDS)
       + " (ratios of arithmetic seed means, two seeds each; no field moves by the rule registered for the test) at "
       f"{SLC['smoke 354977']:.2f} of the training step and {SLC['smoke: peak allocated per rank']:.2f} of the peak memory, "
-      "so the reference keeps 512 and 128 is a cheaper setting that costs nothing measurable here (@sec-oq-slices). "
+      "so the reference keeps 512 and 128 is a cheaper setting that costs interacting ISLA nothing measurable here or on the "
+      "DrivAerML Volume task, and is untested on ISLA-DTT (@sec-oq-slices). "
       f"Data: {R.source('slices_af', 'RESULTS.md')}.")
 print(f"- **ISLA-DTT**: the same configuration with read-only prediction points, {PARAMS['ISLA-DTT'] / 1e6:.1f}M parameters "
       "(@sec-airfrans-dtt-reference).")
@@ -273,13 +275,12 @@ print("**Velocity is measured alike for the three.** GeoTransolver and Transolve
 ```{python}
 #| label: out-tbl-airfrans-protocols
 #| output: asis
-print(St.table("tbl-airfrans-protocols", f"The AirfRANS interior task, `full` split, {N_TEST} test airfoils"))
+print(St.table("tbl-airfrans-protocols", f"The AirfRANS interior task (ISLA: interacting ISLA 0.9.0; ISLA-DTT: ISLA-DTT 0.9.0), `full` split, {N_TEST} test airfoils"))
+print(S.form_callout("its row here is ISLA-DTT 0.9.0, whose error is " + " / ".join(f"{St.ratio('ISLA-DTT', f):.3f}" for f in FK)
+                     + " times interacting ISLA's on " + " / ".join(l for _, l in FIELDS),
+                     what="interacting ISLA 0.9.0 and ISLA-DTT 0.9.0 reading the airfoil alone",
+                     also="the same two trained with the far field as well (@sec-data-airfrans)"))
 ```
-
-::: {.callout-note title="In flight"}
-These numbers come from ISLA and ISLA-DTT reading the airfoil alone. The same two trained with the far field
-as well (@sec-data-airfrans) are being measured, and the ledger (@sec-ledger) tracks it.
-:::
 
 ```{python}
 #| label: para-airfrans-dtt-standing
@@ -568,11 +569,8 @@ print("**Interior writers drawn from the boundary, tested on ISLA of the nearest
       f"error moves by up to {100 * c_posed:.0f}% on one seed.")
 print()
 print("**One planar dataset does not choose ISLA's interior form.** These are two seeds per form on the `full` split, in distribution, on a "
-      "boundary of about a thousand segments; which form ISLA's interior model takes is the open question of @sec-oq-dtt, whose decisive "
-      "data are the AeroZoo held-out splits.")
-print()
-print(S.in_flight_callout({"what": "two seeds of each form on one planar dataset, in distribution",
-                           "replacement": "ISLA-DTT on the seven AeroZoo splits, which decides ISLA's interior form (@sec-oq-dtt),"}))
+      "boundary of about a thousand segments. The form was chosen on AeroZoo's held-out splits, where the two read a close call "
+      "and ISLA-DTT is ISLA's default interior form, on principle (@sec-aerozoo-form).")
 ```
 
 ```{python}
@@ -787,8 +785,12 @@ print(f"- **Clamping the fixed-scale input barely moves its pressure error.** Cl
 print()
 print("Post hoc reading, on AirfRANS only: the fitted, narrow scale of ISLA's Reynolds input, not its architecture, sets most of its "
       "pressure penalty below the band. Like the attribution below (@sec-airfrans-attribution), it is about how a global scalar input is "
-      "scaled; the declared physical scales are the same in all three models. Whether the fixed scale holds on a second dataset is "
-      f"the open question of @sec-oq-reynolds. Data: {R.source('af_extrap', 'lre.json')}, {R.source('af_extrap', 'LRE.md')}, "
+      "scaled; the declared physical scales are the same in all three models. On AeroZoo's `reynolds` split the same fixed scale "
+      f"makes ISLA's velocity error {_LZ['rule']['velocity_l2']['mean']['ratio']:.2f} times that of the fitted scale (registered "
+      f"*{_LZ['rule']['velocity_l2']['mean']['verdict']}*; {_LZ['profile'][-1]['ratio']['velocity_l2']:.2f} times 1.5 to 2 decades "
+      f"above the band), and on pressure, {_LZ['rule']['pressure_l2']['mean']['ratio']:.3f} times, the registered rule reads "
+      f"*{_LZ['rule']['pressure_l2']['mean']['verdict']}*, so it is not adopted "
+      f"(@sec-oq-reynolds). Data: {R.source('lre_az', 'lreaz.json')}, {R.source('af_extrap', 'lre.json')}, {R.source('af_extrap', 'LRE.md')}, "
       f"{R.source('af_extrap', 'stats/afx_fits.json')}, {R.source('af_extrap', 'posthoc.json')}; the controls' scorer reduction is "
       "scratch/isla-af-extrap-2026-10-21/reduce_lre.py.")
 ```
@@ -958,12 +960,13 @@ print("- **No cross-architecture discretization reading.** The boundary's discre
       "never read the airfoil (@sec-airfrans-discretization); discretization independence across architectures is measured on the surface "
       "datasets (@sec-invariances).")
 print("- **No choice of ISLA's interior form.** ISLA-DTT ÷ ISLA is " + " / ".join(f"{dtt_r[f]:.3f}" for f in FK) + " at the reference "
-      "configuration with both forms trained alike (ratios of arithmetic seed means; @sec-airfrans-dtt-reference), on one planar dataset in distribution with two seeds; which form ISLA's interior model "
-      "takes is the open question of @sec-oq-dtt.")
+      "configuration with both forms trained alike (ratios of arithmetic seed means; @sec-airfrans-dtt-reference), on one planar dataset in distribution with two seeds; ISLA's default "
+      "interior form is ISLA-DTT, on principle, after a close call on AeroZoo's held-out splits (@sec-aerozoo-form).")
 print("- **Reynolds extrapolation is measured on this dataset only.** ISLA's error grows more than the baselines' below the training band, "
       "as registered (@sec-interior-extrapolation); trained with its Reynolds input on a fixed scale, its below-band pressure error is "
-      + " and ".join(f"{fx['a']['r'][sd]:.2f}" for sd in ("42", "43")) + " of its value with the fitted scale (per seed), on this "
-      "dataset only (@sec-oq-reynolds).")
+      + " and ".join(f"{fx['a']['r'][sd]:.2f}" for sd in ("42", "43")) + " of its value with the fitted scale (per seed); the same scale "
+      f"costs velocity on AeroZoo's `reynolds` split ({_LZ['rule']['velocity_l2']['mean']['ratio']:.2f} times), so it stays a result "
+      "about AirfRANS (@sec-oq-reynolds).")
 print("- **Whether ISLA's declared scales add accuracy where the Reynolds number varies widely is untested here.** On AirfRANS, ISLA "
       "without them but with the inlet speed standardized is as accurate as ISLA, so standardizing the global input carries ISLA's gain "
       "on this dataset (@sec-airfrans-attribution); AeroZoo, whose Reynolds number varies widely, has no such arm.")
