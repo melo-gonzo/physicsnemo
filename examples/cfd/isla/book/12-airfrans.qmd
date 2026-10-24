@@ -175,6 +175,24 @@ The geometry family is narrow: smooth airfoils of one parameterization, in a pla
 - **The interior draw.** The reader takes each case whole and the first transform keeps a uniform random subset of the interior points (`SubsampleMesh`). The stored points run through space in the solver's order, so a uniform draw is needed to cover the domain.
 - **Splits** (the release's manifest, unchanged). `full`: 800 train / 200 test; `scarce`: 200 train; `reynolds`: 504 / 496, an extrapolation in Reynolds number; `aoa`: 804 / 196, an extrapolation in angle of attack. The training-airfoil ladder uses nested subsets of 50 to 400 airfoils inside `full` (@sec-airfrans-ladder).
 
+```{python}
+#| label: para-airfrans-domain-boundary
+#| output: asis
+AFW = {r_["quantity"]: r_ for r_ in R.md_table("af_whole", "PREREG.md", "3. Facts before training")}
+AF_CROP = re.search(r"nodes in about (\[[^\]]+\] x \[[^\]]+\]) chords", " ".join(R.load("boundary_audit", "REPORT.md").split())).group(1)
+ff = AFW["far field"]["airfoil + far field (W)"]
+L_af, L_w = (AFW["ISLA's L (`ISLA._gauge`, float64)"][k] for k in ("airfoil only (standing)", "airfoil + far field (W)"))
+print("- **The domain's boundary.** The converted files store the airfoil alone, and their interior is the release's own crop, about "
+      f"{AF_CROP.replace(' x ', ' × ')} chords; the crop's edges are not a boundary of the PDE, since the flow crosses them and no "
+      "condition is stored on them. The far field is only in the release's `_freestream.vtp`: on every case "
+      f"{re.match(r'[\d,]+-[\d,]+ segments', ff).group(0).replace('-', ' to ')}, a half circle of radius 200 chords upstream closed "
+      "by the lines $x = 200$ and $y = \\pm 200$ downstream. The standing's ISLA reads the airfoil alone. ISLA's configuration that "
+      "also reads the far field, as the condition `freestream` with no field (its prescribed value is the inlet velocity ISLA already "
+      "reads), is built in the recipe and has no standing. With it ISLA's length unit $L$, the RMS pairwise distance of the given "
+      f"boundary, is {re.search(r'[\d.]+', L_w).group(0)} chords on every case, against "
+      f"{L_af.split(' (')[0].replace('-', ' to ')} chords with the airfoil alone. Data: {R.source('af_whole', 'PREREG.md')} (section 3), {R.source('boundary_audit', 'REPORT.md')} (section 5).")
+```
+
 ## What is measured {#sec-airfrans-measured}
 
 ```{python}
@@ -186,8 +204,17 @@ print(f"**The interior task on the `full` split: 800 training airfoils, {N_TEST}
       "is standardized before scoring, so its ratios order the models but are not physical percentages. The three architectures run at their "
       "reference configurations, the same on every dataset of the book (@sec-selection, @tbl-architectures):")
 print()
+# ISLA with 128 slices against this standing's 512 (registered reading: results/campaigns_2026-10-23/slices_af/RESULTS.md)
+SL = R.load("slices_af", "reading.json")["native"]
+SLC = {r_["measure"].split(",")[0]: R.num(r_["S ÷ B"]) for r_ in R.md_table("slices_af", "RESULTS.md", "R3, cost")}
+assert all(SL[f]["label"] == "no change" for f in FK)
 print(f"- **ISLA**: width 512, 12 layers, 512 slices, learning rate 3.75e-4, {PARAMS['ISLA'] / 1e6:.1f}M parameters; the slice sublayer reads "
-      "the normalized token state (@sec-isla-layer).")
+      "the normalized token state (@sec-isla-layer). With 128 slices in place of 512, its test errors are "
+      + " / ".join(f"{SL[f]['ratio']:.3f}" for f in FK) + " of this configuration's on " + " / ".join(l for _, l in FIELDS)
+      + " (ratios of arithmetic seed means, two seeds each; no field moves by the rule registered for the test) at "
+      f"{SLC['smoke 354977']:.2f} of the training step and {SLC['smoke: peak allocated per rank']:.2f} of the peak memory, "
+      "so the reference keeps 512 and 128 is a cheaper setting that costs nothing measurable here (@sec-oq-slices). "
+      f"Data: {R.source('slices_af', 'RESULTS.md')}.")
 print(f"- **ISLA-DTT**: the same configuration with read-only prediction points, {PARAMS['ISLA-DTT'] / 1e6:.1f}M parameters "
       "(@sec-airfrans-dtt-reference).")
 print(f"- **GeoTransolver**: width 256, learning rate 1e-3, {PARAMS['GeoTransolver'] / 1e6:.1f}M parameters.")
@@ -199,7 +226,7 @@ print("No model trains with rotation or translation augmentation. **The three do
 
 | | boundary | global inputs | at each prediction point |
 |---|---|---|---|
-| ISLA | the airfoil polyline, the one condition `airfoil`: each segment's position, normal and length | the inlet velocity `U_inf` (rank 1), declared as the velocity source: its direction is $\hat g_1$ and its magnitude the velocity scale $U = U_\infty$; with the air's kinematic viscosity, a constant of the configuration, and the length unit $L$ of the airfoil, the one global scalar is the standardized $\log_{10}(U L / \nu)$ (@sec-using-scales) | position, entering only through relational invariants; the exact signed distance and direction to the full-resolution airfoil, computed inside the model |
+| ISLA | the airfoil polyline, the one condition `airfoil`: each segment's position, normal and length; the far field, the rest of the domain's boundary, is not given to the standing's models (@sec-data-airfrans) | the inlet velocity `U_inf` (rank 1), declared as the velocity source: its direction is $\hat g_1$ and its magnitude the velocity scale $U = U_\infty$; with the air's kinematic viscosity, a constant of the configuration, and the length unit $L$ of the airfoil, the one global scalar is the standardized $\log_{10}(U L / \nu)$ (@sec-using-scales) | position, entering only through relational invariants; the exact signed distance and direction to the full-resolution airfoil, computed inside the model |
 | GeoTransolver | none | $\hat g_1$ and the inlet speed standardized over the 800 training airfoils, read by the context projector | coordinates; the stored `sdf` and `sdf_normals` |
 | Transolver | none | the same two, concatenated to every point's features | coordinates; the stored `sdf` and `sdf_normals` |
 
@@ -484,6 +511,10 @@ bundle = {fam: {f: at(fam, "B", f) / at(fam, "CONT" if fam == "isla" else "DTT-C
 # ISLA-DTT without the scales, reading the raw inlet speed (DTT-NOSC), as exp(Δ) against ISLA-DTT and against its reduced form
 dtt_nosc = {f: AT["af/dtt"][f]["arms"]["DTT-NOSC"]["ratio"] for f in FK}
 dtt_nosc_cont = dtt_nosc["pressure_l2"] / AT["af/dtt"]["pressure_l2"]["arms"]["DTT-CONT"]["ratio"]
+# the two ISLA-DTT mirrors of that cost: the stored signed distance put back (DTT-SDF), the reduced form's prediction-point
+# embedding (DTT-QEMB); exp(Δ) against ISLA-DTT, and whether either moves a field by the study's test (RESULTS.md section 3c)
+mirror = {a: {f: AT["af/dtt"][f]["arms"][a]["ratio"] for f in FK} for a in ("DTT-SDF", "DTT-QEMB")}
+assert not any(AT["af/dtt"][f]["arms"][a]["moves"] for a in mirror for f in FK)
 # The ANCHOR arms (results/campaigns_2026-10-18/anchor/PREREG.md), ISLA of the nearest-token form at the reference configuration: A interacting
 # ISLA, C read-only points with 50,000 boundary-drawn interior writers. Scores: readout/scores.json and verdict.json.
 ANC = RES / "campaigns_2026-10-18" / "anchor" / "readout"
@@ -512,14 +543,14 @@ print(f"**At the reference configuration interacting ISLA leads ISLA-DTT on Airf
       + ". In ISLA's components other than the declared scales, ISLA-DTT pays a cost on pressure that interacting ISLA does not: without "
       "the scales and with the raw inlet speed, its error is " + " / ".join(f"{dtt_nosc[f]:.3f}" for f in FK) + " times ISLA-DTT's, and on pressure "
       f"{dtt_nosc_cont:.2f} times its reduced form's, which also reads the raw inlet speed (each exp(Δ), a ratio of geometric seed means). "
+      "Neither of the two pieces that might carry that cost does so measurably: with the stored signed distance put back, ISLA-DTT's "
+      "error is " + " / ".join(f"{mirror['DTT-SDF'][f]:.3f}" for f in FK) + " times ISLA-DTT's, and with the reduced form's "
+      "prediction-point embedding " + " / ".join(f"{mirror['DTT-QEMB'][f]:.3f}" for f in FK) + " (exp(Δ)); no effect passes the "
+      "study's test (|Δ| at least 2 SE and at least 5 percent), and on pressure the stored signed distance is ruled out as carrying even "
+      "half of the cost. Where the cost lies is not located. "
       "Every model in this comparison trained on the compiled training path after its "
       f"fault was fixed and is scored eager. Data: {R.source('attrib090', 'results2_native.json')}, "
-      f"{R.source('attrib090', 'RESULTS.md')} (sections 3 and 3b).")
-print()
-print(S.in_flight_callout({"what": "ISLA-DTT without its declared scales against its reduced form, which differ in every other component "
-                                   "at once",
-                           "replacement": "ISLA-DTT with the stored signed distance put back, and with the reduced form's prediction-point "
-                                          "embedding, two seeds each, which locates the component that costs it pressure accuracy,"}))
+      f"{R.source('attrib090', 'RESULTS.md')} (sections 3, 3b and 3c).")
 print()
 print("**Interior writers drawn from the boundary, tested on ISLA of the nearest-token form, do not replace interacting ISLA.** A read-only arm "
       "adds 50,000 interior tokens that write into the slices, placed from the boundary alone, so that the prediction stays a function of the "

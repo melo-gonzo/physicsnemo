@@ -86,7 +86,7 @@ print(f"The three architectures are {S.CONFIG['ISLA']}, {S.CONFIG['GeoTransolver
 
 ## The problem: one notchback, 484 shapes, one wind {#sec-benchmarks}
 
-**DrivAerML is 484 parametrically morphed variants of one notchback car, each simulated once in the same far-field flow, so the geometry is the only thing that varies.** The base body is the DrivAer notchback, a public research sedan. Each variant is a parametric morph of it, simulated with a hybrid RANS/LES closure; the fields are time averages over the simulated window with the start-up transient trimmed. Every model is given the vehicle surface alone. ISLA reads the positions, outward normals and areas of its cells and the unit far-field direction; GeoTransolver and Transolver read the cells' centered coordinates and normals and the same unit direction (@tbl-model-inputs). The ground plane and the outer boundaries of the domain, which the volume case files store as meshes, are not inputs of these standings, as for every published model on the dataset; ISLA's input is the domain's whole boundary, so its standings here read part of it (@sec-limits-whole-boundary). @fig-problem-drivaer shows one validation car with both tasks' fields.
+**DrivAerML is 484 parametrically morphed variants of one notchback car, each simulated once in the same far-field flow, so the geometry is the only thing that varies.** The base body is the DrivAer notchback, a public research sedan. Each variant is a parametric morph of it, simulated with a hybrid RANS/LES closure; the fields are time averages over the simulated window with the start-up transient trimmed. Every model is given the vehicle surface alone. ISLA reads the positions, outward normals and areas of its cells and the unit far-field direction; GeoTransolver and Transolver read the cells' centered coordinates and normals and the same unit direction (@tbl-model-inputs). The ground plane and the outer boundaries of the domain, which the case files store as meshes, are not inputs of these standings, as for every published model on the dataset; ISLA's input is the domain's whole boundary, so its standings here read part of it, and configurations of both tasks that read all of it are built and have no standing (@sec-limits-whole-boundary). @fig-problem-drivaer shows one validation car with both tasks' fields.
 
 ```{python}
 #| label: fig-problem-drivaer
@@ -103,7 +103,7 @@ print(f"The three architectures are {S.CONFIG['ISLA']}, {S.CONFIG['GeoTransolver
 #|   printed. How to read this: colors are the reference CFD fields, not
 #|   predictions; the dots are a random subset of the cells, so their density
 #|   follows the mesh, not the field; the ground plane and the domain's outer
-#|   boundaries are not model inputs. Data: results/problem_figures_2026-09-22/drivaer.npz.
+#|   boundaries are not inputs of the standings' models. Data: results/problem_figures_2026-09-22/drivaer.npz.
 D, Dm = load_problem("drivaer")
 sp, cp = D["surf_points"], D["surf_cp"]
 norm = TwoSlopeNorm(vcenter=0.0, vmin=-1.5, vmax=1.0)
@@ -125,7 +125,7 @@ sc2 = ax.scatter(q[:, 0], q[:, 2], c=um, s=1.8, lw=0, cmap=SEQUENTIAL, vmin=0, v
 sil = sp[np.abs(sp[:, 1]) < 0.03]; ax.scatter(sil[:, 0], sil[:, 2], s=0.8, c=INK, lw=0, rasterized=True)
 ax.set_ylabel("z [m]"); ax.set_xlabel("x [m]"); ax.set_title("symmetry plane $y = 0$ of the volume mesh: speed ratio $|U| / U_\\infty$", fontsize=9.5)
 ib = D["interior_bbox"]
-note(ax, f"volume mesh: {ib[0,0]:.0f} < x < {ib[1,0]:.0f} m, {ib[0,1]:.0f} < y < {ib[1,1]:.0f} m, {ib[0,2]:.1f} < z < {ib[1,2]:.0f} m\nground plane at z = {ib[0,2]:.2f} m (not an input)", loc="upper right")
+note(ax, f"volume mesh: {ib[0,0]:.0f} < x < {ib[1,0]:.0f} m, {ib[0,1]:.0f} < y < {ib[1,1]:.0f} m, {ib[0,2]:.1f} < z < {ib[1,2]:.0f} m\nground plane at z = {ib[0,2]:.2f} m (not an input of the standings)", loc="upper right")
 cb2 = fig.colorbar(sc2, ax=[ax], fraction=0.025, pad=0.01, extend="max"); cb2.set_label("$|U| / U_\\infty$ [–]"); cb2.outline.set_visible(False)
 plt.show()
 ```
@@ -287,7 +287,7 @@ plt.show()
 
 ### Files, conversion and normalization {#sec-data-drivaer}
 
-**Each case is one directory holding the vehicle surface, the volume mesh with its fields, a watertight body surface and the far-field conditions; the two tasks read different parts of the same files.** A `run_<id>` directory holds a `domain_*.pdmsh` with the vehicle boundary (`boundaries.vehicle`, triangles), the tetrahedral volume mesh with its point fields, the watertight `*_single_solid.stl.pmsh` of the body, and `global_data` with `U_inf` (38.89 m/s along $x$), `rho_inf`, `p_inf` (zero: the pressure is gauge), `nu` and `L_ref` (5 m). The reader divides coordinates by `L_ref`, so a car spans about one unit. A typical car has 17 million surface cells and 150 to 166 million volume points.
+**Each case is one directory holding the vehicle surface, the volume mesh with its fields, a watertight body surface and the far-field conditions; the two tasks read different parts of the same files.** A `run_<id>` directory holds a `domain_*.pdmsh` with the vehicle boundary (`boundaries.vehicle`, triangles) and the four other pieces of the domain's boundary (`no_slip`, `slip`, `inlet`, `outlet`, the faces of a tunnel box the dataset's curation pipeline built, without fields; @sec-oq-far-field), the tetrahedral volume mesh with its point fields, the watertight `*_single_solid.stl.pmsh` of the body, and `global_data` with `U_inf` (38.89 m/s along $x$), `rho_inf`, `p_inf` (zero: the pressure is gauge), `nu` and `L_ref` (5 m). The reader divides coordinates by `L_ref`, so a car spans about one unit. A typical car has 17 million surface cells and 150 to 166 million volume points.
 
 - **Surface task.** The recipe reads the boundary tensordict (`run_*/*.pdmsh/_tensordict/boundaries/vehicle`). The time-averaged fields `pMeanTrim` and `wallShearStressMeanTrim` are nondimensionalized by the case's far-field dynamic pressure (`NonDimensionalizeByMetadata`) and renamed `pressure` and `wss`; `wss` is further divided by a fixed standard deviation (0.00313). Normals are recomputed from the faces after centering, degenerate cells are dropped, and the prediction points are the cell centroids.
 - **Volume task.** `DomainMeshReader` reads the interior as a point cloud (the tetrahedra are dropped), subsamples the vehicle boundary by cells, and computes from the watertight body the signed distance `sdf` and its gradient `sdf_normals` at every interior point (`ComputeSDFFromBoundary`) before dropping the body. ISLA's own dataset file (`drivaer_ml_volume_reference.yaml`) reads the vehicle boundary whole instead, and ISLA draws its boundary tokens from it inside the model. `UMeanTrim`, `pMeanTrim` and `nutMeanTrim` become `velocity` (divided by $|U_\infty|$), `pressure` (divided by the dynamic pressure) and `nut` (standardized with mean 4.8e-4 and standard deviation 9.4e-4 m²/s).
@@ -317,6 +317,28 @@ The three architectures run at their reference configurations, the one configura
 - **Transolver**: width 512, 16 layers, learning rate 1e-3, trained at 100,000 cells.
 
 They are not matched in parameters, memory or time; @tbl-drivaerml-configs states all three.
+
+```{python}
+#| label: para-surface-request
+#| output: asis
+import records as R
+SQR = R.load("surfqpop", "results/out/reduced.json")
+SQ = [SQR[f"r090_dr_isla_seed{s}"]["fields"] for s in (42, 43)]
+sq = lambda fn: " / ".join(f"{sum(fn(d[f]) for d in SQ) / len(SQ):.3f}" for f in ("pressure", "wss"))
+slope = lambda f: sum(d[f]["slope"] for d in SQ) / len(SQ)
+half = [d[f][k]["ratio"] for d in SQ for f in ("pressure", "wss") for k in ("q3_low_x", "q3_high_x")]
+print("**ISLA's surface prediction at a cell depends on the other sampled cells, through a quadrature error that falls as one over "
+      "the square root of their number.** The sampled cells are also ISLA's view of the car. On the standing's checkpoints the spread "
+      "between two independent 200,000-cell samples, on the cells they share, is "
+      f"{sq(lambda d: d['spread']['200000'])} on pressure / wall shear, so one sample's own noise, that spread divided by the "
+      f"square root of two, is {sq(lambda d: d['delta']['200000'] / d['err_uniform']['200000'])} of the error; the spread falls "
+      "with exponents "
+      f"{slope('pressure'):.2f} / {slope('wss'):.2f} from 50,000 to 800,000 cells (seed means). Four disjoint 50,000-cell samples "
+      f"raise the error {sq(lambda d: d['q2_ratio'])} times, as one 50,000-cell sample does, and at 800,000 cells the error is "
+      f"{sq(lambda d: d['err_ratio_to_200k']['800000'])} times the scored one. Half a car given alone raises the error on it "
+      f"{min(half):.0f} to {max(half):.0f} times, so a request must cover the body (@sec-using-sampler). "
+      f"Data: {R.source('surfqpop', 'results/out/reduced.json')}.")
+```
 
 ```{python}
 #| label: make-tbl-drivaerml-configs
@@ -912,5 +934,5 @@ print("The cause is that ISLA's interior points carry routing mass: they write i
 Questions this dataset raises and leaves open:
 
 - **ISLA or ISLA-DTT on the interior?** On this task ISLA-DTT is measured only on a study configuration with the raw slice reads (@tbl-interior-read-only), where it trades some accuracy for exact query independence. Which form the interior tasks use is decided on AeroZoo (@sec-oq-dtt).
-- **How much of ISLA's far-field error is the missing ground?** Trained on a single car, ISLA misses the eddy viscosity far from the car, whose level there follows the height above the floor, a boundary its configuration on this task does not read (@sec-single-case-floor). ISLA's input is the domain's whole boundary, so the floor strip, the slip walls, the inlet and the outlet that the case files store belong in it as named boundary meshes (@sec-limits-whole-boundary); how much of that error they remove is @sec-oq-far-field.
+- **How much of ISLA's far-field error is the missing ground?** Trained on a single car, ISLA misses the eddy viscosity far from the car, whose level there follows the height above the floor, a boundary the standing's configuration on this task does not read (@sec-single-case-floor). ISLA's input is the domain's whole boundary, so the floor strip, the slip walls, the inlet and the outlet that the case files store belong in it as named boundary meshes (@sec-limits-whole-boundary); how much of that error they remove is @sec-oq-far-field.
 - **How precisely must the wall be given?** The watertight STL raises ISLA's error only near the wall, where it differs from the CFD wall by about the chord error of its tessellation (@sec-interior-boundary-law). Whether the on-wall nodes' distance channel causes that rise is untested; a probe that moves only those nodes' distance would settle it.

@@ -520,6 +520,12 @@ print("**On the AirfRANS case no parameter axis closes ISLA's pressure gap, and 
       f"against {gt_k:.2f} for GeoTransolver. GeoTransolver ÷ ISLA over the reference and the three top rungs is {rng(r20)} at "
       f"20,000 steps and {rng(r40)} at 40,000 steps, with GeoTransolver on one seed at both budgets.")
 print()
+# ISLA with 128 slices on full AirfRANS against the 512-slice standing (SLICES-AF): the registered reading, and the near-wall band's
+# case-mean ratio (the last S ÷ B column of RESULTS.md's band table)
+SLR = R.load("slices_af", "reading.json")["native"]
+assert all(v["label"] == "no change" for v in SLR.values())
+_band = next(r_ for r_ in R.md_table("slices_af", "RESULTS.md", "R2, near-wall band") if r_["band"] == "1e-3 to 0.1")
+SL_BAND = R.num(_band["S ÷ B"])
 print(f"The excess stays next to the wall. On every rung but the 128-slice one, ISLA's relative pressure error within the band "
       f"from 1e-3 to 0.1 chords from the wall is {rng(near, 4)}, against GeoTransolver's {rng(neargt, 4)}; with 128 slices it is "
       f"{rng(near128, 4)}. That band holds {w_band:.0f}% of the held-out points and {x_band:.0f}% of the amount by which "
@@ -527,10 +533,14 @@ print(f"The excess stays next to the wall. On every rung but the 128-slice one, 
       "spread on this one case is wide: "
       f"{WORD.get(len(SEEDSET), len(SEEDSET))} reference runs of 20,000 steps span {max(SEEDSET) / min(SEEDSET):.2f} times, and the reference's two runs of 40,000 steps "
       f"{s40:.2f} times. The 128-slice rung's two seeds, {S128[0]:.5f} and {S128[1]:.5f} against the reference's {ref_ladder:.5f} at "
-      "the ladder's seeds, sit inside that spread, so its lower near-wall error is a lead, not a result. The evidence points to the "
+      "the ladder's seeds, sit inside that spread, and on the full dataset the lead does not hold: trained on all 800 training "
+      "airfoils, ISLA with 128 slices scores " + " / ".join(f"{SLR[f]['ratio']:.3f}" for f in SLR)
+      + " times the 512-slice reference's test error on pressure / velocity / eddy viscosity (ratios of arithmetic seed means, "
+      "two seeds each; no field moves by the rule registered for the test), and its pressure error 1e-3 to 0.1 chords from the "
+      f"wall, averaged over the test airfoils, is {SL_BAND:.2f} times the reference's (@sec-oq-slices). The evidence points to the "
       "component that represents the variation next to the wall, not to the parameter count. "
       f"Data: {R.source('cap_audit', 'RESULTS.md')} (Part A, 15.9, 15.11), {R.source('cap_audit', 'tables/resid_af_ladder.md')}, "
-      f"{R.source('cap_audit', 'tables/resid_af_rd.md')}.")
+      f"{R.source('cap_audit', 'tables/resid_af_rd.md')}, {R.source('slices_af', 'RESULTS.md')}.")
 ```
 
 ```{python}
@@ -599,8 +609,8 @@ print(f"Three probes without training point to an input ISLA lacks, the ground. 
       f"distance $d$ far from the car: $\\|\\partial h / \\partial \\ln d\\|$ is {rng(sens_in, 1)} within {L_REF:g} m and "
       f"{rng(sens_out, 1)} beyond, so its distance channels do not saturate. From the fifth of its {n_blocks} blocks on, far points "
       f"hold most of the mass of {min(maj)} to {max(maj)} slices in every block, so they are not starved of slices. Every case file "
-      "stores the floor strip, the slip walls, the inlet and the outlet as meshes beside the vehicle, and ISLA on this task reads "
-      "the vehicle alone (@tbl-model-inputs), short of the whole boundary ISLA reads by design (@sec-limits-whole-boundary). Whether "
+      "stores the floor strip, the slip walls, the inlet and the outlet as meshes beside the vehicle, and the standing's ISLA on this "
+      "task reads the vehicle alone (@tbl-model-inputs), short of the whole boundary ISLA reads by design (@sec-limits-whole-boundary). Whether "
       f"those four meshes, the domain's whole boundary, remove the far-field miss when given as boundary inputs is @sec-oq-far-field. Data: {R.source('cap_audit', 'tables/resid_drv_partB.md')}, "
       f"{R.source('cap_audit', 'tables/resid_drv_ladder.md')}, {R.source('cap_audit', 'RESULTS.md')} (15.10), "
       f"{R.source('cap_audit', 'tables/probes/probe_a.json')}, {R.source('cap_audit', 'tables/probes/probe_bc_cap_drv_isla_rd_s42.json')} "
