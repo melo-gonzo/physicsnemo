@@ -57,6 +57,7 @@ from physicsnemo.experimental.models.isla.tree_read import (
     tree_pair_invariants,
     tree_read_pairs,
 )
+from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
 from test.experimental.models.isla._meshes import (
     cloud,
@@ -1711,23 +1712,48 @@ def _chunked_step(m, kw, loss_of, size):
     return {k: torch.cat([p[k] for p in parts]) for k in parts[0]}
 
 
+def _far_sphere_case():
+    """A closed icosphere of radius 1 about 1e3 of its size from the origin, with
+    prediction points at its centre (a tie of several faces), on 12 of its cells'
+    centroids (on the wall) and near its cells, so that the exact geometry's tie and
+    on-wall bands and its centred frame all decide something."""
+    from physicsnemo.mesh.primitives.surfaces import sphere_icosahedral
+
+    t = torch.tensor([1000.0, -700.0, 400.0], dtype=D)
+    mesh = sphere_icosahedral.load(radius=1.0, subdivisions=1)
+    mesh = Mesh(points=mesh.points.double() + t, cells=mesh.cells)
+    cent = mesh.points[mesh.cells].mean(1)
+    g = torch.Generator().manual_seed(0)
+    near = cent[:30] + 0.2 * torch.randn(30, 3, generator=g, dtype=D)
+    return (
+        mesh,
+        torch.tensor([0.3, 1.0, 0.2], dtype=D),
+        torch.cat([t[None], cent[:12], near]),
+    )
+
+
+@pytest.mark.parametrize("case", ["cloud", "far_sphere"])
 @pytest.mark.parametrize("vectors", [False, True], ids=["plain", "boundary_vectors"])
 @pytest.mark.parametrize("theta", [0.0, TREE_READ_THETA])
-def test_query_chunks_equal_the_forward_pass_and_its_gradients(theta, vectors):
+def test_query_chunks_equal_the_forward_pass_and_its_gradients(theta, vectors, case):
     """ISLA.query_chunks (the boundary side once, the points chunk by chunk, then the
     boundary side's backward with the leaves' gradients): in training mode, from the
     same token draw, the outputs of forward and every parameter's gradient of a loss
     summed over the points, to float64 roundoff. The forward pads its token axis, the
     chunks' boundary side pads its own (both unaligned here) and the points run
-    unpadded."""
+    unpadded. ``far_sphere`` has points whose geometry is a tie or on the wall."""
     import physicsnemo.experimental.models.isla.model as isla_model
+    from physicsnemo.experimental.models.isla.geometry import _closest_features
 
     extra = {"boundary_schemas": {"wall": {"tr": {"rank": 1}}}} if vectors else {}
     m = _model(3, theta, **extra).double()
     with torch.no_grad():
         for p in m.blocks.parameters():
             p.add_(0.05 * torch.randn_like(p))
-    mesh, drv, q = _case()
+    mesh, drv, q = _case() if case == "cloud" else _far_sphere_case()
+    if case == "far_sphere":
+        _, _, _, tied, _, _, _, on_wall = _closest_features(q, mesh.points, mesh.cells)
+        assert bool(tied[0]) and bool(on_wall[1:13].all())
     assert (mesh.n_cells + q.shape[0]) % isla_model.TOKEN_ALIGNMENT
     assert mesh.n_cells % isla_model.TOKEN_ALIGNMENT
     if vectors:
