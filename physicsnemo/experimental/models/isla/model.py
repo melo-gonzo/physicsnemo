@@ -475,13 +475,15 @@ class ISLA(Module):
 
     **Execution.** The ``geo_kernel`` attribute (``"auto"``; set ``"eager"`` or
     ``"fused"`` to force one) selects how the per-layer geometry region is
-    executed, not what it computes (:meth:`resolve_geo_kernel`). It is an
-    execution choice, not a constructor argument: checkpoints do not store it,
-    and a loaded model starts at ``"auto"``. So is ``tree_read_checkpoint``
-    (ISLA-DTT only; ``"off"``): under gradient, ``"read"`` recomputes each block's
-    boundary read in backward instead of keeping its per-pair tensors, and
-    ``"block"`` recomputes each block together with its read; the forward pass is
-    the same, the gradients equal to roundoff.
+    executed, not what it computes (:meth:`resolve_geo_kernel`). The
+    ``tree_walk`` attribute (``"auto"``; set ``"reference"`` or ``"fast"`` to
+    force one) selects how ISLA-DTT's forest walk runs, not the pairs it returns
+    (``tree_read.resolve_walk``). Each is an execution choice, not a constructor
+    argument: checkpoints do not store it, and a loaded model starts at ``"auto"``.
+    So is ``tree_read_checkpoint`` (ISLA-DTT only; ``"off"``): under gradient,
+    ``"read"`` recomputes each block's boundary read in backward instead of keeping
+    its per-pair tensors, and ``"block"`` recomputes each block together with its
+    read; the forward pass is the same, the gradients equal to roundoff.
 
     Args:
         output_schema: Output fields, a rank spec per name. Each field is a leaf of
@@ -798,6 +800,9 @@ class ISLA(Module):
         ### can run and to "eager" otherwise; the blocks read the resolved name.
         ### Writable: tests and debugging set "eager" or "fused" to force one.
         self.geo_kernel = "auto"
+        ### tree_walk names the implementation of ISLA-DTT's forest walk, not its pairs
+        ### (tree_read.resolve_walk): "auto", "reference" or "fast".
+        self.tree_walk = "auto"
         self.n_slices = int(n_slices)
         ### Each boundary condition's fields, each set with its own invariant layout
         ### (_InputSet). A condition's block vectors and tensors reach the slice
@@ -1712,6 +1717,7 @@ class ISLA(Module):
             g_unit=g_unit,
             theta=self._tree_read_theta,
             eps=EPS,
+            walk=self.tree_walk,
         )
 
     def _forward_tensors(

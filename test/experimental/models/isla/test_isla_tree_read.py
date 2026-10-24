@@ -463,6 +463,148 @@ def test_point_pairs_admit_only_separated_coherent_nodes_and_cover_every_cell(th
     assert bool((qi_one == 0).all())
 
 
+@pytest.mark.parametrize("theta", [0.5, 1.0])
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64, "bfloat16 autocast"])
+@pytest.mark.parametrize("dim", [2, 3])
+def test_fast_walk_gives_the_reference_lists_in_the_reference_order(dim, dtype, theta):
+    """The fast walk (Warp; forced here, on CPU) gives the reference walk's lists
+    entry for entry and in its order, with the same node count, for points near and
+    far from the boundary, a NaN point (opened down to every cell) and an infinite
+    one; under bfloat16 autocast (as in training) the forest's coordinates are
+    bfloat16, and the walk rounds as torch does."""
+    autocast = dtype == "bfloat16 autocast"
+    dtype = torch.float32 if autocast else dtype
+    pts, nrm, w, _ = cloud(900, d=dim, seed=3, dtype=dtype)
+    q, _, _, _ = cloud(150, d=dim, seed=4, dtype=dtype, scale=(3.0,) * dim)
+    q[5] = float("nan")
+    q[6, 0] = float("inf")
+    with torch.autocast("cpu", dtype=torch.bfloat16, enabled=autocast):
+        f = BoundaryForest.build(pts, w, nrm, None, theta=theta)
+        qi, si, n_node = f.point_pairs(q, walk="reference")
+        qi_f, si_f, n_node_f = f.point_pairs(q, walk="fast")
+    assert f.aabb_min.dtype == (torch.bfloat16 if autocast else dtype)
+    assert torch.equal(qi_f, qi) and torch.equal(si_f, si)
+    assert n_node_f == n_node > 0
+    assert torch.equal(torch.sort(si[qi == 5]).values, torch.arange(f.n_cells))
+
+
+@pytest.mark.parametrize("device", ["cpu", pytest.param("cuda", marks=cuda_only)])
+@pytest.mark.parametrize(
+    "boxes,diagonals,autocast",
+    [
+        (torch.float32, torch.float32, False),
+        (torch.float64, torch.float64, False),
+        (torch.bfloat16, torch.bfloat16, False),
+        (torch.bfloat16, torch.float32, True),
+    ],
+    ids=["float32", "float64", "bfloat16", "bfloat16_boxes_under_autocast"],
+)
+def test_fast_walk_opening_test_is_the_references_at_the_threshold(
+    device, boxes, diagonals, autocast
+):
+    """Every node a one-leaf tree whose squared diagonal is the reference's own
+    ``min_dist_sq * theta^2`` for one point (not far) or one ulp below it (far): each
+    (point, node) decision of the fast walk is that of GLOBE's traversal, so the walk
+    rounds the test as torch does (its sum order, and the steps autocast runs in
+    float32 for a forest built under it)."""
+    from types import SimpleNamespace
+
+    from physicsnemo.mesh.spatial.cluster_tree import ClusterTree
+
+    n, d, theta, dev = 256, 3, 0.7, torch.device(device)
+    g = torch.Generator().manual_seed(0)
+    scale = torch.logspace(-3, 3, n, dtype=D)[torch.randperm(n, generator=g)][:, None]
+    p, c = (
+        torch.randn(n, d, generator=g, dtype=D) * scale,
+        torch.randn(n, d, generator=g, dtype=D) * 3 * scale,
+    )
+    half = torch.rand(n, d, generator=g, dtype=D) * scale
+    p, lo, hi = (x.to(boxes).to(dev) for x in (p, c - half, c + half))
+    ar, one = torch.arange(n, device=dev), torch.ones(n, dtype=torch.long, device=dev)
+    with torch.autocast(dev.type, dtype=torch.bfloat16, enabled=autocast):
+        pt = p.t().contiguous()
+        gap = torch.clamp(
+            torch.maximum(pt - hi.t().contiguous(), lo.t().contiguous() - pt), min=0
+        )
+        at = (gap.pow(2).sum(dim=0) * theta**2).to(diagonals)
+        bits = {
+            torch.bfloat16: torch.int16,
+            torch.float32: torch.int32,
+            D: torch.int64,
+        }[diagonals]
+        below = torch.where(
+            at > 0, (at.view(bits) - 1).view(diagonals), at
+        )  # one ulp toward zero
+        diam_sq = torch.where(ar % 2 == 0, at, below)
+        leaves = torch.full((n,), -1, device=dev)
+        tree = ClusterTree(
+            node_aabb_min=lo, node_aabb_max=hi, node_diameter_sq=diam_sq, node_left_child=leaves,
+            node_right_child=leaves, leaf_start=ar, leaf_count=one, node_range_start=ar, node_range_count=one,
+            node_total_area=one.float(), sorted_source_order=ar, source_points=p.float(),
+            max_depth=torch.zeros((), dtype=torch.long, device=dev), root_ids=ar, batch_size=torch.Size([]),
+        )  # fmt: skip
+        plan = tree.find_point_interaction_pairs(p, theta=theta, validate=False)
+        forest = SimpleNamespace(
+            aabb_min=lo, aabb_max=hi, diameter_sq=diam_sq, coherent=torch.ones(n, dtype=torch.bool, device=dev),
+            left=leaves, right=leaves, node_offset=torch.arange(n + 1, device=dev), range_start=ar, range_count=one,
+            cells=ar, n_cells=n, levels=[],
+        )  # fmt: skip
+        qi, si, _ = tree_read.walk_pairs(forest, p, theta)
+    ref = torch.zeros(n, n, dtype=torch.bool, device=dev)
+    ref[plan.far_target_ids, plan.far_source_node_ids] = True
+    fast = torch.zeros_like(ref)
+    fast[qi[si >= n], si[si >= n] - n] = True
+    assert 0 < int(ref[ar, ar].sum()) < n
+    assert torch.equal(fast, ref)
+
+
+def test_tree_walk_resolution_and_the_models_walks_agree():
+    """``auto`` walks by the reference on CPU and at theta 0, a forced walk is kept and
+    an unknown one refused; the model's ``tree_walk`` reaches the walk, and its two
+    walks give the same pairs, so the same outputs bitwise."""
+    pts, nrm, w, _ = cloud(300, d=3, seed=1)
+    f = BoundaryForest.build(pts, w, nrm, None, theta=1.0)
+    assert tree_read.resolve_walk("auto", pts, 1.0, f) == "reference"
+    assert tree_read.resolve_walk("fast", pts, 1.0, f) == "fast"
+    assert tree_read.resolve_walk("fast", pts, 0.0, f) == "reference"
+    with pytest.raises(ValueError, match="walk must be"):
+        tree_read.resolve_walk("warp", pts, 1.0, f)
+    tree = _tree(3, 0.5)
+    mesh, drv, q = _sphere_case(n=1500, nq=120)
+    runs = {}
+    for walk in ("reference", "fast"):
+        tree.tree_walk = walk
+        runs[walk] = outputs(_run(tree, mesh, drv, q))
+    assert all(
+        torch.equal(runs["fast"][k], runs["reference"][k]) for k in runs["reference"]
+    )
+
+
+def test_fast_walk_falls_back_to_the_reference_past_its_limits(monkeypatch):
+    """A forest too deep for the count pass's stack is walked by the reference under
+    ``auto`` and refused under a forced ``"fast"``; so are lists past Warp's array
+    limit, found after the count pass."""
+    import physicsnemo.experimental.models.isla.tree_walk as tree_walk
+
+    pts, nrm, w, _ = cloud(300, d=3, seed=1)
+    q, _, _, _ = cloud(40, d=3, seed=2, scale=(3.0,) * 3)
+    f = BoundaryForest.build(pts, w, nrm, None, theta=1.0)
+    qi, si, n_node = f.point_pairs(q, walk="reference")
+    on_cuda = types.SimpleNamespace(is_cuda=True, device=torch.device("cuda"))
+    assert tree_read.resolve_walk("auto", on_cuda, 1.0, f) == "fast"
+    with monkeypatch.context() as m:
+        m.setattr(tree_walk, "WALK_STACK", len(f.levels) + 1)
+        assert tree_read.resolve_walk("auto", on_cuda, 1.0, f) == "reference"
+        with pytest.raises(ValueError, match="does not take this forest"):
+            tree_read.resolve_walk("fast", q, 1.0, f)
+    monkeypatch.setattr(tree_walk, "WARP_MAX_ELEMENTS", qi.numel())
+    with pytest.raises(ValueError, match="Warp's 2\\*\\*31"):
+        f.point_pairs(q, walk="fast")
+    monkeypatch.setattr(tree_read, "resolve_walk", lambda *a: "fast")
+    qi_a, si_a, n_node_a = f.point_pairs(q)
+    assert torch.equal(qi_a, qi) and torch.equal(si_a, si) and n_node_a == n_node
+
+
 @pytest.mark.parametrize("improper", [False, True], ids=["rotation", "reflection"])
 def test_forest_and_every_list_are_the_same_in_every_pose_at_finite_theta(improper):
     """The trees live in the boundary's own frame (principal axes signed by the third
@@ -883,6 +1025,24 @@ def test_fused_segment_softmax_read_matches_eager(dtype):
     for a, b, name in zip(dev_in, ref_in, ("ker", "q", "k", "v")):
         ga, gb_ = a.grad.cpu().double(), b.grad
         assert torch.allclose(ga, gb_, atol=tol * gb_.abs().max(), rtol=tol), name
+
+
+@cuda_only
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+@pytest.mark.parametrize("dim", [2, 3])
+def test_fast_walk_on_cuda_gives_the_reference_lists_in_the_reference_order(dim, dtype):
+    """On CUDA, ``auto`` picks the fast walk, which gives the reference walk's lists
+    on the same device entry for entry and in its order."""
+    dev = torch.device("cuda")
+    pts, nrm, w, _ = cloud(3000, d=dim, seed=8, dtype=dtype)
+    q, _, _, _ = cloud(2000, d=dim, seed=9, dtype=dtype, scale=(3.0,) * dim)
+    pts, nrm, w, q = (t.to(dev) for t in (pts, nrm, w, q))
+    f = BoundaryForest.build(pts, w, nrm, None, theta=TREE_READ_THETA)
+    assert tree_read.resolve_walk("auto", q, TREE_READ_THETA, f) == "fast"
+    qi, si, n_node = f.point_pairs(q, walk="reference")
+    qi_f, si_f, n_node_f = f.point_pairs(q)
+    assert torch.equal(qi_f, qi) and torch.equal(si_f, si)
+    assert n_node_f == n_node > 0
 
 
 @cuda_only
