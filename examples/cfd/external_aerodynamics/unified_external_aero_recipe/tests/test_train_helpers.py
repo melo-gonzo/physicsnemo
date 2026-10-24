@@ -43,6 +43,7 @@ this module's tensorboard skip guard.)
 
 from __future__ import annotations
 
+import logging
 from contextlib import nullcontext
 from types import SimpleNamespace
 
@@ -193,18 +194,71 @@ def test_isla_training_on_thin_triangles(device):
 def test_chunked_forward_backward_equals_the_unchunked_step(
     loss_type, measured, monkeypatch
 ):
-    """ISLA-DTT's chunked step (one pass for a pointwise loss, two otherwise; one
-    pass for one chunk, and two over chunks of _QUERY_CHUNK when one chunk runs out
-    of memory): the loss, its fields, the metrics and every parameter's gradient of
-    forward_pass and its backward, from the same token draw."""
-    from physicsnemo.experimental.models.isla import ISLA
+    """ISLA-DTT's chunked step (one pass for a pointwise loss; otherwise one pass
+    over one chunk of every point when it fits, else two passes): the loss, its
+    fields, the metrics and every parameter's gradient of forward_pass and its
+    backward, from the same token draw."""
     from physicsnemo.experimental.models.isla import model as isla_model
 
-    g = torch.Generator().manual_seed(0)
+    model, batch, target_config = _isla_dtt_case(50, measured)
+    n = 50
+    lc = train.LossCalculator(target_config, loss_type=loss_type)
+    mc = train.MetricCalculator(target_config, metrics=["mae"])
+    torch.manual_seed(1)
+    ref = train.forward_pass(
+        batch, model, "float32", lc, mc, output_type="mesh", target_config=target_config
+    )
+    ref[0].backward()
+    grads = {k: p.grad.clone() for k, p in model.named_parameters()}
+    scale = max(float(v.abs().max()) for v in grads.values())
+    call = isla_model._QueryChunks.__call__
+    sizes = []
+
+    def recorded(self, start, stop):
+        sizes.append(stop - start)
+        return call(self, start, stop)
+
+    monkeypatch.setattr(isla_model._QueryChunks, "__call__", recorded)
+
+    def check(chunk, capacity_gib=None):
+        sizes.clear()
+        model.zero_grad(set_to_none=True)
+        torch.manual_seed(1)
+        out = train.chunked_forward_backward(
+            batch,
+            model,
+            "float32",
+            lc,
+            mc,
+            target_config=target_config,
+            chunk=chunk,
+            capacity_gib=capacity_gib,
+        )
+        for a, b in zip(out, ref):
+            torch.testing.assert_close(a, b.detach(), rtol=1e-5, atol=1e-7)
+        for k, p in model.named_parameters():
+            torch.testing.assert_close(
+                p.grad, grads[k], rtol=1e-4, atol=1e-6 * scale, msg=k
+            )
+        return list(sizes)
+
+    if loss_type in train._POINTWISE_LOSSES:
+        assert check(17) == check(17, capacity_gib=0.0) == [17, 17, 16]
+    else:
+        assert check(17) == [n]
+        assert check(17, capacity_gib=0.0) == [17, 17, 16] * 2
+    assert check(n) == [n]
+
+
+def _isla_dtt_case(n: int, measured: bool = True, seed: int = 0):
+    """A small float64 ISLA-DTT, its batch of ``n`` prediction points (drawn from
+    ``seed``) and the target config."""
+    from physicsnemo.experimental.models.isla import ISLA
+
+    g = torch.Generator().manual_seed(seed)
     tri = torch.randn(60, 3, 3, generator=g, dtype=torch.float64)
     tri = tri[:, :1] * 2.0 + 0.3 * tri  # small triangles spread over a blob
     wall = Mesh(points=tri.reshape(-1, 3), cells=torch.arange(180).reshape(60, 3))
-    n = 50
     targets = TensorDict(
         {
             "pressure": torch.randn(n, generator=g),
@@ -242,50 +296,117 @@ def test_chunked_forward_backward_equals_the_unchunked_step(
     with torch.no_grad():
         for p in model.kernel_reads.parameters():
             p.normal_(0.0, 0.3)
-    lc = train.LossCalculator(target_config, loss_type=loss_type)
-    mc = train.MetricCalculator(target_config, metrics=["mae"])
-    torch.manual_seed(1)
-    ref = train.forward_pass(
-        batch, model, "float32", lc, mc, output_type="mesh", target_config=target_config
+    return model, batch, target_config
+
+
+def test_one_chunk_rule_decides_from_sizes(monkeypatch, caplog):
+    """The predicted peak of ISLA-DTT's step with every point in one chunk, from
+    the walk's pairs, the points and the memory allocated after the boundary side;
+    the decision against the capacity, logged at its first call and on change."""
+    ### AeroZoo in bfloat16 on a GB300 (275.0 GiB free and reserved; jobs 365629,
+    ### 366092): 400k points ran in one chunk (197.7 GiB reserved), 800k did not fit.
+    assert train._one_chunk_peak_gib(83_886_094, 400_000, 73.9, "bfloat16") < 275.0
+    assert train._one_chunk_peak_gib(169_149_486, 800_000, 75.1, "bfloat16") > 275.0
+    ### DrivAerML Volume in float32 (job 366197, 366092): the whole boundary at 150k
+    ### points ran in one chunk (263.8 GiB reserved), the vehicle at 200k did not fit.
+    assert train._one_chunk_peak_gib(126_390_000, 150_000, 112.9, "float32") < 275.0
+    assert train._one_chunk_peak_gib(138_883_949, 200_000, 113.0, "float32") > 275.0
+    chunks = SimpleNamespace(
+        walk=SimpleNamespace(
+            lists=[(torch.zeros(600), None, 0), (torch.zeros(400), None, 0)]
+        ),
+        n_points=50,
     )
-    ref[0].backward()
-    grads = {k: p.grad.clone() for k, p in model.named_parameters()}
-    scale = max(float(v.abs().max()) for v in grads.values())
+    peak = train._one_chunk_peak_gib(1000, 50, 0.0, "float32")
+    cpu = torch.device("cpu")
+    monkeypatch.setattr(train, "_one_chunk_logged", None)
+    with caplog.at_level(logging.INFO, logger="training.step"):
+        assert train._one_chunk_fits(chunks, cpu, False, "float32", peak)
+        assert train._one_chunk_fits(chunks, cpu, False, "float32", None)
+        assert not train._one_chunk_fits(chunks, cpu, False, "float32", peak - 1e-6)
+    logged = [r.getMessage() for r in caplog.records if r.name == "training.step"]
+    assert len(logged) == 2, logged
+    assert "in one chunk" in logged[0] and "two passes" in logged[1]
 
-    def check(chunk):
-        model.zero_grad(set_to_none=True)
+
+def _two_ranks_one_over_the_limit(rank: int, store: str) -> None:
+    """Rank ``rank`` of :func:`test_chunked_forward_backward_agrees_across_ranks`."""
+    import torch.distributed as dist
+
+    from physicsnemo.experimental.models.isla import model as isla_model
+
+    dist.init_process_group(
+        "gloo", init_method=f"file://{store}", rank=rank, world_size=2
+    )
+    try:
+        n = (50, 30)[rank]
+        model, batch, target_config = _isla_dtt_case(n, seed=rank)
+        lc = train.LossCalculator(target_config, loss_type="relative_l2")
+        mc = train.MetricCalculator(target_config, metrics=["mae"])
         torch.manual_seed(1)
-        out = train.chunked_forward_backward(
-            batch, model, "float32", lc, mc, target_config=target_config, chunk=chunk
+        ref = train.forward_pass(
+            batch,
+            model,
+            "float32",
+            lc,
+            mc,
+            output_type="mesh",
+            target_config=target_config,
         )
-        for a, b in zip(out, ref):
-            torch.testing.assert_close(a, b.detach(), rtol=1e-5, atol=1e-7)
-        for k, p in model.named_parameters():
-            torch.testing.assert_close(
-                p.grad, grads[k], rtol=1e-4, atol=1e-6 * scale, msg=k
-            )
+        ref[0].backward()
+        ref_grads = [p.grad / 2 for p in model.parameters()]
+        for g in ref_grads:
+            dist.all_reduce(g)
+        model.zero_grad(set_to_none=True)
+        ### Room for one chunk of 40 points: rank 1's 30 fit, rank 0's 50 do not.
+        capacity = train._one_chunk_peak_gib(0, 40, 0.0, "float32")
+        sizes, peaks = [], []
+        call, predict = isla_model._QueryChunks.__call__, train._one_chunk_peak_gib
+        isla_model._QueryChunks.__call__ = lambda self, a, b: (
+            sizes.append(b - a) or call(self, a, b)
+        )
+        train._one_chunk_peak_gib = lambda *a: peaks.append(predict(*a)) or peaks[-1]
+        torch.manual_seed(1)
+        train.chunked_forward_backward(
+            batch,
+            torch.nn.parallel.DistributedDataParallel(model),
+            "float32",
+            lc,
+            mc,
+            target_config=target_config,
+            chunk=17,
+            capacity_gib=capacity,
+        )
+        assert (peaks[0] <= capacity) == (rank == 1), (rank, peaks, capacity)
+        assert sizes == ([17, 17, 16] if rank == 0 else [17, 13]) * 2, (rank, sizes)
+        for p, g in zip(model.parameters(), ref_grads):
+            torch.testing.assert_close(p.grad, g, rtol=1e-4, atol=1e-9)
+        torch.optim.SGD(model.parameters(), lr=0.1).step()
+        flat = torch.cat(
+            [p.grad.reshape(-1) for p in model.parameters()]
+            + [p.detach().reshape(-1) for p in model.parameters()]
+        )
+        both = [torch.empty_like(flat) for _ in range(2)]
+        dist.all_gather(both, flat)
+        assert torch.equal(both[0], both[1])
+    finally:
+        dist.destroy_process_group()
 
-    check(17)
-    check(n)
-    call = isla_model._QueryChunks.__call__
 
-    def out_of_memory_above_17(self, start, stop):
-        if stop - start > 17:
-            raise torch.OutOfMemoryError("one chunk of every point")
-        return call(self, start, stop)
-
-    monkeypatch.setattr(isla_model._QueryChunks, "__call__", out_of_memory_above_17)
-    monkeypatch.setattr(train, "_QUERY_CHUNK", 17)
-    if loss_type in train._POINTWISE_LOSSES:
-        with pytest.raises(torch.OutOfMemoryError):
-            check(n)
-    else:
-        check(n)
+@pytest.mark.skipif(not torch.distributed.is_gloo_available(), reason="requires Gloo")
+def test_chunked_forward_backward_agrees_across_ranks(tmp_path):
+    """Two DDP ranks (gloo) under a root loss, with different point counts, where
+    every point in one chunk fits on rank 1 and not on rank 0: both take the
+    two-pass form, with gradients equal to the mean of the ranks' unchunked ones
+    and gradients and parameters bitwise equal across the ranks."""
+    torch.multiprocessing.spawn(
+        _two_ranks_one_over_the_limit, args=(str(tmp_path / "store"),), nprocs=2
+    )
 
 
-def test_query_chunk_chunks_isla_dtt_under_every_loss(monkeypatch):
-    """ISLA-DTT takes chunks of _QUERY_CHUNK points under a pointwise loss and every
-    point in one chunk under any other; an interacting ISLA never chunks."""
+def test_query_chunk_chunks_isla_dtt(monkeypatch):
+    """ISLA-DTT takes chunks of _QUERY_CHUNK points; an interacting ISLA never
+    chunks."""
     from physicsnemo.experimental.models.isla import ISLA
 
     def isla(query_independent):
@@ -303,11 +424,8 @@ def test_query_chunk_chunks_isla_dtt_under_every_loss(monkeypatch):
         return {"forward_kwargs": {"prediction_points": Mesh(points=torch.zeros(n, 3))}}
 
     monkeypatch.setattr(train, "_QUERY_CHUNK", 17)
-    dtt, interacting = isla(True), isla(False)
-    for loss_type, chunk in (("huber", 17), ("relative_mse", 17), ("relative_l2", 50)):
-        lc = SimpleNamespace(loss_type=loss_type)
-        assert train._query_chunk(dtt, batch(50), lc) == chunk
-        assert train._query_chunk(interacting, batch(50), lc) is None
+    assert train._query_chunk(isla(True), batch(50)) == 17
+    assert train._query_chunk(isla(False), batch(50)) is None
 
 
 ### ---------------------------------------------------------------------------
