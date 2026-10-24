@@ -283,6 +283,106 @@ def forward_pass(
     return loss, loss_td.detach(), metric_td.detach()
 
 
+### Loss types whose per-field value is a sum over the points of terms that vanish
+### where the prediction equals the target, normalized by the targets alone: a
+### chunk's share of the loss and of its gradient is the loss with every other
+### point's prediction set to its target. The others (a root over all points:
+### relative_l2, case_relative_l2) take the two-pass form.
+_POINTWISE_LOSSES = ("huber", "mse", "relative_mse")
+
+
+def _query_chunk(
+    model: torch.nn.Module, batch: dict[str, Any], chunk: int | None
+) -> int | None:
+    """The chunk size of :func:`chunked_forward_backward` for this batch: ``chunk``
+    when the model is ISLA-DTT (``query_chunks``) and the batch has more prediction
+    points than that, else ``None`` (the unchunked step)."""
+    core = (
+        model.module
+        if isinstance(model, torch.nn.parallel.DistributedDataParallel)
+        else model
+    )
+    if not chunk or not getattr(core, "query_independent", False):
+        return None
+    points = batch["forward_kwargs"].get("prediction_points")
+    if points is None:
+        return None
+    n = points.n_points if isinstance(points, Mesh) else points.shape[0]
+    return int(chunk) if n > chunk else None
+
+
+def chunked_forward_backward(
+    batch: dict[str, Any],
+    model: torch.nn.Module,
+    precision: Precision,
+    loss_calculator: LossCalculator,
+    metric_calculator: MetricCalculator,
+    *,
+    target_config: dict[str, FieldType],
+    chunk: int,
+) -> tuple[Float[torch.Tensor, ""], TensorDict, TensorDict]:
+    """ISLA-DTT's training step in chunks of ``chunk`` prediction points
+    (``ISLA.query_chunks``): :func:`forward_pass` and the backward of its loss, with
+    the activations of one chunk of points held at a time. The loss, its fields, the
+    metrics and every parameter's gradient (averaged over the ranks, as DDP
+    averages them) are the unchunked step's up to summation order. A loss in
+    ``_POINTWISE_LOSSES`` takes one pass over the chunks; any other takes two: the
+    outputs without a graph, the loss's gradient in them, then per chunk a
+    recompute and its backward with that gradient. Returns ``(loss, loss_td,
+    metric_td)``, detached, with the gradients in the parameters.
+    """
+    ddp = isinstance(model, torch.nn.parallel.DistributedDataParallel)
+    core = model.module if ddp else model
+    targets: TensorDict = batch["targets"].float()
+    measure = batch.get("target_measure")
+    measure = None if measure is None else measure.float()
+    with get_autocast_context(precision):
+        chunks = core.query_chunks(**batch["forward_kwargs"])
+    n = chunks.n_points
+    ranges = [(a, min(a + chunk, n)) for a in range(0, n, chunk)]
+
+    def predict(a: int, b: int) -> TensorDict:
+        with get_autocast_context(precision):
+            out = chunks(a, b)
+        pred = normalize_output_to_tensordict(out, target_config, "mesh").float()
+        return pred.apply(lambda p, t: p.reshape(t.shape), targets[a:b])
+
+    if loss_calculator.loss_type in _POINTWISE_LOSSES:
+        parts = []
+        for a, b in ranges:
+            pred = predict(a, b)
+            rest = targets.select(*pred.keys(include_nested=True, leaves_only=True))
+            share, _ = loss_calculator(
+                torch.cat([rest[:a], pred, rest[b:]]), targets, measure
+            )
+            share.backward()
+            parts.append(pred.detach())
+        pred = torch.cat(parts)
+        with torch.no_grad():
+            loss, loss_td = loss_calculator(pred, targets, measure)
+    else:
+        with torch.no_grad():
+            pred = torch.cat([predict(a, b) for a, b in ranges])
+        pred = pred.apply(lambda t: t.requires_grad_())
+        loss, loss_td = loss_calculator(pred, targets, measure)
+        loss.backward()
+        keys = list(pred.keys(include_nested=True, leaves_only=True))
+        for a, b in ranges:
+            part = predict(a, b)
+            torch.autograd.backward(
+                [part[k] for k in keys], [pred[k].grad[a:b] for k in keys]
+            )
+        pred = pred.detach()
+    chunks.backward()
+    if ddp:
+        grads = [p.grad for p in core.parameters() if p.grad is not None]
+        for g, r in zip(grads, fused_all_reduce(grads)):
+            g.copy_(r / dist.get_world_size())
+    with torch.no_grad():
+        metric_td = metric_calculator(pred, targets, measure)
+    return loss.detach(), loss_td.detach(), metric_td.detach()
+
+
 ### ---------------------------------------------------------------------------
 ### Epoch loops
 ### ---------------------------------------------------------------------------
@@ -366,17 +466,39 @@ def _run_epoch(
         for i in range(num_steps):
             batch = load() if next_batch is None else next_batch
             next_batch = None
-            loss, losses, metrics = forward_pass(
-                batch,
-                model,
-                precision,
-                loss_calculator,
-                metric_calculator,
-                output_type=output_type,
-                target_config=target_config,
+            chunk = (
+                _query_chunk(model, batch, cfg.training.get("query_chunk", None))
+                if is_train and scaler is None
+                else None
             )
+            if chunk is not None:
+                optimizer.zero_grad()
+                loss, losses, metrics = chunked_forward_backward(
+                    batch,
+                    model,
+                    precision,
+                    loss_calculator,
+                    metric_calculator,
+                    target_config=target_config,
+                    chunk=chunk,
+                )
+                if i + 1 < num_steps:
+                    next_batch = load()
+                optimizer.step()
+                if cfg.training.get("scheduler_update_mode", "epoch") == "step":
+                    scheduler.step()
+            else:
+                loss, losses, metrics = forward_pass(
+                    batch,
+                    model,
+                    precision,
+                    loss_calculator,
+                    metric_calculator,
+                    output_type=output_type,
+                    target_config=target_config,
+                )
 
-            if is_train:
+            if is_train and chunk is None:
                 optimizer.zero_grad()
                 if precision == "float16" and scaler is not None:
                     scaler.scale(loss).backward()

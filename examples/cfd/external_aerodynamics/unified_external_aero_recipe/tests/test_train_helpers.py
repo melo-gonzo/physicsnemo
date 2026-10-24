@@ -181,6 +181,88 @@ def test_isla_training_on_thin_triangles(device):
     assert any((g != 0).any() for g in gradients)
 
 
+@pytest.mark.parametrize(
+    "loss_type,measured",
+    [
+        ("mse", True),
+        ("huber", False),
+        ("relative_l2", True),
+        ("case_relative_l2", True),
+    ],
+)
+def test_chunked_forward_backward_equals_the_unchunked_step(loss_type, measured):
+    """ISLA-DTT's chunked step (one pass for a pointwise loss, two otherwise): the
+    loss, its fields, the metrics and every parameter's gradient of forward_pass and
+    its backward, from the same token draw."""
+    from physicsnemo.experimental.models.isla import ISLA
+
+    g = torch.Generator().manual_seed(0)
+    tri = torch.randn(60, 3, 3, generator=g, dtype=torch.float64)
+    tri = tri[:, :1] * 2.0 + 0.3 * tri  # small triangles spread over a blob
+    wall = Mesh(points=tri.reshape(-1, 3), cells=torch.arange(180).reshape(60, 3))
+    n = 50
+    targets = TensorDict(
+        {
+            "pressure": torch.randn(n, generator=g),
+            "velocity": torch.randn(n, 3, generator=g),
+        },
+        batch_size=[n],
+    )
+    batch = {
+        "forward_kwargs": {
+            "boundary_meshes": {"vehicle": wall},
+            "prediction_points": Mesh(
+                points=3.0 * torch.randn(n, 3, generator=g, dtype=torch.float64)
+            ),
+            "global_data": {
+                "U_inf_dir": torch.tensor([1.0, 0.2, 0.0], dtype=torch.float64)
+            },
+        },
+        "targets": targets,
+    }
+    if measured:
+        batch["target_measure"] = torch.rand(n, generator=g) + 0.5
+    target_config = {"pressure": "scalar", "velocity": "vector"}
+    torch.manual_seed(0)
+    model = ISLA(
+        output_schema={"pressure": {"rank": 0}, "velocity": {"rank": 1}},
+        boundary_schemas={"vehicle": {}},
+        global_schema={"U_inf_dir": {"rank": 1}},
+        interior=True,
+        query_independent=True,
+        hidden=16,
+        n_layers=2,
+        n_slices=4,
+    ).double()
+    with torch.no_grad():
+        for p in model.kernel_reads.parameters():
+            p.normal_(0.0, 0.3)
+    lc = train.LossCalculator(target_config, loss_type=loss_type)
+    mc = train.MetricCalculator(target_config, metrics=["mae"])
+    torch.manual_seed(1)
+    ref = train.forward_pass(
+        batch, model, "float32", lc, mc, output_type="mesh", target_config=target_config
+    )
+    ref[0].backward()
+    grads = {k: p.grad.clone() for k, p in model.named_parameters()}
+    model.zero_grad(set_to_none=True)
+    assert (
+        train._query_chunk(model, batch, 17) == 17
+        and train._query_chunk(model, batch, n) is None
+    )
+    torch.manual_seed(1)
+    out = train.chunked_forward_backward(
+        batch, model, "float32", lc, mc, target_config=target_config, chunk=17
+    )
+    for a, b in zip(out, ref):
+        torch.testing.assert_close(a, b.detach(), rtol=1e-5, atol=1e-7)
+    scale = max(float(v.abs().max()) for v in grads.values())
+    for k, p in model.named_parameters():
+        torch.testing.assert_close(
+            p.grad, grads[k], rtol=1e-4, atol=1e-6 * scale, msg=k
+        )
+
+
 ### ---------------------------------------------------------------------------
 ### _walk_batch_for_logging
 ### ---------------------------------------------------------------------------
