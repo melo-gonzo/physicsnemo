@@ -186,9 +186,10 @@ print("- **The domain's boundary.** The converted files store the airfoil alone,
       f"{AF_CROP.replace(' x ', ' × ')} chords; the crop's edges are not a boundary of the PDE, since the flow crosses them and no "
       "condition is stored on them. The far field is only in the release's `_freestream.vtp`: on every case "
       f"{re.match(r'[\d,]+-[\d,]+ segments', ff).group(0).replace('-', ' to ')}, a half circle of radius 200 chords upstream closed "
-      "by the lines $x = 200$ and $y = \\pm 200$ downstream. The standing's ISLA reads the airfoil alone. ISLA's configuration that "
-      "also reads the far field, as the condition `freestream` with no field (its prescribed value is the inlet velocity ISLA already "
-      "reads), is built in the recipe and has no standing. With it ISLA's length unit $L$, the RMS pairwise distance of the given "
+      "by the lines $x = 200$ and $y = \\pm 200$ downstream. ISLA's configuration reads the far field as well, as the "
+      "condition `freestream` with no field (its prescribed value is the inlet velocity ISLA already reads); the "
+      "standing's checkpoints were trained with the airfoil alone (@sec-standing-geometry). With the far field "
+      "ISLA's length unit $L$, the RMS pairwise distance of the given "
       f"boundary, is {re.search(r'[\d.]+', L_w).group(0)} chords on every case, against "
       f"{L_af.split(' (')[0].replace('-', ' to ')} chords with the airfoil alone. Data: {R.source('af_whole', 'PREREG.md')} (section 3), {R.source('boundary_audit', 'REPORT.md')} (section 5).")
 ```
@@ -226,7 +227,7 @@ print("No model trains with rotation or translation augmentation. **The three do
 
 | | boundary | global inputs | at each prediction point |
 |---|---|---|---|
-| ISLA | the airfoil polyline, the one condition `airfoil`: each segment's position, normal and length; the far field, the rest of the domain's boundary, is not given to the standing's models (@sec-data-airfrans) | the inlet velocity `U_inf` (rank 1), declared as the velocity source: its direction is $\hat g_1$ and its magnitude the velocity scale $U = U_\infty$; with the air's kinematic viscosity, a constant of the configuration, and the length unit $L$ of the airfoil, the one global scalar is the standardized $\log_{10}(U L / \nu)$ (@sec-using-scales) | position, entering only through relational invariants; the exact signed distance and direction to the full-resolution airfoil, computed inside the model |
+| ISLA | the airfoil polyline, the one condition `airfoil`: each segment's position, normal and length; the far field, the rest of the domain's boundary, is not given to the standing's models, and ISLA's configuration reads it as the condition `freestream` (@sec-data-airfrans) | the inlet velocity `U_inf` (rank 1), declared as the velocity source: its direction is $\hat g_1$ and its magnitude the velocity scale $U = U_\infty$; with the air's kinematic viscosity, a constant of the configuration, and the length unit $L$ of the airfoil, the one global scalar is the standardized $\log_{10}(U L / \nu)$ (@sec-using-scales) | position, entering only through relational invariants; the exact signed distance and direction to the full-resolution airfoil, computed inside the model |
 | GeoTransolver | none | $\hat g_1$ and the inlet speed standardized over the 800 training airfoils, read by the context projector | coordinates; the stored `sdf` and `sdf_normals` |
 | Transolver | none | the same two, concatenated to every point's features | coordinates; the stored `sdf` and `sdf_normals` |
 

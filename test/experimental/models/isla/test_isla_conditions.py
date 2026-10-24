@@ -131,7 +131,14 @@ Q = torch.randn(25, 3, dtype=D, generator=torch.Generator().manual_seed(9)) * 3
 
 def _run(m, meshes, gd=GD, q=None):
     with torch.no_grad():
-        return outputs(m(boundary_meshes=meshes, prediction_points=q, global_data=gd))
+        return outputs(
+            m(
+                boundary_meshes=meshes,
+                prediction_points=q,
+                prediction_boundaries=None if q is not None else list(meshes),
+                global_data=gd,
+            )
+        )
 
 
 def _specs(m, name):

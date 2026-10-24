@@ -21,11 +21,13 @@ AirfRANS stores the interior points in solver order, so the source files' reader
 cyclic contiguous block) keeps one spatial window per draw. The twins read each case whole and draw the interior
 with SubsampleMesh first in the chain. The tests pin that the twin is its source but for the draw, and run both
 through the real reader and transforms on a synthetic AirfRANS-shaped case whose stored order is spatial. The
-baselines' airfrans_uvolume_ud*.yaml (DRIVE-FIX, 2026-10-18) add the standardized freestream speed."""
+baselines' airfrans_uvolume_ud*.yaml (DRIVE-FIX, 2026-10-18) add the standardized freestream speed. ISLA's 2-D files
+(AF-WHOLE, 2026-10-23) read the far field beside the airfoil from the raw release."""
 
 import sys
 from pathlib import Path
 
+import numpy as np
 import pytest
 import torch
 from hydra import compose, initialize_config_dir
@@ -51,6 +53,9 @@ SOURCES = (
 TWINS = {src.replace("airfrans_volume", "airfrans_uvolume", 1): src for src in SOURCES}
 N_INTERIOR = 400  # stored interior points of the synthetic case
 N_AIRFOIL = 24  # airfoil segments
+N_FREE = 16  # far-field segments
+RAW_DATADIR = "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/datasets/airfrans/Dataset"
+CASE = "airFoil2D_SST_29.2_5.9_2.0_4.0_12.0"
 K = 100  # sampling_resolution in these tests (the campaign's 100,000 of 156k to 210k, scaled down)
 
 
@@ -117,13 +122,45 @@ def make_airfrans_case(seed: int = 0) -> DomainMesh:
     )
 
 
+def make_airfrans_freestream() -> Mesh:
+    """The synthetic case's far field as the reader returns it: a closed polyline, a circle of radius 20 about the
+    airfoil in the plane z = 0, traversed counterclockwise as the release's far field is, so that its cell normals
+    point into the fluid (inward)."""
+    t = torch.arange(N_FREE) * (2 * torch.pi / N_FREE)
+    points = torch.stack(
+        [0.5 + 20.0 * torch.cos(t), 20.0 * torch.sin(t), torch.zeros(N_FREE)], dim=1
+    )
+    cells = torch.stack(
+        [torch.arange(N_FREE), (torch.arange(N_FREE) + 1) % N_FREE], dim=1
+    )
+    return Mesh(points=points, cells=cells)
+
+
+def write_airfrans_case(root: Path) -> None:
+    """One synthetic case as the dataset stores it: the case file <root>/<case>/<case>.pdmsh and, under
+    <root>/raw (the raw release's layout), <case>/<case>_freestream.vtp, its far field at z = 0.5 with the
+    solution fields U, p and nut the reader must not read."""
+    import pyvista as pv
+
+    (root / CASE).mkdir(parents=True)
+    make_airfrans_case().save(root / CASE / f"{CASE}.pdmsh")
+    free = make_airfrans_freestream()
+    pts = free.points.double().numpy().copy()
+    pts[:, 2] = 0.5
+    lines = np.hstack([np.full((N_FREE, 1), 2), free.cells.numpy()]).ravel()
+    poly = pv.PolyData(pts, lines=lines)
+    poly.point_data["U"] = np.ones((N_FREE, 3))
+    poly.point_data["p"] = np.ones(N_FREE)
+    poly.cell_data["nut"] = np.ones(N_FREE)
+    (root / "raw" / CASE).mkdir(parents=True)
+    poly.save(root / "raw" / CASE / f"{CASE}_freestream.vtp")
+
+
 @pytest.fixture(scope="module")
 def case_root(tmp_path_factory) -> Path:
     """A dataset root holding one synthetic AirfRANS case, shared by the module's tests."""
     root = tmp_path_factory.mktemp("airfrans")
-    name = "airFoil2D_SST_29.2_5.9_2.0_4.0_12.0"
-    (root / name).mkdir()
-    make_airfrans_case().save(root / name / f"{name}.pdmsh")
+    write_airfrans_case(root)
     return root
 
 
@@ -133,6 +170,7 @@ def _dataset(name: str, root: Path, k: int):
         {
             "train_datadir": str(root),
             "manifest": str(root / "manifest.json"),
+            "raw_datadir": str(root / "raw"),
             "sampling_resolution": k,
         },
     )
@@ -218,6 +256,70 @@ def test_uniform_twin_draws_a_uniform_interior_subset(twin, case_root):
             DatasetBase.close(ds)
 
 
+ISLA_FILES = sorted(
+    p.stem for p in (_RECIPE_ROOT / "datasets").glob("airfrans_*2d*.yaml")
+)
+
+
+@pytest.mark.parametrize("name", ISLA_FILES)
+def test_isla_files_read_the_far_field_from_the_raw_release(name):
+    """AF-WHOLE (2026-10-23): every 2-D AirfRANS file (ISLA's) reads the far field beside the case file's airfoil,
+    by the reader, from the raw release's <case>/<case>_freestream.vtp, in the interior's plane; the posed files
+    keep the case key their pose is drawn from."""
+    cfg = OmegaConf.load(_RECIPE_ROOT / "datasets" / f"{name}.yaml")
+    reader = cfg.pipeline.reader
+    expected = (
+        "CaseKeyVtkBoundaryDomainMeshReader"
+        if "posed" in name
+        else "VtkBoundaryDomainMeshReader"
+    )
+    assert reader._target_.rsplit(".", 1)[-1] == expected
+    assert cfg.raw_datadir == RAW_DATADIR
+    assert OmegaConf.to_container(reader.vtk_boundaries, resolve=True) == {
+        "freestream": f"{RAW_DATADIR}/{{case}}/{{case}}_freestream.vtp"
+    }
+    assert reader.vtk_plane_axis == 2 and reader.drop_in_file_boundaries is False
+
+
+def _relative(d: DomainMesh) -> torch.Tensor:
+    """The far field's points relative to the airfoil's: their distances, which a rigid pose keeps."""
+    return torch.cdist(
+        d.boundaries["freestream"].points.double(),
+        d.boundaries["airfoil"].points.double(),
+    )
+
+
+@pytest.mark.parametrize(
+    "name", ["airfrans_uvolume_2d", "airfrans_uvolume_2d_posed", "airfrans_volume_2d"]
+)
+def test_the_reader_adds_the_far_field_as_geometry_into_the_fluid(name, case_root):
+    """Through the real reader and chain: the sample holds the airfoil and the far field, the release's curve whole
+    and in the plane (posed: moved with the case), with none of the file's fields, its normals into the fluid."""
+    ds, native = (
+        _dataset(name, case_root, K),
+        _dataset("airfrans_uvolume_2d", case_root, K),
+    )
+    try:
+        d, ref = ds[0][0], native[0][0]
+    finally:
+        DatasetBase.close(ds)
+        DatasetBase.close(native)
+    assert set(d.boundaries.keys()) == {"airfoil", "freestream"}
+    free = d.boundaries["freestream"]
+    assert (
+        free.n_spatial_dims == 2
+        and free.n_manifold_dims == 1
+        and free.n_cells == N_FREE
+    )
+    assert not list(free.point_data.keys()) and not list(free.cell_data.keys())
+    torch.testing.assert_close(
+        ref.boundaries["freestream"].points, make_airfrans_freestream().points[:, :2]
+    )
+    torch.testing.assert_close(_relative(d), _relative(ref), atol=1e-4, rtol=1e-5)
+    inward = d.boundaries["airfoil"].cell_centroids.mean(0) - free.cell_centroids
+    assert ((free.cell_normals * inward).sum(-1) > 0).all()
+
+
 UD_TWINS = (
     "airfrans_uvolume_ud",
     "airfrans_uvolume_ud_area",
@@ -281,22 +383,23 @@ def test_ud_twin_feeds_the_baselines_the_direction_and_the_standardized_speed(
 
 
 #: AF-EXTRAP (2026-10-21): the constants of the extrapolation splits' dataset files, each fitted on its split's train
-#: side only (examples/cfd/isla/results/aerozoo_dataset/isla_constants_fit.py airfrans_fit, LHR job 309151).
+#: side only (examples/cfd/isla/results/aerozoo_dataset/isla_constants_fit.py airfrans_fit, LHR job 309151); ISLA's
+#: refit with the far field (AF-WHOLE, 2026-10-23, LHR job 361288).
 SPLIT_FITS = {
     "reynolds": {
         "nut": {"mean": 7.967e-4, "std": 2.383e-3},
         "speed": {"mean": 62.587, "std": 8.762},
         "isla": {
-            "reynolds": {"mean": 6.223, "std": 0.06224},
-            "output_scale": {"nut": 7.460e-05},
+            "reynolds": {"mean": 9.084, "std": 0.06181},
+            "output_scale": {"nut": 1.038e-07},
         },
     },
     "aoa": {
         "nut": {"mean": 7.122e-4, "std": 2.131e-3},
         "speed": {"mean": 62.363, "std": 17.776},
         "isla": {
-            "reynolds": {"mean": 6.207, "std": 0.1327},
-            "output_scale": {"nut": 7.540e-05},
+            "reynolds": {"mean": 9.067, "std": 0.1321},
+            "output_scale": {"nut": 1.048e-07},
         },
     },
 }
@@ -336,8 +439,8 @@ def test_extrapolation_split_file_is_its_source_with_train_side_constants(src, t
         b["pipeline"]["transforms"][-1] = {**SPEED_STD, **fit["speed"]}
     else:
         assert b["isla_constants"] == {
-            "reynolds": {"mean": 6.205, "std": 0.1347},
-            "output_scale": {"nut": 7.511e-05},
+            "reynolds": {"mean": 9.065, "std": 0.1338},
+            "output_scale": {"nut": 1.045e-07},
         }
         b["isla_constants"] = fit["isla"]
     assert a == b

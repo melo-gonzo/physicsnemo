@@ -407,17 +407,29 @@ scoreboard row and keeps the independent draw for its headline comparisons.
 forward_kwargs:
   boundary_meshes:
     vehicle: boundaries.vehicle
+    inlet: boundaries.inlet
+    no_slip: boundaries.no_slip
+    outlet: boundaries.outlet
+    slip: boundaries.slip
+  prediction_boundaries: {literal: [vehicle]}
   global_data: global_data
 model:
   output_schema: {pressure: {rank: 0}, wss: {rank: 1}}
+  boundary_schemas: {vehicle: {}, inlet: {}, no_slip: {}, outlet: {}, slip: {}}
   global_schema: {U_inf_dir: {rank: 1}}
 ```
 
-A surface task (`interior: false`, the default) predicts at the boundary
-cells themselves and passes no prediction points: the surface dataset's
-`MeshToDomainMesh` puts the targets at the vehicle's cell centroids in cell
-order, which is the order of the output Mesh's points; its dataset subsamples
-the surface to the cells it predicts at. The interior task
+A surface task (`interior: false`, the default) reads every boundary it is
+given and predicts at the cells of the boundaries named in
+`prediction_boundaries` (a `{literal: ...}` spec passes the names as they
+are): on DrivAerML Surface the vehicle, with the tunnel's inlet, outlet,
+floor and walls read as conditions only. The DrivAerML surface datasets load
+those four meshes beside the vehicle (`domain_boundaries`), whole, place their
+ground through the whole vehicle's lowest point in the reader, before the
+vehicle is subsampled (`whole_surface_transforms: [PlaceGroundUnderBody]`; 297
+of the 484 files store it 2.4 mm low), and move them with every augmentation; `SurfaceMeshToDomainMesh` puts the targets at
+the vehicle's cell centroids in cell order, which is the order of the output
+Mesh's points; the dataset subsamples the vehicle to the cells it predicts at. The interior task
 (`isla_volume.yaml`, `interior: true`) adds `prediction_points: interior`,
 the dataset's interior point-cloud Mesh, and takes `boundary_meshes` at full
 resolution, its only boundary input. The prediction points join the encoder
@@ -790,7 +802,7 @@ python src/train.py model=geotransolver_surface dataset=highlift_surface \
     dataloader.prefetch_factor=4 dataloader.num_workers=4
 
 # HiLift surface (ISLA reference configuration)
-python src/train.py model=isla_surface dataset=highlift_surface \
+python src/train.py model=isla_surface_highlift dataset=highlift_surface \
     training.num_epochs=200 sampling_resolution=100000
 
 # HiLift volume

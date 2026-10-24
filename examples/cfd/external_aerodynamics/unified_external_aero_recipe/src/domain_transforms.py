@@ -27,6 +27,8 @@ Recipe-local datapipe components that the library does not provide.
 - Evaluation protocols: :class:`FixedRandomPose` (a deterministic per-case
   rigid pose) with :class:`CaseKeyDomainMeshReader`, and
   :class:`FixedDrawDomainMeshReader` (an epoch-independent subsample).
+- :class:`VtkBoundaryDomainMeshReader` and its case-key twin: boundaries stored as
+  VTK files outside the case files (the AirfRANS far field).
 - Field and geometry adapters for datasets outside external aerodynamics:
   :class:`SetConstantCellField`, :class:`StackScalarFields`,
   :class:`SqueezeScalarFields`, :class:`SplitGlobalVector`,
@@ -37,6 +39,8 @@ Recipe-local datapipe components that the library does not provide.
   :class:`BoundaryFieldToGlobal` and :class:`ConcatGlobalFields`; and
   :class:`SplitBoundaryByLabels`, one boundary per condition for a dataset that
   labels its conditions inside one mesh.
+- :class:`PlaceGroundUnderBody`: DrivAerML's synthesized domain meshes, stored
+  2.4 mm low on 297 of 484 case files, moved onto the CFD mesh's domain.
 - Physical-input AeroZoo: :class:`StandardizeGlobalLeaf`, a global PDE
   parameter standardized by per-dataset constants, and :class:`MergeBoundaries`,
   the boundaries' faces as one token set for a tensor-input model.
@@ -648,6 +652,15 @@ class FixedRandomPose(MeshTransform):
         )
 
 
+def _case_directory(root, sample_path) -> str:
+    """The case directory name: the first path component of ``sample_path`` below the
+    reader ``root`` (e.g. ``run_1``), or the file name when it is not below it."""
+    try:
+        return sample_path.relative_to(root).parts[0]
+    except ValueError:
+        return sample_path.name
+
+
 @register()
 class CaseKeyDomainMeshReader(DomainMeshReader):
     """``DomainMeshReader`` that stores the stable per-case integer ``case_key`` in ``global_data``.
@@ -663,11 +676,7 @@ class CaseKeyDomainMeshReader(DomainMeshReader):
     """
 
     def _case_key(self, index: int) -> torch.Tensor:
-        sample_path = self._paths[index]
-        try:
-            name = sample_path.relative_to(self._root).parts[0]
-        except ValueError:
-            name = sample_path.name
+        name = _case_directory(self._root, self._paths[index])
         return torch.tensor(zlib.crc32(name.encode()) & 0x7FFFFFFF, dtype=torch.int64)
 
     def _load_sample(self, index: int) -> DomainMesh:
@@ -679,6 +688,84 @@ class CaseKeyDomainMeshReader(DomainMeshReader):
         return DomainMesh(
             interior=dm.interior, boundaries=dm.boundaries, global_data=gd
         )
+
+
+def read_vtk_boundary(path, like: torch.Tensor, plane_axis: int | None = None) -> Mesh:
+    """A boundary mesh read from a VTK file: its points (as ``like``'s dtype) and
+    cells only, every point and cell field dropped. With ``plane_axis``, that
+    coordinate of every point is set to ``like[0, plane_axis]``, so the boundary
+    lies in the plane of the points ``like`` (a planar case's interior)."""
+    import pyvista as pv
+
+    from physicsnemo.mesh.io import from_pyvista
+
+    m = from_pyvista(pv.read(str(path)), warn_on_lost_data=False)
+    points = m.points.to(like.dtype)
+    if plane_axis is not None:
+        points[:, plane_axis] = like[0, plane_axis]
+    return Mesh(points=points, cells=m.cells)
+
+
+class _VtkBoundaries:
+    """Reader mixin: boundaries read from VTK files outside the case directory
+    (``vtk_boundaries``, name to a path template whose ``{case}`` is the case
+    directory name), added beside the file's own before anything else reads the
+    case, with their geometry only (:func:`read_vtk_boundary`)."""
+
+    def __init__(
+        self,
+        path,
+        *,
+        vtk_boundaries: dict[str, str] | None = None,
+        vtk_plane_axis: int | None = None,
+        **kwargs,
+    ) -> None:
+        super().__init__(path, **kwargs)
+        self._vtk_boundaries = {
+            str(k): str(v) for k, v in (vtk_boundaries or {}).items()
+        }
+        self._vtk_plane_axis = None if vtk_plane_axis is None else int(vtk_plane_axis)
+
+    def _load_sample(self, index: int) -> DomainMesh:
+        dm = super()._load_sample(index)
+        if not self._vtk_boundaries:
+            return dm
+        case = _case_directory(self._root, self._paths[index])
+        boundaries = dict(dm.boundaries)
+        for name, template in self._vtk_boundaries.items():
+            if name in boundaries:
+                raise ValueError(f"the case file already has a boundary {name!r}")
+            boundaries[name] = read_vtk_boundary(
+                template.format(case=case), dm.interior.points, self._vtk_plane_axis
+            )
+        return DomainMesh(
+            interior=dm.interior, boundaries=boundaries, global_data=dm.global_data
+        )
+
+
+@register()
+class VtkBoundaryDomainMeshReader(_VtkBoundaries, DomainMeshReader):
+    r"""``DomainMeshReader`` that adds boundaries stored as VTK files outside the case
+    files (AF-WHOLE, 2026-10-23).
+
+    The AirfRANS case files (``kernel/airfrans_convert.py``) store the airfoil and an
+    interior that the release itself crops to about [-2.2, 4.2] x [-1.6, 1.6] chords;
+    the rest of the PDE domain's boundary, the far field (OpenFOAM's freestream
+    condition on the whole outer curve: a half circle of radius 200 chords upstream
+    and the lines x = 200 and y = +-200 downstream), is only in the raw release,
+    ``<case>/<case>_freestream.vtp``. This reader adds it by name, so ISLA reads the
+    whole boundary while the interior stays the stored crop: the crop's edges are not
+    a boundary of the PDE, and a condition on them could only come from the solution.
+    The file's U, p and nut are solution values, so only the geometry is read; the
+    curve's normals point into the fluid as stored (all 1,000 cases). Everything else
+    is the stock reader.
+    """
+
+
+@register()
+class CaseKeyVtkBoundaryDomainMeshReader(_VtkBoundaries, CaseKeyDomainMeshReader):
+    """:class:`CaseKeyDomainMeshReader` with the boundaries of
+    :class:`VtkBoundaryDomainMeshReader`, for the posed protocols."""
 
 
 @register()
@@ -1736,7 +1823,9 @@ class FlipBoundaryOrientation(MeshTransform):
             winding (default none).
     """
 
-    def __init__(self, boundaries: Sequence[str], normal_fields: Sequence[str] = ()) -> None:
+    def __init__(
+        self, boundaries: Sequence[str], normal_fields: Sequence[str] = ()
+    ) -> None:
         super().__init__()
         self.boundaries = [str(b) for b in boundaries]
         self.normal_fields = [str(f) for f in normal_fields]
@@ -1781,6 +1870,96 @@ class FlipBoundaryOrientation(MeshTransform):
 
     def extra_repr(self) -> str:
         return f"boundaries={self.boundaries}, normal_fields={self.normal_fields}"
+
+
+@register()
+class PlaceGroundUnderBody(MeshTransform):
+    r"""Translate a case's domain meshes vertically so their ground plane meets the body's lowest point (2026-10-23).
+
+    DrivAerML's four domain meshes (``no_slip``, ``slip``, ``inlet``, ``outlet``) are not CFD output: the
+    physicsnemo-curator DrivAerML pipeline (``BoxTunnelBoundaries``) synthesized them per case as the wind
+    tunnel box ``x`` -40..80 m, ``y`` -22..22 m, ``z`` from ``z_floor`` to ``z_floor + 20`` m, with
+    ``z_floor`` the vehicle's lowest ``z`` (the tire contact patch). On 297 of the 484 case files a later
+    in-place pass (``.bc_surgery_checkpoint.jsonl`` in the dataset folder, 2026-06-02) wrote them with
+    ``z_floor`` fixed at -0.32 m, while those files' vehicle and interior nodes reach down to -0.317597 m
+    only: their ground lies 2.403 mm below the wheels and the lowest CFD nodes (about 1.6 M per file on that
+    plane), and their roof 2.403 mm below the highest (5,117 to 5,227 interior nodes per file above it).
+    On every one of the 484 files (lane DRV-GROUND, raw files) the mismatch is that one ``z`` translation
+    (``x``, ``y``, the cells and every in-plane coordinate are identical), and the vehicle's lowest ``z``
+    equals the interior nodes' lowest ``z``; the other 187 files already match. The PDE was solved on the
+    CFD mesh, so its boundary conditions hold where that mesh ends.
+
+    The files stay as they are. This transform applies the generator's own rule to the stored body: the
+    ``boundaries`` (the ground among them) move along ``axis`` by the body's lowest coordinate minus the
+    ground's (one plane, refused otherwise), so the ground passes through the body's lowest point and the
+    rest of the box follows. On a matching file the shift is zero. Place it first, in the files' raw
+    coordinates and before any rotation, and read the body whole: a cell subsample that compacts points
+    can drop its lowest vertex. Bare ``Mesh`` inputs pass through unchanged.
+
+    Args:
+        ground: the boundary that is the ground plane.
+        body: the boundary whose lowest point the ground meets; it is not moved.
+        boundaries: the boundaries to translate, the ground among them.
+        axis: the vertical coordinate (default 2, ``z``).
+    """
+
+    def __init__(
+        self,
+        ground: str,
+        body: str,
+        boundaries: Sequence[str],
+        axis: int = 2,
+    ) -> None:
+        super().__init__()
+        self.ground = str(ground)
+        self.body = str(body)
+        self.boundaries = [str(b) for b in boundaries]
+        self.axis = int(axis)
+        if self.ground not in self.boundaries:
+            raise ValueError(
+                f"PlaceGroundUnderBody: the ground {self.ground!r} must be among the boundaries {self.boundaries!r}"
+            )
+        if self.body in self.boundaries:
+            raise ValueError(
+                f"PlaceGroundUnderBody: the body {self.body!r} must not be among the boundaries it anchors"
+            )
+
+    def __call__(self, mesh: Mesh) -> Mesh:
+        return mesh
+
+    def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
+        """Translate the named boundaries so the ground meets the body's lowest point."""
+        missing = [
+            b for b in (*self.boundaries, self.body) if b not in domain.boundary_names
+        ]
+        if missing:
+            raise KeyError(
+                f"PlaceGroundUnderBody: boundaries {missing!r} not found; available: "
+                f"{domain.boundary_names!r}"
+            )
+        height = domain.boundaries[self.ground].points[:, self.axis]
+        if not bool((height == height[0]).all()):
+            raise ValueError(
+                f"PlaceGroundUnderBody: the ground {self.ground!r} is not one plane along axis "
+                f"{self.axis} (from {float(height.min())} to {float(height.max())})"
+            )
+        lowest = domain.boundaries[self.body].points[:, self.axis].min()
+        offset = torch.zeros_like(domain.boundaries[self.ground].points[0])
+        offset[self.axis] = lowest.to(offset.dtype) - height[0]
+        return DomainMesh(
+            interior=domain.interior,
+            boundaries={
+                name: b.translate(offset) if name in self.boundaries else b
+                for name, b in domain.boundaries.items()
+            },
+            global_data=domain.global_data,
+        )
+
+    def extra_repr(self) -> str:
+        return (
+            f"ground={self.ground!r}, body={self.body!r}, boundaries={self.boundaries}, "
+            f"axis={self.axis}"
+        )
 
 
 @register()

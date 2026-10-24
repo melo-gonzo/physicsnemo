@@ -34,6 +34,9 @@ Spec value semantics:
 - Dicts recurse and produce dict-valued kwargs (used for mesh-input models
   with dict-valued args like GLOBE's ``boundary_meshes`` and
   ``reference_lengths``).
+- A dict whose only key is ``literal`` gives its value unresolved, for an
+  argument that is a constant of the model config rather than data of the case
+  (ISLA's ``prediction_boundaries: {literal: [vehicle]}``, names, not paths).
 - "Modifier" dicts -- dicts containing a ``"source"`` key plus one of the
   recognized modifier keys (currently only ``"expand_like"``) -- are
   deferred to a second resolution pass so they may reference other already-
@@ -178,6 +181,8 @@ def resolve_spec(spec: Any, source: Any) -> Any:
         return torch.cat(resolved, dim=-1)
 
     if isinstance(spec, dict):
+        if set(spec) == {"literal"}:
+            return spec["literal"]
         if _is_modifier_spec(spec):
             raise ValueError(
                 f"Modifier specs ({spec!r}) must be resolved via "
