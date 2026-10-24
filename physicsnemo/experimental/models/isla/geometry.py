@@ -296,6 +296,32 @@ def _zero_area(simplex: torch.Tensor, cells: torch.Tensor):
     return flat, bool(zero.any())
 
 
+def _covered(cells: torch.Tensor, flat: torch.Tensor, n_vertices: int) -> torch.Tensor:
+    """Whether each zero-area cell (``flat``, :func:`_zero_area`; canonical, welded
+    ``cells``) lies in the cells of nonzero measure, ``(F,)``: a point when it is one
+    of their vertices; in three dimensions a segment when its edges between
+    consecutive distinct vertices are edges of theirs, or its edge from first to last
+    vertex is (on a line the canonical order is the order along it, so that edge
+    holds the middle vertex)."""
+    regular = cells[~flat]
+    vertex = torch.zeros(n_vertices, dtype=torch.bool, device=cells.device)
+    vertex[regular.reshape(-1)] = True
+    if cells.shape[1] == 2:
+        return flat & vertex[cells[:, 0]]
+    keys = torch.unique(
+        torch.minimum(regular[:, [0, 0, 1]], regular[:, [1, 2, 2]]) * n_vertices
+        + torch.maximum(regular[:, [0, 0, 1]], regular[:, [1, 2, 2]])
+    )
+
+    def edge(a, b):
+        k = torch.minimum(a, b) * n_vertices + torch.maximum(a, b)
+        return keys[torch.searchsorted(keys, k).clamp_max(max(keys.shape[0] - 1, 0))] == k if keys.numel() else torch.zeros_like(flat)
+
+    v0, v1, v2 = cells.unbind(1)
+    segment = ((v0 == v1) | edge(v0, v1)) & ((v1 == v2) | edge(v1, v2)) | edge(v0, v2)
+    return flat & torch.where(v0 == v2, vertex[v0], segment)
+
+
 def _min_norm_points(c: torch.Tensor) -> torch.Tensor:
     """For each row of ``c`` ``(n, K, d)`` (``K`` distinct unit vectors), the point
     of their convex hull closest to the origin ``(n, d)``. It lies in the relative
@@ -1451,6 +1477,17 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     nq, dim = query_points.shape
     dev = query_points.device
     q64, simplex = query_points.double(), points.double()[cells]
+    ### A zero-area cell is the segment or the point its vertices span. Where that set
+    ### lies in the other cells' it adds nothing to the surface and is left out, so the
+    ### outputs are those without it.
+    flat, any_flat = _zero_area(simplex, cells)
+    kept = None
+    if any_flat:
+        covered = _covered(cells, flat, points.shape[0])
+        if bool(covered.any()):
+            kept = (~covered).nonzero()[:, 0]
+            cells, parity, face_normals, simplex, flat = (x[kept] for x in (cells, parity, face_normals, simplex, flat))
+            any_flat = bool(flat.any())
     face_n, tree = face_normals.double(), None
     coef = torch.finfo(query_points.dtype).eps / 2 + (3 * dim + 4) * torch.finfo(torch.float64).eps / 2
     reach, q_norm = simplex.norm(dim=-1).amax(-1), q64.norm(dim=-1)
@@ -1476,9 +1513,7 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
         new = (rows[1:] != rows[:-1]).any(-1)
     rep = order[torch.cat([new.new_ones(1), new])]
     s_rep, p_rep = simplex[rep], parity[rep].to(q64)
-    ### A zero-area cell is the segment or the point its vertices span: no normal, no
-    ### area, no solid angle (its parity 0 in the winding number).
-    flat, any_flat = _zero_area(simplex, cells)
+    ### (no normal, no area, no solid angle: its parity 0 in the winding number)
     if any_flat:
         p_rep = torch.where(flat[rep], 0.0, p_rep)
     oriented = _oriented_areas(s_rep, p_rep)
@@ -1611,6 +1646,8 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     m = _grouped_min_norm(torch.cat([g, g[wall] + nq]), torch.cat([c, -c[wall]]), 2 * nq)
     tie_u = torch.where(on_wall[:, None], 0.5 * (m[:nq] - m[nq:]), m[:nq])
     sign = _winding_sign(q64, s_rep, p_rep, tree, w_sum, oriented)
+    if kept is not None:
+        idx = kept[idx]
     return idx, tied, tie_u.to(query_points.dtype), sign.to(query_points.dtype), on_wall, w[first]
 
 
@@ -1735,9 +1772,11 @@ def exact_boundary_geometry(
     first, so a surface stored as pieces or as a triangle soup has the
     connectivity of the surface it describes. A cell of zero area (two or three
     coincident vertices, or three collinear ones, by an exact test,
-    :func:`_zero_area`) is the segment or the point its vertices span: its closest
-    point lies on that set, it has no normal and no solid angle, and a query on it
-    takes the normals of the cells there that have one, or :math:`u = 0` with none.
+    :func:`_zero_area`) is the segment or the point its vertices span. Lying along
+    the edges of other cells or at one of their vertices, it adds nothing to the
+    surface and is left out; otherwise its closest point lies on that set, it has no
+    normal and no solid angle, and a query on it takes the normals of the cells
+    there that have one, or :math:`u = 0` with none.
 
     Where several features tie for the closest point (the medial surface: a
     plate's mid-plane, a corner's bisector), within the error bound of the
