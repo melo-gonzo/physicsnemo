@@ -49,6 +49,7 @@ source. Do not edit by hand.
 | `geo_band_phase0/` | GEO-BAND, phase 0: the whole-boundary geometry call re-timed on GB300 at the merged head | `scratch/isla-geo-band-2026-10-24/` |
 | `kernel_tests/` | KERNEL-TESTS: the five CUDA tests that failed after the token padding, their cause and the fix | `scratch/isla-kernel-tests-2026-10-24/` |
 | `slices_drv/` | SLICES-DRV: ISLA with 128 slices against the 512-slice DrivAerML Volume standing | `scratch/isla-slices-drv-2026-10-24/` |
+| `freeze_plan/` | FREEZE-PLAN: the final reference rerun re-planned with ISLA-DTT as the default interior form, its lanes, cost and calendar | `scratch/isla-freeze-plan-2026-10-24/` |
 
 | topic | file | source | md5 |
 | --- | --- | --- | --- |
@@ -261,3 +262,4 @@ source. Do not edit by hand.
 | slices_drv | reading.md | scratch/isla-slices-drv-2026-10-24/reading.md | a810e1a022da3b172820066fa5d6d685 |
 | slices_drv | PREREG.md | scratch/isla-slices-drv-2026-10-24/PREREG.md | 88e36cd7e36232773f080309f7935c77 |
 | slices_drv | farfield/farfield_table.md | scratch/isla-slices-drv-2026-10-24/farfield/farfield_table.md | f993d7713536e50a78f5dcf80421ca53 |
+| freeze_plan | FINAL_RERUN_PLAN.md | scratch/isla-freeze-plan-2026-10-24/FINAL_RERUN_PLAN.md | 33026a229946ed9ca393cd72225b088f |

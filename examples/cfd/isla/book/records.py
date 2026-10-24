@@ -80,6 +80,7 @@ FOLDER = {
     "geo_band_phase0": "campaigns_2026-10-23",
     "kernel_tests": "campaigns_2026-10-23",
     "slices_drv": "campaigns_2026-10-23",
+    "freeze_plan": "campaigns_2026-10-23",
 }
 
 

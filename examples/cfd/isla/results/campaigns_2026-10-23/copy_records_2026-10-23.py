@@ -404,6 +404,11 @@ RECORDS = {
         "SLICES-DRV: ISLA with 128 slices against the 512-slice DrivAerML Volume standing",
         ["RESULTS.md", "reading.md", "PREREG.md", "farfield/farfield_table.md"],
     ),
+    "freeze_plan": (
+        "isla-freeze-plan-2026-10-24",
+        "FREEZE-PLAN: the final reference rerun re-planned with ISLA-DTT as the default interior form, its lanes, cost and calendar",
+        ["FINAL_RERUN_PLAN.md"],
+    ),
 }
 
 
