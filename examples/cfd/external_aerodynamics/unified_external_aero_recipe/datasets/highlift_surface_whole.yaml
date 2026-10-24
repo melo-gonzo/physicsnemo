@@ -23,6 +23,9 @@
 # after the reader's subsample no longer has), at the radius of the two case files that store them
 # (24,533.42 in, 88.95 MAC, the stored interiors' far field). The sidecar is the domain only, no
 # CFD output; its SIDECAR.json per case records the generator and its constants.
+# The generator's symmetry plane is valid only where the wing's cells on y = 0 close into the root
+# loop: of 21 geometries checked (2026-10-24), LHC001 alone. The others store about 19 M duplicated
+# cells and an open, fragmented root, on which its hole is wrong.
 #
 # High-lift airplane surface dataset (compressible, cell-centric)
 # Reads the boundary surface Mesh directly from DomainMesh .pdmsh files
