@@ -65,6 +65,7 @@ def _model(**kw):
             n_layers=2,
             n_slices=8,
             interior=True,
+            query_independent=False,
             **kw,
         )
         .double()
@@ -131,6 +132,7 @@ def test_fused_kernel_stays_available_with_the_built_in_distance():
         n_layers=1,
         n_slices=8,
         interior=True,
+        query_independent=False,
     )
     assert m.n_query_features == 2 and m.qt.seed.in_features == 1 + 2
     assert not (m.n_block_vecs or m.n_block_tens)
@@ -184,6 +186,7 @@ def test_saved_posed_airfrans_case_runs():
             global_schema={"U_inf_dir": {"rank": 1}, "U_inf_mag": {"rank": 0}},
             dim=2,
             interior=True,
+            query_independent=False,
             hidden=32,
             n_layers=2,
             n_slices=8,
@@ -589,6 +592,7 @@ def _interior(dim: int, **kw) -> ISLA:
             n_layers=2,
             n_slices=8,
             interior=True,
+            query_independent=False,
             dim=dim,
             **kw,
         )
@@ -780,6 +784,7 @@ def test_boundary_tokens_is_validated():
                 output_schema=PV,
                 boundary_schemas=WALL,
                 interior=True,
+                query_independent=False,
                 boundary_tokens=bad,
             )
     with pytest.raises(ValueError, match="surface task"):
@@ -792,7 +797,13 @@ def test_boundary_tokens_is_validated():
             boundary_meshes={"airfoil": empty}, prediction_points=q, global_data=gd
         )
     with pytest.raises(NotImplementedError, match="two and three dimensions"):
-        ISLA(output_schema=PV, boundary_schemas=WALL, interior=True, dim=4)
+        ISLA(
+            output_schema=PV,
+            boundary_schemas=WALL,
+            interior=True,
+            query_independent=False,
+            dim=4,
+        )
 
 
 def _flipped(mesh: Mesh) -> Mesh:

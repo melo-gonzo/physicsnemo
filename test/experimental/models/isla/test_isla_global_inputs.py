@@ -186,7 +186,9 @@ def test_two_vectors_interior_path():
     mesh = _boundary()
     q = torch.randn(40, 3, dtype=D, generator=torch.Generator().manual_seed(2))
     gv = torch.randn(2, 3, dtype=D, generator=torch.Generator().manual_seed(1))
-    m = _model({"g1": {"rank": 1}, "g2": {"rank": 1}}, interior=True)
+    m = _model(
+        {"g1": {"rank": 1}, "g2": {"rank": 1}}, interior=True, query_independent=False
+    )
     _assert_se3(m, mesh, {"g1": gv[0], "g2": gv[1]}, q=q)
 
 
@@ -198,6 +200,7 @@ def test_global_scalars_condition_every_token():
     m = _model(
         {"g": {"rank": 1}, "cond.kappa": {"rank": 0}, "cond.E": {"rank": 0}},
         interior=True,
+        query_independent=False,
     )
     assert (
         m.boundary_conditions["wall"].seed.in_features == 1 + 1 + 2
@@ -295,6 +298,7 @@ def test_boundary_data_reaches_the_interior_prediction():
         global_schema={"kappa": {"rank": 0}},
         boundary_schemas={"wall": {"trace": {"rank": 0}}},
         interior=True,
+        query_independent=False,
     )
     assert (
         m.boundary_conditions["wall"].seed.in_features == 1 + 2

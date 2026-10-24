@@ -177,6 +177,7 @@ def test_mixed_flat_and_nested_names_and_the_interior_task():
         global_schema={"freestream": {"rank": 1}},
         boundary_schemas={"wall": {}},
         interior=True,
+        query_independent=False,
     )
     with torch.no_grad():
         out = m(

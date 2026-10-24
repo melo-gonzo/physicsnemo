@@ -68,6 +68,7 @@ def test_cosine_routing_keeps_the_contracts_and_all_parameters_train():
             n_layers=2,
             n_slices=8,
             interior=True,
+            query_independent=False,
         )
         .double()
         .eval()

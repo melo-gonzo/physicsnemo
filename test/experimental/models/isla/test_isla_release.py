@@ -34,6 +34,9 @@ when the backbone changes by decision (a forward hook on ``norm_out`` under
 ``CONFIGS["default"]`` / ``_make_tensors`` below; last recorded when the boundary
 conditions came to be declared by name, each with its own input layer, checkpoint
 0.7.0) and pins the backbone through the internal batched routine.
+``data/isla_interior_interacting_eba038f08.mdlus`` and its ``_output.pth`` are never
+regenerated from the current code: they record a checkpoint written by the code of
+commit eba038f08 (see the test that reads them).
 """
 
 import re
@@ -59,11 +62,14 @@ IO = dict(
     global_schema={"g": {"rank": 1}},
 )
 
-#: One small configuration in its three forms: a surface task, an interior task (the
-#: constructor's ``interior`` flag) and ISLA-DTT (``query_independent``).
+#: One small configuration in its three forms: a surface task, an interior task of
+#: interacting ISLA (the constructor's ``interior`` flag with ``query_independent=False``)
+#: and ISLA-DTT (``query_independent=True``, the interior task's default).
 CONFIGS = {
     "default": dict(hidden=32, n_layers=2, n_slices=8, **IO),
-    "interior": dict(hidden=32, n_layers=2, n_slices=8, interior=True, **IO),
+    "interior": dict(
+        hidden=32, n_layers=2, n_slices=8, interior=True, query_independent=False, **IO
+    ),
     "dtt": dict(
         hidden=32, n_layers=2, n_slices=8, interior=True, query_independent=True, **IO
     ),
@@ -176,6 +182,7 @@ def test_isla_constructor_attributes(config):
                 "outlet": {},
             },
             interior=True,
+            query_independent=False,
             hidden=64,
             n_layers=3,
             n_slices=16,
@@ -337,6 +344,128 @@ def test_isla_reference_checkpoint_matches_golden(device):
     ref = _load_or_create_reference("isla_default_checkpoint_output_v1.pth", out)
     tol = 1e-5 if device == "cpu" else 1e-4
     _assert_dict_close(out, ref, atol=tol, rtol=tol)
+
+
+def _stored_args(path) -> dict:
+    """The constructor arguments a ``.mdlus`` stores (its ``args.json``)."""
+    import json
+    import zipfile
+
+    with zipfile.ZipFile(path) as z:
+        return json.loads(z.read("args.json"))["__args__"]
+
+
+def _boundary_read_parameters(model) -> list[str]:
+    return [
+        n
+        for n, _ in model.named_parameters()
+        if n.startswith(("kernel_basis.", "kernel_reads."))
+    ]
+
+
+def test_interacting_checkpoint_from_before_the_interior_default_loads_as_interacting(
+    device,
+):
+    """A checkpoint written when the interior task's default was interacting ISLA
+    keeps loading as interacting ISLA, with its outputs. The fixture
+    ``data/isla_interior_interacting_eba038f08.mdlus`` was written by the code of
+    commit eba038f08 (checkpoint version 0.11.0), in its own process, from
+    ``ISLA(hidden=32, n_layers=1, n_slices=8, interior=True, **IO)`` built without
+    ``query_independent`` (as a user of that code would), its parameters drawn
+    ``randn * 0.1`` from a CPU generator seeded 11, in evaluation with the eager
+    geometry region; ``data/isla_interior_interacting_eba038f08_output.pth`` holds
+    that code's forward on ``_make_inputs("cpu", query=True)``. ``Module.__new__``
+    stores the bound defaults, so the checkpoint names ``query_independent=False``
+    explicitly and never depends on the class default."""
+    ckpt = DATA_DIR / "isla_interior_interacting_eba038f08.mdlus"
+    args = _stored_args(ckpt)
+    assert "query_independent" in args and args["query_independent"] is False
+    assert args["interior"] is True
+    model = Module.from_checkpoint(str(ckpt)).to(device).eval()
+    assert isinstance(model, ISLA)
+    assert model.interior is True and model.query_independent is False
+    assert model.qt.logw is not None  # the learned routing mass
+    assert model.kernel_basis is None and model.kernel_reads is None
+    assert not _boundary_read_parameters(model)
+    with torch.no_grad():
+        out = outputs(model(**_make_inputs(device, query=True)))
+    ref = torch.load(
+        DATA_DIR / "isla_interior_interacting_eba038f08_output.pth", weights_only=True
+    )["output"]
+    tol = 1e-5 if device == "cpu" else 1e-4
+    _assert_dict_close(out, {k: v.to(device) for k, v in ref.items()}, tol, tol)
+
+
+def test_a_state_dict_of_one_interior_form_does_not_load_into_the_other(tmp_path):
+    """ISLA-DTT and interacting ISLA own different parameters (the boundary read; the
+    routing mass), so a state dict of either fails to load into the other, both
+    ways: strict ``load_state_dict``, ``Module.load`` (the recipe's resume path) and
+    ``Module.from_checkpoint`` of a checkpoint whose arguments name the other form."""
+    import zipfile
+
+    dtt = _instantiate_model(**CONFIGS["dtt"])
+    inter = _instantiate_model(**CONFIGS["interior"])
+    for src, dst, unexpected, missing in (
+        (dtt, inter, "kernel_reads.0.", "qt.logw"),
+        (inter, dtt, "qt.logw", "kernel_reads.0."),
+    ):
+        with pytest.raises(RuntimeError, match="Missing key") as err:
+            dst.load_state_dict(src.state_dict())
+        msg = str(err.value)
+        assert "Unexpected key" in msg
+        assert unexpected in msg.split("Unexpected key")[1]
+        assert missing in msg.split("Unexpected key")[0]
+        path = tmp_path / f"src_{src.query_independent}.mdlus"
+        src.save(path)
+        with pytest.raises(RuntimeError, match="Missing key"):
+            dst.load(str(path), strict=True)
+        dst_path = tmp_path / f"dst_{dst.query_independent}.mdlus"
+        dst.save(dst_path)
+        mixed = tmp_path / f"mixed_{dst.query_independent}.mdlus"
+        with (
+            zipfile.ZipFile(dst_path) as za,
+            zipfile.ZipFile(path) as zs,
+            zipfile.ZipFile(mixed, "w") as zout,
+        ):
+            for item in za.infolist():  # the other form's arguments, src's weights
+                data = (
+                    zs.read("model.pt")
+                    if item.filename == "model.pt"
+                    else za.read(item)
+                )
+                zout.writestr(item, data)
+        assert _stored_args(mixed)["query_independent"] is dst.query_independent
+        with pytest.raises(RuntimeError, match="Missing key"):
+            Module.from_checkpoint(str(mixed))
+
+
+@pytest.mark.parametrize("form", ["default", "interacting"])
+def test_new_interior_checkpoints_store_their_form(tmp_path, form):
+    """An interior model built without ``query_independent`` is ISLA-DTT and stores
+    ``query_independent=True`` in its checkpoint's arguments; one built with
+    ``query_independent=False`` stores ``False``. Each round-trips as its form with
+    its outputs."""
+    kw = dict(CONFIGS["dtt"])
+    del kw["query_independent"]
+    if form == "interacting":
+        kw["query_independent"] = False
+    model = _instantiate_model(seed=5, **kw)
+    dtt = form == "default"
+    assert model.query_independent is dtt
+    path = tmp_path / "isla.mdlus"
+    model.save(path)
+    assert _stored_args(path)["query_independent"] is dtt
+    loaded = Module.from_checkpoint(str(path)).eval()
+    assert isinstance(loaded, ISLA) and loaded.interior is True
+    assert loaded.query_independent is dtt
+    assert bool(_boundary_read_parameters(loaded)) is dtt
+    assert (loaded.qt.logw is None) is dtt
+    loaded.geo_kernel = model.geo_kernel
+    inputs = _make_inputs("cpu", query=True)
+    with torch.no_grad():
+        _assert_dict_close(
+            outputs(loaded(**inputs)), outputs(model(**inputs)), atol=0.0, rtol=0.0
+        )
 
 
 @pytest.mark.parametrize(

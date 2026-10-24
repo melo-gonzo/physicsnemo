@@ -110,6 +110,7 @@ def test_an_aligned_token_count_runs_no_padding(task):
         n_layers=2,
         n_slices=8,
         interior=task == "interior",
+        query_independent=False,
     ).double()
 
     def ops(n_boundary):
