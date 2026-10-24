@@ -8,17 +8,24 @@ from palette import *
 import standing as S
 import json, statistics, glob as _glob
 from pathlib import Path
+import re
+import records as R
+# HiLiftAeroML files that store more of the domain's boundary than the wing (BOUNDARY-AUDIT section 1)
+_hl = [int(x.replace(",", "")) for x in re.search(r"only the wing on ([\d,]+) of ([\d,]+) files", " ".join(R.load("boundary_audit", "REPORT.md").split())).groups()]
+HL_BUT = {1: "one", 2: "two", 3: "three"}.get(_hl[1] - _hl[0], f"{_hl[1] - _hl[0]:,}")
 from matplotlib.colors import TwoSlopeNorm
 RES = Path("..") / "results"
 J = lambda p: json.load(open(RES / p))
 mean = statistics.mean
 pct = lambda r: f"{abs(1 - r) * 100:.0f}%"
 HL = S.Standing("hilift")
-REG, CL = HL.raw["registered"], HL.raw["case_level"]   # the pre-registered outcomes and the per-case readouts of the standing
-RAWD = {b: HL.raw[f"raw_drive_{b.lower()}"] for b in S.BASELINES}   # the same baselines reading the physical freestream vector
 HL_F = tuple(HL.fields)              # pressure_l2, tau_wall_l2
+CL = HL.raw["case_level"]   # the per-case readouts of the standing
+POSED_DEV = [p / n - 1 for f in HL_F for p, n in zip(HL.seeds("ISLA", f, "posed"), HL.seeds("ISLA", f))]   # ISLA's posed ÷ native - 1, per field and seed
+RAWD = {b: HL.raw[f"raw_drive_{b.lower()}"] for b in S.BASELINES}   # the same baselines reading the physical freestream vector
 KEY = {"ISLA": "isla_ref", "GeoTransolver": "gt", "Transolver": "t"}
 seeds_txt = lambda a, f, p="native": " and ".join(f"{v:.4f}" for v in HL.seeds(a, f, p))
+SEALED = J("hilift_sealed_test_2026-09-04.json")["per_arch_axis"]   # test ÷ validation pressure error of the sealed-test runs
 
 
 def both(st, fields, p="native"):
@@ -119,8 +126,8 @@ RATIO = {k: mean(v[3]) / mean(v[2]) for k, v in RUNGS.items()}
 #| label: para-hilift-lede
 #| output: asis
 print(f"The three architectures are {S.CONFIG['ISLA']}, {S.CONFIG['GeoTransolver']} and {S.CONFIG['Transolver']}, each at its reference configuration (@sec-selection). "
-      + f"In one paragraph: at the 510-case rung on the native mesh {both(HL, HL_F)}; GeoTransolver's lead sits in a handful of cases at "
-        "stall, on the leading-edge suction peaks, and Transolver's is a broad offset on the attached cases (@sec-hilift-deficit). "
+      + f"In one paragraph: at the 510-case rung on the native mesh {both(HL, HL_F)}; GeoTransolver's pressure lead sits mostly in a few "
+        "cases at stall, and the rest is an offset spread over the cases (@sec-hilift-deficit). "
       + "Only ISLA keeps its error on a uniform point cloud of the aircraft and under rotation and translation, so under those two scorings ISLA leads "
       f"both baselines by a factor of {S.fmt_ratio(min(HL.ratio(b, f, 'area') for b in S.BASELINES for f in HL_F))} or more (@sec-de-result). On the data-efficiency "
       "ladders, run on a smaller ISLA against unit-direction baselines, GeoTransolver is ahead or level on every rung, its lead largest "
@@ -279,7 +286,7 @@ plt.show()
 
 ### Files, conversion and normalization {#sec-data-hilift}
 
-**1,800 cases on a full grid of 180 geometries by ten angles, in imperial units, with curated manifests for every split.** Each case is a `geo_LHC<nnn>_AoA_<a>` directory; the recipe reads the boundary tensordict (`geo_LHC*/*.pdmsh/_tensordict/boundaries/vehicle`) and merges the parent's `global_data` (`U_inf`, `p_inf`, `rho_inf`, `T_inf`, `L_ref`). Units are slug, inch, second and Rankine; the figures convert positions to meters for display only. The targets are the projected averages `PROJ(AVG(P))`, `PROJ(AVG(T))`, `PROJ(AVG(RHO))`, `PROJ(AVG(U))` and `AVG(TAU_WALL)` on the surface cells, nondimensionalized from the case's `global_data`, renamed `pressure`, `temperature`, `density`, `velocity` and `tau_wall`, and standardized with fixed constants in the dataset yaml (pressure mean −0.5 and standard deviation 1; temperature 1.00 / 0.002; density 1.0 / 0.02; velocity 0.20; wall shear 0.003). A case has about 290 million surface cells, the largest surface in the book, so a 200,000-cell draw is a $10^{-3}$ sample of it. Every split is a curated manifest of one pinned revision of the dataset.
+**1,800 cases on a full grid of 180 geometries by ten angles, in imperial units, with curated manifests for every split.** Each case is a `geo_LHC<nnn>_AoA_<a>` directory; the recipe reads the boundary tensordict (`geo_LHC*/*.pdmsh/_tensordict/boundaries/vehicle`) and merges the parent's `global_data` (`U_inf`, `p_inf`, `rho_inf`, `T_inf`, `L_ref`). Units are slug, inch, second and Rankine; the figures convert positions to meters for display only. The targets are the projected averages `PROJ(AVG(P))`, `PROJ(AVG(T))`, `PROJ(AVG(RHO))`, `PROJ(AVG(U))` and `AVG(TAU_WALL)` on the surface cells, nondimensionalized from the case's `global_data`, renamed `pressure`, `temperature`, `density`, `velocity` and `tau_wall`, and standardized with fixed constants in the dataset yaml (pressure mean −0.5 and standard deviation 1; temperature 1.00 / 0.002; density 1.0 / 0.02; velocity 0.20; wall shear 0.003). A case has about 290 million surface cells, the largest surface in the book, so a 200,000-cell draw is a $10^{-3}$ sample of it. All but `{python} HL_BUT` files store the wing alone, without the far field or the symmetry plane of the CFD domain, so every model here reads the body alone (@sec-oq-whole-boundary). Every split is a curated manifest of one pinned revision of the dataset.
 
 ## What is measured {#sec-de-setup}
 
@@ -367,8 +374,6 @@ The dataset's volume files carry interior coordinates for 31 of the 1,800 cases 
 
 ## The standing {#sec-de-result}
 
-<!-- SLOT: ISLA at the current class: one row beside the nearest-token-form row; native/area/posed seed means and per-seed values (standing.DATASETS["hilift"].current) -->
-
 ```{python}
 #| label: para-de-lede
 #| output: asis
@@ -379,8 +384,7 @@ print(f"**At the 510-case rung, on the native mesh, {both(HL, HL_F)}; on the uni
       "leads both by a wide margin.** Every model reads the unit far-field direction. On the native mesh the baselines' errors are "
       f"{gain('pressure_l2')} lower than ISLA's on pressure and {gain('tau_wall_l2')} lower on wall shear. On the uniform point cloud baseline ÷ ISLA is "
       f"{span('area')[0]} to {span('area')[1]} on the two fields, and rotated and translated {span('posed')[0]} to {span('posed')[1]}. "
-      "@tbl-hilift-protocols is the standing and @fig-hilift-shifts draws it. The standing has no row for ISLA as Part II defines it; "
-      "that row is part of the open question of @sec-oq-class-standing.")
+      "@tbl-hilift-protocols is the standing and @fig-hilift-shifts draws it.")
 ```
 
 ```{python}
@@ -397,12 +401,11 @@ print(HL.table("tbl-hilift-protocols", "HiLiftAeroML at the 510-case rung, 180 v
 #|   wall shear (bottom), seed mean (marker, printed) and the two seeds (black
 #|   dots), logarithmic axis; ISLA blue squares, GeoTransolver red circles,
 #|   Transolver amber triangles; the dashed line at one is the error of
-#|   predicting zero everywhere. ISLA checkpoints of the nearest-token form
-#|   (@sec-checkpoint-form); every model reads the unit far-field direction.
+#|   predicting zero everywhere; every model reads the unit far-field direction.
 #|   How to read this: on the native row the baselines sit left of ISLA;
 #|   down the rows ISLA's marker stays put and the baselines' move right, so
 #|   the order reverses; the figure does not show where on the aircraft the
-#|   error sits (@sec-de-strata). Data: results/char/hilift_surface_a2.json.
+#|   error sits (@sec-de-strata). Data: results/char/hilift_surface_090.json.
 protocol_dots(HL, HL_F); plt.show()
 ```
 
@@ -411,8 +414,7 @@ protocol_dots(HL, HL_F); plt.show()
 #| output: asis
 posed_floor = min(HL.err(a, f, "posed") for a in S.BASELINES for f in HL_F)
 below = all(max(HL.seeds(b, "pressure_l2")) < min(HL.seeds("ISLA", "pressure_l2")) for b in S.BASELINES)
-pose = REG["P3 ISLA (R-POSE)"]["posed_over_native"]
-dev = [v - 1 for d in pose.values() for v in d.values()]
+dev = [p / n - 1 for f in HL_F for p, n in zip(HL.seeds("ISLA", f, "posed"), HL.seeds("ISLA", f))]
 print(f"Three readings. **First, the native verdicts are firm by the seed rule:** ISLA's pressure seeds are {seeds_txt('ISLA', 'pressure_l2')}, "
       f"GeoTransolver's {seeds_txt('GeoTransolver', 'pressure_l2')} and Transolver's {seeds_txt('Transolver', 'pressure_l2')}"
       f"{', so every baseline seed sits below every ISLA seed' if below else ''}, and the wall-shear ordering follows pressure. "
@@ -422,10 +424,11 @@ print(f"Three readings. **First, the native verdicts are firm by the seed rule:*
       "others, so the native draw and the area-proportional one present very different samples of the same aircraft. "
       f"**Third, rotated and translated, ISLA's error is {100 * min(dev):.1f}% to {100 * max(dev):.1f}% above its native error** on each field and "
       f"seed, while every baseline error is at least {posed_floor:.2f}, near or above the score of predicting zero, even though the far-field "
-      "direction is rotated with the case. ISLA's offset is registered as a failure: the check registered before these baselines were scored "
-      "put ISLA's rotated-and-translated error within 0.2% of its native error on every field and seed, as it is to within "
+      "direction is rotated with the case. On the DrivAerML Surface task and SHIFT-SUV ISLA's posed error is within "
       f"{100 * max(abs(S.Standing(k).shift('ISLA', f, 'posed') - 1) for k in ('drivaerml_surface', 'shift_suv') for f in S.DATASETS[k].headline):.3f}% "
-      "on the DrivAerML Surface task and SHIFT-SUV, and what produces the offset on this dataset is not located (@sec-de-limits).")
+      "of its native error. A check registered on the checkpoints of the nearest-token form required ISLA's posed error to be within 0.2% of "
+      "its native error on this dataset (the registered threshold) and failed by the same offset; at the reference configuration the offset persists on both seeds, as the "
+      "prediction registered before scoring expected. What produces it on this dataset is not located (@sec-de-limits).")
 ```
 
 ```{python}
@@ -436,12 +439,11 @@ print(f"Three readings. **First, the native verdicts are firm by the seed rule:*
 #|   each angle, for ISLA (squares), GeoTransolver (circles) and Transolver
 #|   (triangles) at their reference configurations, every model reading the
 #|   unit far-field direction; the number of validation cases at each angle
-#|   below the axis. ISLA checkpoints of the nearest-token form
-#|   (@sec-checkpoint-form). How to read this: below 14° the flow is attached
+#|   below the axis. How to read this: below 14° the flow is attached
 #|   and ISLA and GeoTransolver are close while Transolver is lower; from 14°
 #|   up the errors of all three rise, and GeoTransolver's is the lowest at
 #|   16°, 18° and 22°; a mean per angle does not show the spread of the cases within
-#|   it. Data: results/char/hilift_surface_a2.json (`case_level`).
+#|   it. Data: results/char/hilift_surface_090.json (`case_level`).
 BA = CL["by_aoa"]; aoas_ = sorted(int(a) for a in BA)
 fig, ax = plt.subplots(figsize=(7.6, 3.8))
 for a, k in (("ISLA", "isla_ref"), ("GeoTransolver", "gt"), ("Transolver", "t")):
@@ -460,33 +462,27 @@ plt.show()
 #| label: para-hilift-cases
 #| output: asis
 PB, W = CL["per_baseline"], CL["geotransolver_lead_in_isla_worst"]
-P2 = REG["P2"]
-print(f"**Transolver's native lead is spread over the cases; GeoTransolver's sits in ISLA's worst cases, at the high angles.** Paired case by "
-      f"case on the {CL['n_cases']} validation cases, seed means, Transolver's pressure error is below ISLA's on "
-      f"{PB['Transolver']['pressure_l2']['lower_on']} of them, with a median per-case ratio of {PB['Transolver']['pressure_l2']['median_ratio']:.2f}. "
-      f"GeoTransolver's is below ISLA's on {PB['GeoTransolver']['pressure_l2']['lower_on']}, with a median of "
-      f"{PB['GeoTransolver']['pressure_l2']['median_ratio']:.2f}, so on the typical case the two are close. "
-      f"ISLA's {W['n_worst']} worst cases, a tenth of the set, all sit at {min(W['aoa_deg'])}° to {max(W['aoa_deg'])}° (@fig-hilift-aoa), and they "
-      f"carry {100 * W['share_of_mean_lead']:.0f}% of GeoTransolver's lead in the mean: on them ISLA's mean pressure error is "
-      f"{W['isla_mean']:.3f} and GeoTransolver's {W['geotransolver_mean']:.3f}. The test registered before these baselines were scored "
-      "named three bands for the native pressure ratio: *baseline ahead* at 0.95 or below with the baseline lower on at least two thirds of "
-      f"the cases, *parity* within 5%, *ISLA ahead* at 1.05 or above. Transolver falls in *{P2['Transolver']['band']}*. GeoTransolver meets "
-      f"the band's ratio and not its case count, {PB['GeoTransolver']['pressure_l2']['lower_on']} of {CL['n_cases']} against "
-      f"{2 * CL['n_cases'] // 3}, so it falls in none of the three bands.")
+low = lambda b, f: f"{PB[b][f]['lower_on']} of {CL['n_cases']}, median per-case ratio {b} ÷ ISLA {PB[b][f]['median_ratio']:.2f}"
+print(f"**Against GeoTransolver on pressure the lead sits mostly in ISLA's worst cases, at the high angles; against Transolver, and on "
+      f"wall shear against both, it is spread over the cases.** Paired case by case on the {CL['n_cases']} validation cases, seed means, "
+      f"Transolver's pressure error is below ISLA's on {low('Transolver', 'pressure_l2')}, and GeoTransolver's on "
+      f"{low('GeoTransolver', 'pressure_l2')}, so on the typical case GeoTransolver and ISLA are close. ISLA's {W['n_worst']} worst cases, a tenth "
+      f"of the set, all sit at {min(W['aoa_deg'])}° to {max(W['aoa_deg'])}° (@fig-hilift-aoa), and they carry "
+      f"{100 * W['share_of_mean_lead']:.0f}% of GeoTransolver's pressure lead in the mean: on them ISLA's mean pressure error is "
+      f"{W['isla_mean']:.3f} and GeoTransolver's {W['geotransolver_mean']:.3f}. On wall shear GeoTransolver's error is below ISLA's on "
+      f"{low('GeoTransolver', 'tau_wall_l2')} and Transolver's on {low('Transolver', 'tau_wall_l2')} (@sec-hilift-deficit).")
 ```
 
 ```{python}
 #| label: para-hilift-unit-drive
 #| output: asis
-P1 = REG["P1"]
+UD = {b: S.unit_drive("hilift", b)["pressure_l2"] for b in S.BASELINES}
 U_MAG = float(np.linalg.norm(H["U_inf"]))   # |U_inf| of the case of @fig-problem-hilift, inch/s; the same on every case
 print("**Reading the freestream as the physical velocity vector in inch/s costs both baselines on this dataset.** The same reference "
       f"configurations trained with `U_inf`, magnitude {U_MAG:,.0f} in/s and turning with the angle of attack, in place of its unit "
-      f"direction, nothing else changed, score {1 / P1['GeoTransolver']['unit_over_physical']:.2f} (GeoTransolver) and "
-      f"{1 / P1['Transolver']['unit_over_physical']:.2f} (Transolver) times the native pressure error of their unit-direction twins "
-      "(@tbl-hilift-unit-drive). The prediction registered before the unit-direction runs, that each improves on its physical-vector twin, "
-      "holds for both" + (", and so does the prediction that their uniform-point-cloud and rotated-and-translated errors stay several times "
-      "their native error" if REG["P3 baselines"]["holds"] else "") + ".")
+      f"direction, nothing else changed, score {1 / UD['GeoTransolver']:.2f} (GeoTransolver) and "
+      f"{1 / UD['Transolver']:.2f} (Transolver) times the native pressure error of their unit-direction twins "
+      "(@tbl-hilift-unit-drive).")
 print()
 print("| model and input | surface pressure | wall shear | uniform point cloud, pressure | ÷ ISLA, pressure |\n|---|--:|--:|--:|--:|")
 for b in S.BASELINES:
@@ -497,213 +493,33 @@ print()
 print(": The baselines of @tbl-hilift-protocols with the freestream as its unit direction (the standing's checkpoints) and as the physical vector in "
       "inch/s, at their reference configurations on the HiLiftAeroML 510-case rung: area-weighted relative L2 on the 180 validation cases, "
       "seed means over two seeds, float32, every model scored on the same 200,000 cells per case as ISLA. How to read this: the two rows of "
-      "a baseline differ only in that one input; ÷ ISLA divides by the native pressure error of the standing's ISLA (ISLA checkpoints of the "
-      f"{S.FORM_TAG}, @sec-checkpoint-form). Data: {HL.source} (`raw_drive_geotransolver`, `raw_drive_transolver`). {{#tbl-hilift-unit-drive}}")
+      "a baseline differ only in that one input; ÷ ISLA divides by the native pressure error of the standing's ISLA. "
+      f"Data: {HL.source} (`raw_drive_geotransolver`, `raw_drive_transolver`). {{#tbl-hilift-unit-drive}}")
 ```
 
+### Where ISLA trails {#sec-hilift-deficit}
+
 ```{python}
-#| label: para-hilift-normalized-reads
+#| label: para-hilift-deficit
 #| output: asis
-RA2 = REG["R-A2"]["fields"]; OLD = HL.raw["raw_read_isla"]
-draw = max(abs(HL.raw["char_baselines"]["GeoTransolver 256"]["native"][f]["mean"] / RAWD["GeoTransolver"]["native"][f]["mean"] - 1) for f in HL_F)
-print("**On this rung the normalized slice reads cost ISLA on pressure.** ISLA at the same size with the raw slice reads, the ablation of "
-      f"@sec-isla-layer, scores {OLD['native']['pressure_l2']['mean']:.4f} on pressure and {OLD['native']['tau_wall_l2']['mean']:.4f} on wall "
-      f"shear on the native mesh. Normalized ÷ raw is {RA2['pressure_l2']['ratio']:.3f} on pressure"
-      + (", with both seeds of the normalized reads above both raw-read seeds," if RA2["pressure_l2"]["a2_seeds_above_old_range"] else "")
-      + f" and {RA2['tau_wall_l2']['ratio']:.3f} on wall shear. The bar registered for this comparison, 1.05 on every headline field, "
-      + ("fails on pressure and holds on wall shear" if not RA2["pressure_l2"]["holds"] and RA2["tau_wall_l2"]["holds"] else
-         "holds on both" if all(v["holds"] for v in RA2.values()) else "fails")
-      + ". The raw-read checkpoints were scored on another copy of the dataset, whose 200,000-cell draw differs from the standing's; on "
-      f"GeoTransolver's physical-vector checkpoints the two draws differ by at most {100 * draw:.1f}% in the native error.")
+import re as _re
+import records as R
+HLR = " ".join(R.load("hilift090", "RESULTS_HL090.md").split())
+wo = {"GeoTransolver pressure": _re.search(r"Without the 10 largest-gap cases, ISLA's mean error is ([0-9.]+) times GeoTransolver's", HLR).group(1),
+      "Transolver pressure": _re.search(r"and ([0-9.]+) without the 10 largest-gap cases;", HLR).group(1)}
+_m = _re.search(r"and ([0-9.]+) and ([0-9.]+) without the 10 largest-gap cases\.", HLR)
+wo["GeoTransolver wall shear"], wo["Transolver wall shear"] = _m.group(1), _m.group(2)
+flips = _re.search(r"The post-stall cases flip between seeds: (.*?\d)\.\s", HLR).group(1)
+print("**ISLA's pressure deficit to GeoTransolver is a few cases at stall; its deficit to Transolver, and on wall shear to both, is an "
+      "offset spread over the set.** Remove the ten cases with the largest gap, and GeoTransolver ÷ ISLA on pressure is "
+      f"{1 / float(wo['GeoTransolver pressure']):.3f}, within the level band, against Transolver ÷ ISLA {1 / float(wo['Transolver pressure']):.3f}; "
+      f"on wall shear the two ratios are {1 / float(wo['GeoTransolver wall shear']):.3f} and {1 / float(wo['Transolver wall shear']):.3f}. On a case "
+      "at stall the error is close to all or nothing, and which of ISLA's seeds gets it right changes from case to case (seed 42 / seed "
+      f"43 pressure error: {flips.replace(' / ', ' and ')}), so with two seeds a side any one of these cases moves the mean ratio by a few "
+      "percent, and the deficit is read for its concentration, not for its size to the percent. Every number here is the native "
+      f"pressure or wall-shear error per case, seed means, against the unit-direction baselines. Data: {HL.source} (`case_level`); "
+      f"{R.source('hilift090', 'RESULTS_HL090.md')} (the analyses beside its registered rule).")
 ```
-
-### Where ISLA trails, and why {#sec-hilift-deficit}
-
-```{python}
-#| label: setup-hilift-deficit
-#| include: false
-import csv
-DFP = "campaigns_2026-10-20/hilift_deficit"
-DF = J(f"{DFP}/hilift_deficit_2026-10-20.json")
-PC = list(csv.DictReader(open(RES / DFP / "partA" / "percase_w512s512.csv")))
-TOP = DF["gt_gap"]["top10"]; PS = DF["top10_per_seed"]; SP = DF["spatial"]
-cid = lambda c: c.replace("geo_", "").replace("_AoA", "")          # geo_LHC002_AoA_18 -> LHC002_18
-rng = lambda xs, d=2: f"{min(xs):.{d}f} to {max(xs):.{d}f}"
-NUM = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"]
-SYS = [c for c, v in PS.items() if min(v["ISLA"]) >= 0.15 and max(v["GeoTransolver"]) <= 0.10]   # wrong on both ISLA seeds, right on both GT seeds
-RR = DF["raw_read"]; R16 = [t["case"] for t in RR["top3"]]
-```
-
-```{python}
-#| label: para-hilift-deficit-cases
-#| output: asis
-post = [t for t in TOP if t["post_stall"]]; pre = [t for t in TOP if not t["post_stall"]]
-wo = DF["gt_gap"]["isla_over_gt_without_top10"]
-sys_share = sum(t["share"] for t in TOP if t["case"] in SYS)
-print(f"**Against GeoTransolver, ISLA's deficit is a handful of cases at stall, on which a run is either nearly right or badly "
-      f"wrong; without them the two are level.** Over the {DF['n_cases']} validation cases ISLA's mean pressure error is "
-      f"{100 * (DF['isla_over_gt']['pressure'] - 1):.1f}% above GeoTransolver's. The {NUM[len(TOP)]} cases with the largest gap carry "
-      f"{100 * DF['gt_gap']['top10_share']:.0f}% of that difference; {NUM[len(post)]} of them are post-stall, at "
-      f"{min(t['aoa'] for t in post)}° to {max(t['aoa'] for t in post)}°"
-      + (f", and {NUM[len(pre)]} is a pre-stall case at {pre[0]['aoa']}°" if len(pre) == 1 else "")
-      + f". Without those {NUM[len(TOP)]}, GeoTransolver ÷ ISLA is {1 / wo['pressure']:.3f} on pressure and {1 / wo['wall_shear']:.3f} on "
-      "wall shear (@fig-hilift-deficit-cases). On a case of this kind the error is close to all or nothing. GeoTransolver reads "
-      f"{rng([x for c in SYS for x in PS[c]['GeoTransolver']])} on both seeds of {' and '.join(cid(c) for c in SYS)}, where both of ISLA's "
-      f"seeds read {rng([x for c in SYS for x in PS[c]['ISLA']])}; these two cases alone carry {100 * sys_share:.0f}% of the difference. "
-      "On the other cases of the kind the outcome changes with the seed: GeoTransolver reads "
-      f"{PS['geo_LHC153_AoA_16']['GeoTransolver'][0]:.2f} and {PS['geo_LHC153_AoA_16']['GeoTransolver'][1]:.2f} on its two seeds of LHC153_16 "
-      f"and {PS['geo_LHC119_AoA_16']['GeoTransolver'][0]:.2f} and {PS['geo_LHC119_AoA_16']['GeoTransolver'][1]:.2f} on LHC119_16, and "
-      f"Transolver {PS['geo_LHC002_AoA_18']['Transolver'][0]:.2f} and {PS['geo_LHC002_AoA_18']['Transolver'][1]:.2f} on LHC002_18. Every "
-      f"model is wrong on both seeds of LHC040_16 ({rng([x for a in ('ISLA', 'GeoTransolver', 'Transolver') for x in PS['geo_LHC040_AoA_16'][a]])}). "
-      "With two seeds a side, any one of these cases moves the mean ratio by a few percent, so the deficit is read for its "
-      "concentration, not for its size to the percent.")
-```
-
-```{python}
-#| label: fig-hilift-deficit-cases
-#| fig-cap: >
-#|   Surface-pressure error of every HiLiftAeroML validation case against its
-#|   angle of attack, ISLA (blue squares, right of each angle) and
-#|   GeoTransolver (red circles, left), seed means, native mesh, 510-case
-#|   rung; logarithmic axis. Gray lines join the two models on the ten cases
-#|   with the largest gap between them, which carry the whole of ISLA's
-#|   deficit in the mean; the two labeled cases are wrong on both of ISLA's
-#|   seeds and right on both of GeoTransolver's. ISLA checkpoints of the
-#|   nearest-token form (@sec-checkpoint-form); GeoTransolver reads the unit
-#|   far-field direction. How to read this: most cases sit in one band per
-#|   angle for both models; the deficit is the few cases far above the band;
-#|   a seed mean of a case on which one seed is right and one wrong sits
-#|   between the two, so the figure blurs the all-or-nothing behavior that the
-#|   per-seed values in the text show. Data:
-#|   results/campaigns_2026-10-20/hilift_deficit/partA/percase_w512s512.csv;
-#|   results/campaigns_2026-10-20/hilift_deficit/hilift_deficit_2026-10-20.json.
-fig, ax = plt.subplots(figsize=(8.0, 4.4))
-rg = np.random.default_rng(0)
-topc = {t["case"] for t in TOP}
-for r in PC:
-    a = int(r["aoa"]); j = rg.uniform(-0.18, 0.18)
-    xi, xg = a + 0.4 + j, a - 0.4 + j
-    if r["case"] in topc:
-        ax.plot([xg, xi], [float(r["gt_p"]), float(r["isla_p"])], color=MUTED, lw=0.8, zorder=1)
-    ax.plot(xi, float(r["isla_p"]), **series_kwargs("isla_ref", ls="none", ms=4.2, mew=0.4), alpha=0.85, zorder=3)
-    ax.plot(xg, float(r["gt_p"]), **series_kwargs("gt", ls="none", ms=4.2, mew=0.4), alpha=0.85, zorder=2)
-    if r["case"] in SYS:
-        ax.text(xi + 0.3, float(r["isla_p"]), cid(r["case"]), fontsize=7.5, color=INK2, va="center", path_effects=halo())
-ax.set_yscale("log"); ax.set_ylim(0.012, 0.4)
-ax.set_yticks([0.02, 0.05, 0.1, 0.2]); ax.set_yticklabels(["0.02", "0.05", "0.1", "0.2"]); ax.yaxis.set_minor_formatter(mpl.ticker.NullFormatter())
-aoas_ = sorted({int(r["aoa"]) for r in PC}); ax.set_xticks(aoas_); ax.set_xlim(aoas_[0] - 1.2, aoas_[-1] + 2.6)
-ax.set_xlabel("angle of attack [deg]"); ax.set_ylabel("surface-pressure\nrelative L2 [–]", rotation=0, ha="right", va="center")
-ax.grid(axis="x", visible=False)
-label_line(ax, aoas_[-1] + 0.9, 0.03, "ISLA", BLUE); label_line(ax, aoas_[-1] + 0.9, 0.022, "GeoTransolver", RED)
-plt.show()
-```
-
-```{python}
-#| label: para-hilift-deficit-where
-#| output: asis
-E, C, Y, FL = SP["pressure by element"], SP["pressure by cp"], SP["pressure by span"], SP["pressure by flow"]
-WE = SP["wall shear by element"]
-sh = lambda d, k: 100 * d[k]["share_of_isla_minus_gt"]
-ar = lambda d, k: 100 * d[k]["area"]
-print("**On the surface, the excess sits in the leading-edge suction peaks of the main element and the slat, on a fraction of a "
-      "percent of the area.** The saved predictions split each case's squared pressure error over regions of the surface "
-      f"({SP['_n_labeled']} validation cases carry the element labels). Of ISLA's excess over GeoTransolver, the main element carries "
-      f"{sh(E, 'main'):.0f}% on {ar(E, 'main'):.0f}% of the area and the slat {sh(E, 'slat'):.0f}% on {ar(E, 'slat'):.1f}%; the flap and "
-      f"the rest of the aircraft carry {sh(E, 'flap') + sh(E, 'other'):.0f}%. Split instead by the true pressure coefficient, the cells "
-      f"below $C_p = -4$, {ar(C, 'cp<-4'):.1f}% of the area, carry {sh(C, 'cp<-4'):.0f}% of the excess, and those between $-4$ and $-2$ "
-      f"another {sh(C, '-4..-2'):.0f}% (@fig-hilift-suction). By span, {sh(Y, 'y2') + sh(Y, 'y3'):.0f}% sits between 40% and 80% of the "
-      f"semispan. The regions of reversed flow, where the true wall shear opposes the freestream, are {ar(FL, 'reversed'):.1f}% of the "
-      f"area and carry {sh(FL, 'reversed'):.0f}%. Wall shear follows the same pattern (main element {sh(WE, 'main'):.0f}%, slat "
-      f"{sh(WE, 'slat'):.0f}%). The suction peaks are where the flow at the leading edge holds or breaks down as the wing nears "
-      "stall, so the wrong runs differ from the CFD in whether, and where along the span, the outboard leading-edge suction holds. The record does not hold the sign of the error at those cells or the lift of each case, which would say "
-      "whether a wrong run loses the suction the CFD keeps. On the smaller ISLA at 210 cases no element carried the difference "
-      "between the models (@sec-de-strata); at the reference configuration the elements do. In this split ISLA is the mean of its two "
-      "seeds and GeoTransolver its seed 42.")
-```
-
-```{python}
-#| label: fig-hilift-suction
-#| fig-cap: >
-#|   Where on the HiLiftAeroML surface ISLA's pressure error exceeds
-#|   GeoTransolver's: for each band of the true pressure coefficient, its
-#|   share of the surface area (gray) and its share of ISLA's excess squared
-#|   pressure error over GeoTransolver's (blue), averaged over the 180
-#|   validation cases at the 510-case rung, native mesh. ISLA checkpoints of
-#|   the nearest-token form (@sec-checkpoint-form), the mean of two seeds;
-#|   GeoTransolver seed 42, reading the unit far-field direction. How to read
-#|   this: the bars of excess sum to one; the band below $C_p = -4$, the
-#|   leading-edge suction peaks, is a fraction of a percent of the area and
-#|   carries most of the excess; the figure does not show the excess over
-#|   Transolver, which is spread over the surface (text). Data:
-#|   results/campaigns_2026-10-20/hilift_deficit/partA_spatial/SPATIAL.md
-#|   (reduced in hilift_deficit_2026-10-20.json).
-C = SP["pressure by cp"]
-BANDS = [("cp<-4", "below −4"), ("-4..-2", "−4 to −2"), ("-2..-1", "−2 to −1"), ("-1..0", "−1 to 0"), (">0", "above 0")]
-fig, ax = plt.subplots(figsize=(8.0, 3.4))
-ys = np.arange(len(BANDS))[::-1]
-for y, (k, lab) in zip(ys, BANDS):
-    a, s_ = C[k]["area"], C[k]["share_of_isla_minus_gt"]
-    ax.barh(y + 0.19, a, height=0.36, color=BASELINE)
-    ax.barh(y - 0.19, max(s_, 0), height=0.36, **bar_kwargs("isla_ref"))
-    ax.text(a + 0.01, y + 0.19, f"{100 * a:.1f}% of the area", va="center", fontsize=7.8, color=INK2)
-    ax.text(max(s_, 0) + 0.01, y - 0.19, f"{100 * s_:.0f}% of the excess", va="center", fontsize=7.8, color=BLUE)
-ax.set_yticks(ys); ax.set_yticklabels([lab for _, lab in BANDS])
-ax.set_title("cells grouped by their true pressure coefficient $C_p$ [–]", loc="left", fontsize=9.5)
-ax.set_xlim(0, 1.0); ax.set_xlabel("share [–]"); ax.grid(axis="y", visible=False)
-plt.show()
-```
-
-```{python}
-#| label: para-hilift-deficit-transolver
-#| output: asis
-BT = DF["t_offset"]["by_aoa"]; att = [a for a in BT if int(a) <= 12]
-Y = SP["pressure by span"]; C = SP["pressure by cp"]
-print("**Against Transolver the deficit is broad.** Transolver's pressure error is below ISLA's on "
-      f"{DF['t_offset']['isla_worse_on']} of the {DF['n_cases']} cases, and Transolver ÷ ISLA is "
-      f"{rng([1 / BT[a]['isla_over_t'] for a in att])} in every angle from {min(int(a) for a in att)}° to {max(int(a) for a in att)}°, "
-      "where the flow is attached and GeoTransolver ÷ ISLA is "
-      f"{rng([1 / BT[a]['isla_over_gt'] for a in att])}. Over the surface, the root fifth of the span, {100 * Y['y0']['area']:.0f}% of "
-      f"the area, carries {100 * Y['y0']['share_of_isla_minus_t']:.0f}% of ISLA's excess over Transolver, and the cells below "
-      f"$C_p = -4$ {100 * C['cp<-4']['share_of_isla_minus_t']:.0f}% (Transolver seed 42). This is a second mechanism, an offset on the "
-      "ordinary attached cases, and the suction peaks at stall do not explain it.")
-```
-
-```{python}
-#| label: para-hilift-deficit-reads
-#| output: asis
-B = RR["by_aoa"]; others = [a for a in B if a != "16"]
-n16 = [c for c in R16 if c.endswith("_16")]
-print("**The cost of the normalized slice reads on pressure is three cases at 16°.** Normalized ÷ raw is "
-      f"{RR['isla_over_raw']['pressure']:.3f} on the mean (@sec-de-result); in the 16° bin it is {B['16']['isla_over_raw']:.2f}, which "
-      f"carries {100 * B['16']['share']:.0f}% of the difference, and in every other angle it is "
-      f"{rng([B[a]['isla_over_raw'] for a in others])}. "
-      + ", ".join(f"{cid(t['case'])} ({100 * t['share']:.0f}%)" for t in RR["top3"])
-      + " carry it between them, more than all of it, because the other angles move the other way. On those three the normalized reads are wrong on both seeds "
-      f"({rng([x for c in R16 for x in PS[c]['ISLA']])}) and the raw-read variant reads "
-      f"{rng([x for c in R16 for x in PS[c]['raw_read']])}, so the regression is a choice of branch at the onset of stall on three "
-      "cases, not a loss of accuracy spread over the set. These records cannot separate the reads from the other differences between "
-      "the two runs.")
-```
-
-```{python}
-#| label: para-hilift-deficit-coverage
-#| output: asis
-TRN = DF["training"]; RHO = DF["spearman_isla_over_gt_aoa_ge_16"]
-feat = {k: v for k, v in RHO.items() if "error" not in k}   # case features, not the models' own errors
-print("**Training coverage does not explain the cases at stall.** The 510-case rung is drawn by case, not by geometry: "
-      f"{TRN['n_val_geometries_in_train']} of the {TRN['n_val_geometries']} validation geometries appear in training at other angles. "
-      f"{TRN['n_train_aoa_ge_16']} of the {TRN['n_train']} training cases ({100 * TRN['n_train_aoa_ge_16'] / TRN['n_train']:.0f}%) sit at "
-      f"16° to 22°, {min(v for k, v in TRN['train_by_aoa'].items() if int(k) >= 16)} to "
-      f"{max(v for k, v in TRN['train_by_aoa'].items() if int(k) >= 16)} per angle, as many as at the low angles. Within the cases at "
-      "16° and above, the per-case ratio of the two models' errors has a Spearman correlation of at most "
-      f"{max(abs(v) for v in feat.values()):.2f} in magnitude with the angle, the stall label, the high-deflection label, the number of "
-      "training cases of the same geometry and the angle to the nearest of them, the slat and flap area shares and the cell count. "
-      "The cases ISLA gets wrong are not where the data are thin; they sit at the onset of stall, where two flow states are close in "
-      "the inputs and far apart in the field. Data: "
-      f"results/{DFP}/hilift_deficit_2026-10-20.json, from the records and the script beside it.")
-```
-
-<!-- RENDERING SLOT: fig-hilift-prediction: truth / ISLA / GeoTransolver / Transolver and errors on one held-out case -->
 
 ## Studies on this dataset {#sec-data-efficiency}
 
@@ -951,6 +767,6 @@ print("**Across a boundary in the geometry parameters ISLA does not generalize b
 
 Questions this dataset raises and leaves open:
 
-- **What moves ISLA's error under rotation and translation on this dataset?** On the DrivAerML Surface task and SHIFT-SUV ISLA's rotated-and-translated error equals its native error to float32 roundoff; here it is `{python} f"{100 * min(v - 1 for d in REG['P3 ISLA (R-POSE)']['posed_over_native'].values() for v in d.values()):.1f}"`% to `{python} f"{100 * max(v - 1 for d in REG['P3 ISLA (R-POSE)']['posed_over_native'].values() for v in d.values()):.1f}"`% above it on every field and seed (@sec-de-result), against the registered 0.2%. Candidates are float32 arithmetic on coordinates in inches after the translation and how the far-field direction follows the rotation; scoring the standing's checkpoints rotated only, translated only, and in float64 settles which.
-- **How does ISLA's reference configuration extrapolate in flow regime?** The angle-of-attack and stall test sets of @tbl-hilift-splits hold out the high angles and the post-stall flow. No checkpoint of the reference configuration is scored on them; a smaller ISLA and a GeoTransolver reading the physical freestream vector, scored once on them, both lose about a factor of ten from their validation error (the lab notebook, @sec-notebook; results/hilift_sealed_test_2026-09-04.json).
-- **Why does ISLA take the wrong flow state on a few cases at stall, and what sets Transolver's broad lead?** The deficit to GeoTransolver is a handful of post-stall cases on which ISLA's outboard leading-edge suction departs from the CFD, two of them on both seeds, and the deficit to Transolver is an offset on the attached cases (@sec-hilift-deficit); the fitted law gives ISLA and GeoTransolver the same exponent for the reducible error (@sec-scaling-law). What would settle the first: the sign of the error at the suction peaks and the lift of each case, from saved predictions, and more seeds on the cases at stall, which separate the cases a model gets wrong every time from those that change with the seed. What sets the second is open (@sec-open-questions).
+- **What moves ISLA's error under rotation and translation on this dataset?** On the DrivAerML Surface task and SHIFT-SUV ISLA's rotated-and-translated error equals its native error to float32 roundoff; here it is `{python} f"{100 * min(POSED_DEV):.1f}"`% to `{python} f"{100 * max(POSED_DEV):.1f}"`% above it on every field and seed (@sec-de-result). Candidates are float32 arithmetic on coordinates in inches after the translation and how the far-field direction follows the rotation; scoring the standing's checkpoints rotated only, translated only, and in float64 settles which.
+- **How does ISLA's reference configuration extrapolate in flow regime?** The angle-of-attack and stall test sets of @tbl-hilift-splits hold out the high angles and the post-stall flow. No checkpoint of the reference configuration is scored on them; a smaller ISLA and a GeoTransolver reading the physical freestream vector, scored once on them, have a pressure error `{python} f"{min(v['d_min'] for v in SEALED.values()):.1f}"` to `{python} f"{max(v['d_max'] for v in SEALED.values()):.1f}"` times their validation error on every seed and test set (results/hilift_sealed_test_2026-09-04.json).
+- **Why does ISLA take the wrong flow state on a few cases at stall, and what sets the broad offset?** The pressure deficit to GeoTransolver is a few post-stall cases, where the seed that gets the flow state right changes from case to case; the deficit to Transolver, and on wall shear to both, is an offset spread over the cases (@sec-hilift-deficit); the fitted law gives ISLA and GeoTransolver the same exponent for the reducible error (@sec-scaling-law). What would settle the first: the sign of the error at the suction peaks and the lift of each case, from saved predictions, and more seeds on the cases at stall, which separate the cases a model gets wrong every time from those that change with the seed. What sets the second is open (@sec-open-questions).

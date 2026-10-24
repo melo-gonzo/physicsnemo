@@ -32,7 +32,6 @@ from physicsnemo.core.function_spec import FunctionSpec
 from physicsnemo.experimental.models.isla.tree_read import canonical_frame, frame_coordinates
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.geometry._cell_normals import compute_cell_normals
-from physicsnemo.mesh.spatial import signed_distance_field
 from physicsnemo.mesh.spatial._lbvh import build_lbvh_topology
 from physicsnemo.mesh.spatial.bvh import _compute_morton_codes
 from physicsnemo.nn.functional.geometry.sdf import _closest_point_weights
@@ -455,7 +454,8 @@ def _cell_tree(simplex: torch.Tensor):
     stackless traversal needs: each node's two children, its escape pointer (the
     node after its subtree, -1 at the end), the inner nodes of each level, root
     first, each node's cell (-1 inside), and each node's box ``(N, 3)`` twice (least
-    and greatest corner). The cells are put in Morton order in the boundary's
+    and greatest corner), in float32 rounded outward for the traversals' pruning. The
+    cells are put in Morton order in the boundary's
     canonical frame (:func:`canonical_frame`), so the tree, and the far field of
     :func:`_tree_winding_numbers` on it, is the same in every pose of the case; the
     boxes are in the queries' frame. The topology depends on ``F`` alone, so it is
@@ -485,7 +485,10 @@ def _cell_tree(simplex: torch.Tensor):
     lo[leaf], hi[leaf] = simplex[leaf_cell[leaf]].amin(1), simplex[leaf_cell[leaf]].amax(1)
     children = [wp.from_torch(c.contiguous(), dtype=wp.int64) for c in (left, right)]
     _bottom_up(_node_boxes_kernel, levels, [*children, wp.from_torch(lo, dtype=wp.vec3d), wp.from_torch(hi, dtype=wp.vec3d)], simplex)
-    return left, right, escape, levels, leaf_cell, lo, hi
+    lo32, hi32 = lo.float(), hi.float()
+    lo32 = torch.where(lo32.double() > lo, lo32.nextafter(lo32.new_tensor(-torch.inf)), lo32)
+    hi32 = torch.where(hi32.double() < hi, hi32.nextafter(hi32.new_tensor(torch.inf)), hi32)
+    return left, right, escape, levels, leaf_cell, lo32, hi32
 
 
 def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.Tensor, tree, winding=None):
@@ -501,10 +504,7 @@ def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.T
     also sums the solid angles (:func:`_ball_winding_kernel`), returned as a third
     output ``(Q,)``, the winding number times ``4 pi``."""
     dev = query.device
-    left, _, escape, _, leaf_cell, box_lo, box_hi = tree
-    lo, hi = box_lo.float(), box_hi.float()
-    lo = torch.where(lo.double() > box_lo, lo.nextafter(lo.new_tensor(-torch.inf)), lo)
-    hi = torch.where(hi.double() < box_hi, hi.nextafter(hi.new_tensor(torch.inf)), hi)
+    left, _, escape, _, leaf_cell, lo, hi = tree
     ### Each cell's unit normal and its edges' outward unit normals in its plane,
     ### with their offsets: a point's distance to the cell is at least the root sum
     ### of squares of its height over the plane and of its largest edge offset.
@@ -572,6 +572,168 @@ def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.T
         keep = torch.arange(out.shape[1], device=dev) < count[:, None]
         li, pk = torch.cat([li, rows[:, None].expand_as(out)[keep]]), torch.cat([pk, out[keep]])
     return li, pk, w
+
+
+#: Entries of the traversal stack of :func:`_nearest_cells`; a midpoint-split tree of
+#: ``F`` cells is ``ceil(log2 F)`` deep and needs one more.
+_NEAREST_STACK = 64
+_nearest_stack = wp.types.vector(length=_NEAREST_STACK, dtype=wp.int32)
+_nearest_gaps = wp.types.vector(length=_NEAREST_STACK, dtype=wp.float32)
+
+
+@wp.func
+def _vec3f(v: wp.vec3d) -> wp.vec3f:
+    return wp.vec3f(wp.float32(v[0]), wp.float32(v[1]), wp.float32(v[2]))
+
+
+@wp.func
+def _box_gap2(lo: wp.vec3f, hi: wp.vec3f, x: wp.vec3f) -> wp.float32:
+    """The squared distance from ``x`` to the box ``[lo, hi]``."""
+    zero = wp.float32(0.0)
+    g0 = wp.max(wp.max(lo[0] - x[0], x[0] - hi[0]), zero)
+    g1 = wp.max(wp.max(lo[1] - x[1], x[1] - hi[1]), zero)
+    g2 = wp.max(wp.max(lo[2] - x[2], x[2] - hi[2]), zero)
+    return g0 * g0 + g1 * g1 + g2 * g2
+
+
+@wp.func
+def _triangle_distance2_32(p: wp.vec3f, a: wp.vec3f, b: wp.vec3f, c: wp.vec3f) -> wp.float32:
+    """:func:`_triangle_distance2` in float32 (NaN on a degenerate triangle)."""
+    zero = wp.float32(0.0)
+    ab = b - a
+    ac = c - a
+    ap = p - a
+    d1 = wp.dot(ab, ap)
+    d2 = wp.dot(ac, ap)
+    if d1 <= zero and d2 <= zero:
+        return wp.dot(ap, ap)
+    bp = p - b
+    d3 = wp.dot(ab, bp)
+    d4 = wp.dot(ac, bp)
+    if d3 >= zero and d4 <= d3:
+        return wp.dot(bp, bp)
+    vc = d1 * d4 - d3 * d2
+    if vc <= zero and d1 >= zero and d3 <= zero:
+        r = ap - ab * (d1 / (d1 - d3))
+        return wp.dot(r, r)
+    cp = p - c
+    d5 = wp.dot(ab, cp)
+    d6 = wp.dot(ac, cp)
+    if d6 >= zero and d5 <= d6:
+        return wp.dot(cp, cp)
+    vb = d5 * d2 - d1 * d6
+    if vb <= zero and d2 >= zero and d6 <= zero:
+        r = ap - ac * (d2 / (d2 - d6))
+        return wp.dot(r, r)
+    va = d3 * d6 - d5 * d4
+    if va <= zero and d4 - d3 >= zero and d5 - d6 >= zero:
+        r = bp - (c - b) * ((d4 - d3) / ((d4 - d3) + (d5 - d6)))
+        return wp.dot(r, r)
+    denom = va + vb + vc
+    r = ap - ab * (vb / denom) - ac * (vc / denom)
+    return wp.dot(r, r)
+
+
+@wp.kernel
+def _nearest_cell_kernel(
+    node_lo: wp.array(dtype=wp.vec3f),
+    node_hi: wp.array(dtype=wp.vec3f),
+    left: wp.array(dtype=wp.int32),
+    right: wp.array(dtype=wp.int32),
+    leaf_cell: wp.array(dtype=wp.int64),
+    corners: wp.array(dtype=wp.vec3d),
+    query32: wp.array(dtype=wp.vec3f),
+    rows: wp.array(dtype=wp.int64),
+    nearest: wp.array(dtype=wp.int64),
+):
+    """The cell nearest to the query ``rows[tid]`` in float32 (the first found at equal
+    distances): a depth-first traversal of the BVH, nearer child first, that skips the
+    nodes whose boxes lie no nearer than the nearest cell so far (each stacked with its
+    box's distance). A NaN distance (a degenerate cell) is never the nearest; with no
+    other cell, ``nearest`` keeps its value."""
+    q = rows[wp.tid()]
+    x = query32[q]
+    best = wp.float32(wp.inf)
+    found = wp.int64(-1)
+    nodes = _nearest_stack()
+    gaps = _nearest_gaps()
+    nodes[0] = wp.int32(0)
+    gaps[0] = _box_gap2(node_lo[0], node_hi[0], x)
+    top = int(1)
+    while top > 0:
+        top -= 1
+        if gaps[top] < best:
+            node = nodes[top]
+            c = leaf_cell[node]
+            if c >= wp.int64(0):
+                i = c * wp.int64(3)
+                d2 = _triangle_distance2_32(
+                    x, _vec3f(corners[i]), _vec3f(corners[i + wp.int64(1)]), _vec3f(corners[i + wp.int64(2)])
+                )
+                if d2 < best:
+                    best = d2
+                    found = c
+            else:
+                near = left[node]
+                far = right[node]
+                g_near = _box_gap2(node_lo[near], node_hi[near], x)
+                g_far = _box_gap2(node_lo[far], node_hi[far], x)
+                ### (at equal box distances, as inside both boxes, the nearer centre first)
+                swap = g_far < g_near
+                if g_far == g_near:
+                    e_near = wp.float32(0.5) * (node_lo[near] + node_hi[near]) - x
+                    e_far = wp.float32(0.5) * (node_lo[far] + node_hi[far]) - x
+                    swap = wp.dot(e_far, e_far) < wp.dot(e_near, e_near)
+                if swap:
+                    near = right[node]
+                    far = left[node]
+                    g = g_near
+                    g_near = g_far
+                    g_far = g
+                if g_far < best:
+                    nodes[top] = far
+                    gaps[top] = g_far
+                    top += 1
+                if g_near < best:
+                    nodes[top] = near
+                    gaps[top] = g_near
+                    top += 1
+    if found >= wp.int64(0):
+        nearest[q] = found
+
+
+def _nearest_cells(query: torch.Tensor, simplex: torch.Tensor, tree) -> torch.Tensor:
+    """For each query ``(Q, 3)``, the index of a cell of ``simplex`` ``(F, 3, 3)``
+    nearest to it in float32 ``(Q,)``, by a Warp traversal of the BVH ``tree`` over the
+    cells (:func:`_cell_tree`); cell 0 when every distance is NaN. Its exact distance
+    bounds the closest one, so any cell would do for the search radius; a near one
+    keeps the radius, and so the candidate pairs, few. The queries are traversed in
+    Morton order."""
+    left, right, _, levels, leaf_cell, lo, hi = tree
+    if len(levels) >= _NEAREST_STACK:
+        raise ValueError(f"a tree {len(levels)} levels deep exceeds the nearest-cell stack ({_NEAREST_STACK})")
+    nearest = torch.zeros(query.shape[0], dtype=torch.int64, device=query.device)
+    device, stream = FunctionSpec.warp_launch_context(query)
+    with FunctionSpec.warp_stream_scope(stream):
+        wp.init()
+        wp.launch(
+            _nearest_cell_kernel,
+            dim=query.shape[0],
+            inputs=[
+                wp.from_torch(lo.contiguous(), dtype=wp.vec3f),
+                wp.from_torch(hi.contiguous(), dtype=wp.vec3f),
+                wp.from_torch(left.int().contiguous(), dtype=wp.int32),
+                wp.from_torch(right.int().contiguous(), dtype=wp.int32),
+                wp.from_torch(leaf_cell.contiguous(), dtype=wp.int64),
+                wp.from_torch(simplex.reshape(-1, 3).contiguous(), dtype=wp.vec3d),
+                wp.from_torch(query.float().contiguous(), dtype=wp.vec3f),
+                wp.from_torch(_compute_morton_codes(query).argsort(), dtype=wp.int64),
+                wp.from_torch(nearest, dtype=wp.int64),
+            ],
+            device=device,
+            stream=stream,
+        )
+    return nearest
 
 
 def _segment_candidates(query: torch.Tensor, points: torch.Tensor, cells: torch.Tensor, margin: torch.Tensor):
@@ -968,10 +1130,10 @@ def _closest_candidates(
     winding flip negates it bitwise.
 
     The exact search runs on candidate pairs that contain every cell with
-    ``D_k - max_j E_j`` within that bound. In three dimensions the float32 Warp
-    closest-point query gives an upper bound on the closest distance (the exact
-    distance to its cell plus the error bound), and a Warp traversal of a BVH
-    over the cells returns those within that radius; in two
+    ``D_k - max_j E_j`` within that bound. In three dimensions a Warp traversal of a
+    BVH over the cells finds a cell nearest in float32 (:func:`_nearest_cells`), whose
+    exact distance plus its error bound bounds the closest distance, and a second
+    traversal of the same BVH returns the cells within that radius; in two
     a brute force in the queries' precision keeps the segments within its own
     rounding (``32 u (|x| + max |v|)`` on each side) of the least. The winding
     number takes the same BVH in three dimensions, unless cells repeat."""
@@ -995,16 +1157,16 @@ def _closest_candidates(
     s_rep, p_rep = simplex[rep], parity[rep].to(q64)
     oriented = _oriented_areas(s_rep, p_rep)
     if dim == 3:
-        seed = signed_distance_field(Mesh(points=points, cells=cells), query_points)[2]
-        w0 = _closest_weights(q64, simplex[seed])
-        bound = (q64 - (w0[..., None] * simplex[seed]).sum(1)).norm(dim=-1) + coef * (q_norm + reach[seed])
-        ### (padded by twice the bound, the kernel's float64 distances against these,
-        ### and by the rounding of its box test)
         ### Without repeated cells the two trees are one, and one traversal serves the
         ### ball search and the winding number.
         once = rep.shape[0] == cells.shape[0]
         s_ord = s_rep if once else simplex[order]
         tree, winding = _cell_tree(s_ord), None
+        seed = order[_nearest_cells(query_points, s_ord, tree)]
+        w0 = _closest_weights(q64, simplex[seed])
+        bound = (q64 - (w0[..., None] * simplex[seed]).sum(1)).norm(dim=-1) + coef * (q_norm + reach[seed])
+        ### (padded by twice the bound, the kernel's float64 distances against these,
+        ### and by the rounding of its box test)
         if once:
             winding = _winding_moments(s_rep, p_rep, oriented[0], tree)
         li, pk, w_sum = _ball_candidates(q64, (bound + 3 * err_max) * (1 + 1e-12), s_ord, tree, winding)

@@ -1,0 +1,127 @@
+{
+ "lug": {
+  "sample_id": "00633_lug_0633_lug_0633",
+  "source": {
+   "lug_isla/native": {
+    "row": 12,
+    "run_id": "r090eag_lug_isla_seed42",
+    "dataset": "ginot_lug_volume",
+    "model": "isla_lug",
+    "code": "code_cmpaf_fix",
+    "recipe": "recipe_r090",
+    "cells": 200000,
+    "replay": false,
+    "lhr_dump_job": 343286,
+    "dump": "$T/book_figs_2026-10-22/dump/lug_isla/native/ (copy: scratch/isla-render090-2026-10-22/dump/lug_isla/native/)",
+    "reused_2026_10_18_row": null,
+    "scorer_record": "$T/evals_r090eag/r090eag_lug_isla_seed42/native/r090eag_lug_isla_seed42/metrics.jsonl"
+   },
+   "lug_gt/native": {
+    "row": 13,
+    "run_id": "lugbc_gt_seed42",
+    "dataset": "ginot_lug_volume",
+    "model": "geotransolver_lug",
+    "code": "code_v20",
+    "recipe": "recipe_v8",
+    "cells": 200000,
+    "replay": false,
+    "lhr_dump_job": 336070,
+    "dump": "$T/book_figs_2026-10-22/dump/lug_gt/native/ (copy: scratch/isla-render090-2026-10-22/dump/lug_gt/native/)",
+    "reused_2026_10_18_row": null,
+    "scorer_record": "$T/evals_lugbc/lugbc_gt_seed42/native/lugbc_gt_seed42/metrics.jsonl"
+   },
+   "lug_t/native": {
+    "row": 14,
+    "run_id": "cl_r_lug_t_seed42",
+    "dataset": "ginot_lug_volume",
+    "model": "transolver_lug",
+    "code": "code_v20",
+    "recipe": "recipe_v8",
+    "cells": 200000,
+    "replay": false,
+    "lhr_dump_job": 275252,
+    "dump": "$T/book_figs_2026-10-18/dump/lug_t/native/ (copy: scratch/isla-render090-2026-10-22/dump/lug_t/native/)",
+    "reused_2026_10_18_row": 14,
+    "scorer_record": "results/campaigns_2026-10-02/char/protocols/cl_r_lug_t_seed42/native/metrics.jsonl"
+   }
+  },
+  "n_points_scored": 12720,
+  "n_points_top_face": 1060,
+  "units": "MPa (von_mises = 150.2 + 92.4 x the dump's normalized value)",
+  "params": {
+   "hole_radius_m": 0.01070511806756258,
+   "length_m": 0.10665353387594223,
+   "thickness_m": 0.02736596018075943,
+   "pressure_mpa": 75.74364471435547
+  },
+  "per_sample_rel_l2": {
+   "von_mises_l2": {
+    "ISLA": 0.0009005474275909364,
+    "GeoTransolver": 0.0015347220469266176,
+    "Transolver": 0.0019168148282915354
+   }
+  },
+  "scorer_checks": [
+   {
+    "tag": "lug_isla",
+    "protocol": "native",
+    "run_id": "r090eag_lug_isla_seed42",
+    "sample_id": "00633_lug_0633_lug_0633",
+    "scorer_record": "$T/evals_r090eag/r090eag_lug_isla_seed42/native/r090eag_lug_isla_seed42/metrics.jsonl",
+    "scorer_epoch": 500,
+    "scorer_rows_for_case": 1,
+    "scorer_rows_agree": true,
+    "scorer": {
+     "von_mises_l2": 0.0009005474275909364
+    },
+    "dump": {
+     "von_mises_l2": 0.0009005501051433384
+    },
+    "rel_diff": {
+     "von_mises_l2": 2.9732497367542856e-06
+    },
+    "max_rel_diff": 2.9732497367542856e-06
+   },
+   {
+    "tag": "lug_gt",
+    "protocol": "native",
+    "run_id": "lugbc_gt_seed42",
+    "sample_id": "00633_lug_0633_lug_0633",
+    "scorer_record": "$T/evals_lugbc/lugbc_gt_seed42/native/lugbc_gt_seed42/metrics.jsonl",
+    "scorer_epoch": 500,
+    "scorer_rows_for_case": 1,
+    "scorer_rows_agree": true,
+    "scorer": {
+     "von_mises_l2": 0.0015347220469266176
+    },
+    "dump": {
+     "von_mises_l2": 0.0015347220469266176
+    },
+    "rel_diff": {
+     "von_mises_l2": 0.0
+    },
+    "max_rel_diff": 0.0
+   },
+   {
+    "tag": "lug_t",
+    "protocol": "native",
+    "run_id": "cl_r_lug_t_seed42",
+    "sample_id": "00633_lug_0633_lug_0633",
+    "scorer_record": "results/campaigns_2026-10-02/char/protocols/cl_r_lug_t_seed42/native/metrics.jsonl",
+    "scorer_epoch": 500,
+    "scorer_rows_for_case": 1,
+    "scorer_rows_agree": true,
+    "scorer": {
+     "von_mises_l2": 0.0019168148282915354
+    },
+    "dump": {
+     "von_mises_l2": 0.0019168148282915354
+    },
+    "rel_diff": {
+     "von_mises_l2": 0.0
+    },
+    "max_rel_diff": 0.0
+   }
+  ]
+ }
+}

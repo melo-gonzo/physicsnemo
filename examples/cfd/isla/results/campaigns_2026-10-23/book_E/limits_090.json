@@ -1,0 +1,703 @@
+{
+ "sources": {
+  "query_population": "campaigns_2026-10-23/probes090/results/{qpop_afeag,qpop,qpop_az}/reduced.json",
+  "remesh": "campaigns_2026-10-23/probes090/results/{remesh_afeag,remesh}/reduced_full.json",
+  "stl": "campaigns_2026-10-23/probes090/RESULTS.md (section 4a and the erratum)",
+  "theta": "campaigns_2026-10-23/probes090/RESULTS.md (section 4b)",
+  "f32floor": "campaigns_2026-10-22/az_diag/f32floor/README.md (section 3)",
+  "lane_gpuh": "campaigns_2026-10-22/cost_090/extract.jsonl"
+ },
+ "query_population": {
+  "airfrans_eag": {
+   "half": {
+    "pressure_l2": 1.0982428804087991,
+    "velocity_l2": 1.1229775397529442,
+    "nut_l2": 1.1452560356477308
+   },
+   "chunks4": {
+    "pressure_l2": 1.3085427755246244,
+    "velocity_l2": 1.364381248589253,
+    "nut_l2": 1.4040812641932074
+   },
+   "same": {
+    "pressure_l2": 0.9542000419842507,
+    "velocity_l2": 0.9517903008277379,
+    "nut_l2": 0.9424199582916991
+   },
+   "far": {
+    "pressure_l2": 120.3399357293614,
+    "velocity_l2": 74.76019563061803,
+    "nut_l2": 105.33441632887238
+   },
+   "wall": {
+    "pressure_l2": 19.34488810297342,
+    "velocity_l2": 30.02981181075259,
+    "nut_l2": 22.2924948769274
+   },
+   "sub1000": {
+    "pressure_l2": 4.4559949100718494,
+    "velocity_l2": 5.000857185050135,
+    "nut_l2": 5.695485410239494
+   },
+   "sub100": {
+    "pressure_l2": 21.394993008895742,
+    "velocity_l2": 18.46877164055291,
+    "nut_l2": 32.48842896083296
+   },
+   "sub10": {
+    "pressure_l2": 61.150679952248176,
+    "velocity_l2": 64.76044390177353,
+    "nut_l2": 88.03851331064348
+   },
+   "sub1": {
+    "pressure_l2": 90.63671397837308,
+    "velocity_l2": 87.83700391557122,
+    "nut_l2": 125.63423628870908
+   }
+  },
+  "drivaerml_volume": {
+   "half": {
+    "pressure_l2": 1.0113462259158914,
+    "velocity_l2": 1.0104533028092197,
+    "nut_l2": 1.0197726543317671
+   },
+   "chunks4": {
+    "pressure_l2": 1.0343369408648275,
+    "velocity_l2": 1.033625166284948,
+    "nut_l2": 1.1540797766018875
+   },
+   "same": {
+    "pressure_l2": 0.9962567724261471,
+    "velocity_l2": 0.9956781762077174,
+    "nut_l2": 1.0026123921958705
+   },
+   "far": {
+    "pressure_l2": 20.464650162918694,
+    "velocity_l2": 16.348189859328343,
+    "nut_l2": 13.624683130863382
+   },
+   "wall": {
+    "pressure_l2": 6.192573361436745,
+    "velocity_l2": 4.5281915014789424,
+    "nut_l2": 4.453941441441628
+   },
+   "sub1000": {
+    "pressure_l2": 4.462473486373353,
+    "velocity_l2": 4.011561215713143,
+    "nut_l2": 5.451822747755742
+   },
+   "sub100": {
+    "pressure_l2": 13.182372623971416,
+    "velocity_l2": 9.789809756379706,
+    "nut_l2": 11.688454448017758
+   },
+   "sub10": {
+    "pressure_l2": 17.84318567960356,
+    "velocity_l2": 13.00169874249108,
+    "nut_l2": 14.574860451596336
+   },
+   "sub1": {
+    "pressure_l2": 20.596285095964923,
+    "velocity_l2": 13.173449622551225,
+    "nut_l2": 17.684279574058323
+   }
+  },
+  "aerozoo_full": {
+   "half": {
+    "velocity_l2": 1.0086434017452528,
+    "pressure_l2": 1.0004952749639595,
+    "nut_l2": 1.001135562085893,
+    "tke_l2": 1.0011459358628008,
+    "omega_l2": 1.0000777996446197
+   },
+   "chunks4": {
+    "velocity_l2": 1.0047978591991145,
+    "pressure_l2": 1.0017468262941036,
+    "nut_l2": 1.0003895439056252,
+    "tke_l2": 1.0004130283182726,
+    "omega_l2": 1.0007720813943113
+   },
+   "same": {
+    "velocity_l2": 0.999691121173214,
+    "pressure_l2": 0.9997653687914586,
+    "nut_l2": 1.000024270577438,
+    "tke_l2": 0.9999426135459872,
+    "omega_l2": 1.0001634422416503
+   },
+   "far": {
+    "velocity_l2": 1.0526250038941614,
+    "pressure_l2": 1.0370278437200033,
+    "nut_l2": 1.028912337802884,
+    "tke_l2": 1.0139275229026476,
+    "omega_l2": 1.0188211885674523
+   },
+   "wall": {
+    "velocity_l2": 1.2402177688402038,
+    "pressure_l2": 1.4403441409813262,
+    "nut_l2": 1.2999072459378502,
+    "tke_l2": 1.2120340048439653,
+    "omega_l2": 1.6190697450051892
+   },
+   "sub1000": {
+    "velocity_l2": 1.0500653001636415,
+    "pressure_l2": 1.0876389900690973,
+    "nut_l2": 1.0386396528891013,
+    "tke_l2": 1.0589814381075666,
+    "omega_l2": 1.0390081610344948
+   },
+   "sub100": {
+    "velocity_l2": 1.177570024883756,
+    "pressure_l2": 1.3970342108830738,
+    "nut_l2": 1.1395366124229045,
+    "tke_l2": 1.1691321090493967,
+    "omega_l2": 1.2367960599766437
+   },
+   "sub10": {
+    "velocity_l2": 1.5368138934531603,
+    "pressure_l2": 1.9567006215396394,
+    "nut_l2": 1.4104394105294138,
+    "tke_l2": 1.2673399526255253,
+    "omega_l2": 1.632550410373172
+   },
+   "sub1": {
+    "velocity_l2": 2.9157531648859347,
+    "pressure_l2": 3.9873615056469935,
+    "nut_l2": 2.3019636895798583,
+    "tke_l2": 1.4448357891441548,
+    "omega_l2": 4.364924104255549
+   }
+  },
+  "aerozoo_cases": [
+   179,
+   716
+  ],
+  "dtt_max_abs_dev": 4.077372488864306e-06,
+  "n_modes": 9
+ },
+ "remesh": {
+  "airfrans_eag_isla": {
+   "repeat": {
+    "pressure_l2": 1.0,
+    "velocity_l2": 1.0,
+    "nut_l2": 1.0
+   },
+   "refine2": {
+    "pressure_l2": 1.00005059399325,
+    "velocity_l2": 1.0000262219958764,
+    "nut_l2": 1.0000266103801865
+   },
+   "refine4": {
+    "pressure_l2": 0.9999914737471196,
+    "velocity_l2": 1.0000425874372034,
+    "nut_l2": 1.0000588643593422
+   },
+   "refine31": {
+    "pressure_l2": 1.000005143412504,
+    "velocity_l2": 0.9999891371303693,
+    "nut_l2": 1.0001145636394853
+   },
+   "tok800": {
+    "pressure_l2": 1.0218274809248604,
+    "velocity_l2": 1.0066721569101804,
+    "nut_l2": 1.0058409860331206
+   },
+   "tok600": {
+    "pressure_l2": 1.3192464029641813,
+    "velocity_l2": 1.1172044600364743,
+    "nut_l2": 1.054071870208832
+   },
+   "tok400": {
+    "pressure_l2": 2.2972489011208714,
+    "velocity_l2": 1.5428652505308476,
+    "nut_l2": 1.3881674491573737
+   },
+   "tok200": {
+    "pressure_l2": 5.22159925202016,
+    "velocity_l2": 2.882797250166509,
+    "nut_l2": 2.231266175644686
+   },
+   "redraw400": {
+    "pressure_l2": 2.4316036843684783,
+    "velocity_l2": 1.6285437657558606,
+    "nut_l2": 1.3824387096924406
+   },
+   "redraw200": {
+    "pressure_l2": 5.07203343769887,
+    "velocity_l2": 2.9574839060838265,
+    "nut_l2": 2.338849435807002
+   },
+   "decim400": {
+    "pressure_l2": 1.2915617587597215,
+    "velocity_l2": 3.478805290462428,
+    "nut_l2": 1.0657840263696252
+   },
+   "decim200": {
+    "pressure_l2": 1.8385566375422064,
+    "velocity_l2": 7.676843448474546,
+    "nut_l2": 1.308306706095363
+   }
+  },
+  "airfrans_eag_dtt": {
+   "repeat": {
+    "pressure_l2": 0.999999986510549,
+    "velocity_l2": 1.0000000048889288,
+    "nut_l2": 1.000000015898417
+   },
+   "refine2": {
+    "pressure_l2": 1.017278842912141,
+    "velocity_l2": 1.006551387286224,
+    "nut_l2": 1.0025397396788085
+   },
+   "refine4": {
+    "pressure_l2": 1.0574215182477351,
+    "velocity_l2": 1.021897222398642,
+    "nut_l2": 1.0069017162206908
+   },
+   "refine31": {
+    "pressure_l2": 1.0593186093091689,
+    "velocity_l2": 1.0159817031259144,
+    "nut_l2": 1.0233394919539416
+   },
+   "tok800": {
+    "pressure_l2": 1.0604073791250255,
+    "velocity_l2": 1.0490406420015534,
+    "nut_l2": 0.9992828396082132
+   },
+   "tok600": {
+    "pressure_l2": 1.565770020141564,
+    "velocity_l2": 1.3666513682819774,
+    "nut_l2": 1.1167391038218901
+   },
+   "tok400": {
+    "pressure_l2": 2.720202022042616,
+    "velocity_l2": 2.130228238843906,
+    "nut_l2": 1.5485762744780025
+   },
+   "tok200": {
+    "pressure_l2": 6.234065295850222,
+    "velocity_l2": 3.979850572166952,
+    "nut_l2": 2.584491347173771
+   },
+   "redraw400": {
+    "pressure_l2": 2.9305508679245778,
+    "velocity_l2": 2.234649529140955,
+    "nut_l2": 1.6734095263771598
+   },
+   "redraw200": {
+    "pressure_l2": 5.598247451172398,
+    "velocity_l2": 3.9390370666670327,
+    "nut_l2": 2.8409983231468896
+   },
+   "decim400": {
+    "pressure_l2": 1.2975617215242652,
+    "velocity_l2": 3.1026436324162012,
+    "nut_l2": 1.0386855710376173
+   },
+   "decim200": {
+    "pressure_l2": 1.3997242482703487,
+    "velocity_l2": 6.924570080591046,
+    "nut_l2": 1.1584512982148163
+   }
+  },
+  "airfrans_eag_isla_refine_d_max_median": 3.915810869628967e-05,
+  "airfrans_eag_isla_redraw400_d_pressure_median": {
+   "to_tok400": [
+    0.03158100371887222,
+    0.03261495254606994
+   ],
+   "tok400_to_native": [
+    0.016934623618597405,
+    0.017636907520444306
+   ]
+  },
+  "drivaerml_volume": {
+   "repeat": {
+    "pressure_l2": 1.0000000325389236,
+    "velocity_l2": 0.9999999864291249,
+    "nut_l2": 0.9999999508619651
+   },
+   "tok100k": {
+    "pressure_l2": 1.0012484783922049,
+    "velocity_l2": 1.0005401497244695,
+    "nut_l2": 1.0006029540804082
+   },
+   "tok400k": {
+    "pressure_l2": 0.9996691188510767,
+    "velocity_l2": 0.9997400044830584,
+    "nut_l2": 0.9998078088800433
+   },
+   "subdiv4": {
+    "pressure_l2": 1.001738738970257,
+    "velocity_l2": 1.0051912896258364,
+    "nut_l2": 0.9995775815217341
+   },
+   "stl": {
+    "pressure_l2": 2.951515699396052,
+    "velocity_l2": 1.838741298850283,
+    "nut_l2": 1.476276787094744
+   },
+   "redraw_u0": {
+    "pressure_l2": 1.0000470174189862,
+    "velocity_l2": 0.999884724525093,
+    "nut_l2": 0.9996957768115393
+   },
+   "redraw_u25": {
+    "pressure_l2": 1.0002621700895449,
+    "velocity_l2": 1.0001200054367136,
+    "nut_l2": 1.0002864095865012
+   }
+  }
+ },
+ "stl": {
+  "bands": {
+   "inside the STL (1.6%)": {
+    "pressure_l2": [
+     10.7,
+     15.2
+    ],
+    "velocity_l2": [
+     10.6,
+     17.1
+    ],
+    "nut_l2": [
+     70.0,
+     119.0
+    ]
+   },
+   "native wall distance < 1e-3 L": {
+    "pressure_l2": [
+     3.44,
+     4.22
+    ],
+    "velocity_l2": [
+     2.55,
+     2.45
+    ],
+    "nut_l2": [
+     2.92,
+     5.16
+    ]
+   },
+   "1e-3 L to 1e-2 L": {
+    "pressure_l2": [
+     1.16,
+     1.15
+    ],
+    "velocity_l2": [
+     1.39,
+     1.36
+    ],
+    "nut_l2": [
+     1.04,
+     1.04
+    ]
+   },
+   "\u2265 1e-2 L": {
+    "pressure_l2": [
+     1.011,
+     1.006
+    ],
+    "velocity_l2": [
+     1.007,
+     1.002
+    ],
+    "nut_l2": [
+     1.0,
+     1.001
+    ]
+   }
+  },
+  "offset_median_L": 1.3e-05,
+  "separation_max_L": 0.0078
+ },
+ "theta": {
+  "pressure_ratio": {
+   "1.0": [
+    1.011,
+    1.036,
+    1.06
+   ],
+   "0.5": [
+    1.014,
+    1.027,
+    1.032
+   ],
+   "0.25": [
+    1.003,
+    1.007,
+    1.001
+   ],
+   "0": [
+    1.0006,
+    1.003,
+    1.0008
+   ]
+  },
+  "native_theta1": [
+   0.0144,
+   0.0075,
+   0.023
+  ],
+  "native_theta0": [
+   0.0316,
+   0.0121,
+   0.096
+  ]
+ },
+ "f32floor": {
+  "sign_flips": [
+   12,
+   427
+  ],
+  "draw_changes": [
+   34,
+   5794
+  ],
+  "isla_gap": [
+   0.013,
+   0.28
+  ]
+ },
+ "lane_gpuh": {
+  "drivaerml_surface": {
+   "ISLA": {
+    "gpuh": 15.227466752193868,
+    "epochs": 500,
+    "logged_epochs": 500,
+    "steps_per_epoch": 108.138,
+    "runs": [
+     "r090_dr_isla_seed42",
+     "r090_dr_isla_seed43"
+    ]
+   },
+   "GeoTransolver": {
+    "gpuh": 25.70303957878819,
+    "epochs": 500,
+    "logged_epochs": 500,
+    "steps_per_epoch": 108.42,
+    "runs": [
+     "r80ud_dr_gt_h256_seed42",
+     "r80ud_dr_gt_h256_seed43"
+    ]
+   },
+   "Transolver": {
+    "gpuh": 18.622972646934862,
+    "epochs": 500,
+    "logged_epochs": 500,
+    "steps_per_epoch": 108.094,
+    "runs": [
+     "r80ud_dr_t_h512_l16_c100k_seed42",
+     "r80ud_dr_t_h512_l16_c100k_seed43"
+    ]
+   }
+  },
+  "drivaerml_volume": {
+   "ISLA": {
+    "gpuh": 37.504067335731335,
+    "epochs": 500,
+    "logged_epochs": 500,
+    "steps_per_epoch": 108.583,
+    "runs": [
+     "r090_vol_isla_seed42",
+     "r090_vol_isla_seed43"
+    ]
+   }
+  },
+  "shift_suv": {
+   "ISLA": {
+    "gpuh": 27.677182089655286,
+    "epochs": 500,
+    "logged_epochs": 500,
+    "steps_per_epoch": 198.304,
+    "runs": [
+     "r090_suv_isla_seed42",
+     "r090_suv_isla_seed43"
+    ]
+   },
+   "GeoTransolver": {
+    "gpuh": 47.51146170278028,
+    "epochs": 500,
+    "logged_epochs": 500,
+    "steps_per_epoch": 199.20600000000002,
+    "runs": [
+     "clud_suv_gt_seed42",
+     "clud_suv_gt_seed43"
+    ]
+   },
+   "Transolver": {
+    "gpuh": 36.19347850857936,
+    "epochs": 500,
+    "logged_epochs": 500,
+    "steps_per_epoch": 198.20499999999998,
+    "runs": [
+     "clud_suv_t_seed42",
+     "clud_suv_t_seed43"
+    ]
+   }
+  },
+  "deepjeb": {
+   "ISLA": {
+    "gpuh": 81.93981837640658,
+    "epochs": 40,
+    "logged_epochs": 40,
+    "steps_per_epoch": 14332.725,
+    "runs": [
+     "r090_jb_isla_seed42",
+     "r090_jb_isla_seed43"
+    ]
+   }
+  },
+  "hilift": {
+   "ISLA": {
+    "gpuh": 31.060543072809267,
+    "epochs": 500,
+    "logged_epochs": 500,
+    "steps_per_epoch": 127.693,
+    "runs": [
+     "h090_hl_isla_seed42",
+     "h090_hl_isla_seed43"
+    ]
+   }
+  },
+  "airfrans": {
+   "ISLA": {
+    "gpuh": 44.36539272095413,
+    "epochs": 500,
+    "logged_epochs": 500,
+    "steps_per_epoch": 201.344,
+    "runs": [
+     "r090fix_af_isla_seed42",
+     "r090fix_af_isla_seed43"
+    ]
+   },
+   "ISLA-DTT": {
+    "gpuh": 64.68127273126089,
+    "epochs": 500,
+    "logged_epochs": 500,
+    "steps_per_epoch": 201.424,
+    "runs": [
+     "r090fix_af_dtt_seed42",
+     "r090fix_af_dtt_seed43"
+    ]
+   },
+   "GeoTransolver": {
+    "gpuh": 25.399585190972267,
+    "epochs": 500,
+    "logged_epochs": 500,
+    "steps_per_epoch": 200.267,
+    "runs": [
+     "afu_ud_gt_seed42",
+     "afu_ud_gt_seed43"
+    ]
+   },
+   "Transolver": {
+    "gpuh": 33.84203721030274,
+    "epochs": 500,
+    "logged_epochs": 500,
+    "steps_per_epoch": 200.963,
+    "runs": [
+     "afu_ud_t_seed42",
+     "afu_ud_t_seed43"
+    ]
+   }
+  },
+  "lug": {
+   "ISLA": {
+    "gpuh": 53.74566521228688,
+    "epochs": 500,
+    "logged_epochs": 500,
+    "steps_per_epoch": 604.549,
+    "runs": [
+     "r090fix_lug_isla_seed42",
+     "r090fix_lug_isla_seed43"
+    ]
+   },
+   "ISLA-DTT": {
+    "gpuh": 145.9929655857732,
+    "epochs": 500,
+    "logged_epochs": 310,
+    "steps_per_epoch": 612.6943103107064,
+    "runs": [
+     "r090fix_lug_dtt_seed42",
+     "r090fix_lug_dtt_seed43"
+    ]
+   },
+   "GeoTransolver": {
+    "gpuh": 39.78349520000896,
+    "epochs": 500,
+    "logged_epochs": 500,
+    "steps_per_epoch": 603.8900000000001,
+    "runs": [
+     "lugbc_gt_seed42",
+     "lugbc_gt_seed43"
+    ]
+   }
+  },
+  "tensile2d": {
+   "ISLA": {
+    "gpuh": 8.745886350594148,
+    "epochs": 500,
+    "logged_epochs": 500,
+    "steps_per_epoch": 99.996,
+    "runs": [
+     "r090fix_t2dz_isla_seed42",
+     "r090fix_t2dz_isla_seed43",
+     "r090fix_t2dz_isla_seed44",
+     "r090fix_t2dz_isla_seed45"
+    ]
+   },
+   "GeoTransolver": {
+    "gpuh": 6.301635930494716,
+    "epochs": 500,
+    "priced_from": "results/char/cost_090.json step_seconds x the ISLA lane's steps per epoch"
+   },
+   "Transolver": {
+    "gpuh": 5.759086964634868,
+    "epochs": 500,
+    "priced_from": "results/char/cost_090.json step_seconds x the ISLA lane's steps per epoch"
+   }
+  },
+  "aerozoo": {
+   "ISLA": {
+    "gpuh": 115.19929041453385,
+    "epochs": 250,
+    "logged_epochs": 250,
+    "steps_per_epoch": 703.504,
+    "runs": [
+     "azc_full_isla_seed42",
+     "azc_full_isla_seed43"
+    ]
+   },
+   "ISLA-DTT": {
+    "gpuh": 259.9542905302832,
+    "epochs": 250,
+    "logged_epochs": 166,
+    "steps_per_epoch": 727.9172318014573,
+    "runs": [
+     "azc_full_dtt_seed42",
+     "azc_full_dtt_seed43"
+    ]
+   },
+   "GeoTransolver": {
+    "gpuh": 154.19985321745602,
+    "epochs": 250,
+    "logged_epochs": 250,
+    "steps_per_epoch": 723.764,
+    "runs": [
+     "azc_full_gt_seed42",
+     "azc_full_gt_seed43"
+    ]
+   },
+   "Transolver": {
+    "gpuh": 145.42225389415262,
+    "epochs": 250,
+    "logged_epochs": 250,
+    "steps_per_epoch": 705.754,
+    "runs": [
+     "azc_full_t_seed42",
+     "azc_full_t_seed43"
+    ]
+   }
+  }
+ }
+}

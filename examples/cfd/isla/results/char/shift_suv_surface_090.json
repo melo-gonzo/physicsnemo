@@ -1,0 +1,340 @@
+{
+ "protocol": "ISLA 0.9.0 standings (2026-10-22): the results/char/<dataset>_a2.json record of each dataset with ISLA's arm replaced by\nISLA 0.9.0 at its reference configuration (width 512, 12 layers, 512 slices, 3.75e-4), scored in float32 on the final\ncheckpoint by the protocol scorer: native mesh / uniform point cloud / rotated + translated. The baseline arms (GeoTransolver\n256, Transolver 512 x 16, both reading the unit freestream direction) and the keys that document them (fair_input, scored_set,\nraw_drive_<arch>, transolver_100k_scoring, unlabelled_geotransolver, char_baselines) are the _a2 file's, unchanged.\n\nISLA's arm is built from the scorer's rows, copied unmodified into results/campaigns_2026-10-22/standing_090/scores/\n<evals>/<run>/<protocol>/<run>/metrics.jsonl from the record folders (scratch/isla-ref090-2026-10-20/scores/,\nscratch/isla-hilift090-2026-10-20/scores/; originals on LHR under $T/<evals>/): per seed and protocol the mean over cases of\nthe per-case relative L2 (the last infer_step row per sample id, after the last config row), then the mean over seeds. Each\nconfig row must name the final epoch and each protocol must hold the expected case count.\n\nSTANDING below is the one table a later update edits: per dataset the run stem, the evals folder, the seeds, the final epoch,\nthe case count and the status. A status of \"in_flight\" writes the in-flight text beside the numbers (\"in_flight\": {\"what\",\n\"replacement\"}, read by book/standing.py as \"These numbers come from <what>. <replacement> is being measured ...\").\n\"Fix-trained\" rows are trained with the compiled training path after its fault (pytorch/pytorch#195845) was fixed;\n\"eager-trained\" rows are trained without compilation; the AirfRANS ISLA and ISLA-DTT rows and the lug ISLA rows are\neager-trained, the Tensile2d rows too.\n\"isla_runs\" names each arm's training path. An ISLA-DTT arm that a running experiment will replace carries \"arm_in_flight\"\n({arm name: {\"what\", \"replacement\"}}, read by book/standing.py as Standing.arm_in_flight): when its rows land, copy their\nscore files into the scores folder, set its stem and evals folder in DTT, drop it from ARM_FLIGHT, and rerun.\n\nDEGENERATE marks a protocol that changes no arm's input: its cells keep the scorer's numbers under \"scored\" and carry\n\"mean\": null with the reason, and the file's \"degenerate\" key says why. On the DrivAerML Volume task ISLA draws its boundary\ntokens by area inside the model, and the baselines read only the interior points and the signed distance, so the uniform point\ncloud gives every arm its native input.\n\nHiLift adds \"registered\" (R-HL090 of scratch/isla-hilift090-2026-10-20/PREREG.md: ISLA 0.9.0 against the normalized-read\nnearest-token arm of hilift_surface_a2.json, as registered) and \"case_level\" (the per-case readouts of hilift_a2_2026-10-20.py\nagainst the baselines' per-case rows in results/campaigns_2026-10-20/hilift/scores/). AirfRANS adds the arm\n\"ISLA-DTT 512 with 512 slices\" (query_independent=True, the same configuration).\nusage: python r090_protocol_artifacts_2026-10-22.py",
+ "protocols": {
+  "native": "native mesh",
+  "area": "uniform point cloud",
+  "posed": "rotated + translated"
+ },
+ "fields": {
+  "pressure_l2": "pressure",
+  "wss_l2": "wall shear"
+ },
+ "isla_arm": "ISLA 512 with 512 slices",
+ "status": "final",
+ "in_flight": null,
+ "arms": {
+  "ISLA 512 with 512 slices": {
+   "native": {
+    "pressure_l2": {
+     "mean": 0.04450148438112904,
+     "per_seed": {
+      "42": 0.04555940966714512,
+      "43": 0.043443559095112966
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    },
+    "wss_l2": {
+     "mean": 0.0665319189805575,
+     "per_seed": {
+      "42": 0.06709038112500701,
+      "43": 0.065973456836108
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "mean": 0.044477936501304306,
+     "per_seed": {
+      "42": 0.04548865805069605,
+      "43": 0.04346721495191256
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    },
+    "wss_l2": {
+     "mean": 0.06666642901572314,
+     "per_seed": {
+      "42": 0.06723834423705785,
+      "43": 0.06609451379438844
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "mean": 0.04450150387305202,
+     "per_seed": {
+      "42": 0.04555947604504498,
+      "43": 0.04344353170105905
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    },
+    "wss_l2": {
+     "mean": 0.0665369527508514,
+     "per_seed": {
+      "42": 0.06709408199395796,
+      "43": 0.06597982350774485
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    }
+   }
+  },
+  "GeoTransolver 256": {
+   "native": {
+    "pressure_l2": {
+     "mean": 0.04553434102222173,
+     "per_seed": {
+      "42": 0.04583843789919458,
+      "43": 0.04523024414524888
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    },
+    "wss_l2": {
+     "mean": 0.06649209032155046,
+     "per_seed": {
+      "42": 0.06670436955461598,
+      "43": 0.06627981108848495
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "mean": 0.13608244693640506,
+     "per_seed": {
+      "42": 0.11758627072729246,
+      "43": 0.15457862314551768
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    },
+    "wss_l2": {
+     "mean": 0.179810167563082,
+     "per_seed": {
+      "42": 0.14820491906368372,
+      "43": 0.21141541606248027
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "mean": 1.0557640538071142,
+     "per_seed": {
+      "42": 1.053126633769334,
+      "43": 1.0584014738448944
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    },
+    "wss_l2": {
+     "mean": 1.1707807598691997,
+     "per_seed": {
+      "42": 1.1730491561119003,
+      "43": 1.1685123636264994
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    }
+   }
+  },
+  "Transolver 512 x 16 at 100k cells": {
+   "native": {
+    "pressure_l2": {
+     "mean": 0.04192634784814083,
+     "per_seed": {
+      "42": 0.0418757236365116,
+      "43": 0.041976972059770065
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    },
+    "wss_l2": {
+     "mean": 0.06395168737931685,
+     "per_seed": {
+      "42": 0.06385433312618372,
+      "43": 0.06404904163244998
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "mean": 0.13073649550929214,
+     "per_seed": {
+      "42": 0.12878677098437993,
+      "43": 0.13268622003420436
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    },
+    "wss_l2": {
+     "mean": 0.16975821870746033,
+     "per_seed": {
+      "42": 0.1721434352373836,
+      "43": 0.1673730021775371
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "mean": 1.0763882723721592,
+     "per_seed": {
+      "42": 1.0771450466579862,
+      "43": 1.075631498086332
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    },
+    "wss_l2": {
+     "mean": 1.1822592995383523,
+     "per_seed": {
+      "42": 1.200468275282118,
+      "43": 1.1640503237945865
+     },
+     "n_cases": 99,
+     "n_seeds": 2
+    }
+   }
+  }
+ },
+ "complete": true,
+ "degenerate": {},
+ "isla_runs": {
+  "scores": "results/campaigns_2026-10-22/standing_090/scores",
+  "epoch": 500,
+  "ISLA 512 with 512 slices": "evals_r090/r090_suv_isla_seed{42,43}"
+ },
+ "raw_drive_geotransolver": {
+  "label": "GeoTransolver 256, the arm it replaces",
+  "native": {
+   "pressure_l2": {
+    "mean": 0.045994315484557485,
+    "per_seed": {
+     "42": 0.04620311236140704,
+     "43": 0.04578551860770794
+    },
+    "n_cases": 99,
+    "n_seeds": 2
+   },
+   "wss_l2": {
+    "mean": 0.0670775765120381,
+    "per_seed": {
+     "42": 0.06733157417990944,
+     "43": 0.06682357884416676
+    },
+    "n_cases": 99,
+    "n_seeds": 2
+   }
+  },
+  "area": {
+   "pressure_l2": {
+    "mean": 0.15189584577926482,
+    "per_seed": {
+     "42": 0.10800006172873756,
+     "43": 0.19579162982979206
+    },
+    "n_cases": 99,
+    "n_seeds": 2
+   },
+   "wss_l2": {
+    "mean": 0.20216728942562834,
+    "per_seed": {
+     "42": 0.151471860481031,
+     "43": 0.25286271837022567
+    },
+    "n_cases": 99,
+    "n_seeds": 2
+   }
+  },
+  "posed": {
+   "pressure_l2": {
+    "mean": 1.1035922657359731,
+    "per_seed": {
+     "42": 1.0804806333599668,
+     "43": 1.1267038981119792
+    },
+    "n_cases": 99,
+    "n_seeds": 2
+   },
+   "wss_l2": {
+    "mean": 1.1575058831108942,
+    "per_seed": {
+     "42": 1.1601436884716303,
+     "43": 1.1548680777501579
+    },
+    "n_cases": 99,
+    "n_seeds": 2
+   }
+  }
+ },
+ "fair_input": {
+  "GeoTransolver 256": "retrained reading the unit freestream direction U_inf_dir (clud_suv_gt); scores: campaigns_2026-10-20/drive_fix2/ud2_scores_2026-10-20.json; the replaced arm is kept under raw_drive_geotransolver",
+  "Transolver 512 x 16 at 100k cells": "retrained reading the unit freestream direction U_inf_dir (clud_suv_t), scored on ISLA's 200,000-cell set, its predecessor on its own 100,000-cell draw; scores: campaigns_2026-10-20/drive_fix2/ud2_scores_2026-10-20.json; the replaced arm is kept under raw_drive_transolver"
+ },
+ "raw_drive_transolver": {
+  "label": "Transolver 512 x 16 at 100k cells, the arm it replaces",
+  "native": {
+   "pressure_l2": {
+    "mean": 0.042440315689703426,
+    "per_seed": {
+     "42": 0.04228294738615402,
+     "43": 0.04259768399325284
+    },
+    "n_cases": 99,
+    "n_seeds": 2
+   },
+   "wss_l2": {
+    "mean": 0.06474292398703219,
+    "per_seed": {
+     "42": 0.06455917069406221,
+     "43": 0.06492667728000218
+    },
+    "n_cases": 99,
+    "n_seeds": 2
+   }
+  },
+  "area": {
+   "pressure_l2": {
+    "mean": 0.11958775375828598,
+    "per_seed": {
+     "42": 0.11926920727045849,
+     "43": 0.11990630024611348
+    },
+    "n_cases": 99,
+    "n_seeds": 2
+   },
+   "wss_l2": {
+    "mean": 0.14468783561629478,
+    "per_seed": {
+     "42": 0.1407255596584744,
+     "43": 0.14865011157411517
+    },
+    "n_cases": 99,
+    "n_seeds": 2
+   }
+  },
+  "posed": {
+   "pressure_l2": {
+    "mean": 0.9806494279341265,
+    "per_seed": {
+     "42": 0.995775164979877,
+     "43": 0.965523690888376
+    },
+    "n_cases": 99,
+    "n_seeds": 2
+   },
+   "wss_l2": {
+    "mean": 1.1017680312647964,
+    "per_seed": {
+     "42": 1.1161446619515467,
+     "43": 1.087391400578046
+    },
+    "n_cases": 99,
+    "n_seeds": 2
+   }
+  }
+ }
+}
