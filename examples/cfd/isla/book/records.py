@@ -79,6 +79,7 @@ FOLDER = {
     "lre_az": "campaigns_2026-10-23",
     "geo_band_phase0": "campaigns_2026-10-23",
     "kernel_tests": "campaigns_2026-10-23",
+    "slices_drv": "campaigns_2026-10-23",
 }
 
 

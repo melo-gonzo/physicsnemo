@@ -399,6 +399,11 @@ RECORDS = {
         "KERNEL-TESTS: the five CUDA tests that failed after the token padding, their cause and the fix",
         ["FINAL_REPORT.md", "RESULTS.md"],
     ),
+    "slices_drv": (
+        "isla-slices-drv-2026-10-24",
+        "SLICES-DRV: ISLA with 128 slices against the 512-slice DrivAerML Volume standing",
+        ["RESULTS.md", "reading.md", "PREREG.md", "farfield/farfield_table.md"],
+    ),
 }
 
 

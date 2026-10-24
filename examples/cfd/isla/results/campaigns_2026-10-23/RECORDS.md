@@ -48,6 +48,7 @@ source. Do not edit by hand.
 | `lre_az/` | LRE-AZ: ISLA on AeroZoo with the fixed Reynolds scale against its fitted constants, registered and read | `scratch/isla-lre-az-2026-10-23/` |
 | `geo_band_phase0/` | GEO-BAND, phase 0: the whole-boundary geometry call re-timed on GB300 at the merged head | `scratch/isla-geo-band-2026-10-24/` |
 | `kernel_tests/` | KERNEL-TESTS: the five CUDA tests that failed after the token padding, their cause and the fix | `scratch/isla-kernel-tests-2026-10-24/` |
+| `slices_drv/` | SLICES-DRV: ISLA with 128 slices against the 512-slice DrivAerML Volume standing | `scratch/isla-slices-drv-2026-10-24/` |
 
 | topic | file | source | md5 |
 | --- | --- | --- | --- |
@@ -256,3 +257,7 @@ source. Do not edit by hand.
 | geo_band_phase0 | lhr/timing_table.md | scratch/isla-geo-band-2026-10-24/lhr/timing_table.md | a720b5ee3c2a3fc656ba95217abaf33b |
 | kernel_tests | FINAL_REPORT.md | scratch/isla-kernel-tests-2026-10-24/FINAL_REPORT.md | f4789cdeeae4d0afdc60643e40102b70 |
 | kernel_tests | RESULTS.md | scratch/isla-kernel-tests-2026-10-24/RESULTS.md | 915e4f088d60a4891cbc98c7fb89cb7f |
+| slices_drv | RESULTS.md | scratch/isla-slices-drv-2026-10-24/RESULTS.md | b2fd11e2b478914e60f53a4b85035808 |
+| slices_drv | reading.md | scratch/isla-slices-drv-2026-10-24/reading.md | a810e1a022da3b172820066fa5d6d685 |
+| slices_drv | PREREG.md | scratch/isla-slices-drv-2026-10-24/PREREG.md | 88e36cd7e36232773f080309f7935c77 |
+| slices_drv | farfield/farfield_table.md | scratch/isla-slices-drv-2026-10-24/farfield/farfield_table.md | f993d7713536e50a78f5dcf80421ca53 |
