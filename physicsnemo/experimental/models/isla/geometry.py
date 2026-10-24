@@ -195,12 +195,16 @@ def _canonical_cells(points, cells):
     return torch.stack(vert, 1), 1 - 2 * (inversions % 2)
 
 
-def _closest_weights(q, simplex):
+def _closest_weights(q, simplex, flat=None):
     """The barycentric weights ``(P, d)`` of the point of each simplex closest to
     its query (Ericson 2005, Sec. 5.1.5), exact zeros outside the face region; call
     in float64 (the face-region weights are ratios of Gram determinants that cancel
     on thin cells). An edge-region point of a triangle is recomputed on the edge
-    alone, so every triangle sharing the edge gives it bitwise."""
+    alone, so every triangle sharing the edge gives it bitwise. A zero-area triangle
+    (``flat`` ``(P,)``, :func:`_zero_area`; canonical vertices) is the union of its
+    two edges between consecutive vertices, since on a line the lexicographic order
+    is the order along it: its closest point is the nearer of theirs (the first at
+    equal distances), computed as a triangle sharing that edge computes it."""
     if q.shape[-1] == 2:
         t = _segment_t(q, simplex[:, 0], simplex[:, 1])
         return torch.stack([1 - t, t], -1)
@@ -211,7 +215,85 @@ def _closest_weights(q, simplex):
     a, b = s.gather(1, ends[:, :1, None].expand(-1, 1, 3))[:, 0], s.gather(1, ends[:, 1:, None].expand(-1, 1, 3))[:, 0]
     t = _segment_t(q[edge], a, b)
     w[edge] = torch.zeros_like(s[..., 0]).scatter(1, ends, torch.stack([1 - t, t], -1))
+    if flat is not None:
+        v0, v1, v2 = simplex.unbind(1)
+        t1, t2 = _segment_t(q, v0, v1), _segment_t(q, v1, v2)
+        zero = torch.zeros_like(t1)
+        second = _segment_distance2(q, v1, v2) < _segment_distance2(q, v0, v1)
+        seg = torch.where(second[:, None], torch.stack([zero, 1 - t2, t2], -1), torch.stack([1 - t1, t1, zero], -1))
+        w = torch.where(flat[:, None], seg, w)
     return w
+
+
+#: Shewchuk's (1997) bound on the rounding of a two-dimensional orientation
+#: determinant evaluated in float64 from rounded coordinate differences, ``(3 + 16
+#: e) e`` with ``e = 2^-53`` times the sum of its two products' magnitudes.
+_ORIENT_ERRBOUND = (3 + 16 * 2.0**-53) * 2.0**-53
+
+
+def _two_sum(a, b):
+    """``a + b`` exactly, as ``x + y`` (Knuth)."""
+    x = a + b
+    bv = x - a
+    return x, (a - (x - bv)) + (b - bv)
+
+
+def _two_product(a, b):
+    """``a b`` exactly, as ``x + y`` (Dekker 1971, by splitting; no fused
+    multiply-add)."""
+    x = a * b
+    ca, cb = 134217729.0 * a, 134217729.0 * b
+    ah, bh = ca - (ca - a), cb - (cb - b)
+    al, bl = a - ah, b - bh
+    return x, al * bl - (((x - ah * bh) - al * bh) - ah * bl)
+
+
+def _zero_area(simplex: torch.Tensor, cells: torch.Tensor):
+    """Whether each cell ``simplex`` ``(F, d, d)`` (float64, the coordinates as the
+    search reads them) has zero measure, exactly, ``(F,)``, and whether any has. A
+    segment has zero length when its two vertices coincide (welded, one index); a
+    triangle has zero area when its cross product is exactly zero (two or three
+    vertices coincide, or three distinct ones are collinear). Each component of the
+    cross product is first evaluated in float64 with Shewchuk's (1997) error bound,
+    which proves it nonzero for every cell of nonzero area but the very thinnest;
+    those left are evaluated exactly, ``a x b + b x c + c x a`` as six exact products
+    (:func:`_two_product`) summed as a nonoverlapping expansion (Shewchuk's
+    Grow-Expansion), zero exactly when its every term is. Exact unless an
+    intermediate overflows or underflows: never for float32 coordinates (in float64
+    their products lie on a grid of ``2^-298``), and for float64 ones when every
+    nonzero magnitude lies in ``[2^-485, 2^510]``. Torch evaluates each operation by
+    itself, without a fused multiply-add, and the caller runs in a custom op, which
+    torch.compile does not trace."""
+    if simplex.shape[-1] == 2:
+        flat = cells[:, 0] == cells[:, 1]
+        return flat, bool(flat.any())
+    a, b, c = simplex.unbind(1)
+    e1, e2 = b - a, c - a
+    axes = ((1, 2), (2, 0), (0, 1))
+    certain = torch.zeros_like(a[:, 0], dtype=torch.bool)
+    for i, j in axes:
+        left, right = e1[:, i] * e2[:, j], e1[:, j] * e2[:, i]
+        certain |= (left - right).abs() > _ORIENT_ERRBOUND * (left.abs() + right.abs())
+    rows = (~certain).nonzero()[:, 0]
+    flat = torch.zeros_like(certain)
+    if rows.numel() == 0:
+        return flat, False
+    v = simplex[rows].unbind(1)
+    zero = torch.ones_like(rows, dtype=torch.bool)
+    for i, j in axes:
+        terms = []
+        for x, y in ((v[0], v[1]), (v[1], v[2]), (v[2], v[0])):
+            terms += [*_two_product(x[:, i], y[:, j]), *(-t for t in _two_product(x[:, j], y[:, i]))]
+        expansion = terms[:1]
+        for t in terms[1:]:
+            grown = []
+            for e in expansion:
+                t, h = _two_sum(t, e)
+                grown.append(h)
+            expansion = [*grown, t]
+        zero &= (torch.stack(expansion) == 0).all(0)
+    flat[rows] = zero
+    return flat, bool(zero.any())
 
 
 def _min_norm_points(c: torch.Tensor) -> torch.Tensor:
@@ -602,7 +684,7 @@ def _preorder_cell_tree(simplex: torch.Tensor):
     return (left, right, escape, levels, leaf_cell, *_tree_boxes(s_sorted, left, right, levels, leaf_cell)), order, s_sorted
 
 
-def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.Tensor, tree, winding=None, reach=None):
+def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.Tensor, tree, winding=None, reach=None, flat=None):
     """The (query, cell) pairs ``(P,)``, ``(P,)`` of every cell of ``simplex`` ``(F,
     3, 3)`` within ``radius`` ``(Q,)`` of its query ``(Q, 3)``, all float64: a Warp
     traversal of the BVH ``tree`` over the cells (:func:`_cell_tree`),
@@ -614,7 +696,9 @@ def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.T
     With ``winding`` (:func:`_winding_moments` on the same tree), the first pass
     also sums the solid angles (:func:`_ball_winding_kernel`), returned as a third
     output ``(Q,)``, the winding number times ``4 pi``. ``reach``, the greatest
-    norm of a vertex, when the caller has it."""
+    norm of a vertex, when the caller has it. The zero-area cells ``flat`` ``(F,)``
+    (:func:`_zero_area`) have no plane, and the float64 distance is not defined on
+    them: they are kept wherever their boxes are reached."""
     dev = query.device
     left, _, escape, _, leaf_cell, lo, hi = tree
     ### Each cell's unit normal and its edges' outward unit normals in its plane,
@@ -628,6 +712,11 @@ def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.T
         m = torch.where(((m * (opp - p0)).sum(-1, keepdim=True) > 0), -m, m)
         rows_.append(torch.cat([m, (m * p0).sum(-1, keepdim=True)], -1))
     planes = torch.stack(rows_, 1).float().reshape(-1, 4)
+    corners = simplex
+    if flat is not None:
+        ### (NaN fails every rejection test of the kernel)
+        planes = torch.where(flat.repeat_interleave(4)[:, None], torch.nan, planes)
+        corners = torch.where(flat[:, None, None], torch.nan, simplex)
     q32 = query.float()
     ### (the query's own rounding, then a relative pad far above float32's on the
     ### box test's few operations)
@@ -645,7 +734,7 @@ def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.T
         wp.from_torch(left.int().contiguous(), dtype=wp.int32),
         wp.from_torch(escape.int().contiguous(), dtype=wp.int32),
         wp.from_torch(leaf_cell.contiguous(), dtype=wp.int64),
-        wp.from_torch(simplex.reshape(-1, 3).contiguous(), dtype=wp.vec3d),
+        wp.from_torch(corners.reshape(-1, 3).contiguous(), dtype=wp.vec3d),
         wp.from_torch(planes.contiguous(), dtype=wp.vec4f),
         wp.from_torch(query.contiguous(), dtype=wp.vec3d),
         wp.from_torch(q32.contiguous(), dtype=wp.vec3f),
@@ -1387,12 +1476,18 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
         new = (rows[1:] != rows[:-1]).any(-1)
     rep = order[torch.cat([new.new_ones(1), new])]
     s_rep, p_rep = simplex[rep], parity[rep].to(q64)
+    ### A zero-area cell is the segment or the point its vertices span: no normal, no
+    ### area, no solid angle (its parity 0 in the winding number).
+    flat, any_flat = _zero_area(simplex, cells)
+    if any_flat:
+        p_rep = torch.where(flat[rep], 0.0, p_rep)
     oriented = _oriented_areas(s_rep, p_rep)
     if dim == 3:
         ### Without repeated cells the two trees are one, and one traversal serves the
         ### ball search and the winding number.
         once = rep.shape[0] == cells.shape[0]
         s_ord = s_rep if once else simplex[order]
+        f_ord = flat[order] if any_flat else None
         winding = None
         if fast:
             tree, leaf_order, s_leaf = _preorder_cell_tree(s_ord)
@@ -1400,13 +1495,15 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
         else:
             tree = _cell_tree(s_ord)
             seed = order[_nearest_cells(query_points, s_ord, tree)]
-        w0 = _closest_weights(q64, simplex[seed])
+        w0 = _closest_weights(q64, simplex[seed], flat[seed] if any_flat else None)
         bound = (q64 - (w0[..., None] * simplex[seed]).sum(1)).norm(dim=-1) + coef * (q_norm + reach[seed])
         ### (padded by twice the bound, the kernel's float64 distances against these,
         ### and by the rounding of its box test)
         radius = (bound + 3 * err_max) * (1 + 1e-12)
         if fast:
-            li, pk, _ = _ball_candidates(q64, radius, s_leaf, tree, reach=reach.max())
+            li, pk, _ = _ball_candidates(
+                q64, radius, s_leaf, tree, reach=reach.max(), flat=None if f_ord is None else f_ord[leaf_order]
+            )
             pk = order[leaf_order[pk]]
             if not once:
                 tree, leaf_order, s_leaf = _preorder_cell_tree(s_rep)
@@ -1414,7 +1511,7 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
         else:
             if once:
                 winding = _winding_moments(s_rep, p_rep, oriented[0], tree)
-            li, pk, w_sum = _ball_candidates(q64, radius, s_ord, tree, winding)
+            li, pk, w_sum = _ball_candidates(q64, radius, s_ord, tree, winding, flat=f_ord)
             pk = order[pk]
             if winding is None:
                 tree = _cell_tree(s_rep)
@@ -1427,7 +1524,7 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     key = (li * f + pk).sort().values
     li, pk = key // f, key % f
     tri = simplex[pk]
-    w = _closest_weights(q64[li], tri)
+    w = _closest_weights(q64[li], tri, flat[pk] if any_flat else None)
     diff = q64[li] - (w[..., None] * tri).sum(1)
     dist = diff.norm(dim=-1)
     err = coef * (q_norm[li] + reach[pk])
@@ -1446,9 +1543,19 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     n_nonzero = nonzero.sum(-1)
     corners = cells[pk]
     key = torch.where(n_nonzero == 1, corners.gather(1, w.argmax(-1, keepdim=True))[:, 0], -1)
-    count = torch.bincount(cells.reshape(-1), minlength=n_vertices)[key.clamp_min(0)]
+    if any_flat:
+        ### A zero-area cell's features are its distinct vertices and the edges between
+        ### consecutive distinct ones, each counted once (n_vertices: none).
+        consecutive = cells[:, 1:] != cells[:, :-1]
+        vertices = torch.where(flat[:, None] & ~torch.cat([torch.ones_like(consecutive[:, :1]), consecutive], 1), n_vertices, cells)
+        count = torch.bincount(vertices.reshape(-1), minlength=n_vertices + 1)[key.clamp_min(0)]
+    else:
+        count = torch.bincount(cells.reshape(-1), minlength=n_vertices)[key.clamp_min(0)]
     if dim == 3:
         a, b = cells[:, [0, 0, 1]], cells[:, [1, 2, 2]]
+        if any_flat:
+            edges = torch.stack([consecutive[:, 0], torch.zeros_like(flat), consecutive[:, 1]], 1)
+            a, b = (torch.where(flat[:, None] & ~edges, n_vertices, x) for x in (a, b))
         edge_keys, edge_valence = torch.unique(
             n_vertices + torch.minimum(a, b) * n_vertices + torch.maximum(a, b), return_counts=True
         )
@@ -1470,6 +1577,9 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     ### (the least-norm step needs unit vectors); a degenerate cell has none.
     wall_n = face_n / face_n.norm(dim=-1, keepdim=True)
     has_n = torch.isfinite(wall_n).all(-1)
+    if any_flat:
+        ### (a zero-area cell's computed normal can be a unit vector of rounding)
+        has_n = has_n & ~flat
     tie = (dist - err <= upper[li]) & torch.where(on_wall[li], has_n[pk], reached)
     tq = li[tie]
     fn, on_cell = face_n[pk[tie]], n_nonzero[tie] == dim
@@ -1491,6 +1601,11 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     )
     distinct = (tc != tc[head[tq]]).any(-1).long()
     tied = torch.zeros(nq, dtype=torch.long, device=dev).scatter_reduce(0, tq, distinct, "amax").bool()
+    if any_flat:
+        ### On a zero-area closest cell the direction is the tie's over the cells
+        ### that hold the query and have a normal: theirs, or 0 with none (the
+        ### least-norm element of the distance's gradient on a segment or a point).
+        tied = tied | (on_wall & flat[idx])
     sel = tied[tq]
     g, c, wall = tq[sel], tc[sel], wall[sel]
     m = _grouped_min_norm(torch.cat([g, g[wall] + nq]), torch.cat([c, -c[wall]]), 2 * nq)
@@ -1618,7 +1733,11 @@ def exact_boundary_geometry(
     the least-norm point of the hull of the normals of the cells sharing an edge
     or a vertex. Coincident vertices are welded
     first, so a surface stored as pieces or as a triangle soup has the
-    connectivity of the surface it describes.
+    connectivity of the surface it describes. A cell of zero area (two or three
+    coincident vertices, or three collinear ones, by an exact test,
+    :func:`_zero_area`) is the segment or the point its vertices span: its closest
+    point lies on that set, it has no normal and no solid angle, and a query on it
+    takes the normals of the cells there that have one, or :math:`u = 0` with none.
 
     Where several features tie for the closest point (the medial surface: a
     plate's mid-plane, a corner's bisector), within the error bound of the
