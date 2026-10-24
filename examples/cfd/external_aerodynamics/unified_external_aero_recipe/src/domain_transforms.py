@@ -39,6 +39,8 @@ Recipe-local datapipe components that the library does not provide.
   :class:`BoundaryFieldToGlobal` and :class:`ConcatGlobalFields`; and
   :class:`SplitBoundaryByLabels`, one boundary per condition for a dataset that
   labels its conditions inside one mesh.
+- :class:`PlaceGroundUnderBody`: DrivAerML's synthesized domain meshes, stored
+  2.4 mm low on 297 of 484 case files, moved onto the CFD mesh's domain.
 - Physical-input AeroZoo: :class:`StandardizeGlobalLeaf`, a global PDE
   parameter standardized by per-dataset constants, and :class:`MergeBoundaries`,
   the boundaries' faces as one token set for a tensor-input model.
@@ -1868,6 +1870,96 @@ class FlipBoundaryOrientation(MeshTransform):
 
     def extra_repr(self) -> str:
         return f"boundaries={self.boundaries}, normal_fields={self.normal_fields}"
+
+
+@register()
+class PlaceGroundUnderBody(MeshTransform):
+    r"""Translate a case's domain meshes vertically so their ground plane meets the body's lowest point (2026-10-23).
+
+    DrivAerML's four domain meshes (``no_slip``, ``slip``, ``inlet``, ``outlet``) are not CFD output: the
+    physicsnemo-curator DrivAerML pipeline (``BoxTunnelBoundaries``) synthesized them per case as the wind
+    tunnel box ``x`` -40..80 m, ``y`` -22..22 m, ``z`` from ``z_floor`` to ``z_floor + 20`` m, with
+    ``z_floor`` the vehicle's lowest ``z`` (the tire contact patch). On 297 of the 484 case files a later
+    in-place pass (``.bc_surgery_checkpoint.jsonl`` in the dataset folder, 2026-06-02) wrote them with
+    ``z_floor`` fixed at -0.32 m, while those files' vehicle and interior nodes reach down to -0.317597 m
+    only: their ground lies 2.403 mm below the wheels and the lowest CFD nodes (about 1.6 M per file on that
+    plane), and their roof 2.403 mm below the highest (5,117 to 5,227 interior nodes per file above it).
+    On every one of the 484 files (lane DRV-GROUND, raw files) the mismatch is that one ``z`` translation
+    (``x``, ``y``, the cells and every in-plane coordinate are identical), and the vehicle's lowest ``z``
+    equals the interior nodes' lowest ``z``; the other 187 files already match. The PDE was solved on the
+    CFD mesh, so its boundary conditions hold where that mesh ends.
+
+    The files stay as they are. This transform applies the generator's own rule to the stored body: the
+    ``boundaries`` (the ground among them) move along ``axis`` by the body's lowest coordinate minus the
+    ground's (one plane, refused otherwise), so the ground passes through the body's lowest point and the
+    rest of the box follows. On a matching file the shift is zero. Place it first, in the files' raw
+    coordinates and before any rotation, and read the body whole: a cell subsample that compacts points
+    can drop its lowest vertex. Bare ``Mesh`` inputs pass through unchanged.
+
+    Args:
+        ground: the boundary that is the ground plane.
+        body: the boundary whose lowest point the ground meets; it is not moved.
+        boundaries: the boundaries to translate, the ground among them.
+        axis: the vertical coordinate (default 2, ``z``).
+    """
+
+    def __init__(
+        self,
+        ground: str,
+        body: str,
+        boundaries: Sequence[str],
+        axis: int = 2,
+    ) -> None:
+        super().__init__()
+        self.ground = str(ground)
+        self.body = str(body)
+        self.boundaries = [str(b) for b in boundaries]
+        self.axis = int(axis)
+        if self.ground not in self.boundaries:
+            raise ValueError(
+                f"PlaceGroundUnderBody: the ground {self.ground!r} must be among the boundaries {self.boundaries!r}"
+            )
+        if self.body in self.boundaries:
+            raise ValueError(
+                f"PlaceGroundUnderBody: the body {self.body!r} must not be among the boundaries it anchors"
+            )
+
+    def __call__(self, mesh: Mesh) -> Mesh:
+        return mesh
+
+    def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
+        """Translate the named boundaries so the ground meets the body's lowest point."""
+        missing = [
+            b for b in (*self.boundaries, self.body) if b not in domain.boundary_names
+        ]
+        if missing:
+            raise KeyError(
+                f"PlaceGroundUnderBody: boundaries {missing!r} not found; available: "
+                f"{domain.boundary_names!r}"
+            )
+        height = domain.boundaries[self.ground].points[:, self.axis]
+        if not bool((height == height[0]).all()):
+            raise ValueError(
+                f"PlaceGroundUnderBody: the ground {self.ground!r} is not one plane along axis "
+                f"{self.axis} (from {float(height.min())} to {float(height.max())})"
+            )
+        lowest = domain.boundaries[self.body].points[:, self.axis].min()
+        offset = torch.zeros_like(domain.boundaries[self.ground].points[0])
+        offset[self.axis] = lowest.to(offset.dtype) - height[0]
+        return DomainMesh(
+            interior=domain.interior,
+            boundaries={
+                name: b.translate(offset) if name in self.boundaries else b
+                for name, b in domain.boundaries.items()
+            },
+            global_data=domain.global_data,
+        )
+
+    def extra_repr(self) -> str:
+        return (
+            f"ground={self.ground!r}, body={self.body!r}, boundaries={self.boundaries}, "
+            f"axis={self.axis}"
+        )
 
 
 @register()
