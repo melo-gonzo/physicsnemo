@@ -403,13 +403,16 @@ def _meta(qr, gu, pb, w1, w3) -> dict:
 
 
 def _geometry_args(geometry: dict) -> tuple[tuple[torch.Tensor, ...], int]:
-    """The case's geometry tensors in the kernels' order, contiguous, and the number
-    of rank-1 inputs per source (``src_vecs`` a placeholder when there are none)."""
+    """The case's geometry tensors in the kernels' order, contiguous and detached, and the
+    number of rank-1 inputs per source (``src_vecs`` a placeholder when there are none).
+    Detached: the rank-1 inputs come from learned maps, and an autograd edge into their
+    graph would run (and free) it in every backward through the basis, such as each
+    chunk's of :meth:`ISLA.query_chunks`."""
     sv = geometry["src_vecs"]
     pb = 0 if sv is None else int(sv.shape[1])
     keys = ("query_r", "query_n", "query_wall", "src_r", "src_n")
-    geo = tuple(geometry[k].contiguous() for k in keys)
-    return geo + ((sv if pb else geometry["src_r"]).contiguous(), geometry["g_unit"].contiguous()), pb
+    geo = tuple(geometry[k].detach().contiguous() for k in keys)
+    return geo + ((sv if pb else geometry["src_r"]).detach().contiguous(), geometry["g_unit"].detach().contiguous()), pb
 
 
 class _FusedBasis(torch.autograd.Function):

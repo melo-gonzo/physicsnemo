@@ -1853,6 +1853,29 @@ def test_fused_kernel_basis_matches_the_reference_basis(
 
 
 @cuda_only
+def test_fused_basis_leaves_the_geometrys_graph_alone():
+    """The fused basis gives its geometry no gradient and keeps no edge into the
+    geometry's graph: rank-1 inputs from a learned map (as ISLA's are) survive one
+    backward per range of points, as :meth:`ISLA.query_chunks` takes, and get no
+    gradient."""
+    from physicsnemo.experimental.models.isla import fused_basis
+
+    dev = torch.device("cuda")
+    geometry, plan, basis = _basis_case(3, 1)
+    geo, plan = _to(geometry, dev, torch.float32), _to(plan, dev, torch.float32)
+    basis = basis.float().to(dev)
+    raw = geo["src_vecs"].clone().requires_grad_(True)
+    geo["src_vecs"] = raw.exp()
+    for a, b in ((0, 7000), (7000, 20000)):
+        weights = fused_basis.mlp_weights(basis)
+        fused_basis.fused_kernel_basis(
+            weights, plan.qi[a:b], plan.bj[a:b], 0, 0, geo
+        ).sum().backward()
+    assert raw.grad is None
+    assert all(p.grad is not None for p in basis.parameters())
+
+
+@cuda_only
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16], ids=["bf16", "fp16"])
 def test_fused_basis_gelu_tables_are_pytorchs_gelu_on_every_input(dtype):
     """The fused basis's GELU tables give PyTorch's 16-bit GELU and its backward
