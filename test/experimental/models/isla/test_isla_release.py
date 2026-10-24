@@ -36,6 +36,7 @@ conditions came to be declared by name, each with its own input layer, checkpoin
 0.7.0) and pins the backbone through the internal batched routine.
 """
 
+import inspect
 import re
 import warnings
 from pathlib import Path
@@ -59,11 +60,14 @@ IO = dict(
     global_schema={"g": {"rank": 1}},
 )
 
-#: One small configuration in its three forms: a surface task, an interior task (the
-#: constructor's ``interior`` flag) and ISLA-DTT (``query_independent``).
+#: One small configuration in its three forms: a surface task, an interior task of
+#: interacting ISLA (the constructor's ``interior`` flag with ``query_independent=False``)
+#: and ISLA-DTT (``query_independent=True``, the interior task's default).
 CONFIGS = {
     "default": dict(hidden=32, n_layers=2, n_slices=8, **IO),
-    "interior": dict(hidden=32, n_layers=2, n_slices=8, interior=True, **IO),
+    "interior": dict(
+        hidden=32, n_layers=2, n_slices=8, interior=True, query_independent=False, **IO
+    ),
     "dtt": dict(
         hidden=32, n_layers=2, n_slices=8, interior=True, query_independent=True, **IO
     ),
@@ -176,6 +180,7 @@ def test_isla_constructor_attributes(config):
                 "outlet": {},
             },
             interior=True,
+            query_independent=False,
             hidden=64,
             n_layers=3,
             n_slices=16,
@@ -337,6 +342,103 @@ def test_isla_reference_checkpoint_matches_golden(device):
     ref = _load_or_create_reference("isla_default_checkpoint_output_v1.pth", out)
     tol = 1e-5 if device == "cpu" else 1e-4
     _assert_dict_close(out, ref, atol=tol, rtol=tol)
+
+
+def _stored_args(path) -> dict:
+    """The constructor arguments a ``.mdlus`` stores (its ``args.json``)."""
+    import json
+    import zipfile
+
+    with zipfile.ZipFile(path) as z:
+        return json.loads(z.read("args.json"))["__args__"]
+
+
+def _boundary_read_parameters(model) -> list[str]:
+    return [
+        n
+        for n, _ in model.named_parameters()
+        if n.startswith(("kernel_basis.", "kernel_reads."))
+    ]
+
+
+def test_a_state_dict_of_one_interior_form_does_not_load_into_the_other(tmp_path):
+    """ISLA-DTT and interacting ISLA own different parameters (the boundary read; the
+    routing mass), so a state dict of either fails to load into the other, both
+    ways: strict ``load_state_dict``, ``Module.load`` (the recipe's resume path) and
+    ``Module.from_checkpoint`` of a checkpoint whose arguments name the other form."""
+    import zipfile
+
+    dtt = _instantiate_model(**CONFIGS["dtt"])
+    inter = _instantiate_model(**CONFIGS["interior"])
+    for src, dst, unexpected, missing in (
+        (dtt, inter, "kernel_reads.0.", "qt.logw"),
+        (inter, dtt, "qt.logw", "kernel_reads.0."),
+    ):
+        with pytest.raises(RuntimeError, match="Missing key") as err:
+            dst.load_state_dict(src.state_dict())
+        msg = str(err.value)
+        assert "Unexpected key" in msg
+        assert unexpected in msg.split("Unexpected key")[1]
+        assert missing in msg.split("Unexpected key")[0]
+        path = tmp_path / f"src_{src.query_independent}.mdlus"
+        src.save(path)
+        with pytest.raises(RuntimeError, match="Missing key"):
+            dst.load(str(path), strict=True)
+        dst_path = tmp_path / f"dst_{dst.query_independent}.mdlus"
+        dst.save(dst_path)
+        mixed = tmp_path / f"mixed_{dst.query_independent}.mdlus"
+        with (
+            zipfile.ZipFile(dst_path) as za,
+            zipfile.ZipFile(path) as zs,
+            zipfile.ZipFile(mixed, "w") as zout,
+        ):
+            for item in za.infolist():  # the other form's arguments, src's weights
+                data = (
+                    zs.read("model.pt")
+                    if item.filename == "model.pt"
+                    else za.read(item)
+                )
+                zout.writestr(item, data)
+        assert _stored_args(mixed)["query_independent"] is dst.query_independent
+        with pytest.raises(RuntimeError, match="Missing key"):
+            Module.from_checkpoint(str(mixed))
+
+
+@pytest.mark.parametrize("form", ["default", "interacting"])
+def test_new_interior_checkpoints_store_their_form(tmp_path, form):
+    """An interior model built without ``query_independent`` is ISLA-DTT and stores
+    ``query_independent=True`` in its checkpoint's arguments; one built with
+    ``query_independent=False`` stores ``False``. Each round-trips as its form with
+    its outputs. ``Module.__new__`` stores the bound defaults, so a checkpoint names
+    every constructor argument, the interior form among them, and never depends on
+    the class default. (An interior checkpoint written before 0.12.0, when the
+    default was interacting ISLA, is refused with its version named, as every
+    earlier checkpoint is: test_isla_checkpoint_of_an_earlier_version_is_refused and
+    test_isla_0_7_0_to_0_11_0_state_dicts_are_refused_on_every_loading_path.)"""
+    kw = dict(CONFIGS["dtt"])
+    del kw["query_independent"]
+    if form == "interacting":
+        kw["query_independent"] = False
+    model = _instantiate_model(seed=5, **kw)
+    dtt = form == "default"
+    assert model.query_independent is dtt
+    path = tmp_path / "isla.mdlus"
+    model.save(path)
+    args = _stored_args(path)
+    assert set(args) == set(inspect.signature(ISLA.__init__).parameters) - {"self"}
+    assert args["query_independent"] is dtt and args["interior"] is True
+    loaded = Module.from_checkpoint(str(path)).eval()
+    assert isinstance(loaded, ISLA) and loaded.interior is True
+    assert loaded.query_independent is dtt
+    assert bool(_boundary_read_parameters(loaded)) is dtt
+    assert (loaded.kernel_basis is None and loaded.kernel_reads is None) is not dtt
+    assert (loaded.qt.logw is None) is dtt
+    loaded.geo_kernel = model.geo_kernel
+    inputs = _make_inputs("cpu", query=True)
+    with torch.no_grad():
+        _assert_dict_close(
+            outputs(loaded(**inputs)), outputs(model(**inputs)), atol=0.0, rtol=0.0
+        )
 
 
 @pytest.mark.parametrize(

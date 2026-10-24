@@ -71,12 +71,14 @@ def _model(task: str) -> ISLA:
             "boundary_schemas": SCHEMAS["interior"],
             "global_schema": {"g": {"rank": 1}, "re": {"rank": 0}},
             "interior": True,
+            "query_independent": False,
         }
     elif task == "inputs":
         kw = {
             "boundary_schemas": SCHEMAS["inputs"],
             "global_schema": {"g": {"rank": 1}},
             "interior": True,
+            "query_independent": False,
         }
     elif (
         task == "global_source"
@@ -95,6 +97,7 @@ def _model(task: str) -> ISLA:
             reynolds={"mean": 6.0, "std": 0.2},
             output_stats={"nut": {"mean": 1e-3, "std": 2e-3}},
             interior=True,
+            query_independent=False,
             hidden=32,
             n_layers=2,
             n_slices=8,
@@ -116,6 +119,7 @@ def _model(task: str) -> ISLA:
                 "v": {"mean": 0.0, "std": 4.0},
             },
             interior=True,
+            query_independent=False,
             hidden=32,
             n_layers=2,
             n_slices=8,
@@ -254,6 +258,7 @@ def _budget_model() -> ISLA:
         boundary_schemas=SCHEMAS["interior"],
         global_schema={"g": {"rank": 1}, "re": {"rank": 0}},
         interior=True,
+        query_independent=False,
         boundary_tokens=60,
         hidden=32,
         n_layers=2,
@@ -322,6 +327,7 @@ def test_the_in_model_draw_compiles_under_max_autotune_at_full_resolution():
             boundary_schemas=SCHEMAS["interior"],
             global_schema={"g": {"rank": 1}, "re": {"rank": 0}},
             interior=True,
+            query_independent=False,
             hidden=32,
             n_layers=2,
             n_slices=8,

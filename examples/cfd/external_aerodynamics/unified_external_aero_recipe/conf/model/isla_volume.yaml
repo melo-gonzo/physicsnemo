@@ -20,8 +20,11 @@
 # ---------------------------------------------------------------------------
 # Boundary -> interior on DrivAerML volume data. Interior task
 # (`interior: true`): the outputs are predicted at `prediction_points`, the
-# dataset's interior point cloud passed as a Mesh; the prediction points join
-# the encoder as interacting tokens. The same mesh contract as
+# dataset's interior point cloud passed as a Mesh. The model is ISLA-DTT
+# (`query_independent: true`): the prediction points are passive tokens, which
+# read the slices the boundary forms at every depth without writing into them
+# and after every block read every boundary cell, so each prediction depends on
+# its own point and the boundary alone. The same mesh contract as
 # isla_surface.yaml otherwise: the boundary as named Mesh objects (centroids,
 # normals and measures read from the Mesh), the case's global data as a
 # TensorDict, one case per call; the output is a point-cloud Mesh at the
@@ -68,7 +71,11 @@ training:
   optimizer:
     lr: 3.75e-4
 
-# Whole-model torch.compile, the fastest way to run ISLA: the forward, Mesh in
+# Per-block torch.compile (model.compile_blocks below), not the whole-model
+# compile: ISLA-DTT's boundary read sizes its pairs from the data and breaks the
+# whole-model fullgraph trace. The whole-model compile is interacting ISLA's
+# (compile=true model.query_independent=false model.compile_blocks=false), with
+# the compile_options kept below, the fastest way to run it: the forward, Mesh in
 # and out, traces to one graph with no breaks (fullgraph) and compiles once with
 # dynamic shapes for every token count, so the case-to-case change in boundary
 # and point counts does not recompile (the in-model boundary draw's token count,
@@ -81,10 +88,8 @@ training:
 # faster than padding the cases to CUDA-graph size buckets. The first compile
 # is long (about 11 minutes on a cold cache for DrivAerML Surface on a GB300,
 # a minute from a warm one): keep TORCHINDUCTOR_CACHE_DIR and TRITON_CACHE_DIR
-# across the links of a chained run. Not with
-# model.query_independent=true (ISLA-DTT): its boundary read breaks the graph;
-# there set compile=false and model.compile_blocks=true.
-compile: true
+# across the links of a chained run.
+compile: false
 compile_options:
   fullgraph: true
   dynamic: true
@@ -117,12 +122,13 @@ model:
     outlet: {}                   # the outlet face: no per-cell fields
   global_schema:
     U_inf_dir: {rank: 1}         # the unit freestream direction, read from global_data.U_inf_dir
-  interior: true                 # predict at prediction_points, which join the encoder as tokens
+  interior: true                 # predict at prediction_points: passive tokens that read the boundary (ISLA-DTT)
+  query_independent: true        # ISLA-DTT, the interior task's reference form (the class default for interior: true, stated here)
   boundary_tokens: 200000        # boundary tokens drawn per case inside the model (equal to the class default)
   hidden: 512                  # the reference configuration (REF-80 verdict, 2026-10-04): most accurate under 80 GiB per GPU on DrivAerML Surface and the 210-wing rung; equal to the class defaults
   n_layers: 12
   n_slices: 512
-  # Per-block torch.compile (PERF-3, 2026-10-01): off, since the recipe compiles
-  # the whole model (compile_options above). The way to compile ISLA-DTT
-  # (model.query_independent=true), whose boundary read breaks the whole-model graph.
-  compile_blocks: false
+  # Per-block torch.compile (PERF-3, 2026-10-01; built at the first step, parameter
+  # names and checkpoints unchanged): the way to compile ISLA-DTT, whose boundary
+  # read breaks the whole-model fullgraph trace; see the comment on `compile` above.
+  compile_blocks: true

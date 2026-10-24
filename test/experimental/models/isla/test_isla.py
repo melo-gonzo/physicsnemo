@@ -236,7 +236,9 @@ def test_every_parameter_receives_a_gradient(interior):
     no prediction-point parameters and an interior model uses all of its own, so
     in both tasks every parameter receives a gradient."""
     torch.manual_seed(0)
-    m = _isla(hidden=32, n_layers=2, n_slices=8, interior=interior)
+    m = _isla(
+        hidden=32, n_layers=2, n_slices=8, interior=interior, query_independent=False
+    )
     pts, nrm, w, drv = cloud(128, dtype=torch.float32)
     q = torch.randn(20, 3) if interior else None
     out = outputs(
@@ -280,7 +282,13 @@ def test_interior_task_contracts():
     pts, nrm, w, drv = cloud(n)
     mesh = soup(pts, nrm, w)
     qpts = torch.randn(nq, 3, dtype=D) * 4.0
-    m = _isla(hidden=64, n_layers=2, n_slices=16, interior=True).double().eval()
+    m = (
+        _isla(
+            hidden=64, n_layers=2, n_slices=16, interior=True, query_independent=False
+        )
+        .double()
+        .eval()
+    )
     q = _rotation()
     shift = torch.tensor([3.0, -7.0, 11.0], dtype=D)
     base = _run(m, mesh, drv, qpts)
@@ -393,7 +401,11 @@ def test_query_mass_refinement_invariance():
     q = pts[:17] * 1.3
     qm = points_mesh(q)
     torch.manual_seed(0)
-    m = _isla(hidden=32, n_layers=2, n_slices=8, interior=True).double().eval()
+    m = (
+        _isla(hidden=32, n_layers=2, n_slices=8, interior=True, query_independent=False)
+        .double()
+        .eval()
+    )
     s = 3.7
     qm_s = points_mesh(q * s)
     a = _run(m, mesh, drv, qm)
@@ -413,7 +425,17 @@ def test_geometric_scale_equivariance(interior):
     torch.manual_seed(0)
     pts, nrm, w, drv = cloud(400)
     mesh = soup(pts, nrm, w)
-    m = _isla(hidden=64, n_layers=2, n_slices=16, interior=interior).double().eval()
+    m = (
+        _isla(
+            hidden=64,
+            n_layers=2,
+            n_slices=16,
+            interior=interior,
+            query_independent=False,
+        )
+        .double()
+        .eval()
+    )
     assert not m._scaled
     k = 2.7
     shift = torch.tensor([3.0, -7.0, 11.0], dtype=D)
@@ -440,6 +462,7 @@ def test_boundary_scalars_reach_the_interior_prediction():
             n_layers=2,
             n_slices=8,
             interior=True,
+            query_independent=False,
             boundary_schemas={"wall": {"bc_a": {"rank": 0}, "bc_b": {"rank": 0}}},
         )
         .double()
@@ -501,7 +524,11 @@ def test_frame_is_sampling_consistent():
     pts, nrm, w, drv = cloud(100000)
     q = pts[:40] * 1.2
     torch.manual_seed(1)
-    m = _isla(hidden=32, n_layers=2, n_slices=8, interior=True).double().eval()
+    m = (
+        _isla(hidden=32, n_layers=2, n_slices=8, interior=True, query_independent=False)
+        .double()
+        .eval()
+    )
     n_sub = 10000
     d_bias, d_noise = [], []
 
@@ -526,16 +553,42 @@ def test_frame_is_sampling_consistent():
 
 
 def test_defaults_are_the_reference_configuration():
-    """The class defaults: a surface task, the automatic geometry kernel, one
-    seed invariant n.g and six relational invariants; an interior model adds the
-    prediction-point embedding over the built-in distance pair."""
+    """The class defaults: a surface task (interacting, no query independence), the
+    automatic geometry kernel, one seed invariant n.g and six relational invariants;
+    an interior model adds the prediction-point embedding over the built-in distance
+    pair and is ISLA-DTT by default (the boundary read, no routing mass), interacting
+    ISLA with query_independent=False. A surface task with query_independent=True
+    is refused."""
     m = _isla(hidden=32, n_layers=2, n_slices=8)
     assert m.interior is False and m.qt is None
+    assert m.query_independent is False
+    assert m.kernel_basis is None and m.kernel_reads is None
+    assert m._args["__args__"]["query_independent"] is False
     assert m.geo_kernel == "auto"
     assert m.boundary_conditions["wall"].seed.in_features == 1 + 1
     assert m.blocks[0].geo_logit.in_features == 6
     mi = _isla(hidden=32, n_layers=2, n_slices=8, interior=True)
     assert mi.qt.seed.in_features == 1 + 2  # n.g and the built-in distance pair
+    assert mi.query_independent is True
+    assert mi._args["__args__"]["query_independent"] is True
+    assert mi.qt.logw is None  # no routing mass
+    assert mi.kernel_basis is not None and len(mi.kernel_reads) == 2
+    assert not any(n.startswith("qt.logw") for n, _ in mi.named_parameters())
+    assert any(n.startswith("kernel_reads.") for n, _ in mi.named_parameters())
+    mf = _isla(
+        hidden=32, n_layers=2, n_slices=8, interior=True, query_independent=False
+    )
+    assert mf.query_independent is False
+    assert mf._args["__args__"]["query_independent"] is False
+    assert mf.qt.logw is not None  # the learned routing mass
+    assert mf.kernel_basis is None and mf.kernel_reads is None
+    assert not any(
+        n.startswith(("kernel_basis.", "kernel_reads."))
+        for n, _ in mf.named_parameters()
+    )
+    assert mf.qt.seed.in_features == 1 + 2
+    with pytest.raises(ValueError, match="interior=True"):
+        _isla(hidden=32, n_layers=2, n_slices=8, query_independent=True)
 
 
 def test_constructor_and_forward_are_keyword_only():
@@ -611,7 +664,9 @@ def test_interior_flag_structures_the_forward():
             prediction_points=pts[:3],
             global_data={"g": drv},
         )
-    interior = _isla(hidden=32, n_layers=1, n_slices=8, interior=True)
+    interior = _isla(
+        hidden=32, n_layers=1, n_slices=8, interior=True, query_independent=False
+    )
     with pytest.raises(ValueError, match="pass prediction_points"):
         interior(
             prediction_boundaries=["wall"],
@@ -825,6 +880,7 @@ def test_scalar_only_model_has_no_frame_routing_and_every_parameter_gets_a_gradi
             n_layers=2,
             n_slices=8,
             interior=True,
+            query_independent=False,
         )
         has_vec = any(v["rank"] == 1 for v in outs.values())
         assert m.needs_frame == has_vec and (m.frame_assign is not None) == has_vec

@@ -249,7 +249,7 @@ def test_field_validation_errors():
             global_data=gd,
         )
     ### the prediction points must match the model's dimension
-    mq = _model(interior=True)
+    mq = _model(interior=True, query_independent=False)
     q = pts[:7] * 2
     with pytest.raises(ValueError, match="prediction_points has 2 spatial dimensions"):
         mq(
@@ -269,7 +269,12 @@ def test_fused_kernel_auto_falls_back_with_tensor_inputs():
         n_layers=1,
         n_slices=8,
     )
-    m = ISLA(interior=True, boundary_schemas={"wall": {"S": {"rank": 2}}}, **base)
+    m = ISLA(
+        interior=True,
+        query_independent=False,
+        boundary_schemas={"wall": {"S": {"rank": 2}}},
+        **base,
+    )
     assert m.geo_kernel == "auto"
     assert m.resolve_geo_kernel(torch.zeros(1, 4, 3)) == "eager"
 

@@ -87,7 +87,9 @@ SCALED_OUT = {
 }
 
 
-def _model(interior=False, schemas=SCHEMAS, output_schema=OUT, **kw):
+def _model(
+    interior=False, schemas=SCHEMAS, output_schema=OUT, query_independent=False, **kw
+):
     torch.manual_seed(0)
     return (
         ISLA(
@@ -95,6 +97,7 @@ def _model(interior=False, schemas=SCHEMAS, output_schema=OUT, **kw):
             boundary_schemas=schemas,
             global_schema={"g": {"rank": 1}, "re": {"rank": 0}},
             interior=interior,
+            query_independent=query_independent,
             hidden=32,
             n_layers=2,
             n_slices=8,
