@@ -275,6 +275,11 @@ print("**Velocity is measured alike for the three.** GeoTransolver and Transolve
 print(St.table("tbl-airfrans-protocols", f"The AirfRANS interior task, `full` split, {N_TEST} test airfoils"))
 ```
 
+::: {.callout-note title="In flight"}
+These numbers come from ISLA and ISLA-DTT reading the airfoil alone. The same two trained with the far field
+as well (@sec-data-airfrans) are being measured, and the ledger (@sec-ledger) tracks it.
+:::
+
 ```{python}
 #| label: para-airfrans-dtt-standing
 #| output: asis

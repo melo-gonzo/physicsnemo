@@ -327,8 +327,8 @@ SQ = [SQR[f"r090_dr_isla_seed{s}"]["fields"] for s in (42, 43)]
 sq = lambda fn: " / ".join(f"{sum(fn(d[f]) for d in SQ) / len(SQ):.3f}" for f in ("pressure", "wss"))
 slope = lambda f: sum(d[f]["slope"] for d in SQ) / len(SQ)
 half = [d[f][k]["ratio"] for d in SQ for f in ("pressure", "wss") for k in ("q3_low_x", "q3_high_x")]
-print("**ISLA's surface prediction at a cell depends on the other sampled cells, through a quadrature error that falls as one over "
-      "the square root of their number.** The sampled cells are also ISLA's view of the car. On the standing's checkpoints the spread "
+print("**ISLA's surface prediction at a cell depends on the other sampled cells, through a quadrature error that shrinks as the "
+      "sample grows.** The sampled cells are also ISLA's view of the car. On the standing's checkpoints the spread "
       "between two independent 200,000-cell samples, on the cells they share, is "
       f"{sq(lambda d: d['spread']['200000'])} on pressure / wall shear, so one sample's own noise, that spread divided by the "
       f"square root of two, is {sq(lambda d: d['delta']['200000'] / d['err_uniform']['200000'])} of the error; the spread falls "
@@ -336,7 +336,8 @@ print("**ISLA's surface prediction at a cell depends on the other sampled cells,
       f"{slope('pressure'):.2f} / {slope('wss'):.2f} from 50,000 to 800,000 cells (seed means). Four disjoint 50,000-cell samples "
       f"raise the error {sq(lambda d: d['q2_ratio'])} times, as one 50,000-cell sample does, and at 800,000 cells the error is "
       f"{sq(lambda d: d['err_ratio_to_200k']['800000'])} times the scored one. Half a car given alone raises the error on it "
-      f"{min(half):.0f} to {max(half):.0f} times, so a request must cover the body (@sec-using-sampler). "
+      f"{min(half):.0f} to {max(half):.0f} times, so a request must cover the body (@sec-using-sampler). How the test "
+      "registered for this probe labels the dependence is in @sec-limits-query-independence. "
       f"Data: {R.source('surfqpop', 'results/out/reduced.json')}.")
 ```
 
@@ -934,5 +935,5 @@ print("The cause is that ISLA's interior points carry routing mass: they write i
 Questions this dataset raises and leaves open:
 
 - **ISLA or ISLA-DTT on the interior?** On this task ISLA-DTT is measured only on a study configuration with the raw slice reads (@tbl-interior-read-only), where it trades some accuracy for exact query independence. Which form the interior tasks use is decided on AeroZoo (@sec-oq-dtt).
-- **How much of ISLA's far-field error is the missing ground?** Trained on a single car, ISLA misses the eddy viscosity far from the car, whose level there follows the height above the floor, a boundary the standing's configuration on this task does not read (@sec-single-case-floor). ISLA's input is the domain's whole boundary, so the floor strip, the slip walls, the inlet and the outlet that the case files store belong in it as named boundary meshes (@sec-limits-whole-boundary); how much of that error they remove is @sec-oq-far-field.
+- **How much of ISLA's far-field error is the missing ground?** Trained on a single car, ISLA misses the eddy viscosity far from the car, whose level there follows the height above the floor, a boundary the standing's configuration on this task does not read; a configuration that reads it is built and has no standing (@sec-single-case-floor). ISLA's input is the domain's whole boundary, so the floor strip, the slip walls, the inlet and the outlet that the case files store belong in it as named boundary meshes (@sec-limits-whole-boundary); how much of that error they remove is @sec-oq-far-field.
 - **How precisely must the wall be given?** The watertight STL raises ISLA's error only near the wall, where it differs from the CFD wall by about the chord error of its tessellation (@sec-interior-boundary-law). Whether the on-wall nodes' distance channel causes that rise is untested; a probe that moves only those nodes' distance would settle it.

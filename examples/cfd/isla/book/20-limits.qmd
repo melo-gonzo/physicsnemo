@@ -94,6 +94,9 @@ FW = {"pressure_l2": "pressure", "velocity_l2": "velocity", "nut_l2": "eddy visc
 f3 = lambda xs, d=2: " / ".join(f"{x:.{d}f}" for x in xs)
 span = lambda xs, d=2: f"{min(xs):.{d}f}" if f"{min(xs):.{d}f}" == f"{max(xs):.{d}f}" else f"{min(xs):.{d}f} to {max(xs):.{d}f}"
 SEEDW = {2: "two", 3: "three", 4: "four"}
+# HiLiftAeroML files that store more of the domain's boundary than the wing (BOUNDARY-AUDIT section 1)
+_hl = [int(x.replace(",", "")) for x in re.search(r"only the wing on ([\d,]+) of ([\d,]+) files", " ".join(R.load("boundary_audit", "REPORT.md").split())).groups()]
+HL_BUT = {1: "one", 2: "two", 3: "three"}.get(_hl[1] - _hl[0], f"{_hl[1] - _hl[0]:,}")
 ```
 
 ## What this book does not claim {#sec-not-claimed}
@@ -135,8 +138,8 @@ print("- **Not that ISLA extrapolates across a flow regime, or that it transfers
       "either baseline (@sec-limits-regime, @sec-limits-transfer).")
 print("- **Not that every standing is of ISLA reading its whole boundary.** On the DrivAerML Volume and Surface tasks, SHIFT-SUV, "
       "HiLiftAeroML and AirfRANS the standings' configuration reads the body alone; the configurations that read the rest of the "
-      "stored boundary on the DrivAerML tasks and AirfRANS have no standing, and the SHIFT-SUV and HiLiftAeroML files store no "
-      "other piece (@sec-limits-whole-boundary).")
+      "stored boundary on the DrivAerML tasks and AirfRANS have no standing, and SHIFT-SUV's files, and all but "
+      f"{HL_BUT} of HiLiftAeroML's, store no other piece (@sec-limits-whole-boundary).")
 print("- **Not that the HiLiftAeroML numbers are test-set numbers** (@sec-limits-validation).")
 print("- **Not that the scaling law, the cell-count saturation or the capacity floor are measured at the reference configuration.** "
       "They are measured on smaller ISLAs and read for slopes and floors (@sec-capacity, @sec-oq-scaling).")
@@ -415,7 +418,7 @@ print("**On a surface task the requested cells are also ISLA's view of the body,
       f"{sq(lambda d: d['delta']['200000'] / d['err_uniform']['200000'])} of the error. Four disjoint 50,000-cell requests that together "
       f"cover the body raise the error {sq(lambda d: d['q2_ratio'])} times over one 200,000-cell request, as one 50,000-cell request does "
       f"({sq(lambda d: d['err_ratio_to_200k']['50000'])}), and at 800,000 cells the error is "
-      f"{sq(lambda d: d['err_ratio_to_200k']['800000'])} times the scored one (seed-mean errors over the cars). A request that leaves part "
+      f"{sq(lambda d: d['err_ratio_to_200k']['800000'])} times the scored one (car-mean errors, per seed). A request that leaves part "
       f"of the body out breaks the prediction: half the car alone raises the error on that half {min(half):.0f} to {max(half):.0f} times. "
       "So a surface request covers the body (@sec-using-sampler). By the labels registered before the probe, the wall-shear dependence "
       f"reads *request-coupled beyond quadrature*, because $s(800{{,}}000) / s(200{{,}}000)$ is {', '.join(f'{x:.3f}' for x in s800)} "
@@ -496,8 +499,8 @@ print("**ISLA's input is the whole boundary of the PDE domain, every piece a dat
       + lst([d for n in body for d in WB_CFG[n]]) + " it reads one mesh, the body ("
       + ", ".join(sorted({f"`{BND[n][0]}`" for n in body})) + "), and every standing on those tasks was trained that way, so those "
       "standings are of ISLA reading part of its boundary. On the DrivAerML tasks and AirfRANS the data hold more of the "
-      "boundary, and configurations that read all of it are built and have no standing; the SHIFT-SUV and HiLiftAeroML files "
-      "store the body alone (@sec-oq-whole-boundary). On the DrivAerML Volume task ISLA's far-field eddy-viscosity error follows "
+      "boundary, and configurations that read all of it are built and have no standing; SHIFT-SUV's files, and all but "
+      f"{HL_BUT} of HiLiftAeroML's, store the body alone (@sec-oq-whole-boundary). On the DrivAerML Volume task ISLA's far-field eddy-viscosity error follows "
       "the height above the floor (@sec-oq-far-field). A surface task predicts at every cell it is given, so on a surface task "
       "the domain's walls enter only through a task form that names the boundaries it predicts at and reads the others as "
       "conditions, which is built and has no standing. Because ISLA's length unit $L$ is the RMS pairwise distance of the whole given boundary "
@@ -925,11 +928,11 @@ print("**Read from every dataset's files, the boundary falls in three classes; t
 print()
 print("- **Read whole.** On AeroZoo, the GINOT bracket lug, PLAID Tensile2d and DeepJEB++ ISLA's configuration reads every stored "
       "piece, by its condition name.")
-print("- **Stored, and read by configurations without a standing.** The DrivAerML files store, beside the vehicle, the four faces of "
+print("- **Stored in the data, and read by configurations without a standing.** The DrivAerML files store, beside the vehicle, the four faces of "
       "the tunnel box built from the dataset's documented tunnel (@sec-oq-far-field); configurations that read them on both DrivAerML "
       f"tasks are built. The AirfRANS files store the airfoil and an interior cropped to about {AF_CROP} chords; the crop's edges are "
-      "not a boundary of the PDE, since the flow crosses them and no condition is stored on them. The far field is in the release's "
-      "own `_freestream.vtp` on every case, 200 chords out, and a configuration reads it from there as the condition `freestream`, "
+      "not a boundary of the PDE, since the flow crosses them and no condition is stored on them. The far field is not in the "
+      "converted files but in the release's own `_freestream.vtp` on every case, 200 chords out, and a configuration reads it from there as the condition `freestream`, "
       "whose prescribed value is the inlet velocity ISLA already reads, with the dataset unchanged (@sec-data-airfrans).")
 print(f"- **Not stored.** SHIFT-SUV's {SUV_N} files store the vehicle alone, open at the tyre contact patches, inside an interior "
       f"that fills the box {SUV_BOX}; its ground, side walls, roof, inlet and outlet are not stored, and no published source found "
@@ -946,11 +949,6 @@ print("What would settle it: the missing pieces supplied, built from the documen
       "priced, because the supply sets the runs. "
       f"Data: {R.source('boundary_audit', 'REPORT.md')} (sections 1, 2 and 5), {R.source('setup_research', 'SETUP.md')}.")
 ```
-
-::: {.callout-note title="In flight"}
-These are the standings of ISLA reading the body alone. ISLA and ISLA-DTT reading the AirfRANS far field as well are
-being measured, and the ledger (@sec-ledger) tracks it.
-:::
 
 ### A quarter of the slices {#sec-oq-slices}
 

@@ -937,7 +937,8 @@ larger sample, or the mean of the predictions of several independent samples, lo
 #| output: asis
 SQR = R.load("surfqpop", "results/out/reduced.json")
 SQ = [SQR[f"r090_dr_isla_seed{s}"]["fields"] for s in (42, 43)]
-sq = lambda fn: " / ".join(f"{min(fn(d[f]) for d in SQ):.3f} to {max(fn(d[f]) for d in SQ):.3f}" for f in ("pressure", "wss"))
+_rg = lambda a, b: a if a == b else f"{a} to {b}"
+sq = lambda fn: " / ".join(_rg(f"{min(fn(d[f]) for d in SQ):.3f}", f"{max(fn(d[f]) for d in SQ):.3f}") for f in ("pressure", "wss"))
 half = [d[f][k]["ratio"] for d in SQ for f in ("pressure", "wss") for k in ("q3_low_x", "q3_high_x")]
 print(f"On the DrivAerML Surface task (the standing's two checkpoints, its {SQR['r090_dr_isla_seed42']['n_cases']} validation "
       "cars, float32), one 200,000-cell sample's own noise, the spread between two independent samples on the cells they share "

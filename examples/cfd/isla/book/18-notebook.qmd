@@ -40097,8 +40097,9 @@ AeroZoo decision in REF-090 and FLOOR-DRV in CAP-AUDIT, and adds GEO-FAST and BO
 
 ## 2026-10-23 — The whole boundary, read from the data: AeroZoo, the lug, Tensile2d and DeepJEB++ already give ISLA all of theirs; every DrivAerML file stores a tunnel box that a DrivAerML Volume configuration now reads on its own branch, 2.4 mm low on 297 of the 484 files, which a recipe transform corrects; AirfRANS's far field is only in the raw release; SHIFT-SUV and HiLiftAeroML store the body alone; on DrivAerML Volume the whole boundary's extra cost is almost all one slow seed query {#sec-nb-boundary-audit}
 
-**Question.** Peter ruled at 17:08 EDT that canonical ISLA reads every stored piece of the PDE domain's boundary, by name
-with its condition type, on every dataset (@sec-nb-canonical-rulings). Three lanes read what the data hold. BOUNDARY-AUDIT
+**Question.** Peter ruled at 17:08 EDT that ISLA "SHOULD read the whole boundary" of the PDE domain ("WE should be
+doing that on all PDEs"); the supervisor applied it as every stored piece, by name with its condition type, on every dataset
+(@sec-nb-canonical-rulings). Three lanes read what the data hold. BOUNDARY-AUDIT
 (17:52-20:10 EDT) read every case file's boundary meshes: names, cell types and counts, condition fields, the side the
 stored normals face, and whether the pieces close the domain, on every case for each property claimed for all and on at
 least five cases per dataset otherwise (LHR jobs 359338-360725: cpu-short reads, and 1.62 GPU-h of GB300 cost runs). DRV-GROUND
@@ -40113,8 +40114,8 @@ HiLiftAeroML.
 | whole already | AeroZoo | `inlet`, `outlet`, `no_slip`, `slip`, with condition fields | reads all four |
 | | the lug, Tensile2d, DeepJEB++ | one closed surface or polyline, split by its condition labels into named conditions that cover every cell | reads every condition |
 | stores more than ISLA reads | DrivAerML Volume and Surface | the vehicle, plus `no_slip` (722 triangles), `slip` (2,888), `inlet` (722), `outlet` (722) on all 484 files, no cell data, normals into the fluid | the standing reads the vehicle alone; Volume: all five on psharpe/isla-whole-boundary (c1e07b7fd); Surface: see @sec-nb-surface-bc |
-| | AirfRANS | the airfoil and an interior cropped to about [-2.16, 4.23] × [-1.63, 1.62] chords, the release's own crop; the far field is only in the raw release's `_freestream.vtp` (all 1,000 cases), line cells on a square ±200 chords | the airfoil alone; see @sec-nb-af-whole-prereg |
-| stores less than the PDE has | SHIFT-SUV | the vehicle alone on all 1,991 files, open at the tyre contact patches (3,190 open edges); no ground, walls, inlet or outlet; no condition types | the vehicle |
+| stores less than the PDE has | AirfRANS | the airfoil and an interior cropped to about [-2.16, 4.23] × [-1.63, 1.62] chords, the release's own crop; the far field is not in the converted files, only in the raw release's `_freestream.vtp` on all 1,000 cases: a half circle of radius 200 chords upstream closed by the lines x = 200 and y = ±200, 1,563-1,923 segments (AF-WHOLE's read of every case) | the airfoil alone; the supervisor decided at about 20:25 EDT to read the far field from the release in the recipe (@sec-nb-af-whole-prereg) |
+| | SHIFT-SUV | the vehicle alone on all 1,991 files, open at the tyre contact patches (3,190 open edges); no ground, walls, inlet or outlet; no condition types | the vehicle |
 | | HiLiftAeroML | the wing alone on 1,798 of 1,800 files; geo_LHC001_AoA_10 and _12 also store `inlet`, `outlet`, `symmetry`, without cell data | the wing |
 
 The three solids use different orientation conventions (Tensile2d's normals point into the solid, the lug's and
@@ -40277,9 +40278,10 @@ task's step on the same five pieces: 2,897 ms and 140.6 GB at 0.9.0.
 **Peter's answers.** At 22:31 EDT: "Yeah I mean spiritually I want to say B as that is 'more correct' in some sense. But if
 A has practical benefits (and it might - it avoids the whole DTT read, as I understand), then we can do that. What do you
 think? Let's discuss pros and cons more, based on the evidence you have". The supervisor answered at 23:15 EDT with
-SURFACE-BC's evidence and a proposed rule: (A) as the canonical surface task if a probe showed its request dependence
-shrinking with the request size, otherwise a (B) lane in the ISLA-DTT form, since (B)'s interacting form keeps a request
-dependence through the prediction points' routing mass. Peter ruled at 23:26 EDT: "I agree that interacting B is the
+SURFACE-BC's evidence and a proposed rule: (A) as the canonical surface task if SURF-QPOP showed a surface prediction's
+dependence on the request shrinking with the request size and splitting a request in four changing the error by under 5
+percent; otherwise a (B) lane in the ISLA-DTT form, since (B)'s interacting form keeps a request dependence through the
+prediction points' routing mass. He asked Peter to agree to that rule. Peter ruled at 23:26 EDT: "I agree that interacting B is the
 least-attractive option here. It's gotta be either A or ISLA-DTT. You can do A for now, but then revisit ISLA-DTT after the
 kernel speedups / memory savings land. If we can make ISLA-DTT practical in the long term, that would be awesome. TBD how
 fast we can go there. Please don't hesitate to use parallel subagents - a huge number of them - to accelerate research on
@@ -40321,7 +40323,7 @@ one request's noise is s / sqrt(2)):
 | s(800k) ÷ s(200k) (the pure law: 0.500) | 0.492, 0.492 | 0.518, 0.508 |
 | one request's noise at 200k ÷ its error | 0.211, 0.207 | 0.191, 0.190 |
 | error at 50k, 400k, 800k ÷ error at 200k | 1.075, 0.986, 0.981; 1.074, 0.989, 0.983 | 1.066, 0.989, 0.985; 1.064, 0.990, 0.986 |
-| 4 disjoint 50k chunks ÷ one 200k request | 1.075, 1.074 | 1.063, 1.063 |
+| 4 disjoint 50k chunks ÷ one 200k request | 1.075, 1.073 | 1.063, 1.063 |
 | half the car alone (low x, high x) ÷ the same cells in a covering request | 18.4, 17.2; 17.4, 15.3 | 10.4, 11.1; 10.4, 10.4 |
 | repeated forward | 0 | 0 |
 
@@ -40337,7 +40339,8 @@ By PREREG section 3, "sound quadrature" needs the slope's interval to contain -0
 quadrature" needs the interval to exclude -0.5 and lie above -0.4, or s(800k) not below half of s(200k). Wall shear reads
 **"request-coupled beyond quadrature"** on both seeds, through the second clause (0.518, 0.508; seed 42 satisfies both
 labels). Pressure takes **neither label**: its intervals miss -0.5 on the steep side, by 0.0006 and 0.0005, a case the
-rule did not foresee.
+rule did not foresee. The supervisor's proposed rule of 23:15 EDT (@sec-nb-surface-bc), which Peter's ruling replaced before any result, also
+asked that four chunks change the error by under 5 percent; at 6.3 to 7.5 percent that condition would not have held.
 
 **Post hoc, beside the registered labels.** The clause that fires tests the pure law at its own value: an exact 1/sqrt(N)
 law gives s(800k) / s(200k) = 0.500, so a sound quadrature fires it on about half of all draws. Every measured exponent lies
@@ -40862,7 +40865,7 @@ and with the scales, sit at CONT's. Label: fix-trained.
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-book-noon-2026-10-23/SECOND_READ_STDU.md).*
 
 **Later (2026-10-24).** The two ISLA-DTT mirrors read under PREREG §11 as amended by §12 (md5 dcd52514), the supervisor's
-amendment, written at 20:17 EDT 2026-10-23 before any mirror score existed, which replaced §11's label, since that label had
+amendment, written at 20:17 EDT 2026-10-23 before any mirror score existed (the mirrors were read at 23:37 EDT), which replaced §11's label, since that label had
 the sign of a gain (scratch/isla-attrib090-2026-10-21/RESULTS.md §3c, md5 e01a94de). B is fix-trained 0.9.0 ISLA-DTT; the
 cost to locate is C_f = log(DTT-NOSC ÷ DTT-CONT), +0.131 on pressure and +0.121 on nut (1.140 and 1.129 as ratios;
 velocity's 1.048 is below the 5 percent floor, so no cost is located on velocity), and ψ = −Δ ÷ C_f. DTT-SDF (the stored
@@ -40871,12 +40874,11 @@ signed distance and its normals put back, also in ISLA-DTT's tree read) reads ÷
 DTT-CONT 0.887 / 0.850 / 0.925 (p / v / nut; exp(Δ), ratios of geometric seed means). With the mirrors pooled in, σ is
 0.042 / 0.029 / 0.064 (6 dof), so neither mirror moves any field: "no measurable effect" (φ against ISLA-DTT's own step
 +0.38 / +0.27 / +0.36 and −0.16 / −0.04 / −2.07). By §12, neither carries ISLA-DTT's bundle cost on pressure or nut (ψ −0.30
-and +0.13 on pressure, −0.07 and +0.44 on nut; SE ÷ C_f 0.32 and 0.53). Posed reads the same. So the cost of about 12
-percent on pressure is not in either piece alone, as far as two seeds can show. Beside the rule: at this σ only ψ ≥ 0.64 on
+and +0.13 on pressure, −0.07 and +0.44 on nut; SE ÷ C_f 0.32 and 0.53). Posed reads the same. So the cost on pressure, C_f = +0.131 (DTT-NOSC 14 percent worse than DTT-CONT), is not in either piece alone, as far as two seeds can show. Beside the rule: at this σ only ψ ≥ 0.64 on
 pressure would register; the 2 SE upper ends rule out the stored signed distance as carrying even half the pressure cost
 (ψ ≤ 0.34), but not the embedding (≤ 0.77), and nut bounds neither. Not tested: the cost may exist only with the raw inlet
 speed, with which it was measured (§12(c)), or lie in the length unit, the upstream merge and drift, or the two pieces
-together. By Peter's boundary-only ruling DTT-SDF could not have brought the stored field back anyway; it shows no
+together. As the registration notes, a DTT-SDF effect would not have brought the stored field back, since ISLA reads its geometry from the boundary; it shows no
 measurable loss from removing it. Label: fix-trained.
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-night-2026-10-24/SECOND_READ_NIGHT.md).*

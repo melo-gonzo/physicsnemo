@@ -158,7 +158,6 @@ RECORDS = {
         "isla-drv-ground-2026-10-23",
         "DRV-GROUND: the DrivAerML domain meshes' ground offset on all 484 files, and the recipe transform that places it",
         [
-            "FINAL_REPORT.md",
             "classify_summary.txt",
             "check_summary.txt",
             "offset_runs.txt",
