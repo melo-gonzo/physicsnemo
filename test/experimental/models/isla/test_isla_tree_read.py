@@ -589,6 +589,75 @@ def test_tree_read_every_parameter_receives_a_gradient(randomize):
         )
 
 
+def _checkpoint_steps(m, bm, pp, drv, modes):
+    """The loss, the outputs, every parameter's gradient and the bytes autograd saved
+    for backward (outside checkpointed regions) of one step per
+    ``tree_read_checkpoint`` mode, the same model and inputs each time."""
+    steps = []
+    for mode in modes:
+        m.tree_read_checkpoint = mode
+        m.zero_grad(set_to_none=True)
+        saved = [0]
+
+        def pack(t):
+            saved[0] += t.numel() * t.element_size()
+            return t
+
+        with torch.autograd.graph.saved_tensors_hooks(pack, lambda t: t):
+            out = outputs(
+                m(boundary_meshes=bm, prediction_points=pp, global_data={"g": drv})
+            )
+            loss = sum(
+                v.to(torch.promote_types(v.dtype, torch.float32)).square().mean()
+                for v in out.values()
+            )
+        loss.backward()
+        grads = {n: p.grad.clone() for n, p in m.named_parameters()}
+        steps.append((loss.detach(), out, grads, saved[0]))
+    m.tree_read_checkpoint = "off"
+    return steps
+
+
+@pytest.mark.parametrize("mode", ["read", "block"])
+def test_tree_read_checkpoint_gives_the_same_step(mode):
+    """tree_read_checkpoint recomputes each block's read (or the block with its read)
+    in backward instead of keeping its tensors, so the step saves less. The forward
+    pass is the same: the loss and the outputs are bitwise those of the
+    stored-activation step. In float64 every gradient is bitwise too; in float32 a
+    gradient may differ at roundoff (autograd adds a tensor's gradient contributions
+    in another order), and is then no farther from the float64 step than the
+    stored-activation float32 gradient is, within 2x (and float32 roundoff of the
+    largest gradient)."""
+    m64 = _model(3, 0.5).double()
+    m32 = copy.deepcopy(m64).float()
+    mesh, drv, q = _case()
+
+    def steps(m, dtype, modes):
+        c = lambda t: t.to(dtype)  # noqa: E731
+        bm = {
+            "wall": soup(
+                c(mesh.cell_centroids),
+                c(mesh.cell_normals),
+                c(mesh.cell_data[EFFECTIVE_MEASURE_KEY]),
+            )
+        }
+        return _checkpoint_steps(m, bm, points_mesh(c(q)), c(drv), modes)
+
+    (l64, o64, g64, s0), (l1, o1, g1, s1) = steps(m64, D, ("off", mode))
+    assert s1 < s0
+    assert torch.equal(l64, l1) and all(torch.equal(o64[k], o1[k]) for k in o64)
+    assert all(torch.equal(g64[n], g1[n]) for n in g64)
+    (l0, o0, g0, _), (l1, o1, g1, _) = steps(m32, torch.float32, ("off", mode))
+    assert torch.equal(l0, l1) and all(torch.equal(o0[k], o1[k]) for k in o0)
+    scale = max(float(g.abs().max()) for g in g64.values())
+    for n in g0:
+        ref = g64[n].float()
+        err, err_ref = (g1[n] - ref).abs().max(), (g0[n] - ref).abs().max()
+        assert err <= 2 * err_ref + 1e-6 * scale, n
+    with pytest.raises(ValueError, match="tree_read_checkpoint"):
+        steps(m32, torch.float32, ("all",))
+
+
 def test_tree_read_starts_as_no_update_and_is_live_everywhere():
     """With the zero-initialized output projection the read adds nothing (the model
     equals itself without the read); with trained-like weights it changes every
@@ -727,6 +796,37 @@ def test_tree_read_cuda_fused_and_compiled_training_path():
     assert all(
         torch.allclose(part[k], full[k][:50], atol=1e-4, rtol=1e-4) for k in part
     )
+
+
+@cuda_only
+def test_tree_read_checkpoint_cuda_fused_and_compiled_matches_stored():
+    """tree_read_checkpoint on the training path (fused geometry kernel, compiled
+    blocks, Triton read, bf16 autocast): the loss and every gradient agree with the
+    stored-activation step to the roundoff of the read's atomic sums (node_means
+    and the by-source backward add in no fixed order, so neither the reference nor
+    a recompute is bitwise from run to run)."""
+    dev = "cuda"
+    m = _model(compile_blocks=True).to(dev)
+    mesh, drv, q = _case(n=600, nq=400)
+    bm = {
+        "wall": soup(
+            mesh.cell_centroids.float(),
+            mesh.cell_normals.float(),
+            mesh.cell_data[EFFECTIVE_MEASURE_KEY].float(),
+        ).to(dev)
+    }
+    pp = points_mesh(q.float().to(dev))
+    with torch.autocast("cuda", dtype=torch.bfloat16):
+        steps = _checkpoint_steps(
+            m, bm, pp, drv.float().to(dev), ("off", "read", "block")
+        )
+    (l0, _, g0, s0) = steps[0]
+    for l1, _, g1, s1 in steps[1:]:
+        assert s1 < s0
+        assert torch.allclose(l1, l0, rtol=1e-3, atol=0)
+        for n in g0:
+            a, b = g1[n].float(), g0[n].float()
+            assert (a - b).norm() <= 2e-2 * b.norm() + 1e-6, n
 
 
 @cuda_only
