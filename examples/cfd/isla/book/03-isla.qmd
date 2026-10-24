@@ -1462,14 +1462,13 @@ ISLA reads none. They are built from differences of positions, so the
 distance is invariant and the direction covariant under every rigid motion
 and reflection. The scaled distance $s_q$ divides by $L$, which is computed
 from the same full-resolution surface, so it too is the same for every draw.
-Two places are left where rounding decides this geometry. At a point
-equally far from two parts of the surface, such as the medial surface of a
-thin plate, the direction is not defined, and the search keeps the first
-closest feature it meets, so the order of the mesh's vertices picks it. At a
-fold of the surface, where cells meet back to back, the pseudo-normal that
-signs the distance cancels, so roundoff picks the sign; the sign is
-ill-posed there even in exact arithmetic. Neither has a convergent knob, and
-@sec-medial-ties measures both. @sec-exact-geometry-draw shows what exact
+At a point equally far from two parts of the surface, such as the medial
+surface of a thin plate, the gradient of the distance is not defined, and
+ISLA takes the least-norm point of the hull of the tied directions: the
+midpoint of two, zero where they cancel, a function of the tied features
+alone. The sign of the distance comes from the generalized winding number
+of the oriented cells, so it is defined at a fold of the surface too, where
+cells meet back to back. @sec-medial-ties measures both. @sec-exact-geometry-draw shows what exact
 geometry changes against a distance read from the nearest drawn token.
 
 **Prediction points come in two kinds.** In ISLA's default interior form

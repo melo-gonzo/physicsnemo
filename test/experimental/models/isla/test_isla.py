@@ -75,7 +75,12 @@ def _rotation(seed=0):
 
 def _run(m, mesh, drv, q=None, **kw):
     with torch.no_grad():
-        return m(boundary_meshes={"wall": mesh}, prediction_points=q, global_data={"g": drv}, **kw)
+        return m(
+            boundary_meshes={"wall": mesh},
+            prediction_points=q,
+            global_data={"g": drv},
+            **kw,
+        )
 
 
 @pytest.fixture
@@ -99,14 +104,21 @@ def test_rotation_equivariance_with_scales():
     """With ISLA's own scales (a global velocity source, a vector output in its
     units) the output still rotates with the geometry and the source."""
     torch.manual_seed(0)
-    m = ISLA(
-        output_schema={"p": {"rank": 0, "units": {"U": 2}}, "v": {"rank": 1, "units": {"U": 1}}},
-        boundary_schemas=WALL,
-        global_schema={"g": {"rank": 1, "units": {"U": 1}, "velocity_scale": True}},
-        hidden=32,
-        n_layers=2,
-        n_slices=8,
-    ).double().eval()
+    m = (
+        ISLA(
+            output_schema={
+                "p": {"rank": 0, "units": {"U": 2}},
+                "v": {"rank": 1, "units": {"U": 1}},
+            },
+            boundary_schemas=WALL,
+            global_schema={"g": {"rank": 1, "units": {"U": 1}, "velocity_scale": True}},
+            hidden=32,
+            n_layers=2,
+            n_slices=8,
+        )
+        .double()
+        .eval()
+    )
     pts, nrm, w, drv = cloud(200)
     mesh = soup(pts, nrm, w)
     q = _rotation()
@@ -158,7 +170,11 @@ def test_no_effective_measures_is_the_geometric_quadrature(setup):
     none = _run(m, mesh, drv)
     const = _run(
         m,
-        mesh.with_data(cell_data={EFFECTIVE_MEASURE_KEY: torch.full((mesh.n_cells,), 0.37, dtype=D)}),
+        mesh.with_data(
+            cell_data={
+                EFFECTIVE_MEASURE_KEY: torch.full((mesh.n_cells,), 0.37, dtype=D)
+            }
+        ),
         drv,
     )
     assert same(none, const, atol=1e-10)
@@ -169,14 +185,29 @@ def test_boundary_scalar_contracts():
     """Two rank-0 boundary fields (one leaf per scalar) in ``cell_data`` ride along
     under a rotation."""
     torch.manual_seed(0)
-    m = _isla(hidden=64, n_layers=2, n_slices=16, boundary_schemas={"wall": {"bc_a": {"rank": 0}, "bc_b": {"rank": 0}}}).double().eval()
+    m = (
+        _isla(
+            hidden=64,
+            n_layers=2,
+            n_slices=16,
+            boundary_schemas={"wall": {"bc_a": {"rank": 0}, "bc_b": {"rank": 0}}},
+        )
+        .double()
+        .eval()
+    )
     pts, nrm, w, drv = cloud(300)
     bs = {"bc_a": torch.randn(300, dtype=D), "bc_b": torch.randn(300, dtype=D)}
     mesh = soup(pts, nrm, w, cell_data=bs)
     base = _run(m, mesh, drv)
     q = _rotation()
-    _assert_rotated(_run(m, transform(mesh, q, specs=m.boundary_schemas["wall"]), drv @ q.T), base, q)
-    assert m.boundary_conditions["wall"].seed.in_features == 1 + 1 + 2  # constant, n.g, the two fields
+    _assert_rotated(
+        _run(m, transform(mesh, q, specs=m.boundary_schemas["wall"]), drv @ q.T),
+        base,
+        q,
+    )
+    assert (
+        m.boundary_conditions["wall"].seed.in_features == 1 + 1 + 2
+    )  # constant, n.g, the two fields
 
 
 def test_head_runs_under_bf16_autocast():
@@ -201,7 +232,13 @@ def test_every_parameter_receives_a_gradient(interior):
     m = _isla(hidden=32, n_layers=2, n_slices=8, interior=interior)
     pts, nrm, w, drv = cloud(128, dtype=torch.float32)
     q = torch.randn(20, 3) if interior else None
-    out = outputs(m(boundary_meshes={"wall": soup(pts, nrm, w)}, prediction_points=q, global_data={"g": drv}))
+    out = outputs(
+        m(
+            boundary_meshes={"wall": soup(pts, nrm, w)},
+            prediction_points=q,
+            global_data={"g": drv},
+        )
+    )
     sum(o.sum() for o in out.values()).backward()
     unused = [n for n, p in m.named_parameters() if p.grad is None]
     assert not unused, unused
@@ -249,7 +286,13 @@ def test_interior_task_contracts():
     assert not same(outputs(sub), _rows(base, slice(0, 50)), atol=1e-6)
     # every parameter receives a gradient (DDP safety)
     m.train()
-    out = outputs(m(boundary_meshes={"wall": mesh}, prediction_points=qpts, global_data={"g": drv}))
+    out = outputs(
+        m(
+            boundary_meshes={"wall": mesh},
+            prediction_points=qpts,
+            global_data={"g": drv},
+        )
+    )
     sum(o.square().mean() for o in out.values()).backward()
     missing = [k for k, p in m.named_parameters() if p.grad is None]
     assert not missing, missing
@@ -268,34 +311,65 @@ def test_query_independent_interior_contracts():
     pts, nrm, w, drv = cloud(400)
     mesh = soup(pts, nrm, w)
     qpts = torch.randn(150, 3, dtype=D) * 4.0
-    m = _isla(hidden=64, n_layers=2, n_slices=16, interior=True, query_independent=True).double().eval()
-    assert m.qt.logw is None and not any(n == "qt.logw" for n, _ in m.named_parameters())
+    m = (
+        _isla(hidden=64, n_layers=2, n_slices=16, interior=True, query_independent=True)
+        .double()
+        .eval()
+    )
+    assert m.qt.logw is None and not any(
+        n == "qt.logw" for n, _ in m.named_parameters()
+    )
     base = _run(m, mesh, drv, qpts)
     perm = torch.randperm(150, generator=torch.Generator().manual_seed(1))
     assert same(_run(m, mesh, drv, qpts[:50]), _rows(base, slice(0, 50)), atol=1e-12)
     assert same(_run(m, mesh, drv, qpts[7:8]), _rows(base, slice(7, 8)), atol=1e-12)
     assert same(_run(m, mesh, drv, qpts[perm]), _rows(base, perm), atol=1e-12)
     chunks = [outputs(_run(m, mesh, drv, c)) for c in qpts.split(40)]
-    assert same({k: torch.cat([c[k] for c in chunks]) for k in chunks[0]}, base, atol=1e-12)
+    assert same(
+        {k: torch.cat([c[k] for c in chunks]) for k in chunks[0]}, base, atol=1e-12
+    )
     ### the boundary still determines the prediction
     assert not same(_run(m, soup(pts * 1.1, nrm, w), drv, qpts), base, atol=1e-6)
     q = _rotation()
     shift = torch.tensor([3.0, -7.0, 11.0], dtype=D)
-    _assert_rotated(_run(m, transform(mesh, q, shift), drv @ q.T, qpts @ q.T + shift), base, q)
+    _assert_rotated(
+        _run(m, transform(mesh, q, shift), drv @ q.T, qpts @ q.T + shift), base, q
+    )
     k = 2.7
-    assert same(_run(m, transform(mesh, shift=shift, scale=k), drv, k * qpts + shift), base, atol=1e-10, rtol=0.0)
+    assert same(
+        _run(m, transform(mesh, shift=shift, scale=k), drv, k * qpts + shift),
+        base,
+        atol=1e-10,
+        rtol=0.0,
+    )
     assert same(_run(m, refine(mesh), drv, qpts), base, atol=1e-10, rtol=0.0)
     m.train()
-    out = outputs(m(boundary_meshes={"wall": mesh}, prediction_points=qpts, global_data={"g": drv}))
+    out = outputs(
+        m(
+            boundary_meshes={"wall": mesh},
+            prediction_points=qpts,
+            global_data={"g": drv},
+        )
+    )
     sum(o.square().mean() for o in out.values()).backward()
     missing = [n for n, p in m.named_parameters() if p.grad is None]
     assert not missing, missing
-    m32 = _isla(hidden=32, n_layers=2, n_slices=8, interior=True, query_independent=True)
+    m32 = _isla(
+        hidden=32, n_layers=2, n_slices=8, interior=True, query_independent=True
+    )
     with torch.autocast("cpu", dtype=torch.bfloat16):
-        out = outputs(m32(boundary_meshes={"wall": soup(pts.float(), nrm.float(), w.float())}, prediction_points=qpts.float(), global_data={"g": drv.float()}))
+        out = outputs(
+            m32(
+                boundary_meshes={"wall": soup(pts.float(), nrm.float(), w.float())},
+                prediction_points=qpts.float(),
+                global_data={"g": drv.float()},
+            )
+        )
     sum(o.float().sum() for o in out.values()).backward()
     assert all(torch.isfinite(o.float()).all() for o in out.values())
-    assert all(torch.isfinite(p.grad).all() for p in m32.parameters() if p.grad is not None)
+    assert all(
+        torch.isfinite(p.grad).all() for p in m32.parameters() if p.grad is not None
+    )
     with pytest.raises(ValueError, match="interior=True"):
         _isla(hidden=32, n_layers=1, n_slices=8, query_independent=True)
 
@@ -337,7 +411,12 @@ def test_geometric_scale_equivariance(interior):
     shift = torch.tensor([3.0, -7.0, 11.0], dtype=D)
     q = pts[:50] * 1.5 if interior else None
     a = _run(m, mesh, drv, q)
-    b = _run(m, transform(mesh, shift=shift, scale=k), drv, k * q + shift if interior else None)
+    b = _run(
+        m,
+        transform(mesh, shift=shift, scale=k),
+        drv,
+        k * q + shift if interior else None,
+    )
     assert same(b, a, atol=1e-10, rtol=0.0)
 
 
@@ -347,10 +426,22 @@ def test_boundary_scalars_reach_the_interior_prediction():
     torch.manual_seed(0)
     pts, nrm, w, drv = cloud(60)
     bs = {"bc_a": torch.randn(60, dtype=D), "bc_b": torch.randn(60, dtype=D)}
-    m = _isla(hidden=32, n_layers=2, n_slices=8, interior=True, boundary_schemas={"wall": {"bc_a": {"rank": 0}, "bc_b": {"rank": 0}}}).double().eval()
+    m = (
+        _isla(
+            hidden=32,
+            n_layers=2,
+            n_slices=8,
+            interior=True,
+            boundary_schemas={"wall": {"bc_a": {"rank": 0}, "bc_b": {"rank": 0}}},
+        )
+        .double()
+        .eval()
+    )
     q = pts[:17] * 0.5
     out = _run(m, soup(pts, nrm, w, cell_data=bs), drv, q)
-    out2 = _run(m, soup(pts, nrm, w, cell_data={k: 2 * v for k, v in bs.items()}), drv, q)
+    out2 = _run(
+        m, soup(pts, nrm, w, cell_data={k: 2 * v for k, v in bs.items()}), drv, q
+    )
     assert out.point_data["p"].shape == (17,) and out.point_data["v"].shape == (17, 3)
     assert all(torch.isfinite(o).all() for o in outputs(out).values())
     assert not same(out, out2, atol=1e-6)
@@ -380,7 +471,9 @@ def test_frame_contracts():
     shift = torch.tensor([300.0, -70.0, 1100.0], dtype=D)
     torch.manual_seed(1)
     m = _isla(hidden=64, n_layers=2, n_slices=16).double().eval()
-    assert m.boundary_conditions["wall"].seed.in_features == 1 + 1  # the constant and n.g
+    assert (
+        m.boundary_conditions["wall"].seed.in_features == 1 + 1
+    )  # the constant and n.g
     assert m.blocks[0].geo_logit.in_features == 6
     base = _run(m, mesh, drv)
     assert all(torch.isfinite(o).all() for o in outputs(base).values())
@@ -446,9 +539,13 @@ def test_constructor_and_forward_are_keyword_only():
     with pytest.raises(TypeError):
         ISLA(PV, WALL, G)
     with pytest.raises(TypeError):
-        ISLA(boundary_schemas=WALL, hidden=32, n_layers=1, n_slices=8)  # outputs is required
+        ISLA(
+            boundary_schemas=WALL, hidden=32, n_layers=1, n_slices=8
+        )  # outputs is required
     with pytest.raises(TypeError):
-        ISLA(output_schema=PV, hidden=32, n_layers=1, n_slices=8)  # so are the conditions
+        ISLA(
+            output_schema=PV, hidden=32, n_layers=1, n_slices=8
+        )  # so are the conditions
     m = _isla(hidden=32, n_layers=1, n_slices=8)
     with pytest.raises(TypeError):
         m({"wall": mesh}, None, {"g": drv})
@@ -497,16 +594,32 @@ def test_interior_flag_structures_the_forward():
     mesh = soup(pts, nrm, w)
     surface = _isla(hidden=32, n_layers=1, n_slices=8)
     with pytest.raises(ValueError, match="interior=False"):
-        surface(boundary_meshes={"wall": mesh}, prediction_points=pts[:3], global_data={"g": drv})
+        surface(
+            boundary_meshes={"wall": mesh},
+            prediction_points=pts[:3],
+            global_data={"g": drv},
+        )
     interior = _isla(hidden=32, n_layers=1, n_slices=8, interior=True)
     with pytest.raises(ValueError, match="pass prediction_points"):
         interior(boundary_meshes={"wall": mesh}, global_data={"g": drv})
-    out = interior(boundary_meshes={"wall": mesh}, prediction_points=points_mesh(pts[:3] * 2), global_data={"g": drv})
+    out = interior(
+        boundary_meshes={"wall": mesh},
+        prediction_points=points_mesh(pts[:3] * 2),
+        global_data={"g": drv},
+    )
     assert out.point_data["p"].shape == (3,)
-    bare = interior(boundary_meshes={"wall": mesh}, prediction_points=pts[:3] * 2, global_data={"g": drv})
+    bare = interior(
+        boundary_meshes={"wall": mesh},
+        prediction_points=pts[:3] * 2,
+        global_data={"g": drv},
+    )
     assert torch.equal(bare.point_data["p"], out.point_data["p"])
     with pytest.raises(ValueError, match="tensor of shape \\(N, 3\\)"):
-        interior(boundary_meshes={"wall": mesh}, prediction_points=pts[:3, :2], global_data={"g": drv})
+        interior(
+            boundary_meshes={"wall": mesh},
+            prediction_points=pts[:3, :2],
+            global_data={"g": drv},
+        )
 
 
 def test_mesh_validation_errors():
@@ -518,12 +631,19 @@ def test_mesh_validation_errors():
         m(boundary_meshes={}, global_data={"g": drv})
     with pytest.raises(TypeError, match="must be a physicsnemo.mesh.Mesh"):
         m(boundary_meshes={"wall": pts}, global_data={"g": drv})
-    with pytest.raises(ValueError, match="boundary_meshes\\['wall'\\]: the boundary of a 3-dimensional domain is a Mesh\\[2, 3\\]"):
+    with pytest.raises(
+        ValueError,
+        match="boundary_meshes\\['wall'\\]: the boundary of a 3-dimensional domain is a Mesh\\[2, 3\\]",
+    ):
         m(boundary_meshes={"wall": Mesh(points=pts)}, global_data={"g": drv})
     pts2, nrm2, w2, _ = cloud(20, d=2, dtype=torch.float32)
-    with pytest.raises(ValueError, match="has 2 spatial dimensions; this model has dim=3"):
+    with pytest.raises(
+        ValueError, match="has 2 spatial dimensions; this model has dim=3"
+    ):
         m(boundary_meshes={"wall": soup(pts2, nrm2, w2)}, global_data={"g": drv})
-    with pytest.raises(ValueError, match="global_data is missing the declared fields \\['g'\\]"):
+    with pytest.raises(
+        ValueError, match="global_data is missing the declared fields \\['g'\\]"
+    ):
         m(boundary_meshes={"wall": soup(pts, nrm, w)})
     with pytest.raises(TypeError, match="global_data must be"):
         m(boundary_meshes={"wall": soup(pts, nrm, w)}, global_data=drv)
@@ -546,11 +666,17 @@ def test_rms_distance_scale_contracts():
     _assert_rotated(_run(m, transform(mesh, q), drv @ q.T), base, q)
     assert same(_run(m, transform(mesh, scale=2.5), drv), base, atol=1e-10)
     # measure rescale alone: invariant (the unit is normalized)
-    assert same(_run(m, mesh.with_data(cell_data={EFFECTIVE_MEASURE_KEY: w * 137.0}), drv), base, atol=1e-10)
+    assert same(
+        _run(m, mesh.with_data(cell_data={EFFECTIVE_MEASURE_KEY: w * 137.0}), drv),
+        base,
+        atol=1e-10,
+    )
     # a rescale of the points alone is invariant too: the unit is a length of the
     # sample and the routing bias log w is uniform-rescale invariant, so measures
     # and positions decouple
-    scaled_points_only = transform(mesh, scale=2.5).with_data(cell_data={EFFECTIVE_MEASURE_KEY: w})
+    scaled_points_only = transform(mesh, scale=2.5).with_data(
+        cell_data={EFFECTIVE_MEASURE_KEY: w}
+    )
     assert same(_run(m, scaled_points_only, drv), base, atol=1e-10)
 
 
@@ -577,7 +703,9 @@ def _koch_curve(level: int):
     xy = torch.stack(pts).double()
     mids = (xy[:-1] + xy[1:]) / 2
     seg = (xy[1:] - xy[:-1]).norm(dim=-1)
-    return torch.cat([mids, torch.zeros(len(mids), 1, dtype=D)], dim=-1)[None], seg[None]
+    return torch.cat([mids, torch.zeros(len(mids), 1, dtype=D)], dim=-1)[None], seg[
+        None
+    ]
 
 
 def test_rms_distance_converges_on_koch_curve_where_total_measure_diverges():
@@ -620,8 +748,25 @@ def test_geo_kernel_auto_resolves_to_eager_off_cuda_and_honors_explicit_choices(
     assert auto._geo_kernel_cache[1] == "eager"
     # five global directions: auto stays eager (off CUDA it does anyway; the kernel is
     # unrolled for one to four)
-    five = {"g1": {"rank": 1}, "g2": {"rank": 1}, "g3": {"rank": 1}, "g4": {"rank": 1}, "g5": {"rank": 1}}
-    two = ISLA(output_schema=PV, boundary_schemas=WALL, global_schema=five, hidden=32, n_layers=2, n_slices=8).double().eval()
+    five = {
+        "g1": {"rank": 1},
+        "g2": {"rank": 1},
+        "g3": {"rank": 1},
+        "g4": {"rank": 1},
+        "g5": {"rank": 1},
+    }
+    two = (
+        ISLA(
+            output_schema=PV,
+            boundary_schemas=WALL,
+            global_schema=five,
+            hidden=32,
+            n_layers=2,
+            n_slices=8,
+        )
+        .double()
+        .eval()
+    )
     assert two.resolve_geo_kernel(pts) == "eager"
 
 
@@ -635,11 +780,29 @@ def test_scalar_only_model_has_no_frame_routing_and_every_parameter_gets_a_gradi
     pts, nrm, w, drv = cloud(200, dtype=torch.float32)
     mesh = soup(pts, nrm, w)
     q = torch.randn(30, 3) * 2.0
-    for outs in ({"u": {"rank": 0}}, {"u": {"rank": 0}, "q1": {"rank": 0}, "q2": {"rank": 0}}, {"u": {"rank": 0}, "v": {"rank": 1}}):
-        m = ISLA(output_schema=outs, boundary_schemas=WALL, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8, interior=True)
+    for outs in (
+        {"u": {"rank": 0}},
+        {"u": {"rank": 0}, "q1": {"rank": 0}, "q2": {"rank": 0}},
+        {"u": {"rank": 0}, "v": {"rank": 1}},
+    ):
+        m = ISLA(
+            output_schema=outs,
+            boundary_schemas=WALL,
+            global_schema={"g": {"rank": 1}},
+            hidden=32,
+            n_layers=2,
+            n_slices=8,
+            interior=True,
+        )
         has_vec = any(v["rank"] == 1 for v in outs.values())
         assert m.needs_frame == has_vec and (m.frame_assign is not None) == has_vec
-        out = outputs(m(boundary_meshes={"wall": mesh}, prediction_points=q, global_data={"g": drv}))
+        out = outputs(
+            m(
+                boundary_meshes={"wall": mesh},
+                prediction_points=q,
+                global_data={"g": drv},
+            )
+        )
         sum(v.square().mean() for v in out.values()).backward()
         missing = [k for k, p in m.named_parameters() if p.grad is None]
         assert not missing, missing

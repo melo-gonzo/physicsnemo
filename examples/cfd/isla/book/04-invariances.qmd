@@ -132,9 +132,13 @@ sections are about them.
 
 **On the interior task the boundary draw is pose-invariant in the limit of its token budget.** A boundary with more cells
 than the budget `boundary_tokens` is subsampled by the systematic draw of @sec-arch-boundary-draw, which lays the cells
-along a Morton order of their centroids taken along the dataset's axes. A rotated case therefore draws different cells, and
-its prediction moves by the difference between two quadratures of the same surface. That difference vanishes as the budget
-reaches the full resolution, where every cell is kept, and the posed protocol measures what remains at the working budget.
+along a Morton order of their centroids taken in the boundary's canonical frame. The frame turns with the body, so a rotated
+case draws the same cells except where float32 rounding of its coordinates moves a centroid across a grid line of the Morton
+code, or where the boundary's principal moments nearly tie and the frame itself turns; there its prediction moves by the
+difference between two quadratures of the same surface. That difference vanishes as the budget
+reaches the full resolution, where every cell is kept, and the posed protocol measures what remains at the working budget;
+the standings' posed numbers were measured with a draw ordered along the dataset's axes (@sec-standing-geometry), under
+which a pose changes many of the drawn cells of a subsampled boundary (@sec-medial-ties).
 A boundary with no more cells than the budget is kept whole and is exact, as in the tests above. The length unit, the
 declared scales and each prediction point's wall geometry are computed from the full-resolution boundary before the draw,
 so none of them moves with it.
@@ -150,9 +154,10 @@ so none of them moves with it.
 - **Completeness of the representation.** The anchors are first moments, so two arrangements with the same first moments
   per slice are indistinguishable to a layer (`results/isla_first_moment_collision_2026-09-08.json`).
 - **The deployed arithmetic.** The tests run in float64. On the GPU in float32 the algebra keeps the contract to float32
-  roundoff, but the geometry of the interior task has three discrete steps that roundoff can decide: the closest surface
-  feature of a point equally far from two, which sets its direction; the sign of the distance at a fold of the surface;
-  and the cells the token draw keeps (@sec-medial-ties). ISLA's rotated-and-translated error stays within
+  roundoff, but the geometry of the interior task has two discrete steps that roundoff can still decide: which features
+  join the tie set of a point equally far from two, and which cells the token draw keeps under a pose (@sec-medial-ties).
+  The standings' checkpoints were trained with a geometry in which roundoff also picked the tied feature and the sign of
+  the distance at a fold of the surface, and the token draw followed the dataset's axes (@sec-standing-geometry). ISLA's rotated-and-translated error stays within
   `{python} f"{POSED_DEV:.1%}"` of its native error on every headline field of every task with a final
   `{python} Markdown(f"standing{EXCEPT_TXT} (@tbl-contract-shifts). {S.tally_note()}")` On HiLiftAeroML, a surface task, it is
   `{python} f"{ST['hilift'].shift('ISLA', HEAD['hilift'], 'posed'):.3f}"` times native, outside the 0.2% registered for it;
@@ -769,10 +774,13 @@ print("\n: Interacting ISLA's error under a change of the request, divided by it
 
 ### Ties in the geometry {#sec-medial-ties}
 
-**Exact geometry has no ties between samples, but three of its steps turn on float32 rounding: the closest feature of
-a point equally far from two, the sign of the distance at a fold of the surface, and which cells the token draw
-keeps.** None of them has a convergent knob, so each is a limit of the class: small beside the baselines' pose shifts,
-and real.
+**Exact geometry has no ties between samples, and in the geometry the standings trained with three of its steps turned
+on float32 rounding: the closest feature of a point equally far from two, the sign of the distance at a fold of the
+surface, and which cells the token draw keeps. The class's geometry makes the first two functions of the mesh alone and
+the third independent of the compute precision.** The tie takes the least-norm direction of the tied features, the sign
+comes from the generalized winding number, and the draw is computed in float64 in the boundary's canonical frame
+(@sec-arch-interior-geometry, @sec-arch-boundary-draw). Below, each step is measured first as the standings' checkpoints
+saw it, then with the class's rule (@sec-standing-geometry).
 
 ```{python}
 #| label: para-ties
@@ -789,21 +797,44 @@ print(S.in_flight_callout({"what": L_.in_flight["what"].replace("ISLA", "ISLA on
                            "replacement": L_.in_flight["replacement"]} if L_.in_flight else None))
 print("A prediction point's direction is the unit gradient of its distance to the surface. On the *medial surface*, the set of "
       "points with two or more closest surface features, that gradient is not defined: a node on a thin plate's mid-thickness "
-      "plane is equally far from the top and the bottom face. The closest-feature search keeps the first feature it meets, so "
-      "the order of the mesh's vertices decides the direction there. On the lug, a geometry-only test that reverses the "
+      "plane is equally far from the top and the bottom face. In the geometry the standings trained with, the closest-feature "
+      "search keeps the first feature it meets, so the order of the mesh's vertices decides the direction there. On the lug, a "
+      "geometry-only test of that geometry that reverses the "
       f"winding of every cell finds {LT['nodes']:,} interior nodes in {LT['n_cases']} test cases ({LT['interior_fraction']:.1%} "
       f"of the interior, {LT['per_case_min']} to {LT['per_case_max']} per case) whose direction changes, by up to $\\pi$, while "
       f"their distance does not ({R.source('attrib090', 'RESULTS.md')}, section 4). A rotation and translation rounds the "
       "coordinates differently and can pick the other feature at the same nodes, and because the prediction points join the "
-      "encoder as tokens, the change spreads to the slices. These ties are a candidate cause of the lug's pose shift; the link "
-      "is not isolated. A tie rule that reads every feature within float32 resolution of the minimum would settle it "
-      "(@sec-oq-ties).\n")
+      "encoder as tokens, the change spreads to the slices.\n")
+TX = R.load("tie_exp", "read/results.json")
+TF = lambda run, f: TX["F"][f"F_code_{run}:{f}"]
+tie_pn = [TX["lug"]["posed"]["tie"][s]["von_mises_l2"] / TX["lug"]["native"]["tie"][s]["von_mises_l2"] for s in ("42", "43")]
+fl_tie = [TF(f"tie2_tie_lug_isla_seed{s}", "von_mises")["median"] for s in (42, 43)]
+fl_b = [TF(f"cmpaf_fix_r090eag_lug_isla_seed{s}", "von_mises")["median"] for s in (42, 43)]
+fl_t2d = max(v["max"] for k, v in TX["F"].items() if k.startswith("F_code_tie2_tie_t2dz"))
+assert fl_t2d == 0
+NL, NT = TX["lug"]["N"]["von_mises_l2"], TX["t2d"]["N"]["displacement_l2"]
+print(f"**With the class's tie rule the lug's posed excess falls to {100 * TX['lug']['P']['von_mises_l2']['ratio']:.1f}% of the "
+      "standing's, at no native cost.** ISLA trained with the least-norm tie "
+      "direction on the lug and on Tensile2d, two seeds each, from the standing's snapshot and recipe with only the geometry "
+      f"changed, and scored as the standing was, reads posed ÷ native {1 + TX['lug']['P']['von_mises_l2']['e_TIE']:.4f} on the "
+      f"lug's von Mises stress ({' and '.join(f'{x:.4f}' for x in tie_pn)} per seed), against "
+      f"{1 + TX['lug']['P']['von_mises_l2']['e_B']:.3f} for the standing's checkpoints (ratios of seed means; the excess is posed "
+      "÷ native minus one). Its native error is "
+      f"{NL['r']:.3f} times the lug standing's, and {NT['r']:.3f} times that of seeds 42 and 43 of the four-seed Tensile2d "
+      "standing on displacement (ratios of seed means), and the "
+      f"registered test reads both as \"{NL['verdict']}\"; on Tensile2d, whose seeds are far apart, its band is "
+      f"±{2 * NT['sigma']:.2f} in the logarithm, so there it rules out only a large cost. Under a reversal of every cell's winding "
+      "with the matching negation of the weights, the median residual of the trained models' prediction is "
+      f"{' and '.join(f'{x:.2e}' for x in fl_tie)} on the lug, float32 rounding, against {' and '.join(f'{x:.2e}' for x in fl_b)} "
+      f"for the standing's, and exactly {fl_t2d:.0f} on Tensile2d, which the registered test reads as \"{TX['F_verdict']}\". "
+      "The registered reading of the pose is that \""
+      f"{TX['lug']['P']['von_mises_l2']['verdict']}\" ({R.source('tie_exp', 'read/results.json')}; @sec-lug-ties).\n")
 F32 = R.md_table("az_diag", "f32floor/README.md", "3. Results")
 F32_HI = [r for r in F32 if r["run"] != "controls"]           # the cases chosen for their large float32 error
 flips = [int(r["sign flips (CPU)"]) for r in F32_HI if int(r["sign flips (CPU)"]) > 0]
 cells = [int(x.replace(",", "")) for r in F32_HI for x in re.findall(r"\d[\d,]*", r["cells D32≠D64"])]
 N_PTS = int(re.search(r"\(of ([\d,]+)\)", R.load("az_diag", "f32floor/README.md")).group(1).replace(",", ""))
-print("At a fold of the surface, where cells meet back to back, the pseudo-normal that signs the distance cancels exactly, "
+print("In the geometry the standings trained with, at a fold of the surface, where cells meet back to back, the pseudo-normal that signs the distance cancels exactly, "
       "so roundoff picks the sign; the sign is ill-posed there in exact arithmetic, and float64 would make it reproducible "
       "without making it right. The third step is the token draw: it orders the cells along a quantized Morton curve, "
       "and rounding moves cells across the quantization. On AeroZoo cases chosen for their large float32 error, "
@@ -812,18 +843,27 @@ print("At a fold of the surface, where cells meet back to back, the pseudo-norma
       "cells change "
       f"({R.source('az_diag', 'f32floor/README.md')}). On every one of those cases, computing the geometry in float64 removes "
       "nearly all of the difference between ISLA's float32 and float64 predictions, and computing the network's blocks in "
-      "float64 removes none of it.")
+      "float64 removes none of it.\n")
+FS = R.load("fold_sign", "f32floor_tables.md")
+fs_cases = int(re.search(r"cases: (\d+) of \d+", FS).group(1))
+assert re.search(r"R1: N_flip outside the band summed over cases = 0; in the band = 0", FS)
+TD = R.md_table("token_draw", "DESIGN.md", "2. Measurement")
+assert all(int(r["precision base / v1 / v2"].split("/")[-1]) == 0 for r in TD)
+cut = [R.num(r["v2 cut"]) for r in TD if "degenerate" not in r["case (family)"]]
+n_deg = sum("degenerate" in r["case (family)"] for r in TD)
+print(f"With the class's winding-number sign, the registered repeat of that comparison on {fs_cases} AeroZoo `full` cases finds "
+      "no prediction point whose sign changes between float32 and float64 "
+      f"({R.source('fold_sign', 'f32floor_tables.md')}). The class's draw keeps the same cells at both precisions on all {len(TD)} "
+      "AeroZoo and DrivAerML cases measured, and under a rotation with a translation its canonical frame cuts the cells that "
+      f"change {min(cut):g} to {max(cut):g} times on the {len(cut)} cases whose frame is well defined; on the {n_deg} whose "
+      "principal moments nearly tie it cuts none, and what is left elsewhere is float32 rounding of the posed coordinates "
+      f"across the grid lines of the Morton code ({R.source('token_draw', 'DESIGN.md')}, section 2).")
 ```
 
 ::: {.callout-note title="In flight"}
-These limits are those of ISLA's geometry as it is: a closest-feature tie resolved by the order of the search, the sign of
-the wall distance taken from the closest feature's pseudo-normal, and a token draw ordered along the dataset's axes on
-coordinates in the mesh's own precision. A candidate geometry is being measured that takes the least-norm direction at a
-tie, signs the distance by the generalized winding number, computes the draw in float64 in the boundary's canonical frame,
-which removes the draw's dependence on the compute precision and cuts, without removing, its dependence on the pose, and
-puts a point on the wall by the rounding of its coordinates in place of a fixed cutoff. It becomes ISLA's geometry, at its
-measured cost in training time, if retraining with its tie rule brings the flip residual to float32 roundoff and shows no
-accuracy cost (@sec-oq-ties); the ledger (@sec-ledger) tracks it.
+The posed ÷ native ratios of the standings in this section come from checkpoints trained with the geometry of
+@sec-standing-geometry, whose ties follow the order of the search. Standings trained with the class's geometry replace
+them, and the ledger (@sec-ledger) tracks them.
 :::
 
 ## Studies on a smaller ISLA {#sec-contract-studies}

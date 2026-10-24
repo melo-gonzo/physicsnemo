@@ -1,0 +1,45 @@
+=== match: 187 files
+  vehicle read whole: 187 of 187
+  ground == interior zmin: 187 of 187
+  ground == vehicle zmin: 187 of 187
+  roof == interior zmax (slip, inlet, outlet): 187 of 187
+  low faces == interior zmin (all four): 187 of 187
+  x, y extents == interior's: 187 of 187
+  union bbox == interior bbox: 187 of 187
+  x, y of the meshes unchanged: 187 of 187
+  end of chain: ground == vehicle zmin: 187 of 187
+  shift_z (m): {0.0: 187}
+  sd_stored: interior nodes outside the box: total 0, files with any 0, per file min 0 max 0; by face {}; on the floor per file 1504597..1657842 (files with none 0); on the roof 5117..5246 (files with none 0)
+  sd_after: interior nodes outside the box: total 0, files with any 0, per file min 0 max 0; by face {}; on the floor per file 1504597..1657842 (files with none 0); on the roof 5117..5246 (files with none 0)
+  end of chain: drawn interior nodes outside 0 of 3740000
+  interior nodes checked: 29964311904; seconds per file 31.9..58.7
+=== offset: 297 files
+  vehicle read whole: 297 of 297
+  ground == interior zmin: 297 of 297
+  ground == vehicle zmin: 297 of 297
+  roof == interior zmax (slip, inlet, outlet): 297 of 297
+  low faces == interior zmin (all four): 297 of 297
+  x, y extents == interior's: 297 of 297
+  union bbox == interior bbox: 297 of 297
+  x, y of the meshes unchanged: 297 of 297
+  end of chain: ground == vehicle zmin: 297 of 297
+  shift_z (m): {0.0024029910564422607: 297}
+  sd_stored: interior nodes outside the box: total 1527826, files with any 297, per file min 5117 max 5227; by face {'z-': 1527826}; on the floor per file 0..0 (files with none 297); on the roof 0..0 (files with none 297)
+  sd_after: interior nodes outside the box: total 0, files with any 0, per file min 0 max 0; by face {}; on the floor per file 1498578..1655843 (files with none 0); on the roof 5117..5227 (files with none 0)
+  end of chain: drawn interior nodes outside 0 of 5940000
+  interior nodes checked: 47616675138; seconds per file 30.2..60.2
+=== all: 484 files
+  vehicle read whole: 484 of 484
+  ground == interior zmin: 484 of 484
+  ground == vehicle zmin: 484 of 484
+  roof == interior zmax (slip, inlet, outlet): 484 of 484
+  low faces == interior zmin (all four): 484 of 484
+  x, y extents == interior's: 484 of 484
+  union bbox == interior bbox: 484 of 484
+  x, y of the meshes unchanged: 484 of 484
+  end of chain: ground == vehicle zmin: 484 of 484
+  shift_z (m): {0.0: 187, 0.0024029910564422607: 297}
+  sd_stored: interior nodes outside the box: total 1527826, files with any 297, per file min 0 max 5227; by face {'z-': 1527826}; on the floor per file 0..1657842 (files with none 297); on the roof 0..5246 (files with none 297)
+  sd_after: interior nodes outside the box: total 0, files with any 0, per file min 0 max 0; by face {}; on the floor per file 1498578..1657842 (files with none 0); on the roof 5117..5246 (files with none 0)
+  end of chain: drawn interior nodes outside 0 of 9680000
+  interior nodes checked: 77580987042; seconds per file 30.2..60.2

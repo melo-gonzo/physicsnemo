@@ -226,8 +226,10 @@ of the full surface, exact on a boundary kept whole; and the sample is spread
 along the space-filling curve, so every part of the surface is represented. In
 training the draw's start is uniform from the global torch RNG
 (``torch.manual_seed`` reproduces it), in evaluation it is fixed, so inference
-is deterministic. A surface task reads every cell it is given (its outputs are
-predicted there) and samples none.
+is deterministic. The draw reads the cells' measures and centroids in float64
+from the input meshes, so it is the same at every model precision. A surface
+task reads every cell it is given (its outputs are predicted there) and samples
+none.
 
 **Global inputs.** Rank-1 global inputs are the :math:`K` global directions:
 each is normalized to a unit direction inside the model (a direction is what
@@ -326,7 +328,7 @@ from physicsnemo.experimental.models.isla.inputs import (
     _pack,
     _schema_layout,
 )
-from physicsnemo.experimental.models.isla.sampling import sample_boundary_cells
+from physicsnemo.experimental.models.isla.sampling import draw_inputs, sample_boundary_cells
 from physicsnemo.experimental.models.isla.scales import (
     check_output_stats,
     merged,
@@ -436,9 +438,10 @@ def _refuse_earlier_state_dict(module, state_dict, prefix, local_metadata, *args
     ``load_state_dict``), not only ``Module.from_checkpoint``, which checks the
     recorded version. Two marks tell an earlier state dict: the parameter layout
     before 0.7.0 (the shared seed embedding ``embed.0``, the prediction points'
-    ``qt.type_offset`` and ``qt.embed``), and, for 0.7.0 and 0.8.0, whose layout is
+    ``qt.type_offset`` and ``qt.embed``), and, for 0.7.0 to 0.9.0, whose layout is
     the current one, the state-dict version torch records for every module
-    (``ISLA._version``, 1 before 0.8.0, 8 for 0.8.0). A state dict rebuilt without
+    (``ISLA._version``, 1 before 0.8.0, 8 for 0.8.0, 9 for 0.9.0, and 10 for the
+    unmerged head-frame candidate 0.10.0). A state dict rebuilt without
     torch's metadata (a dict comprehension over it) carries no version and is read
     by its layout alone."""
     old = sorted(
@@ -464,7 +467,10 @@ def _refuse_earlier_state_dict(module, state_dict, prefix, local_metadata, *args
             "from the surface, in place of asinh(s / 1e-6) and sign(d) times it; before "
             "0.9.0, the length unit without each boundary cell's own second moment, and for "
             "the interior task measured on the drawn tokens in place of the full-resolution "
-            "boundary), and ISLA keeps no upgrade path; "
+            "boundary; before 0.11.0, the geometry without least-norm tie directions, the "
+            "winding-number sign of the wall distance, the float64 canonical-frame token "
+            "draw, the on-wall rule and float64 cell normals; state-dict version 10 is the "
+            "unmerged head-frame candidate 0.10.0), and ISLA keeps no upgrade path; "
             "load it with the code that wrote it, or retrain"
         )
 
@@ -506,7 +512,10 @@ class ISLA(Module):
     ``"fused"`` to force one) selects how the per-layer geometry region is
     executed, not what it computes (:meth:`resolve_geo_kernel`). It is an
     execution choice, not a constructor argument: checkpoints do not store it,
-    and a loaded model starts at ``"auto"``.
+    and a loaded model starts at ``"auto"``. The ``geometry_kernel`` attribute
+    (``"auto"``; set ``"reference"`` or ``"fast"``) does the same for the search of
+    the prediction points' boundary geometry (:meth:`resolve_geometry_kernel`), whose
+    two implementations give the same outputs bitwise.
 
     Args:
         output_schema: Output fields, a rank spec per name. Each field is a leaf of
@@ -661,14 +670,20 @@ class ISLA(Module):
     ### boundary's RMS pairwise distance, exact and independent of the token draw (in
     ### place of its estimate from the drawn tokens; same parameters, new forward),
     ### and the opt-in scales (units, velocity_scale, the density and viscosity roles,
-    ### reynolds, output_stats). No earlier checkpoint loads: ISLA is unreleased and
-    ### keeps no upgrade paths.
-    __model_checkpoint_version__ = "0.9.0"
+    ### reynolds, output_stats). 0.11.0: the geometry robustness bundle (least-norm
+    ### tie directions, the winding-number sign of the wall distance, the float64
+    ### canonical-frame token draw, the on-wall rule, float64 cell normals, and the
+    ### cell-tree seed of the search radius; same parameters, new forward). 0.10.0
+    ### is skipped: it names the unmerged head-frame candidate, whose checkpoints
+    ### exist, so each version string names one model. No earlier checkpoint loads:
+    ### ISLA is unreleased and keeps no upgrade paths.
+    __model_checkpoint_version__ = "0.11.0"
     #: torch's state-dict version of the module (``nn.Module._version``, recorded in
-    #: every state dict's metadata): 1 before 0.8.0 and 8 for 0.8.0, so a state dict
-    #: of 0.7.0 or 0.8.0, whose parameter layout is the current one, is told apart and
-    #: refused on load (:func:`_refuse_earlier_state_dict`).
-    _version = 9
+    #: every state dict's metadata): 1 before 0.8.0, 8 for 0.8.0, 9 for 0.9.0 and 10
+    #: for the head-frame candidate, so a state dict of 0.7.0 to 0.10.0, whose
+    #: parameter layout is the current one, is told apart and refused on load
+    #: (:func:`_refuse_earlier_state_dict`).
+    _version = 11
 
     def __init__(
         self,
@@ -823,6 +838,11 @@ class ISLA(Module):
         ### can run and to "eager" otherwise; the blocks read the resolved name.
         ### Writable: tests and debugging set "eager" or "fused" to force one.
         self.geo_kernel = "auto"
+        ### geometry_kernel names the implementation of exact_boundary_geometry's search,
+        ### not its arithmetic: "reference" defines it, "fast" gives the same outputs
+        ### bitwise from a faster traversal. "auto" resolves at the first forward pass
+        ### (resolve_geometry_kernel). Writable, as geo_kernel.
+        self.geometry_kernel = "auto"
         self.n_slices = int(n_slices)
         ### Each boundary condition's fields, each set with its own invariant layout
         ### (_InputSet). A condition's block vectors and tensors reach the slice
@@ -1226,6 +1246,32 @@ class ISLA(Module):
                 "ISLA: rank-1 or rank-2 boundary inputs are present, so the fused "
                 "geometry kernel is not used (kernel follow-up); running the eager region."
             )
+        return chosen
+
+    def resolve_geometry_kernel(self, points: torch.Tensor) -> str:
+        """The implementation of the boundary geometry's search this forward pass will
+        use (``kernel`` of :func:`exact_boundary_geometry`).
+
+        ``"reference"`` or ``"fast"`` when the ``geometry_kernel`` attribute forces it;
+        under the default (``"auto"``) the fast search when ``points`` is on CUDA and
+        Triton is importable (its weld and canonical-cell kernels), else the
+        reference. The decision is cached per device and logged once.
+        """
+        if self.geometry_kernel != "auto":
+            return self.geometry_kernel
+        key = (points.device.type, points.device.index)
+        cached = getattr(self, "_geometry_kernel_cache", None)
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        from .geometry_fast import HAS_TRITON
+
+        chosen = "fast" if points.is_cuda and HAS_TRITON else "reference"
+        if torch.compiler.is_compiling():
+            return chosen
+        self._geometry_kernel_cache = (key, chosen)
+        logger.info(
+            "ISLA geometry_kernel=auto resolved to %r on %s (cuda=%s, triton=%s)", chosen, points.device, points.is_cuda, HAS_TRITON
+        )
         return chosen
 
     def _block_callables(self):
@@ -1680,22 +1726,26 @@ class ISLA(Module):
                     offsets.append(offsets[-1] + m.n_points)
                 points = torch.cat([m.points.to(q_points.device, q_points.dtype) for m in meshes])
                 cells = torch.cat([m.cells.to(q_points.device) + o for m, o in zip(meshes, offsets)])
-                dist, direction = exact_boundary_geometry(q_points, points, cells, eps=EPS)
+                dist, direction = exact_boundary_geometry(
+                    q_points, points, cells, kernel=self.resolve_geometry_kernel(q_points)
+                )
             query["wall_distance"], query["wall_direction"] = dist, direction
             ### The boundary tokens: the sample of the cells (sample_boundary_cells),
             ### each kept cell with its Horvitz-Thompson measure. A uniform start
             ### from the global torch RNG in training, a fixed one in evaluation; in
-            ### the measures' precision (float64 inside), whatever the autocast.
+            ### float64 from the input meshes whatever the model's precision or the
+            ### autocast, the weights cast to the tokens' measures at the end.
             if self.training:
                 start = torch.rand((), dtype=torch.float64, device=q_points.device)
             else:
                 start = torch.full((), EVAL_START, dtype=torch.float64, device=q_points.device)
             with torch.autocast(q_points.device.type, enabled=False):
+                draw = [draw_inputs(m) for m in meshes]
                 kept, weights = sample_boundary_cells(
-                    measures, [m.cell_centroids for m in meshes], self.boundary_tokens, start
+                    [a for a, _ in draw], [x for _, x in draw], self.boundary_tokens, start
                 )
             boundary = boundary.apply(lambda t: t[:, kept], batch_size=[1, kept.shape[0]])
-            boundary["measure"] = weights[None]
+            boundary["measure"] = weights[None].to(boundary["measure"].dtype)
             query = query[None]
         fields = self._redimensionalize(self._forward_tokens(boundary, query, g_unit, g_scalars, gauge=gauge), scales)
         return Mesh(
@@ -1800,7 +1850,9 @@ class ISLA(Module):
         query = None
         if query_points is not None:
             geometry = [
-                exact_boundary_geometry(query_points[i], surface_points[i], surface_cells[i], eps=EPS)
+                exact_boundary_geometry(
+                    query_points[i], surface_points[i], surface_cells[i], kernel=self.resolve_geometry_kernel(query_points)
+                )
                 for i in range(b)
             ]
             query = TensorDict(

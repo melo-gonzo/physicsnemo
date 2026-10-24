@@ -46,32 +46,38 @@
 
 ## af / dtt (native)
 
-**pressure_l2** pooled σ(log) = 0.0263 (dof 4); step D = log(DTT-CONT ÷ B) = +0.1033 (ratio 1.109)
+**pressure_l2** pooled σ(log) = 0.0422 (dof 6); step D = log(DTT-CONT ÷ B) = +0.1033 (ratio 1.109)
 
 | arm | seeds | seed mean | ÷ B | Δ | SE | moves (R1) | φ | R2 |
 |---|---|---|---|---|---|---|---|---|
-| B | 42: 0.01274, 43: 0.01257 | 0.01265 | 1.000 | +0.0000 | 0.0263 | no | +0.00 | base |
-| DTT-CONT | 42: 0.01360, 43: 0.01447 | 0.01404 | 1.109 | +0.1033 | 0.0263 | yes | +1.00 | carries the step |
-| ARM-D(bug-trained,eager) | 42: 0.01397, 43: 0.01393 | 0.01395 | 1.103 | +0.0977 | 0.0263 | yes | +0.95 | carries the step |
-| DTT-NOSC | 42: 0.01569, 43: 0.01631 | 0.01600 | 1.264 | +0.2345 | 0.0263 | yes | +2.27 | carries the step |
+| B | 42: 0.01274, 43: 0.01257 | 0.01265 | 1.000 | +0.0000 | 0.0422 | no | +0.00 | base |
+| DTT-CONT | 42: 0.01360, 43: 0.01447 | 0.01404 | 1.109 | +0.1033 | 0.0422 | yes | +1.00 | carries the step |
+| ARM-D(bug-trained,eager) | 42: 0.01397, 43: 0.01393 | 0.01395 | 1.103 | +0.0977 | 0.0422 | yes | +0.95 | carries the step |
+| DTT-NOSC | 42: 0.01569, 43: 0.01631 | 0.01600 | 1.264 | +0.2345 | 0.0422 | yes | +2.27 | carries the step |
+| DTT-SDF | 42: 0.01394, 43: 0.01242 | 0.01318 | 1.040 | +0.0393 | 0.0422 | no | +0.38 | no measurable effect |
+| DTT-QEMB | 42: 0.01214, 43: 0.01276 | 0.01245 | 0.983 | -0.0167 | 0.0422 | no | -0.16 | no measurable effect |
 
-**velocity_l2** pooled σ(log) = 0.0216 (dof 4); step D = log(DTT-CONT ÷ B) = +0.1563 (ratio 1.169)
-
-| arm | seeds | seed mean | ÷ B | Δ | SE | moves (R1) | φ | R2 |
-|---|---|---|---|---|---|---|---|---|
-| B | 42: 0.00710, 43: 0.00715 | 0.00713 | 1.000 | +0.0000 | 0.0216 | no | +0.00 | base |
-| DTT-CONT | 42: 0.00819, 43: 0.00848 | 0.00833 | 1.169 | +0.1563 | 0.0216 | yes | +1.00 | carries the step |
-| ARM-D(bug-trained,eager) | 42: 0.00874, 43: 0.00862 | 0.00868 | 1.218 | +0.1971 | 0.0216 | yes | +1.26 | carries the step |
-| DTT-NOSC | 42: 0.00894, 43: 0.00852 | 0.00873 | 1.225 | +0.2028 | 0.0216 | yes | +1.30 | carries the step |
-
-**nut_l2** pooled σ(log) = 0.0629 (dof 4); step D = log(DTT-CONT ÷ B) = +0.0255 (ratio 1.026)
+**velocity_l2** pooled σ(log) = 0.0291 (dof 6); step D = log(DTT-CONT ÷ B) = +0.1563 (ratio 1.169)
 
 | arm | seeds | seed mean | ÷ B | Δ | SE | moves (R1) | φ | R2 |
 |---|---|---|---|---|---|---|---|---|
-| B | 42: 0.01989, 43: 0.02309 | 0.02149 | 1.000 | +0.0000 | 0.0629 | no | +0.00 | base |
-| DTT-CONT | 42: 0.02208, 43: 0.02190 | 0.02199 | 1.026 | +0.0255 | 0.0629 | no | +1.00 | no measurable effect |
-| ARM-D(bug-trained,eager) | 42: 0.02154, 43: 0.02338 | 0.02246 | 1.047 | +0.0459 | 0.0629 | no | +1.80 | no measurable effect |
-| DTT-NOSC | 42: 0.02547, 43: 0.02419 | 0.02483 | 1.158 | +0.1468 | 0.0629 | yes | +5.75 | carries the step |
+| B | 42: 0.00710, 43: 0.00715 | 0.00713 | 1.000 | +0.0000 | 0.0291 | no | +0.00 | base |
+| DTT-CONT | 42: 0.00819, 43: 0.00848 | 0.00833 | 1.169 | +0.1563 | 0.0291 | yes | +1.00 | carries the step |
+| ARM-D(bug-trained,eager) | 42: 0.00874, 43: 0.00862 | 0.00868 | 1.218 | +0.1971 | 0.0291 | yes | +1.26 | carries the step |
+| DTT-NOSC | 42: 0.00894, 43: 0.00852 | 0.00873 | 1.225 | +0.2028 | 0.0291 | yes | +1.30 | carries the step |
+| DTT-SDF | 42: 0.00755, 43: 0.00733 | 0.00744 | 1.043 | +0.0425 | 0.0291 | no | +0.27 | no measurable effect |
+| DTT-QEMB | 42: 0.00682, 43: 0.00735 | 0.00709 | 0.994 | -0.0062 | 0.0291 | no | -0.04 | no measurable effect |
+
+**nut_l2** pooled σ(log) = 0.0637 (dof 6); step D = log(DTT-CONT ÷ B) = +0.0255 (ratio 1.026)
+
+| arm | seeds | seed mean | ÷ B | Δ | SE | moves (R1) | φ | R2 |
+|---|---|---|---|---|---|---|---|---|
+| B | 42: 0.01989, 43: 0.02309 | 0.02149 | 1.000 | +0.0000 | 0.0637 | no | +0.00 | base |
+| DTT-CONT | 42: 0.02208, 43: 0.02190 | 0.02199 | 1.026 | +0.0255 | 0.0637 | no | +1.00 | no measurable effect |
+| ARM-D(bug-trained,eager) | 42: 0.02154, 43: 0.02338 | 0.02246 | 1.047 | +0.0459 | 0.0637 | no | +1.80 | no measurable effect |
+| DTT-NOSC | 42: 0.02547, 43: 0.02419 | 0.02483 | 1.158 | +0.1468 | 0.0637 | yes | +5.75 | carries the step |
+| DTT-SDF | 42: 0.02118, 43: 0.02209 | 0.02164 | 1.009 | +0.0091 | 0.0637 | no | +0.36 | no measurable effect |
+| DTT-QEMB | 42: 0.02163, 43: 0.01912 | 0.02037 | 0.949 | -0.0528 | 0.0637 | no | -2.07 | no measurable effect |
 
 
 ## lug / isla (native)

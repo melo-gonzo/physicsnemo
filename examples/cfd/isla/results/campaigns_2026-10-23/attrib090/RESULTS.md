@@ -263,3 +263,43 @@ code_a2r case REF-090-CLOSE found).
 
 Erratum (2026-10-23 09:51 EDT): §2d's "NOSC and RAWU, the raw speed with and without the scales" should read "without and with"
 (NOSC has no scales, RAWU has them). Nothing else changes.
+
+## 3c. The ISLA-DTT mirrors DTT-SDF and DTT-QEMB (PREREG §11 as amended by §12, md5 dcd52514; read 2026-10-23 23:37 EDT; fix-trained)
+
+Read once, after all four lanes were scored together (job 362799; every config row "epoch": 500, 200 cases). B = r090fix_af_dtt;
+D_DTT = log(DTT-CONT ÷ B) = +0.103 / +0.156 / +0.026; C_f = log(DTT-NOSC ÷ DTT-CONT) = +0.131 / +0.047 / +0.121 (p / v / nut).
+Pooled σ over the ISLA-DTT arms, now with the mirrors: **0.042 / 0.029 / 0.064 (6 dof)**, up from 0.026 / 0.022 / 0.063 at §3b
+(DTT-SDF's two pressure seeds are 12 % apart). So SE = 0.042 / 0.029 / 0.064 and SE(C_f) the same. Tables: relaunch_native.md,
+relaunch_posed.md (reduce2.py, section af / dtt), s12_native.md, s12_posed.md (read_s12.py).
+
+| arm | field | seed 42 (÷ B, ÷ DTT-CONT) | seed 43 (÷ B, ÷ DTT-CONT) | ÷ B | ÷ DTT-CONT | Δ ± SE | R1 | φ | R2 | ψ (SE ÷ C_f) | §12(b) |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| DTT-SDF | p | 0.01394 (1.094, 1.025) | 0.01242 (0.989, 0.858) | 1.040 | 0.938 | +0.039 ± 0.042 | no | +0.38 | no measurable effect | −0.30 (0.32) | does not carry it |
+| DTT-SDF | v | 0.00755 (1.062, 0.922) | 0.00733 (1.025, 0.864) | 1.043 | 0.892 | +0.043 ± 0.029 | no | +0.27 | no measurable effect | – (C_f < ln 1.05) | not read |
+| DTT-SDF | nut | 0.02118 (1.064, 0.959) | 0.02209 (0.957, 1.009) | 1.009 | 0.984 | +0.009 ± 0.064 | no | +0.36 | no measurable effect | −0.07 (0.53) | does not carry it |
+| DTT-QEMB | p | 0.01214 (0.953, 0.892) | 0.01276 (1.015, 0.882) | 0.983 | 0.887 | −0.017 ± 0.042 | no | −0.16 | no measurable effect | +0.13 (0.32) | does not carry it |
+| DTT-QEMB | v | 0.00682 (0.960, 0.834) | 0.00735 (1.028, 0.867) | 0.994 | 0.850 | −0.006 ± 0.029 | no | −0.04 | no measurable effect | – (C_f < ln 1.05) | not read |
+| DTT-QEMB | nut | 0.02163 (1.087, 0.980) | 0.01912 (0.828, 0.873) | 0.949 | 0.925 | −0.053 ± 0.064 | no | −2.07 | no measurable effect | +0.44 (0.53) | does not carry it |
+
+(÷ B and ÷ DTT-CONT of the seed means are exp(Δ), ratios of geometric seed means; per-seed ratios are against the same seed.)
+Posed reads the same to the third digit (s12_posed.md); posed rotates and translates the input, but ISLA-DTT is invariant to it,
+so posed is not an independent number.
+
+**Registered reading.** (a) R1 / R2: neither mirror moves any field (|Δ| < 2 SE on all six); both "no measurable effect".
+(b) §12: on pressure and nut, neither DTT-SDF nor DTT-QEMB carries ISLA-DTT's bundle cost ("does not carry it" on all four);
+on velocity no cost is located (C_f below the 5 % floor). **The cost (DTT-NOSC 14 % worse than DTT-CONT on pressure) is not in
+either piece alone, as far as two seeds can show.** Labels: fix-trained.
+
+**Beside the rule (not a verdict).**
+- Power: at this σ a mirror moves pressure only if |Δ| ≥ 0.084, i.e. ψ ≥ 0.64. The 2 SE upper ends of ψ on pressure are 0.34
+  (DTT-SDF) and 0.77 (DTT-QEMB); on nut 0.98 and 1.49. So putting the stored SDF back is ruled out as carrying even half of the
+  pressure cost; the old prediction-point embedding is not ruled out as carrying part of it; nut constrains neither.
+- Directions: DTT-SDF's pressure Δ points the wrong way (stored SDF back, ISLA-DTT no better, ψ −0.30); DTT-QEMB's point
+  toward the cost on p and nut (ψ +0.13 / +0.44), both within noise.
+- §12(c) caveat: C_f is measured with the raw speed on both sides; the mirrors run with 0.9.0's scales and standardized
+  input. A cost that exists only with the raw speed (an interaction with the input defect of §2c) would read as ψ ≈ 0 here.
+  Untested: no ISLA-DTT standardization arm (NOSC-STD's mirror) was run.
+- What remains in the bundle for ISLA-DTT: the gauge L, the upstream merge and drift, the interaction above, or SDF and QEMB
+  together (no DTT-ALL arm). Not attributed.
+- Peter's boundary-only ruling: DTT-SDF would not have brought the stored field back in any case; it shows no measurable loss
+  from removing it.

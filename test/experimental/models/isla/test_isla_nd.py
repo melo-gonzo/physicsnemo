@@ -23,6 +23,7 @@ import pytest
 import torch
 
 from physicsnemo.experimental.models.isla import ISLA
+from physicsnemo.experimental.models.isla.geometry import exact_boundary_geometry
 from physicsnemo.experimental.models.isla.heads import _levi_civita, _pseudovectors
 from test.experimental.models.isla._meshes import (
     cloud,
@@ -50,26 +51,56 @@ def _problem(d: int, n: int = 160, seed: int = 0):
 def _model(d: int, outputs, **kw):
     torch.manual_seed(1)
     kw.setdefault("boundary_schemas", {"wall": {}})
-    return ISLA(output_schema=outputs, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8, dim=d, **kw)
+    return ISLA(
+        output_schema=outputs,
+        global_schema={"g": {"rank": 1}},
+        hidden=32,
+        n_layers=2,
+        n_slices=8,
+        dim=d,
+        **kw,
+    )
 
 
 def _run(m, mesh, drv, q=None):
     with torch.no_grad():
-        return outputs(m(boundary_meshes={"wall": mesh}, prediction_points=q, global_data={"g": drv}))
+        return outputs(
+            m(
+                boundary_meshes={"wall": mesh},
+                prediction_points=q,
+                global_data={"g": drv},
+            )
+        )
 
 
-OUT2 = {"p": {"rank": 0}, "v": {"rank": 1}, "w": {"rank": 1, "parity": "odd"}, "t": {"rank": 2, "symmetric": True}, "a": {"rank": 2, "parity": "odd"}}
+OUT2 = {
+    "p": {"rank": 0},
+    "v": {"rank": 1},
+    "w": {"rank": 1, "parity": "odd"},
+    "t": {"rank": 2, "symmetric": True},
+    "a": {"rank": 2, "parity": "odd"},
+}
 
 
 def test_levi_civita_symbol_and_pseudovector_counts():
     e2 = _levi_civita(2)
     assert torch.equal(e2, torch.tensor([[0.0, 1.0], [-1.0, 0.0]], dtype=torch.float64))
     e3 = _levi_civita(3)
-    assert e3[0, 1, 2] == 1 and e3[0, 2, 1] == -1 and e3[1, 2, 0] == 1 and e3[0, 0, 1] == 0
+    assert (
+        e3[0, 1, 2] == 1 and e3[0, 2, 1] == -1 and e3[1, 2, 0] == 1 and e3[0, 0, 1] == 0
+    )
     v = [torch.tensor([[1.0, 0.0]]), torch.tensor([[0.0, 1.0]])]
     ps = _pseudovectors(v, 2)
-    assert len(ps) == 2 and torch.equal(ps[0], torch.tensor([[0.0, 1.0]])) and torch.equal(ps[1], torch.tensor([[-1.0, 0.0]]))
-    v3 = [torch.tensor([[1.0, 0.0, 0.0]]), torch.tensor([[0.0, 1.0, 0.0]]), torch.tensor([[0.0, 0.0, 1.0]])]
+    assert (
+        len(ps) == 2
+        and torch.equal(ps[0], torch.tensor([[0.0, 1.0]]))
+        and torch.equal(ps[1], torch.tensor([[-1.0, 0.0]]))
+    )
+    v3 = [
+        torch.tensor([[1.0, 0.0, 0.0]]),
+        torch.tensor([[0.0, 1.0, 0.0]]),
+        torch.tensor([[0.0, 0.0, 1.0]]),
+    ]
     assert len(_pseudovectors(v3, 3)) == 3 and _pseudovectors(v3, 4) == []
     m2 = _model(2, {"p": {"rank": 0}})
     m3 = _model(3, {"p": {"rank": 0}})
@@ -96,7 +127,11 @@ def test_two_dimensional_contracts_rotation_translation_magnitude_and_reflection
     ref = _run(m, transform(mesh, r), drv @ r.T)
     tol = dict(rtol=1e-4, atol=1e-5)
     n = mesh.n_cells
-    assert base["p"].shape == (n,) and base["v"].shape == (n, 2) and base["t"].shape == (n, 2, 2)
+    assert (
+        base["p"].shape == (n,)
+        and base["v"].shape == (n, 2)
+        and base["t"].shape == (n, 2, 2)
+    )
     torch.testing.assert_close(rot["p"], base["p"], **tol)
     torch.testing.assert_close(rot["v"], base["v"] @ q.T, **tol)
     torch.testing.assert_close(rot["w"], base["w"] @ q.T, **tol)
@@ -124,7 +159,9 @@ def test_two_dimensional_gradients_and_interior_task():
     ### prediction-point tokens with the internal nearest-boundary geometry in 2-D
     mq = _model(d, {"p": {"rank": 0}, "v": {"rank": 1}}, interior=True)
     q = torch.randn(50, d) * 0.5
-    out = outputs(mq(boundary_meshes={"wall": mesh}, prediction_points=q, global_data={"g": drv}))
+    out = outputs(
+        mq(boundary_meshes={"wall": mesh}, prediction_points=q, global_data={"g": drv})
+    )
     sum(v.square().mean() for v in out.values()).backward()
     missing = [k for k, p in mq.named_parameters() if p.grad is None]
     assert not missing, missing
@@ -133,8 +170,16 @@ def test_two_dimensional_gradients_and_interior_task():
     o1 = _run(mq, mesh, drv, q)
     o2 = _run(mq, transform(mesh, rq), drv @ rq.T, q @ rq.T)
     assert o1["p"].shape == (50,) and o1["v"].shape == (50, 2)
-    torch.testing.assert_close(o2["p"], o1["p"], rtol=1e-4, atol=1e-5)
-    torch.testing.assert_close(o2["v"], o1["v"] @ rq.T, rtol=1e-4, atol=1e-5)
+    ### float32: the rotation's rounding moves a query's distance by at most
+    ### E = 2 u (|x| + max |v|) (u = eps / 2), so the soft-log distance channel by at
+    ### most E / |d|: up to 3e-3 at a query 3e-4 from the wall
+    dist, _ = exact_boundary_geometry(q, mesh.points, mesh.cells)
+    bound = torch.finfo(q.dtype).eps * (q.norm(dim=-1) + mesh.points.norm(dim=-1).max())
+    rel = bound / dist.abs()
+    for got, want in ((o2["p"], o1["p"]), (o2["v"], o1["v"] @ rq.T)):
+        r = rel.reshape(-1, *[1] * (want.ndim - 1))
+        tol = 1e-5 + 1e-4 * want.abs() + r * want.abs().max()
+        assert ((got - want).abs() <= tol).all(), (got - want).abs().max()
 
 
 def test_two_dimensional_rank_inputs_keep_the_contracts():
@@ -146,7 +191,13 @@ def test_two_dimensional_rank_inputs_keep_the_contracts():
     trac = torch.randn(160, d, generator=g)
     sym = torch.randn(160, d, d, generator=g)
     sym = sym + sym.transpose(-1, -2)
-    m = _model(d, {"p": {"rank": 0}, "v": {"rank": 1}}, boundary_schemas={"wall": {"trac": {"rank": 1}, "sig": {"rank": 2, "symmetric": True}}})
+    m = _model(
+        d,
+        {"p": {"rank": 0}, "v": {"rank": 1}},
+        boundary_schemas={
+            "wall": {"trac": {"rank": 1}, "sig": {"rank": 2, "symmetric": True}}
+        },
+    )
     mesh = soup(pts, nrm, w, cell_data={"trac": trac, "sig": sym})
     q = orthogonal(d, 9).float()
     base = _run(m, mesh, drv)
@@ -177,7 +228,9 @@ def test_four_dimensional_even_parity_smoke_and_odd_refused():
 def test_dimension_mismatch_is_refused_and_two_d_is_not_embedded_three_d():
     mesh3, drv3 = _problem(3)
     m2 = _model(2, {"p": {"rank": 0}})
-    with pytest.raises(ValueError, match="has 3 spatial dimensions; this model has dim=2"):
+    with pytest.raises(
+        ValueError, match="has 3 spatial dimensions; this model has dim=2"
+    ):
         m2(boundary_meshes={"wall": mesh3}, global_data={"g": drv3})
     ### The 3-D model with a K = 1 direction keeps its parameter count (the head has
     ### m = 5 true and p = 3 pseudo vectors in both dimensions for K = 1, so the
@@ -191,5 +244,19 @@ def test_dimension_mismatch_is_refused_and_two_d_is_not_embedded_three_d():
     n_surface = 41364 + 3 * (2 * 32**2 + 1)
     m3 = _model(3, {"p": {"rank": 0}, "v": {"rank": 1}})
     assert sum(p.numel() for p in m3.parameters()) == n_surface
-    assert sum(p.numel() for p in _model(2, {"p": {"rank": 0}, "v": {"rank": 1}}).parameters()) == n_surface
-    assert sum(p.numel() for p in _model(3, {"p": {"rank": 0}, "v": {"rank": 1}}, interior=True).parameters()) == n_surface + 129
+    assert (
+        sum(
+            p.numel()
+            for p in _model(2, {"p": {"rank": 0}, "v": {"rank": 1}}).parameters()
+        )
+        == n_surface
+    )
+    assert (
+        sum(
+            p.numel()
+            for p in _model(
+                3, {"p": {"rank": 0}, "v": {"rank": 1}}, interior=True
+            ).parameters()
+        )
+        == n_surface + 129
+    )

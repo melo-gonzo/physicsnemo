@@ -143,6 +143,108 @@ RECORDS = {
         "AeroZoo under the benchmark protocol: the registered rule for ISLA against ISLA-DTT (PREREG_v2 sections 12(f) and 13)",
         ["PREREG_v2.md"],
     ),
+    "boundary_audit": (
+        "isla-boundary-audit-2026-10-23",
+        "BOUNDARY-AUDIT: what each dataset stores of its domain's boundary, and the whole boundary's cost on DrivAerML Volume",
+        [
+            "REPORT.md",
+            "BASELINE_PARITY.md",
+            "cost_table_isla.md",
+            "cost_table_dtt.md",
+            "cost_seed_table.md",
+        ],
+    ),
+    "drv_ground": (
+        "isla-drv-ground-2026-10-23",
+        "DRV-GROUND: the DrivAerML domain meshes' ground offset on all 484 files, and the recipe transform that places it",
+        [
+            "classify_summary.txt",
+            "check_summary.txt",
+            "offset_runs.txt",
+        ],
+    ),
+    "setup_research": (
+        "isla-setup-research-2026-10-23",
+        "SETUP-RESEARCH: the CFD domains of DrivAerML, SHIFT-SUV and HiLiftAeroML, and where their boundary pieces come from",
+        ["SETUP.md"],
+    ),
+    "af_whole": (
+        "isla-af-whole-2026-10-23",
+        "AF-WHOLE: ISLA and ISLA-DTT reading the AirfRANS far field, the pre-registration and its facts before training",
+        ["PREREG.md", "FACTS.md"],
+    ),
+    "surface_bc": (
+        "isla-surface-bc-2026-10-23",
+        "SURFACE-BC: a surface task that reads the whole boundary and predicts at the boundaries it names, built and timed",
+        ["REPORT.md", "DESIGN.md", "cost_table.md"],
+    ),
+    "surfqpop": (
+        "isla-surf-probe-2026-10-23",
+        "SURF-QPOP: how a DrivAerML Surface prediction depends on the other requested cells",
+        [
+            "RESULTS.md",
+            "PREREG.md",
+            "results/out/reduced.json",
+            "results/out/tables.md",
+        ],
+    ),
+    "slices_af": (
+        "isla-slices-2026-10-23",
+        "SLICES-AF: ISLA with 128 slices against the 512-slice AirfRANS standing",
+        [
+            "RESULTS.md",
+            "PREREG.md",
+            "reading.md",
+            "reading.json",
+            "nearwall/nearwall_table.md",
+        ],
+    ),
+    "tie_exp": (
+        "isla-tie-2026-10-22",
+        "TIE-EXP: ISLA with the least-norm tie rules trained on the lug and Tensile2d, read on flip symmetry, native accuracy and pose",
+        [
+            "RESULTS.md",
+            "PREREG.md",
+            "JOBS.md",
+            "read/results.md",
+            "read/results.json",
+        ],
+    ),
+    "fold_sign": (
+        "isla-fold-sign-2026-10-22",
+        "FOLD-SIGN: the wall distance signed by the generalized winding number, the registered f32floor rerun on AeroZoo",
+        ["PREREG.md", "f32floor_tables.md"],
+    ),
+    "token_draw": (
+        "isla-token-draw-2026-10-22",
+        "TOKEN-DRAW: the boundary-token draw in float64 in the boundary's canonical frame, measured under precision, pose and renumbering",
+        ["DESIGN.md"],
+    ),
+    "bundle_merge": (
+        "isla-bundle-merge-2026-10-24",
+        "BUNDLE-MERGE: the geometry robustness bundle merged as ISLA 0.11.0, its version change and tests",
+        ["REPORT.md", "FINAL_REPORT.md"],
+    ),
+    "geo_fast": (
+        "isla-geo-fast-2026-10-23",
+        "GEO-FAST: the exact geometry's fast path, its bitwise checks and its GB300 timing, and the zero-area-cell defect",
+        ["RESULTS.md", "FINAL_REPORT.md", "DESIGN.md", "lhr/final2_table.md"],
+    ),
+    "align8": (
+        "isla-align8-2026-10-23",
+        "ALIGN8: the step cost of token counts that are not a multiple of 8 or 32, and the padding fix",
+        [
+            "FINAL_REPORT.md",
+            "results/repro_table.md",
+            "exposure/exposure_gpuh.md",
+            "exposure/exposure_classes.tsv",
+        ],
+    ),
+    "bc_sidecar": (
+        "isla-bc-sidecar-2026-10-23",
+        "BC-SIDECAR: the SHIFT-SUV box and the HiLiftAeroML far field and symmetry plane, built and checked",
+        ["REPORT.md", "FINAL_REPORT.md"],
+    ),
 }
 
 

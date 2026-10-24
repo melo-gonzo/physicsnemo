@@ -1,0 +1,19 @@
+dataset	variant	split	n_cases	frac_odd	frac_even_not8	frac_8_not32	frac_32	step4_odd	step4_even_not8	step4_8_not32	step4_32
+DrivAerML Surface	vehicle (r090_dr)	train	435	0.000	0.000	0.000	1.000	0.000	0.000	0.000	1.000
+DrivAerML Surface	whole boundary (isla-surface-bc)	train	435	0.000	1.000	0.000	0.000	0.000	1.000	0.000	0.000
+DrivAerML Volume	vehicle (r090_vol)	train	435	0.000	0.000	0.000	1.000	0.000	0.000	0.000	1.000
+DrivAerML Volume	whole boundary (isla-whole-boundary)	train	435	0.000	0.000	0.000	1.000	0.000	0.000	0.000	1.000
+SHIFT-SUV	vehicle (r090_suv)	train	794	0.000	0.000	0.000	1.000	0.000	0.000	0.000	1.000
+DeepJEB++	surface (r090_jb)	train_clean	49804	0.002	0.746	0.180	0.072	0.009	0.987	0.004	0.000
+DeepJEB++	stored cells, no drop (reference)	train_clean	49804	0.002	0.746	0.180	0.072	0.008	0.988	0.004	0.000
+AirfRANS	airfoil (r090eag_af / r090fix_af)	full_train	800	0.524	0.343	0.092	0.041	0.949	0.051	0.000	0.000
+AirfRANS	airfoil + freestream (isla-whole-boundary)	full_train	800	0.000	0.744	0.205	0.051	0.000	0.996	0.004	0.000
+lug	surface (r090eag_lug / r090fix_lug)	train	2400	0.236	0.400	0.271	0.093	0.659	0.323	0.018	0.000
+Tensile2d	outer (r090eag_t2dz)	train_400	400	0.535	0.352	0.080	0.033	0.953	0.047	0.000	0.000
+AeroZoo	4 boundaries (azc full)	full.train	2713	0.000	0.000	0.000	1.000	0.000	0.000	0.000	1.000
+AeroZoo	4 boundaries (azc family_non_box)	family_non_box.train	2390	0.000	0.000	0.000	1.000	0.000	0.000	0.000	1.000
+AeroZoo	4 boundaries (azc reynolds)	reynolds.train	2119	0.000	0.000	0.000	1.000	0.000	0.000	0.000	1.000
+AeroZoo	4 boundaries (azc bank_blobs)	bank_blobs.train	2156	0.000	0.000	0.000	1.000	0.000	0.000	0.000	1.000
+AeroZoo	4 boundaries (azc bank_zero_to_cad)	bank_zero_to_cad.train	3040	0.000	0.000	0.000	1.000	0.000	0.000	0.000	1.000
+AeroZoo	4 boundaries (azc profile_crossflow)	profile_crossflow.train	2820	0.000	0.000	0.000	1.000	0.000	0.000	0.000	1.000
+AeroZoo	4 boundaries (azc profile_dual_inlet)	profile_dual_inlet.train	2875	0.000	0.000	0.000	1.000	0.000	0.000	0.000	1.000
