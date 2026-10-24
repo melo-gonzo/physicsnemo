@@ -591,6 +591,37 @@ print(": Boundary-drawn interior writers at ISLA's reference configuration on th
       "and verdict.json. {#tbl-airfrans-anchor}")
 ```
 
+```{python}
+#| label: para-airfrans-dtt-gap
+#| output: asis
+# DTT-KNOBS's gap study on the standing's eager-trained pairs: ISLA-DTT ÷ ISLA on the test set and on the first 200 training
+# cases (section 1), by region (section 3; pooled RMS ratio [s42, s43]), and the roughness of the difference
+GP1 = {r[""]: r for r in R.md_table("dtt_knobs", "gap/gap_table.md", "1. Fit against generalization")}
+GP3 = {r["AirfRANS (chord units)"]: r for r in R.md_table("dtt_knobs", "gap/gap_table.md", "3. Per region")}
+gfield = lambda col, fs=("pressure", "velocity", "nut"): " / ".join(f"{R.num(GP1[f'AirfRANS {f}'][col]):.3f}" for f in fs)
+seeds = lambda reg, f: [R.num(GP3[reg][f], k) for k in (1, 2)]
+wake_v, far_nut, wall_nut = seeds("wake strip (d >= 0.01)", "velocity"), seeds("d >= 1 chord", "nut"), R.num(GP3["d < 0.01 (near wall)"]["nut"])
+GPT = " ".join(R.load("dtt_knobs", "gap/gap_table.md").split())
+own_far = re.search(r"ISLA-DTT's own seeds differ by ([\d.]+) beyond one chord", GPT).group(1)
+lowre = re.search(r"low-Re quartile \(Re ([\d.]+-[\d.]+e6)\) reads ([\d.]+ / [\d.]+ / [\d.]+)", GPT).groups()
+print("**ISLA-DTT's gap to interacting ISLA on AirfRANS is one of fit, and it sits in the wake and beyond one chord.** For the "
+      f"standing's eager-trained pairs, ISLA-DTT ÷ ISLA on the first 200 training cases is {gfield('train fp32')} (pressure / "
+      f"velocity / eddy viscosity), against {gfield('test fp32')} on the test set; those training cases cover Reynolds "
+      f"numbers of 2e6 to 3e6 only, and the test set's lowest quartile ({lowre[0].replace('-', ' to ')}) reads {lowre[1]}. "
+      f"ISLA-DTT's in-plane velocity error is {wake_v[0]:.2f} and {wake_v[1]:.2f} times ISLA's in the wake (seeds 42 and 43), "
+      f"and its eddy-viscosity error {far_nut[0]:.2f} and {far_nut[1]:.2f} times beyond one chord, where ISLA-DTT's own two "
+      f"seeds differ by {own_far} times. Near the wall its eddy viscosity is {wall_nut:.2f} times ISLA's but carries at most 5% "
+      "of the gap. The difference varies smoothly in space, a bias rather than per-point noise of the tree, except for eddy "
+      "viscosity beyond 0.1 chord, where its gap sits. No opening angle read at inference narrows it (@sec-arch-tree-read), and "
+      "the forest that bfloat16 training builds widens it slightly. Whether a model trained with a finer read narrows it is open "
+      f"(@sec-oq-dtt-theta). Data: {R.source('dtt_knobs', 'gap/gap_table.md')}; {R.source('dtt_knobs', 'gap/rough.md')}.")
+```
+
+::: {.callout-note title="In flight"}
+These numbers come from ISLA and ISLA-DTT reading the airfoil alone. The same two trained with the far field
+as well (@sec-data-airfrans) are being measured, and the ledger (@sec-ledger) tracks it.
+:::
+
 ### Outside the training range: the extrapolation splits {#sec-interior-extrapolation}
 
 ```{python}

@@ -1111,45 +1111,77 @@ print(": Training footprint of the reference configurations (ISLA and ISLA-DTT w
 ```{python}
 #| label: tbl-using-geometry-cost
 #| output: asis
-# GEO-FAST's GB300 timing: columns are case, geometry call (base, f13eb5ce0, head reference, head fast), step (the same four);
-# base is the standings' code, "head, reference" the class's geometry (the commits after it add only the fast path)
-GT_ = R.path("geo_fast", "RESULTS.md").read_text().split("## Timing")[1].split("\n\n")
-GT_ = next(b for b in GT_ if b.lstrip().startswith("| case")).strip().splitlines()[2:]
-GT_ = [[c.strip() for c in ln.strip().strip("|").split("|")] for ln in GT_]
-pair = lambda c: (R.num(c, 0) + R.num(c, 1)) / 2
-GEO_COST = {r[0]: dict(geo_base=pair(r[1]), geo=pair(r[3]), step_base=pair(r[5]), step=pair(r[7])) for r in GT_}
-o = ("| case (prediction points / boundary cells) | geometry call, standings' geometry [ms] | geometry call, ISLA [ms] | "
-     "step, standings' geometry [ms] | step, ISLA [ms] | step ratio |\n|---|--:|--:|--:|--:|--:|\n")
+# FAST-MERGE's GB300 timing of the merged head (job 365898): per case the base (0.9.0, two passes) and the head under the
+# reference and the fast kernel (three passes each); every cell is the median of its passes, none dropped
+import statistics
+GT_ = [r for r in R.md_table("fast_merge", "lhr/timing_table.md") if r["Q / F"]]
+nums = lambda c: [float(x) for x in re.findall(r"\d[\d.]*", c.replace(",", ""))]
+ARM = {"base (0.9.0)": "base", "head, reference": "ref", "head, auto": "fast"}
+GEO_COST, GEO_PASSES, GEO_PEAK = {}, {}, {}
+for r in GT_:
+    a, k = ARM[r["version"]], f"{r['case']} ({r['Q / F']})"
+    assert a != "fast" or r["kernel"] == "fast"   # auto resolved to the fast search on the GB300
+    c = GEO_COST.setdefault(k, {})
+    c[f"geo_{a}"] = statistics.median(nums(r["geometry call (ms)"]))
+    c[f"step_{a}"] = statistics.median(nums(r["training step (ms)"]))
+    GEO_PASSES[k, a] = nums(r["training step (ms)"])
+    GEO_PEAK.setdefault(k, []).append(float(r["peak GiB"]))
+assert {len(v) for (k, a), v in GEO_PASSES.items() if a == "base"} == {2}
+assert {len(v) for (k, a), v in GEO_PASSES.items() if a != "base"} == {3}
+o = ("| case (prediction points / boundary cells) | geometry call: 0.9.0 / 0.11.0 reference / 0.11.0 auto [ms] | "
+     "step: 0.9.0 / 0.11.0 reference / 0.11.0 auto [ms] | step ratio to 0.9.0: reference / auto |\n|---|--:|--:|--:|\n")
 for k, c in GEO_COST.items():
-    o += (f"| {k} | {c['geo_base']:,.0f} | {c['geo']:,.0f} | {c['step_base']:,.0f} | {c['step']:,.0f} | "
-          f"{c['step'] / c['step_base']:.2f} |\n")
+    o += (f"| {k} | {c['geo_base']:,.1f} / {c['geo_ref']:,.1f} / {c['geo_fast']:,.1f} | "
+          f"{c['step_base']:,.0f} / {c['step_ref']:,.0f} / {c['step_fast']:,.0f} | "
+          f"{c['step_ref'] / c['step_base']:.2f} / {c['step_fast'] / c['step_base']:.2f} |\n")
 print(o)
+af_k = next(k for k in GEO_COST if k.startswith("AirfRANS"))
+af_p = GEO_PASSES[af_k, "fast"]
 print(": The cost of ISLA's interior geometry in training: the geometry call and the training step with the geometry the "
-      "standings' checkpoints trained with (@sec-standing-geometry) and with the class's (@sec-arch-interior-geometry), the same "
-      "recipe, settings and network otherwise. One GB300, bfloat16, eager, one case per step; each entry is the mean of two passes "
-      "with the GPUs rotated, each pass the median after five warm-up calls or steps. *Step ratio*: the class's step ÷ the "
-      "standings' step. How to read this: the whole-boundary row reads the DrivAerML tunnel box beside the vehicle; there the "
-      "standings' geometry seeded its search with a query that cost about two seconds, which the class's cell-tree seed does not "
-      "have. Peak memory of the training process is the same in both columns. Data: "
-      f"{R.source('geo_fast', 'RESULTS.md')} (Timing), from {R.source('geo_fast', 'lhr/final2_table.md')}. {{#tbl-using-geometry-cost}}")
+      "standings' checkpoints trained with (0.9.0, @sec-standing-geometry) and with the class's (0.11.0, "
+      "@sec-arch-interior-geometry) under its two search kernels: *reference*, which runs wherever the model runs, and "
+      "*auto*, the default, which takes the fast search on CUDA where Triton imports (as here) and the reference search "
+      "elsewhere. The same recipe, settings and network otherwise. One GB300, bfloat16, eager, one case per step, the GPUs "
+      "rotated between passes; each pass gives the median after five warm-up calls or steps, and each cell is the median of "
+      "its passes: three for the 0.11.0 columns, two for 0.9.0, whose median is their mean. No pass is left out. *Step "
+      "ratio*: the 0.11.0 step ÷ the 0.9.0 step. How to read this: the whole-boundary row reads the DrivAerML tunnel box "
+      "beside the vehicle; there 0.9.0's geometry seeded its search with a query that cost about two seconds, which the "
+      "class's cell-tree seed does not have. In two dimensions both kernels run the same search over the segments. On "
+      f"AirfRANS one auto pass took {max(af_p):.0f} ms a step against {min(af_p):.0f} and "
+      f"{statistics.median(af_p):.0f} in the other two, with the same geometry call, so that row's step spread is not the "
+      f"geometry's. Peak memory of the training process differs by at most "
+      f"{max(max(v) - min(v) for v in GEO_PEAK.values()):.1f} GiB between the three columns of a case. Data: "
+      f"{R.source('fast_merge', 'lhr/timing_table.md')}; the protocol, {R.source('fast_merge', 'REPORT.md')} (Timing). "
+      "{#tbl-using-geometry-cost}")
 ```
 
 ```{python}
 #| label: para-using-geometry-cost
 #| output: asis
-r_ = {k: c["step"] / c["step_base"] for k, c in GEO_COST.items()}
-lo_k, hi_k = min((v, k) for k, v in r_.items() if "whole" not in k), max((v, k) for k, v in r_.items() if "whole" not in k)
-print(f"**The exact interior geometry adds {100 * (lo_k[0] - 1):.0f} to {100 * (hi_k[0] - 1):.0f}% to a training step on a "
-      "body alone, most on the largest boundary** (@tbl-using-geometry-cost). The geometry call computes every candidate "
-      "distance in float64, every tie set and least-norm direction, and the winding number at every prediction point; on the "
-      f"{hi_k[1].split(' (')[0]} case that call is {GEO_COST[hi_k[1]]['geo'] / GEO_COST[hi_k[1]]['geo_base']:.1f} times the "
-      "standings' geometry call. With the DrivAerML tunnel box read beside the vehicle the class's step is "
-      f"{r_[next(k for k in r_ if 'whole' in k)]:.2f} times the standings', because the standings' geometry spent about two "
-      "seconds of every call on the query that seeded its search, and the class seeds it on its own cell tree.")
-print()
-print('::: {.callout-note title="In flight"}\nThese costs are those of the class\'s reference geometry. A fast path that '
-      "computes the same geometry bitwise on CUDA when Triton is installed, chosen automatically, replaces them where it runs, "
-      "once a fix for cells of zero area, which is being checked, is in it; the ledger (@sec-ledger) tracks it.\n:::")
+body = {k: c for k, c in GEO_COST.items() if "whole" not in k}
+whole = next(c for k, c in GEO_COST.items() if "whole" in k)
+r_f = {k: c["step_fast"] / c["step_base"] for k, c in body.items()}
+r_r = {k: c["step_ref"] / c["step_base"] for k, c in body.items()}
+hi_k = max(r_f, key=r_f.get)
+cut = [1 - c["geo_fast"] / c["geo_ref"] for k, c in GEO_COST.items() if not k.startswith("AirfRANS")]
+print(f"**The exact interior geometry adds {100 * (min(r_f.values()) - 1):.0f} to {100 * (max(r_f.values()) - 1):.0f}% to a "
+      "training step on a body alone under the default search, most on the largest boundary** (@tbl-using-geometry-cost). "
+      "The geometry call computes every candidate distance in float64, every tie set and least-norm direction, and the "
+      f"winding number at every prediction point; on the {hi_k.split(' (')[0]} case that call is "
+      f"{body[hi_k]['geo_fast'] / body[hi_k]['geo_base']:.1f} times the standings' geometry call. The default, "
+      '`geometry_kernel="auto"`, takes the fast search on CUDA where Triton imports, which returns the same geometry '
+      f"bitwise and cuts the three-dimensional geometry call by {100 * min(cut):.0f} to {100 * max(cut):.0f}%: it lowers "
+      "the geometry's cost on a body alone and does not remove it. It is optional, as Peter's ruling on the geometry's cost "
+      "asks: "
+      '"If the speedup experiment works, then add an optional fast path (like our other kernels, where we default iff '
+      'triton is installed), and then remove the documented limitation / change it." Where Triton is absent, or on the '
+      f"CPU, the reference search runs, and a step costs {100 * (min(r_r.values()) - 1):.0f} to "
+      f"{100 * (max(r_r.values()) - 1):.0f}% more than the standings' (the reference column). To force one search, set "
+      '`geometry_kernel` to `"reference"` or `"fast"`; checkpoints do not store it. With the DrivAerML tunnel box read '
+      f"beside the vehicle the class's step is {whole['step_fast'] / whole['step_base']:.2f} times the standings' under "
+      f"the default and {whole['step_ref'] / whole['step_base']:.2f} under the reference, because the standings' geometry "
+      "spent about two seconds of every call on the query that seeded its search, and the class seeds it on its own cell "
+      "tree.")
 ```
 
 ```{python}
@@ -1229,7 +1261,10 @@ print(f"- **Compile block by block where the whole graph breaks.** `compile_bloc
       "setting, under torch 2.12, the compiled blocks compute another function on AirfRANS, Tensile2d and the lug, whose "
       "geometry runs in the eager region, and on the lug that changed what training found: retrained with the setting, "
       f"ISLA's von Mises error is {lug_t:.3f} times that of the same run without it, both scored eagerly "
-      f"({R.source('ref090', 'r090_final_tables.md')}).")
+      f"({R.source('ref090', 'r090_final_tables.md')}). With the setting, block by block against eager on trained ISLA-DTT "
+      "checkpoints, the compiled blocks agree to 1.5e-5 relative in float32 and at roundoff in float64; in bfloat16 they "
+      "round fewer intermediates than eager does, with an error against float64 no larger than eager's on the outputs "
+      f"(@sec-arch-cost; {R.source('dtt_fast_compile', 'RESULTS.md')}).")
 ```
 
 ## Contracts you can check on your own data {#sec-using-contracts}

@@ -128,8 +128,9 @@ print(f"- **Not that ISLA's pose invariance is exact on every mesh.** Rotated an
       "mesh puts interior nodes equally far from two boundary features, where in the geometry the standings trained with float32 "
       f"rounding picks the direction; retrained with the class's tie rule, it is {TX_PN:.4f} times native (@sec-limits-ties). What "
       "rounding still decides in the class's geometry is @sec-oq-precision. "
-      "ISLA-DTT's far-field read adds no such limit: a tie of its forest's frame moves the read only by the tree's error "
-      "(@sec-oq-dtt-frame).")
+      "ISLA-DTT's far-field read has limits of its own: a tie of its forest's frame moves the read only by the tree's error, "
+      "but on the lug, where rounding decides the octant of most cells' normals, its posed error is not its native error, and "
+      "under bfloat16 training its forest is built from rounded coordinates (@sec-arch-tree-read, @sec-oq-dtt-frame).")
 print("- **Not that discretization consistency is an exact invariance at every token count.** Under exact re-meshing of the boundary "
       "ISLA's prediction does not move (@sec-limits-boundary-law); under a change of sampling law its residual is quadrature variance "
       "that shrinks with the cell count (@sec-principle), and a token budget far below the boundary's own cell count is not invariant. "
@@ -362,7 +363,8 @@ print(f"**Rotated and translated, ISLA's error stays within {100 * worst:.1f}% o
       f"only the geometry changed, reads posed ÷ native {TX_PN:.4f} (a ratio of seed means), against "
       f"{1 + TXL['P']['von_mises_l2']['e_B']:.3f} for the standing's checkpoints on the same reading, and its native error is "
       f"{TXL['N']['von_mises_l2']['r']:.3f} times theirs, which the registered test reads as "
-      f"\"{TXL['N']['von_mises_l2']['verdict']}\" (@sec-lug-ties). On PLAID "
+      f"\"{TXL['N']['von_mises_l2']['verdict']}\" (@sec-lug-ties). Whether that direction is well conditioned where the "
+      "tied normals nearly coincide is open (@sec-oq-ties). On PLAID "
       "Tensile2d, whose prediction points include the nodes of its boundary polyline, posed ÷ native is "
       f"{f3([ST['tensile2d'].shift('ISLA', f, 'posed') for f in ST['tensile2d'].ds.headline], 4)}. Data: {LG.source}; "
       f"{R.source('attrib090', 'RESULTS.md')} (section 4); {R.source('tie_exp', 'read/results.json')}.")
@@ -568,6 +570,10 @@ FD = " ".join(R.load("floor_drv", "PREREG.md").split())
 fd_gpus, fd_hours, q_floor = map(int, re.search(r"the full job about (\d+) x (\d+) = (\d+) GPU-h allocated", FD).groups())
 fd_step = re.search(r"F ([\d.]+) s/step, C ([\d.]+) s/step, \*\*([\d.]+)x\*\*", FD).groups()
 L_REF = float(re.search(r"`global_data\.L_ref` = ([\d.]+) m", " ".join(R.load("cap_audit", "RESULTS.md").split())).group(1))
+# ISLA-DTT's read retrained on AirfRANS (theta 2, 0.5 and 0, every second read, a basis of 8), as its registration prices the pairs
+KN = re.findall(r"\| (K-[A-Z0-9]+)(?:, eager)? \| [^|]+\| about (\d+)(?:-(\d+))? \|", " ".join(R.load("dtt_knobs", "PREREG.md").split()))
+assert sorted(k for k, *_ in KN) == ["K-B1", "K-BASIS8", "K-EXACT", "K-THETA05", "K-THETA2"]
+q_knobs = (sum(int(a) for _, a, _ in KN), sum(int(b or a) for _, a, b in KN))
 ```
 
 ```{python}
@@ -585,7 +591,8 @@ rows = [
     ("Does what rounding still decides in the class's geometry move a trained model? (@sec-oq-precision)", "the standings "
      "retrained with the class's geometry, scored rotated and translated, and in float32 against float64 on the AeroZoo cases of "
      "the float32 comparison", "the standings' training with the class's geometry, then scoring"),
-    ("How large is ISLA-DTT's tree error at $\\theta = 1$ where its forest's frame ties? (@sec-oq-dtt-frame)", "ISLA-DTT scored rotated and translated, and under boundary redraws, on cases whose boundary has near-equal principal variances", "scoring only"),
+    ("How large is ISLA-DTT's tree error at $\\theta = 1$ where its forest's frame ties, or where rounding decides a cell's octant? (@sec-oq-dtt-frame)", "ISLA-DTT scored rotated and translated, and under boundary redraws, on cases whose boundary has near-equal principal variances; on the lug, the posed forest's octant labels compared with the native ones", "scoring only"),
+    ("Does a cheaper or a finer read pay once ISLA-DTT is trained with it? (@sec-oq-dtt-theta)", "ISLA-DTT trained on AirfRANS at $\\theta$ = 2, 0.5 and 0, with a read after every second layer, and with 8 basis functions, against the $\\theta = 1$ model, two seeds each, under its standing's protocol", f"about {fmt_h(q_knobs[0])} to {fmt_h(q_knobs[1])}"),
     ("Does ISLA transfer better on SHIFT-SUV from fastbacks to estates? (@sec-oq-transfer)", "two more seeds of each of the three fastback-trained models, scored on both families and read by the same registered rules", f"{fmt_h(q_transfer)}"),
     ("Does ISLA's far-field eddy-viscosity error on the DrivAerML Volume task come from the ground and domain walls it is not given? (@sec-oq-far-field)",
      "ISLA trained on one car with fresh draws, with the domain's whole boundary (the floor strip, the slip walls, the inlet and the outlet) added as named boundary meshes, against the same run without them, two seeds each, read on the error more than "
@@ -788,6 +795,12 @@ print("**The open question is whether the class's tie direction is well conditio
       f"{R.source('tie_exp', 'RESULTS.md')}; {R.source('tie_exp', 'read/results.json')}.")
 ```
 
+::: {.callout-note title="In flight"}
+This question rests on the lug's retrained posed ÷ native and on float32 against float64 on-wall
+directions. The class's on-wall directions on the lug's split faces, compared between poses, are being
+measured, and the ledger (@sec-ledger) tracks it.
+:::
+
 ### What rounding still decides in the geometry {#sec-oq-precision}
 
 ```{python}
@@ -828,26 +841,81 @@ print("**The open question is whether what rounding still decides in the class's
 #| output: asis
 PRT = TH["pressure_ratio"]
 t1, t0 = PRT["1.0"], PRT["0"]
-print("**The open question is how large ISLA-DTT's tree error is at $\\theta = 1$ on boundaries whose forest frame ties.** ISLA uses "
+SENS = lambda h: {r["setting"]: r for r in R.md_table("dtt_knobs", "sens/sens_table.md", h)}
+EXACT = {f: [R.num(SENS(f"r090eag_af_dtt_seed{s} native")["t0"][f"{f}_l2 (/ref)"], 1) for s in (42, 43)]
+         for f in ("pressure", "velocity", "nut")}
+LPN = {k: [R.num(SENS(f"r090fix_lug_dtt_seed{s}: posed / native")[k]["von_mises_l2"]) for s in (42, 43)] for k in ("ref", "t0")}
+LPP = R.num(SENS("r090fix_lug_dtt_seed42: posed / native")["ref"]["pairs ratio"])
+NEAR0 = float(re.search(r"lug median ([\d.]+) \(range", " ".join(R.load("dtt_knobs", "sens/sens_table.md").split())).group(1))
+print("**The open question is how large ISLA-DTT's tree error is at $\\theta = 1$ where its forest's frame ties, or where rounding "
+      "decides the octant of a cell's normal.** ISLA uses "
       "no frame and no center: every position enters as a difference from a slice anchor (@sec-isla-frame). ISLA-DTT's Barnes–Hut "
       "forest groups its clusters, for speed alone, in a canonical frame the boundary carries: the measure-weighted centroid of the "
       "sampled cells and the principal axes of their measure-weighted covariance, each signed so that the third moment along it is "
-      "positive (`tree_read.canonical_frame`). That frame moves with a rigid motion, so the forest, and with it every point's list of "
-      "far clusters at a finite opening angle $\\theta$, is the same in every pose. Where two principal variances are equal, or the "
-      "third moment along an axis vanishes, the axis or its sign is decided by rounding (the code then takes the sign of whichever of "
-      "the dataset's axes it overlaps most), and a rotation can regroup the clusters. A redraw of the boundary moves the centroid and "
-      "the moments by quadrature noise, which regroups clusters near a tie as well. A regrouping moves the read only by the tree's "
-      "error, an approximation that vanishes as $\\theta \\to 0$, so ISLA-DTT keeps the pose and sampling invariance of the rest of "
-      "ISLA. The size of that approximation is measured under refinement of the AirfRANS airfoil: splitting every segment in two or "
-      f"four, or refining its front more finely than its rear, changes ISLA-DTT's pressure error by a factor of {f3(t1, 3)} at the trained $\\theta = 1$ and {f3(t0, 4)} at "
-      "$\\theta = 0$, on weights trained at $\\theta = 1$ (the ISLA-DTT pair trained with the compiled path before its fault was "
-      "fixed), whose native error rises at $\\theta = 0$ "
-      f"({f3(TH['native_theta1'], 4)} to {f3(TH['native_theta0'], 4)}, pressure / velocity / eddy viscosity, one seed), so pricing a "
-      "small $\\theta$ needs a model trained there. Where the frame ties, the error at $\\theta = 1$ is not measured. What would "
-      "settle it: ISLA-DTT's checkpoints scored rotated and translated and under boundary redraws on cases whose principal variances "
-      "are nearly equal, such as AeroZoo's sphere bodies and spherical enclosures, against the same scorings on cases with a "
-      f"well-separated frame. Cost: scoring only. Data: {LIM_SRC}, from {R.source('probes090', 'RESULTS.md')} (section 4b).")
+      "positive (`tree_read.canonical_frame`). That frame moves with a rigid motion, so in exact arithmetic the forest, and with it "
+      "every point's list of far clusters at a finite opening angle $\\theta$, is the same in every pose. Where two principal "
+      "variances are equal, or the third moment along an axis vanishes, the axis or its sign is decided by rounding (the code then "
+      "takes the sign of whichever of the dataset's axes it overlaps most); where a cell's normal has a component that is zero but "
+      "for rounding in that frame, so is the sign octant that picks its tree; and a rotation can regroup the clusters. A redraw of "
+      "the boundary moves the centroid and the moments by quadrature noise, which regroups clusters near a tie as well. A "
+      "regrouping moves the read only by the tree's error, an approximation that vanishes as $\\theta \\to 0$. The size of that "
+      "approximation is measured under refinement of the AirfRANS airfoil: splitting every segment in two or four, or refining its "
+      f"front more finely than its rear, changes ISLA-DTT's pressure error by a factor of {f3(t1, 3)} at the trained $\\theta = 1$ "
+      f"and {f3(t0, 4)} at $\\theta = 0$, on weights trained at $\\theta = 1$ (the ISLA-DTT pair trained with the compiled path "
+      "before its fault was fixed). On the standing's pair the exact read has "
+      + "{} times the error at $\\theta = 1$ on pressure, {} on velocity and {} on eddy viscosity".format(
+          *(" / ".join(f"{v:.2f}" for v in EXACT[f]) for f in ("pressure", "velocity", "nut")))
+      + " (seeds 42 / 43), so pricing a small $\\theta$ needs a model trained there (@sec-oq-dtt-theta). On the lug the "
+      f"approximation is not small: {100 * NEAR0:.0f}% of its cells have a normal component below $10^{{-5}}$ in the forest's frame "
+      "(measured in bfloat16), and on the code that pair trained with ISLA-DTT's posed error at $\\theta = 1$ is "
+      f"{' and '.join(f'{v:.2f}' for v in LPN['ref'])} times its native error (seeds 42 and 43), with {LPP:.2f} times the pairs "
+      f"posed, while at $\\theta = 0$ the two agree (posed ÷ native {' and '.join(f'{v:.4f}' for v in LPN['t0'])}). Whether the octant split's sign "
+      "test on those components or a near-tie of the frame itself regroups the clusters is not separated (@sec-arch-tree-read). "
+      "On boundaries with near-equal principal variances the error at $\\theta = 1$ is not measured. What would settle it: "
+      "ISLA-DTT's checkpoints scored rotated and translated and under boundary redraws on cases whose principal variances are "
+      "nearly equal, such as AeroZoo's sphere bodies and spherical enclosures, against the same scorings on cases with a "
+      "well-separated frame, and, on the lug, the posed forest's octant labels compared with the native ones under a "
+      f"tie-breaking rule. Cost: scoring only. Data: {LIM_SRC}, from {R.source('probes090', 'RESULTS.md')} (section 4b); "
+      f"{R.source('dtt_knobs', 'sens/sens_table.md')}; {R.source('dtt_knobs', 'CODE_FACTS.md')} (section 2).")
 ```
+
+::: {.callout-note title="In flight"}
+The lug's posed ÷ native here comes from ISLA-DTT's forest as the code builds it. A fix is being designed,
+and the ledger (@sec-ledger) tracks it.
+:::
+
+### ISLA-DTT's read, retrained {#sec-oq-dtt-theta}
+
+```{python}
+#| label: para-oq-dtt-theta
+#| output: asis
+NAT = {**{f"af{s}": SENS(f"r090eag_af_dtt_seed{s} native") for s in (42, 43)},
+       **{f"lug{s}": SENS(f"r090fix_lug_dtt_seed{s} native") for s in (42, 43)}}
+inf_ratio = lambda st: [R.num(row[c], 1) for row in (t[st] for t in NAT.values()) for c in row if c.endswith("(/ref)")]
+x0, x2 = inf_ratio("t0"), inf_ratio("t2")
+print("**The open question is whether a cheaper or a finer read pays once ISLA-DTT is trained with it.** ISLA-DTT trains and is "
+      "scored at $\\theta = 1$, with a kernel basis of 16 functions and a read after every layer (@sec-arch-tree-read). Read at "
+      "other settings, a model trained there is less accurate: on the AirfRANS interior task and the lug the exact read has "
+      f"{min(x0):.1f} to {max(x0):.1f} times its error at $\\theta = 1$, and $\\theta = 2$ {min(x2):.1f} to {max(x2):.1f} times, "
+      "so no setting of the read can be priced on these checkpoints. Not measured: whether a model trained at $\\theta = 2$, with "
+      "a read after every second layer, or with 8 basis functions predicts as well as the $\\theta = 1$ model, so that the read "
+      "could cost less at no loss; and whether one trained at $\\theta = 0.5$ or with the exact read is more accurate. The second "
+      "also tests Peter's knob rule, by which the book credits ISLA-DTT with its pose invariance, a property exact as "
+      "$\\theta \\to 0$: if the error falls toward the exact-trained model's as $\\theta$ tightens, the tree read is a convergent "
+      "approximation; if the exact-trained model is no better, $\\theta$ is a cost setting on AirfRANS. A finer trained read may "
+      "also narrow ISLA-DTT's gap to interacting ISLA in the wake and beyond one chord (@sec-airfrans-dtt-reference). The cost "
+      "side is measured at car scale: on the DrivAerML Volume task with the whole boundary, 400,000 prediction points fit one "
+      "GB300 at $\\theta \\geq 1.5$ and not at $\\theta = 1$ (@sec-cost-sweep). What would settle it: ISLA-DTT trained on "
+      "AirfRANS at $\\theta = 2$, 0.5 and 0, with a read after every second layer, and with 8 basis functions, two seeds each, "
+      f"against the $\\theta = 1$ model under its standing's protocol. Cost: about {fmt_h(q_knobs[0])} to {fmt_h(q_knobs[1])} "
+      f"GPU-hours. Data: {R.source('dtt_knobs', 'sens/sens_table.md')}; {R.source('dtt_knobs', 'PREREG.md')} (section 8).")
+```
+
+::: {.callout-note title="In flight"}
+These numbers come from models trained at $\theta = 1$ and read at other settings. ISLA-DTT trained on AirfRANS
+at $\theta = 2$, 0.5 and 0, with a read after every second layer and with 8 basis functions, is being measured,
+and the ledger (@sec-ledger) tracks it.
+:::
 
 ### The direction of the SHIFT-SUV transfer {#sec-oq-transfer}
 
@@ -889,6 +957,8 @@ SEEDQ = re.search(r"takes ([\d.]+-[\d.]+) s of the ([\d.]+-[\d.]+) s whole-bound
 SEEDQ = (SEEDQ[0].replace("-", " to "),) + SEEDQ[1:]
 WB_STEP = re.search(r"\| 0\.9\.0 \| ISLA \| [^|]+\| [^|]+\| \*\*([\d.]+)x\*\* \| [^|]+\| [^|]+\| [^|]+\| \*\*([\d.]+)x\*\*", BA).groups()
 PA = R.load("cap_audit", "tables/probes/probe_a.json")
+WBT = {r["version"]: r for r in R.md_table("fast_merge", "lhr/timing_table.md") if r["case"] == "DrivAerML Volume, whole boundary" and r["Q / F"]}
+wb_geo = lambda v: statistics.median(float(x) for x in WBT[v]["geometry call (ms)"].replace(",", "").split(" / "))
 pc = lambda k: f"{100 * min(c[k] for c in PA):.0f} to {100 * max(c[k] for c in PA):.0f}%"
 print("**The open question is whether ISLA's far-field eddy-viscosity error on the DrivAerML Volume task comes from the boundaries "
       "it is not given.** Trained on one car with a fresh draw of points every step, ISLA's relative eddy-viscosity error more than "
@@ -913,11 +983,13 @@ print("**The open question is whether ISLA's far-field eddy-viscosity error on t
       "standings trained with, almost all of the added time is one query, the one that seeded the closest-cell search, and not "
       f"the 5,054 added cells: in training on a GB300 in bfloat16 it takes {SEEDQ[0]} s of the whole-boundary geometry call, "
       f"against {SEEDQ[2]} ms with the vehicle alone, and without it ISLA's step with the whole boundary is {WB_STEP[1]} times its "
-      "step with the vehicle alone. The class seeds that search on its own cell tree; its cost with the whole boundary is in "
-      "@sec-using-cost. "
+      "step with the vehicle alone. The class seeds that search on its own cell tree: with the whole boundary its geometry call "
+      f"takes {wb_geo('head, auto'):.0f} ms under the default fast search and {wb_geo('head, reference'):.0f} ms under the "
+      f"reference search, against {wb_geo('base (0.9.0)'):,.0f} ms in the standings' geometry (@sec-using-cost). "
       f"Data: {R.source('cap_audit', 'tables/resid_drv_partB.md')}, {R.source('cap_audit', 'tables/probes/probe_a.json')}, "
       f"{R.source('floor_drv', 'PREREG.md')} (section 8), {R.source('boundary_audit', 'REPORT.md')} (section 4), "
-      f"{R.source('setup_research', 'SETUP.md')} (section 0), {R.source('drv_ground', 'classify_summary.txt')}.")
+      f"{R.source('setup_research', 'SETUP.md')} (section 0), {R.source('drv_ground', 'classify_summary.txt')}, "
+      f"{R.source('fast_merge', 'lhr/timing_table.md')}.")
 ```
 
 ::: {.callout-note title="In flight"}
