@@ -35,6 +35,7 @@ starts at zero, so most tests give every read parameter a random value first.
 
 import copy
 import itertools
+import logging
 import math
 import types
 
@@ -1389,10 +1390,15 @@ def test_fused_reads_sum_their_basis_gradients_as_autograd_does():
 
 
 @pytest.mark.parametrize("dim", [3, 2])
-def test_tree_read_pairs_basis_from_the_plan_is_exact_for_a_batch(dim):
+def test_tree_read_pairs_basis_from_the_plan_is_exact_for_a_batch(
+    dim, caplog, monkeypatch
+):
     """Two cases in one batch: the basis built from the plan (the fused path's) has the
     reference's plan, values and basis-MLP gradients, bitwise, so each case's point,
-    source and pair offsets are right."""
+    source and pair offsets are right. The fallback to the reference basis (here, on
+    CPU) is logged once."""
+    monkeypatch.setattr(tree_read, "_BASIS_FALLBACKS_LOGGED", set())
+    caplog.set_level(logging.INFO, logger=tree_read.__name__)
     torch.manual_seed(0)
     cases = [cloud(400 + 60 * i, d=dim, seed=3 + i) for i in range(2)]
     n = min(c[0].shape[0] for c in cases)
@@ -1444,6 +1450,9 @@ def test_tree_read_pairs_basis_from_the_plan_is_exact_for_a_batch(dim):
     )  # the second case has pairs
     assert torch.equal(ref.basis, fus.basis)
     assert all(torch.equal(a, b) for a, b in zip(g_ref, g_fus))
+    tree_read_pairs(basis, kernel="fused", **kw)
+    logged = [r.getMessage() for r in caplog.records]
+    assert sum("reference kernel basis" in m for m in logged) == 1, logged
 
 
 class _SinkProbeRead(torch.autograd.Function):
@@ -1681,3 +1690,224 @@ def test_query_chunks_need_query_independent_points():
         m.query_chunks(
             boundary_meshes={"wall": mesh}, prediction_points=q, global_data={"g": drv}
         )
+
+
+def _basis_case(dim, n_vecs, n_pairs=20000, seed=0):
+    """One case's geometry for the kernel basis (float64, CPU; two global directions,
+    ``n_vecs`` rank-1 inputs per source), a random plan of ``n_pairs`` pairs and a
+    basis MLP."""
+    g = torch.Generator().manual_seed(seed)
+    nq, ns = 300, 500
+
+    def unit(*s):
+        return torch.nn.functional.normalize(
+            torch.randn(*s, generator=g, dtype=D), dim=-1
+        )
+
+    geometry = dict(
+        query_r=torch.randn(nq, dim, generator=g, dtype=D),
+        query_n=unit(nq, dim),
+        query_wall=torch.rand(nq, generator=g, dtype=D) + 0.01,
+        src_r=torch.randn(ns, dim, generator=g, dtype=D),
+        src_n=unit(ns, dim),
+        src_vecs=torch.randn(ns, n_vecs, dim, generator=g, dtype=D) if n_vecs else None,
+        g_unit=unit(2, dim),
+        eps=1e-12,
+    )
+    plan = types.SimpleNamespace(
+        qi=torch.randint(0, nq, (n_pairs,), generator=g).int(),
+        bj=torch.randint(0, ns, (n_pairs,), generator=g).int(),
+    )
+    return geometry, plan, _KernelBasis(kernel_geo_width(2, n_vecs)).double()
+
+
+def _to(x, device, dtype):
+    if torch.is_tensor(x):
+        return x.to(device, dtype) if x.is_floating_point() else x.to(device)
+    if isinstance(x, dict):
+        return {k: _to(v, device, dtype) for k, v in x.items()}
+    if isinstance(x, types.SimpleNamespace):
+        return types.SimpleNamespace(**_to(vars(x), device, dtype))
+    return x
+
+
+def _basis_step(basis, plan, geometry, seed, autocast=False, weights=False):
+    """The chunked basis of every pair from the plan, and its MLP's gradients for the
+    basis gradient ``seed``."""
+    basis.zero_grad(set_to_none=True)
+    dev = geometry["query_r"].device.type
+    with torch.autocast(dev, dtype=torch.bfloat16, enabled=autocast):
+        w = tree_read.fused_basis.mlp_weights(basis) if weights else None
+        out = tree_read._chunked_basis_from_plan(
+            basis, plan, 0, int(plan.qi.shape[0]), 0, 0, geometry, w
+        )
+    out.backward(seed.to(out.dtype))
+    return [out.detach()] + [p.grad.clone() for p in basis.parameters()]
+
+
+class _MlpProbe(torch.autograd.Function):
+    """The basis MLP of one chunk's invariants with given weights, its backward the
+    reference's ops (a CPU stand-in for the fused basis kernels)."""
+
+    @staticmethod
+    def mlp(inv, w1, b1, w2, b2, w3, b3):
+        lin, gelu = torch.nn.functional.linear, torch.nn.functional.gelu
+        h = gelu(lin(gelu(lin(inv.to(w1.dtype), w1, b1)), w2, b2))
+        return lin(h, w3, b3)
+
+    @staticmethod
+    def forward(ctx, inv, *ws):
+        ctx.save_for_backward(inv, *ws)
+        return _MlpProbe.mlp(inv, *ws)
+
+    @staticmethod
+    def backward(ctx, dout):
+        inv, *ws = ctx.saved_tensors
+        with torch.enable_grad():
+            ws = [w.detach().requires_grad_(True) for w in ws]
+            grads = torch.autograd.grad(_MlpProbe.mlp(inv, *ws), ws, dout)
+        return (None, *grads)
+
+
+def test_fused_basis_chunks_sum_their_weight_gradients_as_the_reference(monkeypatch):
+    """Under bf16 autocast the reference rounds each chunk's weight and bias gradients
+    to bfloat16 and sums the chunks' in bfloat16, through autocast's one cached cast
+    of each weight. One autograd node per chunk fed one cast per forward pass
+    (``mlp_weights``), as the fused basis is, gives the reference's basis and
+    gradients bitwise (a stand-in node, CPU)."""
+
+    def stand_in(weights, qi, si, q_off, s_off, geometry):
+        with torch.no_grad():
+            inv = tree_pair_invariants(qi.long() - q_off, si.long() - s_off, **geometry)
+        return _MlpProbe.apply(inv, *weights)
+
+    monkeypatch.setattr(tree_read, "TREE_READ_PAIR_CHUNK", 3000)
+    monkeypatch.setattr(tree_read.fused_basis, "fused_kernel_basis", stand_in)
+    geometry, plan, basis = _basis_case(3, 1, n_pairs=10000)
+    geometry, basis = _to(geometry, "cpu", torch.float32), basis.float()
+    seed = 1e-3 * torch.randn(10000, 16, generator=torch.Generator().manual_seed(1))
+    threads = torch.get_num_threads()
+    torch.set_num_threads(1)
+    try:
+        ref = _basis_step(basis, plan, geometry, seed, autocast=True)
+        fused = _basis_step(basis, plan, geometry, seed, autocast=True, weights=True)
+    finally:
+        torch.set_num_threads(threads)
+    assert ref[0].dtype == torch.bfloat16
+    assert all(torch.equal(a, b) for a, b in zip(fused, ref))
+
+
+@cuda_only
+@pytest.mark.parametrize("dim,n_vecs", [(3, 1), (2, 0)])
+@pytest.mark.parametrize("autocast", [False, True], ids=["fp32", "bf16_autocast"])
+def test_fused_kernel_basis_matches_the_reference_basis(
+    autocast, dim, n_vecs, monkeypatch
+):
+    """The fused basis (invariants and MLP in one kernel per chunk) against the
+    reference's chunked basis on CUDA, the basis and every MLP gradient for a given
+    basis gradient: each as close to the CPU float64 reference as the reference is
+    (float32, and bf16 autocast); the fused invariants equal
+    ``tree_pair_invariants``'s to float32 roundoff."""
+    from physicsnemo.experimental.models.isla import fused_basis
+
+    monkeypatch.setattr(tree_read, "TREE_READ_PAIR_CHUNK", 4096)
+    geometry, plan, basis = _basis_case(dim, n_vecs)
+    seed = 1e-3 * torch.randn(20000, 16, generator=torch.Generator().manual_seed(1))
+    seed = seed.bfloat16().double()
+    exact = _basis_step(basis, plan, geometry, seed)
+    dev = torch.device("cuda")
+    geo_c, plan_c = _to(geometry, dev, torch.float32), _to(plan, dev, torch.float32)
+    basis_c = copy.deepcopy(basis).float().to(dev)
+    assert fused_basis.supported(basis_c, geo_c)
+    inv = fused_basis.pair_invariants(plan_c.qi, plan_c.bj, 0, 0, geo_c)
+    inv_ref = tree_pair_invariants(plan_c.qi.long(), plan_c.bj.long(), **geo_c)
+    assert torch.allclose(inv, inv_ref, rtol=1e-6, atol=1e-6)
+    seed_c = seed.float().to(dev)
+    ref = _basis_step(basis_c, plan_c, geo_c, seed_c, autocast=autocast)
+    fused = _basis_step(basis_c, plan_c, geo_c, seed_c, autocast=autocast, weights=True)
+    floor = 1e-6 if not autocast else 1e-3
+    names = ["basis"] + [n for n, _ in basis.named_parameters()]
+    for name, a, b, e in zip(names, fused, ref, exact):
+        assert a.dtype == b.dtype, name
+        scale = e.abs().max()
+        d_fused = (a.double().cpu() - e).abs().max() / scale
+        d_ref = (b.double().cpu() - e).abs().max() / scale
+        print(f"{name}: fused {d_fused:.2e}, reference {d_ref:.2e}")
+        assert d_fused <= 2 * d_ref + floor, name
+    if autocast:
+        ### The reference's rounding points, which a lost rounding would pass above: the
+        ### basis bitwise but where summation order flips a last bit, and the gradients
+        ### within a few bf16 ulps (at each tensor's largest value) of the reference's.
+        same = (fused[0] == ref[0]).double().mean()
+        ulps = [
+            float((a - b).abs().max() / 2.0 ** (b.abs().max().log2().floor() - 7))
+            for a, b in zip(fused[1:], ref[1:])
+        ]
+        print(f"basis bitwise {same:.6f}; gradient ulps {ulps}")
+        assert same >= 0.99
+        assert max(ulps) <= 4, dict(zip(names[1:], ulps))
+
+
+@cuda_only
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16], ids=["bf16", "fp16"])
+def test_fused_basis_gelu_tables_are_pytorchs_gelu_on_every_input(dtype):
+    """The fused basis's GELU tables give PyTorch's 16-bit GELU and its backward
+    bitwise at every input value (the backward for random gradients)."""
+    from physicsnemo.experimental.models.isla import fused_basis
+
+    dev = torch.device("cuda")
+    f, fg = fused_basis._gelu_tables(dev, dtype)
+    f_bwd, g = fg.view(torch.float32).view(-1, 2).unbind(1)
+    bits = torch.arange(1 << 16, dtype=torch.int32, device=dev)
+    x = bits.to(torch.int16).view(dtype)
+    ok = torch.isfinite(x)
+    gen = torch.Generator(device=dev).manual_seed(0)
+    assert torch.equal(f[ok], torch.nn.functional.gelu(x)[ok])
+    assert torch.equal(f_bwd[ok], f.float()[ok])
+    for _ in range(8):
+        dy = torch.randn(x.shape, generator=gen, device=dev).mul(4).to(dtype)
+        ref = torch.ops.aten.gelu_backward(dy, x)
+        assert torch.equal((dy.float() * g).to(dtype)[ok], ref[ok])
+
+
+@cuda_only
+def test_tree_read_pairs_fused_on_cuda_builds_the_basis_in_the_fused_kernel(
+    monkeypatch,
+):
+    """On CUDA ``tree_read_pairs(kernel="fused")`` builds the basis with the fused
+    basis kernel: the reference's plan, and its basis to float32 roundoff."""
+    from physicsnemo.experimental.models.isla import fused_basis
+
+    calls = []
+    real = fused_basis.fused_kernel_basis
+
+    def spy(*args):
+        calls.append(1)
+        return real(*args)
+
+    monkeypatch.setattr(fused_basis, "fused_kernel_basis", spy)
+    torch.manual_seed(0)
+    dev = torch.device("cuda")
+    pts, nrm, w, g = (t.float().to(dev) for t in cloud(500, seed=3))
+    q = cloud(150, seed=7, scale=(4.0,) * 3)[0].float().to(dev)
+    kw = dict(
+        query_r=q[None],
+        query_n=torch.nn.functional.normalize(q, dim=-1)[None],
+        query_wall=0.1 + torch.rand(1, 150, device=dev),
+        boundary_r=pts[None],
+        boundary_n=nrm[None],
+        boundary_vecs=None,
+        log_frac=torch.log(w / w.sum())[None],
+        g_unit=torch.nn.functional.normalize(g, dim=-1)[None, None],
+        theta=0.5,
+        eps=1e-12,
+    )
+    basis = _KernelBasis(kernel_geo_width(1, 0)).to(dev)
+    ref = tree_read_pairs(basis, kernel="reference", **kw)
+    assert not calls
+    fus = tree_read_pairs(basis, kernel="fused", **kw)
+    assert len(calls) == 1
+    assert torch.equal(ref.plan.qi.long(), fus.plan.qi.long())
+    assert torch.equal(ref.plan.bj.long(), fus.plan.bj.long())
+    scale = float(ref.basis.abs().max())
+    assert torch.allclose(fus.basis, ref.basis, rtol=1e-5, atol=1e-5 * scale)

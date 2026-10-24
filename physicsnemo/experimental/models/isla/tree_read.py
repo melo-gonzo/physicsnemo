@@ -102,7 +102,7 @@ import torch.nn as nn
 from tensordict import TensorDict
 from torch.utils.checkpoint import checkpoint
 
-from physicsnemo.experimental.models.isla import fused_read
+from physicsnemo.experimental.models.isla import fused_basis, fused_read
 from physicsnemo.experimental.models.isla.segment_softmax import (
     PairPlan,
     segment_softmax_read,
@@ -113,6 +113,8 @@ from physicsnemo.mesh.spatial._ragged import _ragged_arange
 from physicsnemo.mesh.spatial.cluster_tree import ClusterTree
 
 logger = logging.getLogger(__name__)
+#: Why the fused read used the reference kernel basis, each reason logged once.
+_BASIS_FALLBACKS_LOGGED: set[str] = set()
 
 #: Heads of the read; each head owns ``KERNEL_READ_WIDTH // KERNEL_READ_HEADS`` value
 #: channels.
@@ -611,17 +613,28 @@ def _basis_of_pairs(basis: _KernelBasis, qi, si, q_off: int, s_off: int, geometr
 
 
 def _chunked_basis_from_plan(
-    basis: _KernelBasis, plan: PairPlan, a: int, b: int, q_off: int, s_off: int, geometry: dict
+    basis: _KernelBasis,
+    plan: PairPlan,
+    a: int,
+    b: int,
+    q_off: int,
+    s_off: int,
+    geometry: dict,
+    weights: tuple | None = None,
 ) -> torch.Tensor:
     """The kernel basis of one case's pairs, the plan's rows ``a:b``, in the chunks of
     :func:`_chunked_basis` and with its values, but each chunk's invariants inside the
     checkpoint too: backward rebuilds them from the plan's indices (``q_off`` and
     ``s_off`` the case's first point and source), so nothing per pair but the basis
-    is kept."""
+    is kept. With ``weights`` (:func:`fused_basis.mlp_weights`) each chunk is one
+    fused kernel of the invariants and the MLP (:mod:`fused_basis`)."""
     grad = torch.is_grad_enabled() and any(p.requires_grad for p in basis.parameters())
     parts = []
     for c in range(a, b, TREE_READ_PAIR_CHUNK):
         e = min(c + TREE_READ_PAIR_CHUNK, b)
+        if weights is not None:
+            parts.append(fused_basis.fused_kernel_basis(weights, plan.qi[c:e], plan.bj[c:e], q_off, s_off, geometry))
+            continue
         args = (basis, plan.qi[c:e], plan.bj[c:e], q_off, s_off, geometry)
         parts.append(checkpoint(_basis_of_pairs, *args, use_reentrant=False) if grad else _basis_of_pairs(*args))
     if not parts:
@@ -691,7 +704,8 @@ def tree_read_walk(
     :func:`walk_range_pairs` (with ``"fused"`` the blocks read through
     :mod:`fused_read`, and the basis is built after the plan from its indices, the
     same values with the invariants rebuilt in backward:
-    :func:`_chunked_basis_from_plan`).
+    :func:`_chunked_basis_from_plan`, by one fused kernel per chunk where
+    :func:`fused_basis.supported` holds).
     """
     b, nq, d = query_r.shape
     n = boundary_r.shape[1]
@@ -789,8 +803,14 @@ def walk_range_pairs(
             perm=plan_all.perm.int(),
             qi_by_b=plan_all.qi_by_b.int(),
         )
+    ### One cast of the MLP's weights for every case and chunk, as autocast's weight cache gives the reference.
+    reason = next(filter(None, (fused_basis.unsupported_reason(basis, item[-1]) for item in deferred)), None)
+    weights = fused_basis.mlp_weights(basis) if deferred and reason is None else None
+    if reason is not None and reason not in _BASIS_FALLBACKS_LOGGED:
+        _BASIS_FALLBACKS_LOGGED.add(reason)
+        logger.info("ISLA fused tree read: the reference kernel basis is used (%s)", reason)
     for a, e, q_off, s_off, geometry in deferred:
-        bases.append(_chunked_basis_from_plan(basis, plan_all, a, e, q_off, s_off, geometry))
+        bases.append(_chunked_basis_from_plan(basis, plan_all, a, e, q_off, s_off, geometry, weights))
     basis_all = torch.cat(bases)
     return TreeReadPairs(
         plan=plan_all,
