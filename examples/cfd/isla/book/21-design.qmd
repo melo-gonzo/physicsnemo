@@ -38,7 +38,7 @@ style.** The tables below are canonical; the chapters cited define each entry at
 #| label: tbl-key-names
 #| output: asis
 NAMES = [
-    ("**ISLA**", "`physicsnemo.experimental.models.ISLA` as it is, the class defaults", "@sec-isla"),
+    ("**ISLA**", "`physicsnemo.experimental.models.ISLA` as it is, the class defaults; beside ISLA-DTT on an interior task, the interacting form (`query_independent=False`), called interacting ISLA", "@sec-isla"),
     ("**the reference configuration** (of an architecture)",
      "the one configuration each architecture is scored at: ISLA width 512, 12 layers, 512 slices, learning rate 3.75e-4, 200,000 training cells; "
      "GeoTransolver width 256 (local width 32), learning rate 1e-3, 200,000 cells; Transolver width 512, 16 layers, learning rate 1e-3, 100,000 cells; "
@@ -46,7 +46,7 @@ NAMES = [
      "@sec-using-config, @sec-protocol"),
     ("**the normalized slice reads**", "the slice sublayer's routing, pooling and broadcast read the layer-normalized token state `norm_assign(h)`; the raw state enters only the residual identity and the MLP's LayerNorm; part of ISLA, not an option", "@sec-isla-layer"),
     ("**the raw-read variant** (ablation)", "ISLA with the pooling and broadcast reading the raw state; appears only as an ablation and in the one-sentence note on a standing whose ISLA checkpoints are of this variant (`standing.DATASETS[...].reference` is False)", "@sec-isla-layer"),
-    ("**ISLA-DTT**", "`query_independent=True`: prediction points are read-only and read every boundary cell through a Barnes–Hut forest; interior tasks only", "@sec-arch-modes"),
+    ("**ISLA-DTT**", "`query_independent=True`, the interior default: prediction points are read-only and read every boundary cell through a Barnes–Hut forest; interior tasks only", "@sec-arch-modes"),
     ("**interacting / read-only prediction points**", "interacting ISLA's interior tokens carry routing mass and write into the slices / ISLA-DTT's carry none", "@sec-arch-modes"),
     ("**GeoTransolver**, **Transolver**, **GeoTransolver-volume**", "the public models, never modified", "@sec-baselines"),
     ("**GeoTransolver + ISLA's *feature*** (ablation)", "a baseline with one of ISLA's features added to isolate an effect; not a variant anyone ships", "@sec-baselines"),
@@ -265,7 +265,7 @@ LEDGER = [
     ("Normalized slice reads", "the routing, pooling and broadcast read the normalized state; the raw state enters only the residual identity",
      "trainability: an additive residual stream, whose norm does not grow block by block", "the raw-read variant, whose stream grows multiplicatively at the reference rate",
      "@sec-isla-layer"),
-    ("Prediction-point routing mass", "the prediction points' total routing weight is a learned fraction of the boundary measure, split equally over them",
+    ("Prediction-point routing mass", "interacting prediction points' total routing weight is a learned fraction of the boundary measure, split equally over them",
      "a readout must not read the cell count or the request size", "a fixed mass per prediction point",
      "@sec-isla-contracts, @sec-limits-query-independence"),
     ("Exact interior wall geometry", "each prediction point takes its signed distance and direction from the exact closest point on the full-resolution cells of every given boundary (point to face; a search of the model's own tree over the cells in three dimensions, a brute force in two; differentiable), signed by the generalized winding number of the oriented cells, with the least-norm point of the hull of the tied directions where two certified-distinct directions tie, each tie and on-wall decision made against derived worst-case bands on the coordinates' rounding and the float64 arithmetic's, which runs in the boundary's centered frame, and reads them as $[s_q, \\operatorname{asinh}(s_q / 10^{-6})]$ with $s_q = d_q / L$ and the direction $\\operatorname{sign}(d_q)\\, u_q$, continuous through the surface",
@@ -274,7 +274,7 @@ LEDGER = [
     ("The boundary draw inside the model", "the interior task takes each boundary at full resolution and draws `boundary_tokens` (200,000) cells in the forward pass: water-filled over the conditions, each kept with probability proportional to its measure, capped at one, by systematic sampling along the Morton order of the centroids in the boundary's canonical frame, computed in float64, with its Horvitz–Thompson weight $a_i / \\pi_i$ and an exact count $\\min(\\text{cells}, \\text{budget})$; a random start in training, a fixed start (0.5) in evaluation",
      "the boundary tokens are a quadrature of the surface: unbiased for every measure-weighted sum, exact on a condition kept whole, spread over the surface, with static shapes and a deterministic inference", "a draw by the datapipe, which fixes the sample before the model sees the surface; an independent draw, whose sample clumps",
      "`test_isla_sampling.py` (exact count, unbiased Horvitz–Thompson sums, spread over the surface), `test_isla_interior_geometry.py` (deterministic evaluation; a finer input mesh reads as another draw of the same quadrature); @sec-using-interior; the draw is the same at every compute precision, and under a rotation with a translation float32 rounding of the moved coordinates still changes a few of its cells (@sec-oq-precision)"),
-    ("Read-only prediction points on the interior task, interacting ones as an option", "`query_independent=True` (ISLA-DTT), the default interior form, makes interior tokens read-only; interacting interior tokens write into the slices, the surface task's form and an explicit choice on an interior task",
+    ("Read-only prediction points on the interior task, interacting ones as an option", "`query_independent=True` (ISLA-DTT), the default interior form, to which the default `None` resolves on the interior task, makes interior tokens read-only; interacting interior tokens write into the slices, the surface task's form and an explicit choice on an interior task",
      "a prediction at a point depends on that point and the boundary alone; where the registered accuracy read is a close call, ISLA-DTT (Peter's ruling: \"ISLA-DTT, on principle\"); the interacting form is deployed at its training request count", "query-count augmentation as the default; read-only prediction points with interior writers drawn from the boundary alone, tested in the nearest-token form and not adopted by its registered rule (@tbl-airfrans-anchor)",
      "@sec-limits-query-independence; ISLA-DTT is query-independent to float32 roundoff, and its tree read at a finite opening angle $\\theta$ is an approximation that vanishes as $\\theta \\to 0$ (@sec-oq-dtt-frame); on AeroZoo's held-out splits the two forms read a close call, and interacting ISLA leads on AirfRANS velocity and eddy viscosity and on the lug (@sec-aerozoo-form)"),
     ("The surface output is one Mesh", "the surface task returns one point-cloud `Mesh` at the given conditions' cells, the conditions in sorted order and each condition's cells in its mesh's order; `torch.split` by the conditions' cell counts gives each condition's rows",
@@ -305,10 +305,6 @@ print(out)
 print(": The design-decision ledger of the class. How to read this: each row is a decision and its reason; a row does not "
       f"say what the declined alternative would score, and rows {row_no('Bounded routing')} and {row_no('Normalized slice reads')} are decisions about trainability with no physical principle at "
       f"stake. The numbers in rows 1 and 2 are the DrivAerML Surface task's standing ({SURF.source}).")
-print()
-print('::: {.callout-note title="In flight"}\nThe class and the recipe build an interior model as interacting ISLA '
-      "unless `query_independent=True` is given. The switch of both defaults to ISLA-DTT for the interior task is being "
-      "built, and the ledger (@sec-ledger) tracks it.\n:::")
 ```
 
 **Two rows carry most of the weight.** The measure weights (row 1) make a slice state a
@@ -333,8 +329,8 @@ price.
   would reveal a dependence on the discretization or the dataset's frame, and ask what the change
   consumes that the physics does not supply. A gain whose mechanism is the mesh is not a gain.
 - **Preregister the bar and keep the refuted options runnable.** Every decision above was made
-  against a bar written before the run. The class carries one construction and the read-only
-  interior form as its only switch; the declined alternatives are not in the class, and their
+  against a bar written before the run. The class carries one construction and the interacting
+  interior form (`query_independent=False`) as its only switch; the declined alternatives are not in the class, and their
   code and tests stay in the repository's history, so that a price can be re-measured when the
   data or the metric change.
 

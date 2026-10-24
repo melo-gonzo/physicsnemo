@@ -77,7 +77,8 @@ model = ISLA(
 )
 ```
 
-and an interior model adds `interior=True`.
+and an interior model adds `interior=True`, which builds ISLA-DTT; `query_independent=False` builds interacting
+ISLA instead.
 
 ```{python}
 #| label: para-using-config
@@ -146,23 +147,28 @@ QV = [QP[f"r090_vol_isla_seed{s}"]["ratio_to_native_h"] for s in (42, 43)]
 qv = lambda mode: [sum(v[mode][f] for v in QV) / len(QV) for f in ("pressure_l2", "velocity_l2")]
 QD = R.load("probes090", "results/qpop_afeag/reduced.json")
 qd = max(abs(x - 1) for s in (42, 43) for mode in QD[f"r090eag_af_dtt_seed{s}"]["ratio_to_native_h"].values() for x in mode.values())
-print(f"On the DrivAerML Volume task, the standing's ISLA asked for its scored points in four "
+print(f"On the DrivAerML Volume task, the standing's interacting ISLA asked for its scored points in four "
       f"chunks moves its pressure and velocity error by at most {100 * (max(qv('chunks4')) - 1):.1f}%, but 1,000 of those points "
       f"asked for on their own raise it {min(qv('sub1000')):.1f} to {max(qv('sub1000')):.1f} times, and points asked for one at a "
       f"time {min(qv('sub1')):.0f} to {max(qv('sub1')):.0f} times (seed means). On AirfRANS, ISLA-DTT's error moves by at most "
       f"{sci(float(f'{qd:.1g}'))} relative under every such change of the request, float32 roundoff (the AirfRANS standing's checkpoints, "
       f"trained without compilation). Its tree read is a Barnes–Hut approximation at opening angle $\\theta = "
       f"{TREE_READ_THETA:g}$, whose error vanishes as $\\theta \\to 0$. Data: {R.source('probes090', 'results/qpop/reduced.json')}; {R.source('probes090', 'results/qpop_afeag/reduced.json')}.")
+# DEFAULT-DTT's query-independence check on the class as it is: one real case per interior dataset, fresh weights, eager,
+# evaluation mode; the largest change at the shared points when 1,000 other points join the request, over the field's largest value
+QI = R.md_table("default_dtt", "FINAL_REPORT.md", index=1)
+qi = lambda col: (min(float(r[col]) for r in QI), max(float(r[col]) for r in QI))
+qd64, qi64 = qi("QI fp64, DTT"), qi("QI fp64, ISLA")
+assert "1,000 other points are added" in " ".join(R.load("default_dtt", "FINAL_REPORT.md").split())
+print()
+print(f"On the class as it is, with freshly initialized weights, on one real case of each of the {S._COUNT[len(QI)]} interior datasets, "
+      "eager and in evaluation mode, adding 1,000 other points to a request moves ISLA-DTT's outputs at the shared points by "
+      f"{sci(qd64[0])} to {sci(qd64[1])} of the field's largest value in float64, roundoff, and interacting ISLA's by "
+      f"{sci(qi64[0])} to {sci(qi64[1])}. Data: {R.source('default_dtt', 'FINAL_REPORT.md')} (per interior dataset).")
 ```
 
 What the two forms measure on the same datasets is in
 @sec-interior-read-only, @sec-airfrans-read-only and @sec-aerozoo-form.
-:::
-
-::: {.callout-note title="In flight"}
-The class's and the recipe's interior defaults here are the code as it is: `query_independent` defaults to
-`False`, interacting ISLA. The switch of both defaults to ISLA-DTT for the interior task is being built, and
-the ledger (@sec-ledger) tracks it.
 :::
 
 ## What the model needs from your data {#sec-using-inputs}
@@ -381,9 +387,9 @@ Four of the inputs need a word.
 
 **The measures must be proportional to what each cell represents.** A
 common factor is invisible. The routing reads $\log w$ through a softmax,
-which a common shift does not move; the routing mass of the $Q$ interior
-prediction points, $\omega + \log \sum_i w_i - \log Q$ with a learned
-$\omega$ (@sec-arch-modes), shifts by the same constant; and scaling every
+which a common shift does not move; the routing mass of interacting ISLA's
+$Q$ prediction points (ISLA-DTT's carry none), $\omega + \log \sum_i w_i - \log Q$
+with a learned $\omega$ (@sec-arch-modes), shifts by the same constant; and scaling every
 measure by 5 leaves every output unchanged
 (@tbl-using-contracts). What the model reads is each cell's share of the
 boundary, so one constant must hold across all the boundary meshes of a
@@ -540,7 +546,8 @@ forward pass (`sampling.sample_boundary_cells`):
   condition with fewer cells than its share kept whole and its unused share
   given to the others. The count is exactly $\min(\text{cells},
   \texttt{boundary\_tokens})$, a function of the cell counts alone, so the
-  draw has static shapes and compiles into the one whole-model graph.
+  draw has static shapes and compiles into the whole-model graph or into
+  the per-block graphs.
 - **Law.** A cell is kept with probability $\pi_i$ proportional to its
   measure, capped at one, by systematic sampling along the Morton order of
   the centroids in the boundary's canonical frame, computed in float64: one start $u$, then every unit step along the cells laid end
@@ -798,15 +805,14 @@ ISLA needs no augmentation.** From the recipe root
 # DrivAerML Surface task (sampling_resolution defaults to 200,000 cells per case).
 python src/train.py model=isla_surface dataset=drivaer_ml_surface
 
-# DrivAerML Volume task: boundary -> interior, interacting prediction points. The dataset file reads the vehicle and
-# the tunnel's four pieces whole and reverses the vehicle into the fluid; the model draws its 200,000 boundary tokens
-# from the five.
+# DrivAerML Volume task: boundary -> interior, read-only prediction points (ISLA-DTT), compiled block by block. The
+# dataset file reads the vehicle and the tunnel's four pieces whole and reverses the vehicle into the fluid; the model
+# draws its 200,000 boundary tokens from the five.
 python src/train.py model=isla_volume dataset=drivaer_ml_volume_reference
 
-# The same interior task with read-only prediction points (ISLA-DTT): its boundary read breaks the whole-model
-# graph, so it compiles block by block.
+# The same interior task with interacting prediction points (interacting ISLA), compiled whole.
 python src/train.py model=isla_volume dataset=drivaer_ml_volume_reference \
-    model.query_independent=true compile=false model.compile_blocks=true
+    model.query_independent=false compile=true model.compile_blocks=false
 
 # HiLiftAeroML wings: five outputs (pressure, temperature, density, velocity, wall shear stress).
 python src/train.py model=isla_surface_highlift dataset=highlift_surface
@@ -839,8 +845,8 @@ print(o)
 print(": The recipe's ISLA model configurations (`conf/model/isla_*.yaml`, a parent's `defaults` merged in), read as the page "
       "renders. Every one is the reference configuration at the same learning rate. How to read this: \"boundary inputs\" counts "
       "the declared per-cell fields; a rank-1 global input is a direction and a rank-0 one a scalar, except a velocity source, "
-      "whose magnitude is the velocity scale $U$, and a global with a role, which the declared scales consume (@sec-using-scales); \"compile\" is the whole-model `torch.compile` or the per-block `compile_blocks` (the "
-      "AeroZoo configuration, whose four boundaries recompile the whole-model graph). It does not say which dataset file each "
+      "whose magnitude is the velocity scale $U$, and a global with a role, which the declared scales consume (@sec-using-scales); \"compile\" is the whole-model `torch.compile` or the per-block `compile_blocks` (every "
+      "interior configuration: ISLA-DTT's boundary read breaks the whole-model graph). It does not say which dataset file each "
       "configuration was paired with in a standing; the dataset chapters do.")
 ```
 
@@ -876,7 +882,7 @@ print(f"The recipe builds the optimizer from the parameters' shapes (`build_muon
       f"{BASE['training']['optimizer']['weight_decay']:g}. In the reference configuration of the DrivAerML Surface model that "
       f"is {len(two)} matrices holding {n2:,} parameters ({100 * n2 / (n2 + nr):.2f}% of the total) under Muon, and "
       f"{len(rest)} vectors and scalars holding {nr:,} (the biases, the LayerNorm scales and shifts, the routing gains and, "
-      f"in an interior model, the bias of the prediction points' input layer and their routing mass) under AdamW. The rate is the same for both, and the schedule "
+      f"in an interior model, the bias of the prediction points' input layer and, with interacting points, their routing mass) under AdamW. The rate is the same for both, and the schedule "
       f"divides it by {1 / TRAIN['training']['scheduler']['gamma']:g} every {TRAIN['training']['scheduler']['step_size']} "
       f"epochs (`{TRAIN['training']['scheduler']['_target_']}`, `conf/train.yaml`).")
 ```
@@ -1033,6 +1039,12 @@ print(f"The archive holds {', '.join(f'`{n}`' for n in sorted(zipfile.ZipFile(pa
       f"every constructor argument ({', '.join(f'`{k}`' for k in args)}). The loaded model's outputs are "
       f"{'bitwise equal to' if same else 'different from'} the saved model's. The `geo_kernel` attribute is not stored: a "
       "loaded model starts at `\"auto\"`.")
+assert args["query_independent"] is False and args["interior"] is False   # the resolved value, stored
+print()
+print("**A checkpoint carries its form.** `query_independent` is stored with the value its `None` resolved to (`False` "
+      "for this surface model), so an interior checkpoint loads as the form it was saved as, ISLA-DTT or interacting ISLA, "
+      "whatever the class's default, and a state dict of one form is refused by a model built as the other "
+      "(`test_isla_release.py`).")
 ```
 
 ```{python}
@@ -1040,7 +1052,7 @@ print(f"The archive holds {', '.join(f'`{n}`' for n in sorted(zipfile.ZipFile(pa
 #| output: asis
 assert len(refusals) == 2, refusals
 print(f"**A checkpoint of any version other than {ISLA.__model_checkpoint_version__} is refused, on every loading path, and "
-      "ISLA keeps no upgrade path.** `ISLA.from_checkpoint` compares the recorded version with the class's. The paths that "
+      "ISLA keeps no upgrade path.** `ISLA.from_checkpoint` compares the recorded version with the class's and names both. The paths that "
       "load weights into a built model (`Module.load`, `load_checkpoint`, the recipe's resume, `init_from` and inference, "
       "and `load_state_dict` itself) go through a pre-hook that refuses a state dict with the parameter layout of a "
       "checkpoint before 0.7.0, or with torch's state-dict version of the module other than the class's "
@@ -1080,9 +1092,9 @@ condition's mesh at full resolution, oriented as in training, and
 mode the boundary draw has its fixed start, so the prediction is
 deterministic. Deploy interacting ISLA at its training point count (200,000
 at the reporting protocol on DrivAerML), because an interacting point's
-prediction depends on the joint request (@sec-interior-companion). A model
-built with `query_independent=True` (ISLA-DTT) has no such rule and is
-queried at any count, alone or in chunks.
+prediction depends on the joint request (@sec-interior-companion). The
+default interior model, ISLA-DTT (`query_independent=True`), has no such
+rule and is queried at any count, alone or in chunks.
 
 ## Cost {#sec-using-cost}
 
@@ -1329,7 +1341,8 @@ assert all(c.get("compile_options") == opts for c in ISLA_CFGS.values())   # one
 yv = lambda v: str(v).lower() if isinstance(v, bool) else v
 _ind = opts["options"]   # Inductor's options
 assert _ind == {"max_autotune": True, "coordinate_descent_tuning": True, "triton.mix_order_reduction": False}
-print(f"- **Compile the whole model.** The recipe's ISLA configurations do, all but {', '.join(f'`{n}`' for n in _rest)}: "
+assert all(ISLA_CFGS[n]["model"].get("interior") for n in _rest) and not any(ISLA_CFGS[n]["model"].get("interior") for n in _whole)
+print(f"- **Compile the whole model on the surface task.** The recipe's surface configurations do ({', '.join(f'`{n}`' for n in _whole)}): "
       "`compile: true` with `compile_options` "
       + ", ".join(f"`{k}: {yv(v)}`" for k, v in opts.items() if k != "options")
       + " and the Inductor `options` " + ", ".join(f"`{k}: {yv(v)}`" for k, v in _ind.items())
@@ -1350,8 +1363,9 @@ LUGT = R.md_table("ref090", "r090_final_tables.md", "REF-090-FIX GINOT lug")[0]
 lug_t = R.num(LUGT["T = retrained ÷ original (s42, s43 paired)"])
 print(f"- **Compile block by block where the whole graph breaks.** `compile_blocks: true` runs each slice block's forward "
       "under `torch.compile` instead, with parameter names, the state dict and the eager path unchanged. It is the way to "
-      "compile ISLA-DTT (`compile=false model.compile_blocks=true`), whose boundary read breaks the whole-model graph, and "
-      "the AeroZoo configuration uses it because that dataset's four boundaries recompile the whole graph. The standing's "
+      "compile ISLA-DTT, whose boundary read breaks the whole-model graph, and every interior configuration uses it "
+      f"({', '.join(f'`{n}`' for n in _rest)}: `compile: false`, `compile_blocks: true`); interacting ISLA on AeroZoo needs "
+      "it too, since that dataset's four boundaries recompile the whole graph. The standing's "
       "training runs use it on every dataset but Tensile2d (@tbl-protocol). On the DrivAerML tasks, whose geometry runs in the "
       f"fused kernel, models trained with it score as models trained eagerly do: compiled ÷ eager error between {lo:.3f} and "
       f"{hi:.3f} on every field, seed means of two seeds (results/perf3_neutrality_2026-10-01.json). Without the mix-order "
@@ -1438,6 +1452,6 @@ the pose (a rigid motion leaves each cell's measure unchanged), or positions tha
 sample-dependent quantity before the model saw them. The model normalizes
 the normals and the global directions itself, so their magnitudes cannot
 cause a residual. For an interior model, transform the prediction points
-with the boundary; a read-only model (ISLA-DTT) can also be checked for
+with the boundary; the default read-only model (ISLA-DTT) can also be checked for
 query independence by predicting at a subset of the points and comparing
 with the full request.

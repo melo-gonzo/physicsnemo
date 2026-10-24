@@ -84,6 +84,8 @@ FOLDER = {
     "bc_supply": "campaigns_2026-10-23",
     "geo_band_final": "campaigns_2026-10-23",
     "band_merge": "campaigns_2026-10-23",
+    "default_dtt": "campaigns_2026-10-23",
+    "dtt_default_int": "campaigns_2026-10-23",
 }
 
 

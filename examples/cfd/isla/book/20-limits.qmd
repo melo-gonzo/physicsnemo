@@ -944,8 +944,10 @@ SEEDQ = re.search(r"takes ([\d.]+-[\d.]+) s of the ([\d.]+-[\d.]+) s whole-bound
 SEEDQ = (SEEDQ[0].replace("-", " to "),) + SEEDQ[1:]
 WB_STEP = re.search(r"\| 0\.9\.0 \| ISLA \| [^|]+\| [^|]+\| \*\*([\d.]+)x\*\* \| [^|]+\| [^|]+\| [^|]+\| \*\*([\d.]+)x\*\*", BA).groups()
 PA = R.load("cap_audit", "tables/probes/probe_a.json")
-WBT = {r["version"]: r for r in R.md_table("fast_merge", "lhr/timing_table.md") if r["case"] == "DrivAerML Volume, whole boundary" and r["Q / F"]}
-wb_geo = lambda v: statistics.median(float(x) for x in WBT[v]["geometry call (ms)"].replace(",", "").split(" / "))
+# the whole-boundary geometry call as 06's cost table times it (GEO-BAND phase 0: in a training step, the mean over two
+# rotated passes of the per-pass medians), base (0.9.0) / reference / auto
+WBT = next(r for r in R.md_table("geo_band_phase0", "PHASE0.md", "The book's 06 cost table") if r["case (Q / F)"].startswith("DrivAerML Volume, whole boundary"))
+WBT = dict(zip(("base", "reference", "auto"), (float(x) for x in WBT["geometry call: base / reference / fast [ms]"].replace(",", "").split(" / ")), strict=True))
 pc = lambda k: f"{100 * min(c[k] for c in PA):.0f} to {100 * max(c[k] for c in PA):.0f}%"
 print("**The open question is whether ISLA's far-field eddy-viscosity error on the DrivAerML Volume task comes from the boundaries "
       "it is not given.** Trained on one car with a fresh draw of points every step, ISLA's relative eddy-viscosity error more than "
@@ -971,13 +973,15 @@ print("**The open question is whether ISLA's far-field eddy-viscosity error on t
       "standings trained with, almost all of the added time is one query, the one that seeded the closest-cell search, and not "
       f"the 5,054 added cells: in training on a GB300 in bfloat16 it takes {SEEDQ[0]} s of the whole-boundary geometry call, "
       f"against {SEEDQ[2]} ms with the vehicle alone, and without it ISLA's step with the whole boundary is {WB_STEP[1]} times its "
-      "step with the vehicle alone. The class seeds that search on its own cell tree: with the whole boundary its geometry call "
-      f"takes {wb_geo('head, auto'):.0f} ms under the default fast search and {wb_geo('head, reference'):.0f} ms under the "
-      f"reference search, against {wb_geo('base (0.9.0)'):,.0f} ms in the standings' geometry (@sec-using-cost). "
+      "step with the vehicle alone. The class seeds that search on its own cell tree: timed in a training step as in "
+      "@tbl-using-geometry-cost (one GB300, bfloat16, eager, the mean over two rotated passes of each pass's median), "
+      f"its geometry call with the whole boundary takes {WBT['auto']:.0f} ms under the default fast search and "
+      f"{WBT['reference']:.0f} ms under the reference search, against {WBT['base']:,.0f} ms in the standings' geometry, "
+      "and the derived bands, which that table leaves out, add about 3% to it (@sec-using-cost). "
       f"Data: {R.source('cap_audit', 'tables/resid_drv_partB.md')}, {R.source('cap_audit', 'tables/probes/probe_a.json')}, "
       f"{R.source('floor_drv', 'PREREG.md')} (section 8), {R.source('boundary_audit', 'REPORT.md')} (section 4), "
       f"{R.source('setup_research', 'SETUP.md')} (section 0), {R.source('drv_ground', 'classify_summary.txt')}, "
-      f"{R.source('fast_merge', 'lhr/timing_table.md')}.")
+      f"{R.source('geo_band_phase0', 'PHASE0.md')} (The book's 06 cost table).")
 ```
 
 ::: {.callout-note title="In flight"}

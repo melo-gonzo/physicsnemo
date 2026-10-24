@@ -1067,11 +1067,11 @@ print(f"The two per-layer MLPs hold {100 * mlps / TOT:.0f}% of the total. The ro
       f"so the width $D$ sets the count quadratically and the slice count $M$ linearly.")
 print()
 # The interior task's extra parameters, on the same schemas: the prediction points' input layer and routing mass
-# (ISLA), and ISLA-DTT's kernel basis and per-layer boundary reads instead of the routing mass.
+# (interacting ISLA), and ISLA-DTT's kernel basis and per-layer boundary reads instead of the routing mass.
 kw = dict(output_schema={"pressure": {"rank": 0}, "wss": {"rank": 1}}, boundary_schemas={"vehicle": {}}, global_schema={"U_inf_dir": {"rank": 1}}, interior=True)
-INT_ = ISLA(**kw); DTT_ = ISLA(**kw, query_independent=True)
+INT_ = ISLA(**kw, query_independent=False); DTT_ = ISLA(**kw)
 print(f"An interior model adds the prediction points' own parameters (`qt`): their input layer `qt.seed`, "
-      f"{cnt(INT_.qt.seed):,} numbers on these schemas, and, in ISLA, the one routing-mass scalar `qt.logw`, "
+      f"{cnt(INT_.qt.seed):,} numbers on these schemas, and, in interacting ISLA, the one routing-mass scalar `qt.logw`, "
       f"{cnt(INT_) - TOT:,} in all. ISLA-DTT has no routing mass; its boundary read adds the kernel basis "
       f"({cnt(DTT_.kernel_basis):,}) and one read per layer ({cnt(DTT_.kernel_reads[0]):,} each), "
       f"{cnt(DTT_) - TOT:,} beyond the surface model in all (counted from the class as the page renders).")
@@ -1087,8 +1087,9 @@ places them side by side. Everything above described the first. In the
 second, the model draws its boundary tokens from the full-resolution cells
 (@sec-arch-boundary-draw), and the prediction points join them before
 stage 3. They come in two kinds: *interacting* prediction points (interacting ISLA,
-the class's default, @tbl-arch-switches) carry routing mass and write into the slices; *read-only*
-prediction points (ISLA-DTT, `query_independent=True`) carry none and read
+`query_independent=False`) carry routing mass and write into the slices; *read-only*
+prediction points (ISLA-DTT, `query_independent=True`, the class's default on the interior task,
+@tbl-arch-switches) carry none and read
 the boundary cells directly instead (@sec-arch-passive-decoder). ISLA-DTT is
 ISLA's default interior form; Peter's ruling for AeroZoo's close call is "ISLA-DTT, on
 principle", and its prediction at a point does not depend on which other points are
@@ -1106,8 +1107,8 @@ pass stops distributed training.
 %%|   the head reads every one of them. Interior (`interior=True`): the model draws its boundary tokens from the
 %%|   full-resolution cells, and the prediction points join the slice layers as tokens, each with its signed
 %%|   distance to the full-resolution surface and its direction computed inside the model, and the head reads them
-%%|   alone; interacting points (ISLA) carry a learned routing mass, read-only points (ISLA-DTT) carry none and read
-%%|   the boundary cells after every layer.
+%%|   alone; read-only points (ISLA-DTT, the interior default) carry no routing mass and read the boundary cells after
+%%|   every layer, interacting points (interacting ISLA, `query_independent=False`) carry a learned routing mass.
 %%|   How to read this: the slice layer, head frame and head are the same
 %%|   modules in every form; only the token set, the prediction points'
 %%|   routing mass and the boundary read change. The prediction points' geometry is computed against every cell,
@@ -1163,8 +1164,8 @@ The two distance channels are the built-in pair of
 resolves the boundary layer, where $s_q$ is tiny. The prediction points
 carry zeros in the shared vector and tensor channels of stage 2.
 
-**Interacting prediction points: routing mass.** In ISLA the prediction
-points take part in every softmax over tokens. Their measure bias is not an
+**Interacting prediction points: routing mass.** In interacting ISLA
+(`query_independent=False`) the prediction points take part in every softmax over tokens. Their measure bias is not an
 area but a learned share of the boundary's total measure, split equally
 over the $Q$ points (`qt.logw`, initialized at zero, so the points start
 with as much total routing mass as the boundary):
@@ -1777,8 +1778,8 @@ listing("geometry.py", "soft_log_length")
 
 ### The read-only interior task {#sec-arch-passive-decoder}
 
-**With `query_independent=True` (ISLA-DTT) the prediction points are
-read-only: at every slice layer they read the slices the boundary formed at
+**With `query_independent=True` (ISLA-DTT, the interior default) the
+prediction points are read-only: at every slice layer they read the slices the boundary formed at
 that layer and never write into them, and after it they read the boundary
 cells (@sec-arch-global-read), so the prediction at a point is a function
 of that point and the boundary alone.** A read-only point is encoded as an
@@ -1912,7 +1913,7 @@ similarly oriented cells as one virtual cell, which keeps the prediction
 exactly query-independent and pose-invariant; the frame the forest is
 built in only groups cells for speed.** ISLA-DTT is ISLA with read-only prediction points, the global
 read after every layer and the forest at $\theta = 1$, all set by
-`query_independent=True`. The forest is built once per case, without
+`query_independent=True`, the interior default. The forest is built once per case, without
 gradient (`BoundaryForest`):
 
 1. The frame is the boundary's own canonical frame: centered on the cells'
@@ -2462,11 +2463,11 @@ axis with the row-parallel kernel, and transposes back
 listing("blocks.py", "_softmax_over_points", docstring=True)
 ```
 
-**The whole model compiles to one graph.** `torch.compile` traces the
+**The surface model compiles whole, to one graph.** `torch.compile` traces the
 Python forward into a graph of tensor operations (TorchDynamo) and
 generates fused GPU kernels for it (TorchInductor), which removes most of
 the elementwise round trips and kernel launches outside the geometry
-region. The recipe compiles ISLA whole, `Mesh` inputs and output included,
+region. The recipe's surface configurations compile ISLA whole, `Mesh` inputs and output included,
 with `fullgraph=True` (no breaks in the trace) and `dynamic=True` (the token
 counts are symbols, so one graph serves every mesh size and the case-to-case
 change in cell count does not recompile). The fused geometry kernel is a
@@ -2475,13 +2476,13 @@ class's code exists only to keep that graph single: the token count's
 logarithm is computed as a tensor under compile, since `math.log` of a
 symbolic size would fix it (`_log_count`), and a guard tells the compiler
 that a flattened token axis divides by the token count (`_hint_token_axis`).
-ISLA-DTT is the exception. Its forest and each point's list of sources are
-sized by the data, which breaks a fullgraph trace, so it compiles each slice
-block separately instead (`compile_blocks=True`, @sec-arch-switches). So
-does ISLA on AeroZoo: on its four boundary meshes the compiler ties the
+ISLA-DTT, the interior default, is the exception. Its forest and each point's list of sources are
+sized by the data, which breaks a fullgraph trace, so every interior configuration of the recipe compiles each
+slice block separately instead (`compile: false`, `compile_blocks: true`, @sec-arch-switches). Interacting
+ISLA on AeroZoo needs the per-block compile too: on its four boundary meshes the compiler ties the
 sizes of meshes whose cell counts are equal in the first case and guards
 the input meshes' caches by their size, so the whole-model graph recompiles
-case after case, and `isla_volume_aerozoo.yaml` compiles per block.
+case after case.
 
 **In float32 and float64 the compiled blocks compute the eager blocks'
 function; in bfloat16 they round elsewhere, so they compute a slightly
@@ -2681,12 +2682,12 @@ WHAT = {
     "reynolds": ("1, 2", "`{mean, std}`, the standardization of $\\log_{10}(U L / \\nu)$ over a split's training cases, appended to the global scalars as one column; required with a global of the role `viscosity` and refused without one; a dataset constant, which the recipe fills from the dataset file (@sec-using-scales)"),
     "output_stats": ("5", "`{name: {mean, std}}`, the dataset's constant standardization of each output after its units are restored, so the model returns the standardized targets the loss compares; a vector's mean is zero (@sec-using-scales)"),
     "interior": ("modes", "the task: `False` reads every boundary cell it is given, predicts at the cells of the boundaries `forward` names in `prediction_boundaries` and takes no prediction points; `True` draws its boundary tokens inside the model and predicts at the prediction points, which join the slice layers as tokens with their exact geometry against the full-resolution surface (@sec-arch-modes); implemented in two and three dimensions"),
-    "query_independent": ("modes, after each layer", "interior task only: `True` is ISLA-DTT, with read-only prediction points (no routing mass) that read the boundary cells through the forest at $\\theta = 1$ after every slice layer (@sec-arch-passive-decoder), ISLA's default interior form (@sec-aerozoo-form); `False` is interacting ISLA; rank-2 boundary fields are refused with `True`"),
+    "query_independent": ("modes, after each layer", "`None` resolves to `True` on the interior task and to `False` on the surface task, and the resolved value is stored with the other arguments; interior task only: `True` is ISLA-DTT, with read-only prediction points (no routing mass) that read the boundary cells through the forest at $\\theta = 1$ after every slice layer (@sec-arch-passive-decoder), ISLA's default interior form (@sec-aerozoo-form); `False` is interacting ISLA; rank-2 boundary fields are refused with `True`"),
     "boundary_tokens": ("1, modes", "interior task only: the number of boundary tokens per case, drawn inside the model from the full-resolution boundary (the budget water-filled over the conditions, each cell drawn with probability proportional to its measure by a systematic draw along the Morton order, each kept cell carrying its Horvitz–Thompson measure; a random start in training, $u = 1/2$ in evaluation; @sec-arch-boundary-draw); a surface task reads every cell and accepts only the default"),
     "hidden": ("all", "the width $D$"),
     "n_layers": ("3", "the number of slice layers"),
     "n_slices": ("3, 4", "the slice count $M$ of every layer and of the head frame"),
-    "compile_blocks": ("3", "run each slice block's forward under `torch.compile`, built lazily at the first call; parameter names, the state dict and the eager path are unchanged, and the fused geometry kernel stays a custom-op leaf. The way to compile ISLA-DTT, whose boundary read breaks the whole-model graph (@sec-arch-cost)"),
+    "compile_blocks": ("3", "run each slice block's forward under `torch.compile`, built lazily at the first call; parameter names, the state dict and the eager path are unchanged, and the fused geometry kernel stays a custom-op leaf. The way to compile ISLA-DTT, whose boundary read breaks the whole-model graph, and so every interior configuration of the recipe sets it (@sec-arch-cost)"),
     "dim": ("all", "the spatial dimension: every boundary mesh is a `Mesh[dim - 1, dim]` (a polyline in two dimensions), every prediction point has `dim` coordinates, and the head's basis follows it (perpendiculars instead of cross products in two dimensions; odd-parity outputs refused for `dim >= 4`). A planar problem is passed with `dim=2`, never embedded with a zero third coordinate"),
 }
 sig = inspect.signature(ISLA.__init__).parameters
@@ -2706,7 +2707,6 @@ out += (f"| `geo_kernel` attribute (`{REF.geo_kernel!r}`) | 3 | not an argument 
 print(out)
 print(": The constructor's keyword-only arguments, each default read from `inspect.signature(ISLA.__init__)` as the page "
       "renders, and the one execution attribute. How to read this: `hidden`, `n_layers` and `n_slices` default to the reference "
-      "configuration; `boundary_schemas` has no default, and every other default is the surface task with no global inputs.")
-print()
-print('::: {.callout-note title="In flight"}\nThe class\'s and the recipe\'s interior defaults here are the code as it is: `query_independent` defaults to\n`False`, interacting ISLA. The switch of both defaults to ISLA-DTT for the interior task is being built, and\nthe ledger (@sec-ledger) tracks it.\n:::\n')
+      "configuration; `boundary_schemas` has no default; `query_independent`'s `None` follows the task, ISLA-DTT on the "
+      "interior task; and every other default is the surface task with no global inputs.")
 ```
