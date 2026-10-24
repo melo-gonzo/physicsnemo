@@ -68,8 +68,11 @@ pipeline:
     # and outlet by the case's own stored U_inf, as physicsnemo-curator's HemisphereBoundaries
     # wrote it for the two files that store it (LHC001_AoA_10, _12), whose inlet and outlet it
     # reproduces bit for bit. The radius is the stored data's: the pole of those two files, and
-    # the extent of every interior the dataset stores (31 files; the paper says about 75 MAC).
-    # n_theta 64 and n_phi 32 are the divisions curator wrote them with. Built first, in the
+    # the extent along x and z, to the float32 bit, of every interior the dataset stores (13 files,
+    # of LHC001 and LHC002; the CFD far field's own nodes reach 1.0188 times it, 90.6 MAC, between
+    # those axes; the paper says about 75 MAC). n_theta 64 and n_phi 32 are the divisions curator
+    # wrote them with. Every case of an angle of attack stores the same U_inf, bit for bit, so the
+    # 1,800 cases have 10 far fields, each equal to curator's own. Built first, in the
     # files' raw inches, so every transform and pose below moves it with the wing. The symmetry
     # plane y = 0 is not built: its hole at the wing root needs the root's outline, and the stored
     # roots are open on every geometry but LHC001 (a rebuild of the outline from the stored
