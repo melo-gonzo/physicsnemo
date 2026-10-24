@@ -55,6 +55,7 @@ source. Do not edit by hand.
 | `band_merge/` | BAND-MERGE: the ISLA 0.12.0 version commit for GEO-BAND and its test review | `scratch/isla-band-merge-2026-10-24/` |
 | `default_dtt/` | DEFAULT-DTT: ISLA-DTT the default interior form, its tests, smokes and query-independence check | `scratch/isla-default-dtt-2026-10-24/` |
 | `dtt_default_int/` | DTT-DEFAULT-INT: the default switch integrated with ISLA 0.12.0, and its fixture test reworked | `scratch/isla-dtt-default-int-2026-10-24/` |
+| `geo_thinfast/` | GEO-THINFAST: the thin-cell guard and the accurate closest point fused into the fast path, its equality and timing | `scratch/isla-geo-thinfast-2026-10-24/` |
 
 | topic | file | source | md5 |
 | --- | --- | --- | --- |
@@ -286,3 +287,7 @@ source. Do not edit by hand.
 | default_dtt | BOOK_CHANGES.md | scratch/isla-default-dtt-2026-10-24/BOOK_CHANGES.md | 13b94d1b279ae7006b5ba3a6eab8485e |
 | default_dtt | BOOK_SENTENCES_v2.md | scratch/isla-default-dtt-2026-10-24/BOOK_SENTENCES_v2.md | d28e0fcaff3fb5688185a116520f3046 |
 | dtt_default_int | FINAL_REPORT.md | scratch/isla-dtt-default-int-2026-10-24/FINAL_REPORT.md | 3377379b0a7d0322d0d9e951e6c76b7f |
+| geo_thinfast | FINAL_REPORT.md | scratch/isla-geo-thinfast-2026-10-24/FINAL_REPORT.md | 24a0972e7e8f42d52aad6582f5d4ffd8 |
+| geo_thinfast | RESULTS.md | scratch/isla-geo-thinfast-2026-10-24/RESULTS.md | 137b55986608d7a51fcbdce76576c0a2 |
+| geo_thinfast | REVIEW.md | scratch/isla-geo-thinfast-2026-10-24/REVIEW.md | fbe1ab69c0e59019899e1e9c5639d601 |
+| geo_thinfast | lhr/timing_table.md | scratch/isla-geo-thinfast-2026-10-24/lhr/timing_table.md | c6326b24b902dc7b703a3e324abccce7 |

@@ -457,6 +457,16 @@ RECORDS = {
             "FINAL_REPORT.md",
         ],
     ),
+    "geo_thinfast": (
+        "isla-geo-thinfast-2026-10-24",
+        "GEO-THINFAST: the thin-cell guard and the accurate closest point fused into the fast path, its equality and timing",
+        [
+            "FINAL_REPORT.md",
+            "RESULTS.md",
+            "REVIEW.md",
+            "lhr/timing_table.md",
+        ],
+    ),
 }
 
 
