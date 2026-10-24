@@ -203,6 +203,14 @@ direct labels (`label_line`) to legends. Mermaid: data boxes
   Say what is shown and what will replace it, with no dates, run identifiers or node
   codes. When the result lands, update the numbers and remove the callout. Anything
   known wrong is cut, not labelled.
+
+  The supervisor reads Peter's rule of 2026-10-22, "(and possibly labeled "in-flight"
+  if you're planning on re-running them / re-assessing)", to cover planned reruns as
+  well. A callout may also mark a number that a rerun planned in the ledger (state
+  PLANNED) will replace, but only where a measured result already shows that the number
+  will change: the lug standing's posed ÷ native, for example, which ISLA retrained with
+  the class's tie rule already reads near one. The 0.9.0 standings in general carry no
+  callouts, because 07's `sec-standing-geometry` states once that they are 0.9.0's.
 - **No run identifiers** in prose; they appear in code cells and in caption artifact
   paths only.
 - **No numbers from memory.** Every number is computed from a file in `results/` (or
