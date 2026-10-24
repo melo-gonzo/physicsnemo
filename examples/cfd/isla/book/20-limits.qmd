@@ -944,10 +944,12 @@ SEEDQ = re.search(r"takes ([\d.]+-[\d.]+) s of the ([\d.]+-[\d.]+) s whole-bound
 SEEDQ = (SEEDQ[0].replace("-", " to "),) + SEEDQ[1:]
 WB_STEP = re.search(r"\| 0\.9\.0 \| ISLA \| [^|]+\| [^|]+\| \*\*([\d.]+)x\*\* \| [^|]+\| [^|]+\| [^|]+\| \*\*([\d.]+)x\*\*", BA).groups()
 PA = R.load("cap_audit", "tables/probes/probe_a.json")
-# the whole-boundary geometry call as 06's cost table times it (GEO-BAND phase 0: in a training step, the mean over two
-# rotated passes of the per-pass medians), base (0.9.0) / reference / auto
-WBT = next(r for r in R.md_table("geo_band_phase0", "PHASE0.md", "The book's 06 cost table") if r["case (Q / F)"].startswith("DrivAerML Volume, whole boundary"))
-WBT = dict(zip(("base", "reference", "auto"), (float(x) for x in WBT["geometry call: base / reference / fast [ms]"].replace(",", "").split(" / ")), strict=True))
+# the whole-boundary geometry call as 06's cost table times it, in a training step: the class's from GEO-THINFAST (job 370584,
+# the mean of each arm's passes), 0.9.0's from GEO-BAND's phase 0 (job 368333)
+_tf = next(r for r in R.md_table("geo_thinfast", "lhr/timing_table.md", "Mean over passes") if r["case (Q / F)"].startswith("DrivAerML whole boundary"))
+_p0 = next(r for r in R.md_table("geo_band_phase0", "PHASE0.md", "The book's 06 cost table") if r["case (Q / F)"].startswith("DrivAerML Volume, whole boundary"))
+_g = [float(x) for x in _tf["geometry call: base fast / head fast / reference [ms]"].replace(",", "").split(" / ")]
+WBT = {"auto": _g[1], "reference": _g[2], "base": float(_p0["geometry call: base / reference / fast [ms]"].replace(",", "").split(" / ")[0])}
 pc = lambda k: f"{100 * min(c[k] for c in PA):.0f} to {100 * max(c[k] for c in PA):.0f}%"
 print("**The open question is whether ISLA's far-field eddy-viscosity error on the DrivAerML Volume task comes from the boundaries "
       "it is not given.** Trained on one car with a fresh draw of points every step, ISLA's relative eddy-viscosity error more than "
@@ -974,14 +976,13 @@ print("**The open question is whether ISLA's far-field eddy-viscosity error on t
       f"the 5,054 added cells: in training on a GB300 in bfloat16 it takes {SEEDQ[0]} s of the whole-boundary geometry call, "
       f"against {SEEDQ[2]} ms with the vehicle alone, and without it ISLA's step with the whole boundary is {WB_STEP[1]} times its "
       "step with the vehicle alone. The class seeds that search on its own cell tree: timed in a training step as in "
-      "@tbl-using-geometry-cost (one GB300, bfloat16, eager, the mean over two rotated passes of each pass's median), "
-      f"its geometry call with the whole boundary takes {WBT['auto']:.0f} ms under the default fast search and "
-      f"{WBT['reference']:.0f} ms under the reference search, against {WBT['base']:,.0f} ms in the standings' geometry, "
-      "and the derived bands, which that table leaves out, add about 3% to it (@sec-using-cost). "
+      "@tbl-using-geometry-cost (one GB300, bfloat16, eager, each cell the mean of its passes' medians), its geometry call "
+      f"with the whole boundary takes {WBT['auto']:.0f} ms under the default fast search and {WBT['reference']:.0f} ms under "
+      f"the reference search, against {WBT['base']:,.0f} ms in the standings' geometry (@sec-using-cost). "
       f"Data: {R.source('cap_audit', 'tables/resid_drv_partB.md')}, {R.source('cap_audit', 'tables/probes/probe_a.json')}, "
       f"{R.source('floor_drv', 'PREREG.md')} (section 8), {R.source('boundary_audit', 'REPORT.md')} (section 4), "
       f"{R.source('setup_research', 'SETUP.md')} (section 0), {R.source('drv_ground', 'classify_summary.txt')}, "
-      f"{R.source('geo_band_phase0', 'PHASE0.md')} (The book's 06 cost table).")
+      f"{R.source('geo_thinfast', 'lhr/timing_table.md')}, {R.source('geo_band_phase0', 'PHASE0.md')} (The book's 06 cost table).")
 ```
 
 ::: {.callout-note title="In flight"}

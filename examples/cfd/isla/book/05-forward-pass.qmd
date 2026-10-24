@@ -1459,6 +1459,9 @@ assert re.search(r"Two dimensions: an edge point, 15, plus the centring: 16", GB
 K_OBS = re.search(r"largest observed ratio ([\d.]+) of the bound over 600k thin pairs", GBD).group(1)
 FOOT_OBS = re.search(r"largest error observed against exact rational arithmetic is ([\d.]+)", inspect.getsource(_geo)).group(1)
 BF = re.search(r"The review counted `e_bf \+ A = ([\d.]+) > (\d+)` for float64 queries", GBD).groups()
+# the margin the code allows now, read from the brute force's prefilter in geometry.py
+BF_CODE = int(re.search(r"rounding = (\d+) \* torch\.finfo\(query_points\.dtype\)\.eps / 2", inspect.getsource(_geo)).group(1))
+assert BF_CODE >= float(BF[0]) > int(BF[1])
 F32_SHARE = re.search(r"the storage term u32 \(\|x\| \+ R_k\) is 1 - ([\d.]+e-\d+) of the band", GBR).group(1)
 print(f"$C$ is {C3} in three dimensions and {C2} in two: the worst case, over every path the closest point's weights take, "
       "of the float64 distance's error. The greatest path is a guarded pair that keeps Ericson's point: within the switch's "
@@ -1474,9 +1477,9 @@ print(f"$C$ is {C3} in three dimensions and {C2} in two: the worst case, over ev
       "independently. Against exact rational arithmetic on about 600,000 thin pairs, the largest error of Ericson's point "
       f"is {K_OBS} of the bound $K$ gives, and that of the accurate point {FOOT_OBS} units. The two derivations differ on "
       "one count: the margin of the two-dimensional brute force's prefilter for float64 points. The second counts "
-      f"{BF[0]} units against the {BF[1]} the code allows; the first counts the arithmetic share inside the error bounds "
-      f"the prefilter adds as well and finds {BF[1]} enough. The count concerns which candidates the prefilter keeps beyond "
-      "the band, not an output, and for float32 points both counts leave a wide margin. For float32 points, and bfloat16 ones cast to float32, the arithmetic "
+      f"{BF[0]} units; the first counts the arithmetic share inside the error bounds the prefilter adds as well and finds "
+      f"{BF[1]} enough. The code allows {BF_CODE} units, which covers both counts. The count concerns which candidates the "
+      "prefilter keeps beyond the band, not an output, and for float32 points both counts leave a wide margin. For float32 points, and bfloat16 ones cast to float32, the arithmetic "
       f"share is {sci(float(F32_SHARE))} of the band; for float64 points it is most of the band "
       f"({R.source('geo_band_final', 'DERIVATION.md')}; {R.source('geo_band_final', 'REVIEW_DERIVATION.md')}).")
 ```
