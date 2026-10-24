@@ -31,6 +31,8 @@ source. Do not edit by hand.
 | `fast_merge/` | FAST-MERGE: the exact geometry's fast path merged with the zero-area fix, its bitwise checks and its GB300 timing | `scratch/isla-fast-merge-2026-10-24/` |
 | `dtt_knobs/` | DTT-KNOBS: ISLA-DTT's boundary read, its knobs and its accuracy gap (stage 1, inference only) and the stage-2 registration | `scratch/isla-dtt-knobs-2026-10-23/` |
 | `dtt_fast_compile/` | DTT-FAST, piece COMPILE: ISLA-DTT's compiled blocks certified against eager, and the bf16 casts Inductor leaves out | `scratch/isla-dtt-fast-2026-10-23/compile/` |
+| `dtt_fast_verify_fusedread/` | DTT-FAST, piece FUSEDREAD verified independently: pair lists, precision and the GB300 step | `scratch/isla-dtt-fast-2026-10-23/verify_fusedread/` |
+| `dtt_fast_integration/` | DTT-FAST, integration pass 1: the tree walk, tree build and fused read on ISLA 0.11.0 behind one execution attribute | `scratch/isla-dtt-fast-2026-10-23/integration/` |
 
 | topic | file | source | md5 |
 | --- | --- | --- | --- |
@@ -191,3 +193,5 @@ source. Do not edit by hand.
 | dtt_knobs | treeprec/signtest.md | scratch/isla-dtt-knobs-2026-10-23/treeprec/signtest.md | 2bbe2cce1e8463aa627b08a0c6244e95 |
 | dtt_fast_compile | RESULTS.md | scratch/isla-dtt-fast-2026-10-23/compile/RESULTS.md | 884f4b2354d539c8ec1ad582e8c3211c |
 | dtt_fast_compile | REPORT.md | scratch/isla-dtt-fast-2026-10-23/compile/REPORT.md | 296118e95eab0cc507c6bc77ad8ab104 |
+| dtt_fast_verify_fusedread | VERIFY.md | scratch/isla-dtt-fast-2026-10-23/verify_fusedread/VERIFY.md | 3547c3068a6ef54d514468ea1a7d4364 |
+| dtt_fast_integration | RESULTS.md | scratch/isla-dtt-fast-2026-10-23/integration/RESULTS.md | cd508ec6241c605c2464c0f4541ef70b |

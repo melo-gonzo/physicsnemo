@@ -290,6 +290,16 @@ RECORDS = {
         "DTT-FAST, piece COMPILE: ISLA-DTT's compiled blocks certified against eager, and the bf16 casts Inductor leaves out",
         ["RESULTS.md", "REPORT.md"],
     ),
+    "dtt_fast_verify_fusedread": (
+        "isla-dtt-fast-2026-10-23/verify_fusedread",
+        "DTT-FAST, piece FUSEDREAD verified independently: pair lists, precision and the GB300 step",
+        ["VERIFY.md"],
+    ),
+    "dtt_fast_integration": (
+        "isla-dtt-fast-2026-10-23/integration",
+        "DTT-FAST, integration pass 1: the tree walk, tree build and fused read on ISLA 0.11.0 behind one execution attribute",
+        ["RESULTS.md"],
+    ),
 }
 
 

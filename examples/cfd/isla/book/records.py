@@ -62,6 +62,8 @@ FOLDER = {
     "fast_merge": "campaigns_2026-10-23",
     "dtt_knobs": "campaigns_2026-10-23",
     "dtt_fast_compile": "campaigns_2026-10-23",
+    "dtt_fast_verify_fusedread": "campaigns_2026-10-23",
+    "dtt_fast_integration": "campaigns_2026-10-23",
 }
 
 
