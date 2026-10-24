@@ -608,9 +608,10 @@ rows = [
     ("Why does ISLA not hold the outlet at its prescribed pressure on the crossflow layout? (@sec-oq-outlet)", "the predicted gauge pressure on the outlet faces against the prescribed zero, on every split and for both forms", "scoring only"),
     ("Can the tie and on-wall bands of ISLA's geometry be derived worst cases that do not depend on the pose? (@sec-oq-ties)",
      "bands derived as worst cases for every pair, measured about the boundary's centroid with the vertex term kept at the "
-     "stored coordinates' rounding, and the closest point computed in the boundary's centered frame, checked against an exact "
-     "rational brute force and on the lug in every pose, with every changed output counted on every dataset's recipe draws",
-     "none for the check; a changed tie or on-wall decision changes interior models' inputs"),
+     "stored coordinates' rounding, the closest point computed in the boundary's centered frame, and a certified test of "
+     "distinct directions, checked against an exact rational brute force and on the lug in every pose, with every changed "
+     "output counted on every dataset's recipe draws",
+     "none for the check; a changed tie or on-wall decision changes the interior models' inputs"),
     ("Does what rounding still decides in the class's geometry move a trained model? (@sec-oq-precision)", "the standings "
      "retrained with the class's geometry, scored rotated and translated, and in float32 against float64 on the AeroZoo cases of "
      "the float32 comparison", "the standings' training with the class's geometry, then scoring"),
@@ -811,18 +812,22 @@ EDGE_WC = re.search(r"about ([\d.]+) units for an edge point alone", GTD).group(
 GAP = re.search(r"Gap over band ([\d.]+) \(untied: u the face normal\) against ([\d.]+) \(tied", GTR).groups()
 DU, NODES = re.search(r"\|du\| = ([\d.]+) at that one node of ([\d,]+), which is the whole forward excess", GTR).groups()
 TIED = re.search(r"tied ([\d,]+) against ([\d,]+) on case 1884", GTR).groups()
-MEM_DU = re.search(r"Yet u moves by at most ([\d.e-]+) there", GTR).group(1)
+# the largest move at the membership flips over the three cases, band-edge node aside (FINAL_REPORT; RESULTS' cA row)
+MEM_DU = re.search(r"from bitwise normal ties, with \|du\| <= ([\d.]+e-\d+)", " ".join(R.load("geo_thin_final", "FINAL_REPORT.md").split())).group(1)
+assert re.search(rf"\| cA: abs x replaced by abs\(x - c\) \| {MEM_DU} \(0\)", GTR)
 assert re.search(r"On case 1909 nine mid-plane nodes", GTR)
 print("**The open question is whether the tie and on-wall bands of the exact geometry can be derived worst cases that do not "
-      "depend on the pose.** A feature joins a closest-feature tie, and a point counts as on the wall, when its distance lies "
-      "within a band of the least: $E_k = (u + 13 u_{64})(\\lvert x \\rvert + R_k)$, with $u$ the queries' unit roundoff, "
-      "$u_{64} = 2^{-53}$ and $R_k$ the cell's greatest vertex norm (@sec-arch-interior-geometry). Two parts of it are not "
+      "depend on the pose.** Each cell's distance carries the band $E_k = (u + 13 u_{64})(\\lvert x \\rvert + R_k)$, with $u$ the queries' unit roundoff, "
+      "$u_{64} = 2^{-53}$ and $R_k$ the cell's greatest vertex norm: a feature joins a closest-feature tie when its distance "
+      "less its band is at most the least sum of a distance and its band, and a point counts as on the wall when the least "
+      "distance is within its band of zero (@sec-arch-interior-geometry). Two parts of it are not "
       "derived. Its arithmetic share, 13 units of $u_{64}(\\lvert x \\rvert + R_k)$, is a first-order estimate; the "
       f"first-order worst case for an edge point alone is about {EDGE_WC} units. For float32 queries, and bfloat16 ones cast to "
       f"float32, that share is {sci(float(SHARE))} of the band; for float64 queries rounding may decide a tie or "
       "an on-wall call at the $10^{-15}$ relative level. And $\\lvert x \\rvert$ and $R_k$ are distances from the origin of the "
-      "raw coordinates, so a rigid motion changes the band. On the lug's test case 1884 one node of "
-      f"{NODES} has a gap between its two nearest features of {GAP[0]} times the band natively and {GAP[1]} times it posed, so "
+      "raw coordinates, so a translation changes the band. On the lug's test case 1884 one node of "
+      f"{NODES} has a gap between its two nearest features of {GAP[0]} times the sum of their bands natively and {GAP[1]} times "
+      "it posed, so "
       f"it ties in one pose only and its direction moves by {DU}. Measuring $\\lvert x \\rvert$ about the boundary's centroid "
       "removes that flip. Measuring $R_k$ about it as well makes the band smaller than the stored float32 coordinates' own "
       "rounding, and on case 1909 nine nodes of the plate's mid-plane, tied natively, untie posed, with their direction moving "
@@ -843,9 +848,10 @@ print("**The open question is whether the tie and on-wall bands of the exact geo
 ```
 
 ::: {.callout-note title="In flight"}
-These bands are the class's: their arithmetic share a first-order estimate, and the band measured from the origin of
-the raw coordinates. Bands derived as worst cases, measured about the boundary's centroid, with the closest point
-computed in a centered frame, are being measured, and the ledger (@sec-ledger) tracks it.
+This question rests on the class's bands, whose arithmetic share is a first-order estimate and which are measured
+from the origin of the raw coordinates. Bands derived as worst cases, measured about the boundary's centroid, with
+the closest point computed in a centered frame, are being measured, and the ledger (@sec-ledger) tracks it; a
+certified test of distinct directions is not part of that measurement.
 :::
 
 ### What rounding still decides in the geometry {#sec-oq-precision}

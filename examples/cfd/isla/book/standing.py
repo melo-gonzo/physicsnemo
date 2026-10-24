@@ -238,8 +238,7 @@ def _arch(arm_name: str) -> str:
 BOOK_IN_FLIGHT = {
     "hilift": {
         "ledger": "HL-DUP stage 2",
-        "what": "checkpoints trained and scored on the wing meshes as stored, with their duplicated root cells "
-        "(@sec-data-hilift)",
+        "what": "checkpoints trained and scored on the wing meshes as stored, with their duplicated root cells",
         "replacement": "The standing of ISLA, GeoTransolver and Transolver trained and scored with the copies dropped",
         "rows": "The rows",
     },

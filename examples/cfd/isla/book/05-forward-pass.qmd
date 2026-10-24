@@ -1401,10 +1401,14 @@ a cell whose float64 normal is not accurate to its own float32 rounding, by
 an a-priori bound on the cross product's rounding, gets no planes, so they
 never reject it. The float64 ball test rejects a cell only when its
 computed distance less a bound on that distance's error still exceeds the
-radius. The bound is $K u_{64} l^2 / (\rho^2 L_k)$, with $u_{64} =
-2^{-53}$, $L_k$ the cell's longest edge, $l$ the query's greatest distance
-to the cell's vertices, and $\rho$ replaced by a certified lower bound.
-Where that bound exceeds one unit of the distance's arithmetic bound,
+radius. The closest point is misplaced along the face by at most
+$\Delta = K u_{64} l^2 / (\rho^2 L_k)$, with $u_{64} = 2^{-53}$, $L_k$
+the cell's longest edge, $l$ the query's greatest distance to the cell's
+vertices, and $\rho$ replaced by a certified lower bound; the distance's
+error bound is the smaller of $\Delta$ and $\Delta^2 / (2(\tilde d -
+\Delta))$, with $\tilde d$ the computed distance, and is unbounded where
+$\Delta$ exceeds $L_k$. Where that bound reaches one unit of the
+distance's arithmetic bound,
 $u_{64}(\lvert x \rvert + R_k)$ with $R_k$ the cell's greatest vertex norm,
 the class also computes the closest point accurately, in the frame of the
 cell's longest edge, and takes it when the two distances differ by more
@@ -1412,8 +1416,9 @@ than one unit. The reference search and the fast one run the same
 arithmetic and stay bitwise equal.
 
 **The ball test's error constant is derived; the switch and the bands'
-arithmetic share are first-order estimates.** $K = 168$ is derived in full,
-from the rounding of every operation of the closest-point formulas as coded
+arithmetic share are first-order estimates.** $K = 168$ is derived from
+the rounding of every operation of the closest-point formulas as coded,
+with the amplification by the cancelling denominator kept in the bound
 (167.25, rounded up; the comment above `_ERICSON_K` in `geometry.py`), and
 against exact rational arithmetic on about 600,000 pairs the largest error
 is 0.0115 of the bound. The switch's one unit is the difference of two
@@ -1421,18 +1426,20 @@ first-order estimates, not of derived worst cases: 13 units for the
 arithmetic share of the tie and on-wall bands, whose first-order worst case
 for an edge point alone is about 17.5 units, and 12 for the accurate
 point's distance error, whose first-order worst case is 77 units and whose
-largest observed value is 2.03. The one unit rests on that observation. So
-for float64 queries rounding may decide a tie or an on-wall call at the
+largest observed value is 2.03. The one unit rests on that observation.
+Since the 13-unit share is not derived, for float64 queries rounding may decide a tie or an on-wall call at the
 $10^{-15}$ relative level. For float32 queries, and bfloat16 ones cast to
 float32, the band is $(u_{32} + 13 u_{64})(\lvert x \rvert + R_k)$, with $u_{32} = 2^{-24}$, and the
 estimated share is $2.4 \times 10^{-8}$ of it on every pair
 (results/campaigns_2026-10-23/geo_thin_final/DESIGN.md, Amendment).
 
-**On every stored dataset the treatment changes nothing the model sees.**
+**On every dataset whose ISLA reads the interior geometry, the treatment
+changes nothing the model sees.**
 The distance, the direction, the winding sign, the tie and on-wall
 decisions and every gradient are bitwise those of the same search without
 it, under both kernels, on AirfRANS with its far field, AeroZoo, the lug,
-Tensile2d and the DrivAerML Volume task's whole boundary. Only the op's
+Tensile2d and the DrivAerML Volume task's whole boundary; the surface
+tasks compute no interior geometry. Only the op's
 internal closest-point weights differ, at 11 of the 200,000 queries of a
 DrivAerML whole-boundary draw, on-wall queries on ordinary cells of the
 tunnel floor, by one or two units in the last place. A census of every
@@ -1442,12 +1449,13 @@ wrong, in float32 or float64, under either kernel, and no stored mesh holds
 a cell whose float64 normal is uncertain. Adversarial float64 queries on
 the thinnest faces of the stored AeroZoo meshes, which make the search
 without the treatment raise (a device-side assert on CUDA), are answered
-correctly, and so are all 517,296 queries of the adversarial thin-cell sets
-checked on the CPU. The treatment's cost is in @sec-using-cost
+correctly, and of 517,296 queries of the adversarial thin-cell sets
+checked on the CPU none raises or has a wrong distance, cell, on-wall
+decision or sign. The treatment's cost is in @sec-using-cost
 (results/campaigns_2026-10-23/geo_thin_final/RESULTS.md, A1 to A3, "Phase C checks" and
 "Final head").
 
-**Four kinds of input remain limits of the search**, each counted on the
+**Four kinds of input remain limits of the search**, each measured on the
 stored meshes: overlapping coplanar cells, T-junctions, near-duplicate
 normals at a tie, and the tie band's edge at medial points. **Cells that
 overlap in one plane**, of zero area or not, change
@@ -1487,17 +1495,18 @@ itself decided by rounding (the lug's 1,639 tied queries become about
 5,800), with the direction continuous through it (results/campaigns_2026-10-23/geo_thin_final/RESULTS.md, A4).
 
 **The tie band is measured from the origin of the raw coordinates, so a
-pose can move a medial point across its edge.** A feature joins a tie when
-its distance lies within the band $E_k = (u + 13 u_{64})(\lvert x \rvert +
-R_k)$ of the least, with $u$ the queries' unit roundoff. $\lvert x \rvert$
+pose can move a medial point across its edge.** Each cell's distance
+carries the band $E_k = (u + 13 u_{64})(\lvert x \rvert + R_k)$, with $u$
+the queries' unit roundoff, and two features tie when their distances
+differ by at most the sum of their bands. $\lvert x \rvert$
 and $R_k$ are distances from the origin, so a rotation with a translation
-changes the band, and a point whose two nearest features lie about a
-band's width apart can tie in one pose and not in the other. On the lug's
+changes the band, and a point whose two nearest features lie about that
+sum apart can tie in one pose and not in the other. On the lug's
 test case 1884 one node of 11,520 does: the gap between its two nearest
-features is 1.12 times the band natively and 0.86 times it posed, so its
-direction moves by 0.707. That node is the whole of the posed change of an
-ISLA-DTT forward with random weights on that case, $1.74 \times 10^{-5}$
-relative against a median of $1.5 \times 10^{-7}$ over 24 lug cases. A
+features is 1.12 times the sum of their bands natively and 0.86 times it
+posed, so its direction moves by 0.707. That node accounts for the whole
+excess of the posed change of an ISLA-DTT forward with random weights on
+that case, $1.74 \times 10^{-5}$ relative RMS against a median of $1.5 \times 10^{-7}$ over 24 lug cases. A
 band measured about the boundary's centroid removes that flip, provided
 its vertex term still covers the stored coordinates' own float32 rounding
 (@sec-oq-ties; results/campaigns_2026-10-23/geo_thin_final/RESULTS.md,
@@ -2401,11 +2410,10 @@ fails where eager happens to sit within an ulp of float64, as on the
 AirfRANS checkpoint of seed 42.
 
 ::: {.callout-note title="In flight"}
-These numbers compare the compiled blocks with eager. Whether the current
-compiled blocks meet the supervisor's policy, per tensor group against
-eager's own one-ulp change, has not been measured. The reference rerun
-begins by measuring it on every dataset, and the ledger (@sec-ledger)
-tracks it.
+These numbers compare the compiled blocks with eager. Whether the compiled
+blocks meet the supervisor's policy, per tensor group against eager's own
+one-ulp change, is measured first in the reference rerun, on every
+dataset, and the ledger (@sec-ledger) tracks it.
 :::
 
 **Where a training step's time goes.** @fig-arch-step-breakdown takes one

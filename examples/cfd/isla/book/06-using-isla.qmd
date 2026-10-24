@@ -1213,12 +1213,22 @@ print(f"**The exact interior geometry adds {100 * (min(r_f.values()) - 1):.0f} t
 # GEO-THIN's GB300 timing of the DrivAerML whole-boundary geometry call with the thin-cell bounds (16.65M cells, 200k queries)
 THIN = re.search(r"reference (\d+) to (\d+) ms \(\+(\d+) %\), fast (\d+) to (\d+) ms \(\+(\d+) %\)",
                  " ".join(R.load("geo_thin_final", "DESIGN.md").split())).groups()
+# its profile by part (job 367918): the geometry call on the other dumps, and the accurate point's per-call cost
+GTR_ = " ".join(R.load("geo_thin_final", "RESULTS.md").split())
+BYPART = {c: re.search(rf"\| {c} \| reference \| (\d+) -> (\d+) \|", GTR_).groups() for c in ("DrivAerML vehicle", "AeroZoo")}
+F2_MS = re.search(r"\(\+(\d+) to \+(\d+) ms on DrivAerML", GTR_).groups()
+F3_ROWS = re.search(r"\(([\d.]+) ms for (\d+) AeroZoo rows, ([\d.]+) ms for ([\d,]+) DrivAerML rows\)", GTR_).groups()
 print()
 print("The table's 0.11.0 columns time the class's geometry without its bounds for thin cells (@sec-arch-interior-geometry). "
-      f"With them, the DrivAerML whole-boundary geometry call takes {THIN[0]} to {THIN[1]} ms under the reference search "
-      f"(+{THIN[2]}%) and {THIN[3]} to {THIN[4]} ms under the fast one (+{THIN[5]}%) on a GB300, because the bound on the closest "
-      "point's error is loose, so ordinary pairs pay for it as well. The other cases are not timed with them "
-      f"({R.source('geo_thin_final', 'DESIGN.md')}, Amendment; {R.source('geo_thin_final', 'RESULTS.md')}, \"Cost by part\").")
+      f"Timed apart from the table, the geometry call alone on the DrivAerML whole boundary goes from {THIN[0]} ms without them "
+      f"to {THIN[1]} ms with them under the reference search (+{THIN[2]}%), and from {THIN[3]} to {THIN[4]} ms under the fast one "
+      f"(+{THIN[5]}%), on a GB300. Most of it is the ball search's per-cell error bound ({F2_MS[0]} to {F2_MS[1]} ms) and the "
+      f"kernel launches of the accurate closest point, which cost about the same per call for AeroZoo's {F3_ROWS[1]} guarded "
+      f"pairs ({F3_ROWS[0]} ms) as for DrivAerML's {F3_ROWS[3]} ({F3_ROWS[2]} ms), so a tighter bound would not lower it. The "
+      "table's protocol has not been run on the other cases with them; the geometry call alone, under the reference search, "
+      f"goes from {BYPART['DrivAerML vehicle'][0]} to {BYPART['DrivAerML vehicle'][1]} ms on the DrivAerML vehicle and from "
+      f"{BYPART['AeroZoo'][0]} to {BYPART['AeroZoo'][1]} ms on AeroZoo "
+      f"({R.source('geo_thin_final', 'DESIGN.md')}, Amendment; {R.source('geo_thin_final', 'RESULTS.md')}, \"Cost by part\" and \"Would a tighter certified bound on Ericson's error help?\").")
 print()
 print('::: {.callout-note title="In flight"}\nThe 0.11.0 columns come from the class\'s geometry without its bounds for thin '
       "cells. The five cases timed with them are being measured, and the ledger (@sec-ledger) tracks it.\n:::")

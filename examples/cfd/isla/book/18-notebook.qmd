@@ -41404,13 +41404,14 @@ scratch/isla-nearwall-2026-10-24/RESULTS.md (md5 43888a10), DESIGN.md (1ff494b6)
   $\ln d$ 200 times less. Only a retrain prices it (AF-WHOLE).
 - **Precision.** $10^{-6}$ is about 17 times float32's unit roundoff: rounding moves the channel by at most 0.12 wherever
   the body sits in its domain. A softening that gives AirfRANS's first nodes a logarithmic code moves by up to 3 to 4 when
-  the body sits 30 chords from the origin, mostly through the geometry kernel's float32 arithmetic.
+  the body sits 30 chords from the origin, mostly through the kernel's closest point formed in absolute coordinates
+  (GEOMETRY_NOTE.md).
 
 **The design** (DESIGN.md section 4). Of eight candidates, the lane recommends keeping the channel: it is the one defined
 identically on every dataset, with no fallback, no new declaration and no recipe constant, and robust to rounding
 anywhere in the domain; the viscous softening $\operatorname{asinh}(d U / \nu)$ is undefined on three of five datasets
 and changes every AeroZoo case. Its documentation claimed that $10^{-6} L$ lies below the reference datasets' finest wall
-spacing, which is false under the whole boundary. **The supervisor approved the design at 08:44 EDT**: canonical ISLA keeps
+spacing, which is false under the whole boundary. **The supervisor approved the design at 08:43 EDT**: canonical ISLA keeps
 its channel, the docstring is corrected on psharpe/isla-nearwall, and the viscous softening is held ready, to be tested
 only if AF-WHOLE reads a near-wall harm, with its adoption Peter's. Lane predictions: a harm on velocity or eddy viscosity
 in AF-WHOLE 0.40; given one, mainly near the wall 0.45.
@@ -41458,9 +41459,10 @@ as its own lane, GEO-BAND, at 09:55 EDT, batched with 0.12.0; option B, deriving
 
 **The checks** (GB300 367730 and CPU one-thread 367731, rows in job 367849; at the final head 6bac57cbd, GB300 368128 and
 cpu-short 368129). Against 7213c70c5 with both ops renamed, every model-visible output (the distance, the direction, the
-winding sign, the tie and on-wall decisions) and every gradient is bitwise unchanged on 104 of 104 GB300 cases and 60 of
-60 CPU cases under each kernel: AirfRANS with its far field (4 draws), AeroZoo, the 20 lug cases, Tensile2d, and the
-DrivAerML whole boundary at 2 draws, 2 precisions and 200,000 queries. There only the op's internal closest-point
+winding sign, the tie and on-wall decisions) and every gradient is bitwise unchanged on 104 of 104 GB300 cases (AirfRANS
+with its far field, 4 draws; AeroZoo; the 20 lug cases; Tensile2d; an icosphere, a torus and an ellipse) and 60 of 60
+CPU cases under each kernel, and on the GB300 on the DrivAerML whole boundary at 2 draws, 2 precisions and 200,000
+queries, where only the op's internal closest-point
 weights differ, at 11 of 200,000 queries per draw, on-wall queries on ordinary tunnel-floor cells, by 1 to 2 ulps, and
 the new point is closer to exact in 20 of 22 rows.
 
@@ -41474,14 +41476,16 @@ the new point is closer to exact in 20 of 22 rows.
 
 **The supervisor's acceptance of the real-data result (08:51 EDT):** accepted, with no version change and no new op.
 
-**Cost** (GB300 367918, synchronized timers). The DrivAerML whole-boundary call (16.65 million cells, 200,000 queries)
-takes 412 to 474 ms under the reference (+15%) and 343 to 405 ms under the fast path (+18%) by DESIGN.md and RESULTS.md;
-FINAL_REPORT.md gives the reference as 410 to 474 ms. By part: F2 adds 32 to 34 ms in the ball search, F3 about 27 ms
+**Cost** (GB300). The DrivAerML whole-boundary call (16.65 million cells, 200,000 queries) takes 412 to 474 ms under
+the reference (+15%) and 343 to 405 ms under the fast path (+18%) in phase C's checks (DESIGN.md, Amendment; RESULTS.md,
+"Phase C checks"); FINAL_REPORT.md gives the reference as 410 to 474 ms, and the profile by part (367918, synchronized
+timers) 409 to 472 and 338 to 400 ms. By part: F2 adds 32 to 34 ms in the ball search, F3 about 27 ms
 per call, mostly launch overhead (about the same for AeroZoo's 93 guarded pairs as for DrivAerML's 12,243), and the thin
 bounds 8.5 ms. The guard is loose: a certified bound cannot reach zero guarded pairs on DrivAerML or the lug, which
 would take $K / 1000$ where the observed margin allows at most about $K / 87$. The lever is one fused guard and
-accurate-point kernel (about 25 ms per call), left for 0.12.0. The other cases were not re-timed; GEO-BAND re-times all
-five at 921472488.
+accurate-point kernel (about 25 ms per call), left for 0.12.0. The table's protocol was not rerun on the other cases (by
+part, the call goes from 337 to 394 ms on the DrivAerML vehicle and from 142 to 173 ms on AeroZoo, reference); GEO-BAND
+re-times all five at 921472488.
 
 **The four limits.**
 
@@ -41500,7 +41504,8 @@ five at 921472488.
   well unties nine mid-plane nodes of case 1909 (direction change 1), so the vertex term must still cover the stored
   coordinates' float32 rounding. Which nodes tie still differs posed against native at 4,204 to 5,951 nodes per case,
   from the bitwise test of distinct directions at planar stars, with the direction moving by at most
-  $1.5 \times 10^{-5}$ there.
+  $2.2 \times 10^{-5}$ there (FINAL_REPORT.md and RESULTS.md's centroid-band table; RESULTS.md's prose gives 1.5e-5,
+  case 1909's).
 
 **For the book.** 05 states what the class does for thin cells, which parts are derived and which are first-order
 estimates, the checks, and four limits with their counts, and its thin-cell In-flight callout is cut; 06 states the
