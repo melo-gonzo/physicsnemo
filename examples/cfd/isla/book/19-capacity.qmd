@@ -1152,7 +1152,9 @@ print("**From 100,000 tokens per case up, the memory and the time of a training 
       "(@sec-isla-slices), so linear growth is what the construction predicts. Below 100,000 tokens the step has a fixed part that does not "
       "depend on how much data each kernel handles: the time to launch its kernels and run its small operations. The memory reported is "
       "the allocator peak of @sec-review-frontier, the largest total size of live tensors during the step. @fig-cost-sweep sweeps the "
-      "token count on one GPU for each reference configuration on the DrivAerML tasks.")
+      "token count on one GPU for each reference configuration on the DrivAerML tasks. It times the interior geometry the "
+      "standings trained with (@sec-standing-geometry); what the class's exact geometry adds to an interior step is "
+      "@tbl-using-geometry-cost, and what a token count that is not a multiple of 32 costs is @sec-using-cost.")
 ```
 
 ```{python}

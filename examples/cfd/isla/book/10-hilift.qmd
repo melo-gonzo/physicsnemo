@@ -288,6 +288,19 @@ plt.show()
 
 **1,800 cases on a full grid of 180 geometries by ten angles, in imperial units, with curated manifests for every split.** Each case is a `geo_LHC<nnn>_AoA_<a>` directory; the recipe reads the boundary tensordict (`geo_LHC*/*.pdmsh/_tensordict/boundaries/vehicle`) and merges the parent's `global_data` (`U_inf`, `p_inf`, `rho_inf`, `T_inf`, `L_ref`). Units are slug, inch, second and Rankine; the figures convert positions to meters for display only. The targets are the projected averages `PROJ(AVG(P))`, `PROJ(AVG(T))`, `PROJ(AVG(RHO))`, `PROJ(AVG(U))` and `AVG(TAU_WALL)` on the surface cells, nondimensionalized from the case's `global_data`, renamed `pressure`, `temperature`, `density`, `velocity` and `tau_wall`, and standardized with fixed constants in the dataset yaml (pressure mean −0.5 and standard deviation 1; temperature 1.00 / 0.002; density 1.0 / 0.02; velocity 0.20; wall shear 0.003). A case has about 290 million surface cells, the largest surface in the book, so a 200,000-cell draw is a $10^{-3}$ sample of it. All but `{python} HL_BUT` files store the wing alone, without the far field or the symmetry plane of the CFD domain, so every model here reads the body alone (@sec-oq-whole-boundary). Every split is a curated manifest of one pinned revision of the dataset.
 
+```{python}
+#| label: para-data-hilift-duplicates
+#| output: asis
+BCS = " ".join(R.load("bc_sidecar", "REPORT.md").split())
+DUP = re.search(r"About (\d+) M duplicated cells on (\d+) of (\d+) sampled geometries inflate HiLift's surface measures and "
+                r"draws \(about (\d+) % of uniform draws; ([\d-]+) % of the area\)", BCS).groups()
+DUPN = re.search(r"copies of only ([\d,]+-[\d,]+) distinct cells", BCS).group(1)
+print(f"Most wings store many of their cells more than once: on {DUP[1]} of {DUP[2]} sampled geometries about {DUP[0]} million "
+      f"cells are copies of only {DUPN.replace('-', ' to ')} distinct cells, about {DUP[3]}% of a uniform draw of cells and "
+      f"{DUP[4].replace('-', ' to ')}% of the summed wing area. The recipe reads the cells as stored, so the copies enter the "
+      f"surface measures and the cell draws ({R.source('bc_sidecar', 'REPORT.md')}, sections 3 and 5).")
+```
+
 ## What is measured {#sec-de-setup}
 
 ```{python}
@@ -386,6 +399,11 @@ print(f"**At the 510-case rung, on the native mesh, {both(HL, HL_F)}; on the uni
       f"{span('area')[0]} to {span('area')[1]} on the two fields, and rotated and translated {span('posed')[0]} to {span('posed')[1]}. "
       "@tbl-hilift-protocols is the standing and @fig-hilift-shifts draws it.")
 ```
+
+::: {.callout-note title="In flight"}
+These numbers come from the wing meshes as stored, with their duplicated cells (@sec-data-hilift). The same checkpoints
+scored with the duplicates excluded are being measured, and the ledger (@sec-ledger) tracks it.
+:::
 
 ```{python}
 #| label: make-tbl-hilift-protocols

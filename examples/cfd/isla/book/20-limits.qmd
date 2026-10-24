@@ -110,6 +110,9 @@ follow give each item its numbers.
 lug = ST["lug"].shift("ISLA", "von_mises_l2", "posed")
 exact = [k for k in FIN if all(abs(ST[k].shift("ISLA", f, "posed") - 1) < 0.02 for f in ST[k].ds.headline)]
 worst = max(abs(ST[k].shift("ISLA", f, "posed") - 1) for k in exact for f in ST[k].ds.headline)
+# ISLA retrained on the lug with the class's tie rule (TIE-EXP's registered read): posed / native as a ratio of seed means
+TXL = R.load("tie_exp", "read/results.json")["lug"]
+TX_PN = 1 + TXL["P"]["von_mises_l2"]["e_TIE"]
 print(f"- **Not that ISLA is more accurate in distribution in general.** Across the {len(FIN)} final standings with a native-mesh "
       f"comparison and AeroZoo's `{AZ_IN}` split, ISLA leads a baseline in {len(TAL['leads'])} of {n_all} comparisons{LUGC}, is level in "
       f"{len(TAL['is level with'])} and trails in {len(TAL['trails'])}" + held_clause() + az_pressure_clause()
@@ -122,8 +125,9 @@ print("- **Not that equivariance is an accuracy edge in general.** A baseline gi
       "trained in the dataset's frame without augmentation and scored in random poses (@sec-pose).")
 print(f"- **Not that ISLA's pose invariance is exact on every mesh.** Rotated and translated, its error stays within {100 * worst:.1f}% "
       f"of native on {of_fin(exact)} final standings, and it is {lug:.2f} times native on the GINOT bracket lug, whose structured "
-      "mesh puts interior nodes equally far from two boundary features, where float32 rounding picks the direction, a candidate cause "
-      "of the growth whose link is not isolated (@sec-limits-ties). "
+      "mesh puts interior nodes equally far from two boundary features, where in the geometry the standings trained with float32 "
+      f"rounding picks the direction; retrained with the class's tie rule, it is {TX_PN:.4f} times native (@sec-limits-ties). What "
+      "rounding still decides in the class's geometry is @sec-oq-precision. "
       "ISLA-DTT's far-field read adds no such limit: a tie of its forest's frame moves the read only by the tree's error "
       "(@sec-oq-dtt-frame).")
 print("- **Not that discretization consistency is an exact invariance at every token count.** Under exact re-meshing of the boundary "
@@ -347,18 +351,26 @@ per_seed = [p / n for p, n in zip(LG.seeds("ISLA", "von_mises_l2", "posed"), LG.
 ATT = " ".join(R.load("attrib090", "RESULTS.md").split())
 n_tie, pct_tie = re.search(r"on \*\*([\d,]+) interior nodes \(([\d.]+) % of the interior", ATT).groups()
 print(f"**Rotated and translated, ISLA's error stays within {100 * worst:.1f}% of native on {of_fin(exact)} final "
-      f"standings, and on the GINOT bracket lug it is {lug:.2f} times native ({f3(per_seed)} per seed).** On the lug's structured mesh {n_tie} "
+      f"standings, and on the GINOT bracket lug it is {lug:.2f} times native ({f3(per_seed)} per seed), which the class's tie rule "
+      f"brings to {TX_PN:.4f}.** On the lug's structured mesh {n_tie} "
       f"interior nodes of the probed test lugs, {pct_tie}% of the interior, are equally far, to float32 resolution, from two or more "
-      "surface features: nodes on the plate's mid-thickness plane, and rows of nodes on corner bisectors. The exact closest-point search "
-      "keeps the feature it meets first, so the direction input at those nodes follows the order of the search, which rounding of the "
-      "moved coordinates changes (@sec-lug-ties). These closest-feature ties are a candidate cause of the lug's posed growth; the link "
-      "is not isolated. A float32 tie has no knob that converges, so this is a limit of the input as it is built; the rule that would "
-      "remove the tie from the input, and the measurement that would show whether it removes the growth, are @sec-oq-ties. On PLAID "
+      "surface features: nodes on the plate's mid-thickness plane, and rows of nodes on corner bisectors. In the geometry the standings' "
+      "checkpoints trained with (@sec-standing-geometry), the exact closest-point search keeps the feature it meets first, so the "
+      "direction input at those nodes follows the order of the search, which rounding of the moved coordinates changes "
+      "(@sec-lug-ties). The class takes, at a tie, the least-norm point of the hull of the tied directions, a function of the tie set "
+      "alone (@sec-arch-interior-geometry). ISLA retrained with it on the lug, two seeds, from the standing's snapshot and recipe with "
+      f"only the geometry changed, reads posed ÷ native {TX_PN:.4f} (a ratio of seed means), against "
+      f"{1 + TXL['P']['von_mises_l2']['e_B']:.3f} for the standing's checkpoints on the same reading, and its native error is "
+      f"{TXL['N']['von_mises_l2']['r']:.3f} times theirs, which the registered test reads as "
+      f"\"{TXL['N']['von_mises_l2']['verdict']}\" (@sec-lug-ties). On PLAID "
       "Tensile2d, whose prediction points include the nodes of its boundary polyline, posed ÷ native is "
       f"{f3([ST['tensile2d'].shift('ISLA', f, 'posed') for f in ST['tensile2d'].ds.headline], 4)}. Data: {LG.source}; "
-      f"{R.source('attrib090', 'RESULTS.md')} (section 4).")
+      f"{R.source('attrib090', 'RESULTS.md')} (section 4); {R.source('tie_exp', 'read/results.json')}.")
 print()
 print(S.in_flight_callout("lug"))
+print('::: {.callout-note title="In flight"}\nThe lug standing\'s posed ÷ native comes from checkpoints trained with the '
+      "geometry of @sec-standing-geometry. ISLA trained on the lug with the class's geometry is being measured, and the ledger "
+      "(@sec-ledger) tracks it.\n:::")
 ```
 
 ### The prediction depends on the query set {#sec-limits-query-independence}
@@ -535,9 +547,6 @@ q_rey = SEEDS * lane_gpuh("aerozoo")
 _XB_RES = " ".join(R.load("suv_xfam_b", "RESULTS_B.md").split())
 q_transfer = sum(map(float, re.search(r"training ISLA ([\d.]+) \+ ([\d.]+), Transolver ([\d.]+) \+ ([\d.]+)", _XB_RES).groups()
                      + re.search(r"GPU-h, with training ([\d.]+) \+ ([\d.]+), smoke", _XB_RES).groups()))
-# the tie rule's experiment as MEDIAL-TIE's design prices it (eager-trained lug and Tensile2d, two seeds each)
-DESIGN = " ".join(R.load("medial_tie", "DESIGN.md").split())
-q_ties = int(re.search(r"TIE costs about .*?\*\*(\d+) GPU-h\*\*", DESIGN).group(1))
 # the scaling ladder at the reference configuration on the DrivAerML Surface task:
 # five case rungs x three sizes x two seeds, each run's epoch proportional to its cases, every size priced at the reference's cost
 RUNGS = (27, 54, 109, 218, 435); SIZES = 3
@@ -570,8 +579,12 @@ rows = [
     ("Does a fixed scale of ISLA's Reynolds input hold beyond AirfRANS? (@sec-oq-reynolds)", "ISLA trained with the fixed log-Reynolds scale on AeroZoo's `reynolds` split, read against ISLA with the fitted scale", f"at most {fmt_h(q_rey)}"),
     ("Are ISLA's crossflow and non-box failures on AeroZoo limits of the architecture? (@sec-oq-aerozoo)", "ISLA-DTT on the same splits; for the non-box family, a training set whose velocity scales cover the ducts'", "in the first row"),
     ("Why does ISLA not hold the outlet at its prescribed pressure on the crossflow layout? (@sec-oq-outlet)", "the predicted gauge pressure on the outlet faces against the prescribed zero, on every split and for both forms", "scoring only"),
-    ("Do the closest-feature ties carry the lug's posed growth? (@sec-oq-ties)", "a tie rule that does not depend on the search, retrained on the lug and Tensile2d and scored posed against the same base, by the reading rule of its design", f"{q_ties} (the design's figure)"),
-    ("Can the fold sign and the token draw be made exact in float32? (@sec-oq-precision)", "a fold-robust sign and a draw ordered by the mesh's connectivity, with the float32-against-float64 comparison of the same cases rescored", "scoring only for the gap"),
+    ("Is the class's tie direction well conditioned where the tied normals nearly coincide? (@sec-oq-ties)", "the lug standing "
+     "retrained with the class's geometry, scored rotated and translated, with its on-wall directions compared between poses at the "
+     "nodes of the split faces", "scoring only, once those checkpoints exist"),
+    ("Does what rounding still decides in the class's geometry move a trained model? (@sec-oq-precision)", "the standings "
+     "retrained with the class's geometry, scored rotated and translated, and in float32 against float64 on the AeroZoo cases of "
+     "the float32 comparison", "scoring only, once those checkpoints exist"),
     ("How large is ISLA-DTT's tree error at $\\theta = 1$ where its forest's frame ties? (@sec-oq-dtt-frame)", "ISLA-DTT scored rotated and translated, and under boundary redraws, on cases whose boundary has near-equal principal variances", "scoring only"),
     ("Does ISLA transfer better on SHIFT-SUV from fastbacks to estates? (@sec-oq-transfer)", "two more seeds of each of the three fastback-trained models, scored on both families and read by the same registered rules", f"{fmt_h(q_transfer)}"),
     ("Does ISLA's far-field eddy-viscosity error on the DrivAerML Volume task come from the ground and domain walls it is not given? (@sec-oq-far-field)",
@@ -603,8 +616,7 @@ print(": The open questions, the measurement that would settle each, and its cos
       "to its cases, and *at most* marks a run priced at a larger set than it trains on; *scoring only* means the measurement reads "
       "checkpoints that exist; the far-field question is priced at the step time measured in short trial runs of its two arms. How to read this: the "
       "costs are training only, not scoring; they price the experiment's design, not a "
-      f"schedule. Data: {LIM_SRC}, from results/campaigns_2026-10-22/cost_090/extract.jsonl; the tie rule's figure is "
-      f"{R.source('medial_tie', 'DESIGN.md')}; the far-field question's is {R.source('floor_drv', 'PREREG.md')} (section 8).")
+      f"schedule. Data: {LIM_SRC}, from results/campaigns_2026-10-22/cost_090/extract.jsonl; the far-field question's is {R.source('floor_drv', 'PREREG.md')} (section 8).")
 ```
 
 ### ISLA or ISLA-DTT as the interior form {#sec-oq-dtt}
@@ -752,62 +764,57 @@ print("**The open question is why ISLA does not hold the outlet at its prescribe
       f"for both forms. Cost: scoring only. Data: {R.source('az_diag', 'pdiag/pdiag.tsv')}.")
 ```
 
-### Closest-feature ties of the exact geometry {#sec-oq-ties}
+### The tie direction where normals nearly coincide {#sec-oq-ties}
 
 ```{python}
 #| label: para-oq-ties
 #| output: asis
+TXR = " ".join(R.load("tie_exp", "RESULTS.md").split())
+A7 = re.search(r"At (\d+) of about ([\d.]+)M on-wall nodes \|u32 - uref\| reaches ([\d.e-]+)", TXR).groups()
 n_pose = sum(all(abs(ST[k].shift("ISLA", f, "posed") - 1) <= 0.002 for f in ST[k].ds.headline) for k in FIN)
-print("**The open question is whether the closest-feature ties of the lug's mesh carry its posed growth, and whether a tie rule that "
-      f"does not depend on the search removes it.** On the lug posed ÷ native is {lug:.2f}, and {n_tie} interior nodes of the probed "
-      "test lugs are equally far, to float32 resolution, from two or more surface features; the search keeps the feature it meets first "
-      "(@sec-limits-ties). The rule proposed for them takes, at a tie, the minimum-norm element of the generalized gradient of the "
-      "signed distance over the tied candidates' directions: the midpoint of two directions, zero where they cancel, as on a plate's "
-      "mid-plane. It is a function of the tie set alone, so it does not depend on the order of the search, it flips with the winding "
-      "and it rotates with the body. What would settle it: that rule retrained on the lug and on PLAID Tensile2d, two seeds each, "
-      "scored native and posed against the same base, read on three questions by a rule written before any score: whether the flip "
-      "residual falls to float32 roundoff, whether native accuracy is unchanged within the seed spread, and how much of the excess of "
-      f"posed ÷ native over one is left. The bar the other standings set is posed ÷ native within 0.002 of one on every headline field, which {n_pose} of "
-      f"the {len(FIN)} final standings meet. Nodes on the surface itself keep the found feature's direction under this rule, and a rule for "
-      f"them is open too. If retraining with it brings the flip residual to float32 roundoff and shows no accuracy cost, the rule enters "
-      f"ISLA's geometry with the rest of the candidate geometry of "
-      f"@sec-oq-precision. Cost: {q_ties} GPU-hours, as the design prices it. Data: {R.source('medial_tie', 'DESIGN.md')}.")
+print("**The open question is whether the class's tie direction is well conditioned where the tied directions nearly coincide.** "
+      "At a closest-feature tie the class takes the least-norm point of the hull of the tied directions, and on the wall the same "
+      "point of the hull of the unit normals of the cells that hold the point (@sec-arch-interior-geometry). Retrained with that "
+      f"rule, ISLA's posed ÷ native on the lug is {TX_PN:.4f}, against {lug:.2f} for the standing (@sec-limits-ties). The routine "
+      "returns the exact least-norm point of the directions it receives, but where they form tight clusters that point amplifies "
+      "their rounding. On the lug's split hexahedral faces, whose normals fall into tight clusters, with the normals computed at the "
+      f"queries' precision the float32 and the exact on-wall directions differ by up to {A7[2]} at {A7[0]} of about {A7[1]} million "
+      "on-wall nodes. The class computes those normals in float64 from the coordinates as given, so a float32 and a float64 run on "
+      "the same inputs read the same normals; a rigid motion still rounds the coordinates, and the point amplifies that rounding. The bar the other standings set is posed ÷ native "
+      f"within 0.002 of one on every headline field, which {n_pose} of the {len(FIN)} final standings meet. What would settle it: "
+      "the lug standing retrained with the class's geometry, scored rotated and translated, with its on-wall directions compared "
+      "between poses at the nodes of the split faces. Cost: scoring only, once those checkpoints exist. Data: "
+      f"{R.source('tie_exp', 'RESULTS.md')}; {R.source('tie_exp', 'read/results.json')}.")
 ```
 
-### The wall-distance sign at folds and the token draw in float32 {#sec-oq-precision}
+### What rounding still decides in the geometry {#sec-oq-precision}
 
 ```{python}
 #| label: para-oq-precision
 #| output: asis
-F32R = " ".join(R.load("az_diag", "f32floor/README.md").split())
-s32 = re.search(r"moves single-case predictions by ([0-9]+)-([0-9]+) %", F32R).groups()
-print("**The open question is whether two discrete steps of ISLA's geometry, the sign of the wall distance at folded surface features "
-      "and the draw of boundary tokens, can be made independent of float32 roundoff.** On a few AeroZoo `full` test cases ISLA's float32 "
-      f"and float64 predictions differ by {F32['isla_gap'][0]:.0e} to {F32['isla_gap'][1]:.0e} of the target's RMS, and computing "
-      "only the geometry in float64 removes the difference. "
-      f"{F32['sign_flips'][0]} to {F32['sign_flips'][1]} of a case's 200,000 prediction points flip the sign of their wall distance "
-      "between the two precisions; at each the closest feature is an edge or a vertex whose pseudo-normal cancels, a fold of the "
-      "surface, where the sign is ill-posed even in exact arithmetic, so float64 would only make an arbitrary choice reproducible. And "
-      f"{F32['draw_changes'][0]} to {F32['draw_changes'][1]:,} of the 200,000 drawn boundary cells change between the two precisions, "
-      "because the draw orders the cells by a Morton code of their centroids. Changing only the draw's systematic start moves "
-      f"single-case predictions by {s32[0]} to {s32[1]}%, a larger effect than the precision gap. Neither is a translation defect: "
-      "moving the coordinates to the origin does not help. What would settle it: a sign that does not divide by a cancelling sum, such "
-      "as a generalized winding number, and a draw ordered by the mesh's connectivity, cached per mesh (or, more cheaply, the Morton "
-      "quantization in float64, which removes the precision dependence but not the rotation dependence), each followed by the "
-      "float32-against-float64 comparison of the same cases. Cost: scoring only for the gap; a retrain prices the accuracy. Data: "
-      f"{R.source('az_diag', 'f32floor/README.md')}; {R.source('medial_tie', 'DESIGN.md')} (section i).")
+FSR = R.load("fold_sign", "f32floor_tables.md")
+FST = R.md_table("fold_sign", "f32floor_tables.md")
+fs_after = [R.num(r["gap after"]) for r in FST]
+assert re.search(r"R1: N_flip outside the band summed over cases = 0; in the band = 0", FSR)
+TDT = R.md_table("token_draw", "DESIGN.md", "2. Measurement")
+print("**The open question is whether what rounding still decides in the class's geometry moves a trained model.** In the "
+      "geometry the standings trained with, two steps turned roundoff into large changes. On a few AeroZoo `full` test cases ISLA's "
+      f"float32 and float64 predictions differ by {F32['isla_gap'][0]:.0e} to {F32['isla_gap'][1]:.0e} of the target's RMS: "
+      f"{F32['sign_flips'][0]} to {F32['sign_flips'][1]} of a case's 200,000 prediction points flip the sign of their wall "
+      "distance, each at a fold of the surface where the pseudo-normal that signed it cancels, and "
+      f"{F32['draw_changes'][0]} to {F32['draw_changes'][1]:,} of the 200,000 drawn boundary cells change, through the Morton "
+      "code of their centroids. The class signs the distance by the generalized winding number and draws its tokens in float64 in "
+      f"the boundary's canonical frame. On {len(FST)} AeroZoo `full` test cases, the registered repeat of that comparison finds no "
+      f"point whose sign changes, and the gap lies at {min(fs_after):.1e} to {max(fs_after):.1e}; the draw keeps the same cells at "
+      f"both precisions on all {len(TDT)} cases measured (@sec-medial-ties). Two things are left to rounding. A feature joins a tie "
+      "set when its distance lies within the rounding bound of the least, at the queries' precision, so the float32 and float64 "
+      "tie sets differ at medial axes, and the gap left is of that size on every case. And under a rotation with a translation, "
+      "float32 rounding of the moved coordinates moves centroids across the grid lines of the Morton code; where the boundary's "
+      "principal moments nearly tie, the frame itself turns. What would settle it: the standings retrained with the class's "
+      "geometry, scored rotated and translated, and in float32 against float64 on the same AeroZoo cases. Cost: scoring only, once "
+      f"those checkpoints exist. Data: {R.source('az_diag', 'f32floor/README.md')}; {R.source('fold_sign', 'f32floor_tables.md')}; "
+      f"{R.source('token_draw', 'DESIGN.md')} (section 2).")
 ```
-
-::: {.callout-note title="In flight"}
-These limits are those of ISLA's geometry as it is: a closest-feature tie resolved by the order of the search, the sign of
-the wall distance taken from the closest feature's pseudo-normal, and a token draw ordered along the dataset's axes on
-coordinates in the mesh's own precision. A candidate geometry is being measured that takes the least-norm direction at a
-tie, signs the distance by the generalized winding number, computes the draw in float64 in the boundary's canonical frame,
-which removes the draw's dependence on the compute precision and cuts, without removing, its dependence on the pose, and
-puts a point on the wall by the rounding of its coordinates in place of a fixed cutoff. It becomes ISLA's geometry, at its
-measured cost in training time, if retraining with its tie rule brings the flip residual to float32 roundoff and shows no
-accuracy cost (@sec-oq-ties); the ledger (@sec-ledger) tracks it.
-:::
 
 ### The frame of ISLA-DTT's forest {#sec-oq-dtt-frame}
 
@@ -897,10 +904,12 @@ print("**The open question is whether ISLA's far-field eddy-viscosity error on t
       "decides nothing about the input, which is the domain's whole boundary on every dataset (@sec-limits-whole-boundary). Cost: "
       "with the four meshes ISLA's step takes "
       f"{fd_step[2]} times as long ({fd_step[0]} against {fd_step[1]} s), so the {('two', 'three', 'four')[SEEDS * 2 - 2]} "
-      f"single-case runs take one {fd_gpus}-GPU node for about {fd_hours} hours, {fmt_h(q_floor)} GPU-hours. Almost all of the "
-      "added time is one query, the one that seeds the closest-cell search of ISLA's geometry, and not the 5,054 added cells: in "
-      f"training on a GB300 in bfloat16 it takes {SEEDQ[0]} s of the whole-boundary geometry call, against {SEEDQ[2]} ms with the "
-      f"vehicle alone, and without it ISLA's step with the whole boundary is {WB_STEP[1]} times its step with the vehicle alone. "
+      f"single-case runs take one {fd_gpus}-GPU node for about {fd_hours} hours, {fmt_h(q_floor)} GPU-hours. In the geometry the "
+      "standings trained with, almost all of the added time is one query, the one that seeded the closest-cell search, and not "
+      f"the 5,054 added cells: in training on a GB300 in bfloat16 it takes {SEEDQ[0]} s of the whole-boundary geometry call, "
+      f"against {SEEDQ[2]} ms with the vehicle alone, and without it ISLA's step with the whole boundary is {WB_STEP[1]} times its "
+      "step with the vehicle alone. The class seeds that search on its own cell tree; its cost with the whole boundary is in "
+      "@sec-using-cost. "
       f"Data: {R.source('cap_audit', 'tables/resid_drv_partB.md')}, {R.source('cap_audit', 'tables/probes/probe_a.json')}, "
       f"{R.source('floor_drv', 'PREREG.md')} (section 8), {R.source('boundary_audit', 'REPORT.md')} (section 4), "
       f"{R.source('setup_research', 'SETUP.md')} (section 0), {R.source('drv_ground', 'classify_summary.txt')}.")
@@ -1122,11 +1131,12 @@ print("**ISLA is the choice where the deployment mesh or sampling law may differ
       "arbitrary poses, and where a surrogate must be a function of the physics rather than of the dataset's frame; on in-distribution "
       f"accuracy at matched memory it leads in {len(TAL['leads'])}{LUGC}, is level in {len(TAL['is level with'])} and trails in "
       f"{len(TAL['trails'])} of the {n_all} comparisons of the final standings (@sec-standing).** " + NOTE + " The recommendation rests on the contracts, "
-      "not on an accuracy lead. They hold on every standing up to three measured limits: the closest-feature ties of the lug's mesh, "
-      "a candidate cause of its posed growth whose link is not isolated (@sec-limits-ties), the interacting form's dependence on the request (@sec-limits-query-independence), and the precision of the "
+      "not on an accuracy lead. They hold on every standing up to two measured limits, the interacting form's dependence on the "
+      "request (@sec-limits-query-independence) and the precision of the "
       "wall the interior model is given (@sec-limits-boundary-law, @sec-oq-precision). GeoTransolver and Transolver are released, in "
-      "use and not modified; measure weighting and origin-free positions reach users through ISLA (@sec-principled-ledger). Three "
-      "outcomes would change the recommendation.")
+      "use and not modified; measure weighting and origin-free positions reach users through ISLA (@sec-principled-ledger). The "
+      "lug's posed growth in the geometry the standings trained with comes from closest-feature ties, which the class's tie rule "
+      "removes (@sec-limits-ties). Two outcomes would change the recommendation.")
 print()
 print("- **The interior model changes form** unless interacting ISLA is clearly the more accurate on AeroZoo's held-out splits "
       "(@sec-oq-dtt): the recommendation is then a read-only model whose prediction at a point depends on that point and the "
@@ -1134,8 +1144,6 @@ print("- **The interior model changes form** unless interacting ISLA is clearly 
 print("- **ISLA gains a generalization claim on velocity** if its held-out penalty on AeroZoo velocity stays below a converged "
       "GeoTransolver's; on pressure no claim is possible while both baselines sit at the zero predictor (@sec-limits-transfer, "
       "@sec-aerozoo-baselines).")
-print("- **The pose contract becomes exact on every standing** if a tie rule that does not depend on the search removes the lug's "
-      "posed growth at no native cost (@sec-oq-ties).")
 print()
 print("If none fires, the recommendation stands as written, with the bounds of this chapter attached.")
 ```

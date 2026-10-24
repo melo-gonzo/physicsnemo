@@ -18,6 +18,13 @@ POSE_SEED = [p / n for p, n in zip(ST.seeds("ISLA", F, "posed"), ST.seeds("ISLA"
 B_POSED = [ST.err(a, F, "posed") for a in S.BASELINES]
 # closest-feature ties of ISLA's exact query geometry on 60 test lugs (book_D2_2026-10-22.py, from ATTRIB-090's geometry probe)
 TIE = json.load(open(RES / "campaigns_2026-10-22" / "book_D2" / "book_D2.json"))["lug_closest_feature_ties"]
+import records as REC
+# ISLA retrained with the class's tie rule on the standing's snapshot and recipe (TIE-EXP's registered read)
+TX = REC.load("tie_exp", "read/results.json")["lug"]
+TX_PN = 1 + TX["P"]["von_mises_l2"]["e_TIE"]
+TX_PN_B = 1 + TX["P"]["von_mises_l2"]["e_B"]
+TX_SEED = [TX["posed"]["tie"][s]["von_mises_l2"] / TX["native"]["tie"][s]["von_mises_l2"] for s in ("42", "43")]
+TX_NAT = [sum(TX["native"][a][s]["von_mises_l2"] for s in ("42", "43")) / 2 for a in ("tie", "b")]
 COST = {a: S.cost("lug", a) for a in S.ARCHS}
 
 from matplotlib.collections import PolyCollection
@@ -48,10 +55,14 @@ print(f"**On the GINOT bracket lug, scored on the native mesh, {head} on the von
       f"{ST.shift('ISLA', F, 'posed'):.2f} times its native value and stays {min(B_POSED) / ST.err('ISLA', F, 'posed'):.0f} times below "
       "the baselines', which rise to about one, the error of predicting zero everywhere. ISLA reads, face by face, which faces are "
       "clamped, which belong to the hole and to its loaded half, and the pressure on each; GeoTransolver reads the same four labels on "
-      "the surface triangles, and Transolver reads none. Where ISLA's posed growth comes from is not isolated; the structured mesh "
-      "gives its exact query geometry ties between equally near surface features, a measured candidate (@sec-lug-ties).")
+      "the surface triangles, and Transolver reads none. ISLA's posed growth comes from the ties between equally near surface "
+      "features that the structured mesh gives the geometry its checkpoints trained with: retrained with the class's tie rule, "
+      f"ISLA's posed error is {TX_PN:.4f} times its native one (@sec-lug-ties).")
 print()
 print(S.in_flight_callout("lug"))
+print('::: {.callout-note title="In flight"}\nThe ISLA numbers of this standing come from checkpoints trained with the geometry '
+      'of @sec-standing-geometry, whose closest-feature ties follow the order of the search. ISLA trained on the lug with the '
+      "class's geometry is being measured, and the ledger (@sec-ledger) tracks it.\n:::")
 ```
 
 ## The problem: a clamped lug pressed in its hole {#sec-lug-problem}
@@ -256,8 +267,8 @@ print(f"**Rotated and translated, the baselines fail and ISLA bends.** GeoTranso
       f"without augmentation has no answer for a rotated lug. ISLA reads {ST.err('ISLA', F, 'posed'):.4f}, {ST.shift('ISLA', F, 'posed'):.2f} "
       f"times its native error (per seed {' and '.join(f'{x:.2f}' for x in POSE_SEED)}). In absolute terms ISLA's posed error is "
       f"{100 * (ST.err('ISLA', F, 'posed') - ST.err('ISLA', F)):.2f}% of the field above its native one. The ratio is large because the native "
-      "error is so small: the same perturbation would barely register on a task whose native error is several percent. Where it comes "
-      "from is not isolated; the next section measures a candidate.")
+      "error is so small: the same perturbation would barely register on a task whose native error is several percent. The next "
+      "section locates it.")
 ```
 
 ## Studies on this dataset {#sec-lug-ladders}
@@ -271,7 +282,8 @@ print(f"**Rotated and translated, the baselines fail and ISLA bends.** GeoTranso
 #| output: asis
 print(f"**On the lug's structured mesh, {TIE['interior_direction_changed']:,} of {TIE['n_interior']:,} interior nodes "
       f"({100 * TIE['interior_direction_changed'] / TIE['n_interior']:.1f}%) on {TIE['n_cases']} test lugs are equally far, to float32 "
-      "resolution, from two or more surface features, and which feature sets their direction is decided by the order of the search.** "
+      "resolution, from two or more surface features, and in the geometry the standing's checkpoints trained with the order of the "
+      "search decides which feature sets their direction.** "
       "ISLA gives every prediction point the signed distance $s = d / L$ to the closest point of the full surface and the direction "
       "$\\nu = \\operatorname{sign}(d)\\, u$, with $u$ the unit vector from that closest point. Where the closest point is unique, both are "
       "continuous functions of position and rotate with the body. Where two features are equally near, the distance is still well "
@@ -279,7 +291,9 @@ print(f"**On the lug's structured mesh, {TIE['interior_direction_changed']:,} of
       "puts whole layers of nodes there. The mid-thickness layer is exactly as far from the top face as from the bottom face, so its "
       "candidates point up and down; nodes on the bisector of a corner sit between two faces at a small angle. The closest-feature "
       "search, a float32 bounding-volume hierarchy, keeps the first feature it meets, and which one that is depends on the vertex order "
-      "of the triangles and on rounding.")
+      "of the triangles and on rounding. That is the geometry the standing's checkpoints trained with (@sec-standing-geometry); the "
+      "class takes, at a tie, the least-norm point of the hull of the tied directions, which depends on the tie set alone "
+      "(@sec-arch-interior-geometry).")
 ```
 
 ```{python}
@@ -296,7 +310,7 @@ rows = [("nodes / of them on the surface", f"{TIE['n_nodes']:,} / {TIE['n_surfac
 print("| quantity | value |\n|---|--:|")
 for k, x in rows:
     print(f"| {k} | {x} |")
-print(f"\n: ISLA's exact query geometry on {TIE['n_cases']} GINOT bracket lugs from the test set, computed twice: on the stored surface, and "
+print(f"\n: The exact query geometry the standing's checkpoints trained with (@sec-standing-geometry) on {TIE['n_cases']} GINOT bracket lugs from the test set, computed twice: on the stored surface, and "
       "with every surface triangle's vertex order reversed and its normal negated. That reversal negates $d$ and $\\nu$ exactly wherever "
       "the closest feature is unique, so every node that does not flip is a node whose closest feature is tied and chosen by the search. "
       "How to read this: geometry only, with no trained model and no prediction; the reversal is not a rigid motion, so the table "
@@ -307,15 +321,22 @@ print(f"\n: ISLA's exact query geometry on {TIE['n_cases']} GINOT bracket lugs f
 ```{python}
 #| label: para-lug-ties
 #| output: asis
-print(f"**Everywhere else the geometry is exact, and at the ties it is not.** @tbl-lug-ties reverses every triangle of the surface, "
+print(f"**Everywhere else the standing's geometry is exact, and at the ties it is not.** @tbl-lug-ties reverses every triangle of the surface, "
       "which should negate every distance and direction. The distance does so on every node to float32 resolution, and every surface "
       "node keeps $s = 0$ with its direction flipped. At the tied interior nodes the distance flips and the direction does not: it turns "
       f"by up to {TIE['max_angle_interior_rad']:.2f} rad, a reversal on the mid-thickness layer. A rigid motion in float32 can change the "
-      "rounding and with it the order in which the search meets the tied features, so the same nodes are a candidate cause of ISLA's "
-      f"posed growth of {ST.shift('ISLA', F, 'posed'):.2f} (@tbl-lug-protocols). The link is not isolated: the measurement counts ties "
-      "of the geometry, not their effect on the prediction under a pose. A tie rule that does not depend on the search, such as the "
-      "mean of the tied candidates' directions (zero where they cancel, as on the mid-plane), would remove the tie from the input; whether "
-      "it removes the posed growth is open (@sec-oq-ties).")
+      "rounding and with it the order in which the search meets the tied features, at the same nodes. The table counts ties of the "
+      "geometry, not their effect on a prediction; a retrained model measures that.")
+print()
+print(f"**The ties carry the lug's posed growth.** ISLA trained with the class's tie rule, the least-norm direction at a tie (the "
+      "midpoint of two directions, zero where they cancel, as on the mid-plane), from the standing's snapshot and recipe with only the "
+      "geometry changed, two seeds, scored as the standing was: its posed error is "
+      f"{TX_PN:.4f} times its native one ({' and '.join(f'{x:.4f}' for x in TX_SEED)} per seed), against {TX_PN_B:.3f} for the "
+      f"standing's eager-trained checkpoints (posed ÷ native as a ratio of seed means). Its native von Mises error is {TX_NAT[0]:.5f} "
+      f"against {TX_NAT[1]:.5f}, {TX['N']['von_mises_l2']['r']:.3f} times (a ratio of seed means), which the registered test reads as "
+      f"\"{TX['N']['von_mises_l2']['verdict']}\". The registered reading of the pose is that \"{TX['P']['von_mises_l2']['verdict']}\": "
+      f"the posed excess (posed ÷ native minus one) left is {TX['P']['von_mises_l2']['ratio']:.3f} of the standing's, the float32 floor of an equivariant model "
+      f"({REC.source('tie_exp', 'read/results.json')}).")
 ```
 
 ## What this dataset does not say {#sec-lug-limits}
@@ -325,9 +346,9 @@ print(f"**Everywhere else the geometry is exact, and at the ties it is not.** @t
 ```{python}
 #| label: para-lug-limits
 #| output: asis
-print(f"- **The pose contract does not hold exactly on this mesh.** ISLA's posed error is {ST.shift('ISLA', F, 'posed'):.2f} times "
-      "its native one (@tbl-lug-protocols). Float32 tie-breaking in the closest-feature search has no knob that converges to exact "
-      "invariance, so this is a limit, with closest-feature ties as the measured candidate cause (@sec-lug-ties).")
+print(f"- **The standing's posed column measures the geometry its checkpoints trained with.** ISLA's posed error there is "
+      f"{ST.shift('ISLA', F, 'posed'):.2f} times its native one (@tbl-lug-protocols), from closest-feature ties that the order of the "
+      f"search decided; retrained with the class's tie rule, it is {TX_PN:.4f} times (@sec-lug-ties).")
 import records as R
 LDT = R.load("ref090", "r090_final.json")["fix"]
 ld_i, ld_d = LDT["lug"][F]["fix"], LDT["r090fix_lug_dtt"][F]["dtt"]
