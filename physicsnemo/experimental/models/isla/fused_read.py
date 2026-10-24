@@ -37,9 +37,9 @@ the rounding points of autograd's own sum over the basis's uses (each block's
 contribution rounded, then added to the running sum and rounded again), and handed to
 the basis once, after the last read's backward (:func:`basis_sink`): no block's
 gradient is materialized beside the sum.
-The small products run as ``tl.dot`` in float32 (``ieee``) on operands padded to
-Triton's minimum of 16: the kernel weights are read as a ``(2H, F)`` matrix whose odd
-rows are zero, so ``basis @ W^T`` comes out with the heads interleaved with zeros.
+The small products are broadcast sums in float32, not ``tl.dot``: on GB300 a float32
+``tl.dot`` of these shapes rounded like TF32 (basis gradients 6e-4 from float64 against
+the reference's 5e-5) even with ``input_precision="ieee"``.
 """
 
 from __future__ import annotations
@@ -73,38 +73,30 @@ def _pow2(n: int) -> bool:
 
 def supported(basis: torch.Tensor, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> bool:
     """The fused read applies: CUDA tensors, Triton importable, no float64 (the
-    reference read runs float64 eagerly), and power-of-two widths with ``2H`` and the
-    basis width at least 16 (``tl.dot``'s minimum)."""
+    reference read runs float64 eagerly), and power-of-two widths."""
     h, kc, c, f = q.shape[1], q.shape[2], v.shape[2], basis.shape[1]
     return (
         HAS_TRITON
         and all(t.is_cuda for t in (basis, q, k, v))
         and torch.float64 not in (basis.dtype, q.dtype, k.dtype, v.dtype)
-        and all(_pow2(n) for n in (h, kc, c, f))
-        and 2 * h >= 16
-        and f >= 16
+        and all(_pow2(n) for n in (h, kc, c, f, h * kc, h * c))
     )
 
 
 if HAS_TRITON:
 
     @triton.jit
-    def _padded_weights(w_ptr, H: tl.constexpr, F: tl.constexpr):
-        """The kernel weights ``(H, F)`` as a float32 ``(2H, F)`` matrix, row ``2h`` the
-        head ``h`` and every odd row zero."""
-        rr = tl.arange(0, 2 * H)
-        ff = tl.arange(0, F)
-        w = tl.load(w_ptr + (rr // 2)[:, None] * F + ff[None, :], mask=(rr % 2 == 0)[:, None], other=0.0)
-        return w.to(tl.float32)
+    def _weights(w_ptr, H: tl.constexpr, F: tl.constexpr):
+        """The kernel weights ``(H, F)`` in float32."""
+        return tl.load(w_ptr + tl.arange(0, H)[:, None] * F + tl.arange(0, F)[None, :]).to(tl.float32)
 
     @triton.jit
-    def _kernel_term(basis_ptr, p, msk, wi, H: tl.constexpr, F: tl.constexpr, BLOCK: tl.constexpr):
+    def _kernel_term(basis_ptr, p, msk, w, F: tl.constexpr):
         """The pairs' basis rows ``(BLOCK, F)`` and kernel terms ``(BLOCK, H)``, the
         latter rounded to the basis's dtype (both returned in float32)."""
         ff = tl.arange(0, F)
         bas = tl.load(basis_ptr + p[:, None] * F + ff[None, :], mask=msk[:, None], other=0.0).to(tl.float32)
-        ker2 = tl.dot(bas, tl.trans(wi), input_precision="ieee")  # (BLOCK, 2H), heads at even columns
-        ker, _ = tl.split(tl.reshape(ker2, [BLOCK, H, 2]))
+        ker = tl.sum(bas[:, None, :] * w[None, :, :], axis=2)
         return bas, ker.to(basis_ptr.dtype.element_ty).to(tl.float32)
 
     @triton.jit
@@ -117,7 +109,7 @@ if HAS_TRITON:
         start = tl.load(off_ptr + s)
         end = tl.load(off_ptr + s + 1)
         hh = tl.arange(0, H)
-        wi = _padded_weights(w_ptr, H, F)
+        w = _weights(w_ptr, H, F)
         q = tl.reshape(tl.load(q_ptr + s * (H * KC) + tl.arange(0, H * KC)).to(tl.float32), [H, KC])
         m_run = tl.full([H], float("-inf"), tl.float32)
         den = tl.zeros([H], tl.float32)
@@ -126,7 +118,7 @@ if HAS_TRITON:
             p = p0 + tl.arange(0, BLOCK)
             msk = p < end
             bj = tl.load(bj_ptr + p, mask=msk, other=0).to(tl.int64)
-            _, ker = _kernel_term(basis_ptr, p, msk, wi, H, F, BLOCK)
+            _, ker = _kernel_term(basis_ptr, p, msk, w, F)
             k = tl.reshape(
                 tl.load(
                     k_ptr + bj[:, None] * (H * KC) + tl.arange(0, H * KC)[None, :],
@@ -165,24 +157,24 @@ if HAS_TRITON:
     ):  # fmt: skip
         """One point: dq[s], the basis gradient of its pairs through this block's
         weights added to dbasis (BASIS_GRAD), and its part of the weights' gradient,
-        dw[s] (2H, F) float32."""
+        dw[s] (H, F) float32."""
         s = tl.program_id(0).to(tl.int64)
         start = tl.load(off_ptr + s)
         end = tl.load(off_ptr + s + 1)
         hh = tl.arange(0, H)
         ff = tl.arange(0, F)
-        wi = _padded_weights(w_ptr, H, F)
+        w = _weights(w_ptr, H, F)
         q = tl.reshape(tl.load(q_ptr + s * (H * KC) + tl.arange(0, H * KC)).to(tl.float32), [H, KC])
         lse = tl.load(lse_ptr + s * H + hh)
         dsum = tl.load(dsum_ptr + s * H + hh)
         dout = tl.reshape(tl.load(dout_ptr + s * (H * C) + tl.arange(0, H * C)).to(tl.float32), [H, C])
         dq = tl.zeros([H, KC], tl.float32)
-        dw = tl.zeros([2 * H, F], tl.float32)
+        dw = tl.zeros([H, F], tl.float32)
         for p0 in range(start, end, BLOCK):
             p = p0 + tl.arange(0, BLOCK)
             msk = p < end
             bj = tl.load(bj_ptr + p, mask=msk, other=0).to(tl.int64)
-            bas, ker = _kernel_term(basis_ptr, p, msk, wi, H, F, BLOCK)
+            bas, ker = _kernel_term(basis_ptr, p, msk, w, F)
             k = tl.reshape(
                 tl.load(
                     k_ptr + bj[:, None] * (H * KC) + tl.arange(0, H * KC)[None, :],
@@ -205,20 +197,17 @@ if HAS_TRITON:
             dp = tl.sum(v * dout[None, :, :], axis=2)  # (BLOCK, H)
             dz = pr * (dp - dsum[None, :])  # (BLOCK, H)
             dq += tl.sum(dz[:, :, None] * k, axis=0) * scale
-            ### The kernel-term gradient in the basis's dtype, interleaved with zeros as
-            ### the padded weights' rows are.
+            ### The kernel-term gradient in the basis's dtype.
             dker = dz.to(basis_ptr.dtype.element_ty).to(tl.float32)
-            dker2 = tl.reshape(tl.join(dker, tl.zeros_like(dker)), [BLOCK, 2 * H])
             if BASIS_GRAD:
                 dt = dbasis_ptr.dtype.element_ty
-                dbas = tl.dot(dker2, wi, input_precision="ieee").to(dt).to(tl.float32)  # (BLOCK, F)
+                dbas = tl.sum(dker[:, :, None] * w[None, :, :], axis=1).to(dt).to(tl.float32)  # (BLOCK, F)
                 rows = dbasis_ptr + p[:, None] * F + ff[None, :]
                 run = tl.load(rows, mask=msk[:, None], other=0.0).to(tl.float32)
                 tl.store(rows, (run + dbas).to(dt), mask=msk[:, None])
-            dw += tl.dot(tl.trans(dker2), bas, input_precision="ieee")
+            dw += tl.sum(dker[:, :, None] * bas[:, None, :], axis=0)
         tl.store(dq_ptr + s * (H * KC) + tl.arange(0, H * KC), tl.reshape(dq, [H * KC]))
-        rr = tl.arange(0, 2 * H)
-        tl.store(dw_ptr + s * (2 * H * F) + rr[:, None] * F + ff[None, :], dw)
+        tl.store(dw_ptr + s * (H * F) + hh[:, None] * F + ff[None, :], dw)
 
     @triton.jit
     def _fkr_bwd_source_kernel(
@@ -234,7 +223,7 @@ if HAS_TRITON:
         start = tl.load(boff_ptr + j) + chunk * CHUNK
         end = tl.minimum(tl.load(boff_ptr + j + 1), start + CHUNK)
         hh = tl.arange(0, H)
-        wi = _padded_weights(w_ptr, H, F)
+        w = _weights(w_ptr, H, F)
         kj = tl.reshape(tl.load(k_ptr + j * (H * KC) + tl.arange(0, H * KC)).to(tl.float32), [H, KC])
         vj = tl.reshape(tl.load(v_ptr + j * (H * C) + tl.arange(0, H * C)).to(tl.float32), [H, C])
         dk = tl.zeros([H, KC], tl.float32)
@@ -244,7 +233,7 @@ if HAS_TRITON:
             msk = i < end
             p = tl.load(perm_ptr + i, mask=msk, other=0).to(tl.int64)
             qi = tl.load(qib_ptr + i, mask=msk, other=0).to(tl.int64)
-            _, ker = _kernel_term(basis_ptr, p, msk, wi, H, F, BLOCK)
+            _, ker = _kernel_term(basis_ptr, p, msk, w, F)
             q = tl.reshape(
                 tl.load(
                     q_ptr + qi[:, None] * (H * KC) + tl.arange(0, H * KC)[None, :],
@@ -335,7 +324,7 @@ class _FusedKernelRead(torch.autograd.Function):
         if grad is not None and grad.acc is None:
             grad.acc = torch.zeros_like(basis)
         dbasis = grad.acc if grad is not None else basis
-        dw_parts = torch.empty(n_q, 2 * h, f, device=q.device, dtype=torch.float32)
+        dw_parts = torch.empty(n_q, h, f, device=q.device, dtype=torch.float32)
         dk = torch.zeros(plan.n_b, h, kc, device=q.device, dtype=torch.float32)
         dv = torch.zeros(plan.n_b, h, c, device=q.device, dtype=torch.float32)
         if n_q:
@@ -351,7 +340,7 @@ class _FusedKernelRead(torch.autograd.Function):
                     dout, dk, dv, scale, SOURCE_CHUNK,
                     H=h, C=c, KC=kc, F=f, BLOCK=BLOCK_PAIRS, num_warps=NUM_WARPS,
                 )  # fmt: skip
-        dw = dw_parts[:, 0::2].sum(0).to(w.dtype)
+        dw = dw_parts.sum(0).to(w.dtype)
         dtoken = None if grad is None else basis.new_empty(0)
         return None, dtoken, None, dw, None, dq.to(q.dtype), dk.to(k.dtype), dv.to(v.dtype), None, None
 

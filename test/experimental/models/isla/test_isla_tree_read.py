@@ -911,7 +911,9 @@ def test_fused_kernel_read_matches_the_reference_read(dtype):
 
     def run(kind, device, dt):
         plan = PairPlan.build(qi.to(device), bj.to(device), n_q, n_b)
-        b, w, q, k, v = ins = [t.to(device, dt).requires_grad_(True) for t in leaves]
+        b, w, q, k, v = ins = [
+            t.detach().clone().to(device, dt).requires_grad_(True) for t in leaves
+        ]
         lm = logm.to(device, torch.float32 if dt != D else D)
         if kind == "fused":
             assert supported(b, q, k, v)
