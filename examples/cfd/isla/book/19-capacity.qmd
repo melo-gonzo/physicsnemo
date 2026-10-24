@@ -1285,13 +1285,14 @@ dd_vol = next(r for r in DD if r["Dataset"].startswith("DrivAerML Vol"))["Step t
 assert "whole boundary" in DD[0]["Dataset"] and len(DD) == 5 and "both arms per-block compiled" in DDF
 T2D_LOSS = re.search(r"\*\*Tensile2d\*\* builds and trains ISLA-DTT: the loss falls from ([\d.]+) to ([\d.]+)", DDF).groups()
 print()
-print("**In the recipe's interior configurations, on the class as it is, ISLA-DTT's training step is "
+print("**In the recipe's interior configurations, with ISLA-DTT the class's interior default, ISLA-DTT's training step is "
       f"{min(dd_x('Step ratio')):.1f} to {max(dd_x('Step ratio')):.1f} times interacting ISLA's, at "
       f"{min(dd_x('Memory ratio')):.1f} to {max(dd_x('Memory ratio')):.1f} times its peak memory.** Each of the five interior "
       "datasets trained each form for 40 steps on one GB300, both per-block compiled, in bfloat16, at the dataset's reference split "
-      f"and resolution; on the DrivAerML Volume task with the whole boundary ISLA-DTT's step took {dd_vol[0]} s against interacting "
+      "and resolution, on the class without its derived bands and without the fast search's fused thin-cell kernels, both "
+      f"confined to the geometry call; on the DrivAerML Volume task with the whole boundary ISLA-DTT's step took {dd_vol[0]} s against interacting "
       f"ISLA's {dd_vol[1]} s. These runs check that every configuration builds and trains ISLA-DTT, Tensile2d's included, whose "
-      f"loss fell from {T2D_LOSS[0]} to {T2D_LOSS[1]}; they are not the timings of @fig-cost-sweep. "
+      f"loss fell from {T2D_LOSS[0]} to {T2D_LOSS[1]}; they are not the timings of @fig-cost-sweep or of @tbl-isla-cost. "
       f"Data: {R.source('default_dtt', 'FINAL_REPORT.md')} (per interior dataset).")
 ```
 

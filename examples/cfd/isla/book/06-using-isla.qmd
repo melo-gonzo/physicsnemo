@@ -162,7 +162,7 @@ qi = lambda col: (min(float(r[col]) for r in QI), max(float(r[col]) for r in QI)
 qd64, qi64 = qi("QI fp64, DTT"), qi("QI fp64, ISLA")
 assert "1,000 other points are added" in " ".join(R.load("default_dtt", "FINAL_REPORT.md").split())
 print()
-print(f"On the class as it is, with freshly initialized weights, on one real case of each of the {S._COUNT[len(QI)]} interior datasets, "
+print(f"With freshly initialized weights, on one real case of each of the {S._COUNT[len(QI)]} interior datasets, "
       "eager and in evaluation mode, adding 1,000 other points to a request moves ISLA-DTT's outputs at the shared points by "
       f"{sci(qd64[0])} to {sci(qd64[1])} of the field's largest value in float64, roundoff, and interacting ISLA's by "
       f"{sci(qi64[0])} to {sci(qi64[1])}. Data: {R.source('default_dtt', 'FINAL_REPORT.md')} (per interior dataset).")
@@ -547,8 +547,8 @@ forward pass (`sampling.sample_boundary_cells`):
   condition with fewer cells than its share kept whole and its unused share
   given to the others. The count is exactly $\min(\text{cells},
   \texttt{boundary\_tokens})$, a function of the cell counts alone, so the
-  draw has static shapes and compiles into the whole-model graph or into
-  the per-block graphs.
+  draw has static shapes and compiles into the whole-model graph; under the
+  per-block compile it runs eagerly, outside the compiled slice blocks.
 - **Law.** A cell is kept with probability $\pi_i$ proportional to its
   measure, capped at one, by systematic sampling along the Morton order of
   the centroids in the boundary's canonical frame, computed in float64: one start $u$, then every unit step along the cells laid end
@@ -1180,6 +1180,11 @@ GEO_PEAK = {}
 for r in GT_:
     GEO_PEAK.setdefault(r["case"], []).append(float(r["peak GiB"]))
 assert len(GEO_PEAK) == len(GEO_COST)
+assert all(max(v) == min(v) for v in GEO_PEAK.values())   # the same peak in every arm of a case
+# the class's reference arm as GEO-BAND's phase 0 timed it, without the derived bands, against this table's
+P0R = {r["case (Q / F)"]: (nums(r["geometry call: base / reference / fast [ms]"])[1], nums(r["step: base / reference / fast [ms]"])[1])
+       for r in R.md_table("geo_band_phase0", "PHASE0.md", "The book's 06 cost table")}
+dref = lambda i, col: [100 * (1 - P0R[k][i] / c[col]) for k, c in GEO_COST.items()]
 PH0 = " ".join(R.load("geo_band_phase0", "PHASE0.md").split())
 assert "The base column agrees between the two jobs within 1-3 % on every case" in PH0
 o = ("| case (prediction points / boundary cells) | geometry call: 0.9.0 / the class, reference / the class, auto [ms] | "
@@ -1197,11 +1202,14 @@ print(": The cost of ISLA's interior geometry in training: the geometry call and
       "case per step, the GPUs rotated between passes; each pass gives the median after five warm-up calls or steps, and "
       "each cell of the class's columns is the mean of its passes' medians (the reference two, auto three). The 0.9.0 "
       "column comes from another job of the same protocol on another node, the mean of two passes; its 0.9.0 timings agree "
-      "within 1 to 3% with those of a third job on every case. *Step ratio*: the class's step ÷ the 0.9.0 step. How to read "
+      "within 1 to 3% with those of a third job on every case. The class's reference arm, timed in that other job without the "
+      f"derived bands, reads {min(dref(0, 'geo_ref')):.0f} to {max(dref(0, 'geo_ref')):.0f}% shorter per geometry call and "
+      f"{min(dref(1, 'step_ref')):.0f} to {max(dref(1, 'step_ref')):.0f}% shorter per step than here, so a step ratio to "
+      "0.9.0 carries a few percent of spread between jobs. *Step ratio*: the class's step ÷ the 0.9.0 step. How to read "
       "this: the whole-boundary row reads the DrivAerML tunnel box beside the vehicle; there 0.9.0's geometry seeded its "
       "search with a query that cost about two seconds, which the class's cell-tree seed does not have. In two dimensions "
-      "both kernels run the same search over the segments. Peak memory of the training process differs by at most "
-      f"{max(max(v) - min(v) for v in GEO_PEAK.values()):.1f} GiB between the class's arms of a case. Data: "
+      "both kernels run the same search over the segments. Peak memory of the training process is the same, to the 0.1 GiB "
+      "the timing table prints, in every arm of a case. Data: "
       f"{R.source('geo_thinfast', 'lhr/timing_table.md')}; the 0.9.0 column, {R.source('geo_band_phase0', 'PHASE0.md')}. "
       "{#tbl-using-geometry-cost}")
 ```
@@ -1252,7 +1260,7 @@ assert "back at FAST-MERGE's pre-thin-fix 36.7 ms" in TFR and before("lug", FAST
 assert "what remains is F2's ball-search test" in TFR
 print()
 print("**The bounds for thin cells cost most on the lug, and the fast search's fused kernels take that cost back.** Against "
-      "the same protocol run on the class without those bounds, both before the derived bands (@sec-arch-interior-geometry), "
+      "the same protocol run on the class without those bounds, both without the derived bands (@sec-arch-interior-geometry), "
       "the reference search's "
       f"geometry call rose {pct('lug', REFC)}% on the lug, where {guard}% of the candidate pairs lie within the error bound "
       "that calls for the accurate closest point, so a third of them take it; it rose "
@@ -1274,7 +1282,7 @@ print("**The derived bands cost about three percent of the whole-boundary geomet
       "frame, the certified tie test and the float64 offset (@sec-arch-interior-geometry), timed apart as a geometry call "
       f"alone, outside training, add {BAND_T[2]} ms ({BAND_T[3]}%) to the DrivAerML Volume task's whole-boundary geometry "
       f"call under the reference search ({BAND_T[1].replace('-', ' to ')} against {BAND_T[0].replace('-', ' to ')} ms) and "
-      f"{BAND_T[6]} ms ({BAND_T[7]}%) under the fast one before its fused kernels ({BAND_T[5].replace('-', ' to ')} against "
+      f"{BAND_T[6]} ms ({BAND_T[7]}%) under the fast one without its fused thin-cell kernels ({BAND_T[5].replace('-', ' to ')} against "
       f"{BAND_T[4].replace('-', ' to ')} ms), on one GB300 (the median of "
       f"{S._COUNT[int(BAND_P[0])]} calls after {S._COUNT[int(BAND_P[1])]} warm-up calls, on {S._COUNT[int(BAND_P[2])]} "
       "draws). The other cases were not timed with them. Data: "
@@ -1367,7 +1375,7 @@ print(f"- **Compile block by block where the whole graph breaks.** `compile_bloc
       "compile ISLA-DTT, whose boundary read breaks the whole-model graph, and every interior configuration uses it "
       f"({', '.join(f'`{n}`' for n in _rest)}: `compile: false`, `compile_blocks: true`); interacting ISLA on AeroZoo needs "
       "it too, since that dataset's four boundaries recompile the whole graph. The standing's "
-      "training runs use it on every dataset but Tensile2d (@tbl-protocol). On the DrivAerML tasks, whose geometry runs in the "
+      "training runs use it on every dataset but Tensile2d, AirfRANS and the lug, whose ISLA standings train eagerly (@tbl-protocol). On the DrivAerML tasks, whose geometry runs in the "
       f"fused kernel, models trained with it score as models trained eagerly do: compiled ÷ eager error between {lo:.3f} and "
       f"{hi:.3f} on every field, seed means of two seeds (results/perf3_neutrality_2026-10-01.json). Without the mix-order "
       "setting, under torch 2.12, the compiled blocks compute another function on AirfRANS, Tensile2d and the lug, whose "

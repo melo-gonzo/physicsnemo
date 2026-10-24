@@ -38,7 +38,7 @@ style.** The tables below are canonical; the chapters cited define each entry at
 #| label: tbl-key-names
 #| output: asis
 NAMES = [
-    ("**ISLA**", "`physicsnemo.experimental.models.ISLA` as it is, the class defaults; beside ISLA-DTT on an interior task, the interacting form (`query_independent=False`), called interacting ISLA", "@sec-isla"),
+    ("**ISLA**", "`physicsnemo.experimental.models.ISLA` as it is, the class defaults (ISLA-DTT on an interior task); beside ISLA-DTT on an interior task, as in the interior standings, the interacting form (`query_independent=False`), interacting ISLA", "@sec-isla"),
     ("**the reference configuration** (of an architecture)",
      "the one configuration each architecture is scored at: ISLA width 512, 12 layers, 512 slices, learning rate 3.75e-4, 200,000 training cells; "
      "GeoTransolver width 256 (local width 32), learning rate 1e-3, 200,000 cells; Transolver width 512, 16 layers, learning rate 1e-3, 100,000 cells; "

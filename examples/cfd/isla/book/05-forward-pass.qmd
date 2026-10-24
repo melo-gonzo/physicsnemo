@@ -1459,7 +1459,7 @@ assert re.search(r"Two dimensions: an edge point, 15, plus the centring: 16", GB
 K_OBS = re.search(r"largest observed ratio ([\d.]+) of the bound over 600k thin pairs", GBD).group(1)
 FOOT_OBS = re.search(r"largest error observed against exact rational arithmetic is ([\d.]+)", inspect.getsource(_geo)).group(1)
 BF = re.search(r"The review counted `e_bf \+ A = ([\d.]+) > (\d+)` for float64 queries", GBD).groups()
-# the margin the code allows now, read from the brute force's prefilter in geometry.py
+# the margin the code allows, read from the brute force's prefilter in geometry.py
 BF_CODE = int(re.search(r"rounding = (\d+) \* torch\.finfo\(query_points\.dtype\)\.eps / 2", inspect.getsource(_geo)).group(1))
 assert BF_CODE >= float(BF[0]) > int(BF[1])
 F32_SHARE = re.search(r"the storage term u32 \(\|x\| \+ R_k\) is 1 - ([\d.]+e-\d+) of the band", GBR).group(1)

@@ -41951,9 +41951,8 @@ branch merges into psharpe/isla with this book batch.
 - The switch itself changes no version.
 - Every interior recipe configuration (`isla_volume`, `isla_volume_aerozoo`, `isla_volume_airfrans`, `isla_lug`,
   `isla_tensile2d`) states `query_independent: true` and trains with per-block compile (`compile: false`,
-  `compile_blocks: true`), because ISLA-DTT's boundary read breaks the whole-model graph. Each reference lane's resolved
-  configuration differs from its interacting partner's only in `query_independent`. The surface configurations keep the
-  whole-model compile.
+  `compile_blocks: true`), because ISLA-DTT's boundary read breaks the whole-model graph. The surface configurations keep
+  the whole-model compile.
 
 **Tests.** Interacting ISLA's tests now pass `query_independent=False` explicitly. New tests: a state dict of one interior
 form is refused by a model of the other, in both directions and on every loading path; new interior checkpoints store
@@ -41975,7 +41974,7 @@ test's, which compared with a recorded forward at 1e-5 on CPU and 1e-4 on CUDA. 
 on CPU (370472), 553 passed and 1 skipped on a GB300 with every CUDA test (370473); the recipe tests, 585 passed with the
 same two failures (370615).
 
-**The smokes.** Job 370215, on the merged tree e10681b33, one GB300 node: each interior dataset trained each form for 40
+**The smokes.** Job 370215, on the merged tree e10681b33 (ISLA 0.11.0, without GEO-BAND's bands), one GB300 node: each interior dataset trained each form for 40
 steps, bfloat16, augmentation off, seed 42, at its reference split and resolution, both forms per-block compiled, timed in
 the same job. ISLA-DTT's step was 2.17 to 2.73 times interacting ISLA's and its peak allocated memory 1.12 to 1.52 times;
 on the DrivAerML Volume task with the whole boundary (five pieces), 2.17 against 0.93 s and 195 against 129 GiB. Every
@@ -41983,7 +41982,8 @@ resolved configuration had `query_independent` true and per-block compile, every
 arrived non-empty, there was no graph break and at most one recompile per run. Tensile2d builds and trains ISLA-DTT: its
 loss fell from 0.47 to 0.20. On the lug at one GPU ISLA-DTT's 10-step mean loss drifted from 0.50 to 0.70 while
 interacting ISLA's fell from 0.48 to 0.40; the lane reads it as batch-1 noise, since the four-GPU reference lane of
-ISLA-DTT on the lug descends normally. The smoke before the merge with 0d46b2f9b (369932, another node) gave step ratios
+ISLA-DTT on the lug descends normally. The lane checked that each reference lane's resolved configuration differs from
+its interacting partner's only in `query_independent`. The smoke before the merge with 0d46b2f9b (369932, another node) gave step ratios
 of 1.97 to 2.64 and the same memory.
 
 **The query-independence check.** On one real case per interior dataset, with freshly initialized weights (the 0.9.0

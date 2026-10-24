@@ -825,7 +825,7 @@ trip = lambda a, k="mean", d=4: " / ".join(f"{DA[a][k][f]:.{d}f}" for f in VOL_F
 #| output: asis
 rr = [dr("DTT", f) for f in VOL_F]
 print(f"**ISLA-DTT makes every interior prediction a function of its point and the boundary alone; on a study configuration of the "
-      f"Volume task its error is {min(rr):.2f} to {max(rr):.2f} times ISLA's.** ISLA-DTT is ISLA with `query_independent=True`, the interior default: the interior "
+      f"Volume task its error is {min(rr):.2f} to {max(rr):.2f} times interacting ISLA's.** ISLA-DTT is ISLA with `query_independent=True`, the interior default: the interior "
       "points carry no routing weight, so they read the slices at every layer and write nothing into them, and after every layer each "
       "point also reads every boundary cell directly through a learned kernel of relative geometry, evaluated with a Barnes–Hut forest "
       "at opening angle $\\theta = 1$ (@sec-arch-modes). The forest is built in a canonical frame that the boundary carries (its weighted "
