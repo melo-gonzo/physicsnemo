@@ -67,7 +67,8 @@ are @sec-isla-contracts.
 **In distribution, ISLA leads on some datasets and fields and trails on
 others. Rotated and translated, or resampled, its error barely moves except
 on the lug's structured mesh, whose nodes tie for their closest feature,
-where the class's tie rule removes the growth (@sec-limits-ties), while
+where the class's tie rule removes most of the growth (@sec-limits-ties,
+@sec-standing-geometry), while
 the baselines' errors grow by factors.**
 
 ```{python}
@@ -131,7 +132,7 @@ print(f"At the reference configurations on the native mesh, over {len(keys)} dat
       + (" except on " + " and ".join(f"the {ds} (up to ×{r:.2f})" for ds, r in bent_ds.items()) if bent_ds else "")
       + "; on the GINOT bracket lug ISLA's error is "
       f"×{S.Standing('lug').shift('ISLA', 'von_mises_l2', 'posed'):.2f} rotated and translated, where its structured mesh ties interior "
-      "nodes for their closest feature in the geometry the standings trained with, a growth the class's tie rule removes "
+      "nodes for their closest feature in the geometry the standings trained with, a growth the class's tie rule mostly removes "
       "(@sec-limits-ties); "
       f"the baselines' errors grow by factors of {min(posed_base):.1f} to {max(posed_base):.0f}.")
 notes = [S.DATASETS[k] for k in keys if not S.DATASETS[k].reference]

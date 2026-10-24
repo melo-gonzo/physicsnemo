@@ -1204,9 +1204,9 @@ to centroid (`exact_boundary_geometry`).
 
 The distance is signed by the generalized winding number $w(x_q)$ of the
 oriented cells (Jacobson, Kavan and Sorkine-Hornung), the solid angle the
-cells subtend at the point over that of a sphere: 1 inside a closed surface
-and 0 outside it. With $\sigma$ the sign of the volume the cells enclose,
-$\sigma / 2 - w$ is $+1/2$ on the side the normals point to and $-1/2$ on the
+cells subtend at the point over that of a sphere: $\sigma$ inside a closed
+surface and 0 outside it, with $\sigma = \pm 1$ the sign of the volume the
+cells enclose. So $\sigma / 2 - w$ is $+1/2$ on the side the normals point to and $-1/2$ on the
 other, whichever way they point. The sign needs no closest feature, so it is
 right behind a sharp trailing edge, at a concave corner and at a fold, where
 cells meet back to back: the two sheets of a zero-thickness fold cancel in
@@ -1346,7 +1346,14 @@ three dimensions. The search runs without gradient;
 the closest point is then rebuilt from its cell's vertices with the
 barycentric weights of its region of the cell (computed in float64), so
 $\delta_q$ and $u_q$ are differentiable in the points and the vertex
-positions.
+positions. A cell of zero area, whose vertices coincide, is not handled: the
+search can raise on it or return a farther cell. None of the 36 million
+cells of the real cases checked is such a cell.
+
+::: {.callout-note title="In flight"}
+This limit is that of the search as it is. A search that reads a cell of zero area as the set
+its vertices span is being checked, and the ledger (@sec-ledger) tracks it.
+:::
 
 **No step of this geometry is left to the order of a search or to the sign
 of a cancelling sum.** The direction at a tie is a function of the tie set

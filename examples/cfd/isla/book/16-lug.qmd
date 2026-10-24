@@ -55,14 +55,14 @@ print(f"**On the GINOT bracket lug, scored on the native mesh, {head} on the von
       f"{ST.shift('ISLA', F, 'posed'):.2f} times its native value and stays {min(B_POSED) / ST.err('ISLA', F, 'posed'):.0f} times below "
       "the baselines', which rise to about one, the error of predicting zero everywhere. ISLA reads, face by face, which faces are "
       "clamped, which belong to the hole and to its loaded half, and the pressure on each; GeoTransolver reads the same four labels on "
-      "the surface triangles, and Transolver reads none. ISLA's posed growth comes from the ties between equally near surface "
+      "the surface triangles, and Transolver reads none. ISLA's posed growth comes mostly from the ties between equally near surface "
       "features that the structured mesh gives the geometry its checkpoints trained with: retrained with the class's tie rule, "
       f"ISLA's posed error is {TX_PN:.4f} times its native one (@sec-lug-ties).")
 print()
 print(S.in_flight_callout("lug"))
 print('::: {.callout-note title="In flight"}\nThe ISLA numbers of this standing come from checkpoints trained with the geometry '
-      'of @sec-standing-geometry, whose closest-feature ties follow the order of the search. ISLA trained on the lug with the '
-      "class's geometry is being measured, and the ledger (@sec-ledger) tracks it.\n:::")
+      'of @sec-standing-geometry, whose closest-feature ties follow the order of the search. The lug standing trained with the '
+      "class's geometry replaces them, and the ledger (@sec-ledger) tracks it.\n:::")
 ```
 
 ## The problem: a clamped lug pressed in its hole {#sec-lug-problem}
@@ -328,7 +328,7 @@ print(f"**Everywhere else the standing's geometry is exact, and at the ties it i
       "rounding and with it the order in which the search meets the tied features, at the same nodes. The table counts ties of the "
       "geometry, not their effect on a prediction; a retrained model measures that.")
 print()
-print(f"**The ties carry the lug's posed growth.** ISLA trained with the class's tie rule, the least-norm direction at a tie (the "
+print(f"**The ties carry most of the lug's posed growth.** ISLA trained with the class's tie rule, the least-norm direction at a tie (the "
       "midpoint of two directions, zero where they cancel, as on the mid-plane), from the standing's snapshot and recipe with only the "
       "geometry changed, two seeds, scored as the standing was: its posed error is "
       f"{TX_PN:.4f} times its native one ({' and '.join(f'{x:.4f}' for x in TX_SEED)} per seed), against {TX_PN_B:.3f} for the "

@@ -1148,8 +1148,8 @@ print(f"**The exact interior geometry adds {100 * (lo_k[0] - 1):.0f} to {100 * (
       "seconds of every call on the query that seeded its search, and the class seeds it on its own cell tree.")
 print()
 print('::: {.callout-note title="In flight"}\nThese costs are those of the class\'s reference geometry. A fast path that '
-      "computes the same geometry bitwise on CUDA when Triton is installed, chosen automatically, replaces them where it runs; it "
-      "is being completed, and the ledger (@sec-ledger) tracks it.\n:::")
+      "computes the same geometry bitwise on CUDA when Triton is installed, chosen automatically, replaces them where it runs, "
+      "once a fix for cells of zero area, which is being checked, is in it; the ledger (@sec-ledger) tracks it.\n:::")
 ```
 
 ```{python}
@@ -1165,7 +1165,7 @@ MIS = [("AirfRANS", ex("AirfRANS", "airfoil (")), ("the lug", ex("lug", "surface
        ("DeepJEB++", ex("DeepJEB++", "surface"))]
 print("**A token count that is a multiple of 32 trains fastest.** In bfloat16 on a GB300, on the DrivAerML Surface task and "
       f"AeroZoo, a step at an odd token count takes {min(odd):.2f} to {max(odd):.2f} times as long as at the same count padded to "
-      f"a multiple of 32, and at an even count that is not a multiple of 8 {min(even):.2f} to {max(even):.2f} times, eager and "
+      f"a multiple of 32, and at an even count that is not a multiple of 8, {min(even):.2f} to {max(even):.2f} times, eager and "
       "with the blocks compiled alike. The time goes to the slice attention's matrix products along the token axis, whose fast "
       "kernels need a token stride of 16 bytes, and to LayerNorm's backward pass, whose weight-gradient reduction takes its fast "
       "path only at a multiple of 32 rows. The count is the boundary tokens and prediction points of a case, fixed per case. "
@@ -1173,7 +1173,8 @@ print("**A token count that is a multiple of 32 trains fastest.** In bfloat16 on
       "cases whose count is not a multiple of 32 are " + ", ".join(f"{100 * f:.0f}% on {n}" for n, f in MIS[:-1])
       + f" and {100 * MIS[-1][1]:.0f}% on {MIS[-1][0]}. On AirfRANS an odd count costs "
       f"{R.num(al('airfrans_uvolume_2d', 'eager')['base odd / fix']):.2f} times in the eager step, and on the smaller cases "
-      "the cost is within the run-to-run spread of the wall time. Where the "
+      "the cost is within the run-to-run spread of the wall time, while the profiled GPU time of a step grows 5% on the lug and "
+      "8.6% on Tensile2d at one token more than an aligned count. Where the "
       "count is the user's choice, a multiple of 32 avoids the cost. Data: "
       f"{R.source('align8', 'results/repro_table.md')}; {R.source('align8', 'exposure/exposure_classes.tsv')}.")
 ```

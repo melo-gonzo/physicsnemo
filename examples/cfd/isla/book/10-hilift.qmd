@@ -294,10 +294,12 @@ plt.show()
 BCS = " ".join(R.load("bc_sidecar", "REPORT.md").split())
 DUP = re.search(r"About (\d+) M duplicated cells on (\d+) of (\d+) sampled geometries inflate HiLift's surface measures and "
                 r"draws \(about (\d+) % of uniform draws; ([\d-]+) % of the area\)", BCS).groups()
-DUPN = re.search(r"copies of only ([\d,]+-[\d,]+) distinct cells", BCS).group(1)
-print(f"Most wings store many of their cells more than once: on {DUP[1]} of {DUP[2]} sampled geometries about {DUP[0]} million "
-      f"cells are copies of only {DUPN.replace('-', ' to ')} distinct cells, about {DUP[3]}% of a uniform draw of cells and "
-      f"{DUP[4].replace('-', ' to ')}% of the summed wing area. The recipe reads the cells as stored, so the copies enter the "
+DUPM, DUPN, DUPF = re.search(r"hold ([\d.]+-[\d.]+) M duplicated cells, copies of only ([\d,]+-[\d,]+) distinct cells\. "
+                             r".*?The duplicates are (\d+) % of the cells", BCS).groups()
+print(f"Most wings store many of their cells more than once. On the five geometries examined cell by cell, "
+      f"{DUPM.replace('-', ' to ')} million cells are copies of only {DUPN.replace('-', ' to ')} distinct cells, "
+      f"{DUPF}% of the cells; copies on that scale are on {DUP[1]} of the {DUP[2]} geometries sampled, about {DUP[3]}% of a "
+      f"uniform draw of cells and {DUP[4].replace('-', ' to ')}% of the summed wing area. The recipe reads the cells as stored, so the copies enter the "
       f"surface measures and the cell draws ({R.source('bc_sidecar', 'REPORT.md')}, sections 3 and 5).")
 ```
 
@@ -401,8 +403,9 @@ print(f"**At the 510-case rung, on the native mesh, {both(HL, HL_F)}; on the uni
 ```
 
 ::: {.callout-note title="In flight"}
-These numbers come from the wing meshes as stored, with their duplicated cells (@sec-data-hilift). The same checkpoints
-scored with the duplicates excluded are being measured, and the ledger (@sec-ledger) tracks it.
+These numbers come from the wing meshes as stored, with their duplicated cells, which @sec-data-hilift counts on a
+sample of the geometries. A census of the duplicates in every scored case, and the same checkpoints scored with them
+excluded, are being measured, and the ledger (@sec-ledger) tracks it.
 :::
 
 ```{python}

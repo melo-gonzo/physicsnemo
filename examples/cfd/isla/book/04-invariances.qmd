@@ -136,7 +136,9 @@ along a Morton order of their centroids taken in the boundary's canonical frame.
 case draws the same cells except where float32 rounding of its coordinates moves a centroid across a grid line of the Morton
 code, or where the boundary's principal moments nearly tie and the frame itself turns; there its prediction moves by the
 difference between two quadratures of the same surface. That difference vanishes as the budget
-reaches the full resolution, where every cell is kept, and the posed protocol measures what remains at the working budget.
+reaches the full resolution, where every cell is kept, and the posed protocol measures what remains at the working budget;
+the standings' posed numbers were measured with a draw ordered along the dataset's axes (@sec-standing-geometry), under
+which a pose changes many of the drawn cells of a subsampled boundary (@sec-medial-ties).
 A boundary with no more cells than the budget is kept whole and is exact, as in the tests above. The length unit, the
 declared scales and each prediction point's wall geometry are computed from the full-resolution boundary before the draw,
 so none of them moves with it.
@@ -155,7 +157,7 @@ so none of them moves with it.
   roundoff, but the geometry of the interior task has two discrete steps that roundoff can still decide: which features
   join the tie set of a point equally far from two, and which cells the token draw keeps under a pose (@sec-medial-ties).
   The standings' checkpoints were trained with a geometry in which roundoff also picked the tied feature and the sign of
-  the distance at a fold of the surface (@sec-standing-geometry). ISLA's rotated-and-translated error stays within
+  the distance at a fold of the surface, and the token draw followed the dataset's axes (@sec-standing-geometry). ISLA's rotated-and-translated error stays within
   `{python} f"{POSED_DEV:.1%}"` of its native error on every headline field of every task with a final
   `{python} Markdown(f"standing{EXCEPT_TXT} (@tbl-contract-shifts). {S.tally_note()}")` On HiLiftAeroML, a surface task, it is
   `{python} f"{ST['hilift'].shift('ISLA', HEAD['hilift'], 'posed'):.3f}"` times native, outside the 0.2% registered for it;
@@ -811,17 +813,21 @@ fl_b = [TF(f"cmpaf_fix_r090eag_lug_isla_seed{s}", "von_mises")["median"] for s i
 fl_t2d = max(v["max"] for k, v in TX["F"].items() if k.startswith("F_code_tie2_tie_t2dz"))
 assert fl_t2d == 0
 NL, NT = TX["lug"]["N"]["von_mises_l2"], TX["t2d"]["N"]["displacement_l2"]
-print("**With the class's tie rule the lug's posed growth goes, at no native cost.** ISLA trained with the least-norm tie "
+print(f"**With the class's tie rule the lug's posed excess falls to {100 * TX['lug']['P']['von_mises_l2']['ratio']:.1f}% of the "
+      "standing's, at no native cost.** ISLA trained with the least-norm tie "
       "direction on the lug and on Tensile2d, two seeds each, from the standing's snapshot and recipe with only the geometry "
       f"changed, and scored as the standing was, reads posed ÷ native {1 + TX['lug']['P']['von_mises_l2']['e_TIE']:.4f} on the "
       f"lug's von Mises stress ({' and '.join(f'{x:.4f}' for x in tie_pn)} per seed), against "
-      f"{1 + TX['lug']['P']['von_mises_l2']['e_B']:.3f} for the standing's checkpoints (ratios of seed means). Its native error is "
-      f"{NL['r']:.3f} times theirs on the lug and {NT['r']:.3f} times on Tensile2d displacement (ratios of seed means), and the "
+      f"{1 + TX['lug']['P']['von_mises_l2']['e_B']:.3f} for the standing's checkpoints (ratios of seed means; the excess is posed "
+      "÷ native minus one). Its native error is "
+      f"{NL['r']:.3f} times the lug standing's, and {NT['r']:.3f} times that of seeds 42 and 43 of the four-seed Tensile2d "
+      "standing on displacement (ratios of seed means), and the "
       f"registered test reads both as \"{NL['verdict']}\"; on Tensile2d, whose seeds are far apart, its band is "
       f"±{2 * NT['sigma']:.2f} in the logarithm, so there it rules out only a large cost. Under a reversal of every cell's winding "
       "with the matching negation of the weights, the median residual of the trained models' prediction is "
       f"{' and '.join(f'{x:.2e}' for x in fl_tie)} on the lug, float32 rounding, against {' and '.join(f'{x:.2e}' for x in fl_b)} "
-      f"for the standing's, and exactly {fl_t2d:.0f} on Tensile2d. The registered reading is that \""
+      f"for the standing's, and exactly {fl_t2d:.0f} on Tensile2d, which the registered test reads as \"{TX['F_verdict']}\". "
+      "The registered reading of the pose is that \""
       f"{TX['lug']['P']['von_mises_l2']['verdict']}\" ({R.source('tie_exp', 'read/results.json')}; @sec-lug-ties).\n")
 F32 = R.md_table("az_diag", "f32floor/README.md", "3. Results")
 F32_HI = [r for r in F32 if r["run"] != "controls"]           # the cases chosen for their large float32 error
@@ -856,8 +862,8 @@ print(f"With the class's winding-number sign, the registered repeat of that comp
 
 ::: {.callout-note title="In flight"}
 The posed ÷ native ratios of the standings in this section come from checkpoints trained with the geometry of
-@sec-standing-geometry, whose ties follow the order of the search. Standings trained with the class's geometry on every
-dataset replace them, and the ledger (@sec-ledger) tracks them.
+@sec-standing-geometry, whose ties follow the order of the search. Standings trained with the class's geometry replace
+them, and the ledger (@sec-ledger) tracks them.
 :::
 
 ## Studies on a smaller ISLA {#sec-contract-studies}
