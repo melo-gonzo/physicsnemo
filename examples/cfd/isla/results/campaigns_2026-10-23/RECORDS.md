@@ -40,6 +40,9 @@ source. Do not edit by hand.
 | `dtt_fast_final/` | DTT-FAST, pass 2: ISLA-DTT's training step before and after on GB300, against interacting ISLA, and its surface form | `scratch/isla-dtt-fast-2026-10-23/final/` |
 | `nearwall/` | NEARWALL: ISLA's near-wall distance channel under the whole boundary, its exposure, response and precision, and the design | `scratch/isla-nearwall-2026-10-24/` |
 | `hl_dup/` | HL-DUP: HiLiftAeroML's duplicated wing cells, their census and effect on the standing (stage 1, revised after its second read) and the stage-2 registration | `scratch/isla-hl-dup-2026-10-24/` |
+| `geo_thin_final/` | GEO-THIN, final: the thin-cell fix as merged, its amended design (what is derived and what is estimated), checks, cost and limits | `scratch/isla-geo-thin-2026-10-24/` |
+| `nearwall_final/` | NEARWALL, final: the comment fix as merged, the contingency drafted for AF-WHOLE and the geometry note | `scratch/isla-nearwall-2026-10-24/` |
+| `dtt_fast_bf16diag/` | DTT-FAST, BF16-DIAG: where the chunked step's bf16 excess on AirfRANS comes from, its remedy, and the one-ulp yardstick | `scratch/isla-dtt-fast-2026-10-23/bf16diag/` |
 
 | topic | file | source | md5 |
 | --- | --- | --- | --- |
@@ -223,3 +226,11 @@ source. Do not edit by hand.
 | hl_dup | REVISION_NOTE.md | scratch/isla-hl-dup-2026-10-24/REVISION_NOTE.md | 7883e89de248a357e1024831e8553c04 |
 | hl_dup | HANDOFF_HLDUP.md | scratch/isla-hl-dup-2026-10-24/HANDOFF_HLDUP.md | d8fbfbee0c2401f7a6dca072bd78f9ee |
 | hl_dup | FINAL_REPORT.md | scratch/isla-hl-dup-2026-10-24/FINAL_REPORT.md | 74bc30896f511fcd9513fb01eb935e9f |
+| geo_thin_final | FINAL_REPORT.md | scratch/isla-geo-thin-2026-10-24/FINAL_REPORT.md | fd0d43090cc369e7dfb3bee51778cdc6 |
+| geo_thin_final | DESIGN.md | scratch/isla-geo-thin-2026-10-24/DESIGN.md | be6a283c8a973088cc6348ad8fd706f8 |
+| geo_thin_final | RESULTS.md | scratch/isla-geo-thin-2026-10-24/RESULTS.md | 50924a0e8a2c5441117b05cde4d8a4fb |
+| nearwall_final | FINAL_REPORT.md | scratch/isla-nearwall-2026-10-24/FINAL_REPORT.md | 163bf7637092883b4ef1ace0d29ba33b |
+| nearwall_final | PREREG_CONTINGENCY.md | scratch/isla-nearwall-2026-10-24/PREREG_CONTINGENCY.md | 26856eb98d681596301c37bdb7d3ae0d |
+| nearwall_final | GEOMETRY_NOTE.md | scratch/isla-nearwall-2026-10-24/GEOMETRY_NOTE.md | 6318e44c3819cbceb854772ba6e6254e |
+| dtt_fast_bf16diag | REPORT.md | scratch/isla-dtt-fast-2026-10-23/bf16diag/REPORT.md | 0cba3be885275a1e86191deec4089ad4 |
+| dtt_fast_bf16diag | RESULTS.md | scratch/isla-dtt-fast-2026-10-23/bf16diag/RESULTS.md | 8a8ad8b4de7f050e7ecd0f5db9b70e76 |
