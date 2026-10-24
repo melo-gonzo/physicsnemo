@@ -70,6 +70,14 @@ pipeline:
           _target_: torch.tensor
           data: [1.0, 1.0, 0.0]
   transforms:
+    # The domain meshes are stored 2.4 mm low on 297 of the 484 case files (ground
+    # at z = -0.32 m, under the wheels and the lowest CFD nodes): move them onto the
+    # CFD mesh's domain, ground through the vehicle's lowest point. First, in the
+    # files' raw metres, from the whole vehicle; zero shift on the other 187 files.
+    - _target_: ${dp:PlaceGroundUnderBody}
+      ground: no_slip
+      body: vehicle
+      boundaries: [no_slip, slip, inlet, outlet]
     - _target_: ${dp:DropMeshFields}
       global_data: [TimeValue]
     - _target_: ${dp:CenterMesh}

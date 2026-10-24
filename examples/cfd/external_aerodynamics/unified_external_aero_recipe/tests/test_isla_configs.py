@@ -332,6 +332,26 @@ def test_reference_volume_datasets_read_the_vehicle_whole_into_the_fluid(suffix)
     assert sdf < targets.index("${dp:DropBoundary}")
 
 
+@pytest.mark.parametrize("suffix", ["", "_area", "_posed"])
+def test_reference_volume_datasets_place_the_ground_under_the_vehicle_first(suffix):
+    """The four domain meshes are stored 2.4 mm low on 297 of the 484 DrivAerML files, so
+    every reference volume dataset moves them onto the CFD mesh's domain from the vehicle
+    read whole, as its first transform: in the raw metres, with z vertical, before the pose,
+    the centering and the nondimensionalization."""
+    ds = OmegaConf.load(
+        _RECIPE_ROOT / "datasets" / f"drivaer_ml_volume_reference{suffix}.yaml"
+    )
+    raw = OmegaConf.to_container(ds.pipeline.transforms, resolve=False)
+    assert raw[0] == {
+        "_target_": "${dp:PlaceGroundUnderBody}",
+        "ground": "no_slip",
+        "body": "vehicle",
+        "boundaries": list(DOMAIN_WALLS),
+    }
+    assert sum("PlaceGroundUnderBody" in str(t["_target_"]) for t in raw) == 1
+    assert ds.pipeline.reader.get("subsample_n_cells") is None
+
+
 @pytest.mark.parametrize(
     "model",
     sorted(p.stem for p in (_RECIPE_ROOT / "conf" / "model").glob("isla_*.yaml")),
