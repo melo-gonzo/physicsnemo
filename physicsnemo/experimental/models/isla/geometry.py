@@ -203,7 +203,7 @@ def _canonical_cells(points, cells):
     return torch.stack(vert, 1), 1 - 2 * (inversions % 2)
 
 
-def _closest_weights(q, simplex, flat=None):
+def _closest_weights(q, simplex, flat=None, fast=False):
     """The barycentric weights ``(P, d)`` of the point of each simplex closest to
     its query (Ericson 2005, Sec. 5.1.5), exact zeros outside the face region; call
     in float64 (the face-region weights are ratios of Gram determinants that cancel
@@ -224,7 +224,9 @@ def _closest_weights(q, simplex, flat=None):
     accurate point. At every pair below the guard, Ericson's weights stand,
     bitwise. Both branches are certified: the guard by ``K`` (:data:`_ERICSON_K`),
     the switch by a band of at least ``_SWITCH_UNITS + _FOOT_UNITS``, each a worst
-    case. ``unit`` is measured in the frame of ``q`` and ``simplex``."""
+    case. ``unit`` is measured in the frame of ``q`` and ``simplex``. ``fast`` computes
+    the guard and the accurate point (:func:`_guarded_weights`) by one Triton kernel
+    on CUDA, bitwise (:func:`~physicsnemo.experimental.models.isla.geometry_fast.guarded_weights`)."""
     if q.shape[-1] == 2:
         t = _segment_t(q, simplex[:, 0], simplex[:, 1])
         return torch.stack([1 - t, t], -1)
@@ -235,6 +237,26 @@ def _closest_weights(q, simplex, flat=None):
     a, b = s.gather(1, ends[:, :1, None].expand(-1, 1, 3))[:, 0], s.gather(1, ends[:, 1:, None].expand(-1, 1, 3))[:, 0]
     t = _segment_t(q[edge], a, b)
     w[edge] = torch.zeros_like(s[..., 0]).scatter(1, ends, torch.stack([1 - t, t], -1))
+    if fast:
+        constants = (_ERICSON_K, _SWITCH_UNITS, _ORIENT_ERRBOUND)
+        w = geometry_fast.guarded_weights(q, simplex, w, flat, _guarded_weights, *constants)
+    else:
+        w = _guarded_weights(q, simplex, w, flat)
+    if flat is not None:
+        v0, v1, v2 = simplex.unbind(1)
+        t1, t2 = _segment_t(q, v0, v1), _segment_t(q, v1, v2)
+        zero = torch.zeros_like(t1)
+        second = _segment_distance2(q, v1, v2) < _segment_distance2(q, v0, v1)
+        seg = torch.where(second[:, None], torch.stack([zero, 1 - t2, t2], -1), torch.stack([1 - t1, t1, zero], -1))
+        w = torch.where(flat[:, None], seg, w)
+    return w
+
+
+def _guarded_weights(q, simplex, w, flat):
+    """Ericson's weights ``w`` ``(P, 3)`` of :func:`_closest_weights` (after the edge
+    points' recomputation), each guarded pair's switched to the accurate point's
+    where their distances differ by more than ``_SWITCH_UNITS``; a zero-area row
+    (``flat``) is not guarded."""
     _, kappa, longest = _thin_bounds(simplex)
     dist = (q - (w[..., None] * simplex).sum(1)).norm(dim=-1)
     unit = 2.0**-53 * (q.norm(dim=-1) + simplex.norm(dim=-1).amax(-1))
@@ -247,13 +269,6 @@ def _closest_weights(q, simplex, flat=None):
         acc, d_acc = _accurate_weights(q[rows], simplex[rows])
         switch = (d_acc - dist[rows]).abs() > _SWITCH_UNITS * unit[rows]
         w[rows] = torch.where(switch[:, None], acc, w[rows])
-    if flat is not None:
-        v0, v1, v2 = simplex.unbind(1)
-        t1, t2 = _segment_t(q, v0, v1), _segment_t(q, v1, v2)
-        zero = torch.zeros_like(t1)
-        second = _segment_distance2(q, v1, v2) < _segment_distance2(q, v0, v1)
-        seg = torch.where(second[:, None], torch.stack([zero, 1 - t2, t2], -1), torch.stack([1 - t1, t1, zero], -1))
-        w = torch.where(flat[:, None], seg, w)
     return w
 
 
@@ -1845,7 +1860,9 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     ``fast`` changes how the three-dimensional candidates and the winding number are
     traversed, not what they are: the same tree in depth-first preorder with its
     cells in leaf order (:func:`_preorder_cell_tree`), the ball search alone on it,
-    and the winding number on packed node records (:func:`_packed_winding_sum`)."""
+    and the winding number on packed node records (:func:`_packed_winding_sum`); and
+    it computes the thin-cell guard and the accurate point of the closest weights
+    (:func:`_guarded_weights`) by one Triton kernel on CUDA, bitwise the torch code's."""
     nq, dim = query_points.shape
     dev = query_points.device
     q64, simplex = query_points.double(), points.double()[cells]
@@ -1914,7 +1931,7 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
         else:
             tree = _cell_tree(s_ord)
             seed = order[_nearest_cells(query_c, s_ord, tree)]
-        w0 = _closest_weights(q64, simplex[seed], flat[seed] if any_flat else None)
+        w0 = _closest_weights(q64, simplex[seed], flat[seed] if any_flat else None, fast)
         bound = (q64 - (w0[..., None] * simplex[seed]).sum(1)).norm(dim=-1) + band(torch.arange(nq, device=dev), seed)
         ### (padded by twice the bound, the kernel's float64 distances against these,
         ### and by the rounding of its box test)
@@ -1943,7 +1960,7 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     key = (li * f + pk).sort().values
     li, pk = key // f, key % f
     tri = simplex[pk]
-    w = _closest_weights(q64[li], tri, flat[pk] if any_flat else None)
+    w = _closest_weights(q64[li], tri, flat[pk] if any_flat else None, fast)
     diff = q64[li] - (w[..., None] * tri).sum(1)
     dist = diff.norm(dim=-1)
     err = band(li, pk)
@@ -2218,7 +2235,9 @@ def exact_boundary_geometry(
 
     ``kernel`` names the implementation of the search, not what it computes:
     ``"reference"`` defines it, and ``"fast"`` gives the same outputs bitwise
-    from a faster traversal in three dimensions (:func:`_closest_candidates_impl`).
+    from a faster traversal in three dimensions and, on CUDA with Triton, the
+    thin-cell guard of the closest points fused into one kernel
+    (:func:`_closest_candidates_impl`).
     """
     if query_points.shape[-1] not in (2, 3):
         raise NotImplementedError(
