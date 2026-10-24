@@ -41423,6 +41423,139 @@ Cost: 1.0 of 6 GPU-h (six GB300 short jobs, 367460 to 367749).
 
 *Read by the supervisor on 2026-10-24; added after the batch's second read, so not second-read.*
 
+**Later (2026-10-24).** NEARWALL's comment fix merged into psharpe/isla as cce0fb53d (comments and docstrings only;
+psharpe/isla-nearwall 9af2f1105). Its final records, the contingency drafted for AF-WHOLE (PREREG_CONTINGENCY.md, md5
+26856eb9) and the geometry note (GEOMETRY_NOTE.md, 6318e44c), are copied with its FINAL_REPORT.md (163bf763) to
+results/campaigns_2026-10-23/nearwall_final/. The second read of the thin-cell batch covers this entry
+(scratch/isla-book-geothin-2026-10-24/SECOND_READ_GEOTHIN.md).
+
+## 2026-10-24 — The thin-cell bounds merged (921472488): edge planes outward by vertex order, a float64 ball test that rejects a cell only beyond its derived error (K = 168), an accurate closest point where that error requires it; every model-visible output and gradient bitwise unchanged on every dataset; the switch and the bands' arithmetic share are first-order estimates; four limits recorded, the tie band's edge explaining lug case 1884 {#sec-nb-geo-thin-merged}
+
+**What merged.** psharpe/isla-geo-thin, merged into psharpe/isla as 921472488: 91bd3236e (F1 to F3 and
+`test_isla_geometry_thin.py`, 19 CPU and 19 CUDA tests, 13 of the CPU ones failing at 7213c70c5), 672d6373a (the bounds
+labelled as first-order estimates, and a test that pins the switch on ordinary cells), and the merges eee0c551e and
+6bac57cbd of psharpe/isla 1b25eb899 and cce0fb53d, which changed no geometry code. ISLA stays 0.11.0, with no new custom
+op. Records: scratch/isla-geo-thin-2026-10-24/FINAL_REPORT.md (md5 fd0d4309), DESIGN.md (be6a283c, the amended design)
+and RESULTS.md (50924a0e); copies in results/campaigns_2026-10-23/geo_thin_final/. Phase A's records stay in
+results/campaigns_2026-10-23/geo_thin/ (@sec-nb-geo-thin-census).
+
+**The design as built.** F1: each edge plane of the ball search's float32 lower bound is outward by the cell's vertex
+order, from the cell's normal, and a cell whose float64 normal error exceeds $u_{32}$ gets no planes. F2: the float64
+ball test rejects a cell only when Ericson's distance less its bound $K u_{64} l^2 / (\rho^2 L_k)$ exceeds the radius,
+with $K = 168$ derived (167.25, rounded up); the exact rational check stays within 0.0115 of the bound over about
+600,000 pairs. F3: a guarded pair gets an accurate closest point (the face foot in the frame of the longest edge, or the
+edge points), taken when the two distances differ by more than one unit of $u_{64}(\lvert x \rvert + R_k)$. The
+reference and the fast path stay bitwise equal.
+
+**The supervisor's acceptance of the amendment (08:36 EDT, option A of the lane's 08:31 question).** F1 and F2 are
+certified. F3's switch is not: its 12 and 13 units are first-order estimates, whose first-order worst cases are 77 and
+about 17.5 units, and its one unit rests on the largest error observed, 2.03 units (the design's 25 units let 9 of 520
+queries of the coplanar $10^{-10}$ cap through, 10 to 18 units off; one unit fixes them). The open limit: for float64
+queries the tie and on-wall bands rest on the underived 13-unit share, so rounding may decide a tie or an on-wall call at
+the $10^{-15}$ relative level; for float32 queries, and bfloat16 ones cast to float32, that share is $2.4 \times 10^{-8}$
+of the band. Option C, re-deriving the share for every pair, is the principled follow-up, and the supervisor launched it
+as its own lane, GEO-BAND, at 09:55 EDT, batched with 0.12.0; option B, deriving F3 alone, was declined.
+
+**The checks** (GB300 367730 and CPU one-thread 367731, rows in job 367849; at the final head 6bac57cbd, GB300 368128 and
+cpu-short 368129). Against 7213c70c5 with both ops renamed, every model-visible output (the distance, the direction, the
+winding sign, the tie and on-wall decisions) and every gradient is bitwise unchanged on 104 of 104 GB300 cases and 60 of
+60 CPU cases under each kernel: AirfRANS with its far field (4 draws), AeroZoo, the 20 lug cases, Tensile2d, and the
+DrivAerML whole boundary at 2 draws, 2 precisions and 200,000 queries. There only the op's internal closest-point
+weights differ, at 11 of 200,000 queries per draw, on-wall queries on ordinary tunnel-floor cells, by 1 to 2 ulps, and
+the new point is closer to exact in 20 of 22 rows.
+
+- Adversarial float64 queries on the stored AeroZoo meshes: 0 raises and 0 wrong (at the base, a CUDA device-side
+  assert). Adversarial CPU sets: 0 raises and 0 wrong distances, cells, on-wall decisions or signs in 517,296 queries.
+- Fast path against the reference: 0 of 2,558,096 queries and 0 of 16.7 million candidate pairs differ; FAST-PLUGIN, 0
+  of 584,953.
+- Tests: the ISLA directory on cpu-short (368129) 395 passed, 120 skipped; the recipe tests (368221) 551 passed, 12
+  skipped and 2 failed, `test_campaign_c_hooks`, which fails with the same E lines at 7213c70c5 (367075); on GB300 the
+  geometry, tree-read, geometry-fast, degenerate, thin and release files 282 passed and 1 skipped, forced and under auto.
+
+**The supervisor's acceptance of the real-data result (08:51 EDT):** accepted, with no version change and no new op.
+
+**Cost** (GB300 367918, synchronized timers). The DrivAerML whole-boundary call (16.65 million cells, 200,000 queries)
+takes 412 to 474 ms under the reference (+15%) and 343 to 405 ms under the fast path (+18%) by DESIGN.md and RESULTS.md;
+FINAL_REPORT.md gives the reference as 410 to 474 ms. By part: F2 adds 32 to 34 ms in the ball search, F3 about 27 ms
+per call, mostly launch overhead (about the same for AeroZoo's 93 guarded pairs as for DrivAerML's 12,243), and the thin
+bounds 8.5 ms. The guard is loose: a certified bound cannot reach zero guarded pairs on DrivAerML or the lug, which
+would take $K / 1000$ where the observed margin allows at most about $K / 87$. The lever is one fused guard and
+accurate-point kernel (about 25 ms per call), left for 0.12.0. The other cases were not re-timed; GEO-BAND re-times all
+five at 921472488.
+
+**The four limits.**
+
+- Overlapping coplanar cells: none on the stored meshes (0 coplanar folds, 0 overlaps in an axis plane); AeroZoo's 4
+  near folds change no recipe query.
+- T-junctions: 110 on 74 tunnel-floor edges of DrivAerML's whole boundary, none at a drawn query's closest point, and
+  splitting them leaves all 200,000 queries of each draw bitwise unchanged.
+- Near-duplicate normals at a tie: one-ulp vertex moves change the direction by at most $3.9 \times 10^{-5}$ on the lug
+  and $6.4 \times 10^{-6}$ on Tensile2d (Hölder order 1/2), with no active-set change.
+- The tie band's edge at medial points. The band's $\lvert x \rvert$ term is measured from the origin of the raw
+  coordinates and follows a translation. On lug case 1884, node 6997 of 11,520 has a gap over band of 1.12 natively and
+  0.86 posed, so it ties in one pose only and its direction moves by 0.707. That node is the whole of DTT-POSE's
+  $1.74 \times 10^{-5}$ excess on that case (@sec-nb-dtt-pose-design), which DTT-POSE had found to lie outside the
+  forest, and so the whole of ISLA-DTT's remaining posed residual there (probe_1884.py, cpu-short 368087 and 368125). A
+  band with $\lvert x \rvert$ measured about the boundary's centroid removes it; measuring $R_k$ about the centroid as
+  well unties nine mid-plane nodes of case 1909 (direction change 1), so the vertex term must still cover the stored
+  coordinates' float32 rounding. Which nodes tie still differs posed against native at 4,204 to 5,951 nodes per case,
+  from the bitwise test of distinct directions at planar stars, with the direction moving by at most
+  $1.5 \times 10^{-5}$ there.
+
+**For the book.** 05 states what the class does for thin cells, which parts are derived and which are first-order
+estimates, the checks, and four limits with their counts, and its thin-cell In-flight callout is cut; 06 states the
+whole-boundary call's change beside its cost table, with an In-flight callout for GEO-BAND's five-case timing; 20's
+`sec-oq-ties` is the band question, with an In-flight callout for GEO-BAND; 14's DTT-POSE row names the band edge as
+the source of case 1884's excess.
+
+Cost: 3.39 of GEO-THIN's 8 GPU-h, over 11 GB300 short jobs (scratch/isla-geo-thin-2026-10-24/JOBS.md).
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-geothin-2026-10-24/SECOND_READ_GEOTHIN.md).*
+
+## 2026-10-24 — DTT-FAST BF16-DIAG: the chunked step's bfloat16 excess on AirfRANS comes from an unpadded boundary side under PyTorch's default reduced-precision bfloat16 reduction, and padding it as the merged forward pads removes it; bfloat16 equivalence is judged against a one-ulp family of at least seven {#sec-nb-dtt-fast-bf16}
+
+**Question.** DTT-FAST's pass-2 table (14, the DTT-FAST row) left open why ISLA-DTT's query-chunked training step, in
+bfloat16, sat farther from float64 than the unchunked step on AirfRANS. Piece BF16-DIAG of DTT-FAST measured it on LHR.
+Records: scratch/isla-dtt-fast-2026-10-23/bf16diag/REPORT.md (md5 0cba3be8) and RESULTS.md (8a8ad8b4); copies in
+results/campaigns_2026-10-23/dtt_fast_bf16diag/.
+
+**The cause.** The chunked step runs the boundary side on the boundary tokens alone: 1,017 on AirfRANS, an odd count.
+At that count, under PyTorch's default `torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction = True`,
+cuBLASLt computes the slice anchors ($z_s$ and $m_s$ of every block, and the frame's anchors) with split-K partial sums
+rounded to bfloat16: 25 such kernels per step (2 per block for 12 blocks, plus the frame's), against none in the
+unchunked step at 3,017 tokens (profiler, 367990). Running the chunked step on the unchunked token tensor reproduces the
+reference's loss bitwise, and dropping the leaves changes nothing, so the chunking itself is exact.
+
+**How it shows.** Over 14 one-ulp parameter samples at 2,000 points, 6 chunked runs land at 2.1 to 6.8 times the
+reference's bfloat16 block error, and no reference run above 1.00 times; at all 180,593 points, 1 of 5 lands at 6.1.
+The tail sits in the geometry and routing weights of blocks 0 to 3. On DrivAerML's whole boundary, whose 200,000
+boundary tokens are already a multiple of 32, every chunked sample lies inside the reference's own one-ulp spread, which
+reaches 6.6 times on the loss (mse) and 3.35 times on the blocks.
+
+**The remedy.** Padding `_QueryChunks`' boundary side to a multiple of 32 as psharpe/isla 1b25eb899's `forward` pads
+(`_pad_tokens`), prototyped as a patch: on AirfRANS the blocks sit at 0.74 to 1.01 times the reference over 14 samples at
+2,000 points and 0.73 to 0.98 over 5 at all points; DrivAerML and the lug are unchanged; peak memory rises 3 MB and the
+step time does not change; the ISLA test directory passes (398 passed, 0 failed; 368050). DTT-FAST's integration pass 3
+applies it. Turning `allow_bf16_reduced_precision_reduction` off also removes the tail (0.92 to 1.00 times). The lane's
+open risk: padding only steers cuBLAS's choice of kernel by shape, so another token count could meet a reduction with
+bfloat16 partial sums again; only the setting rules that out everywhere.
+
+**The yardstick.** The supervisor's rule, now in LANE_RULES ("bf16 equivalence"): a change's bfloat16 numerics are
+judged against a family of at least 7 one-ulp perturbations of the reference (inputs or parameters), and per tensor group
+the changed path's distance to float64 must lie inside that family's range. One reference run is not a yardstick: on
+DrivAerML Volume the reference's own one-ulp spread reached 6.6 times on the loss and 3.35 times on the blocks.
+
+**The setting.** Whether to turn PyTorch's reduced-precision bfloat16 reduction off for the final rerun is the
+supervisor's question for the scope freeze. The setting is program-wide and changes the reference's bfloat16 numerics at
+some shapes, so a timed benchmark measures it first.
+
+**For the book.** No chapter changes: the chunked step is on an unmerged branch, and every chapter cost stays the merged
+code's. 14's DTT-FAST row carries the progress.
+
+Cost: 2.22 of 4 GPU-h (GB300 short jobs 367557, 367780, 367888, 367990 and 368049) and seven cpu-short jobs.
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-geothin-2026-10-24/SECOND_READ_GEOTHIN.md).*
+
 ## 2026-10-22 — MECH-090: on Tensile2d the fixed compiled path's float32 gradients sit at a one-ulp eager floor, and pytorch/pytorch#195845 added a unit-dependent sink to ISLA's slice-state softmax (registered emulations not confirmed; a post-smoke emulation matches) {#sec-nb-mech090}
 
 **Question.** REF-090's Tensile2d control (@sec-nb-ref090-t2d-control) read (b) by its registered weighing, in which A2
