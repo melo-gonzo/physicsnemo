@@ -42012,6 +42012,68 @@ results/campaigns_2026-10-23/dtt_default_int/ (FINAL_REPORT.md).
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-default-2026-10-24/SECOND_READ_DEFAULT.md).*
 
+## 2026-10-24 — GEO-THINFAST: the thin-cell guard and the accurate closest point fused into the fast search's Triton kernels, bitwise equal to the reference over 16.5 million queries; the lug's fast geometry call falls from 74.1 to 37.6 ms, and the fast search beats the reference by 22 to 55 percent on every three-dimensional case; the 2-D prefilter margin widened to 40 units; merged with this batch {#sec-nb-geo-thinfast}
+
+**Why.** GEO-THIN's bounds for thin cells made the exact geometry correct on thin cells, but their guard and accurate
+closest point ran as about a hundred small torch launches, twice per call. On the lug, where a third of the candidate
+pairs are guarded, the fast search had become no faster than the reference (@sec-nb-geo-band). Peter's ruling on the
+geometry's cost (2026-10-23): "Correctness is most important; correct + fast is even better. If the speedup experiment
+works, then add an optional fast path (like our other kernels, where we default iff triton is installed), and then remove
+the documented limitation / change it."
+
+**What was built** (psharpe/isla-geo-thinfast at b959a6735, which contains psharpe/isla b66013630 and GEO-BAND's
+3f3fef69f). The fast search computes the whole closest-weights step of triangles (Ericson's weights, the edge
+recomputation, the thin-cell guard and the zero-area segments) in one Triton kernel over the pairs, and the accurate
+point with its switch in a second kernel over the guarded pairs alone, listed by the first without a host
+synchronization. Each float64 operation is written in the form and order that torch's CUDA kernels use, measured on the
+GB300 first (jobs 369877, 369899, 369906): a sum of three over the last axis is ((x0 + x2) + x1) + 0, a norm the root of
+((x0^2 + x2^2) + x1^2) with no fma, a cross product's component an fma, and a scalar divided by a tensor the tensor's
+reciprocal times the scalar. The kernels are launched without contraction, and a negation is written as a product with
+-1, since Triton's unary minus is 0 - x and loses the sign of zero. The reference stays the torch code, unchanged. The
+kernels run only in the fast search, on CUDA with Triton and contiguous inputs, a choice made from the inputs' metadata
+before the launch. The same branch widened the two-dimensional brute force's prefilter margin for float64 points from
+32 to 40 units, which covers both counts of GEO-BAND's derivations (32 and the reviewer's 33.5), and pinned the band
+units to {2: 17, 3: 91} in a test.
+
+**Review.** A lane reviewer, at d42fc83d5, blocked the merge on one P0: a column-major query tensor gave wrong weights
+or an IndexError on the fused path. It also found int32 row offsets that overflow beyond about 238 million pairs. Both
+are fixed and tested in 1730022cb: the fused path runs only on contiguous inputs, and the offsets are int64. A
+pre-existing quirk stays: the reference's own outputs differ at roundoff between contiguous and column-major queries, so
+"bitwise for every input" holds per layout.
+
+**Result: bitwise equal to the reference.** In integer views, on every op output, the distance, the direction and both
+gradients, in float32 and float64, forced fast and under auto (job 370582): 0 differences over 1,240 runs and 16,527,248
+queries (every GEO-THIN and GEO-BAND dump, native, posed and with column-major queries, the adversarial AeroZoo sets and
+GEO-THIN's 88 adversarial thin-cell sets), 0 of 46,538,000 candidate pairs' weights, 0 of 673,850 queries in the forced
+plug-in check over the ISLA test directory, and 0 over 298 runs of the margin change against psharpe/isla's geometry,
+each version in its own process.
+
+**Timing** (job 370584, GEO-BAND's phase-0 protocol: GB300, bfloat16, eager, the median after five warm-up calls or
+steps, the arms interleaved and the GPUs rotated; the mean of the passes, three for each fast arm and two for the
+reference). The fast geometry call, before and after the fusion, with the reference beside it: lug 74.1 to 37.6 ms
+(reference 83.5), AeroZoo 113.7 to 92.8 (135.9), DrivAerML vehicle 384.4 to 345.2 (450.4), DrivAerML whole boundary
+436.1 to 403.3 (514.3); AirfRANS, in two dimensions, does not use the kernels (31.7 to 31.6, reference 33.2). The lug's
+step falls from 204 to 166 ms. The lug's fast call is back at its value before the bounds for thin cells, 36.7 ms; on
+DrivAerML the fusion takes 33 to 39 ms off the call, and what remains of the bounds' cost there is their test in the ball
+search. Peak memory is unchanged.
+
+**Tests.** The ISLA test directory on a GB300 with every CUDA test (370582): 620 passed, 1 skipped (environment-gated), 0
+failed. Under the forced plug-in, 605 passed and 1 failed, a recompile guard on the plug-in's own counter, which passes
+under auto in the same job. On CPU (370585): 413 passed, 200 skipped, 0 failed. GPU use 4.26 of the 6 GPU-h cap.
+
+**The supervisor's decision.** No version change: the branch changes no output, gradient or state dict.
+
+**For the book.** 06's geometry cost table takes the class's columns from this timing, with the derived bands included,
+and keeps the standings' 0.9.0 column from GEO-BAND's phase 0, another job on another node. Its paragraphs say that the
+fast search cuts the geometry call by 22 to 55 percent on every three-dimensional case and that the fused kernels take
+the thin-cell cost back on the lug. 06's In-flight callout on the fused kernel is gone. As Peter's ruling asks, the
+documented limitation, a fast search no faster than the reference on the lug, is gone from the chapters, and the cost on
+DrivAerML is given at the new numbers. 05 states the prefilter margin of 40 units, which covers both counts. 20's
+whole-boundary geometry call reads the same table. Records: results/campaigns_2026-10-23/geo_thinfast/ (FINAL_REPORT.md,
+RESULTS.md, REVIEW.md, lhr/timing_table.md).
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-default-2026-10-24/SECOND_READ_DEFAULT.md).*
+
 ## 2026-10-22 — MECH-090: on Tensile2d the fixed compiled path's float32 gradients sit at a one-ulp eager floor, and pytorch/pytorch#195845 added a unit-dependent sink to ISLA's slice-state softmax (registered emulations not confirmed; a post-smoke emulation matches) {#sec-nb-mech090}
 
 **Question.** REF-090's Tensile2d control (@sec-nb-ref090-t2d-control) read (b) by its registered weighing, in which A2
