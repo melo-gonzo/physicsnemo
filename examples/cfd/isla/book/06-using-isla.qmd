@@ -1044,11 +1044,13 @@ print(f"**A checkpoint of any version other than {ISLA.__model_checkpoint_versio
       "load weights into a built model (`Module.load`, `load_checkpoint`, the recipe's resume, `init_from` and inference, "
       "and `load_state_dict` itself) go through a pre-hook that refuses a state dict with the parameter layout of a "
       "checkpoint before 0.7.0, or with torch's state-dict version of the module other than the class's "
-      f"`_version = {ISLA._version}`. The second mark tells apart a state dict of 0.7.0 to 0.10.0, whose layout is the current "
+      f"`_version = {ISLA._version}`. The second mark tells apart a state dict of 0.7.0 to 0.11.0, whose layout is the current "
       "one but whose weights were trained on another forward: in 0.7.0 another geometry encoding of the prediction points; in 0.7.0 "
       "and 0.8.0 a length unit from the given or drawn cells' centroids alone instead of the full-resolution boundary with each "
       "cell's own second moment; in 0.9.0, the version the standings' checkpoints were trained with, the interior geometry of "
-      "@sec-standing-geometry; and 0.10.0 names a head-frame variant the class does not have. The cell above marks "
+      "@sec-standing-geometry; 0.10.0 names a head-frame variant the class does not have; and 0.11.0 has tie and on-wall "
+      "bands with a first-order arithmetic share and the search's arithmetic in the raw coordinates "
+      "(@sec-arch-interior-geometry). The cell above marks "
       "the example's file as written by 0.8.0 and its state dict with 0.8.0's version mark; both are refused:")
 print()
 for label, msg in refusals.items():
@@ -1242,6 +1244,21 @@ print("**The bounds for thin cells cost most on the lug.** Against the same prot
       "AirfRANS, in two dimensions, where the bounds do not apply, it is unchanged within the passes' spread. A fused kernel "
       "for the accurate closest point is the lever on that cost, and the ledger (@sec-ledger) tracks it. Data: "
       f"{R.source('geo_band_phase0', 'PHASE0.md')} (Against FAST-MERGE's head).")
+# the derived bands, the centred frame and the certified tie test, timed apart on the whole-boundary call (GEO-BAND)
+GBR = " ".join(R.load("geo_band_final", "RESULTS.md").split())
+BAND_T = re.search(r"reference ([\d-]+) -> ([\d-]+) ms \(VF, \+(\d+) ms, \+([\d.]+) %\), fast ([\d-]+) -> ([\d-]+) ms \(\+(\d+) ms, \+([\d.]+) %\)", GBR).groups()
+BAND_P = re.search(r"DrivAerML whole-boundary call \(GB300, median of (\d+) after (\d+) warm-up, (\d+) draws\)", GBR).groups()
+print()
+print("**The derived bands cost about three percent of the whole-boundary geometry call.** @tbl-using-geometry-cost times "
+      "the class's search with its bounds for thin cells but without the derived bands, the centered frame and the "
+      "certified tie test (@sec-arch-interior-geometry). "
+      f"Those add {BAND_T[2]} ms ({BAND_T[3]}%) to the DrivAerML Volume task's whole-boundary geometry "
+      f"call under the reference search ({BAND_T[1].replace('-', ' to ')} against {BAND_T[0].replace('-', ' to ')} ms) and "
+      f"{BAND_T[6]} ms ({BAND_T[7]}%) under the fast one ({BAND_T[5].replace('-', ' to ')} against "
+      f"{BAND_T[4].replace('-', ' to ')} ms), timed apart from the table on one GB300 (the median of "
+      f"{S._COUNT[int(BAND_P[0])]} calls after {S._COUNT[int(BAND_P[1])]} warm-up calls, on {S._COUNT[int(BAND_P[2])]} "
+      "draws). The other cases were not timed with them. Data: "
+      f"{R.source('geo_band_final', 'RESULTS.md')} (Fast path and cost).")
 ```
 
 ```{python}

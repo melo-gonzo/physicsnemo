@@ -365,6 +365,10 @@ n_tie, pct_tie = re.search(r"on \*\*([\d,]+) interior nodes \(([\d.]+) % of the 
 # the tie direction under a one-ulp move of every float32 vertex (GEO-THIN, A4)
 GTR = " ".join(R.load("geo_thin", "RESULTS.md").split())
 TIE_DU = [sci(float(x)) for x in re.search(r"max ([\d.e-]+) \(lug\), ([\d.e-]+) \(Tensile2d\)", GTR).groups()]
+# the band's edge under a translation of one RMS radius of the boundary (GEO-BAND, the pose table)
+GBR = " ".join(R.load("geo_band_final", "RESULTS.md").split())
+EDGE_LUG = re.search(r"\| lug \(20\) \| 1 \| 0 \([\d.e-]+\), [\d,]+, 0 \| 0, ([\d,]+), 0 \|", GBR).group(1)
+EDGE_AF = re.search(r"\| AirfRANS \+ far field \| 1 \| [\d,]+, [\d,]+, [\d,]+ \| [\d,]+, [\d,]+, ([\d,]+) \|", GBR).group(1)
 print(f"**Rotated and translated, ISLA's error stays within {100 * worst:.1f}% of native on {of_fin(exact)} final "
       f"standings, and on the GINOT bracket lug it is {lug:.2f} times native ({f3(per_seed)} per seed), which the class's tie rule "
       f"brings to {TX_PN:.4f}.** On the lug's structured mesh {n_tie} "
@@ -379,11 +383,17 @@ print(f"**Rotated and translated, ISLA's error stays within {100 * worst:.1f}% o
       f"{TXL['N']['von_mises_l2']['r']:.3f} times theirs, which the registered test reads as "
       f"\"{TXL['N']['von_mises_l2']['verdict']}\" (@sec-lug-ties). Where the tied normals nearly coincide the direction "
       "is continuous in them, of order one half: on the lug and Tensile2d a one-ulp move of every vertex changes it by at "
-      f"most {TIE_DU[0]} and {TIE_DU[1]} (@sec-arch-interior-geometry). On PLAID "
+      f"most {TIE_DU[0]} and {TIE_DU[1]} (@sec-arch-interior-geometry). What rounding still decides is which points lie at "
+      "a band's edge. A case's float32 rounding grows with its distance from the origin, so a point whose two nearest "
+      "features lie about the sum of their bands apart can tie in one pose and not in another, answered correctly for its "
+      "own inputs each time: rotated and translated by one RMS radius of the boundary, "
+      f"{EDGE_LUG} points of the 20 lug cases measured change their tie set, and on AirfRANS with its far field {EDGE_AF} of "
+      "400,000 near-wall points are read as on the wall, since their coordinates cannot tell them from it "
+      "(@sec-arch-interior-geometry). On PLAID "
       "Tensile2d, whose prediction points include the nodes of its boundary polyline, posed ÷ native is "
       f"{f3([ST['tensile2d'].shift('ISLA', f, 'posed') for f in ST['tensile2d'].ds.headline], 4)}. Data: {LG.source}; "
       f"{R.source('attrib090', 'RESULTS.md')} (section 4); {R.source('tie_exp', 'read/results.json')}; "
-      f"{R.source('geo_thin', 'RESULTS.md')} (A4).")
+      f"{R.source('geo_thin', 'RESULTS.md')} (A4); {R.source('geo_band_final', 'RESULTS.md')} (item 2).")
 print()
 print(S.in_flight_callout("lug"))
 print('::: {.callout-note title="In flight"}\nThe lug standing\'s posed ÷ native comes from checkpoints trained with the '
@@ -599,12 +609,6 @@ rows = [
     ("Which scale of ISLA's Reynolds input serves AirfRANS and AeroZoo alike? (@sec-oq-reynolds)", "a single program-wide fixed scale, trained on both `reynolds` splits, read against the fitted scale", "not priced"),
     ("Are ISLA's crossflow and non-box failures on AeroZoo limits of the architecture? (@sec-oq-aerozoo)", "for the non-box family, a training set whose velocity scales cover the ducts'", "not priced"),
     ("Why does ISLA not hold the outlet at its prescribed pressure on the crossflow layout? (@sec-oq-outlet)", "the predicted gauge pressure on the outlet faces against the prescribed zero, on every split and for both forms", "scoring only"),
-    ("Can the tie and on-wall bands of ISLA's geometry be derived worst cases that do not depend on the pose? (@sec-oq-ties)",
-     "bands derived as worst cases for every pair, measured about the boundary's centroid with the vertex term kept at the "
-     "stored coordinates' rounding, the closest point computed in the boundary's centered frame, and a certified test of "
-     "distinct directions, checked against an exact rational brute force and on the lug in every pose, with every changed "
-     "output counted on every dataset's recipe draws",
-     "none for the check; a changed tie or on-wall decision changes the interior models' inputs"),
     ("Does what rounding still decides in the class's geometry move a trained model? (@sec-oq-precision)", "the standings "
      "retrained with the class's geometry, scored rotated and translated, and in float32 against float64 on the AeroZoo cases of "
      "the float32 comparison", "the standings' training with the class's geometry, then scoring"),
@@ -755,61 +759,6 @@ print("**The open question is why ISLA does not hold the outlet at its prescribe
       "particular to the new layout: the predicted gauge pressure on the outlet faces against the prescribed zero, on every split and "
       f"for both forms. Cost: scoring only. Data: {R.source('az_diag', 'pdiag/pdiag.tsv')}.")
 ```
-
-### The tie and on-wall bands in the exact geometry {#sec-oq-ties}
-
-```{python}
-#| label: para-oq-ties
-#| output: asis
-GTR = " ".join(R.load("geo_thin_final", "RESULTS.md").split())
-GTD = " ".join(R.load("geo_thin_final", "DESIGN.md").split())
-GT_R = re.search(r"\|du\| / \|dn\| \(the normals' own change\) at most ([\d.]+)", GTR).group(1)
-SHARE = re.search(r"so the share is 13 u64 / \(u32 \+ 13 u64\) = ([\d.]+e-\d+) of it", GTD).group(1)
-EDGE_WC = re.search(r"about ([\d.]+) units for an edge point alone", GTD).group(1)
-GAP = re.search(r"Gap over band ([\d.]+) \(untied: u the face normal\) against ([\d.]+) \(tied", GTR).groups()
-DU, NODES = re.search(r"\|du\| = ([\d.]+) at that one node of ([\d,]+), which is the whole forward excess", GTR).groups()
-TIED = re.search(r"tied ([\d,]+) against ([\d,]+) on case 1884", GTR).groups()
-# the largest move at the membership flips over the three cases, band-edge node aside (FINAL_REPORT; RESULTS' cA row)
-MEM_DU = re.search(r"from bitwise normal ties, with \|du\| <= ([\d.]+e-\d+)", " ".join(R.load("geo_thin_final", "FINAL_REPORT.md").split())).group(1)
-assert re.search(rf"\| cA: abs x replaced by abs\(x - c\) \| {MEM_DU} \(0\)", GTR)
-assert re.search(r"On case 1909 nine mid-plane nodes", GTR)
-print("**The open question is whether the tie and on-wall bands of the exact geometry can be derived worst cases that do not "
-      "depend on the pose.** Each cell's distance carries the band $E_k = (u + 13 u_{64})(\\lvert x \\rvert + R_k)$, with $u$ the queries' unit roundoff, "
-      "$u_{64} = 2^{-53}$ and $R_k$ the cell's greatest vertex norm: a feature joins a closest-feature tie when its distance "
-      "less its band is at most the least sum of a distance and its band, and a point counts as on the wall when the least "
-      "distance is within its band of zero (@sec-arch-interior-geometry). Two parts of it are not "
-      "derived. Its arithmetic share, 13 units of $u_{64}(\\lvert x \\rvert + R_k)$, is a first-order estimate; the "
-      f"first-order worst case for an edge point alone is about {EDGE_WC} units. For float32 queries, and bfloat16 ones cast to "
-      f"float32, that share is {sci(float(SHARE))} of the band; for float64 queries rounding may decide a tie or "
-      "an on-wall call at the $10^{-15}$ relative level. And $\\lvert x \\rvert$ and $R_k$ are distances from the origin of the "
-      "raw coordinates, so a translation changes the band. On the lug's test case 1884 one node of "
-      f"{NODES} has a gap between its two nearest features of {GAP[0]} times the sum of their bands natively and {GAP[1]} times "
-      "it posed, so "
-      f"it ties in one pose only and its direction moves by {DU}. Measuring $\\lvert x \\rvert$ about the boundary's centroid "
-      "removes that flip. Measuring $R_k$ about it as well makes the band smaller than the stored float32 coordinates' own "
-      "rounding, and on case 1909 nine nodes of the plate's mid-plane, tied natively, untie posed, with their direction moving "
-      "by 1: a band that does not depend on the pose must still cover the stored coordinates' rounding. Which nodes tie "
-      f"changes under the pose at thousands of nodes per lug case as well ({TIED[0]} tied natively against {TIED[1]} posed on "
-      "case 1884), through a bitwise test of distinct directions at planar stars, with the direction moving by at most "
-      f"{sci(float(MEM_DU))} there. The direction at a tie is itself well measured where tied normals nearly coincide: a "
-      f"one-ulp move of every float32 vertex of the lug and Tensile2d changes it by at most {TIE_DU[0]} and {TIE_DU[1]}, at "
-      f"most {GT_R} times the normals' own change, and retrained with the class's rule, ISLA's posed ÷ native on the lug is "
-      f"{TX_PN:.4f} (@sec-limits-ties). What would settle the question: bands derived as worst cases for every pair, with "
-      "$\\lvert x \\rvert$ measured about the boundary's centroid and the vertex term kept at the stored coordinates' "
-      "rounding, the closest point computed in the boundary's centered frame, and a certified test of distinct directions in "
-      "place of the bitwise one, checked against an exact rational brute force on the adversarial sets and on the lug in "
-      "every pose, with every distance, direction, sign and decision that changes counted on every dataset's recipe draws. "
-      "Cost: none for the check; a changed tie or on-wall decision changes the interior models' inputs. Data: "
-      f"{R.source('geo_thin_final', 'RESULTS.md')} (A4, \"Fourth limit\"); {R.source('geo_thin_final', 'DESIGN.md')} "
-      f"(Amendment); {R.source('tie_exp', 'RESULTS.md')}.")
-```
-
-::: {.callout-note title="In flight"}
-This question rests on the class's bands, whose arithmetic share is a first-order estimate and which are measured
-from the origin of the raw coordinates. Bands derived as worst cases, measured about the boundary's centroid, with
-the closest point computed in a centered frame, are being measured, and the ledger (@sec-ledger) tracks it; a
-certified test of distinct directions is not part of that measurement.
-:::
 
 ### What rounding still decides in the geometry {#sec-oq-precision}
 
@@ -1145,6 +1094,9 @@ NW_AF = re.search(r"AirfRANS \+ far field \(40, 4\.0 M\) \| [^|]+\| [\d.]+ \| [^
 NW_REL = re.search(r"1e-6 Re_L = ([\d,]+)-([\d,]+)", NWR).groups()
 NW_AFDES = " ".join(R.load("nearwall", "DESIGN.md").split())
 NW_COST = re.search(r"Cost: about ([\d]+)-([\d]+) GPU-h for the AirfRANS pair", NW_AFDES).groups()
+# the viscous softening's input rounding at 30 chords (p99.9 / max); the arithmetic's share is removed by the centred frame
+NW_IN = re.search(r"\| \(ii\) nu / U \| compute \|[^|]+\|[^|]+\|[^|]+\|[^|]+\|[^|]+\| \| \| input \| 0 \| [^|]+\| ([\d.]+) / ([\d.]+) \|", NWR).groups()
+assert re.search(r"\| \(i\) 1e-6 L whole \| compute \|[^|]+\|[^|]+\|[^|]+\|[^|]+\|[^|]+\| \| \| input \| 0 \| [^|]+\| [^|]+\| [\d.]+ / 0\.065 \|", NWR)
 print("**The open question is whether the whole boundary costs ISLA near-wall accuracy through its distance channel.** "
       "The channel $\\operatorname{asinh}(s_q / 10^{-6})$ is linear for distances below $10^{-6} L$, and with the whole "
       f"boundary that holds {NW_AF}% of AirfRANS's drawn points, its viscous sublayer, buffer layer and the start of its log "
@@ -1153,13 +1105,15 @@ print("**The open question is whether the whole boundary costs ISLA near-wall ac
       "near-wall code does not depend on how far out the domain's outer boundary is drawn. It is defined only where a "
       "viscosity is declared (AirfRANS and AeroZoo); elsewhere the channel stays as it is. On AirfRANS with its far field its "
       f"knee sits at $U d / \\nu = 1$, against $10^{{-6}} \\mathrm{{Re}}_L$ = {NW_REL[0]} to {NW_REL[1]} for the present channel. "
-      "It gives up the present channel's guarantee that float32 rounding of the coordinates moves it by at most 0.12 wherever "
-      "the body sits in its domain: with the body 30 chords from the origin of the coordinates, rounding moves it by up to 3 "
-      "to 4. It is to be tested only if ISLA trained on AirfRANS with its far field reads a harm near the wall, and adopting "
+      "It gives up the present channel's guarantee that storing the coordinates in float32 moves it by at most 0.065 wherever "
+      "the body sits in its domain: with the body 30 chords from the origin of the coordinates, that rounding moves it by up to "
+      f"{NW_IN[1]} ({NW_IN[0]} at the 99.9th percentile), and points within that rounding of the wall are read as on it. It is "
+      "to be tested only if ISLA trained on AirfRANS with its far field reads a harm near the wall, and adopting "
       "it is Peter's decision. What would settle it: that retrain read on velocity and eddy viscosity near the wall against "
       "the standing; if it reads a harm there, the viscous softening trained on the same configuration with only the channel "
       f"changed, two seeds. Cost: the retrain is in flight; the viscous arm about {NW_COST[0]} to {NW_COST[1]} GPU-hours. Data: "
-      f"{R.source('nearwall', 'RESULTS.md')} (A1 to A3); {R.source('nearwall', 'DESIGN.md')} (sections 3 and 4).")
+      f"{R.source('nearwall', 'RESULTS.md')} (A1 to A3); {R.source('nearwall', 'DESIGN.md')} (sections 3 and 4); "
+      f"{R.source('geo_band_final', 'RESULTS.md')} (item 3).")
 ```
 
 ::: {.callout-note title="In flight"}

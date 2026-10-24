@@ -40090,7 +40090,7 @@ question on what the other datasets store beyond the body (@sec-oq-whole-boundar
 table row and the recommendation bullet state the registered rule with this answer: ISLA-DTT is the default unless
 interacting ISLA is clearly more accurate. Chapter 09's ground question, chapter 19's far-field paragraph and chapter
 21's design ledger (a row on the whole boundary) say the same. The In-flight callouts on the candidate geometry
-(chapters 04 and 20) and the tie question (@sec-oq-ties) give the adoption rule. The ledger updates GEO-BUNDLE, the
+(chapters 04 and 20) and the tie question (@sec-arch-interior-geometry) give the adoption rule. The ledger updates GEO-BUNDLE, the
 AeroZoo decision in REF-090 and FLOOR-DRV in CAP-AUDIT, and adds GEO-FAST and BOUNDARY-AUDIT.
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-book-eve-2026-10-23/SECOND_READ_EVE.md).*
@@ -40549,7 +40549,7 @@ Cost: 206.1 GPU-h of the 220 GPU-h cap (arms 201.1 in 18 links, first links 3425
 smokes 0.9; scoring 1.0, jobs 345741 and 364216; the F probes 0.4, jobs 345742 and 364217).
 
 The chapters take the result in 04 (@sec-medial-ties), 07 (@sec-standing-geometry), 16 (@sec-lug-ties) and 20
-(@sec-limits-ties, @sec-oq-ties), with In-flight callouts in 04, 16 and 20 on the lug standing's posed numbers, which
+(@sec-limits-ties, @sec-arch-interior-geometry), with In-flight callouts in 04, 16 and 20 on the lug standing's posed numbers, which
 standings trained with the class's geometry replace.
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-tie-2026-10-24/SECOND_READ_TIE.md).*
@@ -40692,7 +40692,7 @@ record of its A3 condition; on the other datasets the standings' inputs differ f
 folds and, where a boundary has more cells than the token budget, in the drawn cells, by an amount not measured. The chapters
 now describe 0.11.0's geometry (05 @sec-arch-interior-geometry and @sec-arch-boundary-draw, 03, 04, 06) and state the
 standings' geometry once, in 07 (@sec-standing-geometry); 0.9.0's limits at ties and folds are cut from 20 and replaced by
-what rounding still decides (@sec-oq-ties, @sec-oq-precision), and the candidate-geometry callouts in 04 and 20 are cut.
+what rounding still decides (@sec-arch-interior-geometry, @sec-oq-precision), and the candidate-geometry callouts in 04 and 20 are cut.
 
 **The cost, as Peter asked.** The merged path is GEO-FAST's reference path (the commits after fb263fa29 add only the fast
 path; RESULTS.md of scratch/isla-geo-fast-2026-10-23, Timing, the "head, reference" column against "base", the standings'

@@ -82,6 +82,8 @@ FOLDER = {
     "slices_drv": "campaigns_2026-10-23",
     "freeze_plan": "campaigns_2026-10-23",
     "bc_supply": "campaigns_2026-10-23",
+    "geo_band_final": "campaigns_2026-10-23",
+    "band_merge": "campaigns_2026-10-23",
 }
 
 
