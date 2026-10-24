@@ -37,9 +37,11 @@ the rounding points of autograd's own sum over the basis's uses (each block's
 contribution rounded, then added to the running sum and rounded again), and handed to
 the basis once, after the last read's backward (:func:`basis_sink`): no block's
 gradient is materialized beside the sum.
-The small products are float32 broadcast sums, each over the last axis: Triton (3.7,
-GB300) turns a sum over the middle axis, ``(M, K, 1) * (1, K, N)`` summed over ``K``,
-into a ``tl.dot`` at TF32 precision (relative error 1e-3 against float64).
+The small products are float32 broadcast sums. Triton (3.7, GB300) turns a sum over
+the middle axis, ``(M, K, 1) * (1, K, N)`` summed over ``K``, into a ``tl.dot`` at
+TF32 precision: exact products when the operands are bfloat16 or float16 (the basis
+gradient under autocast takes that form, the fastest), 1e-3 relative error in
+float32, where the basis gradient is summed head by head instead.
 """
 
 from __future__ import annotations
@@ -90,10 +92,6 @@ if HAS_TRITON:
         """The kernel weights ``(H, F)`` in float32."""
         return tl.load(w_ptr + tl.arange(0, H)[:, None] * F + tl.arange(0, F)[None, :]).to(tl.float32)
 
-    @triton.jit
-    def _weights_t(w_ptr, H: tl.constexpr, F: tl.constexpr):
-        """The kernel weights transposed, ``(F, H)`` in float32."""
-        return tl.load(w_ptr + tl.arange(0, H)[None, :] * F + tl.arange(0, F)[:, None]).to(tl.float32)
 
     @triton.jit
     def _kernel_term(basis_ptr, p, msk, w, F: tl.constexpr):
@@ -158,18 +156,17 @@ if HAS_TRITON:
         off_ptr, bj_ptr, basis_ptr, w_ptr, logm_ptr, q_ptr, k_ptr, v_ptr, lse_ptr, dsum_ptr, dout_ptr,
         dq_ptr, dbasis_ptr, dw_ptr,
         scale, H: tl.constexpr, C: tl.constexpr, KC: tl.constexpr, F: tl.constexpr, BLOCK: tl.constexpr,
-        BASIS_GRAD: tl.constexpr,
+        BASIS_GRAD: tl.constexpr, NARROW: tl.constexpr,
     ):  # fmt: skip
         """One point: dq[s], the basis gradient of its pairs through this block's
         weights added to dbasis (BASIS_GRAD), and its part of the weights' gradient,
-        dw[s] (H, F) float32."""
+        dw[s] (H, F) float32. NARROW: the basis is bfloat16 or float16."""
         s = tl.program_id(0).to(tl.int64)
         start = tl.load(off_ptr + s)
         end = tl.load(off_ptr + s + 1)
         hh = tl.arange(0, H)
         ff = tl.arange(0, F)
         w = _weights(w_ptr, H, F)
-        wt = _weights_t(w_ptr, H, F)
         q = tl.reshape(tl.load(q_ptr + s * (H * KC) + tl.arange(0, H * KC)).to(tl.float32), [H, KC])
         lse = tl.load(lse_ptr + s * H + hh)
         dsum = tl.load(dsum_ptr + s * H + hh)
@@ -207,11 +204,18 @@ if HAS_TRITON:
             dker = dz.to(basis_ptr.dtype.element_ty).to(tl.float32)
             if BASIS_GRAD:
                 dt = dbasis_ptr.dtype.element_ty
-                dbas = tl.sum(dker[:, None, :] * wt[None, :, :], axis=2).to(dt).to(tl.float32)  # (BLOCK, F)
+                if NARROW:
+                    dbas = tl.sum(dker[:, :, None] * w[None, :, :], axis=1)  # (BLOCK, F)
+                else:
+                    dbas = tl.zeros([BLOCK, F], tl.float32)
+                    for h in tl.static_range(H):
+                        col = tl.sum(tl.where(hh[None, :] == h, dker, 0.0), axis=1)
+                        dbas += col[:, None] * tl.sum(tl.where(hh[:, None] == h, w, 0.0), axis=0)[None, :]
+                dbas = dbas.to(dt).to(tl.float32)
                 rows = dbasis_ptr + p[:, None] * F + ff[None, :]
                 run = tl.load(rows, mask=msk[:, None], other=0.0).to(tl.float32)
                 tl.store(rows, (run + dbas).to(dt), mask=msk[:, None])
-            dw += tl.sum(tl.trans(dker)[:, None, :] * tl.trans(bas)[None, :, :], axis=2)
+            dw += tl.sum(dker[:, :, None] * bas[:, None, :], axis=0)
         tl.store(dq_ptr + s * (H * KC) + tl.arange(0, H * KC), tl.reshape(dq, [H * KC]))
         tl.store(dw_ptr + s * (H * F) + hh[:, None] * F + ff[None, :], dw)
 
@@ -336,7 +340,8 @@ class _FusedKernelRead(torch.autograd.Function):
         if n_q:
             _fkr_bwd_point_kernel[(n_q,)](
                 plan.q_offsets, plan.bj, basis, w, logm, q, k, v, lse, dsum, dout, dq, dbasis, dw_parts, scale,
-                H=h, C=c, KC=kc, F=f, BLOCK=BLOCK_PAIRS, BASIS_GRAD=grad is not None, num_warps=NUM_WARPS,
+                H=h, C=c, KC=kc, F=f, BLOCK=BLOCK_PAIRS, BASIS_GRAD=grad is not None,
+                NARROW=basis.dtype in (torch.bfloat16, torch.float16), num_warps=NUM_WARPS,
             )  # fmt: skip
         if plan.n_b:
             src, chunk_idx = _source_items(plan, SOURCE_CHUNK)
