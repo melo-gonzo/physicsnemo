@@ -54,13 +54,7 @@ import torch
 from torch.autograd.function import once_differentiable
 
 from physicsnemo.core.version_check import is_package_available
-from physicsnemo.experimental.models.isla.segment_softmax import (
-    BLOCK_PAIRS,
-    NUM_WARPS,
-    SOURCE_CHUNK,
-    PairPlan,
-    _source_items,
-)
+from physicsnemo.experimental.models.isla.segment_softmax import PairPlan, _source_items
 
 ### Triton is an optional dependency, loaded through importlib (as in geo_kernel.py).
 HAS_TRITON = is_package_available("triton")
@@ -70,6 +64,15 @@ if HAS_TRITON:
         tl = importlib.import_module("triton.language")
     except Exception:  # pragma: no cover - a broken triton install is treated as absent
         HAS_TRITON = False
+
+
+#: Pairs per tile of a program's loop, warps per program, and pairs per program of
+#: the by-source backward (launch constants; on GB300 at DrivAerML scale, 200k points x
+#: 680 pairs, 32-pair tiles on one warp ran each kernel 1.3x to 2.3x faster than the
+#: reference read's 128 on four).
+BLOCK_PAIRS = 32
+NUM_WARPS = 1
+SOURCE_CHUNK = 512
 
 
 def _pow2(n: int) -> bool:
