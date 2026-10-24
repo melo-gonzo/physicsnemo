@@ -210,6 +210,37 @@ def test_surface_reader_loads_the_domain_boundaries_whole_beside_the_subsampled_
         )
         assert torch.equal(domain.boundaries[name].cells, source.boundaries[name].cells)
     assert set(domain.global_data.keys()) == set(mesh.global_data.keys())
+    ### The ground placed from the whole vehicle, which the subsample does not hold: the
+    ### tunnel moves up by the whole vehicle's lowest z minus the ground's, the vehicle
+    ### draw is the same.
+    from domain_transforms import PlaceGroundUnderBody
+
+    place = PlaceGroundUnderBody(
+        ground="no_slip", body="vehicle", boundaries=list(DOMAIN_BOUNDARIES)
+    )
+    placed = MeshReaderWithGlobalData(
+        tmp_path,
+        domain_boundaries=list(DOMAIN_BOUNDARIES),
+        whole_surface_transforms=[place],
+        **kw,
+    )
+    placed.set_generator(torch.Generator().manual_seed(7))
+    pdomain, _ = placed[0]
+    lowest = source.boundaries["vehicle"].points[:, 2].min()
+    assert (
+        pdomain.interior.points[:, 2].min() > lowest
+    )  # the draw misses the lowest vertex
+    assert torch.equal(pdomain.interior.points, mesh.points)
+    dz = lowest - source.boundaries["no_slip"].points[0, 2]
+    assert dz != 0
+    for name in DOMAIN_BOUNDARIES:
+        moved = source.boundaries[name].points + torch.tensor([0.0, 0.0, 1.0]) * dz
+        torch.testing.assert_close(
+            pdomain.boundaries[name].points, moved, atol=0, rtol=0
+        )
+    assert bool((pdomain.boundaries["no_slip"].points[:, 2] == lowest).all())
+    with pytest.raises(ValueError, match="place the domain_boundaries"):
+        MeshReaderWithGlobalData(tmp_path, whole_surface_transforms=[place], **kw)
     with pytest.raises(FileNotFoundError, match="domain boundary 'roof'"):
         MeshReaderWithGlobalData(tmp_path, domain_boundaries=["roof"], **kw)[0]
 
@@ -221,8 +252,9 @@ def test_drivaer_surface_pipeline_moves_the_domain_boundaries_with_the_vehicle(
     """Through the dataset's whole chain, augmentations included, the tunnel boundaries
     undergo the vehicle's rigid motion and scaling: the one similarity that maps the
     stored tunnel onto the output tunnel maps every output vehicle point onto a stored
-    vehicle point. The targets sit at the vehicle's cell centroids, and the tunnel
-    boundaries keep every cell."""
+    vehicle point, the stored tunnel being first placed with its ground through the whole
+    vehicle's lowest point (PlaceGroundUnderBody in the reader). The targets sit at the
+    vehicle's cell centroids, and the tunnel boundaries keep every cell."""
     source = _drivaer_surface_case(tmp_path)
     recipe = Path(__file__).resolve().parent.parent
     cfg = OmegaConf.merge(
@@ -238,7 +270,12 @@ def test_drivaer_surface_pipeline_moves_the_domain_boundaries_with_the_vehicle(
     vehicle = domain.boundaries["vehicle"]
     assert vehicle.n_cells == domain.interior.n_points == 10
     torch.testing.assert_close(domain.interior.points, vehicle.cell_centroids)
+    dz = (
+        source.boundaries["vehicle"].points[:, 2].min()
+        - source.boundaries["no_slip"].points[0, 2]
+    )
     raw = torch.cat([source.boundaries[n].points for n in DOMAIN_BOUNDARIES]).double()
+    raw[:, 2] += float(dz)
     out = torch.cat([domain.boundaries[n].points for n in DOMAIN_BOUNDARIES]).double()
     assert all(domain.boundaries[n].n_cells == 2 for n in DOMAIN_BOUNDARIES)
     ### The similarity out = s R raw + t, fitted on the tunnel (Kabsch with scale).

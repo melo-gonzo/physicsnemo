@@ -340,6 +340,28 @@ def test_isla_volume_composes_with_the_corrected_measure_dataset():
     assert ds.pipeline.reader.boundary_subsample == "cells"
 
 
+@pytest.mark.parametrize("suffix", ["", "_1case", "_pose", "_posed"])
+def test_surface_datasets_read_the_tunnel_beside_the_vehicle(suffix):
+    """Every DrivAerML Surface dataset file reads the four tunnel boundaries beside the
+    subsampled vehicle, places their ground from the whole vehicle in the reader (before
+    the subsample and every pose), and ends with SurfaceMeshToDomainMesh."""
+    ds = OmegaConf.load(_RECIPE_ROOT / "datasets" / f"drivaer_ml_surface{suffix}.yaml")
+    reader = OmegaConf.to_container(ds.pipeline.reader, resolve=False)
+    assert reader["subsample_n_cells"] == "${sampling_resolution}"
+    assert sorted(reader["domain_boundaries"]) == sorted(DOMAIN_WALLS)
+    assert reader["whole_surface_transforms"] == [
+        {
+            "_target_": "${dp:PlaceGroundUnderBody}",
+            "ground": "no_slip",
+            "body": "vehicle",
+            "boundaries": ["inlet", "no_slip", "outlet", "slip"],
+        }
+    ]
+    raw = OmegaConf.to_container(ds.pipeline.transforms, resolve=False)
+    assert str(raw[-1]["_target_"]) == "${dp:SurfaceMeshToDomainMesh}"
+    assert not any("PlaceGroundUnderBody" in str(t["_target_"]) for t in raw)
+
+
 @pytest.mark.parametrize("suffix", ["", "_area", "_posed"])
 def test_reference_volume_datasets_read_the_vehicle_whole_into_the_fluid(suffix):
     """ISLA draws its boundary tokens inside the model, so every reference volume

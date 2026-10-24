@@ -110,6 +110,16 @@ class MeshReaderWithGlobalData(MeshReader):
         the chain (rotation, translation, centering, scaling) acts on all of
         them through ``apply_to_domain`` while the surface's draw, centre and
         pose stay those of the bare surface.  Empty (default): a ``Mesh``.
+    whole_surface_transforms : sequence of MeshTransform
+        Transforms that place the ``domain_boundaries`` from the surface at
+        full resolution, before its subsample (DrivAerML's
+        ``PlaceGroundUnderBody``: the ground through the whole vehicle's lowest
+        point, which a subsample can miss).  Each is applied, in the files' raw
+        coordinates, to a :class:`~physicsnemo.mesh.DomainMesh` whose
+        boundaries are the whole surface (under its directory's name, read from
+        its memory map) and the domain boundaries; it may move only the domain
+        boundaries (a transform that replaces the surface is refused).  Needs
+        ``domain_boundaries``.
     **kwargs
         Forwarded to :class:`MeshReader`.
     """
@@ -120,6 +130,7 @@ class MeshReaderWithGlobalData(MeshReader):
         merge_global_data_from: str | None = None,
         store_case_key: bool = False,
         domain_boundaries: Sequence[str] = (),
+        whole_surface_transforms: Sequence[Any] = (),
         **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
@@ -128,6 +139,11 @@ class MeshReaderWithGlobalData(MeshReader):
         if len(set(self._domain_boundaries)) != len(self._domain_boundaries):
             raise ValueError(
                 f"domain_boundaries names a boundary twice: {self._domain_boundaries!r}"
+            )
+        self._whole_surface_transforms = list(whole_surface_transforms)
+        if self._whole_surface_transforms and not self._domain_boundaries:
+            raise ValueError(
+                "whole_surface_transforms place the domain_boundaries; none are named"
             )
         ### POSE-BENCH (transfer program, 2026-09-09): a stable per-case integer,
         ### the CRC-32 of the case directory name (the first path component
@@ -201,26 +217,60 @@ class MeshReaderWithGlobalData(MeshReader):
 
         return mesh.with_data(global_data=merged)
 
-    def _load_domain_boundary(self, index: int, name: str) -> Mesh:
-        path = self._paths[index].parent / name
+    @staticmethod
+    def _load_whole(path) -> Mesh:
+        """A boundary at full resolution (a copy-on-write memory map for a pmsh)."""
         if (path / "zarr.json").exists():
             from physicsnemo.mesh.io import from_zarr
 
             return from_zarr(path)
+        return Mesh.load(path, mode="r")
+
+    def _load_domain_boundary(self, index: int, name: str) -> Mesh:
+        path = self._paths[index].parent / name
         if not path.exists():
             raise FileNotFoundError(
                 f"domain boundary {name!r} not found beside {self._paths[index]} (looked for {path})"
             )
-        return Mesh.load(path, mode="r")
+        return self._load_whole(path)
+
+    def _place_from_whole_surface(
+        self, index: int, boundaries: dict[str, Mesh]
+    ) -> dict[str, Mesh]:
+        """The domain boundaries after ``whole_surface_transforms``, which see the
+        surface at full resolution beside them."""
+        path = self._paths[index]
+        name = path.name
+        if name in boundaries:
+            raise ValueError(
+                f"domain_boundaries names {name!r}, the surface's own name"
+            )
+        whole = self._load_whole(path)
+        domain = DomainMesh(
+            interior=Mesh(points=whole.points[:0]),
+            boundaries={name: whole, **boundaries},
+        )
+        for t in self._whole_surface_transforms:
+            domain = t.apply_to_domain(domain)
+            if domain.boundaries[name] is not whole:
+                raise ValueError(
+                    f"whole_surface_transforms: {t!r} changed the surface {name!r}; they may "
+                    "move only the domain boundaries"
+                )
+        return {n: domain.boundaries[n] for n in boundaries}
 
     def __getitem__(self, index: int) -> tuple[Mesh | DomainMesh, dict[str, Any]]:
         mesh, metadata = super().__getitem__(index)
         if not self._domain_boundaries:
             return mesh, metadata
-        boundaries = {}
-        for name in self._domain_boundaries:
-            b = self._load_domain_boundary(index, name)
-            boundaries[name] = b.pin_memory() if self.pin_memory else b
+        boundaries = {
+            name: self._load_domain_boundary(index, name)
+            for name in self._domain_boundaries
+        }
+        if self._whole_surface_transforms:
+            boundaries = self._place_from_whole_surface(index, boundaries)
+        if self.pin_memory:
+            boundaries = {name: b.pin_memory() for name, b in boundaries.items()}
         domain = DomainMesh(
             interior=mesh.with_data(
                 global_data=TensorDict({}, batch_size=[], device=mesh.points.device)
