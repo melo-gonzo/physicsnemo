@@ -814,8 +814,9 @@ print("**The tie direction where tied normals nearly coincide is measured, and t
       "than it is long they are not, and adversarial float64 queries on the thinnest faces of the stored AeroZoo meshes make it "
       "raise, where the same queries in float32 are answered correctly; the recipe's own queries are float32, and none of "
       f"{GT_Q} of them, checked against an exact rational brute force in both precisions and under both search kernels, is "
-      "wrong (@sec-arch-interior-geometry). A fix certifies each step against IEEE float64 rounding and keeps the current "
-      "arithmetic, bitwise, wherever its certificate holds. What would settle it: the certified geometry against the current one "
+      "wrong (@sec-arch-interior-geometry). A fix gives the edge planes and the float64 ball test certified bounds on "
+      "IEEE float64 rounding, computes an accurate closest point where the bound requires it, and keeps the current "
+      "arithmetic, bitwise, on every cell without the defect. What would settle it: the certified geometry against the current one "
       "on every dataset's recipe draws, every distance, direction, sign and gradient, under both kernels; an unchanged output "
       "everywhere leaves the stored datasets' inputs as they are. Cost: none, a geometry check. Data: "
       f"{R.source('geo_thin', 'RESULTS.md')} (A2, A2b, A4); {R.source('geo_thin', 'DESIGN.md')}; {R.source('tie_exp', 'RESULTS.md')}.")
@@ -1066,9 +1067,11 @@ AF_CROP = re.search(r"nodes in about (\[[^\]]+\] x \[[^\]]+\]) chords", BA).grou
 HLD4 = " ".join(R.load("hl_dup", "RESULTS.md").split()).split("## 4.")[1].split("## 5.")[0]
 HL_HOLE = (sci(float(re.search(r"The area ratio is ([\d.]+)", HLD4).group(1)) - 1),
            {5: "five"}[len(re.search(r"\*\*The five broken roots\*\* \(([^)]+)\)", HLD4).group(1).split(", "))],
-           *re.search(r"the coverage is still ([\d.]+)-([\d.]+) % within 0\.5 in", HLD4).groups(),
+           *re.search(r"the coverage is still ([\d.]+)-([\d.]+) % within 0\.5 in \(([\d.]+)-([\d.]+) % within 2 in\)", HLD4).groups(),
            *re.search(r"The other ([\d,]+)-([\d,]+) per root belong to no cell", HLD4).groups(),
-           re.search(r"one hole of [\d,]+ in² on every root, [\d-]+ in² \(([\d.]+) %\) less", HLD4).group(1))
+           re.search(r"one hole of [\d,]+ in² on every root, [\d-]+ in² \(([\d.]+) %\) less", HLD4).group(1),
+           *re.search(r"([\d.]+) % of LHC001's outline lies within 0\.5 in of one and (\d+) % within 2 in", HLD4).groups())
+assert HL_HOLE[-1] == "100"
 print("**Read from every dataset's files, the boundary falls in two classes; the open question is how SHIFT-SUV and HiLiftAeroML "
       "get the pieces of their domains' boundaries that their files do not store.** ISLA reads every stored piece of the "
       "boundary, each by name with its condition type (@sec-limits-whole-boundary).")
@@ -1092,13 +1095,17 @@ print(f"- **Not stored.** SHIFT-SUV's {SUV_N} files store the vehicle alone, ope
       f"stores the wing alone on {HL[0]} of its {HL[1]} files; the other two hold an inlet, an outlet and a symmetry plane built by "
       "the same curation pipeline as DrivAerML's box. The dataset's paper puts the far field on a hemisphere of radius about "
       f"{HL_PAPER} mean aerodynamic chords, while the stored interiors reach {HL_MAC} chords. Its symmetry plane is a disk "
-      "with the wing's root cut out. Where the root is closed, the hole the wing's own root cells bound matches the stored "
-      f"plane's to {HL_HOLE[0]} in relative area. On {HL_HOLE[1]} geometries checked whose roots are open, every edge of the "
-      f"cells on the plane together covers only {HL_HOLE[2]} to {HL_HOLE[3]}% of that root outline, while the wing's stored "
-      f"vertices on the plane cover all of it, {HL_HOLE[4]} to {HL_HOLE[5]} of them per root in no cell: what is missing is "
-      "the root's triangles, not its geometry. A closing of each case's own edges and vertices gives a hole "
-      f"{HL_HOLE[6]}% smaller than the closed root's, but only at a closing scale chosen above the vertex spacing, so no "
-      "construction of the symmetry plane from these files is yet robust.")
+      "with the wing's root cut out. On the one geometry checked whose root is closed, the hole the wing's own root cells "
+      f"bound matches the stored plane's to {HL_HOLE[0]} in relative area. On {HL_HOLE[1]} geometries checked whose roots are "
+      f"open, every edge of the cells on the plane together covers only {HL_HOLE[2]} to {HL_HOLE[3]}% of the closed root's "
+      f"outline within 0.5 in ({HL_HOLE[4]} to {HL_HOLE[5]}% within 2 in), while the wing's stored vertices on the plane "
+      f"cover {HL_HOLE[9]}% of it within 0.5 in and all of it within 2 in; {HL_HOLE[6]} to {HL_HOLE[7]} of those vertices per "
+      "root are in no cell, so what is missing is the root's triangles, not its geometry. A closing of each case's own edges "
+      f"and vertices gives a hole {HL_HOLE[8]}% smaller than the closed root's, but only at a closing scale chosen above the "
+      "vertex spacing (1.5 spacings), a radius the program does not use, so no construction of the symmetry plane from these "
+      "files is robust. The supervisor declined to use the closed root's outline as a root section shared by every "
+      "geometry, so the HiLiftAeroML configuration reads no symmetry plane; it waits on Peter's answer on how the missing "
+      "pieces are supplied and on a rebuild of each open root's strip that needs no chosen radius.")
 print()
 print("What would settle it: the missing pieces supplied, built from the documented domain and the stored interior as DrivAerML's "
       "are, or extracted from the raw CFD meshes, beside each dataset, never as a change to it; then each standing retrained with "
@@ -1107,7 +1114,9 @@ print("What would settle it: the missing pieces supplied, built from the documen
       f"with CFD nodes on all six of its planes and its floor {SUV_GR[0]} to {SUV_GR[1]} mm below the vehicle's lowest point, so a "
       "recipe transform can build the inlet, the outlet, the floor, the side walls and the roof on each case, before any pose or "
       "centering, and leave the dataset as it is. Whether SHIFT-SUV's pieces are supplied that way, and with which conditions on "
-      "the walls, the roof and the outlet, is Peter's decision. HiLiftAeroML's far-field radius is a choice its supply must make. "
+      "the walls, the roof and the outlet, is Peter's decision. HiLiftAeroML's far-field radius is a choice its supply must make; for its symmetry "
+      "plane, each open root's missing strip rebuilt from its own unused vertices in outline order, with no chosen "
+      "radius, and checked against the stored hole on the closed root. "
       "Cost: the retraining is not priced, because the supply sets the runs. "
       f"Data: {R.source('boundary_audit', 'REPORT.md')} (sections 1, 2 and 5), {R.source('setup_research', 'SETUP.md')}, "
       f"{R.source('bc_sidecar', 'FINAL_REPORT.md')}, {R.source('hl_dup', 'RESULTS.md')} (section 4).")

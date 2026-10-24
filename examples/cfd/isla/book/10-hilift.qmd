@@ -305,11 +305,12 @@ print(f"**Nearly every wing stores copies of its root.** On {CEN[0]} of the {CEN
       "each copy carries the solution of its first copy, to float32 rounding. The recipe draws cells as stored, so on the "
       f"scored cases the copies carry {DUP_SHARE:.0f}% of the Horvitz–Thompson measure of the drawn cells (the mean over "
       "cases), the measure ISLA's routing and length unit read and the scorer weights by; without them ISLA's length unit is "
-      f"{R.num(_gauge['min']):.2f} to {R.num(_gauge['max']):.2f} times its value with them. By the supervisor's decision, on "
-      "principle, the canonical HiLiftAeroML configuration drops the copies in the recipe and leaves the dataset as it is: "
-      "the reader draws over the stored cells as before and drops the extra copies it draws, keeping each kept cell's "
+      f"{R.num(_gauge['min']):.2f} to {R.num(_gauge['max']):.2f} times its value with them. The supervisor decided, on "
+      "principle, that the canonical HiLiftAeroML configuration drop the copies in the recipe and leave the dataset as it "
+      "is: a reader option draws over the stored cells and drops the extra copies it draws, keeping each kept cell's "
       "Horvitz–Thompson factor, from a per-case mask that stores a fingerprint of its source file and is refused on a "
-      "mismatch. The mask caches the result of a recipe correction and no model reads it, which the supervisor reads as "
+      "mismatch. The recipe of this book reads the copies, and the standing below is of checkpoints trained and scored "
+      "with them (@sec-de-result). The mask caches the result of a recipe correction and no model reads it, which the supervisor reads as "
       "allowed under Peter's boundary-only input ruling; Peter may veto that reading. "
       f"Data: {R.source('hl_dup', 'RESULTS.md')} (sections 1 and 2), {R.source('hl_dup', 'PREREG.md')} (the amendment).")
 ```
@@ -569,7 +570,7 @@ print("**Taken out of the metric, the copies leave the ranking as it is; taken o
       + (f"{100 * min(pb):.0f}%" if f"{100 * min(pb):.0f}" == f"{100 * max(pb):.0f}" else f"{100 * min(pb):.0f} to {100 * max(pb):.0f}%")
       + f" alike (ISLA's from "
       f"{R.num(SC[('pressure', 'a')]['ISLA']):.4f} to {R.num(SC[('pressure', 'b')]['ISLA']):.4f}), and baseline ÷ ISLA moves by "
-      f"at most {moved:.3f}: GeoTransolver ÷ ISLA is {rb[('pressure', RC[0])]:.3f} on pressure and "
+      f"at most {moved:.3f} on pressure and wall shear: GeoTransolver ÷ ISLA is {rb[('pressure', RC[0])]:.3f} on pressure and "
       f"{rb[('wall shear', RC[0])]:.3f} on wall shear, Transolver ÷ ISLA {rb[('pressure', RC[1])]:.3f} and "
       f"{rb[('wall shear', RC[1])]:.3f} (seed means, 180 validation cases, float32). With the copies removed from the input "
       "too, a shift from the data these checkpoints trained on, ISLA's pressure error rises a further "

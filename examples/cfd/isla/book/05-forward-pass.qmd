@@ -1407,12 +1407,12 @@ check b; results/campaigns_2026-10-23/geo_thin/RESULTS.md, A1 to A3 and T-juncti
 
 ::: {.callout-note title="In flight"}
 These limits are those of the search as it is. A fix for thin cells,
-approved by the supervisor, certifies each of the three steps against IEEE
-float64 rounding: edge planes oriented by the cell's vertex order, with the
-cell's normal certified; a float64 ball test that keeps a cell unless its
-distance less a certified bound on the closest point's error exceeds the
-radius; and an accurate closest point, computed in the frame of the cell's
-longest edge, wherever that bound says the usual one may be wrong. It is
+approved by the supervisor, has three parts: edge planes oriented by the
+cell's vertex order, with the cell's normal certified; a float64 ball test
+that keeps a cell unless its distance less a certified bound on the
+closest point's error exceeds the radius; and an accurate closest point,
+computed in the frame of the cell's longest edge, wherever that bound says
+the usual one may be wrong. It is
 being built and checked, and the ledger (@sec-ledger) tracks it.
 Overlapping coplanar cells and T-junctions stay limits.
 :::
