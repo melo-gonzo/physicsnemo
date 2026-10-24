@@ -2395,10 +2395,6 @@ class _QueryChunks:
             self.query[:, start:stop], self.log_w, self.g_unit, self.g_scalars, self.gauge, self.like
         )
         pairs = walk_range_pairs(m.kernel_basis, walk_points_range(self.walk, start, stop))
-        ### The chunk's token axis completed as forward completes its own (_pad_tokens),
-        ### the kernel reads and the head on the real points, as there.
-        n_q = q_tokens.batch_size[1]
-        q_tokens = _pad_tokens(q_tokens, TOKEN_ALIGNMENT)
         h = q_tokens["h"]
         vecs, tens = q_tokens.get("vecs", None), q_tokens.get("tens", None)
         for i, read in enumerate(m._block_read_callables()):
@@ -2406,12 +2402,10 @@ class _QueryChunks:
                 h, self.slices[i], q_tokens["r"], q_tokens["n_hat"], q_tokens["g_hat"], EPS, vecs, tens,
                 geo_kernel=self.geo_kernel,
             )  # fmt: skip
-            h_p = h[:, :n_q]
-            delta = m.kernel_reads[i].read(self.sources[i], h_p.reshape(-1, h.shape[-1]), pairs)
-            h_p = h_p + delta.view_as(h_p)
-            h = h_p if h.shape[1] == n_q else torch.cat([h_p, h[:, n_q:]], dim=1)
+            delta = m.kernel_reads[i].read(self.sources[i], h.reshape(-1, h.shape[-1]), pairs)
+            h = h + delta.view_as(h)
         q_tokens.set("h", h)
-        fields = m._redimensionalize(m._head(q_tokens[:, :n_q], self.frame), self.scales)
+        fields = m._redimensionalize(m._head(q_tokens, self.frame), self.scales)
         points = self.out_points[start:stop]
         return Mesh(points=points, point_data=fields[0].to(points.device), global_data=self.global_td)
 

@@ -1790,37 +1790,28 @@ def test_query_chunks_equal_the_forward_pass_and_its_gradients(theta, vectors, c
         assert torch.allclose(p.grad, ref[name], rtol=1e-9, atol=1e-12 * scale), name
 
 
-def test_query_chunks_pad_both_sides_to_the_token_alignment():
+def test_query_chunks_pad_the_boundary_side_to_the_token_alignment():
     """The boundary side of :meth:`ISLA.query_chunks` runs the slice blocks on its
-    tokens, and each chunk the blocks' reads on its points, completed to a multiple
-    of TOKEN_ALIGNMENT, as forward runs its own; a chunk returns its real points."""
+    tokens completed to a multiple of TOKEN_ALIGNMENT, as forward runs its own."""
     import physicsnemo.experimental.models.isla.model as isla_model
 
     m = _model(3, TREE_READ_THETA).double()
     mesh, drv, q = _case(n=300, nq=40)
-    seen, read_seen = [], []
+    seen = []
     hook = m.blocks[0].register_forward_pre_hook(
         lambda mod, args, kwargs: seen.append(args[0].shape[1]), with_kwargs=True
     )
-    read = m.blocks[0].read
-    m.blocks[0].read = lambda h, *a, **k: (
-        read_seen.append(h.shape[1]) or read(h, *a, **k)
-    )
     try:
-        chunks = m.query_chunks(
+        m.query_chunks(
             boundary_meshes={"wall": mesh},
             prediction_points=points_mesh(q),
             global_data={"g": drv},
         )
-        out = chunks(3, 40)
     finally:
         hook.remove()
-        del m.blocks[0].read
     align = isla_model.TOKEN_ALIGNMENT
-    assert mesh.n_cells % align and 37 % align
+    assert mesh.n_cells % align
     assert seen == [mesh.n_cells + (-mesh.n_cells) % align]
-    assert read_seen == [37 + (-37) % align]
-    assert out.n_points == 37 and out.point_data["p"].shape == (37,)
 
 
 def test_query_chunks_need_query_independent_points():
