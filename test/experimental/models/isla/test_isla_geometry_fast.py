@@ -324,9 +324,9 @@ def _guard_pairs(q, p, c, device):
 @pytest.mark.parametrize("switch", [1, float("inf")])
 @pytest.mark.parametrize("case", [c[0] for c in _guard_meshes()] + ["empty"])
 def test_guard_kernel_equals_the_torch_weights_bitwise(case, switch, monkeypatch):
-    """The fused guard and accurate point give the torch code's weights bitwise, with
-    the switch as set and with it never taken; on the caps and needles the switch
-    fires."""
+    """The fused weights (Ericson's, the guard and the accurate point, the zero-area
+    cells' segments) are the torch code's bitwise, with the switch as set and with it
+    never taken; on the caps and needles the switch fires."""
     if case == "empty":
         q, s, flat = torch.zeros(0, 3, dtype=D), torch.zeros(0, 3, 3, dtype=D), None
         q, s = q.cuda(), s.cuda()
@@ -369,15 +369,13 @@ def test_guard_kernel_falls_back_to_the_torch_code_off_cuda(monkeypatch):
         *next(m for m in _guard_meshes() if m[0] == "zero area")[1:], "cpu"
     )
     calls = []
-    guarded = geometry._guarded_weights
+    closest = geometry._closest_weights
 
     def spy(*args):
         calls.append(args)
-        return guarded(*args)
+        return closest(*args)
 
-    monkeypatch.setattr(geometry, "_guarded_weights", spy)
-    fast = geometry._closest_weights(q, s, flat, fast=True)
+    monkeypatch.setattr(geometry, "_closest_weights", spy)
+    fast = closest(q, s, flat, fast=True)
     assert len(calls) == 1
-    assert torch.equal(
-        fast.view(torch.int64), geometry._closest_weights(q, s, flat).view(torch.int64)
-    )
+    assert torch.equal(fast.view(torch.int64), closest(q, s, flat).view(torch.int64))

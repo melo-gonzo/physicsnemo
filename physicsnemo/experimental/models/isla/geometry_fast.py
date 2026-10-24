@@ -24,12 +24,13 @@ permutation. The kernels here compute the same integers as the reference's torch
 code in one pass each, where the torch code launches tens of kernels (the
 canonical order) or a slow scan (the weld's running maximum).
 
-The closest weights' thin-cell guard (the bound on Ericson's error against one unit
-of the arithmetic) and, on the guarded pairs, the accurate point and the switch to
-it run as one kernel over the pairs (:func:`guarded_weights`), where the torch code
-launches about a hundred small kernels. Its float64 arithmetic is the torch code's
-operation by operation, in the order torch's CUDA kernels evaluate the sums, norms
-and cross products, without contraction, so its weights are the reference's bitwise.
+The closest points' weights on triangles (Ericson's, the edge points recomputed on
+their edges, the thin-cell guard and, on the guarded pairs, the accurate point and
+the switch to it, the zero-area cells' segments) run as one kernel over the pairs
+(:func:`closest_weights`), where the torch code launches about two hundred small
+kernels. Its float64 arithmetic is the torch code's operation by operation, in the
+order torch's CUDA kernels evaluate the sums, norms and cross products, without
+contraction, so its weights are the reference's bitwise.
 
 Each function falls back to the reference's torch code off CUDA or without Triton,
 so its result never depends on the path taken.
@@ -187,6 +188,38 @@ if HAS_TRITON:
         return tl.where(t != t, t, tl.minimum(tl.maximum(t, 0.0), 1.0))
 
     @triton.jit
+    def _segment_distance2(q, a, b, t):
+        """:func:`~physicsnemo.experimental.models.isla.geometry._segment_distance2`,
+        ``t`` its :func:`_segment_t`."""
+        ab = _sub(b, a)
+        r = ((q[0] - a[0]) - t * ab[0], (q[1] - a[1]) - t * ab[1], (q[2] - a[2]) - t * ab[2])
+        return _dot(r, r)
+
+    @triton.jit
+    def _clamp_min(x, low):
+        return tl.where(x != x, x, tl.maximum(x, low))
+
+    @triton.jit
+    def _ericson(q, s):
+        """Ericson's weights, as :func:`~physicsnemo.nn.functional.geometry.sdf._closest_point_weights`."""
+        ab, ac = _sub(s[1], s[0]), _sub(s[2], s[0])
+        qa, qb, qc = _sub(q, s[0]), _sub(q, s[1]), _sub(q, s[2])
+        d1, d2, d3, d4, d5, d6 = _dot(ab, qa), _dot(ac, qa), _dot(ab, qb), _dot(ac, qb), _dot(ab, qc), _dot(ac, qc)
+        va, vb, vc = d3 * d6 - d5 * d4, d5 * d2 - d1 * d6, d1 * d4 - d3 * d2
+        denom = _clamp_min(va + vb + vc, _TINY)
+        t_bc = (d4 - d3) / _clamp_min((d4 - d3) + (d5 - d6), _TINY)
+        t_ac = d2 / _clamp_min(d2 - d6, _TINY)
+        t_ab = d1 / _clamp_min(d1 - d3, _TINY)
+        zero = tl.zeros_like(d1)
+        w = (va / denom, vb / denom, vc / denom)
+        w = _select((va <= 0) & (d4 - d3 >= 0) & (d5 - d6 >= 0), (zero, 1.0 - t_bc, t_bc), w)
+        w = _select((vb <= 0) & (d2 >= 0) & (d6 <= 0), (1.0 - t_ac, zero, t_ac), w)
+        w = _select((d6 >= 0) & (d5 <= d6), (zero, zero, zero + 1.0), w)
+        w = _select((vc <= 0) & (d1 >= 0) & (d3 <= 0), (1.0 - t_ab, t_ab, zero), w)
+        w = _select((d3 >= 0) & (d4 <= d3), (zero, zero + 1.0, zero), w)
+        return _select((d1 <= 0) & (d2 <= 0), (zero + 1.0, zero, zero), w)
+
+    @triton.jit
     def _nearer(d, w, d_best, w_best):
         """The running ``argmin`` of the distances: the first minimum, NaN first."""
         take = (d < d_best) | ((d != d) & (d_best == d_best))
@@ -231,21 +264,33 @@ if HAS_TRITON:
         return total
 
     @triton.jit
-    def _guarded_kernel(
-        q_ptr, s_ptr, w_ptr, flat_ptr, out, n, KAPPA: tl.constexpr, SWITCH: tl.constexpr, ERRBOUND: tl.constexpr, BLOCK: tl.constexpr
+    def _closest_weights_kernel(
+        q_ptr, s_ptr, flat_ptr, out, n, HAS_FLAT: tl.constexpr, KAPPA: tl.constexpr, SWITCH: tl.constexpr, ERRBOUND: tl.constexpr,
+        BLOCK: tl.constexpr,
     ):
-        """Ericson's weights ``w`` of each row, switched to the accurate point's where
-        the row is guarded, as :func:`~physicsnemo.experimental.models.isla.geometry._guarded_weights`
-        (``KAPPA`` is ``_ERICSON_K u64``); a block with no guarded row skips the
-        accurate point."""
+        """The closest weights of each row, as
+        :func:`~physicsnemo.experimental.models.isla.geometry._closest_weights` in three
+        dimensions (``KAPPA`` is ``_ERICSON_K u64``); a block with no guarded row skips
+        the accurate point, and one with no zero-area row the segments."""
         r = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
         m = r < n
         q = (tl.load(q_ptr + 3 * r, mask=m, other=0.0), tl.load(q_ptr + 3 * r + 1, mask=m, other=0.0), tl.load(q_ptr + 3 * r + 2, mask=m, other=0.0))
-        w = (tl.load(w_ptr + 3 * r, mask=m, other=0.0), tl.load(w_ptr + 3 * r + 1, mask=m, other=0.0), tl.load(w_ptr + 3 * r + 2, mask=m, other=0.0))
         s = ()
         for k in tl.static_range(3):
             v = s_ptr + 9 * r + 3 * k
             s = s + ((tl.load(v, mask=m, other=0.0), tl.load(v + 1, mask=m, other=0.0), tl.load(v + 2, mask=m, other=0.0)),)
+        zero = tl.zeros([BLOCK], dtype=tl.float64)
+        ### Ericson's weights, an edge point recomputed on its edge (ends after the zero)
+        w = _ericson(q, s)
+        edge = ((w[0] > 0).to(tl.int32) + (w[1] > 0).to(tl.int32) + (w[2] > 0).to(tl.int32)) == 2
+        gone = tl.where(w[0] == 0, 0, tl.where(w[1] == 0, 1, tl.where(w[2] == 0, 2, 0)))
+        t = _segment_t(q, _select(gone == 0, s[1], s[0]), _select(gone == 2, s[1], s[2]))
+        on_edge = (
+            tl.where(gone == 0, zero, 1 - t),
+            tl.where(gone == 0, 1 - t, tl.where(gone == 1, zero, t)),
+            tl.where(gone == 2, zero, t),
+        )
+        w = _select(edge, on_edge, w)
         ### _thin_bounds' kappa and longest edge
         e1, e2, e3 = _sub(s[1], s[0]), _sub(s[2], s[0]), _sub(s[2], s[1])
         cross2 = tl.zeros([BLOCK], dtype=tl.float64)
@@ -268,10 +313,12 @@ if HAS_TRITON:
         delta = kappa * l2
         eps = tl.where(dist > delta, tl.minimum(delta, delta * delta / (2 * (dist - delta)), propagate_nan=tl.PropagateNan.ALL), delta)
         eps = tl.where(delta <= longest, eps, _INF)
-        guard = ~(eps < unit) & (tl.load(flat_ptr + r, mask=m, other=1) == 0)
+        guard = ~(eps < unit) & m
+        if HAS_FLAT:
+            flat = tl.load(flat_ptr + r, mask=m, other=0) != 0
+            guard = guard & ~flat
         if tl.max(guard.to(tl.int32), 0) > 0:
             ### _accurate_weights: the edge points on (0, 1), (0, 2), (1, 2) ...
-            zero = tl.zeros([BLOCK], dtype=tl.float64)
             t = _segment_t(q, s[0], s[1])
             acc = (1 - t, t, zero)
             d_acc = _distance(q, acc, s)
@@ -306,6 +353,12 @@ if HAS_TRITON:
             d_acc, acc = _nearer(tl.where(on_face, tl.abs(_dot(y, nrm)), _INF), face, d_acc, acc)
             ### the switch
             w = _select(guard & (tl.abs(d_acc - dist) > SWITCH * unit), acc, w)
+        if HAS_FLAT:
+            if tl.max(flat.to(tl.int32), 0) > 0:
+                ### a zero-area cell: the nearer of its edges (0, 1) and (1, 2)
+                t1, t2 = _segment_t(q, s[0], s[1]), _segment_t(q, s[1], s[2])
+                second = _segment_distance2(q, s[1], s[2], t2) < _segment_distance2(q, s[0], s[1], t1)
+                w = _select(flat, _select(second, (zero, 1 - t2, t2), (1 - t1, t1, zero)), w)
         for k in tl.static_range(3):
             tl.store(out + 3 * r + k, w[k], mask=m)
 
@@ -342,20 +395,19 @@ def canonical_cells(points: torch.Tensor, cells: torch.Tensor, reference):
     return vert, parity
 
 
-def guarded_weights(q, simplex, w, flat, reference, ericson_k, switch_units, orient_errbound):
-    """``reference(q, simplex, w, flat)`` (the reference's
-    :func:`~physicsnemo.experimental.models.isla.geometry._guarded_weights`: the
-    thin-cell guard and the accurate point of each guarded pair) by one Triton kernel
-    on CUDA, from the reference's constants ``_ERICSON_K``, ``_SWITCH_UNITS`` and
-    ``_ORIENT_ERRBOUND``."""
+def closest_weights(q, simplex, flat, reference, ericson_k, switch_units, orient_errbound):
+    """``reference(q, simplex, flat)`` (the reference's
+    :func:`~physicsnemo.experimental.models.isla.geometry._closest_weights` of
+    triangles: Ericson's weights, the edge points recomputed, the thin-cell guard and
+    the accurate point of each guarded pair, the zero-area cells' segments) by one
+    Triton kernel on CUDA, from the reference's constants ``_ERICSON_K``,
+    ``_SWITCH_UNITS`` and ``_ORIENT_ERRBOUND``."""
     n = q.shape[0]
     if not _usable(q) or n == 0:
-        return reference(q, simplex, w, flat)
-    out = torch.empty_like(w)
-    if flat is None:
-        flat = torch.zeros(n, dtype=torch.bool, device=q.device)
-    _guarded_kernel[(triton.cdiv(n, _CELL_BLOCK),)](
-        q.contiguous(), simplex.contiguous(), w.contiguous(), flat.contiguous(), out, n, KAPPA=ericson_k * 2.0**-53,
-        SWITCH=switch_units, ERRBOUND=orient_errbound, BLOCK=_CELL_BLOCK, enable_fp_fusion=False,
+        return reference(q, simplex, flat)
+    out = torch.empty_like(q)
+    _closest_weights_kernel[(triton.cdiv(n, _CELL_BLOCK),)](
+        q.contiguous(), simplex.contiguous(), q if flat is None else flat.contiguous(), out, n, HAS_FLAT=flat is not None,
+        KAPPA=ericson_k * 2.0**-53, SWITCH=switch_units, ERRBOUND=orient_errbound, BLOCK=_CELL_BLOCK, enable_fp_fusion=False,
     )
     return out
