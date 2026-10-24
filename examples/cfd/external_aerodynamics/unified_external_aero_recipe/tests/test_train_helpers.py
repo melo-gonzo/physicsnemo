@@ -246,10 +246,6 @@ def test_chunked_forward_backward_equals_the_unchunked_step(loss_type, measured)
     ref[0].backward()
     grads = {k: p.grad.clone() for k, p in model.named_parameters()}
     model.zero_grad(set_to_none=True)
-    assert (
-        train._query_chunk(model, batch, 17) == 17
-        and train._query_chunk(model, batch, n) is None
-    )
     torch.manual_seed(1)
     out = train.chunked_forward_backward(
         batch, model, "float32", lc, mc, target_config=target_config, chunk=17
@@ -263,10 +259,10 @@ def test_chunked_forward_backward_equals_the_unchunked_step(loss_type, measured)
         )
 
 
-def test_resolve_query_chunk_defaults_to_chunks_for_one_pass_losses():
-    """training.query_chunk: unset, ISLA-DTT takes chunks of 100000 points under a
-    one-pass loss and none under a two-pass one; a number sets it for any loss;
-    null or 0 turns it off; an interacting ISLA never chunks."""
+def test_query_chunk_chunks_isla_dtt_under_one_pass_losses(monkeypatch):
+    """ISLA-DTT takes chunks of _QUERY_CHUNK points under a one-pass loss when the
+    batch has more points than that, and the unchunked step otherwise; an
+    interacting ISLA never chunks."""
     from physicsnemo.experimental.models.isla import ISLA
 
     def isla(query_independent):
@@ -280,17 +276,19 @@ def test_resolve_query_chunk_defaults_to_chunks_for_one_pass_losses():
             n_slices=4,
         )
 
+    def batch(n):
+        return {"forward_kwargs": {"prediction_points": Mesh(points=torch.zeros(n, 3))}}
+
+    monkeypatch.setattr(train, "_QUERY_CHUNK", 17)
     dtt, interacting = isla(True), isla(False)
-    unset = OmegaConf.create({"num_epochs": 1})
-    assert train.resolve_query_chunk(dtt, unset, "huber") == 100000
-    assert train.resolve_query_chunk(dtt, unset, "relative_mse") == 100000
-    assert train.resolve_query_chunk(dtt, unset, "case_relative_l2") is None
-    for value, expected in ((5000, 5000), (None, None), (0, None)):
-        cfg = OmegaConf.create({"query_chunk": value})
-        for loss_type in ("mse", "relative_l2"):
-            assert train.resolve_query_chunk(dtt, cfg, loss_type) == expected
-    for cfg in (unset, OmegaConf.create({"query_chunk": 5000})):
-        assert train.resolve_query_chunk(interacting, cfg, "huber") is None
+    for loss_type in ("huber", "mse", "relative_mse"):
+        lc = SimpleNamespace(loss_type=loss_type)
+        assert train._query_chunk(dtt, batch(50), lc) == 17
+        assert train._query_chunk(dtt, batch(17), lc) is None
+        assert train._query_chunk(interacting, batch(50), lc) is None
+    for loss_type in ("relative_l2", "case_relative_l2"):
+        lc = SimpleNamespace(loss_type=loss_type)
+        assert train._query_chunk(dtt, batch(50), lc) is None
 
 
 ### ---------------------------------------------------------------------------

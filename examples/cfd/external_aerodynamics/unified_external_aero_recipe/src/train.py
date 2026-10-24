@@ -290,49 +290,31 @@ def forward_pass(
 ### relative_l2, case_relative_l2) take the two-pass form.
 _POINTWISE_LOSSES = ("huber", "mse", "relative_mse")
 
-### ISLA-DTT's chunk when ``training.query_chunk`` is unset and the loss takes one
-### pass: on DrivAerML Volume, the largest chunk whose peak memory stays at the
-### unchunked 100k-point step's, at no measurable time cost.
-_DEFAULT_QUERY_CHUNK = 100_000
-
-
-def resolve_query_chunk(
-    model: torch.nn.Module, training_cfg: DictConfig, loss_type: str
-) -> int | None:
-    """The chunk size of ISLA-DTT's training step (``training.query_chunk``), or
-    ``None`` for the unchunked step. Unset: ``_DEFAULT_QUERY_CHUNK`` for a loss in
-    ``_POINTWISE_LOSSES``, else ``None`` (the two-pass form costs time); a number
-    overrides it; ``null`` or ``0`` turns chunking off. ``None`` for any model
-    but ISLA-DTT."""
-    core = (
-        model.module
-        if isinstance(model, torch.nn.parallel.DistributedDataParallel)
-        else model
-    )
-    if not getattr(core, "query_independent", False):
-        return None
-    if "query_chunk" not in training_cfg:
-        return _DEFAULT_QUERY_CHUNK if loss_type in _POINTWISE_LOSSES else None
-    chunk = training_cfg.query_chunk
-    return int(chunk) if chunk else None
+### ISLA-DTT's chunk of prediction points under a one-pass loss: on DrivAerML
+### Volume, the largest chunk whose peak memory stays at the unchunked 100k-point
+### step's, at no measurable time cost.
+_QUERY_CHUNK = 100_000
 
 
 def _query_chunk(
-    model: torch.nn.Module, batch: dict[str, Any], chunk: int | None
+    model: torch.nn.Module, batch: dict[str, Any], loss_calculator: LossCalculator
 ) -> int | None:
-    """The chunk size of :func:`chunked_forward_backward` for this batch: ``chunk``
-    when the model is ISLA-DTT (``query_chunks``) and the batch has more prediction
-    points than that, else ``None`` (the unchunked step). Under DDP every batch
-    takes the chunked step, so that every rank reduces its gradients the same way."""
+    """The chunk size of :func:`chunked_forward_backward` for this batch:
+    ``_QUERY_CHUNK`` when the model is ISLA-DTT (``query_chunks``), the loss type is in
+    ``_POINTWISE_LOSSES`` and the batch has more prediction points than that, else
+    ``None`` (the unchunked step). Under DDP every such batch takes the chunked
+    step, so that every rank reduces its gradients the same way."""
     ddp = isinstance(model, torch.nn.parallel.DistributedDataParallel)
     core = model.module if ddp else model
-    if not chunk or not getattr(core, "query_independent", False):
+    if not getattr(core, "query_independent", False):
+        return None
+    if loss_calculator.loss_type not in _POINTWISE_LOSSES:
         return None
     points = batch["forward_kwargs"].get("prediction_points")
     if points is None:
         return None
     n = points.n_points if isinstance(points, Mesh) else points.shape[0]
-    return int(chunk) if ddp or n > chunk else None
+    return _QUERY_CHUNK if ddp or n > _QUERY_CHUNK else None
 
 
 def chunked_forward_backward(
@@ -428,7 +410,6 @@ def _run_epoch(
     optimizer: torch.optim.Optimizer | None = None,
     scheduler: torch.optim.lr_scheduler.LRScheduler | None = None,
     scaler: GradScaler | None = None,
-    query_chunk: int | None = None,
     writer: SummaryWriter | None = None,
     log_jsonl: Callable[[dict[str, Any]], None] | None = None,
 ) -> tuple[float, dict[str, float]]:
@@ -447,8 +428,6 @@ def _run_epoch(
         mode: ``"train"`` or ``"val"``. ``"train"`` requires *optimizer*
             and *scheduler*; ``"val"`` ignores them.
         scaler: GradScaler for fp16 (train mode only).
-        query_chunk: ISLA-DTT's chunk of prediction points in a train step
-            (:func:`resolve_query_chunk`); ``None`` for the unchunked step.
         writer: TensorBoard writer for the matching split. Per-epoch
             metrics are written to it on rank 0; per-step metrics are
             written only in train mode.
@@ -494,7 +473,7 @@ def _run_epoch(
             batch = load() if next_batch is None else next_batch
             next_batch = None
             chunk = (
-                _query_chunk(model, batch, query_chunk)
+                _query_chunk(model, batch, loss_calculator)
                 if is_train and scaler is None
                 else None
             )
@@ -735,7 +714,6 @@ def train_epoch(
     *,
     output_type: IOType,
     target_config: dict[str, FieldType],
-    query_chunk: int | None = None,
     train_writer: SummaryWriter | None = None,
     log_jsonl: Callable[[dict[str, Any]], None] | None = None,
 ) -> tuple[float, dict[str, float]]:
@@ -755,7 +733,6 @@ def train_epoch(
         optimizer=optimizer,
         scheduler=scheduler,
         scaler=scaler,
-        query_chunk=query_chunk,
         writer=train_writer,
         log_jsonl=log_jsonl,
     )
@@ -1139,13 +1116,11 @@ def main(cfg: DictConfig) -> None:
     output_type = require_output_type(cfg)
     logger.info(f"Loss: {loss_calculator}")
     logger.info(f"Metrics: {metric_calculator}")
-    query_chunk = resolve_query_chunk(model, cfg.training, loss_type)
     if getattr(getattr(model, "module", model), "query_independent", False):
         logger.info(
-            "ISLA-DTT training step: "
-            + (f"chunks of {query_chunk} points" if query_chunk else "unchunked")
-            + f" (training.query_chunk {cfg.training.get('query_chunk', 'unset')},"
-            f" loss {loss_type})"
+            f"ISLA-DTT training step: chunks of {_QUERY_CHUNK} prediction points"
+            if loss_type in _POINTWISE_LOSSES
+            else f"ISLA-DTT training step: unchunked ({loss_type} is not pointwise)"
         )
     logger.info(
         f"Model contract: input_type={cfg.input_type}, output_type={output_type}"
@@ -1185,7 +1160,6 @@ def main(cfg: DictConfig) -> None:
                 scaler,
                 output_type=output_type,
                 target_config=target_config,
-                query_chunk=query_chunk,
                 train_writer=train_writer,
                 log_jsonl=log_jsonl,
             )
