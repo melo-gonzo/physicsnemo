@@ -51,6 +51,8 @@ source. Do not edit by hand.
 | `slices_drv/` | SLICES-DRV: ISLA with 128 slices against the 512-slice DrivAerML Volume standing | `scratch/isla-slices-drv-2026-10-24/` |
 | `freeze_plan/` | FREEZE-PLAN: the final reference rerun re-planned with ISLA-DTT as the default interior form, its lanes, cost and calendar | `scratch/isla-freeze-plan-2026-10-24/` |
 | `bc_supply/` | BC-SUPPLY: SHIFT-SUV's box and HiLiftAeroML's inlet and outlet built in the recipe, the deduplicated wing, their checks and cost | `scratch/isla-bc-supply-2026-10-24/` |
+| `geo_band_final/` | GEO-BAND: the exact geometry's derived tie and on-wall bands in the boundary's centred frame (ISLA 0.12.0), their derivation, its independent re-derivation, the pose and native effects, the trained-model check and the cost | `scratch/isla-geo-band-2026-10-24/` |
+| `band_merge/` | BAND-MERGE: the ISLA 0.12.0 version commit for GEO-BAND and its test review | `scratch/isla-band-merge-2026-10-24/` |
 
 | topic | file | source | md5 |
 | --- | --- | --- | --- |
@@ -270,3 +272,11 @@ source. Do not edit by hand.
 | bc_supply | out/hl_val_368914.jsonl | scratch/isla-bc-supply-2026-10-24/out/hl_val_368914.jsonl | cb5c0f152fa98f934c19db5388714c68 |
 | bc_supply | out/move_369235.jsonl | scratch/isla-bc-supply-2026-10-24/out/move_369235.jsonl | 195c322778304c0866e0ba53a08be8d2 |
 | bc_supply | gb/smoke_summary.txt | scratch/isla-bc-supply-2026-10-24/gb/smoke_summary.txt | c6a833c753006178ce4beb9a249d707b |
+| geo_band_final | FINAL_REPORT.md | scratch/isla-geo-band-2026-10-24/FINAL_REPORT.md | efc3cf9ca39930b8fae8e620f06e0d2b |
+| geo_band_final | RESULTS.md | scratch/isla-geo-band-2026-10-24/RESULTS.md | e5cf24a2701e3d511d0b3ac23a4b39ba |
+| geo_band_final | DERIVATION.md | scratch/isla-geo-band-2026-10-24/DERIVATION.md | de7e33f0fa47cbb048cdb73db3e65294 |
+| geo_band_final | INFER_CHECK.md | scratch/isla-geo-band-2026-10-24/INFER_CHECK.md | 0efe2d6f9a29ab8079f3bb2e4139f470 |
+| geo_band_final | REVIEW_DERIVATION.md | scratch/isla-geo-band-2026-10-24/REVIEW_DERIVATION.md | f01d6f974622f24d65967177fca11f80 |
+| geo_band_final | DESIGN.md | scratch/isla-geo-band-2026-10-24/DESIGN.md | 15bdc0a3c638b066752f1e96afdc42d8 |
+| band_merge | FINAL_REPORT.md | scratch/isla-band-merge-2026-10-24/FINAL_REPORT.md | dae15af49551846dbd1df3a330c5f14b |
+| band_merge | REVIEW_TESTS.md | scratch/isla-band-merge-2026-10-24/REVIEW_TESTS.md | dfae97e0f29472178221cee3fea9b34c |

@@ -421,6 +421,26 @@ RECORDS = {
             "gb/smoke_summary.txt",
         ],
     ),
+    "geo_band_final": (
+        "isla-geo-band-2026-10-24",
+        "GEO-BAND: the exact geometry's derived tie and on-wall bands in the boundary's centred frame (ISLA 0.12.0), their derivation, its independent re-derivation, the pose and native effects, the trained-model check and the cost",
+        [
+            "FINAL_REPORT.md",
+            "RESULTS.md",
+            "DERIVATION.md",
+            "INFER_CHECK.md",
+            "REVIEW_DERIVATION.md",
+            "DESIGN.md",
+        ],
+    ),
+    "band_merge": (
+        "isla-band-merge-2026-10-24",
+        "BAND-MERGE: the ISLA 0.12.0 version commit for GEO-BAND and its test review",
+        [
+            "FINAL_REPORT.md",
+            "REVIEW_TESTS.md",
+        ],
+    ),
 }
 
 

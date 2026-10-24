@@ -40090,7 +40090,7 @@ question on what the other datasets store beyond the body (@sec-oq-whole-boundar
 table row and the recommendation bullet state the registered rule with this answer: ISLA-DTT is the default unless
 interacting ISLA is clearly more accurate. Chapter 09's ground question, chapter 19's far-field paragraph and chapter
 21's design ledger (a row on the whole boundary) say the same. The In-flight callouts on the candidate geometry
-(chapters 04 and 20) and the tie question (@sec-oq-ties) give the adoption rule. The ledger updates GEO-BUNDLE, the
+(chapters 04 and 20) and the tie question (@sec-arch-interior-geometry) give the adoption rule. The ledger updates GEO-BUNDLE, the
 AeroZoo decision in REF-090 and FLOOR-DRV in CAP-AUDIT, and adds GEO-FAST and BOUNDARY-AUDIT.
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-book-eve-2026-10-23/SECOND_READ_EVE.md).*
@@ -40549,7 +40549,7 @@ Cost: 206.1 GPU-h of the 220 GPU-h cap (arms 201.1 in 18 links, first links 3425
 smokes 0.9; scoring 1.0, jobs 345741 and 364216; the F probes 0.4, jobs 345742 and 364217).
 
 The chapters take the result in 04 (@sec-medial-ties), 07 (@sec-standing-geometry), 16 (@sec-lug-ties) and 20
-(@sec-limits-ties, @sec-oq-ties), with In-flight callouts in 04, 16 and 20 on the lug standing's posed numbers, which
+(@sec-limits-ties, @sec-arch-interior-geometry), with In-flight callouts in 04, 16 and 20 on the lug standing's posed numbers, which
 standings trained with the class's geometry replace.
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-tie-2026-10-24/SECOND_READ_TIE.md).*
@@ -40692,7 +40692,7 @@ record of its A3 condition; on the other datasets the standings' inputs differ f
 folds and, where a boundary has more cells than the token budget, in the drawn cells, by an amount not measured. The chapters
 now describe 0.11.0's geometry (05 @sec-arch-interior-geometry and @sec-arch-boundary-draw, 03, 04, 06) and state the
 standings' geometry once, in 07 (@sec-standing-geometry); 0.9.0's limits at ties and folds are cut from 20 and replaced by
-what rounding still decides (@sec-oq-ties, @sec-oq-precision), and the candidate-geometry callouts in 04 and 20 are cut.
+what rounding still decides (@sec-arch-interior-geometry, @sec-oq-precision), and the candidate-geometry callouts in 04 and 20 are cut.
 
 **The cost, as Peter asked.** The merged path is GEO-FAST's reference path (the commits after fb263fa29 add only the fast
 path; RESULTS.md of scratch/isla-geo-fast-2026-10-23, Timing, the "head, reference" column against "base", the standings'
@@ -41843,6 +41843,95 @@ retrains them with these pieces. Merged into this book batch as eb5a9c92f. Recor
 (REPORT.md, FINAL_REPORT.md, book/BOOK_CHANGES.md, out/hl_val_368914.jsonl, out/move_369235.jsonl, gb/smoke_summary.txt).
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-az-2026-10-24/SECOND_READ_AZ.md).*
+
+## 2026-10-24 — GEO-BAND: the exact geometry's tie and on-wall bands rest on derived worst cases (C = 91 in 3-D and 17 in 2-D, K = 168, the 1-unit switch certified), its storage term stays in the frame the inputs were given in, its arithmetic runs in the boundary's centered frame, a tie needs certified-distinct directions; no sign or on-wall decision changes, posed lug tie flips fall from 90,221 to 25, no retrain; merged with this batch as ISLA 0.12.0 {#sec-nb-geo-band}
+
+**What it did.** GEO-BAND made the exact query geometry's tie and on-wall decisions rest on derived worst cases and freed
+its arithmetic from the boundary's position. The change is psharpe/isla-geo-band 9e0d52e27, merged with psharpe/isla
+eba038f08 as 2e9cd7fda; BAND-MERGE added the version commit 3f3fef69f (ISLA 0.12.0, @sec-nb-version-0120). It merges into
+psharpe/isla with this book batch.
+
+**The rule (the supervisor's approval at 11:24 EDT, the lane's variant VF), one rule with no flag.**
+- The band is E_k = u (|x| + R_k) + C u64 (|x'| + R'_k). The first term is the inputs' storage rounding, measured in the
+  frame they were given in: a case placed far from the origin is rounded more coarsely, so a storage term measured about
+  the centroid is not a bound. GEO-THIN had seen it fail on lug case 1909, and the lane confirmed why: with the vertex term
+  measured about the centroid, exactly medial nodes see a re-rounding gap the band no longer covers, and 170 lug nodes
+  over the 20 dump cases take |du| = 1 posed.
+- The second term is the float64 arithmetic's, measured in the frame centered on c, the measure-weighted centroid of the
+  distinct cells, computed from exact int64 fixed-point sums, so a function of the set of cells, not of their order, and
+  rounded to the queries' precision, so float32 inputs center exactly.
+- C = 91 in 3-D and 17 in 2-D, a worst case (the first-order 13 and 10 before). The greatest path is a guarded pair that
+  keeps Ericson's point, within the 1-unit switch of the accurate point, whose worst case is 87 units at a face that
+  rounding rejects (GEO-THIN's first-order count was 77; the lane's first draft 88): 88, plus 1 for the centering and 2 for
+  the second-order terms and the band's own evaluation. K = 168 holds as a worst case (second-order terms 3e-15
+  relative). The switch needs no bound of its own: any threshold tau is certified once C >= tau + 88.
+- Each bound is derived (DERIVATION.md, version 2) and was re-derived independently by a reviewer child
+  (REVIEW_DERIVATION.md), whose corrections are applied to the derivation and the code's comments. One disagreement is
+  recorded: the 2-D brute-force prefilter's margin for float64 queries, 33.5 units by the reviewer's count against the 32
+  the code allows; the lane counts its err_max as already covering it. Either way it changes only candidates, never an
+  output, since a wider prefilter adds only candidates beyond the band.
+- A tie needs two certified-distinct directions: farther apart than the sum of their bounds tau = sqrt(2) s (2 where s
+  >= 1), s a bound on the sine of each computed direction's error.
+- The offset x - p is formed in float64 and rounded once to the queries' precision.
+- The reference and the fast search stay bitwise equal: the branch matches variant VF bitwise in 106 of 106 runs, on every
+  op output, d, u and both gradients (job 369316), and the fast path differs from the reference at 0 of 588,689 queries.
+
+**What it changes** (float32 unless named; the recipe's draws of the DrivAerML Volume task's whole boundary, AirfRANS with
+its far field, AeroZoo, the 20 lug cases and Tensile2d).
+- Natively: no winding sign and no on-wall decision changes on any dataset. Distances move at rounding level, at most 0.7
+  percent at AirfRANS's first nodes, where the old float32 cancellation was that large. Directions move at ties: up to
+  6.5e-3 at 7,932 of 400,000 DrivAerML points, 1.6e-5 on the lug, not at all on Tensile2d.
+- Rotated and translated by one RMS radius of the boundary: tie-membership flips fall from 90,221 to 25 on the lug and
+  from 231 to 0 on Tensile2d. DrivAerML's band-edge flips (3,706 points of 400,000 move u by more than 1e-3, against
+  3,000 at 921472488) each lie within their certified direction uncertainty (the supervisor at 11:24: state this
+  wherever the numbers appear).
+- NEARWALL's compute rounding far from the origin falls to 1.9e-7 at the 99.9th percentile (DrivAerML whole boundary
+  translated by L, softening 1e-9 L; 0.0156 at 921472488). Its input part stays: on AirfRANS at 30 chords, queries within
+  the float32 storage rounding of the wall are on it.
+- Lug case 1884's node 6997 remains a band-edge node, answered correctly for its own inputs in each pose (excess
+  1.74e-5).
+- The irreducible limit: a case's float32 storage rounding grows with its distance from the origin, so band-edge nodes
+  can still flip under translation. The extreme is AirfRANS with its far field translated by one boundary RMS radius:
+  16,077 of the 400,000 drawn points, all near the wall, become on-wall, whatever the frame of the arithmetic.
+- Trained models (the pre-registered, gated check, INFER_CHECK.md, job 369317): TIE-EXP's four checkpoints (ISLA with the
+  class's tie rule on the lug and Tensile2d, two seeds each) read through the new geometry reproduce 36 of 36 registered
+  summaries on the old one, and move by at most 2.96e-5 in log(N / O) and 4.4e-5 in posed ÷ native, against limits of
+  0.01. Criterion met: no retrain. Beside it, not gated: AF-WHOLE's seed 42 (epoch 197) and FLOOR-DRV's fdF seed 42
+  (step 2000), both trained with 0.9.0's geometry, read N / O within 0.99990 to 1.00014.
+- Cost on the DrivAerML whole-boundary geometry call (GB300, median of five after three warm-up, two draws): +13 ms (2.8
+  percent) under the reference search, +14 ms (3.5 percent) under the fast one.
+
+**Tests.** GEO-BAND, on 2e9cd7fda: the ISLA test directory on a GB300 with every CUDA test, 548 passed, 1 skipped, 0
+failed (369573); on CPU, 409 passed (369574). BAND-MERGE, on 3f3fef69f: GB300 550 passed, 1 skipped (369879), CPU 411
+passed (369880), the recipe tests 551 passed and 2 failed (`test_campaign_c_hooks`, the base's E line; 369988). The golden
+checkpoint regenerates bitwise in its 59 tensors; of the six changed test lines none weakens a test (REVIEW_TESTS.md).
+
+**Open, not explained.** On the lug with float64 queries posed in float64, 12 to 49 nodes per 20 cases change u by 1 under
+every variant (float32: 0). It is not the recipe's precision and was not chased. The fused kernel for the thin-cell path
+(the lane's phase D) did not fit its cap; GEO-THINFAST builds it.
+
+**For the book.** 05 states the band, its two frames, the derived constants with the one recorded disagreement, the
+certified tie test, the float64 offset, what they change, and the remaining band-edge limit in place of the medial one; 06
+gives the refused versions through 0.11.0 and the bands' cost beside its cost table, not re-timed; 20 loses the derived-bands
+question (`sec-oq-ties`) and its In-flight callout, states the band-edge limit in its tie section, and gives the near-wall
+alternative's rounding without the arithmetic's share; 21 states the certified decisions. Three references of older entries
+to `sec-oq-ties` point at 05's geometry section instead, their text unchanged. Records:
+results/campaigns_2026-10-23/geo_band_final/ (FINAL_REPORT.md, RESULTS.md, DERIVATION.md, INFER_CHECK.md,
+REVIEW_DERIVATION.md, DESIGN.md) and results/campaigns_2026-10-23/band_merge/ (FINAL_REPORT.md, REVIEW_TESTS.md).
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-band-2026-10-24/SECOND_READ_BAND.md).*
+
+## 2026-10-24 — The supervisor's version decision: GEO-BAND merges now as ISLA 0.12.0, and ISLA-DTT's tree fix, if its retrain check reads no cost, merges later as 0.13.0 {#sec-nb-version-0120}
+
+**The decision (the supervisor's, 13:10 EDT).** GEO-BAND's geometry changes model outputs at rounding level and at ties,
+so it is a new ISLA version, 0.12.0, which refuses every earlier state dict; BAND-MERGE made that version commit
+(3f3fef69f, `_version` 12). DTT-POSE's version commit 4242962e0 had also claimed 0.12.0 for its forest. The supervisor
+chose to merge GEO-BAND now rather than wait for the tree fix: merging it now spreads the merge risk before the scope
+freeze. If DTT-POSE-EXP's retrain check reads no cost, the tree fix merges later as ISLA 0.13.0, its version commit redone.
+Version numbers are internal, and ISLA is unreleased. The standings stay ISLA 0.9.0's until the final reference rerun
+(@sec-standing-geometry).
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-band-2026-10-24/SECOND_READ_BAND.md).*
 
 ## 2026-10-22 — MECH-090: on Tensile2d the fixed compiled path's float32 gradients sit at a one-ulp eager floor, and pytorch/pytorch#195845 added a unit-dependent sink to ISLA's slice-state softmax (registered emulations not confirmed; a post-smoke emulation matches) {#sec-nb-mech090}
 

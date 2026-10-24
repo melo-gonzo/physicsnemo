@@ -1323,9 +1323,12 @@ continuous through the surface, so a point on it, whose distance is zero or
 a rounding error of either sign, reads what the points just off it read on
 either side. The softening $\varepsilon = 10^{-6}$ is a precision margin in the length
 unit, not a model length: about 17 times float32's unit roundoff $2^{-24}$,
-so the rounding of float32 coordinates moves the channel by at most 0.12
-wherever the body sits in its domain (measured on AirfRANS with its far
-field, the DrivAerML Volume task and AeroZoo). Its consequence: the channel
+so storing the coordinates in float32 moves the channel by at most 0.065
+wherever the body sits in its domain on AirfRANS with its far field and by
+at most 0.036 on the DrivAerML Volume task; on AeroZoo, storage and
+arithmetic together move it by at most 0.12 (results/campaigns_2026-10-23/nearwall/RESULTS.md, A3).
+The search's own float32 arithmetic, with the offset $x_q - p_q$ formed in
+float64 (below), adds a change at rounding level. Its consequence: the channel
 is linear for distances below $10^{-6} L$, and with the whole boundary $L$
 is the size of the domain. That linear part holds 19.5% of AirfRANS's drawn
 points with its far field, the viscous sublayer, the buffer layer and the
@@ -1353,10 +1356,16 @@ since $L$ is computed from the full-resolution boundary before the draw
 
 The search runs in `forward`, where the meshes are, before the draw, at the
 points' precision and outside autocast (`_closest_features`, which calls the
-torch custom operator `_closest_candidates`). Every candidate distance is
+torch custom operator `_closest_candidates`), in the boundary's centered
+frame: every coordinate less the measure-weighted centroid $c$ of the
+distinct cells, rounded to the points' precision, so that float32
+coordinates are centered exactly. The centroid's sums are exact fixed-point
+sums, so $c$ is a function of the set of cells, not of their order. The
+search's rounding then scales with the size of the boundary, not with its
+distance from the origin of the raw coordinates. Every candidate distance is
 computed in float64 on the cell's vertices in the lexicographic order of
 their positions, with an error bound $E_k$ from the coordinates' rounding and
-the arithmetic's, and a cell ties when its interval $[D_k - E_k, D_k + E_k]$
+the arithmetic's (below), and a cell ties when its interval $[D_k - E_k, D_k + E_k]$
 reaches the least upper end and its closest point is a local minimum of the
 distance on the surface. In three dimensions a float32 traversal of a
 bounding-volume hierarchy over the cells, the model's own cell tree, finds a
@@ -1367,10 +1376,10 @@ far-field expansion of distant nodes and exact float64 solid angles near the
 point. In two dimensions a brute force over the segments, chunked over the
 points, keeps the candidates. The interior task is implemented in two and
 three dimensions. The search runs without gradient;
-the closest point is then rebuilt from its cell's vertices with the
-barycentric weights of its region of the cell (computed in float64), so
-$\delta_q$ and $u_q$ are differentiable in the points and the vertex
-positions.
+the offset $x_q - p_q$ is then formed in float64 from the point and its
+cell's vertices, with the barycentric weights of its region of the cell,
+and rounded once to the points' precision, so $\delta_q$ and $u_q$ are
+differentiable in the points and the vertex positions.
 
 A cell of zero area, whose vertices coincide or lie on one line, is read as
 the segment or the point its vertices span. Such a cell never supplies a
@@ -1413,31 +1422,65 @@ error bound is the smaller of $\Delta$ and $\Delta^2 / (2(\tilde d -
 \Delta))$, with $\tilde d$ the computed distance, and is unbounded where
 $\Delta$ exceeds $L_k$. Where that bound reaches one unit of the
 distance's arithmetic bound,
-$u_{64}(\lvert x \rvert + R_k)$ with $R_k$ the cell's greatest vertex norm,
+$u_{64}(\lvert x' \rvert + R'_k)$, with primes for the centered frame and
+$R'_k$ the greatest distance of the cell's vertices from $c$,
 the class also computes the closest point accurately, in the frame of the
 cell's longest edge, and takes it when the two distances differ by more
 than one unit. The reference search and the fast one run the same
 arithmetic and stay bitwise equal.
 
-**The ball test's error constant is derived; the switch and the bands'
-arithmetic share are first-order estimates.** $K = 168$ is derived from
-the rounding of every operation of the closest-point formulas as coded,
-with the amplification by the cancelling denominator kept in the bound
-(167.25, rounded up; the comment above `_ERICSON_K` in `geometry.py`), and
-against exact rational arithmetic on about 600,000 pairs the largest error
-is 0.0115 of the bound. The switch's one unit is the difference of two
-first-order estimates, not of derived worst cases: 13 units for the
-arithmetic share of the tie and on-wall bands, whose first-order worst case
-for an edge point alone is about 17.5 units, and 12 for the accurate
-point's distance error, whose first-order worst case is 77 units and whose
-largest observed value is 2.03. The one unit rests on that observation.
-Since the 13-unit share is not derived, for float64 queries rounding may decide a tie or an on-wall call at the
-$10^{-15}$ relative level. For float32 queries, and bfloat16 ones cast to
-float32, the band is $(u_{32} + 13 u_{64})(\lvert x \rvert + R_k)$, with $u_{32} = 2^{-24}$, and the
-estimated share is $2.4 \times 10^{-8}$ of it on every pair
-(results/campaigns_2026-10-23/geo_thin_final/DESIGN.md, Amendment).
+**Every constant of the bands and the switch is a derived worst case.**
+Each candidate distance $D_k$ carries the band
 
-**On every dataset whose ISLA reads the interior geometry, the treatment
+$$
+E_k \equiv u\,(\lvert x \rvert + R_k) + C\,u_{64}\,(\lvert x' \rvert + R'_k),
+$$
+
+with $u$ the unit roundoff of the points' precision, $R_k$ the greatest norm
+of the cell's vertices, and primes for the centered frame. The first term is
+the rounding of the coordinates as they were given, so it is measured in the
+frame they were given in: a case placed far from the origin is rounded more
+coarsely, and a storage term measured about the centroid is not a bound on
+that rounding. The second is the float64 arithmetic's, measured in the
+centered frame it runs in.
+
+```{python}
+#| label: para-arch-bands
+#| output: asis
+from physicsnemo.experimental.models.isla import geometry as _geo
+GBD = " ".join(R.load("geo_band_final", "DERIVATION.md").split())
+GBR = " ".join(R.load("geo_band_final", "RESULTS.md").split())
+C3, C2 = _geo._BAND_UNITS[3], _geo._BAND_UNITS[2]
+FOOT, SWITCH, K_ = _geo._FOOT_UNITS, _geo._SWITCH_UNITS, _geo._ERICSON_K
+KEPT = SWITCH + FOOT
+assert C3 == KEPT + 3 and "**C3 = 91**" in GBD and "**C2 = 17**" in GBD and f"`_FOOT_UNITS = {FOOT}`" in GBD
+assert re.search(r"Two dimensions: an edge point, 15, plus the centring: 16", GBD)
+K_OBS = re.search(r"largest observed ratio ([\d.]+) of the bound over 600k thin pairs", GBD).group(1)
+FOOT_OBS = re.search(r"largest error observed against exact rational arithmetic is ([\d.]+)", inspect.getsource(_geo)).group(1)
+BF = re.search(r"The review counted `e_bf \+ A = ([\d.]+) > (\d+)` for float64 queries", GBD).groups()
+F32_SHARE = re.search(r"the storage term u32 \(\|x\| \+ R_k\) is 1 - ([\d.]+e-\d+) of the band", GBR).group(1)
+print(f"$C$ is {C3} in three dimensions and {C2} in two: the worst case, over every path the closest point's weights take, "
+      "of the float64 distance's error. The greatest path is a guarded pair that keeps Ericson's point: within the switch's "
+      f"{SWITCH} unit of the accurate point, whose own worst case is {FOOT} units (at a face whose exact foot rounding "
+      f"rejects), and so within {KEPT} units of the exact distance. One unit more covers the centering, and two the "
+      "second-order terms and the band's own evaluation. In two dimensions the only path is an edge point, 15 units, and one unit for the centering and one for the rest "
+      "give 17. A "
+      "count of every rounding to first order becomes a worst case once each product of two error terms is bounded and no "
+      "term is divided by a quantity that rounding can make small (Higham's $\\gamma_n$); the ball test's "
+      f"$K = {K_:.0f}$ is the worst case 167.25, rounded up, in the same way. The switch needs no bound of its own: any "
+      f"threshold $\\tau$ is certified once $C \\ge \\tau + {FOOT + 1}$, so the band covers both branches by "
+      "construction. Each constant is derived from the rounding of every operation as coded and was derived again "
+      "independently. Against exact rational arithmetic on about 600,000 thin pairs, the largest error of Ericson's point "
+      f"is {K_OBS} of the bound $K$ gives, and that of the accurate point {FOOT_OBS} units. The two derivations differ on "
+      "one count: the margin of the two-dimensional brute force's prefilter for float64 points. The second counts "
+      f"{BF[0]} units against the {BF[1]} the code allows; the first counts the arithmetic share inside the error bounds "
+      f"the prefilter adds as well and finds {BF[1]} enough. The count concerns which candidates the prefilter keeps beyond "
+      "the band, not an output, and for float32 points both counts leave a wide margin. For float32 points, and bfloat16 ones cast to float32, the arithmetic "
+      f"share is {sci(float(F32_SHARE))} of the band; for float64 points it is most of the band "
+      f"({R.source('geo_band_final', 'DERIVATION.md')}; {R.source('geo_band_final', 'REVIEW_DERIVATION.md')}).")
+```
+
+**On every dataset whose ISLA reads the interior geometry, the thin-cell treatment
 changes nothing the model sees.**
 The distance, the direction, the winding sign, the tie and on-wall
 decisions and every gradient are bitwise those of the same search without
@@ -1459,9 +1502,51 @@ decision or sign. The treatment's cost is in @sec-using-cost
 (results/campaigns_2026-10-23/geo_thin_final/RESULTS.md, A1 to A3, "Phase C checks" and
 "Final head").
 
+```{python}
+#| label: para-arch-band-effects
+#| output: asis
+NAT_DRV = re.search(r"\| DrivAerML whole \(400k\) \| [^|]+\| ([\d,]+) \(([\d.]+e-\d+)\) \|", GBR).groups()
+D_REL = re.search(r"up to ([\d.]+) % of d at AirfRANS's first nodes", GBR).group(1)
+assert "VF changes no winding sign and no on-wall decision on any dataset." in GBR
+LUG_P = re.search(r"\| lug \(20\) \| 1 \| 0 \(([\d.e-]+)\), ([\d,]+), 0 \| 0, ([\d,]+), 0 \|", GBR).groups()
+T2D_P = re.search(r"\| Tensile2d \| 1 \| 0 \([\d.e-]+\), ([\d,]+), 0 \| 0, ([\d,]+), 0 \|", GBR).groups()
+DRV_E = re.search(r"\| DrivAerML whole \| 1 \| (\d+) \([\d.]+\), [\d,]+, 0 \| (\d+), [\d,]+, 0 \|", GBR).groups()
+assert "The compute part came entirely from rebuilding `x - closest` from absolute coordinates" in GBR
+FAR = re.search(r"\| DrivAerML whole, L \| ([\d.]+) / [\d.]+ \| ([\d.]+e-\d+) / ([\d.]+e-\d+) \|", GBR).groups()
+assert re.search(r"Fast against reference: 816 rows \(every variant, dataset, precision\), every output bitwise equal", GBR)
+IC1 = R.md_table("geo_band_final", "INFER_CHECK.md", "Gated")
+IC2 = R.md_table("geo_band_final", "INFER_CHECK.md", "Gated", 1)
+assert "Criterion: MET on every row (no retrain)" in R.load("geo_band_final", "INFER_CHECK.md")
+IC_RUNS = sorted({r_["run"] for r_ in IC1})
+IC_LOG = max(abs(float(r_["log(N / O)"])) for r_ in IC1)
+IC_PN = max(abs(float(r_["change"])) for r_ in IC2)
+print("**The derived bands, the centered frame, the certified tie test and the float64 offset move the geometry at "
+      "rounding level and at "
+      "ties, and change no winding sign and no on-wall decision on any stored dataset.** On the recipe's float32 draws of "
+      "AirfRANS with its far field, AeroZoo, the lug, Tensile2d and the DrivAerML Volume task's whole boundary, distances "
+      f"move at rounding level, at most {D_REL}% at AirfRANS's first nodes, where the offset formed in float32 lost that "
+      f"much to cancellation; directions move at rounding level, and by up to {sci(float(NAT_DRV[1]))} at the {NAT_DRV[0]} "
+      "points of 400,000 on DrivAerML whose tie decision the certified test changes. Rotated and translated by "
+      "one RMS radius of the boundary, the points whose tie set changes number "
+      f"{LUG_P[2]} over the 20 lug cases measured, against {LUG_P[1]} under a bitwise test of distinct directions, and "
+      f"{T2D_P[1]} on Tensile2d, against {T2D_P[0]}; the direction moves by at most {sci(float(LUG_P[0]))} at those lug "
+      f"points. On DrivAerML's whole boundary the points whose direction moves by more than $10^{{-3}}$ number "
+      f"{int(DRV_E[1]):,} of 400,000, against {int(DRV_E[0]):,} under the first-order bands and the bitwise test, each a "
+      "point at a band's edge whose move lies within its certified direction uncertainty. With a case translated by $L$ and a softening a thousand times smaller than the channel's, the search's "
+      "own float32 rounding changes the distance channel by "
+      f"{sci(float(FAR[1]))} at the 99.9th percentile on DrivAerML's whole boundary, against {FAR[0]} with the offset "
+      "$x_q - p_q$ formed in float32 from the raw coordinates; centering the search's arithmetic alone does not change it. "
+      "The reference and the fast search stay bitwise equal. Read through this geometry, the "
+      f"{S._COUNT[len(IC_RUNS)]} ISLA models trained with the class's tie rule on the lug and Tensile2d change their case-mean "
+      f"errors by at most {sci(IC_LOG)} in the logarithm and their posed ÷ native by at most {sci(IC_PN)}, so the "
+      "pre-registered check reads no retraining. The cost is in @sec-using-cost "
+      f"({R.source('geo_band_final', 'RESULTS.md')}, items 3 and 4, the native table and phase C; "
+      f"{R.source('geo_band_final', 'INFER_CHECK.md')}).")
+```
+
 **Four kinds of input remain limits of the search**, each measured on the
 stored meshes: overlapping coplanar cells, T-junctions, near-duplicate
-normals at a tie, and the tie band's edge at medial points. **Cells that
+normals at a tie, and the inputs' own rounding at a band's edge. **Cells that
 overlap in one plane**, of zero area or not, change
 the direction at ties, since each joins the tie set: on a closed box with
 triangles of nonzero area added inside its faces, 891 of 9,768 float32
@@ -1483,7 +1568,12 @@ The other two are limits of the tie rule, below.
 of a cancelling sum.** The direction at a tie is a function of the tie set
 alone, not of the order of the vertices, the cells or the search, and a flip
 of the boundary's winding negates $\delta_q$ and $\operatorname{sign}(\delta_q)\,
-u_q$ bitwise. What rounding still decides is which features join a tie set,
+u_q$ bitwise. A point is tied only when two of its tied features' directions
+are certified distinct: farther apart than the sum of bounds on their
+rounding, each $\sqrt 2$ times a bound on the sine of the computed
+direction's error (2 where that bound reaches 1). Directions that agree to
+within their rounding, such as the normals of a planar star of cells, do not
+make a tie. What rounding still decides is which features join a tie set,
 since a feature joins when its distance lies within the rounding bound of the
 least; and where the normals of a tie nearly coincide, as on a structured
 mesh's split faces, their least-norm point is ill-conditioned, so its float32
@@ -1494,29 +1584,45 @@ rests on, and the value is the least-norm point either way. On the lug and
 Tensile2d, a random one-ulp move of every float32 vertex changes the
 direction at tied queries by at most $3.9 \times 10^{-5}$ and
 $6.4 \times 10^{-6}$, at most 2.6 times the normals' own change, and changes
-the set of normals it rests on at no persisting tie; which queries tie is
-itself decided by rounding (the lug's 1,639 tied queries become about
-5,800), with the direction continuous through it (results/campaigns_2026-10-23/geo_thin_final/RESULTS.md, A4).
+the set of normals it rests on at no persisting tie (results/campaigns_2026-10-23/geo_thin_final/RESULTS.md, A4).
 
-**The tie band is measured from the origin of the raw coordinates, so a
-pose can move a medial point across its edge.** Each cell's distance
-carries the band $E_k = (u + 13 u_{64})(\lvert x \rvert + R_k)$, with $u$
-the queries' unit roundoff, and two features tie when their distances
-differ by at most the sum of their bands. $\lvert x \rvert$
-and $R_k$ are distances from the origin, so a rotation with a translation
-changes the band, and a point whose two nearest features lie about that
-sum apart can tie in one pose and not in the other. On the lug's
-test case 1884 one node of 11,520 does: the gap between its two nearest
-features is 1.12 times the sum of their bands natively and 0.86 times it
-posed, so its direction moves by 0.707. That node accounts for the whole
-excess of the posed change of an ISLA-DTT forward with random weights on
-that case, $1.74 \times 10^{-5}$ relative RMS against a median of $1.5 \times 10^{-7}$ over 24 lug cases. A
-band measured about the boundary's centroid removes that flip, provided
-its vertex term still covers the stored coordinates' own float32 rounding
-(@sec-oq-ties; results/campaigns_2026-10-23/geo_thin_final/RESULTS.md,
-"Fourth limit"). @sec-medial-ties measures what the geometry does
-to the contracts, and @sec-standing-geometry gives the geometry the
-standings' checkpoints were trained with.
+**A case's float32 rounding grows with its distance from the origin, so a
+point at a band's edge can change its decision under a translation.** The
+band's storage term bounds the rounding of the coordinates as they were
+given. A pose that moves the case away from the origin rounds them more
+coarsely, so no band that bounds that rounding stays fixed under a
+translation, and a rotation alone moves the gap between two features by about
+the band, so no threshold rule is free of such flips. Each flip answers the
+point correctly for its own inputs: in each pose the class decides from the
+coordinates it is given.
+
+```{python}
+#| label: para-arch-band-edge
+#| output: asis
+GTR_ = " ".join(R.load("geo_thin_final", "RESULTS.md").split())
+GAP_ = re.search(r"Gap over band ([\d.]+) \(untied: u the face normal\) against ([\d.]+) \(tied", GTR_).groups()
+DU_, NODES_ = re.search(r"\|du\| = ([\d.]+) at that one node of ([\d,]+), which is the whole forward excess", GTR_).groups()
+VF_ = re.search(r"\| VF \| ([\d.]+e-\d+), ([\d.]+e-\d+) \(1884\) \| ([\d.]+e-\d+), ([\d.]+e-\d+) \|", GBR).groups()
+DRV_T1 = re.search(r"\| DrivAerML whole \| 1 \| ([\d,]+) \(([\d.]+)\), ([\d,]+), 0 \| ([\d,]+), ([\d,]+), 0 \|", GBR).groups()
+AF_T1 = re.search(r"\| AirfRANS \+ far field \| 1 \| [\d,]+, [\d,]+, ([\d,]+) \| [\d,]+, [\d,]+, ([\d,]+) \| [\d,]+, [\d,]+, [\d,]+ \|", GBR).groups()
+assert AF_T1[0] == AF_T1[1]
+AF_RMS = re.search(r"whose boundary RMS radius is (\d+) chords", GBR).group(1)
+AF_ROUND, AF_FIRST = re.search(r"the storage rounding \(about ([\d.e-]+) chords\) exceeds the first nodes' distance from the airfoil \(([\d.e-]+) chords\)", GBR).groups()
+print(f"On the lug's test case 1884 one node of {NODES_} lies at the edge: the gap between its two nearest features is "
+      f"{GAP_[0]} times the sum of their bands natively and {GAP_[1]} times it rotated and translated, so it ties in one pose "
+      f"only and its direction moves by {DU_}. That node carries the whole excess of the posed change of an ISLA-DTT forward "
+      f"with random weights, read through the forest built outside autocast (@sec-arch-tree-read), on that case, {sci(float(VF_[1]))} relative RMS against a median of {sci(float(VF_[0]))} over "
+      f"24 lug cases. On the DrivAerML Volume task's whole boundary such points number "
+      f"{int(DRV_T1[3].replace(',', '')):,} of 400,000 (above). The extreme case is AirfRANS with its far field, "
+      f"whose boundary's RMS radius is {AF_RMS} chords: rotated and translated by that radius, its coordinates are rounded to about "
+      f"{sci(float(AF_ROUND))} chords, more than the first nodes' distance from the airfoil, {sci(float(AF_FIRST))} chords, so {AF_T1[0]} of "
+      "the 400,000 drawn points (four draws), all near the wall, are read as on the wall, whatever the frame of the arithmetic. Their coordinates "
+      "cannot tell them from the wall. The scoring protocol's pose of AirfRANS, a rotation and a translation by one RMS radius "
+      f"of the interior points, is milder: an ISLA-DTT forward with random weights and the same forest changes its pressure by at most "
+      f"{sci(float(VF_[3]))} relative RMS over 24 cases, {sci(float(VF_[2]))} in the median (@sec-medial-ties measures what the geometry does to the contracts, and "
+      "@sec-standing-geometry gives the geometry the standings' checkpoints were trained with; "
+      f"{R.source('geo_thin_final', 'RESULTS.md')}, \"Fourth limit\"; {R.source('geo_band_final', 'RESULTS.md')}, item 2).")
+```
 
 ```{python}
 #| label: para-arch-sdf-configs
