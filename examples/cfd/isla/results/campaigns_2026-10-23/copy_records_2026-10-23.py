@@ -326,6 +326,17 @@ RECORDS = {
         "GEO-THIN: thin cells of nonzero area in the exact geometry, the census of the stored meshes and the design",
         ["DESIGN.md", "RESULTS.md"],
     ),
+    "hl_dup": (
+        "isla-hl-dup-2026-10-24",
+        "HL-DUP: HiLiftAeroML's duplicated wing cells, their census and effect on the standing (stage 1, revised after its second read) and the stage-2 registration",
+        [
+            "PREREG.md",
+            "RESULTS.md",
+            "NOTEBOOK_DRAFT.md",
+            "REVIEW_STAGE1.md",
+            "REVISION_NOTE.md",
+        ],
+    ),
 }
 
 

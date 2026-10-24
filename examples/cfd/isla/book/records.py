@@ -68,6 +68,7 @@ FOLDER = {
     "dtt_pose": "campaigns_2026-10-23",
     "dtt_pose_exp": "campaigns_2026-10-23",
     "geo_thin": "campaigns_2026-10-23",
+    "hl_dup": "campaigns_2026-10-23",
 }
 
 
