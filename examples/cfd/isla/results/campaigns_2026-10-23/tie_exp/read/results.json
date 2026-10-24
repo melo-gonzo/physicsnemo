@@ -1,0 +1,257 @@
+{
+ "lug": {
+  "native": {
+   "tie": {
+    "42": {
+     "von_mises_l2": 0.0013869429628054302
+    },
+    "43": {
+     "von_mises_l2": 0.0017741902669270832
+    }
+   },
+   "b": {
+    "42": {
+     "von_mises_l2": 0.0013761952519416808
+    },
+    "43": {
+     "von_mises_l2": 0.0017713018258412678
+    }
+   }
+  },
+  "posed": {
+   "tie": {
+    "42": {
+     "von_mises_l2": 0.0013902060190836589
+    },
+    "43": {
+     "von_mises_l2": 0.001776870886484782
+    }
+   },
+   "b": {
+    "42": {
+     "von_mises_l2": 0.0017153143882751465
+    },
+    "43": {
+     "von_mises_l2": 0.002867894172668457
+    }
+   }
+  },
+  "N": {
+   "von_mises_l2": {
+    "r": 1.0043323795424046,
+    "log_r": 0.00432302180393606,
+    "sigma_reg": 0.036,
+    "s_pool": 0.17630724068659795,
+    "sigma": 0.17630724068659795,
+    "verdict": "no cost"
+   }
+  },
+  "P": {
+   "von_mises_l2": {
+    "e_B": 0.4561438653255079,
+    "e_TIE": 0.0018802357901348543,
+    "ratio": 0.004122023626894781,
+    "verdict": "the medial ties carry most of the lug's pose sensitivity"
+   }
+  }
+ },
+ "t2d": {
+  "native": {
+   "tie": {
+    "42": {
+     "displacement_l2": 0.006275877952575683,
+     "stress_l2": 0.00844002902507782,
+     "q_l2": 0.36700565338134766
+    },
+    "43": {
+     "displacement_l2": 0.008064618110656738,
+     "stress_l2": 0.009726709127426148,
+     "q_l2": 0.28775320053100584
+    }
+   },
+   "b": {
+    "42": {
+     "displacement_l2": 0.007826118469238282,
+     "stress_l2": 0.009636967778205871,
+     "q_l2": 0.4103983688354492
+    },
+    "43": {
+     "displacement_l2": 0.006290550827980041,
+     "stress_l2": 0.007936029434204102,
+     "q_l2": 0.2500455856323242
+    }
+   }
+  },
+  "posed": {
+   "tie": {
+    "42": {
+     "displacement_l2": 0.006276407241821289,
+     "stress_l2": 0.008440020084381104,
+     "q_l2": 0.3670055389404297
+    },
+    "43": {
+     "displacement_l2": 0.008062162399291993,
+     "stress_l2": 0.009724629521369934,
+     "q_l2": 0.2877531051635742
+    }
+   },
+   "b": {
+    "42": {
+     "displacement_l2": 0.00782667875289917,
+     "stress_l2": 0.00963696002960205,
+     "q_l2": 0.4103984832763672
+    },
+    "43": {
+     "displacement_l2": 0.006288501620292664,
+     "stress_l2": 0.007935482263565063,
+     "q_l2": 0.2500459861755371
+    }
+   }
+  },
+  "N": {
+   "displacement_l2": {
+    "r": 1.015855494047608,
+    "log_r": 0.01573110877250413,
+    "sigma_reg": 0.232,
+    "s_pool": 0.16627801691036845,
+    "sigma": 0.232,
+    "verdict": "no cost"
+   },
+   "stress_l2": {
+    "r": 1.0337871185499705,
+    "log_r": 0.033228873410017144,
+    "sigma_reg": 0.33,
+    "s_pool": 0.12025371698977681,
+    "sigma": 0.33,
+    "verdict": "no cost"
+   },
+   "q_l2": {
+    "r": 0.9913920015211566,
+    "log_r": -0.00864526129066949,
+    "sigma_reg": 0.303,
+    "s_pool": 0.27599263534975293,
+    "sigma": 0.303,
+    "verdict": "no cost"
+   }
+  },
+  "P": {
+   "displacement_l2": {
+    "e_B": -0.00010547275672057044,
+    "e_TIE": -0.00013433441288523973,
+    "ratio": 1.2736408629304403,
+    "verdict": "control: |log((1+e_TIE)/(1+e_B))| = 0.0000 <= 2 sigma 0.464 (not a verdict)"
+   },
+   "stress_l2": {
+    "e_B": -3.157795088404303e-05,
+    "e_TIE": -0.00011496542391919995,
+    "ratio": 3.640686640541147,
+    "verdict": "control: |log((1+e_TIE)/(1+e_B))| = 0.0001 <= 2 sigma 0.660 (beside)"
+   },
+   "q_l2": {
+    "e_B": 7.797544778753718e-07,
+    "e_TIE": -3.204360633501935e-07,
+    "ratio": -0.41094481973774416,
+    "verdict": "control: |log((1+e_TIE)/(1+e_B))| = 0.0000 <= 2 sigma 0.606 (beside)"
+   }
+  }
+ },
+ "F": {
+  "F_code_cmpaf_fix_r090eag_lug_isla_seed42:von_mises": {
+   "cases": 60,
+   "median": 0.0001402154393861553,
+   "max": 0.00036662965092954783,
+   "d_U_median": 1.585253224135815
+  },
+  "F_code_cmpaf_fix_r090eag_lug_isla_seed43:von_mises": {
+   "cases": 60,
+   "median": 0.00015611176051690006,
+   "max": 0.00044625242646961403,
+   "d_U_median": 1.94094979926879
+  },
+  "F_code_cmpaf_fix_r090eag_t2dz_isla_seed42:displacement": {
+   "cases": 100,
+   "median": 8.221153012142024e-07,
+   "max": 8.838729288806756e-06,
+   "d_U_median": 3.7335143756462585
+  },
+  "F_code_cmpaf_fix_r090eag_t2dz_isla_seed42:q": {
+   "cases": 100,
+   "median": 2.7408589516332837e-05,
+   "max": 3.489290302106708e-05,
+   "d_U_median": 93.07795788898392
+  },
+  "F_code_cmpaf_fix_r090eag_t2dz_isla_seed42:stress": {
+   "cases": 100,
+   "median": 1.4639700600853933e-06,
+   "max": 6.820589291586415e-06,
+   "d_U_median": 2.9083814067155305
+  },
+  "F_code_cmpaf_fix_r090eag_t2dz_isla_seed43:displacement": {
+   "cases": 100,
+   "median": 8.041669581495338e-07,
+   "max": 8.892052152990047e-06,
+   "d_U_median": 4.122482270308032
+  },
+  "F_code_cmpaf_fix_r090eag_t2dz_isla_seed43:q": {
+   "cases": 100,
+   "median": 2.98930386524487e-05,
+   "max": 5.453552611008905e-05,
+   "d_U_median": 133.46163445040776
+  },
+  "F_code_cmpaf_fix_r090eag_t2dz_isla_seed43:stress": {
+   "cases": 100,
+   "median": 1.4295446115462653e-06,
+   "max": 5.762271593933131e-06,
+   "d_U_median": 3.1086575998739807
+  },
+  "F_code_tie2_tie_lug_isla_seed42:von_mises": {
+   "cases": 60,
+   "median": 1.3843804236243328e-07,
+   "max": 2.046811723908457e-07,
+   "d_U_median": 1.5484957852887726
+  },
+  "F_code_tie2_tie_lug_isla_seed43:von_mises": {
+   "cases": 60,
+   "median": 1.4097963388957862e-07,
+   "max": 4.0761723933491067e-07,
+   "d_U_median": 1.3995755419139888
+  },
+  "F_code_tie2_tie_t2dz_isla_seed42:displacement": {
+   "cases": 100,
+   "median": 0.0,
+   "max": 0.0,
+   "d_U_median": 3.2954393088379694
+  },
+  "F_code_tie2_tie_t2dz_isla_seed42:q": {
+   "cases": 100,
+   "median": 0.0,
+   "max": 0.0,
+   "d_U_median": 113.71715122574045
+  },
+  "F_code_tie2_tie_t2dz_isla_seed42:stress": {
+   "cases": 100,
+   "median": 0.0,
+   "max": 0.0,
+   "d_U_median": 2.4978491554646243
+  },
+  "F_code_tie2_tie_t2dz_isla_seed43:displacement": {
+   "cases": 100,
+   "median": 0.0,
+   "max": 0.0,
+   "d_U_median": 3.8169952272204863
+  },
+  "F_code_tie2_tie_t2dz_isla_seed43:q": {
+   "cases": 100,
+   "median": 0.0,
+   "max": 0.0,
+   "d_U_median": 174.63056677050923
+  },
+  "F_code_tie2_tie_t2dz_isla_seed43:stress": {
+   "cases": 100,
+   "median": 0.0,
+   "max": 0.0,
+   "d_U_median": 2.8839853001978044
+  }
+ },
+ "F_verdict": "exact flip symmetry restored"
+}
