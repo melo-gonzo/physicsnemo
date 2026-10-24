@@ -303,8 +303,10 @@ _POINTWISE_LOSSES = ("huber", "mse", "relative_mse")
 ### largest point count of each dataset held out. bfloat16: 30 rows at 100k-600k
 ### points and 9 held out at 500k-800k (intercept 2.56 GiB, held out up to 3.62
 ### above the fit); float32: 12 at 50k-200k and 6 at 150k-250k (2.74, 3.78). Every
-### row's peak is within its prediction. Refit (fit_rule.py of DTT-FAST RULE, on
-### cost_rule.py's rows) when the read's or the blocks' memory changes.
+### row's peak is within its prediction. Each peak was measured over a few steps
+### after empty_cache, so fragmentation over a long run is not in it. Refit
+### (fit_rule.py of DTT-FAST RULE, on cost_rule.py's rows) when the read's or the
+### blocks' memory changes.
 _CHUNK_GIB: dict[str, tuple[float, float, float]] = {
     "bfloat16": (0.0753, 24.40, 6.2),
     "float32": (0.160, 44.02, 6.6),
@@ -353,12 +355,15 @@ def _chunk_spans(
     """The ranges of prediction points of ``chunks`` (``ISLA.query_chunks``) that
     :func:`chunked_forward_backward` runs, and whether it takes two passes over
     them: the fewest chunks of one size (the last one shorter) whose predicted peak
-    (:func:`_chunk_peak_gib`, each with its share of the walk's pairs) is within
-    ``capacity_gib``, by default the device's free memory and the memory the caching
-    allocator holds (on CPU, no limit). Under DDP the smallest chunk that fits over
-    the ranks decides on every rank, so that every rank takes the same step. A
+    (:func:`_chunk_peak_gib`) is within ``capacity_gib``, by default the device's
+    free memory and the memory the caching allocator holds (on CPU, no limit). The
+    chunk size comes from each chunk's share of the walk's pairs; under DDP the
+    smallest over the ranks bounds every rank's chunk size and decides the passes,
+    so every rank makes the same one-or-two-pass choice. Then each rank adds chunks
+    while one of them, by its exact pair count, is predicted not to fit. A
     ``pointwise`` loss takes one pass; any other takes one pass when every rank's
-    points fit in one chunk, else two. The decision is logged at its first call and
+    points fit in one chunk, else two. Raises ``torch.OutOfMemoryError`` when not
+    even a chunk of one point fits. The decision is logged at its first call and
     when it changes."""
     global _chunks_logged
     n = chunks.n_points
@@ -378,18 +383,43 @@ def _chunk_spans(
         reduced = torch.tensor([fit, -n], dtype=torch.float64, device=device)
         dist.all_reduce(reduced, op=dist.ReduceOp.MIN)
         fit, most = float(reduced[0]), -int(reduced[1])
-    size = most if fit >= most else max(1, math.floor(fit))
-    k = -(-n // size)
-    step = -(-n // k)
-    spans = [(a, min(a + step, n)) for a in range(0, n, step)]
+    if fit < 1:
+        raise torch.OutOfMemoryError(
+            "ISLA-DTT training step: a chunk of one prediction point is predicted to"
+            f" peak at {empty + per_point:.1f} GiB of {capacity_gib:.1f}"
+            + (f"; {fit:.2f} points fit on the tightest rank" if ddp else "")
+        )
+    size = most if fit >= most else math.floor(fit)
     two = not pointwise and most > size
-    if (k, two) != _chunks_logged:
-        _chunks_logged = (k, two)
+    ### One chunk holds every pair, as the size counts them, so only a split can
+    ### add chunks here, and then the passes are already two.
+    k = -(-n // size)
+    while True:
+        step = -(-n // k)
+        spans = [(a, min(a + step, n)) for a in range(0, n, step)]
+        bounds = [a for a, _ in spans] + [n]
+        pairs = sum(
+            torch.searchsorted(qi, qi.new_tensor(bounds)).diff()
+            for qi, _, _ in chunks.walk.lists
+        )
+        peak = max(
+            _chunk_peak_gib(p, b - a, allocated, precision)
+            for p, (a, b) in zip(pairs.tolist(), spans)
+        )
+        if len(spans) == 1 or peak <= capacity_gib:
+            break
+        if step == 1:
+            raise torch.OutOfMemoryError(
+                "ISLA-DTT training step: a chunk of one prediction point is"
+                f" predicted to peak at {peak:.1f} GiB of {capacity_gib:.1f}"
+            )
+        k += 1
+    if (len(spans), two) != _chunks_logged:
+        _chunks_logged = (len(spans), two)
         if not ddp or dist.get_rank() == 0:
-            peak = _chunk_peak_gib(n_pairs * step // n, step, allocated, precision)
             _LOGGER.info(
-                f"ISLA-DTT training step: {n} prediction points in {k} chunk"
-                + ("s" if k > 1 else "")
+                f"ISLA-DTT training step: {n} prediction points in {len(spans)} chunk"
+                + ("s" if len(spans) > 1 else "")
                 + (", two passes" if two else "")
                 + f" (a chunk's predicted peak {peak:.1f} GiB of {capacity_gib:.1f};"
                 + f" the largest chunk that fits {fit:,.0f} points"

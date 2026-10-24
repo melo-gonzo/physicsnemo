@@ -246,7 +246,9 @@ def test_chunked_forward_backward_equals_the_unchunked_step(
     assert check() == check(n) == [n]
     passes = 1 if loss_type in train._POINTWISE_LOSSES else 2
     assert check(20) == [17, 17, 16] * passes
-    assert check(0.0) == [1] * n * passes
+    assert check(1.0) == [1] * n * passes
+    with pytest.raises(torch.OutOfMemoryError, match="one prediction point"):
+        check(0.5)
 
 
 def _isla_dtt_case(n: int, measured: bool = True, seed: int = 0):
@@ -317,9 +319,14 @@ def test_chunk_rule_decides_from_sizes(monkeypatch, caplog):
     ):
         peak = train._chunk_peak_gib(pairs, points, allocated, precision)
         assert reserved <= peak < 275.0
+    ### 20 pairs per point over two trees, each list sorted by point.
+    points = torch.arange(50)
     chunks = SimpleNamespace(
         walk=SimpleNamespace(
-            lists=[(torch.zeros(600), None, 0), (torch.zeros(400), None, 0)]
+            lists=[
+                (points.repeat_interleave(12), None, 0),
+                (points.repeat_interleave(8), None, 0),
+            ]
         ),
         n_points=50,
     )
@@ -345,6 +352,37 @@ def test_chunk_rule_decides_from_sizes(monkeypatch, caplog):
     assert "in 1 chunk (" in logged[0] and "2 chunks (" in logged[1]
     assert "2 chunks, two passes" in logged[2]
     assert "3 chunks (" in logged[3] and "4 chunks (" in logged[4]
+
+
+def test_chunk_rule_counts_each_chunks_pairs(monkeypatch):
+    """Points stored in spatial order: the first ten hold 10 pairs each, the rest
+    one, so a chunk at the start holds more than its share of the walk's pairs.
+    The rule adds chunks until each chunk's exact pairs fit, and raises when not
+    even one point fits."""
+    ### One GiB per pair, nothing per point, no margin: the capacity is in pairs.
+    monkeypatch.setitem(train._CHUNK_GIB, "float32", (1e6, 0.0, 0.0))
+    counts = torch.tensor([10] * 10 + [1] * 40)
+    chunks = SimpleNamespace(
+        walk=SimpleNamespace(
+            lists=[(torch.arange(50).repeat_interleave(counts), None, 0)]
+        ),
+        n_points=50,
+    )
+    cpu = torch.device("cpu")
+
+    def spans(pointwise, capacity):
+        return train._chunk_spans(chunks, cpu, False, pointwise, "float32", capacity)
+
+    ### By their share (2.8 pairs per point) 21 points fit 60 pairs, so 3 chunks of
+    ### 17; the first holds 107 pairs. Chunks of 6 hold at most 60.
+    sixes = [(a, min(a + 6, 50)) for a in range(0, 50, 6)]
+    assert spans(True, 60.0) == (sixes, False)
+    assert spans(False, 60.0) == (sixes, True)
+    assert spans(False, 141.0) == ([(0, 50)], False)
+    ### Below the first point's 10 pairs; below a point's share.
+    for capacity in (9.0, 2.0):
+        with pytest.raises(torch.OutOfMemoryError, match="one prediction point"):
+            spans(True, capacity)
 
 
 def _two_ranks_one_over_the_limit(rank: int, store: str, loss_type: str) -> None:
