@@ -40,6 +40,23 @@ pipeline:
     path: ${train_datadir}
     pattern: "run_*/*.pdmsh/_tensordict/boundaries/vehicle"
     subsample_n_cells: ${sampling_resolution}
+    # The other boundaries of the PDE domain, stored beside the vehicle in every case file
+    # (the tunnel: inlet, outlet, and its floor, walls and roof as no_slip and slip), read
+    # whole; only the vehicle is subsampled. The sample is then a DomainMesh whose interior is
+    # the vehicle until SurfaceMeshToDomainMesh, so every transform below (rotation,
+    # translation, CenterMesh on the vehicle, the L_ref scaling) moves them with it. Models
+    # that read only `interior` and `boundaries.vehicle` see what they saw before.
+    domain_boundaries: [inlet, no_slip, outlet, slip]
+    # They are stored 2.4 mm low on 297 of the 484 case files (ground at z = -0.32 m, under
+    # the wheels and the lowest CFD nodes): move them onto the CFD mesh's domain, ground
+    # through the vehicle's lowest point, as the Volume files do. In the reader, in the files'
+    # raw metres and from the whole vehicle (a subsample can miss its lowest point); zero shift
+    # on the other 187 files.
+    whole_surface_transforms:
+      - _target_: ${dp:PlaceGroundUnderBody}
+        ground: no_slip
+        body: vehicle
+        boundaries: [inlet, no_slip, outlet, slip]
     # Walk up two levels from the boundary tensordict to the parent
     # DomainMesh's global_data and merge its keys onto each sample.
     merge_global_data_from: "../../global_data"
@@ -97,11 +114,11 @@ pipeline:
     # the original triangulated surface, with non-target cell features
     # (normals) preserved on the boundary's cell_data. The dataset builder
     # auto-injects `cell_data_targets` from the `targets:` block below.
-    - _target_: ${dp:MeshToDomainMesh}
+    - _target_: ${dp:SurfaceMeshToDomainMesh}
       interior_points: cell_centroids
 
 # Single source of truth for prediction field names + types. Read by both the
-# dataset builder (auto-injected into MeshToDomainMesh above) and the train
+# dataset builder (auto-injected into SurfaceMeshToDomainMesh above) and the train
 # loop (used to build LossCalculator and MetricCalculator).
 targets:
   pressure: scalar

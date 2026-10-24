@@ -65,6 +65,8 @@ def _rel(a, b):
 
 def _run(model, inputs, target):
     model.zero_grad(set_to_none=True)
+    if "prediction_points" not in inputs:
+        inputs = {**inputs, "prediction_boundaries": ["wall"]}
     out = _flat(outputs(model(**inputs)))
     torch.nn.functional.mse_loss(out.float(), target.float()).backward()
     grads = {
@@ -258,7 +260,7 @@ def test_torch_compile_fullgraph_matches_eager(geo_kernel):
     torch._dynamo.reset()
     ref, opt = _pair(torch.float32, geo_kernel=geo_kernel)
     inputs, _ = _boundary(300)
-    ex = torch._dynamo.explain(opt)(**inputs)
+    ex = torch._dynamo.explain(opt)(**inputs, prediction_boundaries=["wall"])
     assert ex.graph_break_count == 0, ex.break_reasons
     compiled = torch.compile(opt, fullgraph=True)
     ### Gradient bar 5e-5: on GB300 blocks.0.assign.v_proj.weight measured 2.1e-5 to 2.3e-5

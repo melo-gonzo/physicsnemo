@@ -262,6 +262,7 @@ def test_isla_end_to_end_through_collate_and_loss():
     )
     spec = {
         "boundary_meshes": {"outer": "boundaries.outer"},
+        "prediction_boundaries": {"literal": ["outer"]},
         "global_data": "global_data",
     }
     batch = build_collate_fn("mesh", spec, TENSOR_TARGETS)([(domain, {})])
@@ -352,6 +353,7 @@ def test_stress_l2_is_one_frobenius_formula_for_both_target_paths_and_rotation_i
     torch.testing.assert_close(m_s["stress_l2"], m_t["stress_l2"])
     for k in ("sig11_l2", "sig22_l2", "sig12_l2"):
         torch.testing.assert_close(m_s[k], m_t[k])
+
     ### Frobenius by hand: off-diagonal twice.
     def fro(a, b):
         return math.sqrt(

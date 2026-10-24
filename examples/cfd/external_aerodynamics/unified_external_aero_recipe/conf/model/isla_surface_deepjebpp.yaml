@@ -57,6 +57,7 @@ forward_kwargs:
     fixed: boundaries.fixed
     free: boundaries.free
     loaded: boundaries.loaded
+  prediction_boundaries: {literal: [fixed, free, loaded]}   # the outputs are predicted at every surface cell, all three conditions
   global_data: global_data        # the case's TensorDict; the model selects its declared leaves
 
 model:

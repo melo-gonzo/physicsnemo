@@ -68,6 +68,7 @@ def _run(m, mesh, drv, q=None):
             m(
                 boundary_meshes={"wall": mesh},
                 prediction_points=q,
+                prediction_boundaries=None if q is not None else ["wall"],
                 global_data={"g": drv},
             )
         )
@@ -231,7 +232,11 @@ def test_dimension_mismatch_is_refused_and_two_d_is_not_embedded_three_d():
     with pytest.raises(
         ValueError, match="has 3 spatial dimensions; this model has dim=2"
     ):
-        m2(boundary_meshes={"wall": mesh3}, global_data={"g": drv3})
+        m2(
+            prediction_boundaries=["wall"],
+            boundary_meshes={"wall": mesh3},
+            global_data={"g": drv3},
+        )
     ### The 3-D model with a K = 1 direction keeps its parameter count (the head has
     ### m = 5 true and p = 3 pseudo vectors in both dimensions for K = 1, so the
     ### 2-D model of the same spec has the same count too). A surface model has the

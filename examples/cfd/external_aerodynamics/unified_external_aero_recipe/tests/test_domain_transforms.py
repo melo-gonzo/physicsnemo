@@ -28,6 +28,25 @@ from physicsnemo.mesh import DomainMesh, Mesh
 from physicsnemo.mesh.calculus import cell_measures, point_measures
 
 
+#: The tunnel boundaries DrivAerML's case files store beside the vehicle.
+DOMAIN_BOUNDARIES = ("inlet", "no_slip", "outlet", "slip")
+
+
+def _tunnel_boundaries() -> dict[str, Mesh]:
+    """Four two-triangle squares standing for the tunnel's boundaries (no cell data,
+    as in the case files), at distinct places so that a move of one is visible."""
+    square = torch.tensor(
+        [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]]
+    )
+    cells = torch.tensor([[0, 1, 2], [0, 2, 3]])
+    return {
+        name: Mesh(
+            points=square * (i + 2) + torch.tensor([-5.0, -4.0, -1.0 - i]), cells=cells
+        )
+        for i, name in enumerate(DOMAIN_BOUNDARIES)
+    }
+
+
 def _two_triangles() -> Mesh:
     """Two triangles in the xy-plane."""
     points = torch.tensor(
@@ -76,7 +95,7 @@ def test_drivaer_dataset_pipeline_preserves_thin_face_and_aligns_targets(
     )
     source = DomainMesh(
         interior=Mesh(points=torch.zeros(0, 3)),
-        boundaries={"vehicle": vehicle},
+        boundaries={"vehicle": vehicle, **_tunnel_boundaries()},
         global_data={
             "U_inf": torch.tensor([10.0, 0.0, 0.0]),
             "rho_inf": torch.tensor(2.0),
@@ -123,6 +142,155 @@ def test_drivaer_dataset_pipeline_preserves_thin_face_and_aligns_targets(
     loss.backward()
     torch.testing.assert_close(prediction.grad, 2 * weights * error.detach())
     assert "TimeValue" not in domain.global_data
+    assert set(domain.boundary_names) == {"vehicle", *DOMAIN_BOUNDARIES}
+
+
+def _drivaer_surface_case(tmp_path, n_cells: int = 30) -> DomainMesh:
+    """One DrivAerML-shaped case file: a random vehicle surface with targets and the
+    four tunnel boundaries, saved as run_001/sample.pdmsh."""
+    g = torch.Generator().manual_seed(0)
+    vehicle = Mesh(
+        points=torch.randn(3 * n_cells, 3, generator=g),
+        cells=torch.arange(3 * n_cells).reshape(n_cells, 3),
+        cell_data={
+            "pMeanTrim": torch.randn(n_cells, generator=g),
+            "wallShearStressMeanTrim": torch.randn(n_cells, 3, generator=g),
+        },
+        global_data={"TimeValue": torch.tensor(0.0)},
+    )
+    source = DomainMesh(
+        interior=Mesh(points=torch.zeros(0, 3)),
+        boundaries={"vehicle": vehicle, **_tunnel_boundaries()},
+        global_data={
+            "U_inf": torch.tensor([10.0, 0.0, 0.0]),
+            "rho_inf": torch.tensor(2.0),
+            "p_inf": torch.tensor(0.0),
+            "L_ref": torch.tensor(5.0),
+        },
+    )
+    path = tmp_path / "run_001" / "sample.pdmsh"
+    path.parent.mkdir()
+    source.save(path)
+    return source
+
+
+def test_surface_reader_loads_the_domain_boundaries_whole_beside_the_subsampled_vehicle(
+    tmp_path,
+):
+    """With domain_boundaries the reader returns a DomainMesh: the vehicle, subsampled
+    exactly as without them (same draw), as its interior, the named siblings whole as its
+    boundaries, the case's global data at the domain level."""
+    from merge_global_data import MeshReaderWithGlobalData
+
+    source = _drivaer_surface_case(tmp_path)
+    kw = dict(
+        pattern="run_*/*.pdmsh/_tensordict/boundaries/vehicle",
+        subsample_n_cells=10,
+        merge_global_data_from="../../global_data",
+    )
+    bare = MeshReaderWithGlobalData(tmp_path, **kw)
+    whole = MeshReaderWithGlobalData(
+        tmp_path, domain_boundaries=list(DOMAIN_BOUNDARIES), **kw
+    )
+    for r in (bare, whole):
+        r.set_generator(torch.Generator().manual_seed(7))
+    mesh, _ = bare[0]
+    domain, meta = whole[0]
+    assert isinstance(domain, DomainMesh) and domain.interior.n_cells == 10
+    assert torch.equal(domain.interior.points, mesh.points)
+    assert torch.equal(domain.interior.cells, mesh.cells)
+    assert (
+        set(domain.boundary_names)
+        == set(DOMAIN_BOUNDARIES)
+        == set(meta["boundary_names"])
+    )
+    for name in DOMAIN_BOUNDARIES:
+        assert torch.equal(
+            domain.boundaries[name].points, source.boundaries[name].points
+        )
+        assert torch.equal(domain.boundaries[name].cells, source.boundaries[name].cells)
+    assert set(domain.global_data.keys()) == set(mesh.global_data.keys())
+    ### The ground placed from the whole vehicle, which the subsample does not hold: the
+    ### tunnel moves up by the whole vehicle's lowest z minus the ground's, the vehicle
+    ### draw is the same.
+    from domain_transforms import PlaceGroundUnderBody
+
+    place = PlaceGroundUnderBody(
+        ground="no_slip", body="vehicle", boundaries=list(DOMAIN_BOUNDARIES)
+    )
+    placed = MeshReaderWithGlobalData(
+        tmp_path,
+        domain_boundaries=list(DOMAIN_BOUNDARIES),
+        whole_surface_transforms=[place],
+        **kw,
+    )
+    placed.set_generator(torch.Generator().manual_seed(7))
+    pdomain, _ = placed[0]
+    lowest = source.boundaries["vehicle"].points[:, 2].min()
+    assert (
+        pdomain.interior.points[:, 2].min() > lowest
+    )  # the draw misses the lowest vertex
+    assert torch.equal(pdomain.interior.points, mesh.points)
+    dz = lowest - source.boundaries["no_slip"].points[0, 2]
+    assert dz != 0
+    for name in DOMAIN_BOUNDARIES:
+        moved = source.boundaries[name].points + torch.tensor([0.0, 0.0, 1.0]) * dz
+        torch.testing.assert_close(
+            pdomain.boundaries[name].points, moved, atol=0, rtol=0
+        )
+    assert bool((pdomain.boundaries["no_slip"].points[:, 2] == lowest).all())
+    with pytest.raises(ValueError, match="place the domain_boundaries"):
+        MeshReaderWithGlobalData(tmp_path, whole_surface_transforms=[place], **kw)
+    with pytest.raises(FileNotFoundError, match="domain boundary 'roof'"):
+        MeshReaderWithGlobalData(tmp_path, domain_boundaries=["roof"], **kw)[0]
+
+
+@pytest.mark.parametrize("dataset", ["drivaer_ml_surface", "drivaer_ml_surface_posed"])
+def test_drivaer_surface_pipeline_moves_the_domain_boundaries_with_the_vehicle(
+    tmp_path, dataset
+):
+    """Through the dataset's whole chain, augmentations included, the tunnel boundaries
+    undergo the vehicle's rigid motion and scaling: the one similarity that maps the
+    stored tunnel onto the output tunnel maps every output vehicle point onto a stored
+    vehicle point, the stored tunnel being first placed with its ground through the whole
+    vehicle's lowest point (PlaceGroundUnderBody in the reader). The targets sit at the
+    vehicle's cell centroids, and the tunnel boundaries keep every cell."""
+    source = _drivaer_surface_case(tmp_path)
+    recipe = Path(__file__).resolve().parent.parent
+    cfg = OmegaConf.merge(
+        OmegaConf.load(recipe / "datasets" / f"{dataset}.yaml"),
+        {"dataset_paths": {"drivaer_ml": str(tmp_path)}, "sampling_resolution": 10},
+    )
+    dataset_ = build_dataset(cfg, augment=True, device=None, num_workers=1)
+    try:
+        domain, _ = dataset_[0]
+    finally:
+        DatasetBase.close(dataset_)
+    assert set(domain.boundary_names) == {"vehicle", *DOMAIN_BOUNDARIES}
+    vehicle = domain.boundaries["vehicle"]
+    assert vehicle.n_cells == domain.interior.n_points == 10
+    torch.testing.assert_close(domain.interior.points, vehicle.cell_centroids)
+    dz = (
+        source.boundaries["vehicle"].points[:, 2].min()
+        - source.boundaries["no_slip"].points[0, 2]
+    )
+    raw = torch.cat([source.boundaries[n].points for n in DOMAIN_BOUNDARIES]).double()
+    raw[:, 2] += float(dz)
+    out = torch.cat([domain.boundaries[n].points for n in DOMAIN_BOUNDARIES]).double()
+    assert all(domain.boundaries[n].n_cells == 2 for n in DOMAIN_BOUNDARIES)
+    ### The similarity out = s R raw + t, fitted on the tunnel (Kabsch with scale).
+    rc, oc = raw - raw.mean(0), out - out.mean(0)
+    u, sv, vt = torch.linalg.svd(rc.T @ oc)
+    rot = (u @ vt).T
+    scale = sv.sum() / rc.square().sum()
+    shift = out.mean(0) - scale * raw.mean(0) @ rot.T
+    torch.testing.assert_close(scale * raw @ rot.T + shift, out, atol=1e-5, rtol=0)
+    torch.testing.assert_close(
+        scale, torch.tensor(0.2, dtype=scale.dtype), atol=1e-6, rtol=0
+    )  # 1 / L_ref
+    mapped = scale * source.boundaries["vehicle"].points.double() @ rot.T + shift
+    nearest = torch.cdist(vehicle.points.double(), mapped).min(dim=1).values
+    assert nearest.max() < 1e-5
 
 
 def test_stack_scalar_fields_builds_a_zero_padded_vector():

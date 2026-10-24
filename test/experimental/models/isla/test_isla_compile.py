@@ -53,7 +53,10 @@ SCHEMAS = {
     "interior": {"inlet": {"bc": {"rank": 0}, "u_bc": {"rank": 1}}, "wall": {}},
     "inputs": {"inlet": {"T": {"rank": 2}}, "wall": {"bc": {"rank": 0}}},
     "scales": {
-        "inlet": {"bc": {"rank": 0, "units": {"U": 2}}, "u_bc": {"rank": 1, "units": {"U": 1}, "velocity_scale": True}},
+        "inlet": {
+            "bc": {"rank": 0, "units": {"U": 2}},
+            "u_bc": {"rank": 1, "units": {"U": 1}, "velocity_scale": True},
+        },
         "wall": {},
     },
 }
@@ -75,9 +78,15 @@ def _model(task: str) -> ISLA:
             "global_schema": {"g": {"rank": 1}},
             "interior": True,
         }
-    elif task == "global_source":  # ISLA's own scales from a global source (AirfRANS's U_inf)
+    elif (
+        task == "global_source"
+    ):  # ISLA's own scales from a global source (AirfRANS's U_inf)
         return ISLA(
-            output_schema={"p": {"rank": 0}, "v": {"rank": 1}, "nut": {"rank": 0, "units": {"U": 1, "L": 1}, "scale": 1e-4}},
+            output_schema={
+                "p": {"rank": 0},
+                "v": {"rank": 1},
+                "nut": {"rank": 0, "units": {"U": 1, "L": 1}, "scale": 1e-4},
+            },
             boundary_schemas={"wall": {}},
             global_schema={
                 "g": {"rank": 1, "units": {"U": 1}, "velocity_scale": True},
@@ -92,22 +101,26 @@ def _model(task: str) -> ISLA:
         )
     else:  # scales: ISLA's own, with the derived direction, Re and output_stats
         return ISLA(
-            output_schema={"p": {"rank": 0, "units": {"U": 2, "rho": 1}}, "v": {"rank": 1, "units": {"U": 1}}},
+            output_schema={
+                "p": {"rank": 0, "units": {"U": 2, "rho": 1}},
+                "v": {"rank": 1, "units": {"U": 1}},
+            },
             boundary_schemas=SCHEMAS["scales"],
             global_schema={
                 "rho": {"rank": 0, "role": "density"},
                 "nu": {"rank": 0, "units": {"U": 1, "L": 1}, "role": "viscosity"},
             },
             reynolds={"mean": 5.0, "std": 1.0},
-            output_stats={"p": {"mean": 1.0, "std": 30.0}, "v": {"mean": 0.0, "std": 4.0}},
+            output_stats={
+                "p": {"mean": 1.0, "std": 30.0},
+                "v": {"mean": 0.0, "std": 4.0},
+            },
             interior=True,
             hidden=32,
             n_layers=2,
             n_slices=8,
         )
-    return ISLA(
-        output_schema=PV, hidden=32, n_layers=2, n_slices=8, **kw
-    )
+    return ISLA(output_schema=PV, hidden=32, n_layers=2, n_slices=8, **kw)
 
 
 def _case(task: str, sizes: dict, nq: int, device, seed: int) -> dict:
@@ -118,7 +131,10 @@ def _case(task: str, sizes: dict, nq: int, device, seed: int) -> dict:
     for k, (name, n) in enumerate(sorted(sizes.items())):
         pts, nrm, w, _ = cloud(n, seed=seed + k, dtype=torch.float32)
         schema = SCHEMAS[task][name] if task in SCHEMAS else {}
-        data = {f: torch.randn(n, *(3,) * spec["rank"], generator=g) for f, spec in schema.items()}
+        data = {
+            f: torch.randn(n, *(3,) * spec["rank"], generator=g)
+            for f, spec in schema.items()
+        }
         meshes[name] = soup(pts, nrm, w, cell_data=data).to(device)
     drv = torch.nn.functional.normalize(torch.randn(3, generator=g), dim=0)
     case = {"boundary_meshes": meshes, "global_data": {"g": drv.to(device)}}
@@ -130,7 +146,11 @@ def _case(task: str, sizes: dict, nq: int, device, seed: int) -> dict:
         case["prediction_points"] = (2 * torch.randn(nq, 3, generator=g)).to(device)
     elif task == "inputs":
         ### a point-cloud Mesh (its points alone are read), not a bare tensor
-        case["prediction_points"] = points_mesh(2 * torch.randn(nq, 3, generator=g)).to(device)
+        case["prediction_points"] = points_mesh(2 * torch.randn(nq, 3, generator=g)).to(
+            device
+        )
+    else:
+        case["prediction_boundaries"] = ["wall"]
     return case
 
 
@@ -153,7 +173,9 @@ def _assert_close(a, b, device, rel=3e-2):
 
 
 @pytest.mark.parametrize("device", DEVICES)
-@pytest.mark.parametrize("task", ["surface", "interior", "inputs", "scales", "global_source"])
+@pytest.mark.parametrize(
+    "task", ["surface", "interior", "inputs", "scales", "global_source"]
+)
 def test_whole_model_compiles_fullgraph_with_dynamic_shapes_and_matches_eager(
     task, device
 ):
@@ -216,7 +238,11 @@ def test_whole_model_does_not_guard_on_the_key_order_of_its_inputs():
 
 #: Cases on both sides of the interior budget of :func:`_budget_model` (60 tokens):
 #: 64, 111 and 50 boundary cells over two conditions.
-BUDGET_SIZES = [({"inlet": 23, "wall": 41}, 57), ({"inlet": 31, "wall": 80}, 45), ({"inlet": 20, "wall": 30}, 40)]
+BUDGET_SIZES = [
+    ({"inlet": 23, "wall": 41}, 57),
+    ({"inlet": 31, "wall": 80}, 45),
+    ({"inlet": 20, "wall": 30}, 40),
+]
 
 
 def _budget_model() -> ISLA:
@@ -274,7 +300,10 @@ def test_a_warm_compile_cache_reuses_the_graph_across_the_budget():
             compiled = torch.compile(_budget_model(), fullgraph=True, dynamic=True)
             for i, (s, nq) in enumerate(sizes):
                 case = _case("interior", s, nq, "cpu", seed=i)
-                with torch.no_grad(), torch._dynamo.config.patch(error_on_recompile=i > 0):
+                with (
+                    torch.no_grad(),
+                    torch._dynamo.config.patch(error_on_recompile=i > 0),
+                ):
                     compiled(**case)
 
 
@@ -287,17 +316,23 @@ def test_the_in_model_draw_compiles_under_max_autotune_at_full_resolution():
     eager outputs."""
     torch._dynamo.reset()
     torch.manual_seed(0)
-    model = ISLA(
-        output_schema=PV,
-        boundary_schemas=SCHEMAS["interior"],
-        global_schema={"g": {"rank": 1}, "re": {"rank": 0}},
-        interior=True,
-        hidden=32,
-        n_layers=2,
-        n_slices=8,
-    ).cuda().eval()
+    model = (
+        ISLA(
+            output_schema=PV,
+            boundary_schemas=SCHEMAS["interior"],
+            global_schema={"g": {"rank": 1}, "re": {"rank": 0}},
+            interior=True,
+            hidden=32,
+            n_layers=2,
+            n_slices=8,
+        )
+        .cuda()
+        .eval()
+    )
     eager = copy.deepcopy(model)  # never called under compile: no shared module state
-    compiled = torch.compile(model, fullgraph=True, dynamic=True, mode="max-autotune-no-cudagraphs")
+    compiled = torch.compile(
+        model, fullgraph=True, dynamic=True, mode="max-autotune-no-cudagraphs"
+    )
     case = _case("interior", {"inlet": 700_000, "wall": 700_000}, 2000, "cuda", seed=0)
     with torch.no_grad():
         out = outputs(compiled(**case))
