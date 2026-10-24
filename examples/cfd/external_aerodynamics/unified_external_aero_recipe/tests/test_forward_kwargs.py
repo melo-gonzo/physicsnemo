@@ -109,6 +109,18 @@ class TestWalkPath:
             result, simple_domain.boundaries["vehicle"].cell_data["normals"]
         )
 
+    def test_key_named_like_a_tensordict_method(self, simple_domain):
+        """A boundary or field named like a TensorDict method (``floor``, ``max``) resolves
+        to its value, not the method."""
+        vehicle = simple_domain.boundaries["vehicle"]
+        domain = DomainMesh(
+            interior=simple_domain.interior,
+            boundaries={"vehicle": vehicle, "floor": vehicle},
+            global_data={"max": torch.tensor(2.0)},
+        )
+        assert isinstance(walk_path(domain, "boundaries.floor"), Mesh)
+        assert torch.equal(walk_path(domain, "global_data.max"), torch.tensor(2.0))
+
     def test_global_data_lookup(self, simple_domain):
         """Global data lookup."""
         result = walk_path(simple_domain, "global_data.U_inf")
