@@ -467,20 +467,23 @@ INTERIOR = ("drivaerml_volume", "airfrans", "aerozoo", "tensile2d", "lug")
 
 
 def form_callout(
-    measured: str, what: str = "interacting ISLA 0.9.0", also: str = ""
+    measured: str,
+    what: str = "interacting ISLA 0.9.0",
+    also: str = "",
+    also_one: bool = False,
 ) -> str:
     """STYLE's "In flight" callout on an interior standing: its numbers come from ``what``; ISLA's default interior form
     is ISLA-DTT, and ``measured`` (a clause) says what ISLA-DTT reads on this dataset; ``also`` names, after "and", what
-    else on the same standing is being measured."""
+    else on the same standing is being measured (``also_one`` when that is one thing)."""
     return (
         '::: {.callout-note title="In flight"}\n'
         f"These numbers come from {what}. ISLA's default interior form is ISLA-DTT; {measured}. "
         + (
-            f"{also[0].upper() + also[1:]} and ISLA-DTT as the class builds it, in the reference rerun on every interior "
-            "dataset, are being measured, and the ledger (@sec-ledger) tracks them.\n:::\n"
+            f"{also[0].upper() + also[1:].rstrip(',')} {'is' if also_one else 'are'} being measured, and ISLA-DTT as the class builds it is "
+            "measured on every interior dataset in the final reference run; the ledger (@sec-ledger) tracks them.\n:::\n"
             if also
-            else "ISLA-DTT as the class builds it is being measured in the reference rerun on every interior dataset, "
-            "and the ledger (@sec-ledger) tracks it.\n:::\n"
+            else "ISLA-DTT as the class builds it is measured on every interior dataset in the final reference run, "
+            "which the ledger (@sec-ledger) tracks.\n:::\n"
         )
     )
 

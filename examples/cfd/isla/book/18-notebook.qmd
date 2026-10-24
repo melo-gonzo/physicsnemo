@@ -41664,7 +41664,7 @@ CROSS_DATASET_INPUTS.md; QUERYPOP090_FOR_12F.md); the standing with its ISLA-DTT
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-az-2026-10-24/SECOND_READ_AZ.md).*
 
-## 2026-10-24 — Verdict, LRE-AZ: on AeroZoo's Reynolds split the fixed Reynolds scale z = log10(Re / 1e6) costs ISLA 13 % on velocity, growing to 1.28× two decades beyond the band, so it does not carry over from AirfRANS, and ISLA keeps its fitted constants {#sec-nb-az-lre-verdict}
+## 2026-10-24 — Verdict, LRE-AZ: on AeroZoo's Reynolds split the fixed Reynolds scale z = log10(Re / 1e6) costs ISLA 13 % on velocity, growing to 1.28× 1.5 to 2 decades above the band, so it does not carry over from AirfRANS, and ISLA keeps its fitted constants {#sec-nb-az-lre-verdict}
 
 **Setting.** On AirfRANS's `reynolds` split, training ISLA 0.9.0 with its Reynolds input on a fixed physical scale,
 z = log10(Re_ISLA / 1e6), instead of the per-split fitted z = (log10 Re_ISLA − m) / s, cut its below-band pressure error to
@@ -41699,8 +41699,8 @@ carry {6, 1} for B and {5.062, 0.8985} for A. No event-guard hit.
 - The medians move less (velocity 1.068, pressure 1.080, ν_t 1.03, all "no change"), so the cost sits in the far-out,
   higher-error cases.
 
-**Reading.** By the registered rule, "harms" on velocity means the fixed scale is not adopted, and ISLA keeps its
-per-split fitted constants. The AirfRANS gain does not carry over. With a wide fitted spread the fixed scale changes
+**Reading.** The registered consequence of "harms" on velocity is that the fixed scale is not adopted without Peter; it
+is not adopted, and ISLA keeps its per-split fitted constants. The AirfRANS gain does not carry over. With a wide fitted spread the fixed scale changes
 nothing inside the band, but it makes ISLA extrapolate worse on velocity, and somewhat on pressure, one to two decades
 beyond it. How far z overshoots its training range does not explain this: the fixed z overshoots by up to 2.09 units, the
 fitted one by 2.33. The mechanism is untested. Two seeds per arm, one training configuration. Not tested, each needing a

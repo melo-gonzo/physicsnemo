@@ -215,8 +215,8 @@ print(f"- **ISLA**: width 512, 12 layers, 512 slices, learning rate 3.75e-4, {PA
       + " / ".join(f"{SL[f]['ratio']:.3f}" for f in FK) + " of this configuration's on " + " / ".join(l for _, l in FIELDS)
       + " (ratios of arithmetic seed means, two seeds each; no field moves by the rule registered for the test) at "
       f"{SLC['smoke 354977']:.2f} of the training step and {SLC['smoke: peak allocated per rank']:.2f} of the peak memory, "
-      "so the reference keeps 512 and 128 is a cheaper setting that costs nothing measurable here or on the DrivAerML Volume task "
-      "(@sec-oq-slices). "
+      "so the reference keeps 512 and 128 is a cheaper setting that costs interacting ISLA nothing measurable here or on the "
+      "DrivAerML Volume task, and is untested on ISLA-DTT (@sec-oq-slices). "
       f"Data: {R.source('slices_af', 'RESULTS.md')}.")
 print(f"- **ISLA-DTT**: the same configuration with read-only prediction points, {PARAMS['ISLA-DTT'] / 1e6:.1f}M parameters "
       "(@sec-airfrans-dtt-reference).")
@@ -787,8 +787,9 @@ print("Post hoc reading, on AirfRANS only: the fitted, narrow scale of ISLA's Re
       "pressure penalty below the band. Like the attribution below (@sec-airfrans-attribution), it is about how a global scalar input is "
       "scaled; the declared physical scales are the same in all three models. On AeroZoo's `reynolds` split the same fixed scale "
       f"makes ISLA's velocity error {_LZ['rule']['velocity_l2']['mean']['ratio']:.2f} times that of the fitted scale (registered "
-      f"*{_LZ['rule']['velocity_l2']['mean']['verdict']}*; up to {_LZ['profile'][-1]['ratio']['velocity_l2']:.2f} times two decades "
-      f"beyond the band) and leaves pressure unchanged (*{_LZ['rule']['pressure_l2']['mean']['verdict']}*), so it is not adopted "
+      f"*{_LZ['rule']['velocity_l2']['mean']['verdict']}*; {_LZ['profile'][-1]['ratio']['velocity_l2']:.2f} times 1.5 to 2 decades "
+      f"above the band), and on pressure, {_LZ['rule']['pressure_l2']['mean']['ratio']:.3f} times, the registered rule reads "
+      f"*{_LZ['rule']['pressure_l2']['mean']['verdict']}*, so it is not adopted "
       f"(@sec-oq-reynolds). Data: {R.source('lre_az', 'lreaz.json')}, {R.source('af_extrap', 'lre.json')}, {R.source('af_extrap', 'LRE.md')}, "
       f"{R.source('af_extrap', 'stats/afx_fits.json')}, {R.source('af_extrap', 'posthoc.json')}; the controls' scorer reduction is "
       "scratch/isla-af-extrap-2026-10-21/reduce_lre.py.")
@@ -960,7 +961,7 @@ print("- **No cross-architecture discretization reading.** The boundary's discre
       "datasets (@sec-invariances).")
 print("- **No choice of ISLA's interior form.** ISLA-DTT ÷ ISLA is " + " / ".join(f"{dtt_r[f]:.3f}" for f in FK) + " at the reference "
       "configuration with both forms trained alike (ratios of arithmetic seed means; @sec-airfrans-dtt-reference), on one planar dataset in distribution with two seeds; ISLA's default "
-      "interior form, ISLA-DTT, is set on AeroZoo's held-out splits (@sec-aerozoo-form).")
+      "interior form is ISLA-DTT, on principle, after a close call on AeroZoo's held-out splits (@sec-aerozoo-form).")
 print("- **Reynolds extrapolation is measured on this dataset only.** ISLA's error grows more than the baselines' below the training band, "
       "as registered (@sec-interior-extrapolation); trained with its Reynolds input on a fixed scale, its below-band pressure error is "
       + " and ".join(f"{fx['a']['r'][sd]:.2f}" for sd in ("42", "43")) + " of its value with the fitted scale (per seed); the same scale "

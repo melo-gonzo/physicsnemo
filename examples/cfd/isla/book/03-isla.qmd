@@ -1473,8 +1473,8 @@ of the oriented cells, so it is defined at a fold of the surface too, where
 cells meet back to back. @sec-medial-ties measures both. @sec-exact-geometry-draw shows what exact
 geometry changes against a distance read from the nearest drawn token.
 
-**Prediction points come in two kinds.** In interacting ISLA, the form
-the surface task uses, the prediction points are **interacting** tokens: they carry routing mass,
+**Prediction points come in two kinds.** In interacting ISLA, the interior
+form with `query_independent=False`, the prediction points are **interacting** tokens: they carry routing mass,
 a learned fraction of the total boundary measure split equally among them,
 so they help form the slices and their anchors, and the prediction at one
 point depends on which other points are in the request. That dependence is

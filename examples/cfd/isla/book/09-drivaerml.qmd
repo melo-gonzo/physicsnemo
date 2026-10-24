@@ -329,7 +329,8 @@ _SLDC = {r_["measure"].split(",")[0]: R.num(r_["S ÷ B"]) for r_ in R.md_table("
 print("With 128 slices in place of 512, ISLA's Volume-task errors are " + " / ".join(_SLD[f]["S ÷ B"] for f in ("pressure_l2", "velocity_l2", "nut_l2"))
       + " of this configuration's on pressure / velocity / eddy viscosity (ratios of arithmetic seed means, two seeds each; no field "
       f"moves by the rule registered for the test) at {_SLDC['smoke 363505']:.3f} of the training step and "
-      f"{_SLDC['smoke: peak allocated per rank']:.3f} of the peak memory (@sec-oq-slices). Data: {R.source('slices_drv', 'reading.md')}.")
+      f"{_SLDC['smoke: peak allocated per rank']:.3f} of the peak memory; this is interacting ISLA, the reference keeps 512 slices, and 128 "
+      f"slices is untested on ISLA-DTT, the surface task and the solids (@sec-oq-slices). Data: {R.source('slices_drv', 'reading.md')}.")
 ```
 
 ```{python}

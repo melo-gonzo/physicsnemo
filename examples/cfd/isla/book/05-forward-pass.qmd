@@ -1090,8 +1090,9 @@ stage 3. They come in two kinds: *interacting* prediction points (interacting IS
 the class's default, @tbl-arch-switches) carry routing mass and write into the slices; *read-only*
 prediction points (ISLA-DTT, `query_independent=True`) carry none and read
 the boundary cells directly instead (@sec-arch-passive-decoder). ISLA-DTT is
-ISLA's default interior form, on principle: its prediction at a point does not
-depend on which other points are queried (@sec-aerozoo-form). The interacting
+ISLA's default interior form; Peter's ruling for AeroZoo's close call is "ISLA-DTT, on
+principle", and its prediction at a point does not depend on which other points are
+queried (@sec-aerozoo-form). The interacting
 form stays the surface task's, and an explicit choice on an interior task. The tasks
 own different parameter sets (the interior task adds the prediction points'
 input layer and, for interacting points, the routing mass), which is why the
@@ -2039,8 +2040,8 @@ print("**On the AirfRANS interior task at the reference configuration, interacti
       + "; ".join(" / ".join(f"{x:.5f}" for x in AFS.seeds("ISLA-DTT", f)) + " against ISLA's "
                   + " / ".join(f"{x:.5f}" for x in AFS.seeds("ISLA", f)) for f in AFS.ds.headline)
       + f"; {AFS.source}). On AeroZoo's held-out splits, the test registered to choose between the forms, the read is a "
-      "close call, which Peter's ruling gives to the form whose prediction does not depend on the request "
-      "(@sec-aerozoo-form).\n")
+      "close call, and Peter's ruling for that case is \"ISLA-DTT, on principle\": ISLA-DTT's prediction at a point does not depend "
+      "on the request (@sec-aerozoo-form).\n")
 ```
 
 One pre-registered comparison, on checkpoints of the nearest-token form
@@ -2574,7 +2575,7 @@ WHAT = {
     "reynolds": ("1, 2", "`{mean, std}`, the standardization of $\\log_{10}(U L / \\nu)$ over a split's training cases, appended to the global scalars as one column; required with a global of the role `viscosity` and refused without one; a dataset constant, which the recipe fills from the dataset file (@sec-using-scales)"),
     "output_stats": ("5", "`{name: {mean, std}}`, the dataset's constant standardization of each output after its units are restored, so the model returns the standardized targets the loss compares; a vector's mean is zero (@sec-using-scales)"),
     "interior": ("modes", "the task: `False` reads every boundary cell it is given, predicts at the cells of the boundaries `forward` names in `prediction_boundaries` and takes no prediction points; `True` draws its boundary tokens inside the model and predicts at the prediction points, which join the slice layers as tokens with their exact geometry against the full-resolution surface (@sec-arch-modes); implemented in two and three dimensions"),
-    "query_independent": ("modes, after each layer", "interior task only: `True` is ISLA-DTT, with read-only prediction points (no routing mass) that read the boundary cells through the forest at $\\theta = 1$ after every slice layer (@sec-arch-passive-decoder), ISLA's default interior form (@sec-aerozoo-form); `False` is interacting ISLA; rank-2 boundary fields are refused with it"),
+    "query_independent": ("modes, after each layer", "interior task only: `True` is ISLA-DTT, with read-only prediction points (no routing mass) that read the boundary cells through the forest at $\\theta = 1$ after every slice layer (@sec-arch-passive-decoder), ISLA's default interior form (@sec-aerozoo-form); `False` is interacting ISLA; rank-2 boundary fields are refused with `True`"),
     "boundary_tokens": ("1, modes", "interior task only: the number of boundary tokens per case, drawn inside the model from the full-resolution boundary (the budget water-filled over the conditions, each cell drawn with probability proportional to its measure by a systematic draw along the Morton order, each kept cell carrying its Horvitz–Thompson measure; a random start in training, $u = 1/2$ in evaluation; @sec-arch-boundary-draw); a surface task reads every cell and accepts only the default"),
     "hidden": ("all", "the width $D$"),
     "n_layers": ("3", "the number of slice layers"),

@@ -1174,8 +1174,9 @@ print(": The cost of ISLA's interior geometry in training: the geometry call and
       "and *auto*, the default, which takes the fast search on CUDA where Triton imports (as here) and the reference search "
       "elsewhere. The same recipe, settings and network otherwise. One GB300, bfloat16, eager, one case per step, the GPUs "
       "rotated between passes; each pass gives the median after five warm-up calls or steps, and each cell is the mean of "
-      "two rotated passes' medians. The reference AeroZoo row uses the second and third passes, because its first run stopped "
-      "before training on a port collision between the concurrent runs. *Step ratio*: the class's step ÷ the 0.9.0 step. How "
+      "the medians of the first two of its rotated passes (the 0.9.0 column has two passes, the class's columns three); the "
+      "reference AeroZoo cell uses the second and third, because its first run stopped before training on a port collision "
+      "between the concurrent runs. *Step ratio*: the class's step ÷ the 0.9.0 step. How "
       "to read this: the whole-boundary row reads the DrivAerML tunnel box beside the vehicle; there 0.9.0's geometry seeded "
       "its search with a query that cost about two seconds, which the class's cell-tree seed does not have. In two dimensions "
       f"both kernels run the same search over the segments. On the lug the auto row's second pass took {lug_out[0]} ms a call "
@@ -1227,12 +1228,16 @@ az = [pct("AeroZoo", col) for col in (REFC, FASTC)]
 assert "(+" not in CH["AirfRANS 2-D"][REFC] + CH["AirfRANS 2-D"][FASTC]
 guard = re.search(r"([\d.]+) % of its candidate pairs are guarded", PH0).group(1)
 lug = next(c for k, c in GEO_COST.items() if k.startswith("lug"))
+import statistics
+LUG3 = {a: statistics.median(nums(r["geometry call (ms)"])) for r in GT_ if r["case"] == "lug"
+        for a in [{"head, reference": "ref", "head, auto": "fast"}.get(r["version"])] if a}
 print()
-print("**The bounds for thin cells cost most on the lug.** Against the same protocol run on the class before those bounds "
+print("**The bounds for thin cells cost most on the lug.** Against the same protocol run on the class without those bounds "
       f"(@sec-arch-interior-geometry), the lug's geometry call rose {pct('lug', REFC)}% under the reference search and "
       f"{pct('lug', FASTC)}% under the fast one. On the lug {guard}% of the candidate pairs lie within the error bound that calls "
       "for the accurate closest point, so a third of them take it, and there the fast search is no faster than the reference "
-      f"({lug['geo_fast']:.1f} against {lug['geo_ref']:.1f} ms). On the DrivAerML Volume task the call rose {min(drv)} to "
+      f"({lug['geo_fast']:.1f} against {lug['geo_ref']:.1f} ms; the fast mean includes its outlier second pass, and by the "
+      f"median of the three passes it is {LUG3['fast']:.1f} against {LUG3['ref']:.1f} ms). On the DrivAerML Volume task the call rose {min(drv)} to "
       f"{max(drv)}% (the vehicle alone and the whole boundary, both searches), on AeroZoo {min(az)} to {max(az)}%, and on "
       "AirfRANS, in two dimensions, where the bounds do not apply, it is unchanged within the passes' spread. A fused kernel "
       "for the accurate closest point is the lever on that cost, and the ledger (@sec-ledger) tracks it. Data: "

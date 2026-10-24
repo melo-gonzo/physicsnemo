@@ -153,8 +153,8 @@ print("- **Not that ISLA extrapolates across a flow regime, or that it transfers
 print("- **Not that every standing is of ISLA reading its whole boundary.** ISLA's configurations read every piece of the "
       "boundary the DrivAerML and AirfRANS files store, but the standings' checkpoints on the DrivAerML Volume and Surface "
       "tasks, SHIFT-SUV, HiLiftAeroML and AirfRANS were trained with the body alone (@sec-standing-geometry); SHIFT-SUV's "
-      f"files, and all but {HL_BUT} of HiLiftAeroML's, store no other piece; the recipe now builds SHIFT-SUV's box and "
-      "HiLiftAeroML's inlet and outlet and the configurations read them, while those two standings still come from checkpoints "
+      f"files, and all but {HL_BUT} of HiLiftAeroML's, store no other piece; the recipe builds SHIFT-SUV's box and "
+      "HiLiftAeroML's inlet and outlet, and the configurations read them; those two standings come from checkpoints "
       "trained with the body alone (@sec-limits-whole-boundary, @sec-oq-whole-boundary).")
 print("- **Not that the HiLiftAeroML numbers are test-set numbers** (@sec-limits-validation).")
 print("- **Not that the scaling law, the cell-count saturation or the capacity floor are measured at the reference configuration.** "
@@ -403,8 +403,8 @@ request count, and every interior number in the book is scored at that count. IS
 routing mass, read the slices and every boundary cell, and never write, so its prediction at a
 point is a function of that point and the boundary alone, and a request can be split into chunks
 with the same result (@sec-arch-modes). ISLA-DTT is ISLA's default interior form: on AeroZoo's
-held-out splits the two forms read a close call, and Peter's ruling gives a close call to the form
-whose prediction does not depend on the request (@sec-aerozoo-form).
+held-out splits the two forms read a close call, and Peter's ruling for that case is "ISLA-DTT, on
+principle"; ISLA-DTT's prediction does not depend on the request (@sec-aerozoo-form).
 
 ```{python}
 #| label: para-limits-query-independence
@@ -1089,7 +1089,7 @@ print(f"- **Not stored.** SHIFT-SUV's {SUV_N} files store the vehicle alone, ope
       "the same curation pipeline as DrivAerML's box. The dataset's paper puts the far field on a hemisphere of radius about "
       f"{HL_PAPER} mean aerodynamic chords, while the stored interiors reach {HL_MAC} chords. The recipe builds the inlet and the "
       f"outlet as the first transform of its dataset file (`AddHemisphereBoundaries`), as the curation pipeline built them: at "
-      f"radius {BCSU_R} in ({HL_R} mean aerodynamic chords), split by each case's stored freestream, of which the "
+      f"radius {float(BCSU_R):,.8f} in ({HL_R} mean aerodynamic chords), split by each case's stored freestream, of which the "
       f"{BCSU_CASES} cases store {BCSU_NU} distinct vectors, one per angle of attack. On the two files that store a far field "
       "the built inlet and outlet equal the stored ones bit for bit, in points and in oriented cells; only the order differs, "
       "since the stored order is the curation pipeline's permutation. Its symmetry plane is a disk "
@@ -1121,7 +1121,7 @@ print("**Peter approved building the missing pieces in the recipe, as the superv
       "vertices in outline order, with no chosen radius, and checked against the stored hole on the closed root, is what would "
       "add it. GeoTransolver's and Transolver's inputs and targets are bitwise unchanged by both transforms "
       f"({BCSU_BASE[0]} of {BCSU_BASE[0]} items with the box, {BCSU_BASE[1]} of {BCSU_BASE[1]} with the inlet and outlet). Both "
-      "standings were trained reading the body alone, and the final reference rerun retrains them with these pieces. What would "
+      "standings were trained reading the body alone, and the final reference run (@sec-ledger) retrains them with these pieces. What would "
       "settle the question: each standing retrained with ISLA reading those pieces, two seeds, scored beside the standing as "
       "it is. "
       "Cost: not priced, because the configurations set the runs. "

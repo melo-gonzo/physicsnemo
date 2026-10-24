@@ -66,7 +66,7 @@ print(S.form_callout(f"ISLA-DTT 0.9.0, both forms trained on the fixed compiled 
                      "von Mises error, with both of its seeds above both of ISLA's (@sec-aerozoo-form)",
                      what="interacting ISLA 0.9.0, trained with the geometry of @sec-standing-geometry, whose closest-feature "
                           "ties follow the order of the search",
-                     also="the lug standing trained with the class's geometry"))
+                     also="the lug standing trained with the class's geometry", also_one=True))
 ```
 
 ## The problem: a clamped lug pressed in its hole {#sec-lug-problem}
