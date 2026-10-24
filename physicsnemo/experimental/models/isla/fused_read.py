@@ -82,7 +82,7 @@ SOURCE_CHUNK = 512
 #: Registers per thread of the by-point and by-source backward kernels under a narrow
 #: basis (launch constants: these one-warp kernels are latency-bound, and on GB300 at
 #: DrivAerML scale the caps, at a few spilled registers, let more programs reside per
-#: SM and ran them 1.15x and 1.07x faster).
+#: SM and ran them 1.15x and 1.04x faster).
 POINT_MAXNREG = 128
 SOURCE_MAXNREG = 96
 
