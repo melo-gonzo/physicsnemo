@@ -59,6 +59,7 @@ source. Do not edit by hand.
 | `dtt_fast_done/` | DTT-FAST, done: ISLA-DTT's exact speedups as merged, their equivalence, the step on the final heads, the pose port, the compiled bf16 gradient spike and the bf16 reduction flag | `scratch/isla-dtt-fast-2026-10-23/` |
 | `hl_dup_stage2/` | HL-DUP, stage 2: ISLA and both unit-drive baselines retrained and scored on the deduplicated HiLift wing, its review, and the failed root-outline rebuild | `scratch/isla-hl-dup-2026-10-24/` |
 | `dtt_fast_final_table_p5/` | DTT-FAST, pass 2's table with its pass-3 columns added, as it now stands | `scratch/isla-dtt-fast-2026-10-23/final/` |
+| `hl_dup_stage2_scores/` | HL-DUP, stage 2: the scorer's per-case rows of the six deduplicated-wing runs (native and posed), and the stage-1 scores of the stored-wing checkpoints that its rule and its like-for-like figures read | `scratch/isla-hl-dup-2026-10-24/` |
 
 | topic | file | source | md5 |
 | --- | --- | --- | --- |
@@ -308,3 +309,42 @@ source. Do not edit by hand.
 | hl_dup_stage2 | HOLE_CRUST.md | scratch/isla-hl-dup-2026-10-24/HOLE_CRUST.md | 64cc1c9b050c0498c0f2ae434ed45baa |
 | hl_dup_stage2 | FINAL_REPORT.md | scratch/isla-hl-dup-2026-10-24/FINAL_REPORT.md | 5b9c637c63009c38280fb691386f82d0 |
 | dtt_fast_final_table_p5 | TABLE.md | scratch/isla-dtt-fast-2026-10-23/final/TABLE.md | 9602478cd5dca559fdd1a5326785be17 |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_gt_seed42/native/hldupx_hl_gt_seed42/metrics.jsonl | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_gt_seed42/native/hldupx_hl_gt_seed42/metrics.jsonl | 2c8a692b53b6ee5ed5278d9614feb996 |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_gt_seed42/posed/hldupx_hl_gt_seed42/metrics.jsonl | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_gt_seed42/posed/hldupx_hl_gt_seed42/metrics.jsonl | 3a595a7cfd50dfeaf03ce99af5805459 |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_gt_seed43/native/hldupx_hl_gt_seed43/metrics.jsonl | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_gt_seed43/native/hldupx_hl_gt_seed43/metrics.jsonl | ca1ea7be8a1de51fcef79aa6ecbefcb7 |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_gt_seed43/posed/hldupx_hl_gt_seed43/metrics.jsonl | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_gt_seed43/posed/hldupx_hl_gt_seed43/metrics.jsonl | 06f1ffe519c0719ee4e6b28047296493 |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_isla_seed42/native/hldupx_hl_isla_seed42/metrics.jsonl | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_isla_seed42/native/hldupx_hl_isla_seed42/metrics.jsonl | 6284d609d2101d968773b3ae12e3a3f2 |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_isla_seed42/posed/hldupx_hl_isla_seed42/metrics.jsonl | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_isla_seed42/posed/hldupx_hl_isla_seed42/metrics.jsonl | 0bd487062dd8346709e2018813579a74 |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_isla_seed43/native/hldupx_hl_isla_seed43/metrics.jsonl | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_isla_seed43/native/hldupx_hl_isla_seed43/metrics.jsonl | f9cf17fb3cbb7cd310a97d0f3d2c012a |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_isla_seed43/posed/hldupx_hl_isla_seed43/metrics.jsonl | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_isla_seed43/posed/hldupx_hl_isla_seed43/metrics.jsonl | 8e971238dd5bb3c0bae7759d000a8ee2 |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_t_seed42/native/hldupx_hl_t_seed42/metrics.jsonl | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_t_seed42/native/hldupx_hl_t_seed42/metrics.jsonl | dde305fc03fcc703aaba9681a964a614 |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_t_seed42/posed/hldupx_hl_t_seed42/metrics.jsonl | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_t_seed42/posed/hldupx_hl_t_seed42/metrics.jsonl | ae96e10dbbb40d31f198a5ef1fbfa5b1 |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_t_seed43/native/hldupx_hl_t_seed43/metrics.jsonl | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_t_seed43/native/hldupx_hl_t_seed43/metrics.jsonl | 968204a4a6a1336c67828f14fa8606ab |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_t_seed43/posed/hldupx_hl_t_seed43/metrics.jsonl | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_t_seed43/posed/hldupx_hl_t_seed43/metrics.jsonl | 6746a1603bb71d32ed24aa8a8c9889fc |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_gt_seed42/native/SNAPSHOT_USED | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_gt_seed42/native/SNAPSHOT_USED | a0a238a6ce558501c4f6cc6b20159091 |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_gt_seed42/posed/SNAPSHOT_USED | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_gt_seed42/posed/SNAPSHOT_USED | a0a238a6ce558501c4f6cc6b20159091 |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_gt_seed43/native/SNAPSHOT_USED | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_gt_seed43/native/SNAPSHOT_USED | a0a238a6ce558501c4f6cc6b20159091 |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_gt_seed43/posed/SNAPSHOT_USED | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_gt_seed43/posed/SNAPSHOT_USED | a0a238a6ce558501c4f6cc6b20159091 |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_isla_seed42/native/SNAPSHOT_USED | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_isla_seed42/native/SNAPSHOT_USED | eac02220af6fe0a138bf20a6ff3e6e19 |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_isla_seed42/posed/SNAPSHOT_USED | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_isla_seed42/posed/SNAPSHOT_USED | eac02220af6fe0a138bf20a6ff3e6e19 |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_isla_seed43/native/SNAPSHOT_USED | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_isla_seed43/native/SNAPSHOT_USED | eac02220af6fe0a138bf20a6ff3e6e19 |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_isla_seed43/posed/SNAPSHOT_USED | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_isla_seed43/posed/SNAPSHOT_USED | eac02220af6fe0a138bf20a6ff3e6e19 |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_t_seed42/native/SNAPSHOT_USED | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_t_seed42/native/SNAPSHOT_USED | a0a238a6ce558501c4f6cc6b20159091 |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_t_seed42/posed/SNAPSHOT_USED | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_t_seed42/posed/SNAPSHOT_USED | a0a238a6ce558501c4f6cc6b20159091 |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_t_seed43/native/SNAPSHOT_USED | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_t_seed43/native/SNAPSHOT_USED | a0a238a6ce558501c4f6cc6b20159091 |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_t_seed43/posed/SNAPSHOT_USED | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_t_seed43/posed/SNAPSHOT_USED | a0a238a6ce558501c4f6cc6b20159091 |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_gt_seed42/native/DATASET_USED | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_gt_seed42/native/DATASET_USED | 6d936e405bec5d944e3197faf2171466 |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_gt_seed42/posed/DATASET_USED | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_gt_seed42/posed/DATASET_USED | e3a760d41bc7137514d3c181fb84126f |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_gt_seed43/native/DATASET_USED | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_gt_seed43/native/DATASET_USED | 6d936e405bec5d944e3197faf2171466 |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_gt_seed43/posed/DATASET_USED | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_gt_seed43/posed/DATASET_USED | e3a760d41bc7137514d3c181fb84126f |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_isla_seed42/native/DATASET_USED | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_isla_seed42/native/DATASET_USED | 6d936e405bec5d944e3197faf2171466 |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_isla_seed42/posed/DATASET_USED | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_isla_seed42/posed/DATASET_USED | e3a760d41bc7137514d3c181fb84126f |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_isla_seed43/native/DATASET_USED | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_isla_seed43/native/DATASET_USED | 6d936e405bec5d944e3197faf2171466 |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_isla_seed43/posed/DATASET_USED | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_isla_seed43/posed/DATASET_USED | e3a760d41bc7137514d3c181fb84126f |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_t_seed42/native/DATASET_USED | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_t_seed42/native/DATASET_USED | 6d936e405bec5d944e3197faf2171466 |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_t_seed42/posed/DATASET_USED | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_t_seed42/posed/DATASET_USED | e3a760d41bc7137514d3c181fb84126f |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_t_seed43/native/DATASET_USED | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_t_seed43/native/DATASET_USED | 6d936e405bec5d944e3197faf2171466 |
+| hl_dup_stage2_scores | scores_stage2/hldupx_hl_t_seed43/posed/DATASET_USED | scratch/isla-hl-dup-2026-10-24/scores_stage2/hldupx_hl_t_seed43/posed/DATASET_USED | e3a760d41bc7137514d3c181fb84126f |
+| hl_dup_stage2_scores | score_summary.json | scratch/isla-hl-dup-2026-10-24/score_summary.json | b49b4a6baa0dcade745dc99c6df0848e |
+| hl_dup_stage2_scores | score_table.md | scratch/isla-hl-dup-2026-10-24/score_table.md | 17b91d1106afc2b951494c10a72fba37 |
+| hl_dup_stage2_scores | stage2_summary.json | scratch/isla-hl-dup-2026-10-24/stage2_summary.json | f08ac2ef904f1ef561cc67d2d646df28 |
