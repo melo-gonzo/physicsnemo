@@ -451,7 +451,8 @@ def test_chunked_forward_backward_agrees_across_ranks(tmp_path, loss_type):
 
 
 def test_chunked_step_chunks_isla_dtt():
-    """ISLA-DTT takes the chunked step; an interacting ISLA never chunks."""
+    """ISLA-DTT takes the chunked step, also as the interior default
+    (``query_independent=None``); an interacting ISLA never chunks."""
     from physicsnemo.experimental.models.isla import ISLA
 
     def isla(query_independent):
@@ -469,6 +470,7 @@ def test_chunked_step_chunks_isla_dtt():
         return {"forward_kwargs": {"prediction_points": Mesh(points=torch.zeros(n, 3))}}
 
     assert train._chunked_step(isla(True), batch(50))
+    assert train._chunked_step(isla(None), batch(50))
     assert not train._chunked_step(isla(False), batch(50))
 
 
