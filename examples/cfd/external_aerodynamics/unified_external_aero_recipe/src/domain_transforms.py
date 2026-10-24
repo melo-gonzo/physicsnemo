@@ -39,6 +39,8 @@ Recipe-local datapipe components that the library does not provide.
   labels its conditions inside one mesh.
 - :class:`PlaceGroundUnderBody`: DrivAerML's synthesized domain meshes, stored
   2.4 mm low on 297 of 484 case files, moved onto the CFD mesh's domain.
+- :class:`AddBoxBoundaries`: the faces of a box-shaped domain a case file does
+  not store (SHIFT-SUV's), built from constants.
 - Physical-input AeroZoo: :class:`StandardizeGlobalLeaf`, a global PDE
   parameter standardized by per-dataset constants, and :class:`MergeBoundaries`,
   the boundaries' faces as one token set for a tensor-input model.
@@ -77,6 +79,7 @@ from physicsnemo.mesh.calculus.measure import (
     cell_measures,
     scale_measures,
 )
+from physicsnemo.mesh.primitives.planar import structured_grid
 from physicsnemo.mesh.projections import project
 from physicsnemo.mesh.spatial.bvh import _compute_morton_codes
 
@@ -1875,6 +1878,120 @@ class PlaceGroundUnderBody(MeshTransform):
             f"ground={self.ground!r}, body={self.body!r}, boundaries={self.boundaries}, "
             f"axis={self.axis}"
         )
+
+
+_BOX_FACES = ("x_min", "x_max", "y_min", "y_max", "z_min", "z_max")
+
+
+def _box_face(bounds: torch.Tensor, face: str, n_per_side: tuple[int, int]) -> Mesh:
+    """One face of the box ``bounds`` (``(3, 2)``, min and max per axis): a structured grid of
+    ``n_per_side`` points along its two in-plane axes (in xyz order), two triangles per quad, every
+    normal into the box."""
+    axis, side = "xyz".index(face[0]), 0 if face.endswith("min") else 1
+    a, b = [i for i in range(3) if i != axis]
+    grid = structured_grid.load(
+        x_min=float(bounds[a, 0]),
+        x_max=float(bounds[a, 1]),
+        y_min=float(bounds[b, 0]),
+        y_max=float(bounds[b, 1]),
+        n_x=n_per_side[0],
+        n_y=n_per_side[1],
+        device=bounds.device,
+    )
+    points = torch.empty(grid.n_points, 3, dtype=bounds.dtype, device=bounds.device)
+    points[:, axis] = bounds[axis, side]
+    points[:, a], points[:, b] = grid.points[:, 0], grid.points[:, 1]
+    cells = grid.cells
+    p0, p1, p2 = points[cells[0]]
+    inward = 1.0 if side == 0 else -1.0
+    if float(torch.linalg.cross(p1 - p0, p2 - p0)[axis]) * inward < 0:
+        cells = cells[:, [0, 2, 1]]
+    return Mesh(points=points, cells=cells)
+
+
+@register()
+class AddBoxBoundaries(MeshTransform):
+    r"""Add the faces of a box-shaped PDE domain that a case file does not store, as named boundaries (2026-10-24).
+
+    SHIFT-SUV's case files store the vehicle alone, while its CFD domain is a box: on every one of the
+    1,991 files the interior's exact bounding box is ``x`` -40..80 m, ``y`` -20..20 m, ``z``
+    -0.024..19.976 m, with CFD nodes on each of its six planes (lane BC-SIDECAR). This transform builds
+    those faces from constants, as physicsnemo-curator's ``BoxTunnelBoundaries`` built the tunnel
+    DrivAerML's files store: a structured grid of ``n_per_side`` points along the two in-plane axes of
+    each face, triangulated, every normal into the box (the fluid). ``faces`` names each boundary and
+    the faces it holds (several faces are merged into one mesh), and must hold each of the six faces
+    exactly once, so the box is closed.
+
+    On a bare ``Mesh`` (the surface a reader returns) the result is the ``DomainMesh`` that
+    ``MeshReaderWithGlobalData`` returns with ``domain_boundaries``: the surface as its interior (until
+    ``SurfaceMeshToDomainMesh``), the faces as its boundaries, the surface's ``global_data`` at the
+    domain level. On a ``DomainMesh`` the faces are added to its boundaries (a name it has is refused).
+    Place it first, in the files' raw coordinates and before every pose, so that each later transform
+    moves the faces with the surface.
+
+    Args:
+        bounds: ``[[x_min, x_max], [y_min, y_max], [z_min, z_max]]``.
+        faces: ``{boundary name: [face, ...]}``, each face one of ``x_min``, ``x_max``, ``y_min``,
+            ``y_max``, ``z_min``, ``z_max``.
+        n_per_side: points along each in-plane axis of a face (curator's default, 2 x 19 x 19 = 722
+            triangles per face).
+    """
+
+    def __init__(
+        self,
+        bounds: Sequence[Sequence[float]],
+        faces: dict[str, Sequence[str]],
+        n_per_side: Sequence[int] = (20, 20),
+    ) -> None:
+        super().__init__()
+        self.bounds = torch.tensor(bounds, dtype=torch.float32)
+        if tuple(self.bounds.shape) != (3, 2) or not bool(
+            (self.bounds[:, 0] < self.bounds[:, 1]).all()
+        ):
+            raise ValueError(
+                f"AddBoxBoundaries: bounds must be [[min, max]] * 3 with min < max, got {bounds!r}"
+            )
+        self.faces = {str(name): [str(f) for f in fs] for name, fs in faces.items()}
+        held = sorted(f for fs in self.faces.values() for f in fs)
+        if held != sorted(_BOX_FACES) or not all(self.faces.values()):
+            raise ValueError(
+                f"AddBoxBoundaries: faces must hold each of {list(_BOX_FACES)} exactly once, got {self.faces!r}"
+            )
+        self.n_per_side = (int(n_per_side[0]), int(n_per_side[1]))
+
+    def _boundaries(self, like: torch.Tensor) -> dict[str, Mesh]:
+        bounds = self.bounds.to(dtype=like.dtype, device=like.device)
+        out = {}
+        for name, fs in self.faces.items():
+            parts = [_box_face(bounds, f, self.n_per_side) for f in fs]
+            out[name] = parts[0] if len(parts) == 1 else Mesh.merge(parts)
+        return out
+
+    def __call__(self, mesh: Mesh) -> DomainMesh:  # type: ignore[override]
+        return DomainMesh(
+            interior=mesh.with_data(
+                global_data=TensorDict({}, batch_size=[], device=mesh.points.device)
+            ),
+            boundaries=self._boundaries(mesh.points),
+            global_data=mesh.global_data,
+        )
+
+    def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
+        """Add the faces beside the domain's boundaries."""
+        taken = [n for n in self.faces if n in domain.boundary_names]
+        if taken:
+            raise ValueError(f"AddBoxBoundaries: boundaries {taken!r} exist already")
+        return DomainMesh(
+            interior=domain.interior,
+            boundaries={
+                **{n: domain.boundaries[n] for n in domain.boundary_names},
+                **self._boundaries(domain.interior.points),
+            },
+            global_data=domain.global_data,
+        )
+
+    def extra_repr(self) -> str:
+        return f"bounds={self.bounds.tolist()}, faces={self.faces}, n_per_side={self.n_per_side}"
 
 
 @register()

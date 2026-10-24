@@ -1,0 +1,126 @@
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# High-lift airplane surface dataset with the whole boundary of the PDE domain (2026-10-24): as
+# highlift_surface.yaml, plus the hemisphere far field (inlet, outlet) and the symmetry plane, which
+# 1,798 of the 1,800 case files do not store. They are read from a boundary-only sidecar beside the
+# dataset (dataset_paths.highlift_aero_ml_boundaries, the case files' relative layout), written once
+# per case by physicsnemo-curator's HemisphereBoundaries from the full-resolution wing (the
+# symmetry plane's hole at the wing root needs every wing cell on y = 0, which a per-step transform
+# after the reader's subsample no longer has), at the radius of the two case files that store them
+# (24,533.42 in, 88.95 MAC, the stored interiors' far field). The sidecar is the domain only, no
+# CFD output; its SIDECAR.json per case records the generator and its constants.
+#
+# High-lift airplane surface dataset (compressible, cell-centric)
+# Reads the boundary surface Mesh directly from DomainMesh .pdmsh files
+# by navigating into the on-disk tensordict directory structure.
+# Boundary mesh from HiLiftAeroML. Physics fields live in cell_data
+# (derived from vertex-projected point_data during conversion).
+# Model inputs use cell centroids and face normals; topology (triangles)
+# is preserved for normal computation and cell-based subsampling.
+# global_data: the boundary tensordict's own global_data is empty; the
+# per-case freestream conditions (U_inf, p_inf, rho_inf, T_inf, L_ref)
+# live on the parent DomainMesh's _tensordict/global_data, so we use
+# MeshReaderWithGlobalData to merge them onto each boundary Mesh at load
+# time. Units are slug-inch-second-Rankine.
+# Splits are controlled by manifest.json + train_split/val_split in the training config.
+
+train_datadir: ${dataset_paths.highlift_aero_ml}
+# manifest: <path to a {train, val} manifest JSON built from the dataset-root
+#           manifest's curated split lists (e.g. full_train / full_val)>
+
+pipeline:
+  reader:
+    _target_: ${dp:MeshReaderWithGlobalData}
+    path: ${train_datadir}
+    pattern: "geo_LHC*/*.pdmsh/_tensordict/boundaries/vehicle"
+    subsample_n_cells: ${sampling_resolution}
+    # Walk up two levels from the boundary tensordict to the parent
+    # DomainMesh's global_data and merge its keys onto each sample.
+    merge_global_data_from: "../../global_data"
+    # The other boundaries of the PDE domain, read whole; only the wing is subsampled. The
+    # sample is then a DomainMesh whose interior is the wing until SurfaceMeshToDomainMesh, so
+    # every transform below (rotation, translation, CenterMesh on the wing, the L_ref scaling)
+    # moves them with it.
+    domain_boundaries: [inlet, outlet, symmetry]
+    domain_boundaries_root: ${dataset_paths.highlift_aero_ml_boundaries}
+  augmentations:
+    - _target_: ${dp:RandomRotateMesh}
+      axes: ["z"]
+      mode: axis_aligned
+      transform_point_data: true
+      transform_cell_data: true
+      transform_global_data: true
+    - _target_: ${dp:RandomTranslateMesh}
+      distribution:
+        _target_: torch.distributions.Uniform
+        low:
+          _target_: torch.tensor
+          data: [-1.0, -1.0, 0.0]
+        high:
+          _target_: torch.tensor
+          data: [1.0, 1.0, 0.0]
+  transforms:
+    # Unit freestream direction as a NEW global leaf U_inf_dir (U_inf stays
+    # physical). Consumed as the unit global vector input by ISLA
+    # (global_schema: U_inf_dir); inert for models that do not declare it.
+    # Mirrors drivaer_ml_surface.yaml; placed before CenterMesh so the
+    # rotation augmentation rotates it together with U_inf and the geometry.
+    - _target_: ${dp:ComputeFreestreamDirection}
+      velocity_field: U_inf
+      output_field: U_inf_dir
+    - _target_: ${dp:CenterMesh}
+      use_area_weighting: false
+    - _target_: ${dp:ComputeSurfaceNormals}
+      store_as: cell_data
+      field_name: normals
+    - _target_: ${dp:NonDimensionalizeByMetadata}
+      fields:
+        PROJ(AVG(P)): pressure
+        PROJ(AVG(T)): temperature
+        PROJ(AVG(RHO)): density
+        PROJ(AVG(U)): velocity
+        AVG(TAU_WALL): stress
+      association: cell_data
+    - _target_: ${dp:RenameMeshFields}
+      cell_data:
+        PROJ(AVG(P)): pressure
+        PROJ(AVG(T)): temperature
+        PROJ(AVG(RHO)): density
+        PROJ(AVG(U)): velocity
+        AVG(TAU_WALL): tau_wall
+    # z-score normalization (dataset-wide stats)
+    # Stats are post-nondimensionalization values.
+    # TODO: recompute stats for cell-centered data (these are vertex-projected estimates)
+    - _target_: ${dp:NormalizeMeshFields}
+      association: cell_data
+      fields:
+        pressure:    {type: scalar, mean: -0.5,  std: 1.0}
+        temperature: {type: scalar, mean:  1.00, std: 0.002}
+        density:     {type: scalar, mean:  1.0, std: 0.02}
+        velocity:    {type: vector, mean: [0.00, 0.00, 0.00], std: 0.20}
+        tau_wall:    {type: scalar, mean: [0.00, 0.00, 0.00], std: 0.003}
+    # Terminal: convert the surface Mesh into a DomainMesh per the recipe
+    # contract. cell_data_targets are auto-injected from the `targets:` block.
+    - _target_: ${dp:SurfaceMeshToDomainMesh}
+      interior_points: cell_centroids
+
+targets:
+  pressure: scalar
+  temperature: scalar
+  density: scalar
+  velocity: vector
+  tau_wall: vector

@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import zlib
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 import torch
@@ -110,6 +111,13 @@ class MeshReaderWithGlobalData(MeshReader):
         the chain (rotation, translation, centering, scaling) acts on all of
         them through ``apply_to_domain`` while the surface's draw, centre and
         pose stay those of the bare surface.  Empty (default): a ``Mesh``.
+    domain_boundaries_root : str or None
+        A directory that holds the ``domain_boundaries`` instead of the case
+        files, in their relative layout: the boundary ``<name>`` of the sample
+        ``<path>/<rel>/<surface>`` is read from ``<root>/<rel>/<name>`` (a
+        boundary-only sidecar beside a dataset whose files store the surface
+        alone, as HiLift's hemisphere far field and symmetry plane).  ``None``
+        (default): beside the surface.  Needs ``domain_boundaries``.
     whole_surface_transforms : sequence of MeshTransform
         Transforms that place the ``domain_boundaries`` from the surface at
         full resolution, before its subsample (DrivAerML's
@@ -130,6 +138,7 @@ class MeshReaderWithGlobalData(MeshReader):
         merge_global_data_from: str | None = None,
         store_case_key: bool = False,
         domain_boundaries: Sequence[str] = (),
+        domain_boundaries_root: str | None = None,
         whole_surface_transforms: Sequence[Any] = (),
         **kwargs: Any,
     ) -> None:
@@ -139,6 +148,13 @@ class MeshReaderWithGlobalData(MeshReader):
         if len(set(self._domain_boundaries)) != len(self._domain_boundaries):
             raise ValueError(
                 f"domain_boundaries names a boundary twice: {self._domain_boundaries!r}"
+            )
+        self._domain_boundaries_root = (
+            None if domain_boundaries_root is None else Path(domain_boundaries_root)
+        )
+        if self._domain_boundaries_root is not None and not self._domain_boundaries:
+            raise ValueError(
+                "domain_boundaries_root holds the domain_boundaries; none are named"
             )
         self._whole_surface_transforms = list(whole_surface_transforms)
         if self._whole_surface_transforms and not self._domain_boundaries:
@@ -228,6 +244,8 @@ class MeshReaderWithGlobalData(MeshReader):
 
     def _load_domain_boundary(self, index: int, name: str) -> Mesh:
         path = self._paths[index].parent / name
+        if self._domain_boundaries_root is not None:
+            path = self._domain_boundaries_root / path.relative_to(self._root)
         if not path.exists():
             raise FileNotFoundError(
                 f"domain boundary {name!r} not found beside {self._paths[index]} (looked for {path})"

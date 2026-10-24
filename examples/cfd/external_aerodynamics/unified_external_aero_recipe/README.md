@@ -805,6 +805,16 @@ python src/train.py model=geotransolver_surface dataset=highlift_surface \
 python src/train.py model=isla_surface_highlift dataset=highlift_surface \
     training.num_epochs=200 sampling_resolution=100000
 
+# HiLift surface, ISLA reading the whole boundary: the wing beside the hemisphere far
+# field and symmetry plane of a boundary-only sidecar (dataset_paths.highlift_aero_ml_boundaries),
+# written per case by physicsnemo-curator's HemisphereBoundaries
+python src/train.py model=isla_surface_highlift_whole dataset=highlift_surface_whole \
+    training.num_epochs=200 sampling_resolution=100000
+
+# SHIFT-SUV surface, ISLA reading the vehicle and the CFD box the dataset builds
+# (AddBoxBoundaries: inlet, outlet, floor, side_walls, roof)
+python src/train.py model=isla_surface_shift_suv dataset=shift_suv_surface
+
 # HiLift volume
 python src/train.py model=geotransolver_volume_highlift dataset=highlift_volume \
     compile=false training.num_epochs=200 sampling_resolution=100000
