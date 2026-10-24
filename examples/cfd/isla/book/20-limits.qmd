@@ -629,6 +629,9 @@ rows = [
     ("Does a quarter of the slices cost nothing on ISLA-DTT and on the surface task? (@sec-oq-slices)",
      "ISLA-DTT with 128 slices against 512 on AirfRANS and the lug, and interacting ISLA with 128 against 512 on the DrivAerML Surface task, two seeds each, read for harm by the same rule",
      "not priced"),
+    ("Should a slice's mean normal be normalized by a smooth form with no constant? (@sec-oq-slice-normal)",
+     "a smooth, constant-free form of the slice's mean-normal invariant, checked by a deterministic test on a closed boundary with uniform routing, where the mean normal is exactly zero, then trained and read for harm against the standings",
+     "not priced"),
 ]
 if HELD:
     rows.append((f"How do the architectures compare on {names(sorted({k for k, _ in HELD}))} {' and '.join(ST[k].fields[f] for k, f in HELD)} measured alike?",
@@ -1126,6 +1129,52 @@ print("**The open question is whether the whole boundary costs ISLA near-wall ac
 This question rests on probes of the standings' trained input layers at fixed weights. ISLA trained on
 AirfRANS with its far field, read near the wall, is being measured, and the ledger (@sec-ledger) tracks it.
 :::
+
+### A slice's mean normal on a closed boundary {#sec-oq-slice-normal}
+
+```{python}
+#| label: para-oq-slice-normal
+#| output: asis
+# DTT-FAST SPIKE: the compiled bfloat16 gradient blow-up, its cause, its rate over the one-ulp samples, and the training logs
+SPK = " ".join(R.load("dtt_fast_done", "spike/RESULTS.md").split())
+n_s, n_c, n_e = map(int, re.search(r"1 blow-up in (\d+) distinct bf16 one-ulp samples \((\d+) of them compiled, (\d+) eager\)", SPK).groups())
+assert "Compiled only, never eager" in SPK
+m_min = re.search(r"The blown-up row is block (\d+)'s slice (\d+), the block's smallest \|m\| \(([\d.e-]+)\)", SPK).groups()
+amp = re.search(r"The observed amplification is ([\d.e]+)\.", SPK).group(1)
+rep = re.search(r"repeated it \(([\d.e]+)\)", SPK).group(1)
+n_runs = int(re.search(r"(\d+) run dirs, (\d+) ISLA / ISLA-DTT, all bf16", SPK).group(2))
+n_ck = re.search(r"(\d+) runs, ([\d,]+) checkpoints, every 2 epochs", SPK).groups()
+assert "0 skipped steps and 0 non-finite losses in any run" in SPK and "no step in these runs had a FLAG-size spike" in SPK
+blip = re.search(r"at most a one-epoch loss blip of about (\d+)%", SPK).group(1)
+from physicsnemo.experimental.models.isla.model import EPS as _EPS
+sci_ = lambda x: f"$" + (lambda m, e: f"{m} \\times 10^{{{int(e)}}}")(*f"{float(x):.1e}".split("e")) + "$"
+print("**The open question is whether a slice's mean normal should be normalized by a smooth form with no constant.** Each "
+      "slice layer normalizes the measure-weighted mean normal of a slice's tokens to a unit vector, "
+      f"$m_s / \\max(\\lvert m_s \\rvert, \\epsilon)$ with $\\epsilon = 10^{{{int(f'{_EPS:.0e}'.split('e')[1])}}}$ (`_SliceBlock.forward`, @sec-arch-layer), "
+      "and the relational invariants read it. A slice spread over a closed boundary has a mean normal near zero, because "
+      "the measure-weighted normals of a closed surface sum to zero, so in bfloat16 that mean is mostly rounding, and the "
+      "rounding can make it exactly zero. The clamp then takes over: the gradient through the normalization becomes "
+      "$I / \\epsilon$ in place of $(I - \\hat m_s \\hat m_s^\\top) / \\lvert m_s \\rvert$, a gain of "
+      "$\\lvert m_s \\rvert / \\epsilon$, up to $10^9$. "
+      f"In {n_s} one-ulp bfloat16 samples of a training step on real inputs ({n_c} compiled, {n_e} eager), one compiled "
+      f"step of ISLA-DTT on the AirfRANS interior task blew the gradient up, in the slice of layer {int(m_min[0]) + 1} of "
+      f"twelve with that layer's smallest $\\lvert m_s \\rvert$ ({sci_(m_min[2])}), by {sci_(amp)} times the float64 truth on that row, "
+      f"and a second process with the same compiled kernels repeated it; no eager sample did. No such spike shows in "
+      f"training: the logs of {n_runs} training runs of ISLA and ISLA-DTT hold no skipped step and no non-finite loss, and "
+      f"the optimizer states of {S._COUNT.get(int(n_ck[0]), n_ck[0])} of them, read at {n_ck[1]} checkpoints, hold no "
+      "spike of that size, which the second-moment estimates of the parameters AdamW trains would hold for hundreds of steps. Muon, the "
+      "optimizer of every matrix parameter, steps along an orthogonalized direction of fixed size (steepest descent in the "
+      "spectral norm), so a large gradient does not make a large update; and the finite spikes of the routing path that do "
+      f"occur, in compiled and eager runs alike, leave at most a one-epoch loss blip of about {blip}%. The spike is a "
+      "property of the normalization, not of the compiled path: the compiled kernels' coarser partial sums make an exact zero more likely, "
+      "and nothing in the eager code prevents one. What would settle it: a smooth form of the invariant with no constant, "
+      "checked by a deterministic test (a closed boundary with uniform routing, whose mean normal is exactly zero), then "
+      "trained and read for harm against the standings. Cost: not priced. "
+      f"Data: {R.source('dtt_fast_done', 'spike/RESULTS.md')} (sections 1 to 3).")
+print()
+print("::: {.callout-note title=\"In flight\"}\nThis question rests on the normalization with its clamp, as the code has it. A "
+      "smooth, constant-free form of the slice's mean-normal invariant is being designed, and the ledger (@sec-ledger) tracks it.\n:::")
+```
 
 ### A quarter of the slices {#sec-oq-slices}
 
