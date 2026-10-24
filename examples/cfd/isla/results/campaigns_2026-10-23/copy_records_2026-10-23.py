@@ -441,6 +441,32 @@ RECORDS = {
             "REVIEW_TESTS.md",
         ],
     ),
+    "default_dtt": (
+        "isla-default-dtt-2026-10-24",
+        "DEFAULT-DTT: ISLA-DTT the default interior form, its tests, smokes and query-independence check",
+        [
+            "FINAL_REPORT.md",
+            "BOOK_CHANGES.md",
+            "BOOK_SENTENCES_v2.md",
+        ],
+    ),
+    "dtt_default_int": (
+        "isla-dtt-default-int-2026-10-24",
+        "DTT-DEFAULT-INT: the default switch integrated with ISLA 0.12.0, and its fixture test reworked",
+        [
+            "FINAL_REPORT.md",
+        ],
+    ),
+    "geo_thinfast": (
+        "isla-geo-thinfast-2026-10-24",
+        "GEO-THINFAST: the thin-cell guard and the accurate closest point fused into the fast path, its equality and timing",
+        [
+            "FINAL_REPORT.md",
+            "RESULTS.md",
+            "REVIEW.md",
+            "lhr/timing_table.md",
+        ],
+    ),
 }
 
 

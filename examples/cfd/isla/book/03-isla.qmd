@@ -1192,8 +1192,9 @@ plt.show()
 #|   bracket along its length into three regions, a weakly decided one over
 #|   the half toward the clamped root, the arm, and the head around the
 #|   hole, and in the last layer the anchors gather toward the head and
-#|   around the hole. ISLA at its reference configuration, the standing's
-#|   eagerly trained checkpoint on each task, seed 42, final checkpoint; the
+#|   around the hole. Interacting ISLA (`query_independent=False`) at its
+#|   reference configuration, the standing's eagerly trained checkpoint on
+#|   each task, seed 42, final checkpoint; the
 #|   airfoil of @fig-airfrans-prediction and the lug of @fig-lug-prediction.
 #|   Data: results/renderings_2026-10-22/routing/r090eag_af_isla_seed42_s00215.npz,
 #|   r090eag_lug_isla_seed42_s00633.npz.
@@ -1591,11 +1592,10 @@ print("**ISLA-DTT is ISLA's default interior form, on principle: its prediction 
       + " / ".join(_AF.fields[f] for f in _AF.ds.headline) + f", a ratio of arithmetic seed means; {_AF.source}). On the GINOT bracket lug, with both forms trained on the compiled "
       "training path after its fault was fixed, interacting ISLA leads ISLA-DTT on the von Mises stress (ISLA-DTT ÷ ISLA "
       f"{_ld['mean'] / _li['mean']:.3f} on the native mesh, a ratio of arithmetic seed means; {R.source('ref090', 'r090_final.json')}). "
-      "The interacting form stays in the class: the surface task uses it, and an interior task may choose it explicitly. "
+      "The class's default follows the task: `interior=True` alone builds ISLA-DTT, the surface task builds interacting "
+      "ISLA, and `query_independent=False` builds interacting ISLA for an interior task. Every interior configuration of "
+      "the recipe states `query_independent: true`. "
       "The interior standings of Part IV are of interacting ISLA, and each says what ISLA-DTT measures there.\n")
-print('::: {.callout-note title="In flight"}\nThe class builds an interior model as interacting ISLA unless '
-      "`query_independent=True` is given, and so does the recipe. The switch of both defaults to ISLA-DTT for the interior "
-      "task is being built, and the ledger (@sec-ledger) tracks it.\n:::")
 ```
 
 ## Why ISLA has no center {#sec-isla-variants}
@@ -1639,7 +1639,7 @@ the stages of that chapter.
 | 4 relational invariants | $\xi_{is}$; the routing refinement | 3 | `_relational_invariants`, `geo_kernel.py` |
 | 5 the slice layer | pooling, slice MLP, read-back, normalized reads | 3 | `_SliceBlock.forward` |
 | 6 the equivariant basis | coefficients times body-fixed directions | 4, 5 | `heads.py`, `frame_assign` |
-| 7 the interior | exact geometry against the full-resolution surface; its two distance channels; interacting or read-only points | 1, 3 | `exact_boundary_geometry`, `soft_log_length`, `_QueryTokens`, `tree_read.py` |
+| 7 the interior | exact geometry against the full-resolution surface; its two distance channels; read-only (the default) or interacting points | 1, 3 | `exact_boundary_geometry`, `soft_log_length`, `_QueryTokens`, `tree_read.py` |
 
 : The seven ideas of this chapter, the stage of the forward pass that holds
 each, and the code that implements it. How to read this: the stage numbers

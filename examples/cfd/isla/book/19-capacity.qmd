@@ -1276,6 +1276,24 @@ print(f"Three readings follow. At {i25['tokens']:,} tokens ISLA's step ({i25['st
       "ISLA's DrivAerML standing lanes trained on code that runs the compiled blocks with Inductor's mix-order reduction at its "
       f"default; timed on that code, ISLA's surface step is within {100 * max(abs(x) for x in tail):.1f}% of the one shown at every "
       "count, at the same peak memory.")
+# DEFAULT-DTT's training checks of the class as it is: per interior dataset, 40 steps of each form per-block compiled
+# in one job on one GB300 (bfloat16, seed 42, each dataset's reference split and resolution)
+DD = R.md_table("default_dtt", "FINAL_REPORT.md", index=1)
+DDF = " ".join(R.load("default_dtt", "FINAL_REPORT.md").split())
+dd_x = lambda col: [float(r[col].rstrip("x")) for r in DD]
+dd_vol = next(r for r in DD if r["Dataset"].startswith("DrivAerML Vol"))["Step time, DTT vs ISLA (s)"].split(" vs ")
+assert "whole boundary" in DD[0]["Dataset"] and len(DD) == 5 and "both arms per-block compiled" in DDF
+T2D_LOSS = re.search(r"\*\*Tensile2d\*\* builds and trains ISLA-DTT: the loss falls from ([\d.]+) to ([\d.]+)", DDF).groups()
+print()
+print("**In the recipe's interior configurations, with ISLA-DTT the class's interior default, ISLA-DTT's training step is "
+      f"{min(dd_x('Step ratio')):.1f} to {max(dd_x('Step ratio')):.1f} times interacting ISLA's, at "
+      f"{min(dd_x('Memory ratio')):.1f} to {max(dd_x('Memory ratio')):.1f} times its peak memory.** Each of the five interior "
+      "datasets trained each form for 40 steps on one GB300, both per-block compiled, in bfloat16, at the dataset's reference split "
+      "and resolution, on the class without its derived bands and without the fast search's fused thin-cell kernels, both "
+      f"confined to the geometry call; on the DrivAerML Volume task with the whole boundary ISLA-DTT's step took {dd_vol[0]} s against interacting "
+      f"ISLA's {dd_vol[1]} s. These runs check that every configuration builds and trains ISLA-DTT, Tensile2d's included, whose "
+      f"loss fell from {T2D_LOSS[0]} to {T2D_LOSS[1]}; they are not the timings of @fig-cost-sweep or of @tbl-isla-cost. "
+      f"Data: {R.source('default_dtt', 'FINAL_REPORT.md')} (per interior dataset).")
 ```
 
 ::: {.callout-note title="In flight"}
