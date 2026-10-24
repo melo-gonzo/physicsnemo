@@ -623,6 +623,9 @@ rows = [
     ("How do SHIFT-SUV and HiLiftAeroML get the pieces of their domains' boundaries that their files do not store? (@sec-oq-whole-boundary)",
      "the missing pieces supplied beside each dataset, never as a change to it, then each standing retrained with ISLA reading the whole boundary, two seeds",
      "not priced (the supply sets the runs)"),
+    ("Does the whole boundary cost ISLA near-wall accuracy through its distance channel? (@sec-oq-nearwall)",
+     "ISLA trained on AirfRANS with its far field, read near the wall against the standing; if it reads a harm there, the viscous softening trained on the same configuration with only the channel changed, two seeds",
+     "in flight; then about 180 to 225 for the viscous softening"),
     ("Does a quarter of the slices cost nothing beyond AirfRANS? (@sec-oq-slices)",
      "ISLA with 128 slices against the standing's 512 on a three-dimensional dataset, two seeds, read for harm by the AirfRANS rule",
      "not priced"),
@@ -1121,6 +1124,38 @@ print("What would settle it: the missing pieces supplied, built from the documen
       f"Data: {R.source('boundary_audit', 'REPORT.md')} (sections 1, 2 and 5), {R.source('setup_research', 'SETUP.md')}, "
       f"{R.source('bc_sidecar', 'FINAL_REPORT.md')}, {R.source('hl_dup', 'RESULTS.md')} (section 4).")
 ```
+
+### The near-wall channel under the whole boundary {#sec-oq-nearwall}
+
+```{python}
+#| label: para-oq-nearwall
+#| output: asis
+NWR = " ".join(R.load("nearwall", "RESULTS.md").split())
+NW_AF = re.search(r"AirfRANS \+ far field \(40, 4\.0 M\) \| [^|]+\| [\d.]+ \| [^|]+\| 0 / \*\*([\d.]+) %\*\*", NWR).group(1)
+NW_REL = re.search(r"1e-6 Re_L = ([\d,]+)-([\d,]+)", NWR).groups()
+NW_AFDES = " ".join(R.load("nearwall", "DESIGN.md").split())
+NW_COST = re.search(r"Cost: about ([\d]+)-([\d]+) GPU-h for the AirfRANS pair", NW_AFDES).groups()
+print("**The open question is whether the whole boundary costs ISLA near-wall accuracy through its distance channel.** "
+      "The channel $\\operatorname{asinh}(s_q / 10^{-6})$ is linear for distances below $10^{-6} L$, and with the whole "
+      f"boundary that holds {NW_AF}% of AirfRANS's drawn points, its viscous sublayer, buffer layer and the start of its log "
+      "layer, where the trained input layers code $\\log d$ (@sec-arch-interior-geometry). The supervisor holds one "
+      "alternative ready: a viscous softening, $\\operatorname{asinh}(d U / \\nu)$, in which the length unit cancels, so the "
+      "near-wall code does not depend on how far out the domain's outer boundary is drawn. It is defined only where a "
+      "viscosity is declared (AirfRANS and AeroZoo); elsewhere the channel stays as it is. On AirfRANS with its far field its "
+      f"knee sits at $U d / \\nu = 1$, against $10^{{-6}} \\mathrm{{Re}}_L$ = {NW_REL[0]} to {NW_REL[1]} for the present channel. "
+      "It gives up the present channel's guarantee that float32 rounding of the coordinates moves it by at most 0.12 wherever "
+      "the body sits in its domain: with the body 30 chords from the origin of the coordinates, rounding moves it by up to 3 "
+      "to 4. It is to be tested only if ISLA trained on AirfRANS with its far field reads a harm near the wall, and adopting "
+      "it is Peter's decision. What would settle it: that retrain read on velocity and eddy viscosity near the wall against "
+      "the standing; if it reads a harm there, the viscous softening trained on the same configuration with only the channel "
+      f"changed, two seeds. Cost: the retrain is in flight; the viscous arm about {NW_COST[0]} to {NW_COST[1]} GPU-hours. Data: "
+      f"{R.source('nearwall', 'RESULTS.md')} (A1 to A3); {R.source('nearwall', 'DESIGN.md')} (sections 3 and 4).")
+```
+
+::: {.callout-note title="In flight"}
+This question rests on probes of the standings' trained input layers at fixed weights. ISLA trained on
+AirfRANS with its far field, read near the wall, is being measured, and the ledger (@sec-ledger) tracks it.
+:::
 
 ### A quarter of the slices {#sec-oq-slices}
 

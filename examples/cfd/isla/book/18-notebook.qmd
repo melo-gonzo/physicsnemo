@@ -41385,6 +41385,44 @@ Cost: MERGE-PREP's 6.98 GPU-h over both parts.
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-boundary-2026-10-24/SECOND_READ_BOUNDARY.md).*
 
+## 2026-10-24 — NEARWALL: under the whole boundary ISLA's distance channel is linear for 19.5 percent of AirfRANS's drawn points, and the standings' input layers code log d; the supervisor approves keeping the channel, with its documentation corrected, and holds a viscous softening ready {#sec-nb-nearwall-design}
+
+**Question.** With the whole boundary, ISLA's length unit $L$ is the size of the domain, so the softening of its distance
+channel $\operatorname{asinh}(s / 10^{-6})$, $s = d / L$, moves out with the far field. Lane NEARWALL, launched by the
+supervisor at about 07:40 EDT 2026-10-24, measured what that does, with probes only. Records:
+scratch/isla-nearwall-2026-10-24/RESULTS.md (md5 43888a10), DESIGN.md (1ff494b6) and its review REVIEW_DESIGN.md
+(08b55280, "sound with fixes", each applied); copies in results/campaigns_2026-10-23/nearwall/.
+
+- **Exposure** (the recipe's drawn points at 2b15490b2). Off-wall points in the linear part, body alone against whole
+  boundary: AirfRANS 0 against 19.5% (first nodes at $5.2 \times 10^{-9} L$), DrivAerML Volume 0 against 0.57%, AeroZoo
+  0.01% as it stands, the lug and Tensile2d none. On AirfRANS the knee sits at $U d / \nu = 10^{-6}\,\mathrm{Re}_L$ = 610
+  to 1,830, $y^+$ about 25 to 90 with an estimated friction velocity: the sublayer, the buffer layer and the start of the
+  log layer.
+- **Response** (the standings' trained checkpoints at fixed weights). The input layers code $\log d$: their change per
+  decade of $d$ is flat over five decades (about 15 on AirfRANS, 17 on DrivAerML). Read with the whole boundary's $L$, a
+  tenfold change at AirfRANS's first nodes moves the input layer 38 times less and the embedding's sensitivity per unit
+  $\ln d$ 200 times less. Only a retrain prices it (AF-WHOLE).
+- **Precision.** $10^{-6}$ is about 17 times float32's unit roundoff: rounding moves the channel by at most 0.12 wherever
+  the body sits in its domain. A softening that gives AirfRANS's first nodes a logarithmic code moves by up to 3 to 4 when
+  the body sits 30 chords from the origin, mostly through the geometry kernel's float32 arithmetic.
+
+**The design** (DESIGN.md section 4). Of eight candidates, the lane recommends keeping the channel: it is the one defined
+identically on every dataset, with no fallback, no new declaration and no recipe constant, and robust to rounding
+anywhere in the domain; the viscous softening $\operatorname{asinh}(d U / \nu)$ is undefined on three of five datasets
+and changes every AeroZoo case. Its documentation claimed that $10^{-6} L$ lies below the reference datasets' finest wall
+spacing, which is false under the whole boundary. **The supervisor approved the design at 08:44 EDT**: canonical ISLA keeps
+its channel, the docstring is corrected on psharpe/isla-nearwall, and the viscous softening is held ready, to be tested
+only if AF-WHOLE reads a near-wall harm, with its adoption Peter's. Lane predictions: a harm on velocity or eddy viscosity
+in AF-WHOLE 0.40; given one, mainly near the wall 0.45.
+
+**For the book.** 05 states the softening as a precision margin with its consequence; 03 no longer says the boundary
+layer is resolved over many decades; 20 adds the near-wall question with the held alternative and an In-flight callout
+(@sec-oq-nearwall).
+
+Cost: 1.0 of 6 GPU-h (six GB300 short jobs, 367460 to 367749).
+
+*Read by the supervisor on 2026-10-24; added after the batch's second read, so not second-read.*
+
 ## 2026-10-22 — MECH-090: on Tensile2d the fixed compiled path's float32 gradients sit at a one-ulp eager floor, and pytorch/pytorch#195845 added a unit-dependent sink to ISLA's slice-state softmax (registered emulations not confirmed; a post-smoke emulation matches) {#sec-nb-mech090}
 
 **Question.** REF-090's Tensile2d control (@sec-nb-ref090-t2d-control) read (b) by its registered weighing, in which A2

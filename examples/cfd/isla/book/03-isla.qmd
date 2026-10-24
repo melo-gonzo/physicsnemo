@@ -1394,8 +1394,9 @@ normal on both sides of the wall. It plays the role of the normal in every
 invariant (the seed's $\hat\nu_q \cdot \hat g_k$, the layers'
 $\hat\rho_{qs} \cdot \hat\nu_q$). The distance enters as two channels,
 $[\,s_q,\ \operatorname{asinh}(s_q / 10^{-6})\,]$: the second is logarithmic
-away from the wall, so the boundary layer, where $s_q$ is tiny, is resolved
-over many decades, and linear through it. @fig-isla-interior draws both on
+above $s_q = 10^{-6}$, so distances from a millionth of the length unit up are
+resolved over many decades, and it is linear through the wall and below that
+(@sec-arch-interior-geometry). @fig-isla-interior draws both on
 the airfoil.
 
 ```{python}

@@ -1317,10 +1317,24 @@ sides of the wall, and $\operatorname{asinh}(s / \varepsilon)$ is $s /
 \varepsilon)$ far from it (`soft_log_length`): the code of a point is
 continuous through the surface, so a point on it, whose distance is zero or
 a rounding error of either sign, reads what the points just off it read on
-either side. The softening $\varepsilon$ is a numerical resolution in the
-length unit, not a parameter: above float32's resolution of a distance
-relative to $L$ and below the finest wall spacing of the reference datasets
-(the docstring of `soft_log_length` gives both).
+either side. The softening $\varepsilon = 10^{-6}$ is a precision margin in the length
+unit, not a model length: about 17 times float32's unit roundoff $2^{-24}$,
+so the rounding of float32 coordinates moves the channel by at most 0.12
+wherever the body sits in its domain (measured on AirfRANS with its far
+field, the DrivAerML Volume task and AeroZoo). Its consequence: the channel
+is linear for distances below $10^{-6} L$, and with the whole boundary $L$
+is the size of the domain. That linear part holds 19.5% of AirfRANS's drawn
+points with its far field, the viscous sublayer, the buffer layer and the
+start of the log layer ($y^+$ about 25 to 90, estimated from a friction
+velocity that was not measured), 0.57% on the DrivAerML Volume task, 0.01%
+on AeroZoo, and none on the lug or Tensile2d. The standings' trained input
+layers code $\log d$: their response to a tenfold change of distance is
+flat over five decades. At fixed weights a tenfold change at AirfRANS's
+first nodes moves the input layer 38 times less in the linear part than in
+the logarithmic one, so with the whole boundary those weights resolve the
+near-wall distance on AirfRANS less finely; whether a model trained with
+the whole boundary recovers it is open (@sec-oq-nearwall;
+results/campaigns_2026-10-23/nearwall/RESULTS.md, A1 to A3; results/campaigns_2026-10-23/nearwall/DESIGN.md, section 4).
 
 $\delta_q$ and $u_q$ are functions of the surface and its orientation alone:
 the same for every draw of the boundary tokens, unchanged by splitting a

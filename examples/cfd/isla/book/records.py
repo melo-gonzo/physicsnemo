@@ -70,6 +70,7 @@ FOLDER = {
     "geo_thin": "campaigns_2026-10-23",
     "hl_dup": "campaigns_2026-10-23",
     "dtt_fast_final": "campaigns_2026-10-23",
+    "nearwall": "campaigns_2026-10-23",
 }
 
 
