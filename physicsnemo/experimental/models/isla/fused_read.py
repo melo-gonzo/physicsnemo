@@ -25,6 +25,11 @@ weights, which autograd keeps for backward in every block (2e8 to 7e8 pairs at
 DrivAerML scale). Here the read's kernels compute :math:`\kappa` per tile from the
 basis and the weights instead, in forward and again in backward (as flash attention
 recomputes its logits), so a block keeps only its per-point output and log-sum-exp.
+The backward recomputes each pair's softmax weight and logit gradient once, in the
+by-point kernel, which writes them (float32) in the plan's by-source order; the
+by-source kernel sums them against the points' queries and output gradients into the
+keys' and values' gradients, chunk by chunk of each source's pairs, and the chunks of
+a source are then summed in order: no atomics, so the backward is deterministic.
 
 The arithmetic is the reference's but for summation order: :math:`\kappa` is a sum of
 exact products in float32 rounded to the basis's dtype (bfloat16 under autocast, as
@@ -176,14 +181,16 @@ if HAS_TRITON:
     @triton.jit
     def _fkr_bwd_point_kernel(
         off_ptr, bj_ptr, basis_ptr, w_ptr, logm_ptr, q_ptr, k_ptr, v_ptr, lse_ptr, dsum_ptr, dout_ptr,
-        dq_ptr, dbasis_ptr, dw_ptr,
+        inv_ptr, dq_ptr, dbasis_ptr, dw_ptr, prdz_ptr,
         scale, H: tl.constexpr, C: tl.constexpr, KC: tl.constexpr, F: tl.constexpr, BLOCK: tl.constexpr,
         BASIS_GRAD: tl.constexpr, NARROW: tl.constexpr,
     ):  # fmt: skip
         """One point: dq[s], the basis gradient of its pairs through this block's
-        weights added to dbasis (BASIS_GRAD), and its part of the weights' gradient,
-        dw[s] (2H, F) float32 with the heads at the even rows. NARROW: the basis is
-        bfloat16 or float16."""
+        weights added to dbasis (BASIS_GRAD), its part of the weights' gradient,
+        dw[s] (2H, F) float32 with the heads at the even rows, and each pair's softmax
+        weight and logit gradient, float32 and interleaved by head, in the pair's row
+        of prdz in the plan's by-source order (inv: each pair's position there).
+        NARROW: the basis is bfloat16 or float16."""
         s = tl.program_id(0).to(tl.int64)
         start = tl.load(off_ptr + s)
         end = tl.load(off_ptr + s + 1)
@@ -226,6 +233,12 @@ if HAS_TRITON:
             dp = tl.sum(v * dout[None, :, :], axis=2)  # (BLOCK, H)
             dz = pr * (dp - dsum[None, :])  # (BLOCK, H)
             dq += tl.sum(dz[:, :, None] * k, axis=0) * scale
+            ip = tl.load(inv_ptr + p, mask=msk, other=0).to(tl.int64)
+            tl.store(
+                prdz_ptr + ip[:, None] * (2 * H) + rr[None, :],
+                tl.reshape(tl.join(pr, dz), [BLOCK, 2 * H]),
+                mask=msk[:, None],
+            )
             ### The kernel-term gradient in the basis's dtype; NARROW: as a (BLOCK, 2H)
             ### matrix with the heads at the even columns, for tl.dot.
             dker_lp = dz.to(basis_ptr.dtype.element_ty)
@@ -258,32 +271,26 @@ if HAS_TRITON:
 
     @triton.jit
     def _fkr_bwd_source_kernel(
-        boff_ptr, item_src_ptr, item_chunk_ptr, perm_ptr, qib_ptr, basis_ptr, w_ptr, logm_ptr, q_ptr, k_ptr,
-        v_ptr, lse_ptr, dsum_ptr, dout_ptr, dk_ptr, dv_ptr,
-        scale, CHUNK, H: tl.constexpr, C: tl.constexpr, KC: tl.constexpr, F: tl.constexpr, BLOCK: tl.constexpr,
-        NARROW: tl.constexpr,
+        boff_ptr, item_src_ptr, item_chunk_ptr, qib_ptr, prdz_ptr, q_ptr, dout_ptr, part_ptr,
+        scale, CHUNK, H: tl.constexpr, C: tl.constexpr, KC: tl.constexpr, BLOCK: tl.constexpr,
     ):  # fmt: skip
         """One chunk of one source's pairs (the plan's by-source order): its part of
-        dk[j] and dv[j], added atomically."""
+        dk[j] and dv[j] from the pairs' softmax weights and logit gradients (prdz, by
+        the point kernel), in its row of part."""
         item = tl.program_id(0).to(tl.int64)
         j = tl.load(item_src_ptr + item).to(tl.int64)
         chunk = tl.load(item_chunk_ptr + item).to(tl.int64)
         start = tl.load(boff_ptr + j) + chunk * CHUNK
         end = tl.minimum(tl.load(boff_ptr + j + 1), start + CHUNK)
-        hh = tl.arange(0, H)
-        w = _weights(w_ptr, H, F)
-        wp = _weights_padded(w_ptr, H, F)
-        logm = tl.load(logm_ptr + j).to(tl.float32)
-        kj = tl.reshape(tl.load(k_ptr + j * (H * KC) + tl.arange(0, H * KC)).to(tl.float32), [H, KC])
-        vj = tl.reshape(tl.load(v_ptr + j * (H * C) + tl.arange(0, H * C)).to(tl.float32), [H, C])
+        rr = tl.arange(0, 2 * H)
         dk = tl.zeros([H, KC], tl.float32)
         dv = tl.zeros([H, C], tl.float32)
         for i0 in range(start, end, BLOCK):
             i = i0 + tl.arange(0, BLOCK)
             msk = i < end
-            p = tl.load(perm_ptr + i, mask=msk, other=0).to(tl.int64)
             qi = tl.load(qib_ptr + i, mask=msk, other=0).to(tl.int64)
-            _, ker = _kernel_term(basis_ptr, p, msk, w, wp, H, F, BLOCK, NARROW)
+            prdz = tl.load(prdz_ptr + i[:, None] * (2 * H) + rr[None, :], mask=msk[:, None], other=0.0)
+            pr, dz = tl.split(tl.reshape(prdz, [BLOCK, H, 2]))
             q = tl.reshape(
                 tl.load(
                     q_ptr + qi[:, None] * (H * KC) + tl.arange(0, H * KC)[None, :],
@@ -291,12 +298,6 @@ if HAS_TRITON:
                 ).to(tl.float32),
                 [BLOCK, H, KC],
             )
-            score = tl.sum(q * kj[None, :, :], axis=2)
-            z = ker + score * scale + logm
-            lse = tl.load(lse_ptr + qi[:, None] * H + hh[None, :], mask=msk[:, None], other=0.0)
-            dsum = tl.load(dsum_ptr + qi[:, None] * H + hh[None, :], mask=msk[:, None], other=0.0)
-            pr = tl.exp(z - lse)
-            pr = tl.where(msk[:, None], pr, 0.0)
             dout = tl.reshape(
                 tl.load(
                     dout_ptr + qi[:, None] * (H * C) + tl.arange(0, H * C)[None, :],
@@ -304,12 +305,28 @@ if HAS_TRITON:
                 ).to(tl.float32),
                 [BLOCK, H, C],
             )
-            dp = tl.sum(dout * vj[None, :, :], axis=2)
-            dz = pr * (dp - dsum)
             dv += tl.sum(pr[:, :, None] * dout, axis=0)
             dk += tl.sum(dz[:, :, None] * q, axis=0) * scale
-        tl.atomic_add(dk_ptr + j * (H * KC) + tl.arange(0, H * KC), tl.reshape(dk, [H * KC]))
-        tl.atomic_add(dv_ptr + j * (H * C) + tl.arange(0, H * C), tl.reshape(dv, [H * C]))
+        row = part_ptr + item * (H * (KC + C))
+        tl.store(row + tl.arange(0, H * KC), tl.reshape(dk, [H * KC]))
+        tl.store(row + H * KC + tl.arange(0, H * C), tl.reshape(dv, [H * C]))
+
+    @triton.jit
+    def _fkr_source_sum_kernel(
+        item_off_ptr, part_ptr, dk_ptr, dv_ptr, H: tl.constexpr, C: tl.constexpr, KC: tl.constexpr,
+    ):  # fmt: skip
+        """One source: dk[j] and dv[j], the sum of its items' parts in item order."""
+        j = tl.program_id(0).to(tl.int64)
+        a = tl.load(item_off_ptr + j)
+        b = tl.load(item_off_ptr + j + 1)
+        dk = tl.zeros([H * KC], tl.float32)
+        dv = tl.zeros([H * C], tl.float32)
+        for t in range(a, b):
+            row = part_ptr + t * (H * (KC + C))
+            dk += tl.load(row + tl.arange(0, H * KC))
+            dv += tl.load(row + H * KC + tl.arange(0, H * C))
+        tl.store(dk_ptr + j * (H * KC) + tl.arange(0, H * KC), dk)
+        tl.store(dv_ptr + j * (H * C) + tl.arange(0, H * C), dv)
 
 
 if HAS_TRITON:
@@ -497,11 +514,16 @@ def _narrow(basis: torch.Tensor) -> bool:
 
 
 def _plan_source_items(plan: PairPlan):
-    """The by-source work items of ``plan``, built once (their count costs a host sync)
-    and kept on the plan for every block's backward."""
+    """The by-source work items of ``plan`` (source and chunk index), each source's
+    first item and each pair's position in the by-source order, built once (the
+    items' count costs a host sync) and kept on the plan for every block's backward."""
     items = getattr(plan, "_fused_source_items", None)
     if items is None:
-        items = _source_items(plan, SOURCE_CHUNK)
+        src, chunk_idx = _source_items(plan, SOURCE_CHUNK)
+        item_off = torch.searchsorted(src, torch.arange(plan.n_b + 1, device=src.device, dtype=src.dtype))
+        inv = torch.empty_like(plan.perm)
+        inv[plan.perm.long()] = torch.arange(plan.perm.shape[0], device=inv.device, dtype=inv.dtype)
+        items = src, chunk_idx, item_off, inv
         plan._fused_source_items = items
     return items
 
@@ -540,22 +562,26 @@ class _FusedKernelRead(torch.autograd.Function):
         acc = _basis_grad_target(ctx, basis)
         dbasis = acc if acc is not None else basis
         dw_parts = torch.empty(n_q, 2 * h, f, device=q.device, dtype=torch.float32)
-        dk = torch.zeros(plan.n_b, h, kc, device=q.device, dtype=torch.float32)
-        dv = torch.zeros(plan.n_b, h, c, device=q.device, dtype=torch.float32)
+        dk = torch.empty(plan.n_b, h, kc, device=q.device, dtype=torch.float32)
+        dv = torch.empty(plan.n_b, h, c, device=q.device, dtype=torch.float32)
+        src, chunk_idx, item_off, inv = _plan_source_items(plan)
+        prdz = torch.empty(inv.shape[0], 2 * h, device=q.device, dtype=torch.float32)
         if n_q:
             _fkr_bwd_point_kernel[(n_q,)](
-                plan.q_offsets, plan.bj, basis, w, logm, q, k, v, lse, dsum, dout, dq, dbasis, dw_parts, scale,
-                H=h, C=c, KC=kc, F=f, BLOCK=BLOCK_PAIRS, BASIS_GRAD=acc is not None,
+                plan.q_offsets, plan.bj, basis, w, logm, q, k, v, lse, dsum, dout, inv, dq, dbasis, dw_parts, prdz,
+                scale, H=h, C=c, KC=kc, F=f, BLOCK=BLOCK_PAIRS, BASIS_GRAD=acc is not None,
                 NARROW=_narrow(basis), num_warps=NUM_WARPS,
             )  # fmt: skip
         if plan.n_b:
-            src, chunk_idx = _plan_source_items(plan)
+            ### Each source's dk and dv: every item's part, then their sum in item order.
+            parts = torch.empty(src.shape[0], h * (kc + c), device=q.device, dtype=torch.float32)
             if src.shape[0]:
                 _fkr_bwd_source_kernel[(src.shape[0],)](
-                    plan.b_offsets, src, chunk_idx, plan.perm, plan.qi_by_b, basis, w, logm, q, k, v, lse, dsum,
-                    dout, dk, dv, scale, SOURCE_CHUNK,
-                    H=h, C=c, KC=kc, F=f, BLOCK=BLOCK_PAIRS, NARROW=_narrow(basis), num_warps=NUM_WARPS,
+                    plan.b_offsets, src, chunk_idx, plan.qi_by_b, prdz, q, dout, parts, scale, SOURCE_CHUNK,
+                    H=h, C=c, KC=kc, BLOCK=BLOCK_PAIRS, num_warps=NUM_WARPS,
                 )  # fmt: skip
+            del prdz
+            _fkr_source_sum_kernel[(plan.n_b,)](item_off, parts, dk, dv, H=h, C=c, KC=kc, num_warps=1)
         dw = dw_parts[:, 0::2].sum(0).to(w.dtype)
         dtoken = None if acc is None else basis.new_empty(0)
         return None, dtoken, None, dw, None, dq.to(q.dtype), dk.to(k.dtype), dv.to(v.dtype), None, None, None

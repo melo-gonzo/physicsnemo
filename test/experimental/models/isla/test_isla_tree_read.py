@@ -1389,6 +1389,44 @@ def test_fused_reads_sum_their_basis_gradients_as_autograd_does():
     assert torch.cuda.memory_allocated() == base
 
 
+@cuda_only
+def test_fused_kernel_read_backward_is_deterministic():
+    """The fused read's backward runs no atomics: two backward passes of one read give
+    every gradient bitwise, with sources read by many points (each split over several
+    programs, whose parts are summed in order) and sources read by none (zero); in
+    float32, where a change of summation order shows in the keys' and values' gradients."""
+    from physicsnemo.experimental.models.isla.fused_read import (
+        SOURCE_CHUNK,
+        fused_kernel_read,
+    )
+    from physicsnemo.experimental.models.isla.segment_softmax import PairPlan
+
+    dev = torch.device("cuda")
+    g = torch.Generator(device=dev).manual_seed(6)
+    n_q, n_b, h, kc, c, f = 500, 300, 8, 4, 8, 16
+    counts = torch.randint(1, 400, (n_q,), generator=g, device=dev)
+    qi = torch.repeat_interleave(torch.arange(n_q, device=dev), counts)
+    bj = torch.randint(0, n_b - 3, (qi.shape[0],), generator=g, device=dev)
+    bj[::3] = 7
+    plan = PairPlan.build(qi, bj, n_q, n_b)
+    assert int((bj == 7).sum()) > 20 * SOURCE_CHUNK
+    leaves = [
+        torch.randn(*s, generator=g, device=dev)
+        for s in ((qi.shape[0], f), (h, f), (n_q, h, kc), (n_b, h, kc), (n_b, h, c))
+    ]
+    logm = -8 * torch.rand(n_b, generator=g, device=dev)
+    seed = torch.randn(n_q, h, c, generator=g, device=dev)
+    grads = []
+    for _ in range(2):
+        ins = [t.clone().requires_grad_(True) for t in leaves]
+        b, w, q, k, v = ins
+        (fused_kernel_read(b, w, logm, q, k, v, plan, 0.5) * seed).sum().backward()
+        grads.append([t.grad for t in ins])
+    for a, b in zip(*grads):
+        assert torch.equal(a, b)
+    assert not grads[0][3][-3:].any() and not grads[0][4][-3:].any()
+
+
 @pytest.mark.parametrize("dim", [3, 2])
 def test_tree_read_pairs_basis_from_the_plan_is_exact_for_a_batch(
     dim, caplog, monkeypatch
