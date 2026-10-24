@@ -1389,12 +1389,14 @@ def test_fused_basis_gelu_tables_are_pytorchs_gelu_on_every_input(dtype):
     from physicsnemo.experimental.models.isla import fused_basis
 
     dev = torch.device("cuda")
-    f, g = fused_basis._gelu_tables(dev, dtype)
+    f, fg = fused_basis._gelu_tables(dev, dtype)
+    f_bwd, g = fg.view(torch.float32).view(-1, 2).unbind(1)
     bits = torch.arange(1 << 16, dtype=torch.int32, device=dev)
     x = bits.to(torch.int16).view(dtype)
     ok = torch.isfinite(x)
     gen = torch.Generator(device=dev).manual_seed(0)
     assert torch.equal(f[ok], torch.nn.functional.gelu(x)[ok])
+    assert torch.equal(f_bwd[ok], f.float()[ok])
     for _ in range(8):
         dy = torch.randn(x.shape, generator=gen, device=dev).mul(4).to(dtype)
         ref = torch.ops.aten.gelu_backward(dy, x)
