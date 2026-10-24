@@ -60,9 +60,13 @@ print(f"**On the GINOT bracket lug, scored on the native mesh, {head} on the von
       f"ISLA's posed error is {TX_PN:.4f} times its native one (@sec-lug-ties).")
 print()
 print(S.in_flight_callout("lug"))
-print('::: {.callout-note title="In flight"}\nThe ISLA numbers of this standing come from checkpoints trained with the geometry '
-      'of @sec-standing-geometry, whose closest-feature ties follow the order of the search. The lug standing trained with the '
-      "class's geometry replaces them, and the ledger (@sec-ledger) tracks it.\n:::")
+_LF = REC.load("ref090", "r090_final.json")["fix"]
+_lr = _LF["r090fix_lug_dtt"]["von_mises_l2"]["dtt"]["mean"] / _LF["lug"]["von_mises_l2"]["fix"]["mean"]
+print(S.form_callout(f"ISLA-DTT 0.9.0, both forms trained on the fixed compiled path, has {_lr:.3f} times interacting ISLA's "
+                     "von Mises error, with both of its seeds above both of ISLA's (@sec-aerozoo-form)",
+                     what="interacting ISLA 0.9.0, trained with the geometry of @sec-standing-geometry, whose closest-feature "
+                          "ties follow the order of the search",
+                     also="the lug standing trained with the class's geometry"))
 ```
 
 ## The problem: a clamped lug pressed in its hole {#sec-lug-problem}
@@ -230,7 +234,7 @@ print(f"**On the GINOT bracket lug at 2,400 training lugs, scored on the native 
 ```{python}
 #| label: tab-lug-protocols
 #| output: asis
-print(ST.table("tbl-lug-protocols", f"The GINOT bracket lug, 2,400 training lugs, {N_TEST} test lugs"))
+print(ST.table("tbl-lug-protocols", f"The GINOT bracket lug (ISLA: interacting ISLA 0.9.0), 2,400 training lugs, {N_TEST} test lugs"))
 ```
 
 ```{python}
@@ -371,8 +375,8 @@ print("- **The standing is of the interacting form.** ISLA-DTT, whose prediction
       f"({R.num(GL3['bf16']):.2f}; {R.source('dtt_knobs', 'gap/gap_table.md')}). Rotated and translated, ISLA-DTT's error on "
       "the lug is 1.53 and 1.98 times its native error (seeds 42 and 43): rounding decides the sign octant of most of "
       "its cells' normals and many exact ties of the forest's box test, so the posed lug gets another forest "
-      f"(@sec-arch-tree-read; {R.source('dtt_knobs', 'sens/sens_table.md')}; {R.source('dtt_pose', 'MECHANISMS.md')}). Which "
-      "form is ISLA's interior model is open (@sec-oq-dtt).")
+      f"(@sec-arch-tree-read; {R.source('dtt_knobs', 'sens/sens_table.md')}; {R.source('dtt_pose', 'MECHANISMS.md')}). ISLA-DTT "
+      "is ISLA's default interior form all the same, on principle (@sec-aerozoo-form).")
 ```
 
 - **No tensor target and no geometry class change.** Tensile2d measures a tensor target (@sec-interior-tensile2d); the lug's shapes are one topology.

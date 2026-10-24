@@ -568,7 +568,10 @@ sn = lambda s: f"`{SPLIT_NAME[s]}`"
 azc = lambda a, s, f: AZA[a]["splits"][s][f]
 azr = lambda a, s, f: azc(a, s, f)["mean"] / azc("ISLA", s, f)["mean"]   # baseline ÷ ISLA, seed means (R1)
 mm = lambda a, s, f, d=3: f"{azc(a, s, f)['mean']:.{d}f} [{azc(a, s, f)['median']:.{d}f}]"
-AZSRC = "results/char/aerozoo_090.json"
+AZSRC = "results/char/aerozoo_090_final.json"
+ARCH_T = ("ISLA", "ISLA-DTT", "GeoTransolver", "Transolver")
+seeds_of = lambda a, s, f: [azc(a, s, f)["per_seed"][k] for k in ("42", "43")]
+fp = lambda xs, d=2: ", ".join(f"`{SPLIT_NAME[x]}`" for x in xs)
 DIAG = AZS["diagnostics"]
 PD = R.load("az_diag", "pdiag/pdiag.tsv")
 pdm = lambda sp, seed, col: statistics.median(float(r[col]) for r in PD if r["split"] == sp and r["seed"] == seed)
@@ -579,13 +582,27 @@ pdm = lambda sp, seed, col: statistics.median(float(r[col]) for r in PD if r["sp
 #| output: asis
 v_above = sum(azr("GeoTransolver", s, "velocity_l2") > 1 for s in HELD)
 over1 = [s for s in HELD if azc("ISLA", s, "pressure_l2")["mean"] > ZERO]
+assert all(azc("ISLA-DTT", s, "pressure_l2")["mean"] > ZERO for s in over1)
+v_dtt = sum(azr("ISLA-DTT", s, "velocity_l2") < 1 for s in HELD)
+gt_v_lead = [s for s in HELD if azc("GeoTransolver", s, "velocity_l2")["mean"] < azc("ISLA", s, "velocity_l2")["mean"]]
+gt_vm_lead = [s for s in HELD if s not in gt_v_lead
+              and azc("GeoTransolver", s, "velocity_l2")["median"] < azc("ISLA", s, "velocity_l2")["median"]]
 print("**On AeroZoo both baselines end as about a zero predictor on pressure, so ISLA's pressure lead there is a lead over predicting "
       f"zero; on velocity, where GeoTransolver learns in part, GeoTransolver ÷ ISLA is {S.fmt_ratio(azr('GeoTransolver', 'full', 'velocity_l2'))} "
-      f"on `full` and above one on {v_above} of the six held-out splits; and "
-      f"on two held-out families, {' and '.join(sn(s) for s in over1)}, ISLA's own pressure error is above the zero predictor's.** "
+      f"on `full` and above one on {v_above} of the six held-out splits; ISLA-DTT's velocity error is below interacting ISLA's on "
+      f"{v_dtt} of the six; and on two held-out families, {' and '.join(sn(s) for s in over1)}, the pressure error of both forms of "
+      "ISLA is above the zero predictor's.** "
       "Every model is scored on the test side of each split, from its final checkpoint (epoch 250), in float32, at 200,000 interior "
       "points, two seeds. The relative L2 is the physical one per field and case, so predicting zero scores exactly "
-      f"{ZERO:.1f} on every field and case. ISLA and GeoTransolver are trained on all seven splits and Transolver on `full`. "
+      f"{ZERO:.1f} on every field and case. ISLA, ISLA-DTT and GeoTransolver are trained on all seven splits and Transolver on `full`. "
+      "Transolver is at its documented floor: it receives no inlet or outlet value, so it cannot see the inlet, and on `full` its "
+      f"velocity error is {S.fmt_ratio(azr('Transolver', 'full', 'velocity_l2'))} times ISLA's. GeoTransolver leads ISLA on the velocity "
+      f"of {fp(gt_v_lead)} ({mm('GeoTransolver', gt_v_lead[0], 'velocity_l2', 2)} against {mm('ISLA', gt_v_lead[0], 'velocity_l2', 2)}) "
+      f"and on the median velocity of {fp(gt_vm_lead)} ({azc('GeoTransolver', gt_vm_lead[0], 'velocity_l2')['median']:.2f} against "
+      f"{azc('ISLA', gt_vm_lead[0], 'velocity_l2')['median']:.2f}). Where ISLA's pressure error is above one, GeoTransolver's error of "
+      "about one leads it only because predicting zero beats an overshoot: on `profile_crossflow` ISLA drives the flow about twice "
+      "too fast and its pressure follows the speed, and on `family_non_box` it gets the shape of the pressure wrong "
+      "(@sec-aerozoo-failures). "
       "The readout registered before any score, for each split and field, is the seed-mean ratio of each baseline's error to ISLA's, "
       "with two summaries: its mean over the six held-out splits and the count of those splits on which it is above one. A held-out "
       "split's *penalty*, an architecture's error there divided by its own `full` error, is read beside it as a description. Because a "
@@ -595,21 +612,24 @@ print("**On AeroZoo both baselines end as about a zero predictor on pressure, so
 ```{python}
 #| label: make-tbl-aerozoo-standing
 #| output: asis
-print("| split | cases | ISLA: velocity | ISLA: pressure | GeoTransolver: velocity | GeoTransolver: pressure | Transolver: velocity | Transolver: pressure |")
-print("|---|--:|---|---|---|---|---|---|")
+print("| split | cases | " + " | ".join(f"{a}: velocity | {a}: pressure" for a in ARCH_T) + " |")
+print("|---|--:|" + "---|" * (2 * len(ARCH_T)))
 for s in AZS["splits"]:
-    t = (" | ".join(mm("Transolver", s, f) for f in ("velocity_l2", "pressure_l2")) if s in AZA["Transolver"]["splits"]
-         else "not trained | not trained")
-    print(f"| {sn(s)} | {AZS['n_cases'][s]:,} | {mm('ISLA', s, 'velocity_l2')} | {mm('ISLA', s, 'pressure_l2')} | "
-          f"{mm('GeoTransolver', s, 'velocity_l2')} | {mm('GeoTransolver', s, 'pressure_l2')} | {t} |")
-print(f"| predicting zero | | {ZERO:.3f} | {ZERO:.3f} | {ZERO:.3f} | {ZERO:.3f} | {ZERO:.3f} | {ZERO:.3f} |")
+    cells = [mm(a, s, f) if s in AZA[a]["splits"] else "not trained" for a in ARCH_T for f in ("velocity_l2", "pressure_l2")]
+    print(f"| {sn(s)} | {AZS['n_cases'][s]:,} | " + " | ".join(cells) + " |")
+print("| predicting zero | | " + " | ".join(f"{ZERO:.3f}" for _ in range(2 * len(ARCH_T))) + " |")
 print()
+BASE_PMED = [azc(a, s, "pressure_l2")["median"] for a in S.BASELINES for s in AZA[a]["splits"]]
 print(": The AeroZoo standing on velocity and pressure: each architecture at its reference configuration, relative L2 of the physical "
       "field, seed mean of the mean over the test cases, then [the median over cases of the per-case seed mean]; two seeds, final "
       "checkpoint, float32, 200,000 interior points; `full` is in distribution, the other six splits hold a family out of training "
-      f"(@tbl-aerozoo-splits). GeoTransolver: {AZA['GeoTransolver']['note']}. Transolver: {AZA['Transolver']['note']}. GeoTransolver's "
+      "(@tbl-aerozoo-splits). The ISLA columns are interacting ISLA; the ISLA-DTT columns are the same configuration with read-only "
+      "prediction points. GeoTransolver and Transolver are about a zero predictor on pressure: predicting zero scores "
+      f"{ZERO:.1f}, and their medians over cases are {min(BASE_PMED):.3f} to {max(BASE_PMED):.3f}. "
+      f"GeoTransolver: {AZA['GeoTransolver']['note']}. Transolver: {AZA['Transolver']['note']}. GeoTransolver's "
       "velocity is not converged at the last epoch (@sec-aerozoo-baselines). How to read this: lower is better and the last row is the "
-      "zero predictor; a mean far above its median is a few cases with errors far above one. It does not show ISLA-DTT. "
+      "zero predictor; a mean far above its median is a few cases with errors far above one; the per-seed values are in "
+      f"{R.source('az_decide_final', 'tables_final.md')}, with the eddy viscosity, $k$ and $\\omega$. "
       f"Data: {AZSRC}. {{#tbl-aerozoo-standing}}")
 ```
 
@@ -624,16 +644,16 @@ for f, lab in AZF.items():
           + f" | {S.fmt_ratio(mean(r[s] for s in HELD))} | {sum(r[s] > 1 for s in HELD)} of {len(HELD)} |")
 for f, lab in AZF.items():
     print(f"| Transolver ÷ ISLA, {lab} | {S.fmt_ratio(azr('Transolver', 'full', f))} | " + " | ".join("–" for _ in HELD) + " | – | – |")
-print("| ISLA-DTT ÷ ISLA | " + " | ".join("in flight" for _ in AZS["splits"]) + " | in flight | in flight |")
 print()
 print(": The registered readout of the AeroZoo standing: the seed-mean ratio of each baseline's error to ISLA's per split and field, "
       "with its mean over the six held-out splits and the count of those splits on which it is above one; Transolver is trained on "
       "`full` only. How to read this: a ratio above one favors ISLA; on pressure, eddy viscosity, turbulent kinetic energy and specific "
       "dissipation both baselines are about a zero predictor (@tbl-aerozoo-standing), so a ratio above one there says ISLA beats "
-      "predicting zero, and on velocity GeoTransolver is not converged. "
-      f"Data: {AZSRC}. {{#tbl-aerozoo-r1}}")
+      "predicting zero, and on velocity GeoTransolver is not converged; ISLA is interacting ISLA, and ISLA-DTT against it is "
+      f"@tbl-aerozoo-form. Data: {AZSRC}. {{#tbl-aerozoo-r1}}")
 print()
-print(S.in_flight_callout("aerozoo"))
+print(S.form_callout("its columns in @tbl-aerozoo-standing are ISLA-DTT 0.9.0, read against interacting ISLA in "
+                     "@sec-aerozoo-form", what="ISLA 0.9.0 in both its interior forms, GeoTransolver and Transolver"))
 ```
 
 ```{python}
@@ -641,7 +661,7 @@ print(S.in_flight_callout("aerozoo"))
 #| output: asis
 pen = {s: azc("ISLA", s, "velocity_l2")["mean"] / azc("ISLA", "full", "velocity_l2")["mean"] for s in HELD}
 order = sorted(pen, key=pen.get); lo, hi = order[0], order[-1]
-print(f"ISLA-DTT on the same seven splits decides, with these rows, which interior form ISLA uses (@sec-oq-dtt). Described as penalties, "
+print(f"Described as penalties, "
       f"ISLA's velocity error on a held-out family is {pen[lo]:.1f} times its `full` error on {sn(lo)} and {pen[hi]:.0f} times on {sn(hi)}; "
       f"it pays least on {', '.join(sn(s) for s in order[:3])} and most on {' and '.join(sn(s) for s in order[-2:])}. No AeroZoo run is "
       "exposed to the compiled-path fault of the other interior chapters: the geometry runs in the fused kernel, which keeps the fault "
@@ -649,6 +669,123 @@ print(f"ISLA-DTT on the same seven splits decides, with these rows, which interi
       f"the first {_re.search(r'Cases: the first (\d+) of full.test', ' '.join(R.load('az_diag', 'cmpdiag/README.md').split())).group(1)} "
       f"`full` test cases compiled and eager predictions agree to {_re.search(r'at most ([0-9.e-]+) for ISLA', R.load('az_diag', 'cmpdiag/README.md')).group(1)} "
       f"relative ({R.source('az_diag', 'cmpdiag/README.md')}).")
+```
+
+```{python}
+#| label: para-aerozoo-reynolds-scale
+#| output: asis
+LZ = R.load("lre_az", "lreaz.json")
+lz = lambda f: LZ["rule"][f]["mean"]
+LZT = " ".join(R.load("lre_az", "RESULTS.md").split())
+in_band = _re.search(r"on the (\d+) test cases inside ISLA's training band, B ÷ A is ([\d.]+) for pressure and ([\d.]+) for velocity", LZT).groups()
+fit_c = _re.search(r"A shows \{([\d.]+), ([\d.]+)\}", LZT).groups()
+far = LZ["profile"][-1]
+print("**The scale of ISLA's Reynolds input.** ISLA reads $\\log_{10}(U L / \\nu)$, standardized by the training cases' mean and "
+      f"spread. On `reynolds` those are {fit_c[0]} and {fit_c[1]} decades. Trained instead "
+      "on a fixed scale, $\\log_{10}(\\mathrm{Re} / 10^6)$, two seeds, ISLA matches the standing inside its training band (velocity "
+      f"{float(in_band[2]):.3f} times, pressure {float(in_band[1]):.3f} times the standing's error, on the {in_band[0]} test cases "
+      f"there). Beyond the band its velocity error grows faster: {lz('velocity_l2')['ratio']:.2f} times on the test set, which the "
+      f"registered rule reads as *{lz('velocity_l2')['verdict']}*, and {far['ratio']['velocity_l2']:.2f} times at "
+      f"{far['bin'][0]:g} to {round(far['bin'][1]):g} decades above it. Pressure reads *{lz('pressure_l2')['verdict']}* by the registered "
+      f"rule ({lz('pressure_l2')['ratio']:.3f} times), and the eddy viscosity improves ({lz('nut_l2')['ratio']:.2f} times). So the "
+      f"standing keeps the fitted constants (@sec-oq-reynolds). Data: {R.source('lre_az', 'lreaz.json')}; "
+      f"{R.source('lre_az', 'RESULTS.md')} (section 3).")
+```
+
+### ISLA against ISLA-DTT, and ISLA's default interior form {#sec-aerozoo-form}
+
+```{python}
+#| label: para-aerozoo-form
+#| output: asis
+AZR_ = " ".join(R.load("az_compliant", "PREREG_v2.md").split())
+DTT_CLEAR = float(_re.search(r"\*\*ISLA-DTT clearly:\*\* R ≤ ([\d.]+) on velocity and pressure on every held-out split", AZR_).group(1))
+ISLA_CLEAR = float(_re.search(r"\*\*ISLA clearly:\*\* the arithmetic mean of R over the six held-out splits ≥ ([\d.]+) on velocity or on pressure", AZR_).group(1))
+AZD = " ".join(R.load("az_decide_final", "RESULTS.md").split())
+RULING = _re.search(r'Peter\'s ruling \("([^"]+)"\)', AZD).group(1)
+PV = ("velocity_l2", "pressure_l2")
+Rm = {f: mean(azr("ISLA-DTT", s, f) for s in HELD) for f in PV}
+fail_dtt = [(s, f) for s in HELD for f in PV if azr("ISLA-DTT", s, f) > DTT_CLEAR]
+assert len(fail_dtt) == 1 and max(Rm.values()) < ISLA_CLEAR
+sd, fd = fail_dtt[0]
+overlap = lambda s, f: max(min(seeds_of(a, s, f)) for a in ("ISLA", "ISLA-DTT")) <= min(max(seeds_of(a, s, f)) for a in ("ISLA", "ISLA-DTT"))
+apart = [s for s in HELD if not any(overlap(s, f) for f in PV)]
+both_ov = [s for s in HELD if all(overlap(s, f) for f in PV)]
+p_ov = [s for s in HELD if overlap(s, "pressure_l2") and not overlap(s, "velocity_l2")]
+v_ov = [s for s in HELD if overlap(s, "velocity_l2") and not overlap(s, "pressure_l2")]
+assert all(azr("ISLA-DTT", s, f) < 1 for s in apart for f in PV)
+p_better = sum(azr("ISLA-DTT", s, "pressure_l2") < 1 for s in HELD)
+print(f"**On AeroZoo's six held-out splits ISLA-DTT's error is below interacting ISLA's on velocity on all six and on pressure on "
+      f"{p_better}; the rule registered for the two forms reads that as a close call, and by Peter's ruling a close call makes "
+      "ISLA-DTT ISLA's default interior form, on principle.** The rule was registered before any ISLA-DTT score: per held-out split "
+      "and field, $R$ = ISLA-DTT ÷ ISLA, the ratio of seed means, on velocity and pressure (@tbl-aerozoo-form). ISLA-DTT is clearly "
+      f"the more accurate if $R \\le {DTT_CLEAR:g}$ on both fields on every held-out split; that fails on the {SPLIT_NAME[sd]} "
+      f"{AZF[fd]} alone ($R$ = {azr('ISLA-DTT', sd, fd):.3f}). Interacting ISLA is clearly the more accurate if the six-split "
+      f"arithmetic mean of $R$ is at least {ISLA_CLEAR:.2f} on velocity or on pressure; the means are {Rm['velocity_l2']:.3f} and "
+      f"{Rm['pressure_l2']:.3f}. Neither holds, so the read is the close call between the two bands. Against the seed spread the "
+      f"closeness is not uniform: on {fp(apart)} the two forms' seed ranges do not overlap on either field, and there ISLA-DTT is "
+      "the more accurate beyond the spread"
+      + (f"; on {fp(v_ov)} they overlap on velocity only" if v_ov else "")
+      + f"; on {fp(both_ov)} they overlap on both fields" + (f", and on {fp(p_ov)} on pressure only" if p_ov else "") + ". "
+      f"The one ratio against ISLA-DTT, {SPLIT_NAME[sd]} {AZF[fd]}, is on a field where both forms do worse than predicting "
+      f"zero ({azc('ISLA', sd, fd)['mean']:.2f} and {azc('ISLA-DTT', sd, fd)['mean']:.2f}).")
+print()
+AFS_ = S.Standing("airfrans")
+af_v = {f: AFS_.verdict("ISLA-DTT", f) for f in AFS_.ds.headline}
+LDT_ = R.load("ref090", "r090_final.json")["fix"]
+l_i, l_d = LDT_["lug"]["von_mises_l2"]["fix"], LDT_["r090fix_lug_dtt"]["von_mises_l2"]["dtt"]
+assert min(l_d["per_seed"].values()) > max(l_i["per_seed"].values())
+CR = _re.search(r"ISLA-DTT ÷ ISLA per split \(median step / mean step / peak memory / train GPU-h projected to 250 epochs\): (.*)",
+                R.load("az_decide_final", "tables_final.md")).group(1)
+CR = {p.split(" ", 1)[0]: [float(x) for x in p.split(" ", 1)[1].split(" / ")] for p in CR.split("; ")}
+assert len(CR) == len(AZS["splits"])
+cr = lambda i: (min(v[i] for v in CR.values()), max(v[i] for v in CR.values()))
+print(f"Peter ruled on this branch in advance, before any ISLA-DTT test score existed: \"{RULING}\". The principle is the one "
+      "of @sec-limits-query-independence. ISLA-DTT's prediction at a point is a function of that point and the boundary alone, so it "
+      "does not depend on which other points are queried; interacting ISLA's does, and on AeroZoo `full` single-point requests raise "
+      "its error severalfold (@sec-aerozoo-request). The ruling settles a close call; it does not make ISLA-DTT the more accurate "
+      "form everywhere. On the AirfRANS interior task at the reference configuration, interacting ISLA "
+      + ", and ".join(f"{v} ISLA-DTT on {AFS_.fields[f]}" for f, v in af_v.items())
+      + " (ISLA-DTT ÷ ISLA " + " / ".join(f"{AFS_.ratio('ISLA-DTT', f):.3f}" for f in AFS_.ds.headline) + "; "
+      "@sec-airfrans-dtt-reference), and on the GINOT bracket lug, both forms trained on the fixed compiled path, ISLA-DTT ÷ ISLA is "
+      f"{l_d['mean'] / l_i['mean']:.3f} on the von Mises stress, with both of ISLA-DTT's seeds above both of ISLA's (ratios of "
+      f"arithmetic seed means; {R.source('ref090', 'r090_final.json')}). ISLA-DTT also costs more: on AeroZoo its median training "
+      f"step is {cr(0)[0]:.2f} to {cr(0)[1]:.2f} times interacting ISLA's over the seven splits, its peak memory {cr(2)[0]:.2f} to "
+      f"{cr(2)[1]:.2f} times, and its training GPU-hours {cr(3)[0]:.1f} to {cr(3)[1]:.1f} times (four GB300 GPUs, bfloat16; "
+      f"{R.source('az_decide_final', 'tables_final.md')}, Cost).")
+print()
+print("The interacting form stays in the class. A surface task uses it: under Peter's ruling for the surface task, it reads every "
+      "named boundary and predicts at the cells of the boundaries it names (@sec-arch-modes). On an interior task it stays "
+      "available as an explicit choice, `query_independent=False`. This read compares the two forms with ISLA-DTT's forest as the "
+      "code builds it, whose octant test is not antipodal at zero normal components (@sec-arch-tree-read). Data: "
+      f"{AZSRC}; {R.source('az_decide_final', 'RESULTS.md')} (sections 2 and 3); {R.source('az_compliant', 'PREREG_v2.md')} "
+      "(sections 12(f) and 13).")
+```
+
+```{python}
+#| label: make-tbl-aerozoo-form
+#| output: asis
+print("| split | $R$, velocity (seed 42, 43) | $R$, pressure (seed 42, 43) | seed ranges overlap: velocity / pressure |")
+print("|---|--:|--:|---|")
+sm = lambda s, f: ", ".join(f"{d / i:.3f}" for d, i in zip(seeds_of("ISLA-DTT", s, f), seeds_of("ISLA", s, f)))
+yn = lambda b: "yes" if b else "no"
+for s in HELD + ["full"]:
+    lab = sn(s) + (" (in distribution, not in the rule)" if s == "full" else "")
+    print(f"| {lab} | " + " | ".join(f"{azr('ISLA-DTT', s, f):.3f} ({sm(s, f)})" for f in PV)
+          + f" | {yn(overlap(s, 'velocity_l2'))} / {yn(overlap(s, 'pressure_l2'))} |")
+print(f"| six-split arithmetic mean | {Rm['velocity_l2']:.3f} | {Rm['pressure_l2']:.3f} | |")
+print()
+print(": ISLA against ISLA-DTT on AeroZoo, the readout registered before any ISLA-DTT score: $R$ = ISLA-DTT ÷ ISLA, the ratio of "
+      "seed means of the case-mean relative L2, with the seed-matched ratios beside it, and whether the two forms' two-seed ranges "
+      "overlap; ISLA is interacting ISLA, both at the reference configuration, two seeds, final checkpoint, float32, 200,000 "
+      f"interior points. The registered bands: ISLA-DTT clearly if $R \\le {DTT_CLEAR:g}$ on both fields on every held-out split; "
+      f"interacting ISLA clearly if the six-split mean of $R$ is at least {ISLA_CLEAR:.2f} on either field; otherwise a close call. "
+      "How to read this: a ratio below one favors ISLA-DTT; where the seed ranges overlap, the difference is within the seed "
+      f"spread. Data: {AZSRC}; the rule, {R.source('az_compliant', 'PREREG_v2.md')}, section 12(f). {{#tbl-aerozoo-form}}")
+print()
+print(S.in_flight_callout({"what": "ISLA-DTT as the standing trained it: its read before the faster code, and its forest "
+                                   "before the octant fix of @sec-arch-tree-read",
+                           "replacement": "Faster ISLA-DTT code, and ISLA-DTT retrained with the fixed forest,"}).replace(
+    "is being measured, and the ledger (@sec-ledger) tracks it", "are being built and measured, and the ledger (@sec-ledger) tracks them"))
 ```
 
 ### Why the baselines sit at the zero predictor {#sec-aerozoo-baselines}

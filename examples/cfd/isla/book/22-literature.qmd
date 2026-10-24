@@ -139,7 +139,7 @@ notes = [S.DATASETS[k] for k in keys if not S.DATASETS[k].reference]
 if notes:
     print("\n\n" + " ".join(f"On {d.name}, ISLA's checkpoints are of the raw-read variant: its slice pooling "
                              f"and broadcast read the raw stream." for d in notes))
-print("\n\nData: " + ", ".join(S.Standing(k).source for k in keys + flight) + ", results/char/aerozoo_090.json. The standing row by row is @sec-standing.")
+print("\n\nData: " + ", ".join(S.Standing(k).source for k in keys + flight) + ", results/char/aerozoo_090_final.json. The standing row by row is @sec-standing.")
 print()
 print(S.in_flight_callout("lug"))
 ```
@@ -450,12 +450,13 @@ was fixed by up to `{python} f"{100 * (max(TH['1.0']) - 1):.0f}"`% at its
 trained opening angle $\theta = 1$ and by
 `{python} f"{100 * (max(TH['0']) - 1):.1f}"`% at $\theta = 0$, the size of
 the tree's approximation (@sec-oq-dtt-frame). The interior chapters measure
-it against the interacting form (@sec-drivaerml, @sec-airfrans), and the
-AeroZoo held-out splits decide which of the two is ISLA's interior form
-(@sec-oq-dtt).
+it against the interacting form (@sec-drivaerml, @sec-airfrans), and on
+AeroZoo's held-out splits the two read a close call, which makes ISLA-DTT
+ISLA's default interior form, on principle (@sec-aerozoo-form).
 
-*Caveat.* Which interior form is the better default is an open question
-(@sec-oq-dtt). The read costs time and memory: on AeroZoo `full` its median
+*Caveat.* ISLA-DTT is not the more accurate form everywhere: interacting
+ISLA leads it on AirfRANS velocity and eddy viscosity and on the lug
+(@sec-aerozoo-form). The read costs time and memory: on AeroZoo `full` its median
 training step is `{python} f"{C_D['step_seconds'] / C_I['step_seconds']:.1f}"`
 times the interacting form's and its peak memory
 `{python} f"{C_D['peak_gib'] / C_I['peak_gib']:.2f}"` times (@tbl-ref-cost). Where the canonical frame the forest is built in ties, a rotation

@@ -125,16 +125,16 @@ print(f"The constructor's {len(SIG)} arguments (@tbl-arch-switches), all keyword
 ```
 
 ::: {.callout-note title="Interacting or read-only prediction points"}
-An interior prediction of ISLA is a function of the whole set of
-prediction points, because those points are interacting tokens: they carry
-routing mass and help form the slices (@sec-arch-modes). Deploy an
-interior ISLA at its training point count and state that count with every
-interior number. A model that must answer at an arbitrary point set, one
-point at a time or in chunks, is built with `query_independent=True`:
-ISLA-DTT, whose read-only prediction points never write into the slices and
-read the boundary cells through a Barnes–Hut forest instead
-(@sec-arch-passive-decoder). Its prediction at a point depends on that
-point and the boundary alone.
+ISLA's default interior form is ISLA-DTT (`query_independent=True`), whose
+read-only prediction points never write into the slices and read the
+boundary cells through a Barnes–Hut forest (@sec-arch-passive-decoder). Its
+prediction at a point depends on that point and the boundary alone, so it
+answers at an arbitrary point set, one point at a time or in chunks
+(@sec-aerozoo-form). An interior prediction of interacting ISLA
+(`query_independent=False`) is a function of the whole set of prediction
+points, because those points are interacting tokens: they carry routing
+mass and help form the slices (@sec-arch-modes). Deploy interacting ISLA at
+its training point count and state that count with every interior number.
 
 ```{python}
 #| label: para-using-query-population
@@ -156,7 +156,13 @@ print(f"On the DrivAerML Volume task, the standing's ISLA asked for its scored p
 ```
 
 What the two forms measure on the same datasets is in
-@sec-interior-read-only and @sec-airfrans-read-only.
+@sec-interior-read-only, @sec-airfrans-read-only and @sec-aerozoo-form.
+:::
+
+::: {.callout-note title="In flight"}
+The class's and the recipe's interior defaults here are the code as it is: `query_independent` defaults to
+`False`, interacting ISLA. The switch of both defaults to ISLA-DTT for the interior task is being built, and
+the ledger (@sec-ledger) tracks it.
 :::
 
 ## What the model needs from your data {#sec-using-inputs}
@@ -1070,7 +1076,7 @@ pieces, whole; the outputs come back at the vehicle's cells. For an interior mod
 condition's mesh at full resolution, oriented as in training, and
 `prediction_points`, and read the outputs at those points; in evaluation
 mode the boundary draw has its fixed start, so the prediction is
-deterministic. Deploy an interior ISLA at its training point count (200,000
+deterministic. Deploy interacting ISLA at its training point count (200,000
 at the reporting protocol on DrivAerML), because an interacting point's
 prediction depends on the joint request (@sec-interior-companion). A model
 built with `query_independent=True` (ISLA-DTT) has no such rule and is
@@ -1139,99 +1145,98 @@ print(": Training footprint of the reference configurations (ISLA and ISLA-DTT w
 ```{python}
 #| label: tbl-using-geometry-cost
 #| output: asis
-# FAST-MERGE's GB300 timing of the merged head (job 365898): per case the base (0.9.0, two passes) and the head under the
-# reference and the fast kernel (three passes each); every cell is the median of its passes, none dropped
-import statistics
-GT_ = [r for r in R.md_table("fast_merge", "lhr/timing_table.md") if r["Q / F"]]
+# GEO-BAND's GB300 timing of the merged head (job 368333): per case the base (0.9.0) and the class under the reference and
+# the fast search, each cell the mean over two rotated passes of the per-pass medians (PHASE0.md's table)
 nums = lambda c: [float(x) for x in re.findall(r"\d[\d.]*", c.replace(",", ""))]
-ARM = {"base (0.9.0)": "base", "head, reference": "ref", "head, auto": "fast"}
-GEO_COST, GEO_PASSES, GEO_PEAK = {}, {}, {}
+GEO_COST = {}
+for r in R.md_table("geo_band_phase0", "PHASE0.md", "The book's 06 cost table"):
+    v = nums(r["geometry call: base / reference / fast [ms]"]) + nums(r["step: base / reference / fast [ms]"])
+    GEO_COST[r["case (Q / F)"]] = dict(zip(("geo_base", "geo_ref", "geo_fast", "step_base", "step_ref", "step_fast"), v, strict=True))
+GT_ = [r for r in R.md_table("geo_band_phase0", "lhr/timing_table.md") if r["Q / F"]]
+assert all(r["kernel"] == "fast" for r in GT_ if r["version"] == "head, auto")   # auto resolved to the fast search
+GEO_PEAK = {}
 for r in GT_:
-    a, k = ARM[r["version"]], f"{r['case']} ({r['Q / F']})"
-    assert a != "fast" or r["kernel"] == "fast"   # auto resolved to the fast search on the GB300
-    c = GEO_COST.setdefault(k, {})
-    c[f"geo_{a}"] = statistics.median(nums(r["geometry call (ms)"]))
-    c[f"step_{a}"] = statistics.median(nums(r["training step (ms)"]))
-    GEO_PASSES[k, a] = nums(r["training step (ms)"])
-    GEO_PEAK.setdefault(k, []).append(float(r["peak GiB"]))
-assert {len(v) for (k, a), v in GEO_PASSES.items() if a == "base"} == {2}
-assert {len(v) for (k, a), v in GEO_PASSES.items() if a != "base"} == {3}
-o = ("| case (prediction points / boundary cells) | geometry call: 0.9.0 / 0.11.0 reference / 0.11.0 auto [ms] | "
-     "step: 0.9.0 / 0.11.0 reference / 0.11.0 auto [ms] | step ratio to 0.9.0: reference / auto |\n|---|--:|--:|--:|\n")
+    GEO_PEAK.setdefault(r["case"], []).append(float(r["peak GiB"]))
+assert len(GEO_PEAK) == len(GEO_COST)
+PH0 = " ".join(R.load("geo_band_phase0", "PHASE0.md").split())
+lug_out = re.search(r"pass 2 of the fast arm, ([\d.]+) ms and a (\d+) ms step, is an outlier", PH0).groups()
+assert "The book row for it uses passes 2 and 3" in PH0
+o = ("| case (prediction points / boundary cells) | geometry call: 0.9.0 / the class, reference / the class, auto [ms] | "
+     "step: 0.9.0 / the class, reference / the class, auto [ms] | step ratio to 0.9.0: reference / auto |\n|---|--:|--:|--:|\n")
 for k, c in GEO_COST.items():
     o += (f"| {k} | {c['geo_base']:,.1f} / {c['geo_ref']:,.1f} / {c['geo_fast']:,.1f} | "
           f"{c['step_base']:,.0f} / {c['step_ref']:,.0f} / {c['step_fast']:,.0f} | "
           f"{c['step_ref'] / c['step_base']:.2f} / {c['step_fast'] / c['step_base']:.2f} |\n")
 print(o)
-af_k = next(k for k in GEO_COST if k.startswith("AirfRANS"))
-af_p = GEO_PASSES[af_k, "fast"]
 print(": The cost of ISLA's interior geometry in training: the geometry call and the training step with the geometry the "
-      "standings' checkpoints trained with (0.9.0, @sec-standing-geometry) and with the class's (0.11.0, "
-      "@sec-arch-interior-geometry) under its two search kernels: *reference*, which runs wherever the model runs, and "
-      "*auto*, the default, which takes the fast search on CUDA where Triton imports (as here) and the reference search "
+      "standings' checkpoints trained with (0.9.0, @sec-standing-geometry) and with the class's, its bounds for thin cells "
+      "included (@sec-arch-interior-geometry), under its two search kernels: *reference*, which runs wherever the model runs, "
+      "and *auto*, the default, which takes the fast search on CUDA where Triton imports (as here) and the reference search "
       "elsewhere. The same recipe, settings and network otherwise. One GB300, bfloat16, eager, one case per step, the GPUs "
-      "rotated between passes; each pass gives the median after five warm-up calls or steps, and each cell is the median of "
-      "its passes: three for the 0.11.0 columns, two for 0.9.0, whose median is their mean. No pass is left out. *Step "
-      "ratio*: the 0.11.0 step ÷ the 0.9.0 step. How to read this: the whole-boundary row reads the DrivAerML tunnel box "
-      "beside the vehicle; there 0.9.0's geometry seeded its search with a query that cost about two seconds, which the "
-      "class's cell-tree seed does not have. In two dimensions both kernels run the same search over the segments. On "
-      f"AirfRANS one auto pass took {max(af_p):.0f} ms a step against {min(af_p):.0f} and "
-      f"{statistics.median(af_p):.0f} in the other two, with the same geometry call, so that row's step spread is not the "
-      f"geometry's. Peak memory of the training process differs by at most "
+      "rotated between passes; each pass gives the median after five warm-up calls or steps, and each cell is the mean of "
+      "two rotated passes' medians. The reference AeroZoo row uses the second and third passes, because its first run stopped "
+      "before training on a port collision between the concurrent runs. *Step ratio*: the class's step ÷ the 0.9.0 step. How "
+      "to read this: the whole-boundary row reads the DrivAerML tunnel box beside the vehicle; there 0.9.0's geometry seeded "
+      "its search with a query that cost about two seconds, which the class's cell-tree seed does not have. In two dimensions "
+      f"both kernels run the same search over the segments. On the lug the auto row's second pass took {lug_out[0]} ms a call "
+      f"and {lug_out[1]} ms a step, an outlier of its passes. Peak memory of the training process differs by at most "
       f"{max(max(v) - min(v) for v in GEO_PEAK.values()):.1f} GiB between the three columns of a case. Data: "
-      f"{R.source('fast_merge', 'lhr/timing_table.md')}; the protocol, {R.source('fast_merge', 'REPORT.md')} (Timing). "
+      f"{R.source('geo_band_phase0', 'PHASE0.md')}; per pass, {R.source('geo_band_phase0', 'lhr/timing_table.md')}. "
       "{#tbl-using-geometry-cost}")
 ```
 
 ```{python}
 #| label: para-using-geometry-cost
 #| output: asis
-body = {k: c for k, c in GEO_COST.items() if "whole" not in k}
+body3 = {k: c for k, c in GEO_COST.items() if "whole" not in k and not k.startswith("AirfRANS")}
+af = next(c for k, c in GEO_COST.items() if k.startswith("AirfRANS"))
 whole = next(c for k, c in GEO_COST.items() if "whole" in k)
-r_f = {k: c["step_fast"] / c["step_base"] for k, c in body.items()}
-r_r = {k: c["step_ref"] / c["step_base"] for k, c in body.items()}
-hi_k = max(r_f, key=r_f.get)
-cut = [1 - c["geo_fast"] / c["geo_ref"] for k, c in GEO_COST.items() if not k.startswith("AirfRANS")]
+vk = next(k for k in GEO_COST if "vehicle" in k)
+r_f = {k: c["step_fast"] / c["step_base"] for k, c in body3.items()}
+r_r = {k: c["step_ref"] / c["step_base"] for k, c in body3.items()}
+faster = {k: 1 - c["geo_fast"] / c["geo_ref"] for k, c in GEO_COST.items() if c["geo_fast"] < c["geo_ref"]}
+not_faster = [k.split(" (")[0] for k, c in GEO_COST.items() if c["geo_fast"] >= c["geo_ref"] and not k.startswith("AirfRANS")]
+nm6 = lambda k: k.split(" (")[0].replace("DrivAerML Volume, vehicle", "DrivAerML vehicle").replace("DrivAerML Volume, whole boundary", "DrivAerML whole boundary")
 print(f"**The exact interior geometry adds {100 * (min(r_f.values()) - 1):.0f} to {100 * (max(r_f.values()) - 1):.0f}% to a "
-      "training step on a body alone under the default search, most on the largest boundary** (@tbl-using-geometry-cost). "
-      "The geometry call computes every candidate distance in float64, every tie set and least-norm direction, and the "
-      f"winding number at every prediction point; on the {hi_k.split(' (')[0].replace(', vehicle', '')} case with the vehicle alone that call is "
-      f"{body[hi_k]['geo_fast'] / body[hi_k]['geo_base']:.1f} times the standings' geometry call. The default, "
+      "training step on a three-dimensional body alone under the default search, and nothing measurable in two dimensions** "
+      f"(@tbl-using-geometry-cost; on AirfRANS {af['step_fast'] / af['step_base']:.2f} times the standings' step). The geometry "
+      "call computes every candidate distance in float64, every tie set and least-norm direction, and the winding number at "
+      f"every prediction point; on the DrivAerML Volume case with the vehicle alone that call is "
+      f"{GEO_COST[vk]['geo_fast'] / GEO_COST[vk]['geo_base']:.1f} times the standings' geometry call. The default, "
       '`geometry_kernel="auto"`, takes the fast search on CUDA where Triton imports, which returns the same geometry '
-      f"bitwise and cuts the three-dimensional geometry call by {100 * min(cut):.0f} to {100 * max(cut):.0f}%: it lowers "
+      f"bitwise and cuts the geometry call by {100 * min(faster.values()):.0f} to {100 * max(faster.values()):.0f}% on "
+      + " and ".join(sorted({nm6(k).split(' ')[0] for k in faster if not k.startswith('AirfRANS')}))
+      + f", but not on {' and '.join('the ' + n for n in not_faster)}, whose thin cells the next paragraph prices: it lowers "
       "the geometry's cost on a body alone and does not remove it. It is optional, as Peter's ruling on the geometry's cost "
       "asks: "
       '"If the speedup experiment works, then add an optional fast path (like our other kernels, where we default iff '
       'triton is installed), and then remove the documented limitation / change it." Where Triton is absent, or on the '
-      f"CPU, the reference search runs; on the GB300 it makes a step cost {100 * (min(r_r.values()) - 1):.0f} to "
+      f"CPU, the reference search runs; on the GB300 it makes a three-dimensional step cost {100 * (min(r_r.values()) - 1):.0f} to "
       f"{100 * (max(r_r.values()) - 1):.0f}% more than the standings' (the reference column). To force one search, set "
       '`geometry_kernel` to `"reference"` or `"fast"`; checkpoints do not store it. With the DrivAerML tunnel box read '
       f"beside the vehicle the class's step is {whole['step_fast'] / whole['step_base']:.2f} times the standings' under "
       f"the default and {whole['step_ref'] / whole['step_base']:.2f} under the reference, because the standings' geometry "
       "spent about two seconds of every call on the query that seeded its search, and the class seeds it on its own cell "
       "tree.")
-# GEO-THIN's GB300 timing of the DrivAerML whole-boundary geometry call with the thin-cell bounds (16.65M cells, 200k queries)
-THIN = re.search(r"reference (\d+) to (\d+) ms \(\+(\d+) %\), fast (\d+) to (\d+) ms \(\+(\d+) %\)",
-                 " ".join(R.load("geo_thin_final", "DESIGN.md").split())).groups()
-# its profile by part (job 367918): the geometry call on the other dumps, and the accurate point's per-call cost
-GTR_ = " ".join(R.load("geo_thin_final", "RESULTS.md").split())
-BYPART = {c: re.search(rf"\| {c} \| reference \| (\d+) -> (\d+) \|", GTR_).groups() for c in ("DrivAerML vehicle", "AeroZoo")}
-F2_MS = re.search(r"\(\+(\d+) to \+(\d+) ms on DrivAerML", GTR_).groups()
-F3_ROWS = re.search(r"\(([\d.]+) ms for (\d+) AeroZoo rows, ([\d.]+) ms for ([\d,]+) DrivAerML rows\)", GTR_).groups()
+# the same protocol on the class before its bounds for thin cells (FAST-MERGE's head, job 365898), against the table
+CH = {r_["case"]: r_ for r_ in R.md_table("geo_band_phase0", "PHASE0.md", "Against FAST-MERGE's head")}
+pct = lambda case, col: int(re.search(r"\(\+(\d+) %\)", CH[case][col]).group(1))
+REFC, FASTC = "geometry call, reference [ms]", "geometry call, fast [ms]"
+drv = [pct(c, col) for c in ("DrivAerML vehicle", "DrivAerML whole boundary") for col in (REFC, FASTC)]
+az = [pct("AeroZoo", col) for col in (REFC, FASTC)]
+assert "(+" not in CH["AirfRANS 2-D"][REFC] + CH["AirfRANS 2-D"][FASTC]
+guard = re.search(r"([\d.]+) % of its candidate pairs are guarded", PH0).group(1)
+lug = next(c for k, c in GEO_COST.items() if k.startswith("lug"))
 print()
-print("The table's 0.11.0 columns time the class's geometry without its bounds for thin cells (@sec-arch-interior-geometry). "
-      f"Timed apart from the table, the geometry call alone on the DrivAerML whole boundary goes from {THIN[0]} ms without them "
-      f"to {THIN[1]} ms with them under the reference search (+{THIN[2]}%), and from {THIN[3]} to {THIN[4]} ms under the fast one "
-      f"(+{THIN[5]}%), on a GB300. Most of it is the ball search's per-cell error bound ({F2_MS[0]} to {F2_MS[1]} ms) and the "
-      f"kernel launches of the accurate closest point, which cost about the same per call for AeroZoo's {F3_ROWS[1]} guarded "
-      f"pairs ({F3_ROWS[0]} ms) as for DrivAerML's {F3_ROWS[3]} ({F3_ROWS[2]} ms), so a tighter bound would not lower it. The "
-      "table's protocol has not been run on the other cases with them; the geometry call alone, under the reference search, "
-      f"goes from {BYPART['DrivAerML vehicle'][0]} to {BYPART['DrivAerML vehicle'][1]} ms on the DrivAerML vehicle and from "
-      f"{BYPART['AeroZoo'][0]} to {BYPART['AeroZoo'][1]} ms on AeroZoo "
-      f"({R.source('geo_thin_final', 'DESIGN.md')}, Amendment; {R.source('geo_thin_final', 'RESULTS.md')}, \"Cost by part\" and \"Would a tighter certified bound on Ericson's error help?\").")
-print()
-print('::: {.callout-note title="In flight"}\nThe 0.11.0 columns come from the class\'s geometry without its bounds for thin '
-      "cells. The five cases timed with them are being measured, and the ledger (@sec-ledger) tracks it.\n:::")
+print("**The bounds for thin cells cost most on the lug.** Against the same protocol run on the class before those bounds "
+      f"(@sec-arch-interior-geometry), the lug's geometry call rose {pct('lug', REFC)}% under the reference search and "
+      f"{pct('lug', FASTC)}% under the fast one. On the lug {guard}% of the candidate pairs lie within the error bound that calls "
+      "for the accurate closest point, so a third of them take it, and there the fast search is no faster than the reference "
+      f"({lug['geo_fast']:.1f} against {lug['geo_ref']:.1f} ms). On the DrivAerML Volume task the call rose {min(drv)} to "
+      f"{max(drv)}% (the vehicle alone and the whole boundary, both searches), on AeroZoo {min(az)} to {max(az)}%, and on "
+      "AirfRANS, in two dimensions, where the bounds do not apply, it is unchanged within the passes' spread. A fused kernel "
+      "for the accurate closest point is the lever on that cost, and the ledger (@sec-ledger) tracks it. Data: "
+      f"{R.source('geo_band_phase0', 'PHASE0.md')} (Against FAST-MERGE's head).")
 ```
 
 ```{python}

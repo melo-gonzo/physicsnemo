@@ -330,7 +330,8 @@ print(f"**On PLAID Tensile2d at 400 training specimens, scored on the native mes
 ```{python}
 #| label: tab-tensile2d-protocols
 #| output: asis
-print(ST.table("tbl-tensile2d-protocols", f"PLAID Tensile2d, 400 training specimens, {N_VAL} validation specimens"))
+print(ST.table("tbl-tensile2d-protocols", f"PLAID Tensile2d (ISLA: interacting ISLA 0.9.0), 400 training specimens, {N_VAL} validation specimens"))
+print(S.form_callout("no ISLA-DTT is trained on this dataset"))
 ```
 
 ```{python}
