@@ -21,6 +21,8 @@ source. Do not edit by hand.
 | `surfqpop/` | SURF-QPOP: how a DrivAerML Surface prediction depends on the other requested cells | `scratch/isla-surf-probe-2026-10-23/` |
 | `slices_af/` | SLICES-AF: ISLA with 128 slices against the 512-slice AirfRANS standing | `scratch/isla-slices-2026-10-23/` |
 | `tie_exp/` | TIE-EXP: ISLA with the least-norm tie rules trained on the lug and Tensile2d, read on flip symmetry, native accuracy and pose | `scratch/isla-tie-2026-10-22/` |
+| `fold_sign/` | FOLD-SIGN: the wall distance signed by the generalized winding number, the registered f32floor rerun on AeroZoo | `scratch/isla-fold-sign-2026-10-22/` |
+| `token_draw/` | TOKEN-DRAW: the boundary-token draw in float64 in the boundary's canonical frame, measured under precision, pose and renumbering | `scratch/isla-token-draw-2026-10-22/` |
 | `bundle_merge/` | BUNDLE-MERGE: the geometry robustness bundle merged as ISLA 0.11.0, its version change and tests | `scratch/isla-bundle-merge-2026-10-24/` |
 | `geo_fast/` | GEO-FAST: the exact geometry's fast path, its bitwise checks and its GB300 timing, and the zero-area-cell defect | `scratch/isla-geo-fast-2026-10-23/` |
 | `align8/` | ALIGN8: the step cost of token counts that are not a multiple of 8 or 32, and the padding fix | `scratch/isla-align8-2026-10-23/` |
@@ -137,6 +139,9 @@ source. Do not edit by hand.
 | tie_exp | JOBS.md | scratch/isla-tie-2026-10-22/JOBS.md | 6c18a17e2044618ec3fd4cefde77b418 |
 | tie_exp | read/results.md | scratch/isla-tie-2026-10-22/read/results.md | 1da6c5776d71c1c044093059aa7cee76 |
 | tie_exp | read/results.json | scratch/isla-tie-2026-10-22/read/results.json | 43f42f214c59bee626b412bb382cea51 |
+| fold_sign | PREREG.md | scratch/isla-fold-sign-2026-10-22/PREREG.md | 3fe4597743bb7af6f23fe1e3d707523f |
+| fold_sign | f32floor_tables.md | scratch/isla-fold-sign-2026-10-22/f32floor_tables.md | a7974465df17c0b179041e2d7f410230 |
+| token_draw | DESIGN.md | scratch/isla-token-draw-2026-10-22/DESIGN.md | 00038f90939bb2c811ac06531a7e2f3d |
 | bundle_merge | REPORT.md | scratch/isla-bundle-merge-2026-10-24/REPORT.md | 764a8dc3f644e89648bc8eb1cb893d02 |
 | bundle_merge | FINAL_REPORT.md | scratch/isla-bundle-merge-2026-10-24/FINAL_REPORT.md | 71f404a48d9a50174cf652117be44dfb |
 | geo_fast | RESULTS.md | scratch/isla-geo-fast-2026-10-23/RESULTS.md | cd9aae8a28eba697fcbe569f0b05eaea |

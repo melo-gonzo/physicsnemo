@@ -210,6 +210,16 @@ RECORDS = {
             "read/results.json",
         ],
     ),
+    "fold_sign": (
+        "isla-fold-sign-2026-10-22",
+        "FOLD-SIGN: the wall distance signed by the generalized winding number, the registered f32floor rerun on AeroZoo",
+        ["PREREG.md", "f32floor_tables.md"],
+    ),
+    "token_draw": (
+        "isla-token-draw-2026-10-22",
+        "TOKEN-DRAW: the boundary-token draw in float64 in the boundary's canonical frame, measured under precision, pose and renumbering",
+        ["DESIGN.md"],
+    ),
     "bundle_merge": (
         "isla-bundle-merge-2026-10-24",
         "BUNDLE-MERGE: the geometry robustness bundle merged as ISLA 0.11.0, its version change and tests",
