@@ -488,6 +488,76 @@ def test_fast_walk_gives_the_reference_lists_in_the_reference_order(dim, dtype, 
     assert torch.equal(torch.sort(si[qi == 5]).values, torch.arange(f.n_cells))
 
 
+@pytest.mark.parametrize("device", ["cpu", pytest.param("cuda", marks=cuda_only)])
+@pytest.mark.parametrize(
+    "boxes,diagonals,autocast",
+    [
+        (torch.float32, torch.float32, False),
+        (torch.float64, torch.float64, False),
+        (torch.bfloat16, torch.bfloat16, False),
+        (torch.bfloat16, torch.float32, True),
+    ],
+    ids=["float32", "float64", "bfloat16", "bfloat16_boxes_under_autocast"],
+)
+def test_fast_walk_opening_test_is_the_references_at_the_threshold(
+    device, boxes, diagonals, autocast
+):
+    """Every node a one-leaf tree whose squared diagonal is the reference's own
+    ``min_dist_sq * theta^2`` for one point (not far) or one ulp below it (far): each
+    (point, node) decision of the fast walk is that of GLOBE's traversal, so the walk
+    rounds the test as torch does (its sum order, and the steps autocast runs in
+    float32 for a forest built under it)."""
+    from types import SimpleNamespace
+
+    from physicsnemo.mesh.spatial.cluster_tree import ClusterTree
+
+    n, d, theta, dev = 256, 3, 0.7, torch.device(device)
+    g = torch.Generator().manual_seed(0)
+    scale = torch.logspace(-3, 3, n, dtype=D)[torch.randperm(n, generator=g)][:, None]
+    p, c = (
+        torch.randn(n, d, generator=g, dtype=D) * scale,
+        torch.randn(n, d, generator=g, dtype=D) * 3 * scale,
+    )
+    half = torch.rand(n, d, generator=g, dtype=D) * scale
+    p, lo, hi = (x.to(boxes).to(dev) for x in (p, c - half, c + half))
+    ar, one = torch.arange(n, device=dev), torch.ones(n, dtype=torch.long, device=dev)
+    with torch.autocast(dev.type, dtype=torch.bfloat16, enabled=autocast):
+        pt = p.t().contiguous()
+        gap = torch.clamp(
+            torch.maximum(pt - hi.t().contiguous(), lo.t().contiguous() - pt), min=0
+        )
+        at = (gap.pow(2).sum(dim=0) * theta**2).to(diagonals)
+        bits = {
+            torch.bfloat16: torch.int16,
+            torch.float32: torch.int32,
+            D: torch.int64,
+        }[diagonals]
+        below = torch.where(
+            at > 0, (at.view(bits) - 1).view(diagonals), at
+        )  # one ulp toward zero
+        diam_sq = torch.where(ar % 2 == 0, at, below)
+        leaves = torch.full((n,), -1, device=dev)
+        tree = ClusterTree(
+            node_aabb_min=lo, node_aabb_max=hi, node_diameter_sq=diam_sq, node_left_child=leaves,
+            node_right_child=leaves, leaf_start=ar, leaf_count=one, node_range_start=ar, node_range_count=one,
+            node_total_area=one.float(), sorted_source_order=ar, source_points=p.float(),
+            max_depth=torch.zeros((), dtype=torch.long, device=dev), root_ids=ar, batch_size=torch.Size([]),
+        )  # fmt: skip
+        plan = tree.find_point_interaction_pairs(p, theta=theta, validate=False)
+        forest = SimpleNamespace(
+            aabb_min=lo, aabb_max=hi, diameter_sq=diam_sq, coherent=torch.ones(n, dtype=torch.bool, device=dev),
+            left=leaves, right=leaves, node_offset=torch.arange(n + 1, device=dev), range_start=ar, range_count=one,
+            cells=ar, n_cells=n, levels=[],
+        )  # fmt: skip
+        qi, si, _ = tree_read.walk_pairs(forest, p, theta)
+    ref = torch.zeros(n, n, dtype=torch.bool, device=dev)
+    ref[plan.far_target_ids, plan.far_source_node_ids] = True
+    fast = torch.zeros_like(ref)
+    fast[qi[si >= n], si[si >= n] - n] = True
+    assert 0 < int(ref[ar, ar].sum()) < n
+    assert torch.equal(fast, ref)
+
+
 def test_tree_walk_resolution_and_the_models_walks_agree():
     """``auto`` walks by the reference on CPU and at theta 0, a forced walk is kept and
     an unknown one refused; the model's ``tree_walk`` reaches the walk, and its two

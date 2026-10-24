@@ -31,9 +31,11 @@ buffer of the opened nodes' (left, right) pairs read even entries first, so no s
 follows. The opening test is the reference's arithmetic, operation by operation in
 the boxes' dtype, in a module compiled without contracted multiply-adds, so every
 decision is the reference's. Under autocast the forest's coordinates are bfloat16
-(or float16), whose torch kernels compute each operation in float32 and round its
-result, and sum in float32 with one rounding at the end; the kernels compute in
-float32 and round at the same places.
+(``points @ frame`` is an autocast matmul), and which steps of the test run in
+bfloat16 depends on the device's autocast lists (CUDA's runs ``pow`` and ``sum`` in
+float32): the dtype of each step is read from torch's dispatch, and the kernels
+compute in float32 and round to bfloat16 where torch's bfloat16 kernels do (each
+elementwise result; a sum once, after accumulating in float32).
 """
 
 from typing import Any
@@ -55,14 +57,38 @@ _walk_stack = wp.types.vector(length=WALK_STACK, dtype=wp.int32)
 
 @wp.func
 def _low(x: Any, low: int):
-    """``x`` rounded to the forest's storage precision: bfloat16 (``low = 1``),
-    float16 (``2``), or kept (``0``)."""
+    """``x`` rounded to a storage precision: bfloat16 (``low = 1``), float16 (``2``),
+    or kept (``0``)."""
     y = x
     if low == 1:
         y = type(x)(wp.bfloat16(wp.float32(x)))
     elif low == 2:
         y = type(x)(wp.float16(wp.float32(x)))
     return y
+
+
+@wp.func
+def _gap_sq(
+    pts: wp.array(dtype=Any),
+    q: int,
+    lo: wp.array(dtype=Any),
+    hi: wp.array(dtype=Any),
+    m: int,
+    d: int,
+    k: int,
+    mode: int,
+    zero: Any,
+):
+    """``clamp(maximum(p - max, min - p), 0) ** 2`` on axis ``k``, NaN where torch's
+    maximum and clamp would propagate one."""
+    p = pts[q * d + k]
+    a = _low(p - hi[m * d + k], mode & 3)
+    b = _low(lo[m * d + k] - p, mode & 3)
+    g = wp.max(wp.max(a, b), zero)
+    sq = _low(g * g, (mode >> 2) & 3)
+    if wp.isnan(a) or wp.isnan(b):
+        sq = type(zero)(wp.nan)
+    return sq
 
 
 @wp.func
@@ -76,27 +102,27 @@ def _is_far(
     m: int,
     d: int,
     theta_sq: Any,
-    low: int,
+    mode: int,
 ):
     """The reference's admission of node ``m`` for point ``q``: the squared gap from the
-    point to the box, ``clamp(maximum(p - max, min - p), 0)`` squared and summed over
-    the axes in order from zero, times ``theta_sq`` above the squared diagonal, and the
-    node coherent. A NaN gap (torch's maximum and clamp propagate it) is never far."""
+    point to the box summed over the axes in torch's order, times ``theta_sq``, above
+    the squared diagonal, and the node coherent; a NaN gap is never far. ``mode``
+    packs the roundings of the differences, the squares and the sum and product
+    (bits 0-1, 2-3, 4-5; see :func:`_low`) and the order of the three squares'
+    sum (bit 6: ``(s0 + s2) + s1``, else ``(s0 + s1) + s2``)."""
     zero = type(theta_sq)(0.0)
-    dist_sq = zero
-    nan = bool(False)
-    for k in range(d):
-        p = pts[q * d + k]
-        a = _low(p - hi[m * d + k], low)
-        b = _low(lo[m * d + k] - p, low)
-        if wp.isnan(a) or wp.isnan(b):
-            nan = True
-        g = wp.max(wp.max(a, b), zero)
-        dist_sq = dist_sq + _low(g * g, low)
+    s0 = _gap_sq(pts, q, lo, hi, m, d, 0, mode, zero)
+    s1 = _gap_sq(pts, q, lo, hi, m, d, 1, mode, zero)
+    s2 = zero
+    if d == 3:
+        s2 = _gap_sq(pts, q, lo, hi, m, d, 2, mode, zero)
+    dist_sq = (s0 + s1) + s2
+    if (mode >> 6) & 1:
+        dist_sq = (s0 + s2) + s1
+    low = (mode >> 4) & 3
     far = bool(False)
-    if not nan:
-        if _low(_low(dist_sq, low) * theta_sq, low) > diam_sq[m]:
-            far = coherent[m]
+    if _low(_low(dist_sq, low) * theta_sq, low) > diam_sq[m]:
+        far = coherent[m]
     return far
 
 
@@ -112,7 +138,7 @@ def _count_kernel(
     count: wp.array(dtype=wp.int64),
     roots: wp.array(dtype=wp.int64),
     theta_sq: Any,
-    low: int,
+    mode: int,
     d: int,
     n_q: int,
     n_t: int,
@@ -135,7 +161,7 @@ def _count_kernel(
         top -= 1
         m = int(stack[top])
         visit += wp.int64(1)
-        if _is_far(pts, q, lo, hi, diam_sq, coherent, m, d, theta_sq, low):
+        if _is_far(pts, q, lo, hi, diam_sq, coherent, m, d, theta_sq, mode):
             far += wp.int64(1)
         elif left[m] < wp.int64(0):
             near += count[m]
@@ -163,7 +189,7 @@ def _fill_kernel(
     cells: wp.array(dtype=wp.int64),
     roots: wp.array(dtype=wp.int64),
     theta_sq: Any,
-    low: int,
+    mode: int,
     d: int,
     n_q: int,
     n_t: int,
@@ -205,7 +231,7 @@ def _fill_kernel(
                     m = int(scratch[base + wp.int64(j)])
                 else:
                     m = int(scratch[last - wp.int64(j)])
-                if _is_far(pts, q, lo, hi, diam_sq, coherent, m, d, theta_sq, low):
+                if _is_far(pts, q, lo, hi, diam_sq, coherent, m, d, theta_sq, mode):
                     qi[far_at] = q64
                     si[far_at] = n_cells + wp.int64(m)
                     far_at += wp.int64(1)
@@ -228,32 +254,54 @@ def _fill_kernel(
         front = not front
 
 
-#: The kernels' rounding mode for each storage dtype of the forest's boxes.
+#: The kernels' rounding (:func:`_low`) for each dtype a step of the test runs in.
 _LOW = {torch.bfloat16: 1, torch.float16: 2}
+#: Whether torch sums three squares as ``(s0 + s2) + s1`` on the device type.
+_SUM_02_FIRST = {"cpu": False, "cuda": False}
 
 
 def walk_fits(forest) -> bool:
-    """The forest's depth fits the count pass's stack and its boxes' dtype is one the
-    kernels reproduce."""
-    dtypes = (torch.float32, torch.float64, *_LOW)
-    return len(forest.levels) + 2 <= WALK_STACK and forest.aabb_min.dtype in dtypes
+    """The forest is two- or three-dimensional, its depth fits the count pass's stack
+    and its boxes are floating point."""
+    fields = (forest.aabb_min, forest.aabb_max, forest.diameter_sq)
+    return (
+        forest.aabb_min.shape[1] in (2, 3)
+        and len(forest.levels) + 2 <= WALK_STACK
+        and all(x.dtype in (torch.float32, torch.float64, *_LOW) for x in fields)
+    )
+
+
+def _opening_dtypes(forest, theta_sq: float) -> tuple[torch.dtype, torch.dtype, torch.dtype]:
+    """The dtypes of the reference's opening test, read from torch's own dispatch on
+    empty tensors under the current autocast state: the traversal table's (the
+    concatenation of the boxes and the diagonals, which the points are cast to), the
+    squares' and the sum's. Under CUDA autocast ``pow`` and ``sum`` run in float32, so
+    a forest built there has float32 diagonals and a float32 table of bfloat16 boxes."""
+    d = forest.aabb_min.shape[1]
+    lo, hi, diam_sq = (x[:0] for x in (forest.aabb_min, forest.aabb_max, forest.diameter_sq))
+    box = torch.cat([lo.t(), hi.t(), diam_sq.sqrt()[None], diam_sq[None]], dim=0)
+    p = box[:d]
+    sq = torch.clamp(torch.maximum(p - box[d : 2 * d], box[:d] - p), min=0).pow(2)
+    return box.dtype, sq.dtype, (sq.sum(dim=0) * theta_sq).dtype
 
 
 def walk_pairs(forest, points_f: torch.Tensor, theta: float) -> tuple[torch.Tensor, torch.Tensor, int]:
     """Every point's list ``(qi, si, n_node)`` for the points ``points_f`` ``(Q, d)`` in
     the forest's frame at ``theta > 0``, equal to the reference's
     (:meth:`BoundaryForest.point_pairs`) entry for entry; one host read, of the sizes."""
-    lo = forest.aabb_min
-    dtype, device = lo.dtype, lo.device
+    device = forest.aabb_min.device
     n_q, d = points_f.shape
     n_t = int(forest.node_offset.shape[0]) - 1
     if n_q == 0 or n_t == 0:
         empty = torch.empty(0, dtype=torch.long, device=device)
         return empty, empty.clone(), 0
-    ### Reduced-precision coordinates are widened exactly to float32 and the kernels
-    ### round where torch's kernels do.
+    ### Reduced-precision values are widened exactly to float32 and the kernels round
+    ### where torch's kernels round.
+    dtype, sq_dtype, sum_dtype = _opening_dtypes(forest, theta * theta)
     work = torch.float64 if dtype == torch.float64 else torch.float32
-    low = _LOW.get(dtype, 0)
+    mode = _LOW.get(dtype, 0) | _LOW.get(sq_dtype, 0) << 2 | _LOW.get(sum_dtype, 0) << 4
+    mode |= _SUM_02_FIRST.get(device.type, False) << 6
+    lo = forest.aabb_min.to(dtype)
     pts = points_f.detach().to(dtype)
     scalar = wp.float64 if work == torch.float64 else wp.float32
     wtype = wp.dtype_from_torch(work)
@@ -262,14 +310,14 @@ def walk_pairs(forest, points_f: torch.Tensor, theta: float) -> tuple[torch.Tens
     tree = [
         as_real(pts),
         as_real(lo),
-        as_real(forest.aabb_max),
-        as_real(forest.diameter_sq),
+        as_real(forest.aabb_max.to(dtype)),
+        as_real(forest.diameter_sq.to(dtype)),
         wp.from_torch(forest.coherent.contiguous(), dtype=wp.bool),
         as_long(forest.left),
         as_long(forest.right),
     ]
     roots = as_long(forest.node_offset[:-1])
-    walk = [scalar(theta * theta), low, d, n_q, n_t]
+    walk = [scalar(theta * theta), mode, d, n_q, n_t]
     n_near, n_far, n_visit = (torch.empty(n_q * n_t, dtype=torch.long, device=device) for _ in range(3))
     wp_device, stream = FunctionSpec.warp_launch_context(pts)
     with FunctionSpec.warp_stream_scope(stream):
