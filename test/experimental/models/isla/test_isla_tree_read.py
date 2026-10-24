@@ -470,8 +470,8 @@ def test_fast_walk_gives_the_reference_lists_in_the_reference_order(dim, dtype, 
     """The fast walk (Warp; forced here, on CPU) gives the reference walk's lists
     entry for entry and in its order, with the same node count, for points near and
     far from the boundary, a NaN point (opened down to every cell) and an infinite
-    one; under bfloat16 autocast (as in training) the forest's coordinates are
-    bfloat16, and the walk rounds as torch does."""
+    one; under bfloat16 autocast (as in training) too, in whatever precision the
+    reference forest is built."""
     autocast = dtype == "bfloat16 autocast"
     dtype = torch.float32 if autocast else dtype
     pts, nrm, w, _ = cloud(900, d=dim, seed=3, dtype=dtype)
@@ -482,7 +482,6 @@ def test_fast_walk_gives_the_reference_lists_in_the_reference_order(dim, dtype, 
         f = BoundaryForest.build(pts, w, nrm, None, theta=theta)
         qi, si, n_node = f.point_pairs(q, walk="reference")
         qi_f, si_f, n_node_f = f.point_pairs(q, walk="fast")
-    assert f.aabb_min.dtype == (torch.bfloat16 if autocast else dtype)
     assert torch.equal(qi_f, qi) and torch.equal(si_f, si)
     assert n_node_f == n_node > 0
     assert torch.equal(torch.sort(si[qi == 5]).values, torch.arange(f.n_cells))
@@ -1089,9 +1088,8 @@ def _check_fast_build(dim, dtype, device, autocast):
             ]
             q = pts[:50] * 1.5 + 0.25
             (qa, sa, na), (qb, sb, nb) = (f.point_pairs(q) for f in forests)
-        ### Under autocast the reference builds its trees from bfloat16 coordinates
-        ### (``points @ frame`` is an autocast matmul), and so must the fast build.
-        assert (forests[0].aabb_min.dtype == torch.bfloat16) == autocast
+        ### The fast build follows the precision the reference builds in (under
+        ### autocast too): _forest_differences compares dtypes as well as bits.
         assert not _forest_differences(*forests), (pts.shape[0], leaf)
         assert torch.equal(qa, qb) and torch.equal(sa, sb) and na == nb
 
