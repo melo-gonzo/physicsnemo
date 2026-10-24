@@ -34,11 +34,9 @@ when the backbone changes by decision (a forward hook on ``norm_out`` under
 ``CONFIGS["default"]`` / ``_make_tensors`` below; last recorded when the boundary
 conditions came to be declared by name, each with its own input layer, checkpoint
 0.7.0) and pins the backbone through the internal batched routine.
-``data/isla_interior_interacting_eba038f08.mdlus`` and its ``_output.pth`` are never
-regenerated from the current code: they record a checkpoint written by the code of
-commit eba038f08 (see the test that reads them).
 """
 
+import inspect
 import re
 import warnings
 from pathlib import Path
@@ -363,39 +361,6 @@ def _boundary_read_parameters(model) -> list[str]:
     ]
 
 
-def test_interacting_checkpoint_from_before_the_interior_default_loads_as_interacting(
-    device,
-):
-    """A checkpoint written when the interior task's default was interacting ISLA
-    keeps loading as interacting ISLA, with its outputs. The fixture
-    ``data/isla_interior_interacting_eba038f08.mdlus`` was written by the code of
-    commit eba038f08 (checkpoint version 0.11.0), in its own process, from
-    ``ISLA(hidden=32, n_layers=1, n_slices=8, interior=True, **IO)`` built without
-    ``query_independent`` (as a user of that code would), its parameters drawn
-    ``randn * 0.1`` from a CPU generator seeded 11, in evaluation with the eager
-    geometry region; ``data/isla_interior_interacting_eba038f08_output.pth`` holds
-    that code's forward on ``_make_inputs("cpu", query=True)``. ``Module.__new__``
-    stores the bound defaults, so the checkpoint names ``query_independent=False``
-    explicitly and never depends on the class default."""
-    ckpt = DATA_DIR / "isla_interior_interacting_eba038f08.mdlus"
-    args = _stored_args(ckpt)
-    assert "query_independent" in args and args["query_independent"] is False
-    assert args["interior"] is True
-    model = Module.from_checkpoint(str(ckpt)).to(device).eval()
-    assert isinstance(model, ISLA)
-    assert model.interior is True and model.query_independent is False
-    assert model.qt.logw is not None  # the learned routing mass
-    assert model.kernel_basis is None and model.kernel_reads is None
-    assert not _boundary_read_parameters(model)
-    with torch.no_grad():
-        out = outputs(model(**_make_inputs(device, query=True)))
-    ref = torch.load(
-        DATA_DIR / "isla_interior_interacting_eba038f08_output.pth", weights_only=True
-    )["output"]
-    tol = 1e-5 if device == "cpu" else 1e-4
-    _assert_dict_close(out, {k: v.to(device) for k, v in ref.items()}, tol, tol)
-
-
 def test_a_state_dict_of_one_interior_form_does_not_load_into_the_other(tmp_path):
     """ISLA-DTT and interacting ISLA own different parameters (the boundary read; the
     routing mass), so a state dict of either fails to load into the other, both
@@ -444,7 +409,12 @@ def test_new_interior_checkpoints_store_their_form(tmp_path, form):
     """An interior model built without ``query_independent`` is ISLA-DTT and stores
     ``query_independent=True`` in its checkpoint's arguments; one built with
     ``query_independent=False`` stores ``False``. Each round-trips as its form with
-    its outputs."""
+    its outputs. ``Module.__new__`` stores the bound defaults, so a checkpoint names
+    every constructor argument, the interior form among them, and never depends on
+    the class default. (An interior checkpoint written before 0.12.0, when the
+    default was interacting ISLA, is refused with its version named, as every
+    earlier checkpoint is: test_isla_checkpoint_of_an_earlier_version_is_refused and
+    test_isla_0_7_0_to_0_11_0_state_dicts_are_refused_on_every_loading_path.)"""
     kw = dict(CONFIGS["dtt"])
     del kw["query_independent"]
     if form == "interacting":
@@ -454,11 +424,14 @@ def test_new_interior_checkpoints_store_their_form(tmp_path, form):
     assert model.query_independent is dtt
     path = tmp_path / "isla.mdlus"
     model.save(path)
-    assert _stored_args(path)["query_independent"] is dtt
+    args = _stored_args(path)
+    assert set(args) == set(inspect.signature(ISLA.__init__).parameters) - {"self"}
+    assert args["query_independent"] is dtt and args["interior"] is True
     loaded = Module.from_checkpoint(str(path)).eval()
     assert isinstance(loaded, ISLA) and loaded.interior is True
     assert loaded.query_independent is dtt
     assert bool(_boundary_read_parameters(loaded)) is dtt
+    assert (loaded.kernel_basis is None and loaded.kernel_reads is None) is not dtt
     assert (loaded.qt.logw is None) is dtt
     loaded.geo_kernel = model.geo_kernel
     inputs = _make_inputs("cpu", query=True)
