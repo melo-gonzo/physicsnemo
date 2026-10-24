@@ -1270,3 +1270,408 @@ def test_fast_forest_build_is_the_reference_forest_on_cuda(dim, dtype, autocast)
 
     assert resolve_tree_build("auto", torch.zeros(1, dim, device="cuda")) == "fast"
     _check_fast_build(dim, dtype, "cuda", autocast)
+
+
+def _step_grads(m, mesh, drv, q, autocast=False):
+    """One training step's outputs and every parameter's gradient, in float64."""
+    m.zero_grad()
+    dev = q.device.type
+    with torch.autocast(dev, dtype=torch.bfloat16, enabled=autocast):
+        out = outputs(
+            m(
+                boundary_meshes={"wall": mesh},
+                prediction_points=points_mesh(q),
+                global_data={"g": drv},
+            )
+        )
+    sum(o.double().square().mean() for o in out.values()).backward()
+    grads = {
+        n: p.grad.double().cpu() for n, p in m.named_parameters() if p.grad is not None
+    }
+    return {k: v.detach().double().cpu() for k, v in out.items()}, grads
+
+
+def test_tree_read_kernel_resolves_to_the_reference_on_cpu_and_its_basis_flow_is_exact():
+    """On CPU ``tree_read_kernel="auto"`` resolves to the reference read. Forcing
+    ``"fused"`` there keeps the reference read (the fused kernels need CUDA) but builds
+    the basis as the fused path does, from the plan with the invariants rebuilt in
+    backward: outputs and every gradient bitwise equal to the reference's."""
+    m = _model(3, 0.5).double()
+    mesh, drv, q = _case()
+    assert m.tree_read_kernel == "auto" and m.resolve_tree_read_kernel(q) == "reference"
+    threads = torch.get_num_threads()
+    ### Some CPU reductions are not run-to-run bitwise across threads.
+    torch.set_num_threads(1)
+    try:
+        ref = _step_grads(m, mesh, drv, q)
+        m.tree_read_kernel = "fused"
+        fused = _step_grads(m, mesh, drv, q)
+    finally:
+        torch.set_num_threads(threads)
+    for a, b in zip(ref, fused):
+        assert a.keys() == b.keys() and all(torch.equal(a[k], b[k]) for k in a)
+
+
+@cuda_only
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16], ids=["fp32", "bf16"])
+def test_fused_kernel_read_matches_the_reference_read(dtype):
+    """The fused read (kernel term inside the kernels) against the reference read fed
+    ``basis @ W.T``, values and every gradient, on a ragged random plan with empty
+    sources and one source read by half the pairs: in float32 and bfloat16 each is as
+    close to the float64 eager read as the reference is (the same rounding points,
+    another summation order)."""
+    from physicsnemo.experimental.models.isla.fused_read import (
+        fused_kernel_read,
+        supported,
+    )
+    from physicsnemo.experimental.models.isla.segment_softmax import (
+        PairPlan,
+        _eager_segment_softmax_read,
+        segment_softmax_read,
+    )
+
+    dev = torch.device("cuda")
+    g = torch.Generator().manual_seed(4)
+    n_q, n_b, h, kc, c, f = 37, 50, 8, 4, 8, 16
+    counts = torch.randint(0, 5000, (n_q,), generator=g)
+    counts[3] = 0
+    p = int(counts.sum())
+    qi = torch.repeat_interleave(torch.arange(n_q), counts)
+    bj = torch.randint(0, n_b - 5, (p,), generator=g)
+    bj[: p // 2] = 0
+    leaves = [
+        torch.randn(p, f, generator=g, dtype=D),
+        0.3 * torch.randn(h, f, generator=g, dtype=D),
+        torch.randn(n_q, h, kc, generator=g, dtype=D),
+        torch.randn(n_b, h, kc, generator=g, dtype=D),
+        torch.randn(n_b, h, c, generator=g, dtype=D),
+    ]
+    logm = -torch.rand(n_b, generator=g, dtype=D) * 8  # per source
+    seed = torch.randn(n_q, h, c, generator=g, dtype=D)
+
+    def run(kind, device, dt):
+        plan = PairPlan.build(qi.to(device), bj.to(device), n_q, n_b)
+        b, w, q, k, v = ins = [
+            t.detach().clone().to(device, dt).requires_grad_(True) for t in leaves
+        ]
+        lm = logm.to(device, torch.float32 if dt != D else D)
+        if kind == "fused":
+            assert supported(b, q, k, v)
+            out = fused_kernel_read(b, w, lm, q, k, v, plan, 0.5)
+        elif kind == "reference":
+            out = segment_softmax_read(
+                b @ w.t(), lm[plan.bj.long()], q, k, v, plan, 0.5
+            )
+        else:
+            out = _eager_segment_softmax_read(
+                b @ w.t(), lm[plan.bj.long()], q, k, v, plan, 0.5
+            )
+        (out.double() * seed.to(device)).sum().backward()
+        return [out.detach().double().cpu()] + [t.grad.double().cpu() for t in ins]
+
+    exact = run("eager", "cpu", D)
+    fused, ref = run("fused", dev, dtype), run("reference", dev, dtype)
+    rows = counts > 0
+    floor = 1e-6 if dtype == torch.float32 else 1e-3
+    for name, a, b, e in zip(("out", "basis", "w", "q", "k", "v"), fused, ref, exact):
+        if name == "out":
+            a, b, e = a[rows], b[rows], e[rows]
+        scale = e.abs().max()
+        d_fused, d_ref = (a - e).abs().max() / scale, (b - e).abs().max() / scale
+        print(
+            f"{name}: fused {d_fused:.2e}, reference {d_ref:.2e}, fused-reference {(a - b).abs().max() / scale:.2e}"
+        )
+        assert d_fused <= 2 * d_ref + floor, name
+
+
+@cuda_only
+@pytest.mark.parametrize("autocast", [False, True], ids=["fp32", "bf16_autocast"])
+def test_tree_read_fused_matches_the_reference_on_cuda(autocast):
+    """The model on CUDA reads through the fused read by default; one training step's
+    outputs and every parameter's gradient are as close to the CPU float64 model's as
+    the reference read's are (float32, and bf16 autocast)."""
+    m = _model(3, 0.5)
+    mesh, drv, q = _sphere_case(n=1500, nq=200)
+    exact = _step_grads(copy.deepcopy(m).double(), mesh, drv, q)
+    dev = torch.device("cuda")
+    m = m.to(dev).float()
+    mesh_c = mesh.to(dev).apply(lambda t: t.float() if t.is_floating_point() else t)
+    args = (mesh_c, drv.to(dev).float(), q.to(dev).float())
+    assert m.resolve_tree_read_kernel(args[2]) == "fused"
+    fused = _step_grads(m, *args, autocast=autocast)
+    m.tree_read_kernel = "reference"
+    ref = _step_grads(m, *args, autocast=autocast)
+    floor = 1e-6 if not autocast else 1e-3
+    for a, b, e in zip(fused, ref, exact):
+        groups = {k.split(".")[0] for k in e}
+        for grp in groups:
+            keys = [k for k in e if k.split(".")[0] == grp]
+            scale = max(float(e[k].abs().max()) for k in keys)
+            d_fused = max(float((a[k] - e[k]).abs().max()) for k in keys) / scale
+            d_ref = max(float((b[k] - e[k]).abs().max()) for k in keys) / scale
+            print(f"{grp}: fused {d_fused:.2e}, reference {d_ref:.2e}")
+            assert d_fused <= 2 * d_ref + floor, grp
+
+
+@cuda_only
+def test_fused_reads_sum_their_basis_gradients_as_autograd_does():
+    """Fused reads of one basis that share its sink sum their basis gradients in place
+    bitwise as autograd sums them when each read passes its own (bfloat16, the
+    running sum rounded after every read), and the step leaves no memory behind."""
+    from physicsnemo.experimental.models.isla.fused_read import (
+        _plan_source_items,
+        basis_sink,
+        fused_kernel_read,
+    )
+    from physicsnemo.experimental.models.isla.segment_softmax import PairPlan
+
+    dev, bf = torch.device("cuda"), torch.bfloat16
+    g = torch.Generator(device=dev).manual_seed(5)
+    n_q, n_b, h, kc, c, f = 300, 400, 8, 4, 8, 16
+    counts = torch.randint(1, 600, (n_q,), generator=g, device=dev)
+    qi = torch.repeat_interleave(torch.arange(n_q, device=dev), counts)
+    bj = torch.randint(0, n_b, (qi.shape[0],), generator=g, device=dev)
+    plan = PairPlan.build(qi, bj, n_q, n_b)
+    logm = -8 * torch.rand(n_b, generator=g, device=dev)
+    reads = [
+        [
+            torch.randn(*s, generator=g, device=dev).to(bf)
+            for s in ((h, f), (n_q, h, kc), (n_b, h, kc), (n_b, h, c))
+        ]
+        for _ in range(3)
+    ]
+    basis0 = torch.randn(qi.shape[0], f, generator=g, device=dev).to(bf)
+    _plan_source_items(plan)  # the plan keeps its by-source work items for every block
+    base = torch.cuda.memory_allocated()
+    grads = []
+    for shared in (True, False):
+        basis = basis0.clone().requires_grad_(True)
+        sink = basis_sink(basis) if shared else None
+        out = sum(
+            fused_kernel_read(basis, *r[:1], logm, *r[1:], plan, 0.5, sink=sink)
+            for r in reads
+        )
+        out.square().sum().backward()
+        grads.append(basis.grad)
+        del basis, sink, out
+    assert torch.equal(grads[0], grads[1])
+    del grads
+    assert torch.cuda.memory_allocated() == base
+
+
+@pytest.mark.parametrize("dim", [3, 2])
+def test_tree_read_pairs_basis_from_the_plan_is_exact_for_a_batch(dim):
+    """Two cases in one batch: the basis built from the plan (the fused path's) has the
+    reference's plan, values and basis-MLP gradients, bitwise, so each case's point,
+    source and pair offsets are right."""
+    torch.manual_seed(0)
+    cases = [cloud(400 + 60 * i, d=dim, seed=3 + i) for i in range(2)]
+    n = min(c[0].shape[0] for c in cases)
+    pts = torch.stack([c[0][:n] for c in cases])
+    nrm = torch.stack([c[1][:n] for c in cases])
+    w = torch.stack([c[2][:n] for c in cases])
+    q = torch.stack(
+        [cloud(90, d=dim, seed=7 + i, scale=(4.0,) * dim)[0] for i in range(2)]
+    )
+    g = torch.stack([torch.nn.functional.normalize(c[3], dim=-1)[None] for c in cases])
+    basis = _KernelBasis(kernel_geo_width(1, 0)).double()
+    kw = dict(
+        query_r=q,
+        query_n=torch.nn.functional.normalize(q, dim=-1),
+        query_wall=torch.rand(
+            2, 90, dtype=D, generator=torch.Generator().manual_seed(1)
+        )
+        + 0.1,
+        boundary_r=pts,
+        boundary_n=nrm,
+        boundary_vecs=None,
+        log_frac=torch.log(w / w.sum(1, keepdim=True)),
+        g_unit=g,
+        theta=0.5,
+        eps=1e-12,
+    )
+    threads = torch.get_num_threads()
+    torch.set_num_threads(1)
+    try:
+        res = []
+        for kernel in ("reference", "fused"):
+            basis.zero_grad()
+            pairs = tree_read_pairs(basis, kernel=kernel, **kw)
+            seed = torch.randn(
+                pairs.basis.shape, dtype=D, generator=torch.Generator().manual_seed(2)
+            )
+            (pairs.basis * seed).sum().backward()
+            res.append((pairs, [p.grad.clone() for p in basis.parameters()]))
+    finally:
+        torch.set_num_threads(threads)
+    (ref, g_ref), (fus, g_fus) = res
+    assert (
+        ref.plan.n_q == 180
+        and torch.equal(ref.plan.qi, fus.plan.qi)
+        and torch.equal(ref.plan.bj, fus.plan.bj)
+    )
+    assert (
+        len({int(x) for x in ref.plan.qi[ref.plan.qi >= 90]}) > 0
+    )  # the second case has pairs
+    assert torch.equal(ref.basis, fus.basis)
+    assert all(torch.equal(a, b) for a, b in zip(g_ref, g_fus))
+
+
+class _SinkProbeRead(torch.autograd.Function):
+    """``basis @ w.T``, passing its basis gradient through the fused read's sink as
+    the fused read does (a stand-in for its Triton kernels on CPU)."""
+
+    @staticmethod
+    def forward(ctx, basis, token, grad, w):
+        ctx.save_for_backward(basis, w)
+        ctx.grad, ctx.sink_node = grad, token.grad_fn
+        return basis @ w.t()
+
+    @staticmethod
+    def backward(ctx, dout):
+        from physicsnemo.experimental.models.isla.fused_read import _basis_grad_target
+
+        basis, w = ctx.saved_tensors
+        acc = _basis_grad_target(ctx, basis)
+        if acc is not None:
+            acc += dout @ w
+        return None, None if acc is None else basis.new_empty(0), None, dout.t() @ basis
+
+
+def _partial_backward_sequences(read, theta, ws, x, loss_of):
+    """theta.grad after each partial-backward sequence, ``read(basis, w)`` the read."""
+    out = []
+    for seq in ("grad_then_backward", "inputs_w_then_theta"):
+        theta.grad = None
+        loss = loss_of(read, theta, ws, x)
+        if seq == "grad_then_backward":
+            torch.autograd.grad(loss, [x], retain_graph=True)
+            loss.backward(inputs=[theta])
+        else:
+            loss.backward(inputs=[ws[0]], retain_graph=True)
+            loss.backward(inputs=[theta])
+        out.append(theta.grad.clone())
+    return out
+
+
+def test_fused_read_sink_ignores_backward_passes_that_skip_the_basis():
+    """A backward pass that runs the reads but not the basis (autograd.grad of another
+    input, backward(inputs=[a read weight])) leaves nothing in the sink's sum: the
+    next pass's basis gradient equals plain autograd's, with the fused read's sink and
+    its backward's choice of target (a stand-in read, CPU)."""
+    from physicsnemo.experimental.models.isla.fused_read import basis_sink
+
+    g = torch.Generator().manual_seed(8)
+    inv = torch.randn(50, 16, generator=g, dtype=D)
+    theta = torch.randn(16, generator=g, dtype=D).requires_grad_(True)
+    ws = [
+        torch.randn(8, 16, generator=g, dtype=D).requires_grad_(True) for _ in range(3)
+    ]
+    x = torch.randn(50, 8, generator=g, dtype=D).requires_grad_(True)
+    sinks = []
+
+    def loss_of(read, theta, ws, x):
+        basis = inv * theta
+        sinks.append(basis_sink(basis) if read is not None else None)
+        outs = [
+            basis @ w.t()
+            if read is None
+            else _SinkProbeRead.apply(basis.detach(), *sinks[-1], w)
+            for w in ws
+        ]
+        return (sum(outs) * x).square().sum()
+
+    ref = _partial_backward_sequences(None, theta, ws, x, loss_of)
+    fused = _partial_backward_sequences(_SinkProbeRead, theta, ws, x, loss_of)
+    for a, b in zip(fused, ref):
+        assert torch.allclose(a, b, rtol=1e-12, atol=0)
+    assert all(s[1].acc is None for s in sinks[2:])
+
+
+@cuda_only
+def test_fused_read_partial_backward_matches_the_reference_read():
+    """The same partial-backward sequences through the fused reads (float32) against the
+    reference read fed ``basis @ W.T``."""
+    from physicsnemo.experimental.models.isla.fused_read import (
+        basis_sink,
+        fused_kernel_read,
+    )
+    from physicsnemo.experimental.models.isla.segment_softmax import (
+        PairPlan,
+        segment_softmax_read,
+    )
+
+    dev = torch.device("cuda")
+    g = torch.Generator(device=dev).manual_seed(9)
+    n_q, n_b, h, kc, c, f = 200, 300, 8, 4, 8, 16
+    counts = torch.randint(1, 400, (n_q,), generator=g, device=dev)
+    qi = torch.repeat_interleave(torch.arange(n_q, device=dev), counts)
+    bj = torch.randint(0, n_b, (qi.shape[0],), generator=g, device=dev)
+    plan = PairPlan.build(qi, bj, n_q, n_b)
+    logm = -8 * torch.rand(n_b, generator=g, device=dev)
+    inv = torch.randn(qi.shape[0], f, generator=g, device=dev)
+    theta = torch.randn(f, generator=g, device=dev).requires_grad_(True)
+    ws = [
+        (0.3 * torch.randn(h, f, generator=g, device=dev)).requires_grad_(True)
+        for _ in range(3)
+    ]
+    qkv = [
+        torch.randn(*s, generator=g, device=dev)
+        for s in ((n_q, h, kc), (n_b, h, kc), (n_b, h, c))
+    ]
+    x = torch.randn(n_q, h, c, generator=g, device=dev).requires_grad_(True)
+
+    def loss_of(fused, theta, ws, x):
+        basis = inv * theta
+        sink = basis_sink(basis) if fused else None
+        if fused:
+            outs = [
+                fused_kernel_read(basis, w, logm, *qkv, plan, 0.5, sink=sink)
+                for w in ws
+            ]
+        else:
+            outs = [
+                segment_softmax_read(basis @ w.t(), logm[plan.bj], *qkv, plan, 0.5)
+                for w in ws
+            ]
+        return (sum(outs) * x).square().sum()
+
+    ref = _partial_backward_sequences(False, theta, ws, x, loss_of)
+    fused = _partial_backward_sequences(True, theta, ws, x, loss_of)
+    for a, b in zip(fused, ref):
+        assert (a - b).abs().max() <= 1e-4 * b.abs().max(), (
+            (a - b).abs().max(),
+            b.abs().max(),
+        )
+
+
+@cuda_only
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16], ids=["fp32", "bf16"])
+def test_fused_node_means_match_the_reference(dtype):
+    """The fused node means against ``node_means`` on a forest of a sphere: the
+    backward bitwise (the same float32 additions, one per node), the forward to
+    float32 roundoff before the cast (the reference sums each leaf's cells by atomics,
+    in no fixed order)."""
+    from physicsnemo.experimental.models.isla.fused_read import fused_node_means
+
+    mesh, _, _ = _sphere_case(n=3000, nq=10)
+    dev = torch.device("cuda")
+    pts = mesh.cell_centroids.float().to(dev)
+    nrm = mesh.cell_normals.float().to(dev)
+    w = mesh.cell_data[EFFECTIVE_MEASURE_KEY].float().to(dev)
+    omega = w / w.sum()
+    forest = BoundaryForest.build(pts, omega, nrm, None, theta=1.0)
+    g = torch.Generator(device=dev).manual_seed(6)
+    x0 = torch.randn(pts.shape[0], 96, generator=g, device=dev).to(dtype)
+    gout = torch.randn(forest.n_nodes, 96, generator=g, device=dev).to(dtype)
+    res = []
+    for fn in (tree_read.node_means, fused_node_means):
+        x = x0.clone().requires_grad_(True)
+        y = fn(x, forest, omega)
+        y.backward(gout)
+        res.append((y.detach().float(), x.grad))
+    tol = 1e-6 if dtype == torch.float32 else 8e-3
+    assert torch.allclose(
+        res[1][0], res[0][0], rtol=tol, atol=tol * res[0][0].abs().max()
+    )
+    assert torch.equal(res[1][1], res[0][1])
