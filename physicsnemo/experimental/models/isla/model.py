@@ -1671,9 +1671,11 @@ class ISLA(Module):
         names = [name for name in self.boundary_names if name in boundary_meshes]
         meshes = [boundary_meshes[name] for name in names]
         ### A surface task's outputs: the token rows of its prediction boundaries, as
-        ### (start, stop) ranges in token order, adjacent conditions' ranges merged.
+        ### (start, stop) ranges in token order, adjacent conditions' ranges merged;
+        ### None when every given boundary is one, so that the head reads the token
+        ### state itself (decided by name: a test on the counts would guard on them).
         out_rows = None
-        if prediction_points is None:
+        if prediction_points is None and not set(names) <= set(prediction_boundaries):
             out_rows, start = [], 0
             for name, m in zip(names, meshes):
                 if name in prediction_boundaries:
@@ -1715,7 +1717,9 @@ class ISLA(Module):
         )
         query = None
         if prediction_points is None:
-            out_points = torch.cat([boundary["points"][0, a:b] for a, b in out_rows])
+            out_points = boundary["points"][0]
+            if out_rows is not None:
+                out_points = torch.cat([out_points[a:b] for a, b in out_rows])
         else:
             query = self._point_set(prediction_points)
             out_points = query["points"]
