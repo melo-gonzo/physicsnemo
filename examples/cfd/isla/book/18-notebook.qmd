@@ -41933,6 +41933,85 @@ Version numbers are internal, and ISLA is unreleased. The standings stay ISLA 0.
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-band-2026-10-24/SECOND_READ_BAND.md).*
 
+## 2026-10-24 — DEFAULT-DTT: ISLA-DTT is the class's and the recipe's default interior form; `query_independent=None` resolves to the task, every interior configuration trains ISLA-DTT compiled per block, and ISLA-DTT's outputs at shared points stay at roundoff when other points join a request; integrated with ISLA 0.12.0 and merged with this batch {#sec-nb-default-dtt}
+
+**What it did.** AZ-DECIDE read AeroZoo's registered test of the two interior forms as a close call, and Peter's
+ruling of 2026-10-23 for that case is "ISLA-DTT, on principle" (@sec-nb-az-decide). DEFAULT-DTT put the ruling into the
+code on psharpe/isla-default-dtt: 9d27ae47b (the model's default and docstrings), b0fd82da8 (the recipe's interior
+configurations and README) and e1a6d7853 (the tests and two fixtures), merged with psharpe/isla 0d46b2f9b as e10681b33.
+DTT-DEFAULT-INT then merged GEO-BAND into the branch (616992605) and reworked one test for ISLA 0.12.0 (f9b0014c8). The
+branch merges into psharpe/isla with this book batch.
+
+**The supervisor's design decisions.**
+- `query_independent` defaults to `None`, which resolves to the task: ISLA-DTT on the interior task, interacting ISLA on
+  the surface task. An explicit `True` on the surface task is still refused.
+- An explicit `query_independent=False` builds interacting ISLA on an interior task.
+- The class writes the resolved value into its stored arguments, so a checkpoint carries its form and never depends on
+  the default.
+- The switch itself changes no version.
+- Every interior recipe configuration (`isla_volume`, `isla_volume_aerozoo`, `isla_volume_airfrans`, `isla_lug`,
+  `isla_tensile2d`) states `query_independent: true` and trains with per-block compile (`compile: false`,
+  `compile_blocks: true`), because ISLA-DTT's boundary read breaks the whole-model graph. Each reference lane's resolved
+  configuration differs from its interacting partner's only in `query_independent`. The surface configurations keep the
+  whole-model compile.
+
+**Tests.** Interacting ISLA's tests now pass `query_independent=False` explicitly. New tests: a state dict of one interior
+form is refused by a model of the other, in both directions and on every loading path; new interior checkpoints store
+their form; every interior recipe configuration runs ISLA-DTT compiled per block. The assertion audit removed no message
+or match string and weakened no tolerance; no golden was regenerated. On e10681b33: the ISLA test directory, 401 passed
+and 122 skipped on CPU (job 369930), 531 passed and 1 skipped on a GB300 with every CUDA test (369933); the recipe tests,
+585 passed, 15 skipped and 2 failed (370095), the two `test_campaign_c_hooks` tests that fail at the base with the same
+message inside a Slurm job.
+
+**The integration with ISLA 0.12.0 (DTT-DEFAULT-INT).** DEFAULT-DTT's first head carried a fixture of an interior
+checkpoint written before the switch, on 0.11.0, and a test that it loaded as interacting ISLA. 0.12.0 refuses every
+earlier checkpoint, so after GEO-BAND's merge that fixture is refused with its version named ("version 0.11.0 is not
+compatible with current version 0.12.0"), which two existing refusal tests already cover. DTT-DEFAULT-INT deleted the
+fixture and its test, and moved their proof to 0.12.0 inside `test_new_interior_checkpoints_store_their_form`: a model
+built with `query_independent=False` is saved and reloaded, reloads as interacting ISLA (routing mass present, no boundary
+read), gives the saved model's outputs with atol = rtol = 0, and stores every constructor argument
+(`set(args)` equals the constructor's parameters) with `interior` true. The comparison is stricter than the deleted
+test's, which compared with a recorded forward at 1e-5 on CPU and 1e-4 on CUDA. On f9b0014c8: the ISLA test directory, 414 passed and 132 skipped
+on CPU (370472), 553 passed and 1 skipped on a GB300 with every CUDA test (370473); the recipe tests, 585 passed with the
+same two failures (370615).
+
+**The smokes.** Job 370215, on the merged tree e10681b33, one GB300 node: each interior dataset trained each form for 40
+steps, bfloat16, augmentation off, seed 42, at its reference split and resolution, both forms per-block compiled, timed in
+the same job. ISLA-DTT's step was 2.17 to 2.73 times interacting ISLA's and its peak allocated memory 1.12 to 1.52 times;
+on the DrivAerML Volume task with the whole boundary (five pieces), 2.17 against 0.93 s and 195 against 129 GiB. Every
+resolved configuration had `query_independent` true and per-block compile, every boundary piece its dataset file names
+arrived non-empty, there was no graph break and at most one recompile per run. Tensile2d builds and trains ISLA-DTT: its
+loss fell from 0.47 to 0.20. On the lug at one GPU ISLA-DTT's 10-step mean loss drifted from 0.50 to 0.70 while
+interacting ISLA's fell from 0.48 to 0.40; the lane reads it as batch-1 noise, since the four-GPU reference lane of
+ISLA-DTT on the lug descends normally. The smoke before the merge with 0d46b2f9b (369932, another node) gave step ratios
+of 1.97 to 2.64 and the same memory.
+
+**The query-independence check.** On one real case per interior dataset, with freshly initialized weights (the 0.9.0
+checkpoints do not load into the current version), eager and in evaluation mode so that the boundary draw is fixed, 1,000
+other points were added to a request, and the largest change at the shared points was taken as a fraction of the field's
+largest value. In float64 ISLA-DTT moved by 1.5e-15 to 2e-14, roundoff, against interacting ISLA's 2.8e-3 to 3.1e-2. In
+float32 ISLA-DTT moved by 8e-7 to 3e-5, which the lane reads as of the order of the change from reversing the request
+(7e-7 to 8e-6), and interacting ISLA by 3e-3 to 3e-2.
+
+**What it leaves.** The interior standings stay interacting ISLA 0.9.0's until the final reference rerun, which trains
+ISLA-DTT as the class builds it. Research probes that compose the recipe's interior configuration now get ISLA-DTT unless
+they pass `model.query_independent=false`; all of them read checkpoints from before 0.12.0, which are refused anyway, so
+they stay unchanged. AirfRANS's ISLA-DTT reference lanes trained eagerly, and its configuration now compiles per block;
+COMPILED-PATH found compiled equal to eager per case after the mix-order fix, and the per-block certification under the
+supervisor's compiled-regions policy is the final rerun's.
+
+**For the book.** The four In-flight callouts on the switch (03, 05, 06, 21) are gone. 03, 05, 06 and 21 state the
+default: `None` follows the task, `interior=True` alone builds ISLA-DTT, `query_independent=False` builds interacting
+ISLA, and every interior configuration states `query_independent: true` and compiles per block. 05's and 09's parameter
+counts build their interacting model explicitly; 06 shows the recipe's interacting command, that a checkpoint carries its
+form, and the query-independence check; 19 gives the smokes' step and memory ratios, as the class's training checks, not
+as timings of the cost sweep; 15's callout says that the Tensile2d configuration builds and trains ISLA-DTT. The interior
+standings' callouts stay. 20's far-field cell now reads the whole-boundary geometry call from 06's re-timed table.
+Records: results/campaigns_2026-10-23/default_dtt/ (FINAL_REPORT.md, BOOK_CHANGES.md, BOOK_SENTENCES_v2.md) and
+results/campaigns_2026-10-23/dtt_default_int/ (FINAL_REPORT.md).
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-default-2026-10-24/SECOND_READ_DEFAULT.md).*
+
 ## 2026-10-22 — MECH-090: on Tensile2d the fixed compiled path's float32 gradients sit at a one-ulp eager floor, and pytorch/pytorch#195845 added a unit-dependent sink to ISLA's slice-state softmax (registered emulations not confirmed; a post-smoke emulation matches) {#sec-nb-mech090}
 
 **Question.** REF-090's Tensile2d control (@sec-nb-ref090-t2d-control) read (b) by its registered weighing, in which A2
