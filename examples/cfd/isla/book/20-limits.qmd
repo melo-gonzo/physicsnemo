@@ -1068,11 +1068,13 @@ print(f"- **Not stored.** SHIFT-SUV's {SUV_N} files store the vehicle alone, ope
       "files is robust. A rebuild of each open root's outline from its own vertices with no chosen radius (a constrained "
       "nearest-neighbor crust) fails its own validation at the sharp trailing edges, and on the open roots, where distinct "
       "stored vertices share a position on the plane, at its first check; every failure was caught by a check. The dataset's "
-      f"source STL files, stored for {HC[0]} cases, hold the root closed by a planar cap, and on each of the {HC[1]} read "
+      f"source STL files, stored for {HC[0]} cases of five of its 180 geometries, hold the root closed by a planar cap, and on "
+      f"each of the {HC[1]} read "
       f"that cap matches the closed root's hole to {HC[2]} in (Hausdorff distance). Asked whether the plane may take its "
       "root outline from that cap, applied to every case after a check that the case's own root points lie on it, Peter "
-      "answered \"Yes, that works\". So the recipe is to build HiLiftAeroML's symmetry plane at load from that cap, case by "
-      "case, and a case that fails the check gets no plane; until it does, the configuration reads no symmetry plane.")
+      "answered \"Yes, that works\". So HiLiftAeroML's symmetry plane is the far field's $y = 0$ disk with that cap cut out, "
+      "built at load case by case, and a case that fails the check gets no plane; the configuration does not read it "
+      "(In flight, below).")
 print()
 # the far-field radius the stored interiors and curator's two synthesized files use (BC-SIDECAR, decision 4)
 HL_R = re.search(r"The stored interiors and curator's 2 files use [\d,.]+ in \(([\d.]+) MAC\)", " ".join(R.load("bc_sidecar", "REPORT.md").split())).group(1)
@@ -1086,8 +1088,8 @@ print("**Peter approved building the missing pieces in the recipe, as the superv
       "the roof's or the outlet's. It takes HiLiftAeroML's inlet and outlet from the curation pipeline's own generator, its "
       "arithmetic copied unchanged, at the "
       f"radius the stored interiors use, {HL_R} mean aerodynamic chords, read beside the wing with its duplicated root cells "
-      "dropped (@sec-data-hilift). Its symmetry plane is the source STL's root cap, checked against each case's own root "
-      "points (above), which the recipe does not build yet. GeoTransolver's and Transolver's inputs and targets are bitwise unchanged by both transforms "
+      "dropped (@sec-data-hilift). Its symmetry plane, the far field's $y = 0$ disk with the source STL's root cap cut out, "
+      "each case checked against its own root points (above), is not built. GeoTransolver's and Transolver's inputs and targets are bitwise unchanged by both transforms "
       f"({BCSU_BASE[0]} of {BCSU_BASE[0]} items with the box, {BCSU_BASE[1]} of {BCSU_BASE[1]} with the inlet and outlet). Both "
       "standings were trained reading the body alone, and the final reference run (@sec-ledger) retrains them with these pieces. What would "
       "settle the question: each standing retrained with ISLA reading those pieces, two seeds, scored beside the standing as "
@@ -1100,8 +1102,9 @@ print("**Peter approved building the missing pieces in the recipe, as the superv
 ```
 
 ::: {.callout-note title="In flight"}
-HiLiftAeroML's symmetry plane is not read. The plane built at load from the source STL's root cap, checked case by case
-against each case's own root points, is being built, and the ledger (@sec-ledger) tracks it.
+HiLiftAeroML's symmetry plane is not read. The plane built at load from the far field's $y = 0$ disk with the source
+STL's root cap cut out, checked case by case against each case's own root points, is being built, and the ledger
+(@sec-ledger) tracks it.
 :::
 
 ### The near-wall channel under the whole boundary {#sec-oq-nearwall}
@@ -1166,18 +1169,19 @@ print("**The open question is whether a slice's mean normal should be normalized
       "the measure-weighted normals of a closed surface sum to zero, so in bfloat16 that mean is mostly rounding, and the "
       "rounding can make it exactly zero. The clamp then takes over: the gradient through the normalization becomes "
       "$I / \\epsilon$ in place of $(I - \\hat m_s \\hat m_s^\\top) / \\lvert m_s \\rvert$, a gain of "
-      "$\\lvert m_s \\rvert / \\epsilon$, up to $10^9$. "
+      "$\\lvert m_s \\rvert / \\epsilon$, about $10^9$ for a slice whose mean normal is near $10^{-3}$. "
       f"In {n_s} one-ulp bfloat16 samples of a training step on real inputs ({n_c} compiled, {n_e} eager), one compiled "
       f"step of ISLA-DTT on the AirfRANS interior task blew the gradient up, in the slice of layer {int(m_min[0]) + 1} of "
       f"twelve with that layer's smallest $\\lvert m_s \\rvert$ ({sci_(m_min[2])}), by {sci_(amp)} times the float64 truth on that row, "
       f"and a second process with the same compiled kernels repeated it; no eager sample did. No such spike shows in "
       f"training: the logs of {n_runs} training runs of ISLA and ISLA-DTT hold no skipped step and no non-finite loss, and "
       f"the optimizer states of {S._COUNT.get(int(n_ck[0]), n_ck[0])} of them, read at {n_ck[1]} checkpoints, hold no "
-      "spike of that size, which the second-moment estimates of the parameters AdamW trains would hold for hundreds of steps. Muon, the "
+      "spike of that size, which the second-moment estimates of the parameters AdamW (Adam with decoupled weight decay) trains would hold for hundreds of steps. Muon, the "
       "optimizer of every matrix parameter, steps along an orthogonalized direction of fixed size (steepest descent in the "
       "spectral norm), so a large gradient does not make a large update; and the finite spikes of the routing path that do "
-      f"occur, in compiled and eager runs alike, leave at most a one-epoch loss blip of about {blip}%. The spike is a "
-      "property of the normalization, not of the compiled path: the compiled kernels' coarser partial sums make an exact zero more likely, "
+      f"occur, in compiled and eager runs alike, leave at most a one-epoch loss blip of about {blip}%. On the spike study's "
+      "quantitative reading the spike is a property of the normalization, not of the compiled path: the compiled kernels' "
+      "coarser partial sums probably make an exact zero more likely (inferred, not measured on the GPU), "
       "and nothing in the eager code prevents one. What would settle it: a smooth form of the invariant with no constant, "
       "checked by a deterministic test (a closed boundary with uniform routing, whose mean normal is exactly zero), then "
       "trained and read for harm against the standings. Cost: not priced. "

@@ -762,11 +762,12 @@ print(f"Peter ruled on this branch in advance, before any ISLA-DTT test score ex
       f"arithmetic seed means; {R.source('ref090', 'r090_final.json')}). ISLA-DTT also costs more: on AeroZoo its median training "
       f"step is {cr(0)[0]:.2f} to {cr(0)[1]:.2f} times interacting ISLA's over the seven splits, its peak memory {cr(2)[0]:.2f} to "
       f"{cr(2)[1]:.2f} times, and its training GPU-hours {cr(3)[0]:.1f} to {cr(3)[1]:.1f} times (four GB300 GPUs, bfloat16; "
-      f"{R.source('az_decide_final', 'tables_final.md')}, Cost).")
+      f"{R.source('az_decide_final', 'tables_final.md')}, Cost). Those lanes ran the read's reference implementation in one "
+      "unchunked step; the class's ISLA-DTT step on AeroZoo is @tbl-using-dtt-cost.")
 print()
 print("The interacting form stays in the class. A surface task uses it: under Peter's ruling for the surface task, it reads every "
       "named boundary and predicts at the cells of the boundaries it names (@sec-arch-modes); ISLA-DTT's form of the surface "
-      "task costs about four times its step, and the supervisor's reading of the revisit that ruling asks for keeps the "
+      "task costs about four times its step on a DrivAerML case with the whole boundary at 200,000 and 400,000 cells, and the supervisor's reading of the revisit that ruling asks for keeps the "
       "interacting form there (@sec-cost-surface-form). On an interior task it stays "
       "available as an explicit choice, `query_independent=False`. This read compares the two forms with ISLA-DTT's forest as the "
       "code builds it, whose octant test is not antipodal at zero normal components (@sec-arch-tree-read). Data: "

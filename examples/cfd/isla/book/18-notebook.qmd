@@ -42100,13 +42100,14 @@ reviewed by a separate child, then integrated in five passes):
   unchunked step's up to summation order. It is the recipe's training path for ISLA-DTT, with no switch. The size rule
   (`_chunk_spans`) takes the fewest chunks of one size whose predicted peak, a linear fit in a chunk's pairs and points
   refitted on the final code (bfloat16 0.136 GiB per million pairs and 23.25 GiB per 100,000 points, with a margin of
-  7.6 GiB), fits the device; under data parallelism an all-reduce takes the smallest fitting size over the ranks, so
-  every rank makes the same choice, before any point's forward pass, as the supervisor's rule on execution choices
-  requires.
+  7.6 GiB), fits the device; under data parallelism an all-reduce takes the smallest fitting size over the ranks, which
+  bounds every rank's chunks and decides one pass or two the same way on every rank (a rank may then add chunks for its
+  own pair counts), before any point's forward pass, as the supervisor's rule on execution choices requires; the step
+  logs the choice when it changes.
 - *One execution attribute*, `tree_read_kernel` (`"auto"` or `"reference"`). Under `"auto"` the build runs fast on
   CUDA with Warp in two or three dimensions, the walk on CUDA where the forest's depth fits its stack, and the read and
-  its node means fused on CUDA with Triton outside float64. The reference path is unchanged, and is the CPU and
-  float64 fallback. Checkpoints do not store the attribute.
+  its node means fused on CUDA with Triton outside float64. The reference path is unchanged; it is the CPU fallback,
+  and the read's float64 fallback (the build and the walk keep their Warp kernels in float64 on CUDA). Checkpoints do not store the attribute.
 - *Dropped*, with their reasons recorded: checkpointing of the read (chunking makes it redundant), the compiled read
   projections (part P, which missed certification by 1 of 1,440 groups), and per-chunk padding (no gain).
 
@@ -42188,7 +42189,7 @@ results/campaigns_2026-10-23/dtt_fast_final_table_p5/TABLE.md (pass 2's table wi
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-fast-2026-10-24/SECOND_READ_FAST.md).*
 
-## 2026-10-24 — HL-DUP stage 2: ISLA 0.9.0, GeoTransolver and Transolver retrained on HiLiftAeroML's deduplicated wing and scored over its distinct cells; the registered verdict is mixed; every baseline ÷ ISLA ratio moved toward one (GeoTransolver 0.936 / 0.957, Transolver 0.966 / 0.954 on pressure / wall shear), and both baselines still lead in the mean; the radius-free rebuild of the root outline failed its own validation, and Peter approved building the symmetry plane from the closed root cap of the dataset's source STL files {#sec-nb-hl-dup-stage2}
+## 2026-10-24 — HL-DUP stage 2: ISLA 0.9.0, GeoTransolver and Transolver retrained on HiLiftAeroML's deduplicated wing and scored over its distinct cells; the registered verdict is mixed; every baseline ÷ ISLA ratio moved toward one (GeoTransolver 0.936 / 0.957, Transolver 0.966 / 0.954 on pressure / wall shear), and both baselines still lead in the mean; the radius-free rebuild of the root outline failed its own validation, and Peter approved building the symmetry plane with the closed root cap of the dataset's source STL files as its hole {#sec-nb-hl-dup-stage2}
 
 **Why.** The stored wings repeat about 25,700 root cells about 18.9 million times (@sec-nb-hl-dup). With the
 supervisor's ruling that the deduplication is canonical on principle, ISLA 0.9.0 and both unit-drive baselines were
@@ -42237,16 +42238,17 @@ within 0.011 in of the closed root's outline.
 **Peter's answer (about 19:10 EDT 2026-10-24).** The supervisor asked him at 19:08 EDT: "may HiLift's symmetry plane
 take its root outline from the closed root cap in the dataset's own source STL files, applied to every case after a
 check that the case's own root points lie on it?" Peter answered: "Yes, that works". So HL-SYMPLANE builds the plane at
-load from the source STL's root cap, and a case that fails the check gets no plane. Until it merges, HiLift's boundary
+load from the far field's y = 0 disk minus the source STL's root cap, after a per-case check of the case's own on-plane
+vertices and open edges against the cap, and a case that fails the check gets no plane, logged. Until it merges, HiLift's boundary
 still lacks the plane.
 
 **Second read.** A lane reviewer (REVIEW_STAGE2.md) found 11 fixes; all are applied (REVISION_NOTE_STAGE2.md).
 
 **For the book.** These rows are to set the book's HiLift standing on the deduplicated wing with the metric over
 distinct cells, HiLift's In-flight mark (`standing.BOOK_IN_FLIGHT`) is to go, and HiLift's symmetry plane is
-being built from the source STL's root cap (Peter's answer above). 10 and 20 now say so, with an In-flight callout each
+being built with the source STL's root cap as its hole (Peter's answer above). 10 and 20 now say so, with an In-flight callout each
 pointing at HL-SYMPLANE, and 20 records his answer and the failed rebuild. The standing switch and the removal of the
-mark are not applied in this batch: the standing is read from
+mark (HL-STANDING) are not applied in this batch: the standing is read from
 `results/char/hilift_surface_090.json` by 04, 07, 08, 10, 20 and the index, and 10 also draws per-case figures and
 angle-of-attack analyses from its `case_level`, so the switch needs a new standing artifact with stage 2's per-case
 scores, which are not among the records copied. Until then the chapters show the stored-wing standing with its In-flight

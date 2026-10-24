@@ -1214,26 +1214,27 @@ rng = lambda xs, f="{:.2f}": f.format(min(xs)) + " to " + f.format(max(xs)) if f
 print(f"**On one GB300, ISLA-DTT's training step takes {rng([1 / s for s in sp])} of the time of its read's reference "
       f"implementation in one unchunked step, at {rng(mp)} of its peak memory, on the DrivAerML Volume task and AeroZoo; it "
       f"costs {rng(rx(drv, 0))} times interacting ISLA's step on the DrivAerML Volume task and {rng(rx(az, 0))} times on "
-      f"AeroZoo.** @tbl-using-dtt-cost times the recipe's own training step, optimizer included, of the three in one job per "
+      f"AeroZoo, both forms compiled block by block.** @tbl-using-dtt-cost times the recipe's own training step, optimizer included, of the three in one job per "
       "case (@sec-arch-tree-exec for the pieces). At 400,000 prediction points on the DrivAerML Volume task the reference "
       f"implementation runs out of the GPU's memory, and ISLA-DTT takes {v400['dtt'][0]:,.0f} ms with the vehicle and "
-      f"{w400['dtt'][0]:,.0f} ms with the whole boundary; the chunked step has trained up to {MAXN} million prediction points "
-      "per case on DrivAerML.")
+      f"{w400['dtt'][0]:,.0f} ms with the whole boundary; a chunked training step has run at up to {MAXN} million prediction "
+      "points per case on DrivAerML.")
 print()
 dw, za, ra = (FIXED[k] for k in ("DrivAerML whole boundary", "AeroZoo", "AirfRANS whole boundary"))
-print("**At the registered training counts, in the state training runs in, ISLA-DTT's step is "
+print("**At the point counts the recipe's configurations train at, where the count never changes within a process, "
+      "ISLA-DTT's step is "
       f"{dw['dtt'][0]:,.0f} to {dw['dtt'][1]:,.0f} ms on the DrivAerML Volume task with the whole boundary at {dw['n']:,} "
       f"prediction points, {za['dtt'][0]:,.0f} to {za['dtt'][1]:,.0f} ms on AeroZoo at {za['n']:,} and {ra['dtt'][0]:,.0f} to "
       f"{ra['dtt'][1]:,.0f} ms on the AirfRANS interior task with its far field at {ra['n']:,}.** Interacting ISLA takes "
       f"{dw['isla']:,.0f}, {za['isla']:,.0f} and {ra['isla']:,.0f} ms there, and the reference implementation "
-      f"{dw['ref']:,.0f}, {za['ref']:,.0f} and {ra['ref']:,.0f} ms. In that state the point count never changes within a "
-      "process, as at a fixed `sampling_resolution`, and the two numbers of each range come from two jobs on two nodes. On "
+      f"{dw['ref']:,.0f}, {za['ref']:,.0f} and {ra['ref']:,.0f} ms. The configurations draw a fixed `sampling_resolution`, "
+      "and the two numbers of each range come from two jobs on two nodes. On "
       f"AirfRANS a process whose counts vary runs the same code up to {REP_AF:.0f}% apart from one "
       f"process to the next, against {REP_AF_FIXED:.1f}% at a fixed count, so its rows in @tbl-using-dtt-cost carry that "
       "spread.")
 print()
-print(f"**ISLA-DTT's peak memory fills the GPU as far as one chunk allows, because the size rule takes the fewest chunks "
-      f"that fit.** At these counts every point of a case runs in one chunk: {w200['dtt'][1]:.0f} GiB at 200,000 points on "
+print(f"**ISLA-DTT's peak is that of one chunk of every point, because the size rule takes the fewest chunks that fit, "
+      f"and here one chunk fits.** At these counts every point of a case runs in one chunk: {w200['dtt'][1]:.0f} GiB at 200,000 points on "
       f"the DrivAerML Volume task with the whole boundary, on a card the rule reads as {CAP:.0f} GiB. A step cut into more "
       "chunks holds less memory and takes longer, so a peak here measures what one chunk of every point needs, not the "
       f"least the step can run in. On the GINOT bracket lug, all {next(n for c, n, v in F2_ROWS if c.startswith('lug')):,} "
@@ -1454,11 +1455,12 @@ print(f"- **The geometry kernel is chosen for you.** At the first forward pass t
       "rank-2 inputs run eager. To force one path, set the model's `geo_kernel` attribute to `\"eager\"` or `\"fused\"` "
       "before the first forward pass.")
 print("- **So are ISLA-DTT's tree-read kernels.** Under the default `tree_read_kernel=\"auto\"` the forest build and the walk "
-      "run their Warp kernels on CUDA and the read its fused Triton kernel on CUDA outside float64, each where its own "
-      "requirements hold, and each logs its choice once; on the CPU and in float64 the reference runs. All of them compute the "
-      "same forest, the same pairs and the same read up to summation order (@sec-arch-tree-exec). Set `\"reference\"` to run "
-      "every reference. The recipe trains ISLA-DTT in chunks of prediction points, as many as fit the GPU, the same on every "
-      "rank (@sec-using-dtt-cost).")
+      "run their Warp kernels on CUDA (Warp, like Triton, is a Python framework for writing GPU kernels) and the read its fused "
+      "Triton kernel on CUDA outside float64, each where its own requirements hold, and each logs its choice once; on the CPU "
+      "every piece runs its reference, and in float64 the read does. All of them compute the same forest, the same pairs and "
+      "the same read up to summation order (@sec-arch-tree-exec). Set `\"reference\"` to run every reference. The recipe "
+      "trains ISLA-DTT in the fewest chunks of prediction points that fit the GPU, chosen before any point's forward pass and "
+      "bounded alike on every rank (@sec-using-dtt-cost).")
 from physicsnemo.experimental.models.isla import model as IM
 _whole = [n for n, c in ISLA_CFGS.items() if c.get("compile")]; _rest = [n for n in ISLA_CFGS if n not in _whole]
 assert all(c.get("compile_options") == opts for c in ISLA_CFGS.values())   # one set of options in every configuration

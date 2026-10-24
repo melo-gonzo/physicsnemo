@@ -2137,8 +2137,9 @@ where they are installed. Five pieces make up the read:
    with `torch.searchsorted` over the sorted indices, on the GPU.
 4. **The read** (`fused_read.py`, Triton) computes each pair's kernel term
    from the shared basis and the block's weights inside the kernel, in the
-   forward pass and again in the reverse pass, as flash attention
-   recomputes its logits, so nothing per pair is kept but the basis. Its
+   forward pass and again in the reverse pass, as memory-efficient
+   attention kernels recompute their attention weights instead of storing
+   them, so nothing per pair is kept but the basis. Its
    reverse pass sums in a fixed order and is deterministic. The basis itself,
    the small network over each pair's invariants, runs fused with those
    invariants (`fused_basis.py`).
@@ -2146,17 +2147,24 @@ where they are installed. Five pieces make up the read:
    (`ISLA.query_chunks`). The boundary side, the slice layers over the
    boundary tokens and the forest, runs once per case. The prediction
    points then run in chunks, each holding only its own activations, and
-   the boundary side's reverse pass runs once after the chunks'. The loss
+   the boundary side's reverse pass runs once after the chunks'. A loss
+   that is not a sum over points, such as a relative L2 over the case,
+   takes two passes when there is more than one chunk: the outputs without
+   a graph, the loss's gradient in them, then each chunk recomputed with
+   its reverse pass. The loss
    and every gradient are those of the unchunked step up to summation
    order, because a read-only point reads exactly what it reads among all
    of them. The recipe always trains ISLA-DTT this way. A size rule
    picks the fewest chunks of one size whose predicted peak memory fits
    the GPU: a linear function of the chunk's pairs and points, fitted to
    measured peaks on GB300 with a margin. It decides after the boundary
-   side and before any point's forward pass; under data parallelism every
-   rank takes the smallest fitting size over the ranks (an all-reduce), so
-   every rank makes the same choice; and the step logs it once
-   (`_chunk_spans` in the recipe's `src/train.py`).
+   side and before any point's forward pass. Under data parallelism, where
+   each GPU trains on its own case and the ranks combine their gradients
+   (an *all-reduce*), an all-reduce takes the smallest fitting chunk size
+   over the ranks: that bounds every rank's chunks and decides one pass or
+   two the same way on every rank, and a rank may then add chunks for its
+   own pair counts. The step logs the choice when it changes (`_chunk_spans`
+   in the recipe's `src/train.py`).
 
 ```{python}
 #| label: para-arch-tree-exec
@@ -2176,6 +2184,7 @@ bf_o = next(r_ for r_ in BF if r_["case"] == "AirfRANS" and r_["group"] == "othe
 bf_ref = [R.num(bf_o["reference family min / median / max"], i) for i in range(3)]
 bf_new = [R.num(bf_o["head family"], i) for i in range(3)]
 bf_b = next(r_ for r_ in BF if r_["case"] == "AirfRANS" and r_["group"] == "blocks")
+bf_k = next(r_ for r_ in BF if r_["case"] == "DrivAerML vehicle" and r_["group"] == "kernel_basis")
 assert all(r_["tensors above in every run / below"].startswith("0 /") for r_ in BF if r_["tensors above in every run / below"])
 FAM = {r_["group"]: r_ for r_ in R.md_table("dtt_fast_done", "integration/RESULTS.md", "Remerge", index=4)}
 FAM_B = [R.num(FAM["blocks max"][c]) for c in ("reference family in b1", "reference family in c1")]
@@ -2189,12 +2198,14 @@ print("**The fast pieces change no number beyond rounding.** On five real cases 
       f"{EQ32:.2f} times the reference's, against a bound of 2. In bfloat16 the test is a family of seven one-ulp "
       "perturbations of the reference's inputs, the reference's own spread under rounding, measured on the DrivAerML Volume "
       "task with the vehicle and on AirfRANS. Per tensor group the fast pieces' distance to float64 lies inside that "
-      "family's range on both, but for single runs and one group. On AirfRANS the blocks' gradients reach {R.num(bf_b['head family'], 2):.2f} in one run of seven, against the "
-      f"reference family's maximum of {R.num(bf_b['reference family min / median / max'], 2):.2f}, and the group of the "
-      f"remaining parameter gradients, the one group, has a family of {bf_new[0]:.2f} to {bf_new[2]:.2f} (median {bf_new[1]:.2f}) against "
-      f"the reference's {bf_ref[0]:.2f} to {bf_ref[2]:.2f}. The supervisor accepts that read: the reference's own family "
-      f"moves by more than that excess between two jobs of the same code (its blocks' maximum {FAM_B[0]:.2f} in one and "
-      f"{FAM_B[1]:.2f} in the other), no tensor lies above the reference in every run, and float64 and float32 are "
+      f"family's range on both, except for single-run maxima (the DrivAerML vehicle's kernel basis at "
+      f"{R.num(bf_k['head family'], 2):.2f} against {R.num(bf_k['reference family min / median / max'], 2):.2f}, AirfRANS's "
+      f"blocks at {R.num(bf_b['head family'], 2):.2f} in one run of seven against "
+      f"{R.num(bf_b['reference family min / median / max'], 2):.2f}) and one group on AirfRANS, the remaining parameter "
+      f"gradients, whose family runs {bf_new[0]:.2f} to {bf_new[2]:.2f} (median {bf_new[1]:.2f}) against the reference's "
+      f"{bf_ref[0]:.2f} to {bf_ref[2]:.2f}. The supervisor accepts that read: the reference's own family moves by more than "
+      "that excess between two jobs whose code differs only in a geometry change shared by both arms (its blocks' maximum "
+      f"{FAM_B[0]:.2f} in one and {FAM_B[1]:.2f} in the other), no tensor lies above the reference in every run, and float64 and float32 are "
       "equivalent. The forest build synchronizes the host with the GPU "
       f"{SYNC_B[1]} times where the reference synchronizes {SYNC_B[0]}, and the walk once where it "
       f"synchronizes {SYNC_W[0]}; the read's reverse pass runs {BWD[0]} times faster than the reference's, and the "
@@ -2207,7 +2218,8 @@ print("**One execution attribute, `tree_read_kernel`, selects the path: `\"auto\
       "where the forest's depth fits the walk's stack (`resolve_walk`); and the read and its node means run fused on CUDA "
       "where Triton imports, in any precision but float64 (`ISLA.resolve_tree_read_kernel`). Any other case runs the "
       "piece's reference, and `\"reference\"` runs every reference. The reference path is the code the reference tests "
-      "check, and the class's path on the CPU and in float64. Checkpoints do not store the attribute, and a loaded model "
+      "check and the class's whole path on the CPU; in float64 on CUDA the read and its node means run their reference, "
+      "and the build and the walk keep their Warp kernels. Checkpoints do not store the attribute, and a loaded model "
       "starts at `\"auto\"`.")
 print()
 print("Three choices of the supervisor stand beside the fast pieces. PyTorch's default reduced-precision reduction in "
@@ -2215,7 +2227,8 @@ print("Three choices of the supervisor stand beside the fast pieces. PyTorch's d
       f"time by {FLG[0]}% to {FLG[1]}% on the {FLG[2]} large settings timed and removes no measured error, since a cold "
       "compile of the bfloat16 step picks some kernels by timing, which moves the one-ulp families as much as the setting "
       "does. The read's projections stay out of the compiled blocks: compiled, they missed the certification of compiled "
-      f"regions on {PART_P[0]} of {PART_P[1]} tensor groups. And the read of bfloat16 equivalence above stands for AirfRANS; "
+      f"regions on {PART_P[0]} of {PART_P[1]} tensor groups, at the bound, although every group lies inside eager's family "
+      "of one-ulp draws. And the read of bfloat16 equivalence above stands for AirfRANS; "
       "the certification of the compiled path (@sec-arch-cost) checks every dataset with families of its own. "
       f"Data: {R.source('dtt_fast_done', 'flag/REPORT.md')}; "
       f"{R.source('dtt_fast_done', 'integration/RESULTS.md')} (Pass 3, part P).")
@@ -2721,8 +2734,8 @@ gb = lambda k: PB["gpu_busy_unprofiled_fraction"][k]
 pa = PB["prefetch_ab_ms"]
 sav = sorted(100 * (1 - np.mean(r["fix"]) / r["base"]) for r in (pa["isla_aba_269723"], pa["isla_abab_270549"]))
 ri, dd = PB["rank_imbalance"], PB["ddp_allreduce"]
-bc, sy, mem = PB["boundary_cells_per_rank"]["isla"], PB["host_syncs_per_step"]["isla_dtt"], PB["peak_memory_gib"]
-FMi, FMd = FM["isla"], FM["isla_dtt"]
+bc, mem = PB["boundary_cells_per_rank"]["isla"], PB["peak_memory_gib"]
+FMi = FM["isla"]
 print(f"**The step is bound by the GPU, and what is left is waiting.** ISLA's warm step takes {HT['isla']['step']:,.0f} ms and keeps "
       f"the GPUs running kernels for about {100 * gb('isla'):.0f}% of it; its forward and reverse passes issue their kernels faster "
       f"than the GPU runs them ({HT['isla']['fwd_host']:.0f} ms of host time against {GK['isla']['fwd']:.0f} ms of kernels in the "
