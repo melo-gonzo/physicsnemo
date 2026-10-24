@@ -33,6 +33,8 @@ Usage::
     python src/train.py benchmark_io=true +training.benchmark_max_steps=20
 """
 
+import logging
+import math
 import os
 import time
 from collections.abc import Callable, Iterator, Mapping
@@ -283,6 +285,244 @@ def forward_pass(
     return loss, loss_td.detach(), metric_td.detach()
 
 
+### Loss types whose per-field value is a sum over the points of terms that vanish
+### where the prediction equals the target, normalized by the targets alone: a
+### chunk's share of the loss and of its gradient is the loss with every other
+### point's prediction set to its target. The others (a root over all points:
+### relative_l2, case_relative_l2) take the two-pass form.
+_POINTWISE_LOSSES = ("huber", "mse", "relative_mse")
+
+### ISLA-DTT's step over a chunk of prediction points, by precision: its peak
+### reserved memory above the memory allocated once the boundary side and the walk
+### have run, in GiB per million of the chunk's walk pairs and per 100,000 of its
+### points, and the margin. Least squares on GB300 over DrivAerML Volume (the
+### vehicle alone, the whole boundary) and AeroZoo at 200,000 tokens with the fused
+### read and its fused backward, each chunk's points walked when it runs: one chunk
+### of every point and chunks of a half to a quarter of them, in one pass (huber)
+### and in two (relative_l2, case_relative_l2, within the one-pass rows'
+### residuals), the largest point count of each dataset held out. bfloat16: 20 rows
+### at 100k-600k points and 7 held out at 500k-800k, the margin the intercept (4.05
+### GiB) plus the largest held-out residual (3.47 above the fit); float32 without an
+### intercept, which holds out three times closer than with one: 10 rows at
+### 50k-200k and 6 held out at 150k-250k, the margin the largest residual of any row
+### (3.93 above the fit). Every row's peak is within its prediction. Each peak was
+### measured over a few steps after empty_cache, so fragmentation over a long run
+### is not in it. Refit (fit_rule.py of DTT-FAST RULE, on cost_rule.py's rows) when
+### the read's or the blocks' memory changes.
+_CHUNK_GIB: dict[str, tuple[float, float, float]] = {
+    "bfloat16": (0.136, 23.25, 7.6),
+    "float32": (0.231, 44.97, 4.0),
+}
+
+_LOGGER = logging.getLogger("training.step")
+_chunks_logged: tuple[int, bool] | None = None
+
+
+def _chunked_step(model: torch.nn.Module, batch: dict[str, Any]) -> bool:
+    """Whether this batch takes :func:`chunked_forward_backward`: the model is
+    ISLA-DTT (``query_chunks``) and the batch has prediction points."""
+    core = (
+        model.module
+        if isinstance(model, torch.nn.parallel.DistributedDataParallel)
+        else model
+    )
+    if not getattr(core, "query_independent", False):
+        return False
+    return batch["forward_kwargs"].get("prediction_points") is not None
+
+
+def _chunk_peak_gib(
+    n_pairs: int, n_points: int, allocated_gib: float, precision: Precision
+) -> float:
+    """The predicted peak memory in GiB of ISLA-DTT's step over a chunk of
+    ``n_points`` prediction points with ``n_pairs`` walk pairs, from the memory
+    allocated once the boundary side has run, with the fit's margin."""
+    per_m_pairs, per_100k_points, margin = _CHUNK_GIB[precision]
+    return (
+        allocated_gib
+        + per_m_pairs * n_pairs / 1e6
+        + per_100k_points * n_points / 1e5
+        + margin
+    )
+
+
+def _chunk_spans(
+    chunks: Any,
+    device: torch.device,
+    ddp: bool,
+    pointwise: bool,
+    precision: Precision,
+    capacity_gib: float | None,
+) -> tuple[list[tuple[int, int]], bool]:
+    """The ranges of prediction points of ``chunks`` (``ISLA.query_chunks``) that
+    :func:`chunked_forward_backward` runs, and whether it takes two passes over
+    them: the fewest chunks of one size (the last one shorter) whose predicted peak
+    (:func:`_chunk_peak_gib`) is within ``capacity_gib``, by default the device's
+    free memory and the memory the caching allocator holds (on CPU, no limit). The
+    chunk size comes from each chunk's share of the walk's pairs; under DDP the
+    smallest over the ranks bounds every rank's chunk size and decides the passes,
+    so every rank makes the same one-or-two-pass choice. Then each rank adds chunks
+    while one of them, by its exact pair count, is predicted not to fit. A
+    ``pointwise`` loss takes one pass; any other takes one pass when every rank's
+    points fit in one chunk, else two. Raises ``torch.OutOfMemoryError`` when not
+    even a chunk of one point fits. The decision is logged at its first call and
+    when it changes."""
+    global _chunks_logged
+    n = chunks.n_points
+    cum = torch.cat([chunks.pair_counts.new_zeros(1), chunks.pair_counts.cumsum(0)])
+    n_pairs = int(cum[-1])
+    allocated = 0.0
+    if device.type == "cuda":
+        allocated = torch.cuda.memory_allocated(device) / 2**30
+        if capacity_gib is None:
+            free, _ = torch.cuda.mem_get_info(device)
+            capacity_gib = (free + torch.cuda.memory_reserved(device)) / 2**30
+    if capacity_gib is None:
+        capacity_gib = math.inf
+    empty = _chunk_peak_gib(0, 0, allocated, precision)
+    per_point = (_chunk_peak_gib(n_pairs, n, allocated, precision) - empty) / n
+    fit, most = (capacity_gib - empty) / per_point, n
+    if ddp:
+        reduced = torch.tensor([fit, -n], dtype=torch.float64, device=device)
+        dist.all_reduce(reduced, op=dist.ReduceOp.MIN)
+        fit, most = float(reduced[0]), -int(reduced[1])
+    if fit < 1:
+        raise torch.OutOfMemoryError(
+            "ISLA-DTT training step: a chunk of one prediction point is predicted to"
+            f" peak at {empty + per_point:.1f} GiB of {capacity_gib:.1f}"
+            + (f"; {fit:.2f} points fit on the tightest rank" if ddp else "")
+        )
+    size = most if fit >= most else math.floor(fit)
+    two = not pointwise and most > size
+    ### One chunk holds every pair, as the size counts them, so only a split can
+    ### add chunks here, and then the passes are already two.
+    k = -(-n // size)
+    while True:
+        step = -(-n // k)
+        spans = [(a, min(a + step, n)) for a in range(0, n, step)]
+        bounds = [a for a, _ in spans] + [n]
+        pairs = cum[bounds].diff()
+        peak = max(
+            _chunk_peak_gib(p, b - a, allocated, precision)
+            for p, (a, b) in zip(pairs.tolist(), spans)
+        )
+        if len(spans) == 1 or peak <= capacity_gib:
+            break
+        if step == 1:
+            raise torch.OutOfMemoryError(
+                "ISLA-DTT training step: a chunk of one prediction point is"
+                f" predicted to peak at {peak:.1f} GiB of {capacity_gib:.1f}"
+            )
+        k += 1
+    if (len(spans), two) != _chunks_logged:
+        _chunks_logged = (len(spans), two)
+        if not ddp or dist.get_rank() == 0:
+            _LOGGER.info(
+                f"ISLA-DTT training step: {n} prediction points in {len(spans)} chunk"
+                + ("s" if len(spans) > 1 else "")
+                + (", two passes" if two else "")
+                + f" (a chunk's predicted peak {peak:.1f} GiB of {capacity_gib:.1f};"
+                + f" the largest chunk that fits {fit:,.0f} points"
+                + (", the smallest over the ranks)" if ddp else ")")
+            )
+    return spans, two
+
+
+def chunked_forward_backward(
+    batch: dict[str, Any],
+    model: torch.nn.Module,
+    precision: Precision,
+    loss_calculator: LossCalculator,
+    metric_calculator: MetricCalculator,
+    *,
+    target_config: dict[str, FieldType],
+    capacity_gib: float | None = None,
+) -> tuple[Float[torch.Tensor, ""], TensorDict, TensorDict]:
+    """ISLA-DTT's training step in chunks of prediction points
+    (``ISLA.query_chunks``): :func:`forward_pass` and the backward of its loss, with
+    the activations of one chunk of points held at a time. The loss, its fields, the
+    metrics and every parameter's gradient (averaged over the ranks, as DDP
+    averages them) are the unchunked step's up to summation order. The chunks are
+    the fewest that fit the device (:func:`_chunk_spans`, decided after the
+    boundary side and the walk, with ``capacity_gib`` its capacity, for tests). A
+    loss in ``_POINTWISE_LOSSES`` takes one pass over the chunks; any other takes
+    one pass over one chunk of every point, else two: the outputs without a graph,
+    the loss's gradient in them, then per chunk a recompute and its backward with
+    that gradient. Returns ``(loss, loss_td, metric_td)``, detached, with the
+    gradients in the parameters.
+    """
+    ddp = isinstance(model, torch.nn.parallel.DistributedDataParallel)
+    core = model.module if ddp else model
+    targets: TensorDict = batch["targets"].float()
+    if targets.batch_dims != 1:
+        raise ValueError(
+            "chunked_forward_backward takes one case's targets over its prediction"
+            f" points, batch size (n_points,); got {tuple(targets.batch_size)}"
+        )
+    measure = batch.get("target_measure")
+    measure = None if measure is None else measure.float()
+    with get_autocast_context(precision):
+        chunks = core.query_chunks(**batch["forward_kwargs"])
+
+    def predict(a: int, b: int) -> TensorDict:
+        with get_autocast_context(precision):
+            out = chunks(a, b)
+        pred = normalize_output_to_tensordict(out, target_config, "mesh").float()
+        return pred.apply(lambda p, t: p.reshape(t.shape), targets[a:b])
+
+    def one_pass(spans: list[tuple[int, int]]) -> TensorDict:
+        parts = []
+        for a, b in spans:
+            pred = predict(a, b)
+            rest = targets.select(*pred.keys(include_nested=True, leaves_only=True))
+            share, _ = loss_calculator(
+                torch.cat([rest[:a], pred, rest[b:]]), targets, measure
+            )
+            share.backward()
+            parts.append(pred.detach())
+        return torch.cat(parts)
+
+    def two_pass(spans: list[tuple[int, int]]) -> TensorDict:
+        with torch.no_grad():
+            pred = torch.cat([predict(a, b) for a, b in spans])
+        pred = pred.apply(lambda t: t.requires_grad_())
+        loss, _ = loss_calculator(pred, targets, measure)
+        loss.backward()
+        keys = list(pred.keys(include_nested=True, leaves_only=True))
+        for a, b in spans:
+            part = predict(a, b)
+            torch.autograd.backward(
+                [part[k] for k in keys], [pred[k].grad[a:b] for k in keys]
+            )
+        return pred.detach()
+
+    spans, two = _chunk_spans(
+        chunks,
+        next(core.parameters()).device,
+        ddp,
+        loss_calculator.loss_type in _POINTWISE_LOSSES,
+        precision,
+        capacity_gib,
+    )
+    pred = two_pass(spans) if two else one_pass(spans)
+    with torch.no_grad():
+        loss, loss_td = loss_calculator(pred, targets, measure)
+    chunks.backward()
+    if ddp:
+        ### Paired across the ranks by position: every rank reduces the same list.
+        params = [p for p in core.parameters() if p.requires_grad]
+        if any(p.grad is None for p in params):
+            raise RuntimeError(
+                "chunked_forward_backward: a trainable parameter has no gradient"
+            )
+        grads = [p.grad for p in params]
+        for g, r in zip(grads, fused_all_reduce(grads)):
+            g.copy_(r / dist.get_world_size())
+    with torch.no_grad():
+        metric_td = metric_calculator(pred, targets, measure)
+    return loss.detach(), loss_td.detach(), metric_td.detach()
+
+
 ### ---------------------------------------------------------------------------
 ### Epoch loops
 ### ---------------------------------------------------------------------------
@@ -366,18 +606,31 @@ def _run_epoch(
         for i in range(num_steps):
             batch = load() if next_batch is None else next_batch
             next_batch = None
-            loss, losses, metrics = forward_pass(
-                batch,
-                model,
-                precision,
-                loss_calculator,
-                metric_calculator,
-                output_type=output_type,
-                target_config=target_config,
-            )
+            chunked = is_train and scaler is None and _chunked_step(model, batch)
+            if chunked:
+                optimizer.zero_grad()
+                loss, losses, metrics = chunked_forward_backward(
+                    batch,
+                    model,
+                    precision,
+                    loss_calculator,
+                    metric_calculator,
+                    target_config=target_config,
+                )
+            else:
+                loss, losses, metrics = forward_pass(
+                    batch,
+                    model,
+                    precision,
+                    loss_calculator,
+                    metric_calculator,
+                    output_type=output_type,
+                    target_config=target_config,
+                )
 
             if is_train:
-                optimizer.zero_grad()
+                if not chunked:
+                    optimizer.zero_grad()
                 if precision == "float16" and scaler is not None:
                     scaler.scale(loss).backward()
                     if i + 1 < num_steps:
@@ -385,7 +638,8 @@ def _run_epoch(
                     scaler.step(optimizer)
                     scaler.update()
                 else:
-                    loss.backward()
+                    if not chunked:
+                        loss.backward()
                     ### Load the next batch now, while the GPU still runs this
                     ### backward: the loader's host-side work (the lookahead
                     ### sample's host-to-device copy and transforms) then
@@ -988,6 +1242,22 @@ def main(cfg: DictConfig) -> None:
     output_type = require_output_type(cfg)
     logger.info(f"Loss: {loss_calculator}")
     logger.info(f"Metrics: {metric_calculator}")
+    if getattr(getattr(model, "module", model), "query_independent", False):
+        logger.info(
+            "ISLA-DTT training step: the fewest chunks of prediction points whose"
+            " predicted peak memory fits the device on every rank"
+            + (
+                ""
+                if loss_type in _POINTWISE_LOSSES
+                else f", in two passes when more than one ({loss_type} is not"
+                " pointwise)"
+            )
+        )
+        if cfg.compile:
+            logger.info(
+                "ISLA-DTT training step: compile=true does not compile the chunked"
+                " step (query_chunks runs eagerly; compile_blocks still applies)"
+            )
     logger.info(
         f"Model contract: input_type={cfg.input_type}, output_type={output_type}"
     )
