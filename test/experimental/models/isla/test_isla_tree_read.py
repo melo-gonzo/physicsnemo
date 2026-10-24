@@ -1390,11 +1390,13 @@ def test_fused_reads_sum_their_basis_gradients_as_autograd_does():
 
 
 @cuda_only
-def test_fused_kernel_read_backward_is_deterministic():
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16], ids=["fp32", "bf16"])
+def test_fused_kernel_read_backward_is_deterministic(dtype):
     """The fused read's backward runs no atomics: two backward passes of one read give
     every gradient bitwise, with sources read by many points (each split over several
     programs, whose parts are summed in order) and sources read by none (zero); in
-    float32, where a change of summation order shows in the keys' and values' gradients."""
+    float32, where a change of summation order shows in the keys' and values' gradients,
+    and in bfloat16 (the register-capped launches)."""
     from physicsnemo.experimental.models.isla.fused_read import (
         SOURCE_CHUNK,
         fused_kernel_read,
@@ -1411,7 +1413,7 @@ def test_fused_kernel_read_backward_is_deterministic():
     plan = PairPlan.build(qi, bj, n_q, n_b)
     assert int((bj == 7).sum()) > 20 * SOURCE_CHUNK
     leaves = [
-        torch.randn(*s, generator=g, device=dev)
+        torch.randn(*s, generator=g, device=dev).to(dtype)
         for s in ((qi.shape[0], f), (h, f), (n_q, h, kc), (n_b, h, kc), (n_b, h, c))
     ]
     logm = -8 * torch.rand(n_b, generator=g, device=dev)

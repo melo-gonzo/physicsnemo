@@ -82,7 +82,8 @@ SOURCE_CHUNK = 512
 #: Registers per thread of the by-point and by-source backward kernels under a narrow
 #: basis (launch constants: these one-warp kernels are latency-bound, and on GB300 at
 #: DrivAerML scale the caps, at a few spilled registers, let more programs reside per
-#: SM and ran them 1.15x and 1.04x faster).
+#: SM and ran them 1.15x and 1.04x faster). Swept on GB300 with Triton 3.7: re-sweep them
+#: when the kernels or Triton change. CUDA only (ROCm's Triton has no maxnreg).
 POINT_MAXNREG = 128
 SOURCE_MAXNREG = 96
 
@@ -525,8 +526,9 @@ def _plan_source_items(plan: PairPlan):
     if items is None:
         src, chunk_idx = _source_items(plan, SOURCE_CHUNK)
         item_off = torch.searchsorted(src, torch.arange(plan.n_b + 1, device=src.device, dtype=src.dtype))
-        inv = torch.empty_like(plan.perm)
-        inv[plan.perm.long()] = torch.arange(plan.perm.shape[0], device=inv.device, dtype=inv.dtype)
+        n = plan.perm.shape[0]
+        inv = plan.perm.new_empty(n, dtype=torch.int32 if n < 2**31 else torch.int64)
+        inv[plan.perm.long()] = torch.arange(n, device=inv.device, dtype=inv.dtype)
         items = src, chunk_idx, item_off, inv
         plan._fused_source_items = items
     return items
@@ -571,11 +573,12 @@ class _FusedKernelRead(torch.autograd.Function):
         src, chunk_idx, item_off, inv = _plan_source_items(plan)
         prdz = torch.empty(inv.shape[0], 2 * h, device=q.device, dtype=torch.float32)
         narrow = _narrow(basis)
+        cap = narrow and torch.version.hip is None
         if n_q:
             _fkr_bwd_point_kernel[(n_q,)](
                 plan.q_offsets, plan.bj, basis, w, logm, q, k, v, lse, dsum, dout, inv, dq, dbasis, dw_parts, prdz,
                 scale, H=h, C=c, KC=kc, F=f, BLOCK=BLOCK_PAIRS, BASIS_GRAD=acc is not None,
-                NARROW=narrow, num_warps=NUM_WARPS, **({"maxnreg": POINT_MAXNREG} if narrow else {}),
+                NARROW=narrow, num_warps=NUM_WARPS, **({"maxnreg": POINT_MAXNREG} if cap else {}),
             )  # fmt: skip
         if plan.n_b:
             ### Each source's dk and dv: every item's part, then their sum in item order.
@@ -584,7 +587,7 @@ class _FusedKernelRead(torch.autograd.Function):
                 _fkr_bwd_source_kernel[(src.shape[0],)](
                     plan.b_offsets, src, chunk_idx, plan.qi_by_b, prdz, q, dout, parts, scale, SOURCE_CHUNK,
                     H=h, C=c, KC=kc, BLOCK=BLOCK_PAIRS, num_warps=NUM_WARPS,
-                    **({"maxnreg": SOURCE_MAXNREG} if narrow else {}),
+                    **({"maxnreg": SOURCE_MAXNREG} if cap else {}),
                 )  # fmt: skip
             del prdz
             _fkr_source_sum_kernel[(plan.n_b,)](item_off, parts, dk, dv, H=h, C=c, KC=kc, num_warps=1)
