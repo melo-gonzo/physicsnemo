@@ -42074,6 +42074,188 @@ RESULTS.md, REVIEW.md, lhr/timing_table.md).
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-default-2026-10-24/SECOND_READ_DEFAULT.md).*
 
+## 2026-10-24 — DTT-FAST, done: ISLA-DTT's read made exact and fast on the GPU (a Warp forest build and walk, a searchsorted pair plan, a fused Triton read and basis with faster backward passes, and query-chunked training under a size rule); on GB300 its training step is 1.6 to 1.8 times faster than the reference read's on DrivAerML and AeroZoo at 0.7 to 0.8 times its peak memory, and it trains 400,000 points and up to 12.8 million on DrivAerML; the same function, the same version (0.12.0) and the same state dict; merged with this batch {#sec-nb-dtt-fast-final}
+
+**Why.** Peter's ruling on the surface task (2026-10-23, 23:26 EDT): "You can do A for now, but then revisit ISLA-DTT
+after the kernel speedups / memory savings land. If we can make ISLA-DTT practical in the long term, that would be
+awesome." With ISLA-DTT the default interior form (@sec-nb-default-dtt), its read set the cost of every interior lane
+of the final rerun. DTT-FAST, launched by the supervisor at 23:33 EDT 2026-10-23 with a cap of 80 GPU-h and a rule that
+each piece be equivalent to the exact read before its speed counts, ended at 18:35 EDT 2026-10-24 with about 81 of 88
+GPU-h used (the cap raised during the run).
+
+**The pieces** (psharpe/isla-dtt-fast at 4d281a702, which contains psharpe/isla b4b10d5a9; each piece verified or
+reviewed by a separate child, then integrated in five passes):
+- *A Warp forest build* (`tree_build.py`): the frame and classes by the reference's own code, the topology, boxes and
+  node sums on the GPU; every forest field bitwise the reference's; 107 to 11-18 ms per build, and 187 host
+  synchronizations down to 5.
+- *A Warp walk* (`tree_walk.py`): a count pass and a fill pass over every point and tree; the lists equal the
+  reference's in its order; 122 to 12 ms, and 183 synchronizations down to 1.
+- *A fused Triton read* (`fused_read.py`) that computes the kernel term inside the read and recomputes it in the
+  backward pass, as flash attention recomputes its logits, keeping nothing per pair but the basis; its backward is
+  deterministic and 1.41 times faster. *A fused basis* (`fused_basis.py`) computes the pair invariants with the basis
+  network; its backward is 1.66 times faster.
+- *The pair plan* (`PairPlan.build`) by `torch.searchsorted` over the sorted indices.
+- *Query-chunked training* (`ISLA.query_chunks` and the recipe's `chunked_forward_backward`): the boundary side runs
+  once, the prediction points in chunks, the boundary side's backward once after them, with gradients equal to the
+  unchunked step's up to summation order. It is the recipe's training path for ISLA-DTT, with no switch. The size rule
+  (`_chunk_spans`) takes the fewest chunks of one size whose predicted peak, a linear fit in a chunk's pairs and points
+  refitted on the final code (bfloat16 0.136 GiB per million pairs and 23.25 GiB per 100,000 points, with a margin of
+  7.6 GiB), fits the device; under data parallelism an all-reduce takes the smallest fitting size over the ranks, so
+  every rank makes the same choice, before any point's forward pass, as the supervisor's rule on execution choices
+  requires.
+- *One execution attribute*, `tree_read_kernel` (`"auto"` or `"reference"`). Under `"auto"` the build runs fast on
+  CUDA with Warp in two or three dimensions, the walk on CUDA where the forest's depth fits its stack, and the read and
+  its node means fused on CUDA with Triton outside float64. The reference path is unchanged, and is the CPU and
+  float64 fallback. Checkpoints do not store the attribute.
+- *Dropped*, with their reasons recorded: checkpointing of the read (chunking makes it redundant), the compiled read
+  projections (part P, which missed certification by 1 of 1,440 groups), and per-chunk padding (no gain).
+
+**Equivalence** of the head against psharpe/isla b4b10d5a9, each version in its own process, on five first-batch inputs
+(DrivAerML vehicle and whole boundary, AeroZoo, AirfRANS, the lug) at 2,000 points: pair lists raw-equal on all five;
+float64 at most 3.1e-13 relative; the float32 distance-to-float64 ratio at most 1.14 (bound 2). In bfloat16, on
+DrivAerML vehicle and AirfRANS, against families of seven one-ulp samples over two cold processes per version, every
+group lies inside the reference family's range but for single-run maxima (AirfRANS blocks 3.94 in one run of seven
+against 1.46; DrivAerML vehicle kernel_basis 1.14 against 1.12) and one group: AirfRANS "other" (the remaining
+parameter gradients) sits at 0.99 / 1.03 / 1.07 against the reference's 0.97 / 0.99 / 1.01, a 4% shift of a group whose
+reference range is 4% wide. The whole ISLA test directory on a GB300 with every CUDA test: 709 passed, 0 failed (job
+371487); on CPU 461 passed, 241 skipped (371488). Version 0.12.0 and its state dict are unchanged; a 0.12.0 ISLA-DTT
+checkpoint loads strictly with bitwise outputs.
+
+**Step time** (final2/TABLE.md: one GB300, the recipe's own bfloat16 step with per-block compile, median of 15 steps,
+interacting ISLA, the reference ISLA-DTT at b4b10d5a9 and the head in one job per case). DrivAerML Volume with the whole
+boundary at 200,000 points: 4,112 ms at f13eb5ce0 (before the exact geometry's fast search), 2,105 ms at 7213c70c5 and
+2,126 to 2,152 ms at b4b10d5a9 (both before DTT-FAST), and 1,209 to 1,231 ms at the head in the fixed-count state
+training runs in (1,212 to 1,219 ms with varying counts). At 400,000 points the reference runs out of memory; the head
+takes 1,586 ms with the vehicle and 1,790 to 1,792 ms with the whole boundary. AeroZoo at 200,000: 1,250 ms at 7213c70c5
+(1,239 to 1,264 at b4b10d5a9) to 699 to 718 ms. Against the reference at b4b10d5a9 the head is 1.62 to 1.81 times
+faster on DrivAerML and AeroZoo, 1.40 on the lug and 1.00 to 1.37 on AirfRANS, at 0.69 to 0.82 times its peak. Against
+interacting ISLA at b4b10d5a9 (per-block compile) it costs 1.27 to 1.48 times the step on DrivAerML (2.5 times at
+DTT-FAST's start, by its final report), 1.15 on AeroZoo, 1.10 to 1.33 on AirfRANS and 1.69 on the lug, with 1.08 to 1.13 times its peak on
+DrivAerML, 0.95 to 1.00 on AeroZoo and 0.77 to 0.79 on AirfRANS. The chunked step trained up to 12.8 million vehicle
+points on DrivAerML in the plan piece.
+
+**Peak memory.** The head's peaks are 1.3 to 1.9 times the pass-2 table's (143 GiB against 107 GiB at DrivAerML 200,000
+with the whole boundary), because the size rule now runs every point in one chunk where pass 2 cut chunks of 100,000, so
+it fills the card; its steps are 5 to 20% faster than pass 2's for it. AirfRANS with every point and the airfoil alone is
+the one setting where the head is slower than pass 2 (782 against 693 ms), level with the reference; the final rerun
+trains neither that boundary nor that count. The AirfRANS varied-count state moves 17 to 20% between processes of the
+same code, so its fixed-count numbers are the ones to read.
+
+**The spike** (spike/RESULTS.md). In 557 distinct bfloat16 one-ulp samples (234 compiled, 323 eager), one compiled
+AirfRANS step of ISLA-DTT's unchunked reference blew up the gradient (block 9's `assign.weight` to 6.7e5, against a true
+maximum of 6e-4, repeated in a second cold process with the same kernels); no eager sample did. The cause, by the
+spike child's quantitative reading, is the slice block's normalization of a slice's mean normal,
+`m_s / |m_s|.clamp_min(1e-12)`: a slice spread over a closed boundary has a mean normal near zero (the blown-up row is
+block 9's slice 446, |m| = 9.9e-4, the block's smallest), bfloat16 rounding with split-K partial sums can make it exactly
+zero, and the clamp then amplifies the gradient by |m| / 1e-12, up to 1e9 (observed 1.5e9). FLAG's earlier reading,
+1/dist in the relational invariants, is refuted on this input. No such spike shows in 267 training runs: 0 skipped
+steps and 0 non-finite losses in their logs, and no spike of that size in the optimizer states of 12 of them; Muon bounds
+the update, and finite routing spikes leave at most a one-epoch loss blip of about 15%. The certification of the
+compiled path would catch it only by chance (95% needs about 60 sample-processes at its setting's rate). A deterministic
+test is possible: a closed boundary with uniform routing has m_s = 0 exactly.
+
+**The surface form, revisited.** ISLA-DTT's form of the surface task on DrivAerML with the whole boundary at 200,000
+cells went from 3,996 ms at f13eb5ce0 (1,492 at pass 2) to 1,188 ms at the head, still 4.3 times option A's 276 ms (3.6
+times at 400,000); on HiLift it still runs out of memory inside the exact geometry. On Peter's ruling of 23:26 EDT the
+supervisor reads the revisit as keeping option A for the surface task.
+
+**The supervisor's decisions** (2026-10-24):
+- PyTorch's default bfloat16 reduced-precision reduction stays. FLAG: turning it off moves the step by -0.53% to +0.09%
+  on 8 large settings and fixes nothing measured; a cold compile of the bfloat16 step picks kernels by timing (Inductor's
+  `pad_mm`, probably Triton's autotuning too), which moves the one-ulp families as much as the flag does.
+- The compiled read projections (part P) stay out of the final rerun.
+- The bfloat16-equivalence read of the final head is accepted on AirfRANS's "other" group: the reference family itself
+  moved more than the excess between jobs b1 and c1 (blocks maximum 3.42 against 1.46), no tensor lies above the
+  reference in every run, float64 and float32 are equivalent, and the final rerun's compiled-path certification checks
+  every dataset again with fresh families.
+
+**What it leaves.** psharpe/isla-dttfast-pose at 38a7915cc (ISLA 0.13.0: the same code on DTT-POSE's forest, 728
+passed on a GB300, 3 to 5% faster still on DrivAerML) waits on DTT-POSE-EXP's registered read. A smooth, constant-free
+form of the slice mean-normal invariant is being designed (SLICE-NORMAL). The recipe logs no gradient norm; the spike
+child proposes logging it. Records stay on LHR under `$T/kernel/dttfast_*` (about 37 GB).
+
+**For the book.** 05 gains how the read runs on a GPU (the five pieces, the equivalence, the execution attribute and
+what auto picks, and the three decisions above labelled as the supervisor's); its listings follow the merged model's
+split of `forward` into `_case_inputs`, `_boundary_tokens`, `_query_tokens` and `_head`, and its step breakdown keeps
+interacting ISLA, whose profile it is. 06 gains ISLA-DTT's training step from the final-head table, with the peak the
+size rule fills, and the tree-read bullet; its cost table's ISLA-DTT column is labelled as the standing lanes' reference
+read. 19 takes ISLA-DTT out of the 0.9.0 cost sweep and gives its ratios to interacting ISLA from the same table, drops
+the smoke timings and the theta projection that the chunked step supersedes, loses its In-flight callout on the faster
+read, and gives the surface form's revisit. 20 gains the slice mean-normal question with its In-flight callout. 13
+points at the revisit. Records: results/campaigns_2026-10-23/dtt_fast_done/ (FINAL_REPORT.md, integration/RESULTS.md,
+final2/TABLE.md, pose/RESULTS.md, spike/RESULTS.md, flag/RESULTS.md, flag/REPORT.md) and
+results/campaigns_2026-10-23/dtt_fast_final_table_p5/TABLE.md (pass 2's table with its pass-3 columns).
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-fast-2026-10-24/SECOND_READ_FAST.md).*
+
+## 2026-10-24 — HL-DUP stage 2: ISLA 0.9.0, GeoTransolver and Transolver retrained on HiLiftAeroML's deduplicated wing and scored over its distinct cells; the registered verdict is mixed; every baseline ÷ ISLA ratio moved toward one (GeoTransolver 0.936 / 0.957, Transolver 0.966 / 0.954 on pressure / wall shear), and both baselines still lead in the mean; the radius-free rebuild of the root outline failed its own validation, and Peter approved building the symmetry plane from the closed root cap of the dataset's source STL files {#sec-nb-hl-dup-stage2}
+
+**Why.** The stored wings repeat about 25,700 root cells about 18.9 million times (@sec-nb-hl-dup). With the
+supervisor's ruling that the deduplication is canonical on principle, ISLA 0.9.0 and both unit-drive baselines were
+retrained, two seeds each, on the same 510 cases with `drop_duplicate_cells`, 500 epochs each. Each draws 200,000 cells
+and drops the copies, about 186,000 kept. They were scored, float32, on the 180 validation cases over the distinct
+cells, native and posed (scoring jobs 371516 and 372745; 209.6 of 320 GPU-h for stage 2). Pre-registration
+scratch/isla-hl-dup-2026-10-24/PREREG.md (md5 072b6b1c), with the supervisor's amendment of 06:44 EDT.
+
+**Result** (native, seed means, seeds in parentheses):
+- ISLA 0.9.0: pressure 0.0546 (0.0530, 0.0561), wall shear 0.0963 (0.0945, 0.0981).
+- GeoTransolver, unit drive: 0.0511 / 0.0921, baseline ÷ ISLA 0.936 / 0.957.
+- Transolver, unit drive: 0.0527 / 0.0919, baseline ÷ ISLA 0.966 / 0.954.
+
+**The rule as registered** (G = seed-mean baseline ÷ seed-mean ISLA, against stage 1's (b), the old models scored on
+the same distinct cells: 0.917 / 0.922 for GeoTransolver and 0.924 / 0.909 for Transolver). Every ratio moved toward one
+by 0.019 to 0.045. Wall shear narrows for both baselines, on both seeds; GeoTransolver's pressure moved +0.019, inside the
+0.03 band; for Transolver's pressure the seeds disagree (1.022 and 0.914). *Narrows* needs all four cells, so the verdict
+is **mixed**, and no verdict is claimed. Predictions: P1 (ISLA below its (b) of 0.0589 by at least 3%) held at 0.927; P2
+(each baseline within 5% of its (b)) failed, GeoTransolver 5.4% better; P3 ("unchanged") failed; P4 (ISLA below 0.065)
+held; P5 (posed ÷ native within 1.005 to 1.015) is undetermined, since the registration names no field: in band on
+pressure, wall shear and density, below it on velocity and temperature.
+
+**Beside the rule.**
+- On pressure the retrain brought ISLA to 0.900 / 0.955 of its (b) and the baselines to 0.935 to 0.972 of theirs. ISLA
+  gained more on seed 42 on every field; on seed 43 its pressure margin over GeoTransolver is under 1% (0.955 against
+  0.957). By the registered rule the duplicates were part of ISLA's deficit on wall shear; on pressure the read is
+  unresolved.
+- Before stall (4 to 12°) ISLA is 3% ahead of GeoTransolver on both seeds and lower on 66 of the 84 cases (116 of 180 in
+  all, against 54 under (b)). After stall (14 to 22°) GeoTransolver leads on both seeds. Transolver leads before stall
+  (T ÷ ISLA 0.925); after stall its seeds disagree (1.047 and 0.913).
+- ISLA's posed ÷ native stays 1.009 on pressure, against about 19 for the baselines.
+- ISLA's two seeds now differ by 5.8% on pressure, against 0.07% before; Transolver's by 5.7%, GeoTransolver's by 2.1%.
+- With the copies, ISLA's length unit varied 14.6% across the training cases; without them, 1.3%.
+
+The old HiLift standing (ISLA 0.0427) is not comparable with these numbers: its metric put 42% of its weight on copies of
+root cells whose errors are lower. Stage 1's (b), 0.0589 for ISLA, is the like-for-like old figure.
+
+**The symmetry plane.** A parameter-free outline rebuild (constrained NN-crust) failed its own validation
+(HOLE_CRUST.md): on the clean roots, knock-out tests failed at the sharp trailing edges (14 of 40 random runs exact); on
+the broken roots it stopped at its first check, because 16 to 17 distinct vertices share an (x, z). Every failure was
+caught by a check, so no wrong loop passed. HiLift's symmetry plane stays missing. Side finding: 41 cases store the
+dataset's source STL; the 39 whose caps were read each hold the same closed root cap, equal to curator's hole to
+0.06 in (Hausdorff distance 0.061 in, area ratio 0.999986), and every on-plane vertex of the five broken roots lies
+within 0.011 in of the closed root's outline.
+
+**Peter's answer (about 19:10 EDT 2026-10-24).** The supervisor asked him at 19:08 EDT: "may HiLift's symmetry plane
+take its root outline from the closed root cap in the dataset's own source STL files, applied to every case after a
+check that the case's own root points lie on it?" Peter answered: "Yes, that works". So HL-SYMPLANE builds the plane at
+load from the source STL's root cap, and a case that fails the check gets no plane. Until it merges, HiLift's boundary
+still lacks the plane.
+
+**Second read.** A lane reviewer (REVIEW_STAGE2.md) found 11 fixes; all are applied (REVISION_NOTE_STAGE2.md).
+
+**For the book.** These rows are to set the book's HiLift standing on the deduplicated wing with the metric over
+distinct cells, HiLift's In-flight mark (`standing.BOOK_IN_FLIGHT`) is to go, and HiLift's symmetry plane is
+being built from the source STL's root cap (Peter's answer above). 10 and 20 now say so, with an In-flight callout each
+pointing at HL-SYMPLANE, and 20 records his answer and the failed rebuild. The standing switch and the removal of the
+mark are not applied in this batch: the standing is read from
+`results/char/hilift_surface_090.json` by 04, 07, 08, 10, 20 and the index, and 10 also draws per-case figures and
+angle-of-attack analyses from its `case_level`, so the switch needs a new standing artifact with stage 2's per-case
+scores, which are not among the records copied. Until then the chapters show the stored-wing standing with its In-flight
+mark. Records: results/campaigns_2026-10-23/hl_dup_stage2/ (RESULTS_STAGE2.md, stage2_table.md, REVIEW_STAGE2.md,
+REVISION_NOTE_STAGE2.md, HOLE_CRUST.md, FINAL_REPORT.md); the chapter changes are listed in
+scratch/isla-hl-dup-2026-10-24/NOTEBOOK_DRAFT_STAGE2.md (md5 9512b28d).
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-fast-2026-10-24/SECOND_READ_FAST.md).*
+
 ## 2026-10-22 — MECH-090: on Tensile2d the fixed compiled path's float32 gradients sit at a one-ulp eager floor, and pytorch/pytorch#195845 added a unit-dependent sink to ISLA's slice-state softmax (registered emulations not confirmed; a post-smoke emulation matches) {#sec-nb-mech090}
 
 **Question.** REF-090's Tensile2d control (@sec-nb-ref090-t2d-control) read (b) by its registered weighing, in which A2
