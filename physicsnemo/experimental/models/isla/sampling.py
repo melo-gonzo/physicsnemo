@@ -30,7 +30,8 @@ the forward pass from the full-resolution surfaces (:func:`sample_boundary_cells
   found exactly from the sorted measures: :func:`pps_inclusion_probabilities`);
   a condition kept whole has every :math:`\pi_i = 1`.
 - **Draw.** Systematic sampling: the cells are laid along a line, each
-  condition's cells in the Morton (Z-order) order of their centroids, each
+  condition's cells in the Morton (Z-order) order of their centroids in the
+  boundary's canonical frame (``tree_read.canonical_frame`` over every cell), each
   cell an interval of length :math:`\pi_i`, and the cells hit by the points
   :math:`u + m`, :math:`m = 0, \dots, k - 1`, are kept. The count is exactly
   :math:`k = \min(\sum_c N_c, \text{budget})`, a function of the cell counts
@@ -42,16 +43,29 @@ the forward pass from the full-resolution surfaces (:func:`sample_boundary_cells
   Horvitz-Thompson weight), so every measure-weighted sum over the tokens is
   unbiased for the sum over the full surface, and exact on a condition kept
   whole.
+- **Precision.** The measures and centroids the draw reads are computed in
+  float64 from the mesh's coordinates as given (:func:`draw_inputs`), whatever
+  the model's precision, so the draw is a function of the input mesh only: a
+  float32 and a float64 run on the same inputs keep the same cells.
 
-Everything is tensor arithmetic without a host synchronization or a
-data-dependent shape, so the draw traces into one graph under
-``torch.compile(fullgraph=True, dynamic=True)``.
+Everything is tensor arithmetic without a data-dependent shape, so the draw
+traces into one graph under ``torch.compile(fullgraph=True, dynamic=True)``.
+It synchronizes with the host only in the canonical frame's 3 x 3 eigensolve
+(:func:`~physicsnemo.experimental.models.isla.tree_read.canonical_frame`).
 """
 
 import torch
 from jaxtyping import Float, Int
 
+from physicsnemo.experimental.models.isla.tree_read import (
+    canonical_frame,
+    frame_coordinates,
+)
+from physicsnemo.mesh import Mesh
+from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
+from physicsnemo.mesh.geometry._cell_areas import compute_cell_areas
 from physicsnemo.mesh.spatial.bvh import _compute_morton_codes
+from physicsnemo.mesh.utilities._gather import gather_rows
 
 
 @torch.library.custom_op("physicsnemo::isla_cumsum", mutates_args=())
@@ -121,6 +135,19 @@ def pps_inclusion_probabilities(
     return torch.empty_like(pi).scatter_(0, order, pi)
 
 
+def draw_inputs(mesh: Mesh) -> tuple[Float[torch.Tensor, " cells"], Float[torch.Tensor, "cells dim"]]:
+    """A condition's cell measures and centroids for :func:`sample_boundary_cells`, in
+    float64 from the mesh's points as given: its effective measures when stored, else
+    the cells' geometric measures, and the vertex means. Never the mesh's cached
+    geometry, which is in the mesh's precision."""
+    with torch.no_grad():
+        verts = gather_rows(mesh.points.detach().double(), mesh.cells)
+        measure = mesh.cell_data.get(EFFECTIVE_MEASURE_KEY, None)
+        if measure is None:
+            measure = compute_cell_areas(verts[:, 1:] - verts[:, :1])
+        return measure.detach().double(), verts.mean(dim=1)
+
+
 def sample_boundary_cells(
     measures: list[Float[torch.Tensor, " cells"]],
     centroids: list[Float[torch.Tensor, "cells dim"]],
@@ -130,7 +157,8 @@ def sample_boundary_cells(
     r"""The boundary token sample of one case: kept cells and their weights.
 
     ``measures`` and ``centroids`` hold each named condition's cells, in the
-    order their tokens are concatenated; ``budget`` is the total token budget and
+    order their tokens are concatenated, in float64 (:func:`draw_inputs`);
+    ``budget`` is the total token budget and
     ``start`` the systematic draw's start :math:`u \in [0, 1)` (a float64 scalar).
     Returns the indices of the kept cells into the concatenation of the
     conditions' cells, in increasing order, ``(k,)`` with :math:`k = \min(\sum_c N_c,` ``budget``
@@ -140,6 +168,10 @@ def sample_boundary_cells(
     with torch.no_grad():
         counts = torch.stack([m.new_full((), m.shape[0], dtype=torch.float64) for m in measures])
         shares = water_fill(counts, budget)
+        ### The Morton grid lies in the boundary's own frame over all its cells, so a
+        ### rigid motion of the case leaves the line, and the draw, unchanged (up to
+        ### roundoff and the frame's ties).
+        frame = canonical_frame(torch.cat(centroids).detach(), torch.cat(measures).detach())
         pis, orders, offset = [], [], 0
         for i, (a, x) in enumerate(zip(measures, centroids)):
             n_i = a.shape[0]
@@ -147,7 +179,7 @@ def sample_boundary_cells(
                 continue
             pis.append(pps_inclusion_probabilities(a.detach().double(), shares[i]))
             ### Morton order of the centroids on cubic cells, ties broken by index.
-            code = _compute_morton_codes(x.detach(), isotropic=True)
+            code = _compute_morton_codes(frame_coordinates(x.detach(), frame), isotropic=True)
             orders.append(code.argsort(stable=True) + offset)
             offset = offset + n_i
         pi = torch.cat(pis)
