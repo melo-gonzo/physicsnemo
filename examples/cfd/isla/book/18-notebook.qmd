@@ -40807,7 +40807,7 @@ tested: posed octant labels were not compared, no tie-break was tried, and the f
 against the 1e-9 threshold) are not excluded.
 
 **Consequence.** An inference probe cannot price a retrain: θ is trained in, and the capacity ablations rank models
-trained with every read and head. Stage 2 is pre-registered and not run: retrained AirfRANS arms at θ = 2 and θ = 0.5,
+trained with every read and head. Stage 2 is pre-registered and was not yet run when stage 1 was read: retrained AirfRANS arms at θ = 2 and θ = 0.5,
 reads after every second block, a kernel basis of 8, the exact read, and ISLA-DTT without scales on a standardized inlet
 speed, each against the standing's pair (scratch/isla-dtt-knobs-2026-10-23/PREREG.md, md5 84a25280: about 1,010 GPU-h
 without the exact read, which adds about 330 to 390 GPU-h and is submitted only if its smoke prices it at 300 or less;
@@ -40867,8 +40867,8 @@ results/campaigns_2026-10-23/geo_degen/.
 
 **Cost.** On the DrivAerML Volume task's whole boundary (16.65 million cells, 200,000 queries, GB300) the flag takes
 2.4 ms; the geometry call goes from 406 to 412 ms under the reference kernel and from 340.5 to 341.1 ms under the fast
-kernel. Real dumps hold no zero-area cell (0 of 16,652,301 on DrivAerML; GEO-FAST's count, 0 of 36,136,773), so no trained
-result changes.
+kernel. Real dumps hold no zero-area cell (0 of 16,652,301 on DrivAerML), and GEO-FAST found no cell with two coincident
+vertices in 36,136,773, so no trained result changes.
 
 **Two limits that stay as they were at the base** (RESULTS.md, "Out of scope"; reported to the supervisor at 02:10 EDT).
 
@@ -40966,8 +40966,8 @@ segment softmax; so do the geometry call and the head.
 **The certification** (RESULTS.md section 2; AeroZoo `azc_full_dtt` and AirfRANS `r090eag_af_dtt`, seeds 42 and 43, each
 block on the eager float32 run's own inputs at full size, beside float64 eager; gradients at 20,000 tokens and points).
 
-- Float32: the compiled blocks agree with eager to 1.5e-5 relative or better, the largest on AeroZoo's first block, whose
-  eager float32 output is itself 8.5e-4 from float64.
+- Float32: the compiled blocks agree with eager to 1.5e-5 relative or better, the largest on AeroZoo, where the first
+  block's eager float32 output is itself 8.5e-4 from float64.
 - Float64: every output and parameter gradient at roundoff, 2.3e-13 relative or better.
 - Bfloat16: the compiled blocks' outputs are no farther from float64 than eager's (AeroZoo seed 42, 8.2e-2 against
   1.4e-1), and their output fields and parameter gradients are 1.0 to 1.4 times eager's distance to float64 in every
@@ -40989,14 +40989,15 @@ checkpoint trained under. The lane recommends against it. Its read patch (`compi
 **The policy** (the supervisor's, 2026-10-24, LANE_RULES "Compiled regions"): one policy for every compiled ISLA region, old
 and new: Inductor's default casts (no `emulate_precision_casts`), certified block by block against eager at a maximum
 deviation of 1e-5 in float32 and at roundoff in float64, plus a bfloat16 check that the region's error against float64
-stays within 1.5 times eager's. The current blocks are kept; the read patch is not merged, and under this policy it would
-compile without the emulated casts.
+stays within 1.5 times eager's. The current blocks are kept, although their largest float32 deviation, on AeroZoo, is 1.5e-5 and the bfloat16 loss of
+the randomly initialized DrivAerML whole-boundary model reads 1.70 times eager's distance; the read patch is not merged,
+and under this policy it would compile without the emulated casts.
 
 Cost: 4.79 of 6 GPU-h (eight GB300 jobs, 363857 to 365445; cpu-short 365063).
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-geofast-2026-10-24/SECOND_READ_GEOFAST.md).*
 
-## 2026-10-24 — The exact geometry's fast path merged with the zero-area fix (7213c70c5): the default on CUDA where Triton imports, bitwise the reference; under it the step is 1.07 to 1.40 times 0.9.0's on a body alone, against 1.06 to 1.53 under the reference; Peter's ruling on the fast path is met {#sec-nb-geo-fast-merged}
+## 2026-10-24 — The exact geometry's fast path merged with the zero-area fix (7213c70c5): the default on CUDA where Triton imports, bitwise the reference; under it the step is 1.07 to 1.40 times 0.9.0's on a body alone, against 1.06 to 1.53 under the reference; the supervisor reads Peter's ruling on the fast path as met {#sec-nb-geo-fast-merged}
 
 **The merge.** Lane FAST-MERGE merged psharpe/isla (045dd14fe) into psharpe/isla-geo-fast (1086cf42e) as 5219f2e8f, with no
 conflicts and no other change; the supervisor merged it into psharpe/isla as 7213c70c5 at 04:53 EDT 2026-10-24. ISLA stays
@@ -41036,7 +41037,7 @@ the same geometry call; the lane's own table (lhr/book_table.md, means of passes
 recommends 389 ms from passes 1 and 3, but the median of all three keeps every pass. Peak memory is the same under both
 kernels to 0.1 GiB.
 
-**Peter's ruling met.** His words of 2026-10-23 (17:08 EDT): "If the speedup experiment works, then add an optional fast
+**Peter's ruling, read as met by the supervisor.** His words of 2026-10-23 (17:08 EDT): "If the speedup experiment works, then add an optional fast
 path (like our other kernels, where we default iff triton is installed), and then remove the documented limitation / change
 it." The fast path is optional, the default exactly where Triton imports on CUDA, and bitwise the reference. The fast path
 cuts the cost but does not remove it on the body-only tasks, so 06 changes the documented cost rather than removing it: the
