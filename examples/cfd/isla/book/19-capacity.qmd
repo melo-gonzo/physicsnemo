@@ -577,6 +577,9 @@ ref_cell = lambda f: R.num(DRVL[f]["ref s44 (s42, s43)"])
 DF = ("velocity", "nu_t", "pressure")
 d6, w256 = ([R.num(DRVL[f][c], 1) for f in DF] for c in ("d6", "w256"))
 s128 = [R.num(DRVL[f]["s128"]) / ref_cell(f) for f in DF]
+_SLD = {r_["field"]: r_ for r_ in R.md_table("slices_drv", "reading.md") if r_["protocol"] == "native"}
+assert all(r_["label"] == "no change" for r_ in _SLD.values())
+_SLDF = [c.strip().replace("**", "") for c in next(ln for ln in R.load("slices_drv", "RESULTS.md").splitlines() if ln.startswith("| **> 5 m")).strip("|").split("|")][4]
 spread = [R.num(DRVL[f]["spread"]) for f in DF]
 far_row = next(r for r in BAND_DRV if r["band"] == "[1,inf)")
 far_isla = [R.num(v) for k, v in far_row.items() if k.startswith("isla_")]
@@ -595,7 +598,11 @@ print("**On one DrivAerML Volume car, ISLA's velocity deficit is a uniform multi
       "plateau. Halving the depth raises the velocity, eddy-viscosity and "
       f"pressure floors {f3(d6)} times, halving the width {f3(w256)} times and quartering the slices {f3(s128)} times ({f3([x ** 0.5 for x in s128])} per halving), against a "
       f"spread of {f3(spread)} over the reference's three seeds. No rung moves the far-field eddy viscosity: beyond {L_REF:g} m, ISLA's "
-      f"relative error is {rng(far_isla, 3)} on every rung and seed, and Transolver's {rng(far_t, 3)}.")
+      f"relative error is {rng(far_isla, 3)} on every rung and seed, and Transolver's {rng(far_t, 3)}. On the full dataset, two seeds "
+      "each, 128 slices reads no change on every field either (" + " / ".join(_SLD[f]["S ÷ B"] for f in ("pressure_l2", "velocity_l2", "nut_l2"))
+      + " on pressure / velocity / eddy viscosity, @sec-oq-slices), and its eddy-viscosity error beyond "
+      f"{L_REF:g} m from the car is " + " / ".join(x.strip() for x in _SLDF.split(",")) + " times the standing's, "
+      f"seed-matched ({R.source('slices_drv', 'RESULTS.md')}).")
 print()
 r2 = {k: [c[k] for c in PROBE_A] for k in ("r2_z", "r2_x", "r2_d")}
 pc = lambda xs: f"{100 * min(xs):.0f} to {100 * max(xs):.0f}%"

@@ -1473,8 +1473,8 @@ of the oriented cells, so it is defined at a fold of the surface too, where
 cells meet back to back. @sec-medial-ties measures both. @sec-exact-geometry-draw shows what exact
 geometry changes against a distance read from the nearest drawn token.
 
-**Prediction points come in two kinds.** In ISLA's default interior form
-the prediction points are **interacting** tokens: they carry routing mass,
+**Prediction points come in two kinds.** In interacting ISLA, the interior
+form with `query_independent=False`, the prediction points are **interacting** tokens: they carry routing mass,
 a learned fraction of the total boundary measure split equally among them,
 so they help form the slices and their anchors, and the prediction at one
 point depends on which other points are in the request. That dependence is
@@ -1486,7 +1486,7 @@ four chunks raises the error
 and queries of at most `{python} f"{int(QP_SUBS[0][3:]):,}"` points raise it
 `{python} f"{min(QP_SMALL):.1f}"`-fold to `{python} f"{max(QP_SMALL):.0f}"`-fold
 (@sec-query-population). ISLA-DTT
-(`query_independent=True`) makes the points **read-only**: they carry no
+(`query_independent=True`), ISLA's default interior form, makes the points **read-only**: they carry no
 routing mass, so at every layer they read the slices the boundary formed
 and never write into them, and after every layer each point also reads
 every boundary cell directly, through a learned kernel of the pair's
@@ -1503,9 +1503,10 @@ answer. @fig-isla-dtt shows one point's read on the airfoil.
 #| label: fig-isla-dtt
 #| fig-cap: >
 #|   Two kinds of prediction point, on the airfoil. Left: an interacting
-#|   point (ISLA's default, aqua) adds its weight to the slices (solid
+#|   point (interacting ISLA, aqua) adds its weight to the slices (solid
 #|   arrows into the anchors) and reads them back (dashed arrows), so the
-#|   interior helps shape the partition. Right: a read-only point of ISLA-DTT
+#|   interior helps shape the partition. Right: a read-only point of ISLA-DTT,
+#|   ISLA's default interior form,
 #|   reads the boundary through a tree over 160 cells: the cells near it one
 #|   by one (black segments) and each distant cluster as one virtual cell
 #|   (violet diamonds at the cluster's measure-weighted centroid, area
@@ -1572,20 +1573,29 @@ for f, v in _v.items():
 _LDT = R.load("ref090", "r090_final.json")["fix"]
 _li, _ld = _LDT["lug"]["von_mises_l2"]["fix"], _LDT["r090fix_lug_dtt"]["von_mises_l2"]["dtt"]
 assert min(_ld["per_seed"].values()) > max(_li["per_seed"].values()) and _ld["mean"] / _li["mean"] >= 1 + S.TIE_BAND
-print("Read-only points give up the coupling that lets the interior shape the partition, and the measurements do not "
-      "settle which form is better. On the AirfRANS interior task at the reference configuration, interacting ISLA "
+import re as _re
+AZD_ = " ".join(R.load("az_decide_final", "RESULTS.md").split())
+_ruling = _re.search(r'Peter\'s ruling \("([^"]+)"\)', AZD_).group(1)
+_AZ = S.aerozoo(); _AZA = {n.split()[0]: a for n, a in _AZ["arms"].items()}
+_Rm = {f: sum(_AZA["ISLA-DTT"]["splits"][s][f]["mean"] / _AZA["ISLA"]["splits"][s][f]["mean"] for s in _AZ["held_out"])
+       / len(_AZ["held_out"]) for f in ("velocity_l2", "pressure_l2")}
+print("**ISLA-DTT is ISLA's default interior form, on principle: its prediction at a point does not depend on which other "
+      "points are queried.** Read-only points give up the coupling that lets the interior shape the partition, and the "
+      "measurements do not make either form the more accurate everywhere. On AeroZoo's six held-out splits, the test of "
+      "generalization registered to choose between them, ISLA-DTT ÷ ISLA averages "
+      f"{_Rm['velocity_l2']:.3f} on velocity and {_Rm['pressure_l2']:.3f} on pressure, which the registered rule reads as a "
+      "close call, and Peter's ruling for that case is "
+      f"\"{_ruling}\" (@sec-aerozoo-form). On the AirfRANS interior task at the reference configuration, interacting ISLA "
       + ", and ".join(f"{v} ISLA-DTT on {' and '.join(fs)}" for v, fs in _by.items())
       + " (ISLA-DTT ÷ ISLA " + " / ".join(f"{_AF.ratio('ISLA-DTT', f):.3f}" for f in _AF.ds.headline) + " on "
       + " / ".join(_AF.fields[f] for f in _AF.ds.headline) + f", a ratio of arithmetic seed means; {_AF.source}). On the GINOT bracket lug, with both forms trained on the compiled "
       "training path after its fault was fixed, interacting ISLA leads ISLA-DTT on the von Mises stress (ISLA-DTT ÷ ISLA "
       f"{_ld['mean'] / _li['mean']:.3f} on the native mesh, a ratio of arithmetic seed means; {R.source('ref090', 'r090_final.json')}). "
-      "Which interior form is ISLA's "
-      "reference is decided on AeroZoo's held-out splits, and it is an open question (@sec-oq-dtt); the interior standings "
-      "of Part IV are of the interacting form.\n")
-_azd = S.aerozoo()["arms"]["ISLA-DTT 512 with 512 slices"].get("in_flight")
-if _azd:
-    print(S.in_flight_callout({"what": "ISLA against ISLA-DTT on AirfRANS and the GINOT bracket lug",
-                               "replacement": "ISLA-DTT on AeroZoo's seven splits, which decides the interior form,"}))
+      "The interacting form stays in the class: the surface task uses it, and an interior task may choose it explicitly. "
+      "The interior standings of Part IV are of interacting ISLA, and each says what ISLA-DTT measures there.\n")
+print('::: {.callout-note title="In flight"}\nThe class builds an interior model as interacting ISLA unless '
+      "`query_independent=True` is given, and so does the recipe. The switch of both defaults to ISLA-DTT for the interior "
+      "task is being built, and the ledger (@sec-ledger) tracks it.\n:::")
 ```
 
 ## Why ISLA has no center {#sec-isla-variants}

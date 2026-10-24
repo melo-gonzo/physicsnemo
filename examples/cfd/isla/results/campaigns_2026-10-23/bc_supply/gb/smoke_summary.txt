@@ -1,0 +1,8 @@
+| arm | train steps | losses finite | loss step 1 -> 20 | median step, steps 6-20 (ms) | peak mem_gb | tokens read |
+|---|---|---|---|---|---|---|
+| suv_body | 20 | True | 0.1506 -> 0.0681 | 168.7 | 64.85 | 200,000 (vehicle 200,000) |
+| suv_whole | 20 | True | 0.1381 -> 0.0710 | 217.4 | 67.59 | 204,332 (vehicle 200,000, inlet 722, outlet 722, floor 722, side_walls 1,444, roof 722) |
+| hl_body | 20 | True | 0.6017 -> 0.2308 | 782.1 | 30.98 | 93,364 (vehicle 93,364) |
+| hl_whole | 20 | True | 0.6404 -> 0.2426 | 160.2 | 32.23 | 97,268 (vehicle 93,364, inlet 1,952, outlet 1,952) |
+suv_whole / suv_body: step 1.289x, peak memory 1.042x, tokens 1.0217x
+hl_whole / hl_body: step 0.205x, peak memory 1.040x, tokens 1.0418x

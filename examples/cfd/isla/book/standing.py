@@ -52,6 +52,7 @@ chapter follows; when an in-flight file's replacement lands, its generator write
 """
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -77,7 +78,7 @@ _COUNT = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five"}
 
 #: The other results files of the standing, keyed as ``in_flight_callout`` accepts them.
 EXTRA = {
-    "aerozoo": "aerozoo_090.json",
+    "aerozoo": "aerozoo_090_final.json",
     "suv_xfam": "shift_suv_xfam_090.json",
     "globe_airfrans": "globe_airfrans_090.json",
 }
@@ -461,15 +462,93 @@ def in_flight_callout(what) -> str:
     )
 
 
-def aerozoo() -> dict:
-    """The AeroZoo standing, results/char/aerozoo_090.json (results/char/aerozoo_090_2026-10-22.py)::
+#: The interior standings: their ISLA rows are interacting ISLA 0.9.0, while ISLA's default interior form is ISLA-DTT.
+INTERIOR = ("drivaerml_volume", "airfrans", "aerozoo", "tensile2d", "lug")
 
-        {"status": "in_flight", "in_flight": {what, replacement},       # ISLA-DTT's lanes
+
+def form_callout(
+    measured: str,
+    what: str = "interacting ISLA 0.9.0",
+    also: str = "",
+    also_one: bool = False,
+) -> str:
+    """STYLE's "In flight" callout on an interior standing: its numbers come from ``what``; ISLA's default interior form
+    is ISLA-DTT, and ``measured`` (a clause) says what ISLA-DTT reads on this dataset; ``also`` names, after "and", what
+    else on the same standing is being measured (``also_one`` when that is one thing)."""
+    return (
+        '::: {.callout-note title="In flight"}\n'
+        f"These numbers come from {what}. ISLA's default interior form is ISLA-DTT; {measured}. "
+        + (
+            f"{also[0].upper() + also[1:].rstrip(',')} {'is' if also_one else 'are'} being measured, and ISLA-DTT as the class builds it is "
+            "measured on every interior dataset in the final reference run; the ledger (@sec-ledger) tracks them.\n:::\n"
+            if also
+            else "ISLA-DTT as the class builds it is measured on every interior dataset in the final reference run, "
+            "which the ledger (@sec-ledger) tracks.\n:::\n"
+        )
+    )
+
+
+def interior_form_callout(keys, aerozoo: bool = False) -> str:
+    """The form callout of a cross-dataset summary: its interior rows (and AeroZoo, if it is summarized) are interacting
+    ISLA 0.9.0, and what ISLA-DTT measures on each, from the standings and the lug's REF-090 pair."""
+    import records
+
+    parts, names = [], []
+    for k in [
+        k for k in INTERIOR if k in keys and k in DATASETS and DATASETS[k].artifact
+    ]:
+        s = Standing(k)
+        names.append(("the " if k == "lug" else "") + DATASETS[k].short)
+        if s.has("ISLA-DTT"):
+            rs = " / ".join(f"{s.ratio('ISLA-DTT', f):.3f}" for f in s.ds.headline)
+            parts.append(
+                f"{rs} on {DATASETS[k].short} "
+                f"({' / '.join(s.fields[f] for f in s.ds.headline)})"
+            )
+        elif k == "lug":
+            fx = records.load("ref090", "r090_final.json")["fix"]
+            r = (
+                fx["r090fix_lug_dtt"]["von_mises_l2"]["dtt"]["mean"]
+                / fx["lug"]["von_mises_l2"]["fix"]["mean"]
+            )
+            parts.append(
+                f"{r:.3f} on the lug, both forms trained on the fixed compiled path"
+            )
+    if aerozoo:
+        az = _load("aerozoo")
+        A = {n.split()[0]: a for n, a in az["arms"].items()}
+        m = {
+            f: sum(
+                A["ISLA-DTT"]["splits"][sp][f]["mean"]
+                / A["ISLA"]["splits"][sp][f]["mean"]
+                for sp in az["held_out"]
+            )
+            / len(az["held_out"])
+            for f in ("velocity_l2", "pressure_l2")
+        }
+        names.append("AeroZoo")
+        parts.append(
+            f"{m['velocity_l2']:.3f} / {m['pressure_l2']:.3f} on AeroZoo (velocity / pressure, the six held-out splits' mean)"
+        )
+    if not names:
+        return ""
+    nm = " and ".join(", ".join(names).rsplit(", ", 1))
+    return form_callout(
+        "ISLA-DTT ÷ interacting ISLA, where it is measured at the reference configuration, reads "
+        + "; ".join(parts)
+        + " (@sec-aerozoo-form)",
+        what=f"interacting ISLA 0.9.0 on the interior standings, {nm}",
+    )
+
+
+def aerozoo() -> dict:
+    """The AeroZoo standing, results/char/aerozoo_090_final.json (results/char/aerozoo_090_final_2026-10-24.py, which
+    adds ISLA-DTT's arm to results/char/aerozoo_090.json)::
+
+        {"status": "final",
          "splits": [split], "held_out": [split], "fields": {key: label},
          "n_cases": {split: n}, "zero_predictor": 1.0, "isla_arm": arm name,
-         "arms": {arm name: {"note": str, "splits": {split: {field: {"mean", "per_seed", "median", "n_cases", "n_seeds"}}},
-                             # ISLA-DTT: "status": "in_flight", "in_flight": {...}, "splits": {}
-                             }},
+         "arms": {arm name: {"note": str, "splits": {split: {field: {"mean", "per_seed", "median", "n_cases", "n_seeds"}}}}},
          "diagnostics": {"velocity_direction_and_speed": {"columns", "n_cases", "runs": {run: {column: median}}},
                          "geotransolver_velocity_last_epochs": {run: {"train_velocity", "train_velocity_slope_*",
                                                                       "val_velocity_l2"}}}}
@@ -751,7 +830,21 @@ def cost(key: str, arch: str):
     """{peak_gib, step_seconds, n_parameters, gpus, ranks, precision, source, note} of one reference configuration on one
     dataset, or None."""
     c = json.load(open(CHAR / COST_FILE))["cost"].get(key, {}).get(arch)
-    return None if c is None else {k: c[k] for k in _COST_FIELDS}
+    if c is None:
+        return None
+    c = {k: c[k] for k in _COST_FIELDS}
+    if (key, arch) == ("aerozoo", "ISLA-DTT"):
+        # the file prices this lane on the epochs logged while it trained; its finished logs give the step and peak memory
+        src = "campaigns_2026-10-23/az_decide_final/tables_final.md"
+        row = re.search(
+            r"^\| ISLA-DTT \| full \| ([\d.]+) \| [\d.]+ \| ([\d.]+) \|.* (\d+)/\3 \|$",
+            (RES / src).read_text(),
+            re.M,
+        )
+        c["step_seconds"], c["peak_gib"] = float(row.group(1)), float(row.group(2))
+        c["note"] = c["note"].split("; in flight")[0]
+        c["source"] = f"{src}: Cost, ISLA-DTT full"
+    return c
 
 
 # --- The recipe's ISLA configurations -----------------------------------------------------------------
