@@ -41892,7 +41892,7 @@ its far field, AeroZoo, the 20 lug cases and Tensile2d).
   1.74e-5).
 - The irreducible limit: a case's float32 storage rounding grows with its distance from the origin, so band-edge nodes
   can still flip under translation. The extreme is AirfRANS with its far field translated by one boundary RMS radius:
-  16,077 of 400,000 near-wall nodes become on-wall, whatever the frame of the arithmetic.
+  16,077 of the 400,000 drawn points, all near the wall, become on-wall, whatever the frame of the arithmetic.
 - Trained models (the pre-registered, gated check, INFER_CHECK.md, job 369317): TIE-EXP's four checkpoints (ISLA with the
   class's tie rule on the lug and Tensile2d, two seeds each) read through the new geometry reproduce 36 of 36 registered
   summaries on the old one, and move by at most 2.96e-5 in log(N / O) and 4.4e-5 in posed ÷ native, against limits of

@@ -1171,8 +1171,9 @@ for k, c in GEO_COST.items():
           f"{c['step_ref'] / c['step_base']:.2f} / {c['step_fast'] / c['step_base']:.2f} |\n")
 print(o)
 print(": The cost of ISLA's interior geometry in training: the geometry call and the training step with the geometry the "
-      "standings' checkpoints trained with (0.9.0, @sec-standing-geometry) and with the class's, its bounds for thin cells "
-      "included (@sec-arch-interior-geometry), under its two search kernels: *reference*, which runs wherever the model runs, "
+      "standings' checkpoints trained with (0.9.0, @sec-standing-geometry) and with the class's search, its bounds for thin "
+      "cells included but its derived bands, centered frame, certified tie test and float64 offset not, which add about 3% "
+      "to the whole-boundary call (below; @sec-arch-interior-geometry), under its two search kernels: *reference*, which runs wherever the model runs, "
       "and *auto*, the default, which takes the fast search on CUDA where Triton imports (as here) and the reference search "
       "elsewhere. The same recipe, settings and network otherwise. One GB300, bfloat16, eager, one case per step, the GPUs "
       "rotated between passes; each pass gives the median after five warm-up calls or steps, and each cell is the mean of "
@@ -1242,7 +1243,7 @@ print("**The bounds for thin cells cost most on the lug.** Against the same prot
       f"median of the three passes it is {LUG3['fast']:.1f} against {LUG3['ref']:.1f} ms). On the DrivAerML Volume task the call rose {min(drv)} to "
       f"{max(drv)}% (the vehicle alone and the whole boundary, both searches), on AeroZoo {min(az)} to {max(az)}%, and on "
       "AirfRANS, in two dimensions, where the bounds do not apply, it is unchanged within the passes' spread. A fused kernel "
-      "for the accurate closest point is the lever on that cost, and the ledger (@sec-ledger) tracks it. Data: "
+      "for the accurate closest point is the lever on that cost. Data: "
       f"{R.source('geo_band_phase0', 'PHASE0.md')} (Against FAST-MERGE's head).")
 # the derived bands, the centred frame and the certified tie test, timed apart on the whole-boundary call (GEO-BAND)
 GBR = " ".join(R.load("geo_band_final", "RESULTS.md").split())
@@ -1250,15 +1251,21 @@ BAND_T = re.search(r"reference ([\d-]+) -> ([\d-]+) ms \(VF, \+(\d+) ms, \+([\d.
 BAND_P = re.search(r"DrivAerML whole-boundary call \(GB300, median of (\d+) after (\d+) warm-up, (\d+) draws\)", GBR).groups()
 print()
 print("**The derived bands cost about three percent of the whole-boundary geometry call.** @tbl-using-geometry-cost times "
-      "the class's search with its bounds for thin cells but without the derived bands, the centered frame and the "
-      "certified tie test (@sec-arch-interior-geometry). "
+      "the class's search with its bounds for thin cells but without the derived bands, the centered frame, the "
+      "certified tie test and the float64 offset (@sec-arch-interior-geometry). "
       f"Those add {BAND_T[2]} ms ({BAND_T[3]}%) to the DrivAerML Volume task's whole-boundary geometry "
       f"call under the reference search ({BAND_T[1].replace('-', ' to ')} against {BAND_T[0].replace('-', ' to ')} ms) and "
       f"{BAND_T[6]} ms ({BAND_T[7]}%) under the fast one ({BAND_T[5].replace('-', ' to ')} against "
-      f"{BAND_T[4].replace('-', ' to ')} ms), timed apart from the table on one GB300 (the median of "
+      f"{BAND_T[4].replace('-', ' to ')} ms), timed apart from the table as a geometry call alone, outside training, whose "
+      f"base reads {BAND_T[0].replace('-', ' to ')} ms against the table's {whole['geo_ref']:.1f} ms in a training step, on "
+      "one GB300 (the median of "
       f"{S._COUNT[int(BAND_P[0])]} calls after {S._COUNT[int(BAND_P[1])]} warm-up calls, on {S._COUNT[int(BAND_P[2])]} "
       "draws). The other cases were not timed with them. Data: "
       f"{R.source('geo_band_final', 'RESULTS.md')} (Fast path and cost).")
+print()
+print('::: {.callout-note title="In flight"}\nThe lug\'s fast-search cost here is that of the fast search without a '
+      'fused kernel for the thin-cell guard and the accurate closest point. That kernel, bitwise equal to the reference, '
+      'is being built, and the ledger (@sec-ledger) tracks it.\n:::')
 ```
 
 ```{python}

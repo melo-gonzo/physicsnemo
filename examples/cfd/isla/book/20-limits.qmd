@@ -388,7 +388,7 @@ print(f"**Rotated and translated, ISLA's error stays within {100 * worst:.1f}% o
       "features lie about the sum of their bands apart can tie in one pose and not in another, answered correctly for its "
       "own inputs each time: rotated and translated by one RMS radius of the boundary, "
       f"{EDGE_LUG} points of the 20 lug cases measured change their tie set, and on AirfRANS with its far field {EDGE_AF} of "
-      "400,000 near-wall points are read as on the wall, since their coordinates cannot tell them from it "
+      "the 400,000 drawn points, all near the wall, are read as on the wall, since their coordinates cannot tell them from it "
       "(@sec-arch-interior-geometry). On PLAID "
       "Tensile2d, whose prediction points include the nodes of its boundary polyline, posed ÷ native is "
       f"{f3([ST['tensile2d'].shift('ISLA', f, 'posed') for f in ST['tensile2d'].ds.headline], 4)}. Data: {LG.source}; "
@@ -783,7 +783,8 @@ print("**The open question is whether what rounding still decides in the class's
       f"point whose sign changes, and the gap lies at {min(fs_after):.1e} to {max(fs_after):.1e}; the draw keeps the same cells at "
       f"both precisions on all {len(TDT)} cases measured (@sec-medial-ties). Two things are left to rounding. A feature joins a tie "
       "set when its distance lies within the rounding bound of the least, at the queries' precision, so the float32 and float64 "
-      f"tie sets differ at medial axes. That leaves a nearly uniform gap of {min(fs_after):.1e} to {max(fs_after):.1e}, larger "
+      f"tie sets differ at medial axes. Measured with the offset $x_q - p_q$ formed in float32 and a bitwise test of distinct "
+      f"directions, that leaves a nearly uniform gap of {min(fs_after):.1e} to {max(fs_after):.1e}, larger "
       f"than in the standings' geometry on {fs_up} of the {len(FST)} cases, those with little sign or draw error. And under a "
       "rotation with a translation, "
       "float32 rounding of the moved coordinates moves centroids across the grid lines of the Morton code; where the boundary's "
@@ -1094,7 +1095,7 @@ NW_AF = re.search(r"AirfRANS \+ far field \(40, 4\.0 M\) \| [^|]+\| [\d.]+ \| [^
 NW_REL = re.search(r"1e-6 Re_L = ([\d,]+)-([\d,]+)", NWR).groups()
 NW_AFDES = " ".join(R.load("nearwall", "DESIGN.md").split())
 NW_COST = re.search(r"Cost: about ([\d]+)-([\d]+) GPU-h for the AirfRANS pair", NW_AFDES).groups()
-# the viscous softening's input rounding at 30 chords (p99.9 / max); the arithmetic's share is removed by the centred frame
+# the viscous softening's input rounding at 30 chords (p99.9 / max); the arithmetic's share is removed by the float64 offset
 NW_IN = re.search(r"\| \(ii\) nu / U \| compute \|[^|]+\|[^|]+\|[^|]+\|[^|]+\|[^|]+\| \| \| input \| 0 \| [^|]+\| ([\d.]+) / ([\d.]+) \|", NWR).groups()
 assert re.search(r"\| \(i\) 1e-6 L whole \| compute \|[^|]+\|[^|]+\|[^|]+\|[^|]+\|[^|]+\| \| \| input \| 0 \| [^|]+\| [^|]+\| [\d.]+ / 0\.065 \|", NWR)
 print("**The open question is whether the whole boundary costs ISLA near-wall accuracy through its distance channel.** "
