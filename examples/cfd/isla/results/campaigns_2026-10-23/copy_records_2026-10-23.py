@@ -18,7 +18,9 @@
 RECORDS.md: one row per file with its source path under the program's scratch folder and its md5.
 
 The records are the lanes' own outputs (reductions, tables, READMEs); nothing here recomputes a number. A chapter reads
-them through ``book/records.py``. Rerun after a lane updates a record: the copy and the index are rewritten together.
+them through ``book/records.py``. A committed record is never overwritten: if a destination exists and differs from its
+source, the script stops before writing anything and names both md5s. A newer version of a record goes in under a new
+topic, and the old topic's file is listed in ``KEPT`` with its committed md5.
 
 usage: python copy_records_2026-10-23.py [scratch root, default ~/gh/physicsnemo/scratch]
 """
@@ -349,6 +351,29 @@ RECORDS = {
             "FINAL_REPORT.md",
         ],
     ),
+    "geo_thin_final": (
+        "isla-geo-thin-2026-10-24",
+        "GEO-THIN, final: the thin-cell fix as merged, its amended design (what is derived and what is estimated), checks, cost and limits",
+        ["FINAL_REPORT.md", "DESIGN.md", "RESULTS.md"],
+    ),
+    "nearwall_final": (
+        "isla-nearwall-2026-10-24",
+        "NEARWALL, final: the comment fix as merged, the contingency drafted for AF-WHOLE and the geometry note",
+        ["FINAL_REPORT.md", "PREREG_CONTINGENCY.md", "GEOMETRY_NOTE.md"],
+    ),
+    "dtt_fast_bf16diag": (
+        "isla-dtt-fast-2026-10-23/bf16diag",
+        "DTT-FAST, BF16-DIAG: where the chunked step's bf16 excess on AirfRANS comes from, its remedy, and the one-ulp yardstick",
+        ["REPORT.md", "RESULTS.md"],
+    ),
+}
+
+
+#: (topic, file) -> md5 of the committed copy, for records whose source has moved on since it was copied
+KEPT = {
+    ("dtt_fast_integration", "RESULTS.md"): "cd508ec6241c605c2464c0f4541ef70b",
+    ("geo_thin", "DESIGN.md"): "f7f8ed6849f68cc8a4584989afb1a27e",
+    ("geo_thin", "RESULTS.md"): "6daa28650f27ed75c455c12e89fbd25d",
 }
 
 
@@ -357,20 +382,34 @@ def md5(p: Path) -> str:
     return hashlib.md5(p.read_bytes()).hexdigest()
 
 
-topics = ["| topic | what it measures | source folder |", "| --- | --- | --- |"] + [
-    f"| `{topic}/` | {what} | `scratch/{folder}/` |"
-    for topic, (folder, what, _) in RECORDS.items()
-]
-rows = ["| topic | file | source | md5 |", "| --- | --- | --- | --- |"]
+copies = []
 for topic, (folder, what, files) in RECORDS.items():
     src = SCRATCH / folder
     for pattern in files:
         for s in sorted(src.glob(pattern)):
             rel = s.relative_to(src)
             d = HERE / topic / rel
-            d.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(s, d)
-            rows.append(f"| {topic} | {rel} | scratch/{folder}/{rel} | {md5(d)} |")
+            kept = KEPT.get((topic, str(rel)))
+            if kept is not None:
+                if md5(d) != kept:
+                    sys.exit(f"{d}: md5 {md5(d)}, but KEPT lists {kept}")
+            elif d.exists() and md5(d) != md5(s):
+                sys.exit(
+                    f"{d} exists with md5 {md5(d)}, and its source {s} now has md5 {md5(s)}: "
+                    "copy the newer version under a new topic instead of overwriting the record"
+                )
+            copies.append((topic, folder, rel, s, d))
+
+topics = ["| topic | what it measures | source folder |", "| --- | --- | --- |"] + [
+    f"| `{topic}/` | {what} | `scratch/{folder}/` |"
+    for topic, (folder, what, _) in RECORDS.items()
+]
+rows = ["| topic | file | source | md5 |", "| --- | --- | --- | --- |"]
+for topic, folder, rel, s, d in copies:
+    if not d.exists():
+        d.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(s, d)
+    rows.append(f"| {topic} | {rel} | scratch/{folder}/{rel} | {md5(d)} |")
 head = [
     "# Study records read by the book",
     "",

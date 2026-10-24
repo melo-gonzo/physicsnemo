@@ -232,6 +232,19 @@ def _arch(arm_name: str) -> str:
     return arm_name.split()[0]
 
 
+#: Standings that a running experiment will replace although their results file says "final" (results files are never
+#: edited): dataset key -> {ledger row, what the numbers are, what replaces them, which rows}. Only the mark: ``status`` and
+#: ``final()`` read the file, so every count keeps the dataset.
+BOOK_IN_FLIGHT = {
+    "hilift": {
+        "ledger": "HL-DUP stage 2",
+        "what": "checkpoints trained and scored on the wing meshes as stored, with their duplicated root cells",
+        "replacement": "The standing of ISLA, GeoTransolver and Transolver trained and scored with the copies dropped",
+        "rows": "The rows",
+    },
+}
+
+
 class Standing:
     """The standing of the three reference configurations on one dataset."""
 
@@ -258,7 +271,9 @@ class Standing:
 
     @property
     def in_flight(self) -> dict | None:
-        """{what, replacement} of an in-flight file (the callout's two clauses), else None."""
+        """{what, replacement} of an in-flight file or of ``BOOK_IN_FLIGHT`` (the callout's two clauses), else None."""
+        if self.ds.key in BOOK_IN_FLIGHT:
+            return BOOK_IN_FLIGHT[self.ds.key]
         return self.raw.get("in_flight") if self.status == "in_flight" else None
 
     def arm_in_flight(self, arch: str) -> dict | None:
@@ -382,7 +397,7 @@ class Standing:
                 for n, a in sorted(by.items(), reverse=True)
             )
         flight = (
-            f"The ISLA rows are in flight: they come from {self.in_flight['what']} (@sec-ledger). "
+            f"{self.in_flight.get('rows', 'The ISLA rows')} are in flight: they come from {self.in_flight['what']} (@sec-ledger). "
             if self.in_flight
             else ""
         ) + "".join(
@@ -432,7 +447,9 @@ def in_flight_callout(what) -> str:
 
     ``what`` is a key of ``DATASETS`` or ``EXTRA`` (the file's own ``in_flight``), or an ``{what, replacement}`` dict, for
     example ``aerozoo()["arms"]["ISLA-DTT 512 with 512 slices"]["in_flight"]``."""
-    if isinstance(what, str):
+    if isinstance(what, str) and what in BOOK_IN_FLIGHT:
+        what = BOOK_IN_FLIGHT[what]
+    elif isinstance(what, str):
         raw = _load(what)
         what = raw.get("in_flight") if raw.get("status") == "in_flight" else None
     if not what:

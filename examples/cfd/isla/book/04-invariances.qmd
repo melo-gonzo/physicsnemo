@@ -460,8 +460,8 @@ print("\n: Shifts of every headline field at the reference configurations: each 
 for k in KEYS:
     if ST[k].in_flight:
         _w, _dn = ST[k].in_flight, S.DATASETS[k].in_sentence
-        _dn = _dn if _dn.startswith("the ") else "the " + _dn
-        print("\n" + S.in_flight_callout({"what": f"{_dn}'s rows of @fig-contract-shifts and "
+        _dn = ("the " if k == "lug" else "") + _dn
+        print("\n" + S.in_flight_callout({"what": f"the rows of {_dn} in @fig-contract-shifts and "
                                                   f"@tbl-contract-shifts: {_w['what']}", "replacement": _w["replacement"]}))
 ```
 
