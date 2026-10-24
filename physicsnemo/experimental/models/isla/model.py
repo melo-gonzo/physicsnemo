@@ -200,7 +200,8 @@ direction :math:`u_q`: the cell's normal, oriented toward the query, when
 :math:`p_q` is interior to a cell, else :math:`(x_q - p_q) / |x_q - p_q|`
 (:func:`exact_boundary_geometry`). The token reads :math:`s_q = d_q / L` and
 :math:`\operatorname{asinh}(s_q / 10^{-6})` (:func:`soft_log_length`; logarithmic
-away from the wall, linear through it) as its two distance channels, and
+away from the wall, linear through it and within :math:`10^{-6} L` of it) as its
+two distance channels, and
 :math:`\operatorname{sign}(d_q)\, u_q`
 (with :math:`\operatorname{sign}(0) = +1`, the gradient of the signed distance) as
 its direction. Both are continuous through the surface: a point on it, whose

@@ -44,7 +44,8 @@ from physicsnemo.nn.functional.geometry.sdf import _closest_point_weights
 _SEARCH_PAIRS = 2**23
 
 #: The softening of the logarithmic length channels (:func:`soft_log_length`), in
-#: the frame's length unit.
+#: the frame's length unit: a precision margin of about 17 times float32's unit
+#: roundoff relative to the length unit.
 LENGTH_SOFTENING = 1e-6
 
 #: The far-field criterion of the winding number that signs the distance
@@ -79,12 +80,19 @@ def soft_log_length(s: torch.Tensor, eps: float = LENGTH_SOFTENING) -> torch.Ten
 
     The softening :math:`\varepsilon = 10^{-6}` (in the frame's length unit, so
     the channel is invariant to a uniform scaling of the geometry) is a numerical
-    resolution, not a model parameter. It sits about 16 times above the float32
-    resolution of a distance relative to the frame's length (a few units of
-    :math:`2^{-24}`), so rounding moves the channel by at most about 0.1, and below
-    the finest wall spacing of the reference datasets (AirfRANS's first nodes off
-    the airfoil, about :math:`5 \times 10^{-6}` of the frame's length), so the
-    near-wall layers keep their logarithmic resolution.
+    resolution, not a model parameter: about 17 times float32's unit roundoff
+    :math:`2^{-24}`, the resolution of a distance relative to the frame's length
+    wherever the geometry sits in its domain. Measured with the whole boundary on
+    AirfRANS, DrivAerML Volume and AeroZoo, float32 rounding of the coordinates and of
+    the closest-point arithmetic moves the channel by at most 0.12, with the body
+    anywhere in its domain. The channel is linear for :math:`\lvert s \rvert` below
+    :math:`\varepsilon`. With the whole boundary of an external flow, the length unit
+    is the domain's size, so that range can reach into the boundary layer. On
+    AirfRANS with its far field (305 chords) it holds 19.5 % of the interior points:
+    the viscous sublayer, the buffer layer and the start of the log layer (:math:`y^+`
+    about 25-90, estimated). The first nodes there sit at about
+    :math:`5 \times 10^{-9}` of the frame's length, below float32's resolution of the
+    domain. On DrivAerML Volume with its domain the range holds 0.57 % of the points.
     """
     return torch.asinh(s / eps)
 
