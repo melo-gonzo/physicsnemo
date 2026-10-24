@@ -158,7 +158,9 @@ def test_two_dimensional_gradients_and_interior_task():
     d = 2
     mesh, drv = _problem(d)
     ### prediction-point tokens with the internal nearest-boundary geometry in 2-D
-    mq = _model(d, {"p": {"rank": 0}, "v": {"rank": 1}}, interior=True)
+    mq = _model(
+        d, {"p": {"rank": 0}, "v": {"rank": 1}}, interior=True, query_independent=False
+    )
     q = torch.randn(50, d) * 0.5
     out = outputs(
         mq(boundary_meshes={"wall": mesh}, prediction_points=q, global_data={"g": drv})
@@ -260,7 +262,10 @@ def test_dimension_mismatch_is_refused_and_two_d_is_not_embedded_three_d():
         sum(
             p.numel()
             for p in _model(
-                3, {"p": {"rank": 0}, "v": {"rank": 1}}, interior=True
+                3,
+                {"p": {"rank": 0}, "v": {"rank": 1}},
+                interior=True,
+                query_independent=False,
             ).parameters()
         )
         == n_surface + 129

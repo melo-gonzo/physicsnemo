@@ -216,7 +216,7 @@ def test_prediction_boundaries_is_checked():
             global_data=GD,
         )
     assert m(prediction_boundaries=("vehicle",), **kw).n_points == SIZES["vehicle"]
-    interior = _model(interior=True)
+    interior = _model(interior=True, query_independent=False)
     q = torch.zeros(4, 3, dtype=D)
     with pytest.raises(ValueError, match="prediction_boundaries must be None"):
         interior(prediction_points=q, prediction_boundaries=["vehicle"], **kw)

@@ -28,8 +28,15 @@ import torch
 from physicsnemo.experimental.models.isla import geometry, geometry_fast
 from physicsnemo.experimental.models.isla.geometry import exact_boundary_geometry
 from physicsnemo.mesh import Mesh
+from physicsnemo.mesh.geometry._cell_normals import compute_cell_normals
 from physicsnemo.mesh.primitives.surfaces import cube_surface
 from test.experimental.models.isla._meshes import orthogonal, outputs, transform
+from test.experimental.models.isla.test_isla_geometry_thin import (
+    _capped_cube,
+    _face_queries,
+    _rotation,
+    _soup,
+)
 from test.experimental.models.isla.test_isla_interior_geometry import (
     _box_ties,
     _box_wall,
@@ -246,3 +253,189 @@ def test_canonical_cells_kernel_equals_the_torch_sort(d, k, dtype):
         pts.cuda(), cells.cuda(), geometry._canonical_cells
     )
     assert all(torch.equal(a.cpu(), b) and a.dtype == b.dtype for a, b in zip(out, ref))
+
+
+def _guard_meshes():
+    """(name, queries, points, cells) for the thin-cell guard, float64: GEO-THIN's caps
+    and needles in a rotated, shifted cube (float32-derived and float64) and sliver
+    soups at h = 1e-16 and 1e-13, random ordinary triangles with queries on their
+    faces, edges and vertices, near and far, and cells of zero area (coincident and
+    collinear vertices) beside others."""
+    for kind in ("cap", "needle"):
+        for rho in (1e-3, 1e-6):
+            p, c, _ = _capped_cube(rho, kind)
+            g = torch.Generator().manual_seed(int(rho * 1e7) + len(kind))
+            q = torch.cat(
+                [
+                    _face_queries(g, p[c[0]], rho, 40),
+                    torch.rand(80, 3, dtype=D, generator=g) * 1.4 - 0.2,
+                ]
+            )
+            rot, shift = _rotation(7), torch.tensor([0.3, -0.2, 0.7], dtype=D)
+            q, p = q @ rot.T + shift, p @ rot.T + shift
+            yield f"{kind} {rho} float32", q.float().double(), p.float().double(), c
+            yield f"{kind} {rho} float64", q, p, c
+    for seed in (0, 1):
+        for h in (1e-16, 1e-13):
+            p, c, q = _soup(seed, h)
+            yield f"soup {seed} {h}", q, p, c
+    g = torch.Generator().manual_seed(5)
+    tri = torch.randn(64, 3, 3, dtype=D, generator=g)
+    b = torch.rand(64, 3, dtype=D, generator=g)
+    t = torch.rand(64, 1, dtype=D, generator=g)
+    q = torch.cat(
+        [
+            ((b / b.sum(1, keepdim=True))[:, :, None] * tri).sum(1),
+            tri[:, 0] + t * (tri[:, 1] - tri[:, 0]),
+            tri.reshape(-1, 3),
+            torch.randn(64, 3, dtype=D, generator=g),
+            1e3 * torch.randn(64, 3, dtype=D, generator=g),
+        ]
+    )
+    cells = torch.arange(192).reshape(-1, 3)
+    yield (
+        "ordinary float32",
+        q.float().double(),
+        tri.reshape(-1, 3).float().double(),
+        cells,
+    )
+    yield "ordinary float64", q, tri.reshape(-1, 3), cells
+    p = torch.randn(12, 3, dtype=D, generator=g)
+    p[3] = p[2]
+    p[5] = 0.25 * p[4] + 0.75 * p[6]
+    p[8] = 0.5 * (p[7] + p[9])
+    c = torch.tensor(
+        [[0, 1, 2], [2, 3, 1], [4, 5, 6], [7, 8, 9], [9, 10, 11], [1, 1, 1], [0, 4, 8]]
+    )
+    yield "zero area", torch.cat([p, torch.randn(60, 3, dtype=D, generator=g)]), p, c
+
+
+def _guard_pairs(q, p, c, device):
+    """Every query against every canonical cell: queries, cells, zero-area flags."""
+    cells, _ = geometry._canonical_cells(p, geometry._weld(p)[c])
+    s = p[cells]
+    flat, any_flat = geometry._zero_area(s, cells)
+    qi = torch.arange(q.shape[0]).repeat_interleave(cells.shape[0])
+    ki = torch.arange(cells.shape[0]).repeat(q.shape[0])
+    return q[qi].to(device), s[ki].to(device), flat[ki].to(device) if any_flat else None
+
+
+def _pairs_of(case, device="cuda"):
+    """:func:`_guard_pairs` of the set ``case`` of :func:`_guard_meshes`."""
+    return _guard_pairs(*next(m for m in _guard_meshes() if m[0] == case)[1:], device)
+
+
+@_TRITON_CUDA
+@pytest.mark.parametrize("switch", [1, float("inf")])
+@pytest.mark.parametrize("case", [c[0] for c in _guard_meshes()] + ["empty"])
+def test_guard_kernel_equals_the_torch_weights_bitwise(case, switch, monkeypatch):
+    """The fused weights (Ericson's, the guard and the accurate point, the zero-area
+    cells' segments) are the torch code's bitwise, with the switch as set and with it
+    never taken; on the caps and needles the switch fires. A column-major ``q`` takes
+    the torch code."""
+    if case == "empty":
+        q, s, flat = torch.zeros(0, 3, dtype=D), torch.zeros(0, 3, 3, dtype=D), None
+        q, s = q.cuda(), s.cuda()
+    else:
+        q, s, flat = _pairs_of(case)
+    monkeypatch.setattr(geometry, "_SWITCH_UNITS", switch)
+    ref = geometry._closest_weights(q, s, flat)
+    fast = geometry._closest_weights(q, s, flat, fast=True)
+    assert torch.equal(ref.view(torch.int64), fast.view(torch.int64))
+    q = q.T.contiguous().T
+    ref = geometry._closest_weights(q, s, flat)
+    fast = geometry._closest_weights(q, s, flat, fast=True)
+    assert torch.equal(ref.view(torch.int64), fast.view(torch.int64))
+    if switch == 1 and case.startswith(("cap", "needle")):
+        monkeypatch.setattr(geometry, "_SWITCH_UNITS", float("inf"))
+        assert bool((geometry._closest_weights(q, s, flat) != ref).any())
+
+
+@_TRITON_CUDA
+@pytest.mark.parametrize("n", [1, 7, 255])
+def test_guard_kernel_on_a_partial_block(n, monkeypatch):
+    """A single partial block of pairs, the switched ones first, gives the torch
+    weights bitwise."""
+    q, s, flat = _pairs_of("cap 0.001 float64")
+    ref = geometry._closest_weights(q, s, flat)
+    monkeypatch.setattr(geometry, "_SWITCH_UNITS", float("inf"))
+    switched = (geometry._closest_weights(q, s, flat) != ref).any(-1)
+    monkeypatch.undo()
+    rows = torch.cat([switched.nonzero()[:, 0], (~switched).nonzero()[:, 0]])[:n]
+    q, s, flat = q[rows], s[rows], None if flat is None else flat[rows]
+    ref = geometry._closest_weights(q, s, flat)
+    fast = geometry._closest_weights(q, s, flat, fast=True)
+    assert bool(switched[rows[0]])
+    assert torch.equal(ref.view(torch.int64), fast.view(torch.int64))
+
+
+@_TRITON_CUDA
+def test_guard_kernel_without_guarded_pairs(monkeypatch):
+    """Pairs of which none is guarded (far queries of a well-shaped triangle) give the
+    torch weights bitwise."""
+    g = torch.Generator().manual_seed(3)
+    q = (1e2 * torch.randn(300, 3, dtype=D, generator=g)).cuda()
+    s = torch.tensor([[0.0, 0, 0], [1, 0, 0], [0, 1, 0]], dtype=D).expand(300, 3, 3)
+    s = s.contiguous().cuda()
+    ref = geometry._closest_weights(q, s)
+
+    def unguarded(*args):
+        raise AssertionError("a guarded pair")
+
+    monkeypatch.setattr(geometry, "_accurate_weights", unguarded)
+    fast = geometry._closest_weights(q, s, fast=True)
+    assert torch.equal(ref.view(torch.int64), fast.view(torch.int64))
+
+
+@_TRITON_CUDA
+@pytest.mark.parametrize("case", ["ordinary float64", "zero area"])
+def test_guard_kernel_with_nan_coordinates(case):
+    """NaN coordinates in queries and cells give the torch weights bitwise, NaN
+    payloads included."""
+    q, s, flat = _pairs_of(case)
+    q[::97, 1] = float("nan")
+    s[::89, 2, 0] = float("nan")
+    ref = geometry._closest_weights(q, s, flat)
+    fast = geometry._closest_weights(q, s, flat, fast=True)
+    assert bool(ref.isnan().any())
+    assert torch.equal(ref.view(torch.int64), fast.view(torch.int64))
+
+
+@_TRITON_CUDA
+@pytest.mark.parametrize("columns", [False, True], ids=["rows", "columns"])
+@pytest.mark.parametrize("case", [c[0] for c in _guard_meshes()])
+def test_fast_search_equals_the_reference_on_thin_cells(case, columns):
+    """The fast op's outputs are the reference op's, bitwise, on the guard's sets,
+    with the queries row-major and column-major."""
+    _, q, p, c = next(m for m in _guard_meshes() if m[0] == case)
+    q, p = q.cuda(), p.cuda()
+    if columns:
+        q = q.T.contiguous().T
+    cells, parity = geometry._canonical_cells(p, geometry._weld(p)[c.cuda()])
+    s = p[cells]
+    n64 = parity[:, None].double() * compute_cell_normals(s[:, 1:] - s[:, :1])
+    ref = geometry._closest_candidates(q, p, cells, parity, n64)
+    fast = geometry._closest_candidates_fast(q, p, cells, parity, n64)
+    for a, b in zip(ref, fast):
+        assert a.dtype == b.dtype
+        assert (
+            torch.equal(a.view(torch.uint8), b.view(torch.uint8))
+            if a.is_floating_point()
+            else torch.equal(a, b)
+        )
+
+
+def test_guard_kernel_falls_back_to_the_torch_code_off_cuda(monkeypatch):
+    """Off CUDA the fast weights are the torch code's, from the torch code itself."""
+    q, s, flat = _pairs_of("zero area", "cpu")
+    calls = []
+    closest = geometry._closest_weights
+
+    def spy(*args):
+        calls.append(args)
+        return closest(*args)
+
+    monkeypatch.setattr(geometry, "_closest_weights", spy)
+    fast = closest(q, s, flat, fast=True)
+    assert len(calls) == 1
+    assert torch.equal(fast.view(torch.int64), closest(q, s, flat).view(torch.int64))

@@ -1820,6 +1820,7 @@ def test_query_chunks_need_query_independent_points():
         global_schema=G,
         boundary_schemas={"wall": {}},
         interior=True,
+        query_independent=False,
         hidden=16,
         n_layers=1,
     )

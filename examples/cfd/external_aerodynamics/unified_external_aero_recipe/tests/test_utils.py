@@ -349,12 +349,19 @@ _ISLA_COMPILE = {
         "triton.mix_order_reduction": False,
     },
 }
-#: ISLA templates that keep the per-block compile by default (whole-model
-#: recompiles open on AeroZoo; see the template).
-_ISLA_PER_BLOCK = {"isla_volume_aerozoo"}
+#: ISLA templates that keep the per-block compile by default: the interior ones
+#: (`interior: true`), ISLA-DTT, whose boundary read breaks the whole-model
+#: fullgraph trace (see isla_volume.yaml).
+_ISLA_PER_BLOCK = {
+    p.stem
+    for p in (_CONF / "model").glob("isla*.yaml")
+    if OmegaConf.load(p).model.get("interior", False)
+}
 
 
-@pytest.mark.parametrize("entry,compiled_by_default", [("train", True), ("infer", False)])
+@pytest.mark.parametrize(
+    "entry,compiled_by_default", [("train", True), ("infer", False)]
+)
 @pytest.mark.parametrize("model", _MODELS)
 def test_compile_model_passes_the_template_compile_options(
     model, entry, compiled_by_default, monkeypatch
@@ -363,13 +370,22 @@ def test_compile_model_passes_the_template_compile_options(
     whole-model options (with the per-block compile off, except where a template
     keeps it and compile=false), PyTorch's defaults for every other model;
     ``compile=false`` (infer.yaml's default) compiles nothing."""
+    assert {
+        "isla_volume",
+        "isla_volume_aerozoo",
+        "isla_volume_airfrans",
+    } <= _ISLA_PER_BLOCK
     calls = []
     monkeypatch.setattr(torch, "compile", lambda m, **kw: calls.append(kw) or m)
     expected = _ISLA_COMPILE if model.startswith("isla") else {}
     per_block = model in _ISLA_PER_BLOCK
     compiled_by_default = compiled_by_default and not per_block
     net = torch.nn.Linear(2, 2)
-    for flag, compiled in ((None, compiled_by_default), ("true", True), ("false", False)):
+    for flag, compiled in (
+        (None, compiled_by_default),
+        ("true", True),
+        ("false", False),
+    ):
         overrides = [f"model={model}"] + ([f"compile={flag}"] if flag else [])
         with initialize_config_dir(config_dir=str(_CONF), version_base=None):
             cfg = compose(config_name=entry, overrides=overrides)

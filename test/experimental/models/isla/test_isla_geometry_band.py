@@ -214,6 +214,14 @@ def test_the_arithmetic_share_bounds_the_pair_distance(dim):
     assert geometry._BAND_UNITS[3] >= geometry._SWITCH_UNITS + geometry._FOOT_UNITS
 
 
+def test_the_band_units_are_the_derived_constants():
+    """The arithmetic share's units are pinned: the tests read ``_BAND_UNITS``, so a
+    change to it must be a change to its derivation."""
+    assert geometry._BAND_UNITS == {2: 17, 3: 91}, (
+        "derived in scratch/isla-geo-band-2026-10-24/DERIVATION.md"
+    )
+
+
 def _numbered():
     """A posed float32 icosphere, queries around it, on its vertices and its
     edges' midpoints, and the same surface with its vertices and cells permuted and
