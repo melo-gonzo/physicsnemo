@@ -50,7 +50,7 @@ base_posed_solid = (min(shifts(SOLID, S.BASELINES, "posed")), max(shifts(SOLID, 
 solid_dev = {k: max(abs(x - 1) for x in shifts([k], ["ISLA"], "posed")) for k in SOLID}
 SOLID_STILL = [k for k in SOLID if solid_dev[k] < 0.01]     # pose-exact to float32 on every headline field
 SOLID_MOVED = {k: max(shifts([k], ["ISLA"], "posed")) for k in SOLID if k not in SOLID_STILL}
-FLIGHT = S.in_flight()
+FLIGHT = [k for k in S.available() if S.Standing(k).in_flight]   # the standings @fig-standing marks ‡
 _n = {k: S.Standing(k).n_seeds("ISLA") for k in S.available()}
 _n0 = S.Standing("drivaerml_surface").n_seeds("ISLA")
 SEEDS_TXT = f"{S._COUNT[_n0]} seeds" + "".join(f" ({S._COUNT[n]} for ISLA on {S.DATASETS[k].name})" for k, n in _n.items() if n != _n0)
@@ -183,7 +183,7 @@ plt.show()
 #| output: asis
 for k in FLIGHT:
     w, dn = S.Standing(k).in_flight, S.DATASETS[k].in_sentence
-    dn = dn if dn.startswith("the ") else "the " + dn
+    dn = ("the " if k == "lug" else "") + dn
     print(S.in_flight_callout({"what": f"the ‡ rows of {dn}: {w['what']}", "replacement": w["replacement"]}))
 ```
 

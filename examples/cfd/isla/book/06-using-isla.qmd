@@ -1210,6 +1210,18 @@ print(f"**The exact interior geometry adds {100 * (min(r_f.values()) - 1):.0f} t
       f"the default and {whole['step_ref'] / whole['step_base']:.2f} under the reference, because the standings' geometry "
       "spent about two seconds of every call on the query that seeded its search, and the class seeds it on its own cell "
       "tree.")
+# GEO-THIN's GB300 timing of the DrivAerML whole-boundary geometry call with the thin-cell bounds (16.65M cells, 200k queries)
+THIN = re.search(r"reference (\d+) to (\d+) ms \(\+(\d+) %\), fast (\d+) to (\d+) ms \(\+(\d+) %\)",
+                 " ".join(R.load("geo_thin_final", "DESIGN.md").split())).groups()
+print()
+print("The table's 0.11.0 columns time the class's geometry without its bounds for thin cells (@sec-arch-interior-geometry). "
+      f"With them, the DrivAerML whole-boundary geometry call takes {THIN[0]} to {THIN[1]} ms under the reference search "
+      f"(+{THIN[2]}%) and {THIN[3]} to {THIN[4]} ms under the fast one (+{THIN[5]}%) on a GB300, because the bound on the closest "
+      "point's error is loose, so ordinary pairs pay for it as well. The other cases are not timed with them "
+      f"({R.source('geo_thin_final', 'DESIGN.md')}, Amendment; {R.source('geo_thin_final', 'RESULTS.md')}, \"Cost by part\").")
+print()
+print('::: {.callout-note title="In flight"}\nThe 0.11.0 columns come from the class\'s geometry without its bounds for thin '
+      "cells. The five cases timed with them are being measured, and the ledger (@sec-ledger) tracks it.\n:::")
 ```
 
 ```{python}
