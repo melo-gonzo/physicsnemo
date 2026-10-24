@@ -90,7 +90,7 @@ class PairPlan:
 
         def offsets(sorted_idx, n):
             bounds = torch.arange(n + 1, device=sorted_idx.device, dtype=sorted_idx.dtype)
-            return torch.searchsorted(sorted_idx, bounds)
+            return torch.searchsorted(sorted_idx, bounds, out_int32=sorted_idx.dtype == torch.int32)
 
         ### A stable sort is unique, so 32-bit keys give the same permutation.
         perm = torch.argsort(bj.int() if n_b <= 2**31 else bj, stable=True)

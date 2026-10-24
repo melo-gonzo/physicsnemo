@@ -877,9 +877,9 @@ def test_tree_read_cuda_fused_and_compiled_training_path():
 )
 def test_pair_plan_is_the_histogram_plan_and_builds_without_a_host_sync(device):
     """The plan's offsets and stable permutation equal a histogram of each index and a
-    stable sort of the 64-bit source indices, field by field, with points and sources
-    that have no pairs (the last ones among them); on CUDA it builds without a host
-    sync."""
+    stable sort of the source indices, field by field and in dtype, for 64- and 32-bit
+    indices, with points and sources that have no pairs (the last ones among them); on
+    CUDA it builds without a host sync."""
     from physicsnemo.experimental.models.isla.segment_softmax import PairPlan
 
     g = torch.Generator().manual_seed(4)
@@ -896,20 +896,21 @@ def test_pair_plan_is_the_histogram_plan_and_builds_without_a_host_sync(device):
         o[1:] = torch.cumsum(torch.bincount(idx, minlength=n), 0)
         return o
 
-    perm = torch.argsort(bj, stable=True)
-    ref = (offsets(qi, n_q), perm, offsets(bj, n_b), qi[perm])
-    if device == "cuda":
-        torch.cuda.synchronize()
-        torch.cuda.set_sync_debug_mode("error")
-        try:
+    for qi, bj in ((qi, bj), (qi.int(), bj.int())):
+        perm = torch.argsort(bj, stable=True)
+        ref = (offsets(qi, n_q), perm, offsets(bj, n_b), qi[perm])
+        if device == "cuda":
+            torch.cuda.synchronize()
+            torch.cuda.set_sync_debug_mode("error")
+            try:
+                plan = PairPlan.build(qi, bj, n_q, n_b)
+            finally:
+                torch.cuda.set_sync_debug_mode("default")
+        else:
             plan = PairPlan.build(qi, bj, n_q, n_b)
-        finally:
-            torch.cuda.set_sync_debug_mode("default")
-    else:
-        plan = PairPlan.build(qi, bj, n_q, n_b)
-    got = (plan.q_offsets, plan.perm, plan.b_offsets, plan.qi_by_b)
-    for name, a, b in zip(("q_offsets", "perm", "b_offsets", "qi_by_b"), got, ref):
-        assert a.dtype == b.dtype and torch.equal(a, b), name
+        got = (plan.q_offsets, plan.perm, plan.b_offsets, plan.qi_by_b)
+        for name, a, b in zip(("q_offsets", "perm", "b_offsets", "qi_by_b"), got, ref):
+            assert a.dtype == b.dtype and torch.equal(a, b), (name, qi.dtype)
 
 
 @cuda_only
