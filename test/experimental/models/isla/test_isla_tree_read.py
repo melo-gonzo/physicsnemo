@@ -1828,18 +1828,25 @@ def test_fused_basis_chunks_sum_their_weight_gradients_as_the_reference(monkeypa
 
 
 @cuda_only
+@pytest.mark.parametrize(
+    "gelu_tables", [False, True], ids=["gelu_computed", "gelu_tables"]
+)
 @pytest.mark.parametrize("dim,n_vecs", [(3, 1), (2, 0)])
 @pytest.mark.parametrize("autocast", [False, True], ids=["fp32", "bf16_autocast"])
 def test_fused_kernel_basis_matches_the_reference_basis(
-    autocast, dim, n_vecs, monkeypatch
+    autocast, dim, n_vecs, gelu_tables, monkeypatch
 ):
     """The fused basis (invariants and MLP in one kernel per chunk) against the
     reference's chunked basis on CUDA, the basis and every MLP gradient for a given
     basis gradient: each as close to the CPU float64 reference as the reference is
-    (float32, and bf16 autocast); the fused invariants equal
-    ``tree_pair_invariants``'s to float32 roundoff."""
+    (float32, and bf16 autocast, its backward's GELU computed or from the tables);
+    the fused invariants equal ``tree_pair_invariants``'s to float32 roundoff."""
     from physicsnemo.experimental.models.isla import fused_basis
 
+    if gelu_tables:
+        monkeypatch.setattr(
+            fused_basis, "_computed_gelu_is_pytorchs", lambda device, dtype: False
+        )
     monkeypatch.setattr(tree_read, "TREE_READ_PAIR_CHUNK", 4096)
     geometry, plan, basis = _basis_case(dim, n_vecs)
     seed = 1e-3 * torch.randn(20000, 16, generator=torch.Generator().manual_seed(1))
@@ -1921,6 +1928,32 @@ def test_fused_basis_gelu_tables_are_pytorchs_gelu_on_every_input(dtype):
         dy = torch.randn(x.shape, generator=gen, device=dev).mul(4).to(dtype)
         ref = torch.ops.aten.gelu_backward(dy, x)
         assert torch.equal((dy.float() * g).to(dtype)[ok], ref[ok])
+
+
+@cuda_only
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16], ids=["bf16", "fp16"])
+def test_fused_basis_backward_computes_pytorchs_gelu_on_every_input(dtype):
+    """The fused basis backward's computed GELU (CUDA 13's erff, ported) is PyTorch's
+    16-bit GELU, and its factor PyTorch's float32 ``gelu_backward(1, x)``, bitwise at
+    every finite input on PyTorch's CUDA 13 builds, where the check that chooses it
+    over the tables passes; it passes only where they hold."""
+    from physicsnemo.experimental.models.isla import fused_basis
+
+    dev = torch.device("cuda")
+    x = torch.arange(1 << 16, dtype=torch.int32, device=dev).to(torch.int16).view(dtype)
+    out = torch.empty(1 << 16, 2, device=dev)
+    fused_basis._gelu_check_kernel[(64,)](
+        x, out, 1 << 16, BLOCK=1024, enable_fp_fusion=False
+    )
+    ok, xf = torch.isfinite(x), x.float()
+    gelu = torch.nn.functional.gelu(xf).to(dtype).float()
+    factor = torch.ops.aten.gelu_backward(torch.ones_like(xf), xf)
+    same = torch.equal(out[ok, 0], gelu[ok]) and torch.equal(out[ok, 1], factor[ok])
+    fused_basis._GELU_COMPUTED.clear()
+    computed = fused_basis._computed_gelu_is_pytorchs(dev, dtype)
+    assert same or not computed
+    if int(torch.version.cuda.split(".")[0]) >= 13:
+        assert same and computed
 
 
 @cuda_only
