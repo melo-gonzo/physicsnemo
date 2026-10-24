@@ -916,28 +916,41 @@ def _build_cases(dim, dtype):
         yield pts[:n], w[:n], nrm[:n], vecs[:n], 4
 
 
-def _check_fast_build(dim, dtype, device):
+def _check_fast_build(dim, dtype, device, autocast):
     for pts, w, nrm, vecs, leaf in _build_cases(dim, dtype):
         pts, w, nrm = pts.to(device), w.to(device), nrm.to(device)
         vecs = None if vecs is None else vecs.to(device)
-        forests = [
-            BoundaryForest.build(pts, w, nrm, vecs, theta=1.0, leaf_size=leaf, build=b)
-            for b in ("reference", "fast")
-        ]
+        with torch.autocast(device, dtype=torch.bfloat16, enabled=autocast):
+            forests = [
+                BoundaryForest.build(
+                    pts, w, nrm, vecs, theta=1.0, leaf_size=leaf, build=b
+                )
+                for b in ("reference", "fast")
+            ]
+            q = pts[:50] * 1.5 + 0.25
+            (qa, sa, na), (qb, sb, nb) = (f.point_pairs(q) for f in forests)
+        ### Under autocast the reference builds its trees from bfloat16 coordinates
+        ### (``points @ frame`` is an autocast matmul), and so must the fast build.
+        assert (forests[0].aabb_min.dtype == torch.bfloat16) == autocast
         assert not _forest_differences(*forests), (pts.shape[0], leaf)
-        q = pts[:50] * 1.5 + 0.25
-        (qa, sa, na), (qb, sb, nb) = (f.point_pairs(q) for f in forests)
         assert torch.equal(qa, qb) and torch.equal(sa, sb) and na == nb
 
 
-@pytest.mark.parametrize("dtype", [torch.float32, D], ids=["float32", "float64"])
+_PRECISIONS = pytest.mark.parametrize(
+    "dtype, autocast",
+    [(torch.float32, False), (D, False), (torch.float32, True)],
+    ids=["float32", "float64", "bf16-autocast"],
+)
+
+
+@_PRECISIONS
 @pytest.mark.parametrize("dim", [3, 2])
-def test_fast_forest_build_is_the_reference_forest(dim, dtype):
+def test_fast_forest_build_is_the_reference_forest(dim, dtype, autocast):
     """The fast build (one pass over all octants, Warp's CPU backend here) gives the
-    reference's forest in every bit: node table, levels, boxes, diameters, virtual
-    cells, measures, coherence and every tree's own fields, so the reference walk
-    makes the same pair lists on it."""
-    _check_fast_build(dim, dtype, "cpu")
+    reference's forest in every bit, under bfloat16 autocast too: node table, levels,
+    boxes, diameters, virtual cells, measures, coherence and every tree's own fields,
+    so the reference walk makes the same pair lists on it."""
+    _check_fast_build(dim, dtype, "cpu", autocast)
 
 
 def test_tree_build_auto_resolves_to_the_reference_off_cuda():
@@ -961,12 +974,12 @@ def test_tree_build_auto_resolves_to_the_reference_off_cuda():
 
 
 @cuda_only
-@pytest.mark.parametrize("dtype", [torch.float32, D], ids=["float32", "float64"])
+@_PRECISIONS
 @pytest.mark.parametrize("dim", [3, 2])
-def test_fast_forest_build_is_the_reference_forest_on_cuda(dim, dtype):
+def test_fast_forest_build_is_the_reference_forest_on_cuda(dim, dtype, autocast):
     """On CUDA, where "auto" picks it, the fast build gives the reference's forest in
-    every bit."""
+    every bit, under bfloat16 autocast too."""
     from physicsnemo.experimental.models.isla.tree_build import resolve_tree_build
 
     assert resolve_tree_build("auto", torch.zeros(1, dim, device="cuda")) == "fast"
-    _check_fast_build(dim, dtype, "cuda")
+    _check_fast_build(dim, dtype, "cuda", autocast)
