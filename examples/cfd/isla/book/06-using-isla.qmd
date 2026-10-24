@@ -1153,8 +1153,118 @@ print(": Training footprint of the reference configurations (ISLA and ISLA-DTT w
       + (f"‡ {named('‡')}: the lane is still training, priced on the epochs logged so far. " if marked["‡"] else "")
       + (f"² {named('²')}: trained in float32, as logged. " if marked["²"] else "")
       + "How to read this: memory is the budget the configurations were selected under (80 GiB on DrivAerML Surface); a step time "
-      "is a cost on this hardware, and parameters are not a measure of capacity across architectures. Data: "
+      "is a cost on this hardware, and parameters are not a measure of capacity across architectures. ISLA-DTT's column is "
+      "its standing lanes' training, which ran its read's reference implementation in one unchunked step; the class's "
+      "ISLA-DTT step is @tbl-using-dtt-cost. Data: "
       f"results/char/{S.COST_FILE}.")
+```
+
+### ISLA-DTT's training step {#sec-using-dtt-cost}
+
+```{python}
+#| label: setup-using-dtt-cost
+#| include: false
+# DTT-FAST's table on the final heads: one GB300, the recipe's own training step (train._run_epoch, optimizer included),
+# bfloat16, per-block compile, median of 15 timed steps; three columns of one job per case. Code: interacting ISLA and the
+# reference ISLA-DTT at b4b10d5a9 (no fast pieces, no chunked step), ISLA-DTT at 4d281a702 (the class as merged)
+F2 = R.md_table("dtt_fast_done", "final2/TABLE.md", "Main table")
+F2_COL = {"isla": "interacting ISLA b4b10d5a9", "ref": "ISLA-DTT ref b4b10d5a9", "dtt": "ISLA-DTT 4d281a702"}
+def f2_cell(row, col):
+    """(step ms, peak GiB), or None where the step ran out of the GPU's memory."""
+    c = row[F2_COL[col]]
+    return None if c.startswith("OOM") else (R.num(c, 0), R.num(c, 1))
+F2_ROWS = [(r_["case"], int(R.num(r_["points"])), {c: f2_cell(r_, c) for c in F2_COL}) for r_ in F2]
+assert all(v["dtt"] and v["isla"] for *_, v in F2_ROWS)
+# the fixed-count state (the point count never changes in the process, as in training at the registered counts), two jobs
+F2S = {r_["case"]: r_ for r_ in R.md_table("dtt_fast_done", "final2/TABLE.md", "Fixed-count state")}
+fx = lambda case, col: R.num(F2S[case][col], 0)
+FIXED = {case: dict(dtt=sorted((fx(case, "4d281a702 fixed / varied"), fx(case, "4d281a702 repeat fixed / varied (pose job)"))),
+                    isla=fx(case, "interacting b4b10d5a9 fixed / varied"), ref=fx(case, "ref b4b10d5a9 fixed / varied"),
+                    n=int(R.num(F2S[case]["points"])))
+         for case in F2S}
+F2T = " ".join(R.load("dtt_fast_done", "final2/TABLE.md").split())
+CAP = float(re.search(r"It still fits a GB300 \(([\d.]+) GiB as the rule reads it\)", F2T).group(1))
+DFR = " ".join(R.load("dtt_fast_done", "FINAL_REPORT.md").split())
+MAXN = re.search(r"up to ([\d.]+)M on DrivAerML", DFR).group(1)
+# the same column on two nodes: the spread of its median, by setting and state
+REP = {r_["run"]: R.num(r_["spread"]) for r_ in R.md_table("dtt_fast_done", "final2/TABLE.md", "Repeats of a column")}
+rep = lambda pre, tags: max(v for k, v in REP.items() if k.startswith(pre) and any(g in k for g in tags))
+REP_3D = rep("after_", ("drv_", "aerozoo"))
+REP_AF = max(v for k, v in REP.items() if k.startswith("after_airfrans"))
+REP_AF_FIXED = rep("afterS_", ("airfrans",))
+REP_LUG = rep("after_", ("lug",))
+```
+
+```{python}
+#| label: para-using-dtt-cost
+#| output: asis
+big = [(c, n, v) for c, n, v in F2_ROWS if c.startswith(("DrivAerML", "AeroZoo")) and v["ref"]]
+sp = [v["ref"][0] / v["dtt"][0] for *_, v in big]; mp = [v["dtt"][1] / v["ref"][1] for *_, v in big]
+drv = [(c, n, v) for c, n, v in F2_ROWS if c.startswith("DrivAerML")]
+az = [(c, n, v) for c, n, v in F2_ROWS if c.startswith("AeroZoo")]
+af = [(c, n, v) for c, n, v in F2_ROWS if c.startswith("AirfRANS")]
+lug = next(v for c, n, v in F2_ROWS if c.startswith("lug"))
+rx = lambda rows, i: [v["dtt"][i] / v["isla"][i] for *_, v in rows]
+oom = [(c, n, v) for c, n, v in drv if v["ref"] is None]
+w400 = next(v for c, n, v in drv if c == "DrivAerML whole boundary" and n == 400_000)
+v400 = next(v for c, n, v in drv if c == "DrivAerML vehicle" and n == 400_000)
+w200 = next(v for c, n, v in drv if c == "DrivAerML whole boundary" and n == 200_000)
+assert {n for _, n, _ in oom} == {400_000}
+rng = lambda xs, f="{:.2f}": f.format(min(xs)) + " to " + f.format(max(xs)) if f.format(min(xs)) != f.format(max(xs)) else f.format(min(xs))
+print(f"**On one GB300, ISLA-DTT's training step takes {rng([1 / s for s in sp])} of the time of its read's reference "
+      f"implementation in one unchunked step, at {rng(mp)} of its peak memory, on the DrivAerML Volume task and AeroZoo; it "
+      f"costs {rng(rx(drv, 0))} times interacting ISLA's step on the DrivAerML Volume task and {rng(rx(az, 0))} times on "
+      f"AeroZoo, both forms compiled block by block.** @tbl-using-dtt-cost times the recipe's own training step, optimizer included, of the three in one job per "
+      "case (@sec-arch-tree-exec for the pieces). At 400,000 prediction points on the DrivAerML Volume task the reference "
+      f"implementation runs out of the GPU's memory, and ISLA-DTT takes {v400['dtt'][0]:,.0f} ms with the vehicle and "
+      f"{w400['dtt'][0]:,.0f} ms with the whole boundary; a chunked training step has run at up to {MAXN} million prediction "
+      "points per case on DrivAerML.")
+print()
+dw, za, ra = (FIXED[k] for k in ("DrivAerML whole boundary", "AeroZoo", "AirfRANS whole boundary"))
+print("**At the point counts the recipe's configurations train at, where the count never changes within a process, "
+      "ISLA-DTT's step is "
+      f"{dw['dtt'][0]:,.0f} to {dw['dtt'][1]:,.0f} ms on the DrivAerML Volume task with the whole boundary at {dw['n']:,} "
+      f"prediction points, {za['dtt'][0]:,.0f} to {za['dtt'][1]:,.0f} ms on AeroZoo at {za['n']:,} and {ra['dtt'][0]:,.0f} to "
+      f"{ra['dtt'][1]:,.0f} ms on the AirfRANS interior task with its far field at {ra['n']:,}.** Interacting ISLA takes "
+      f"{dw['isla']:,.0f}, {za['isla']:,.0f} and {ra['isla']:,.0f} ms there, and the reference implementation "
+      f"{dw['ref']:,.0f}, {za['ref']:,.0f} and {ra['ref']:,.0f} ms. The configurations draw a fixed `sampling_resolution`, "
+      "and the two numbers of each range come from two jobs on two nodes. On "
+      f"AirfRANS a process whose counts vary runs the same code up to {REP_AF:.0f}% apart from one "
+      f"process to the next, against {REP_AF_FIXED:.1f}% at a fixed count, so its rows in @tbl-using-dtt-cost carry that "
+      "spread.")
+print()
+print(f"**ISLA-DTT's peak is that of one chunk of every point, because the size rule takes the fewest chunks that fit, "
+      f"and here one chunk fits.** At these counts every point of a case runs in one chunk: {w200['dtt'][1]:.0f} GiB at 200,000 points on "
+      f"the DrivAerML Volume task with the whole boundary, on a card the rule reads as {CAP:.0f} GiB. A step cut into more "
+      "chunks holds less memory and takes longer, so a peak here measures what one chunk of every point needs, not the "
+      f"least the step can run in. On the GINOT bracket lug, all {next(n for c, n, v in F2_ROWS if c.startswith('lug')):,} "
+      f"nodes of one case, ISLA-DTT's step is {lug['dtt'][0]:.0f} ms against interacting ISLA's {lug['isla'][0]:.0f} ms.")
+```
+
+```{python}
+#| label: tbl-using-dtt-cost
+#| output: asis
+f = lambda c: "out of memory" if c is None else f"{c[0]:,.0f} / {c[1]:.1f}"
+o = ("| case | prediction points | interacting ISLA [ms / GiB] | ISLA-DTT, reference implementation [ms / GiB] | "
+     "ISLA-DTT [ms / GiB] | reference ÷ ISLA-DTT, step / peak | ISLA-DTT ÷ interacting ISLA, step / peak |\n"
+     "|---|--:|--:|--:|--:|--:|--:|\n")
+for c, n, v in F2_ROWS:
+    rr = "–" if v["ref"] is None else f"{v['ref'][0] / v['dtt'][0]:.2f} / {v['ref'][1] / v['dtt'][1]:.2f}"
+    o += (f"| {c.replace('DrivAerML', 'DrivAerML Volume,')} | {n:,} | {f(v['isla'])} | {f(v['ref'])} | {f(v['dtt'])} | {rr} | "
+          f"{v['dtt'][0] / v['isla'][0]:.2f} / {v['dtt'][1] / v['isla'][1]:.2f} |\n")
+print(o)
+print(": ISLA-DTT's training step on one GB300: the recipe's own step (forward, loss, reverse pass and optimizer), bfloat16, "
+      "each slice block compiled on its own, one real first-batch case per setting, the median of 15 timed steps and the "
+      "allocator's peak over them. *ISLA-DTT* is the class under `tree_read_kernel=\"auto\"` with the recipe's chunked step; "
+      "*reference implementation* is the same function with every piece of the read at its reference and no chunks; "
+      "*interacting ISLA* is `query_independent=False`, per-block compiled. The three columns of a case ran in one job on "
+      "one node, each in its own process, after untimed steps at 85 to 95% of the count, so the point count varies within "
+      "the process. *Vehicle*: the car alone; *whole boundary*: the car and the tunnel's four other pieces; *AirfRANS "
+      "airfoil*: the airfoil alone. *Out of memory*: the step does not fit the GPU. How to read this: a ratio within one row "
+      f"is same-node; on DrivAerML and AeroZoo a column repeats within {REP_3D:.1f}% across nodes, on AirfRANS within "
+      f"{REP_AF:.0f}% in this state and {REP_AF_FIXED:.1f}% at a fixed count (see the text), and on the lug, one "
+      f"host-bound case, within {REP_LUG:.0f}%; ISLA-DTT's peak is that of one chunk of every point (see the text). Data: "
+      f"{R.source('dtt_fast_done', 'final2/TABLE.md')} (Main table; Fixed-count state). {{#tbl-using-dtt-cost}}")
 ```
 
 ```{python}
@@ -1329,7 +1439,7 @@ print(f"**ISLA pads its token axis to a multiple of {TOKEN_ALIGNMENT}, because a
       f"{R.source('boundary_merge', 'results/TIMING.md')}; {R.source('boundary_merge', 'REPORT.md')} (part 1).")
 ```
 
-Three practical consequences follow.
+Four practical consequences follow.
 
 ```{python}
 #| label: para-using-kernel
@@ -1344,6 +1454,13 @@ print(f"- **The geometry kernel is chosen for you.** At the first forward pass t
       "function. It logs the choice once. A planar model, a model with no global direction (the lug) and a model with "
       "rank-2 inputs run eager. To force one path, set the model's `geo_kernel` attribute to `\"eager\"` or `\"fused\"` "
       "before the first forward pass.")
+print("- **So are ISLA-DTT's tree-read kernels.** Under the default `tree_read_kernel=\"auto\"` the forest build and the walk "
+      "run their Warp kernels on CUDA (Warp, like Triton, is a Python framework for writing GPU kernels) and the read its fused "
+      "Triton kernel on CUDA outside float64, each where its own requirements hold, and each logs its choice once; on the CPU "
+      "every piece runs its reference, and in float64 the read does. All of them compute the same forest, the same pairs and "
+      "the same read up to summation order (@sec-arch-tree-exec). Set `\"reference\"` to run every reference. The recipe "
+      "trains ISLA-DTT in the fewest chunks of prediction points that fit the GPU, chosen before any point's forward pass and "
+      "bounded alike on every rank (@sec-using-dtt-cost).")
 from physicsnemo.experimental.models.isla import model as IM
 _whole = [n for n, c in ISLA_CFGS.items() if c.get("compile")]; _rest = [n for n in ISLA_CFGS if n not in _whole]
 assert all(c.get("compile_options") == opts for c in ISLA_CFGS.values())   # one set of options in every configuration

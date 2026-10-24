@@ -286,7 +286,13 @@ plt.show()
 
 ### Files, conversion and normalization {#sec-data-hilift}
 
-**1,800 cases on a full grid of 180 geometries by ten angles, in imperial units, with curated manifests for every split.** Each case is a `geo_LHC<nnn>_AoA_<a>` directory; the recipe reads the boundary tensordict (`geo_LHC*/*.pdmsh/_tensordict/boundaries/vehicle`) and merges the parent's `global_data` (`U_inf`, `p_inf`, `rho_inf`, `T_inf`, `L_ref`). Units are slug, inch, second and Rankine; the figures convert positions to meters for display only. The targets are the projected averages `PROJ(AVG(P))`, `PROJ(AVG(T))`, `PROJ(AVG(RHO))`, `PROJ(AVG(U))` and `AVG(TAU_WALL)` on the surface cells, nondimensionalized from the case's `global_data`, renamed `pressure`, `temperature`, `density`, `velocity` and `tau_wall`, and standardized with fixed constants in the dataset yaml (pressure mean −0.5 and standard deviation 1; temperature 1.00 / 0.002; density 1.0 / 0.02; velocity 0.20; wall shear 0.003). A case has about 290 million surface cells, the largest surface in the book, so a 200,000-cell draw is a $10^{-3}$ sample of it. All but `{python} HL_BUT` files store the wing alone, without the far field or the symmetry plane of the CFD domain. The recipe builds the far field's inlet and outlet as the dataset file's first transform (`AddHemisphereBoundaries`), equal to the stored far field bit for bit where one exists, and canonical ISLA's configuration reads them beside the deduplicated wing; the symmetry plane is not built. GeoTransolver's and Transolver's inputs are unchanged, bitwise. The numbers here come from checkpoints trained reading the wing alone, and the final reference run (@sec-ledger) retrains ISLA with the inlet and outlet (@sec-oq-whole-boundary). Every split is a curated manifest of one pinned revision of the dataset.
+**1,800 cases on a full grid of 180 geometries by ten angles, in imperial units, with curated manifests for every split.** Each case is a `geo_LHC<nnn>_AoA_<a>` directory; the recipe reads the boundary tensordict (`geo_LHC*/*.pdmsh/_tensordict/boundaries/vehicle`) and merges the parent's `global_data` (`U_inf`, `p_inf`, `rho_inf`, `T_inf`, `L_ref`). Units are slug, inch, second and Rankine; the figures convert positions to meters for display only. The targets are the projected averages `PROJ(AVG(P))`, `PROJ(AVG(T))`, `PROJ(AVG(RHO))`, `PROJ(AVG(U))` and `AVG(TAU_WALL)` on the surface cells, nondimensionalized from the case's `global_data`, renamed `pressure`, `temperature`, `density`, `velocity` and `tau_wall`, and standardized with fixed constants in the dataset yaml (pressure mean −0.5 and standard deviation 1; temperature 1.00 / 0.002; density 1.0 / 0.02; velocity 0.20; wall shear 0.003). A case has about 290 million surface cells, the largest surface in the book, so a 200,000-cell draw is a $10^{-3}$ sample of it. All but `{python} HL_BUT` files store the wing alone, without the far field or the symmetry plane of the CFD domain. The recipe builds the far field's inlet and outlet as the dataset file's first transform (`AddHemisphereBoundaries`), equal to the stored far field bit for bit where one exists, and canonical ISLA's configuration reads them beside the deduplicated wing. The symmetry plane is not read. It is the far field's $y = 0$ disk with the closed root cap that the dataset's own source STL files hold cut out, applied to a case only after a check that the case's own root points lie on that cap, so that a case failing the check gets no plane (@sec-oq-whole-boundary). GeoTransolver's and Transolver's inputs are unchanged, bitwise. The numbers here come from checkpoints trained reading the wing alone, and the final reference run (@sec-ledger) retrains ISLA with the inlet and outlet (@sec-oq-whole-boundary). Every split is a curated manifest of one pinned revision of the dataset.
+
+::: {.callout-note title="In flight"}
+HiLiftAeroML's boundary here lacks its symmetry plane. The plane built at load from the far field's $y = 0$ disk
+with the source STL's root cap cut out, checked case by case against each case's own root points, is being built, and
+the ledger (@sec-ledger) tracks it.
+:::
 
 ```{python}
 #| label: para-data-hilift-duplicates
@@ -416,8 +422,8 @@ print(f"**At the 510-case rung, on the native mesh, {both(HL, HL_F)}; on the uni
 
 ::: {.callout-note title="In flight"}
 These numbers come from checkpoints trained and scored on the wing meshes as stored, with their duplicated root cells
-(@sec-data-hilift). ISLA, GeoTransolver and Transolver trained and scored with the copies dropped are being measured,
-and the ledger (@sec-ledger) tracks it.
+(@sec-data-hilift). The standing of ISLA, GeoTransolver and Transolver trained and scored with the copies dropped replaces
+them once its per-case scores are read into the standing's file, and the ledger (@sec-ledger) tracks it.
 :::
 
 ```{python}

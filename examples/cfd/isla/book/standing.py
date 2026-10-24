@@ -238,9 +238,9 @@ def _arch(arm_name: str) -> str:
 #: ``final()`` read the file, so every count keeps the dataset.
 BOOK_IN_FLIGHT = {
     "hilift": {
-        "ledger": "HL-DUP stage 2",
+        "ledger": "HL-STANDING",
         "what": "checkpoints trained and scored on the wing meshes as stored, with their duplicated root cells",
-        "replacement": "The standing of ISLA, GeoTransolver and Transolver trained and scored with the copies dropped",
+        "replacement": "The per-case standing of ISLA, GeoTransolver and Transolver trained and scored with the copies dropped",
         "rows": "The rows",
     },
 }

@@ -313,16 +313,16 @@ by them before stage 2, and multiplies the outputs by them after stage 5
 (@sec-using-scales).
 
 ::: {.callout-note collapse="true" title="Stage 1 in the code"}
-Each condition's cells become rows of one token set in `forward`, and a surface task's prediction boundaries pick the rows the head returns (`out_rows`, left unset when every given boundary is named); the length unit is one function of the full-resolution cells, and the frame is a few lines of `_forward_tokens` (the token state then stores `r = points / gauge`): no center survives either.
+Each condition's cells become rows of one token set in `_case_inputs`, which `forward` calls, and a surface task's prediction boundaries pick the rows the head returns (`out_rows`, left unset when every given boundary is named); the length unit is one function of the full-resolution cells, and the frame is a few lines of `_boundary_tokens` (the token state then stores `r = points / gauge`): no center survives either.
 
 ```{python}
 #| label: code-stage-1
 #| output: asis
-listing("model.py", "ISLA.forward", start="### The given conditions in canonical order.", end="query = None")
+listing("model.py", "ISLA._case_inputs", start="### The given conditions in canonical order.", end="query = None")
 listing("model.py", "ISLA._gauge")
 listing("geometry.py", "rms_pairwise_distance")
 listing("geometry.py", "cell_second_moments")
-listing("model.py", "ISLA._forward_tokens", start="### Frame:", end="### Boundary inputs")
+listing("model.py", "ISLA._boundary_tokens", start="### Frame:", end="### Boundary inputs")
 ```
 :::
 
@@ -466,7 +466,7 @@ The water filling, the capped inclusion probabilities found exactly from the sor
 listing("sampling.py", "water_fill")
 listing("sampling.py", "pps_inclusion_probabilities")
 listing("sampling.py", "sample_boundary_cells")
-listing("model.py", "ISLA.forward", start="### The boundary tokens: the sample", end="query = query[None]")
+listing("model.py", "ISLA._case_inputs", start="### The boundary tokens: the sample", end="query = query[None]")
 ```
 :::
 
@@ -912,12 +912,12 @@ AeroZoo's held-out non-box family, it made the pressure error worse on both
 seeds, on a field where neither arm beats predicting zero.
 
 ::: {.callout-note collapse="true" title="Stage 4 in the code"}
-The head frame is the tail of `_forward_tokens`: one more routing map, read both ways, and a difference of positions.
+The head frame opens the head (`_head`): one more routing map, read both ways, and a difference of positions.
 
 ```{python}
 #| label: code-stage-4
 #| output: asis
-listing("model.py", "ISLA._forward_tokens", start="### Head frame:", end="### The token basis.")
+listing("model.py", "ISLA._head", start="### Head frame:", end="### The token basis.")
 ```
 :::
 
@@ -1012,7 +1012,7 @@ The basis is stacked in the order the text gives, and each declared output is co
 ```{python}
 #| label: code-stage-5
 #| output: asis
-listing("model.py", "ISLA._forward_tokens", start="### The token basis.")
+listing("model.py", "ISLA._head", start="### The token basis.")
 listing("heads.py", "_polar_complement")
 listing("heads.py", "_pseudovectors")
 listing("heads.py", "_assemble_output")
@@ -1094,7 +1094,7 @@ the boundary cells directly instead (@sec-arch-passive-decoder). ISLA-DTT is
 ISLA's default interior form; Peter's ruling for AeroZoo's close call is "ISLA-DTT, on
 principle", and its prediction at a point does not depend on which other points are
 queried (@sec-aerozoo-form). The interacting
-form stays the surface task's, and an explicit choice on an interior task. The tasks
+form stays the surface task's (@sec-cost-surface-form), and an explicit choice on an interior task. The tasks
 own different parameter sets (the interior task adds the prediction points'
 input layer and, for interacting points, the routing mass), which is why the
 task is a constructor argument: a parameter that takes no part in a forward
@@ -1772,7 +1772,7 @@ print("ISLA reads no stored signed distance, and putting it back has no measurab
 ```{python}
 #| label: code-interior-geometry
 #| output: asis
-listing("model.py", "ISLA.forward", start="### The points' geometry from the boundary surface", end="### The boundary tokens: the sample")
+listing("model.py", "ISLA._case_inputs", start="### The points' geometry from the boundary surface", end="### The boundary tokens: the sample")
 listing("geometry.py", "exact_boundary_geometry")
 listing("geometry.py", "_closest_features")
 listing("geometry.py", "soft_log_length")
@@ -1959,9 +1959,8 @@ cell entering with its total measure fraction as its log bias and its
 invariants computed from its centroid and normal. Because the read is a
 quadrature, a virtual cell is its cluster's monopole: were the logit
 constant over the cluster, reading the virtual cell would equal reading its
-cells one by one. The softmax of each point runs in a fused Triton kernel
-that keeps nothing per pair between the forward and backward passes
-(`segment_softmax_read`).
+cells one by one. How the build, the walk and the read run on a GPU is
+@sec-arch-tree-exec.
 
 **Under bfloat16 autocast, as in training, the forest is built from rounded
 coordinates.** The two products `points @ frame` in `BoundaryForest.build`
@@ -2111,13 +2110,128 @@ num = lambda s: float(re.search(r"[0-9.]+(?:e[0-9]+)?", s).group(0))
 floor_ = pick(cost_rows, "read-only, no read"); forest_ = pick(cost_rows, "forest, theta 1")
 per_point = re.search(r"\(([0-9,]+) per point, ([0-9]+)% nodes\)", forest_[3])
 pairs = num(forest_[3]); dense = 200_000 * 200_000
-print(f"On one GB300 at 200,000 boundary cells and 200,000 prediction points (width 512, 512 slices, bfloat16, compiled "
-      f"slice layers, one forward and backward pass), a point at $\\theta = 1$ reads about {per_point.group(1)} sources, "
-      f"{per_point.group(2)}% of them virtual cells: ${pairs / 10 ** int(np.log10(pairs)):.1f} \\times 10^{{{int(np.log10(pairs))}}}$ pairs per layer, {dense / pairs:.0f} times fewer than reading "
-      f"every cell. The step takes {num(forest_[0]):g} s and {num(forest_[2]):g} GiB against {num(floor_[0]):g} s and "
-      f"{num(floor_[2]):g} GiB for the read-only model without the boundary read, {num(forest_[0]) / num(floor_[0]):.1f} times "
-      f"the step (research/dtt/REPORT.md, \"Verification and cost of the forest\"). @fig-arch-step-breakdown takes one training step "
-      "of ISLA and of ISLA-DTT apart.")
+print(f"At 200,000 boundary cells and 200,000 prediction points (width 512, 512 slices), a point at $\\theta = 1$ reads "
+      f"about {per_point.group(1)} sources, {per_point.group(2)}% of them virtual cells: "
+      f"${pairs / 10 ** int(np.log10(pairs)):.1f} \\times 10^{{{int(np.log10(pairs))}}}$ pairs per layer, {dense / pairs:.0f} "
+      "times fewer than reading every cell (research/dtt/REPORT.md, \"Verification and cost of the forest\"). What a training "
+      "step of ISLA-DTT costs on a GB300 is @sec-using-dtt-cost.")
+```
+
+#### How the read runs {#sec-arch-tree-exec}
+
+**On a GPU, every piece of the read runs a kernel that computes what its
+reference computes: the same forest, the same pairs in the same order, and
+the same read up to the order of summation.** A *kernel* here is one
+function the GPU runs over many threads (@sec-arch-cost); Warp and Triton
+are two Python frameworks for writing such kernels, which the class uses
+where they are installed. Five pieces make up the read:
+
+1. **The forest build** (`tree_build.py`, Warp) computes the frame and the
+   classes with the reference's own code, then builds the trees' topology,
+   boxes and node sums on the GPU. Every field of the forest is bitwise the
+   reference's.
+2. **The walk** (`tree_walk.py`, Warp) runs every point's walk of every
+   tree in parallel: a count pass sizes the lists, a fill pass writes them,
+   and the lists equal the reference's entry for entry, in its order.
+3. **The pair plan** (`PairPlan`) indexes the list by point and by source
+   with `torch.searchsorted` over the sorted indices, on the GPU.
+4. **The read** (`fused_read.py`, Triton) computes each pair's kernel term
+   from the shared basis and the block's weights inside the kernel, in the
+   forward pass and again in the reverse pass, as memory-efficient
+   attention kernels recompute their attention weights instead of storing
+   them, so nothing per pair is kept but the basis. Its
+   reverse pass sums in a fixed order and is deterministic. The basis itself,
+   the small network over each pair's invariants, runs fused with those
+   invariants (`fused_basis.py`).
+5. **The training step runs in chunks of prediction points**
+   (`ISLA.query_chunks`). The boundary side, the slice layers over the
+   boundary tokens and the forest, runs once per case. The prediction
+   points then run in chunks, each holding only its own activations, and
+   the boundary side's reverse pass runs once after the chunks'. A loss
+   that is not a sum over points, such as a relative L2 over the case,
+   takes two passes when there is more than one chunk: the outputs without
+   a graph, the loss's gradient in them, then each chunk recomputed with
+   its reverse pass. The loss
+   and every gradient are those of the unchunked step up to summation
+   order, because a read-only point reads exactly what it reads among all
+   of them. The recipe always trains ISLA-DTT this way. A size rule
+   picks the fewest chunks of one size whose predicted peak memory fits
+   the GPU: a linear function of the chunk's pairs and points, fitted to
+   measured peaks on GB300 with a margin. It decides after the boundary
+   side and before any point's forward pass. Under data parallelism, where
+   each GPU trains on its own case and the ranks combine their gradients
+   (an *all-reduce*), an all-reduce takes the smallest fitting chunk size
+   over the ranks: that bounds every rank's chunks and decides one pass or
+   two the same way on every rank, and a rank may then add chunks for its
+   own pair counts. The step logs the choice when it changes (`_chunk_spans`
+   in the recipe's `src/train.py`).
+
+```{python}
+#| label: para-arch-tree-exec
+#| output: asis
+# DTT-FAST: the final report's piece summary, and the integration lane's equivalence of the head against the code without
+# the fast pieces, each version in its own process, on five first-batch inputs at 2,000 points (one training step)
+DFR = " ".join(R.load("dtt_fast_done", "FINAL_REPORT.md").split())
+SYNC_B = re.search(r"Warp forest build: every field bitwise equal; [^;]+; (\d+) host syncs down to (\d+)", DFR).groups()
+SYNC_W = re.search(r"Warp walk: lists equal in the reference's order; [^;]+; (\d+) syncs down to (\d+)", DFR).groups()
+assert SYNC_W[1] == "1"
+BWD = re.search(r"backward is deterministic and ([\d.]+)x faster\. - A fused basis MLP with its invariants; its backward is ([\d.]+)x faster", DFR).groups()
+EQ = R.md_table("dtt_fast_done", "integration/RESULTS.md", "Remerge", index=2)
+assert len(EQ) == 5 and all(r_["raw"] == "True" and r_["pairs"] == "identical" for r_ in EQ)
+EQ64, EQ32 = max(R.num(r_["float64"]) for r_ in EQ), max(R.num(r_["float32 ratio"]) for r_ in EQ)
+BF = R.md_table("dtt_fast_done", "integration/RESULTS.md", "Remerge", index=3)
+bf_o = next(r_ for r_ in BF if r_["case"] == "AirfRANS" and r_["group"] == "other")
+bf_ref = [R.num(bf_o["reference family min / median / max"], i) for i in range(3)]
+bf_new = [R.num(bf_o["head family"], i) for i in range(3)]
+bf_b = next(r_ for r_ in BF if r_["case"] == "AirfRANS" and r_["group"] == "blocks")
+bf_k = next(r_ for r_ in BF if r_["case"] == "DrivAerML vehicle" and r_["group"] == "kernel_basis")
+assert all(r_["tensors above in every run / below"].startswith("0 /") for r_ in BF if r_["tensors above in every run / below"])
+FAM = {r_["group"]: r_ for r_ in R.md_table("dtt_fast_done", "integration/RESULTS.md", "Remerge", index=4)}
+FAM_B = [R.num(FAM["blocks max"][c]) for c in ("reference family in b1", "reference family in c1")]
+PART_P = re.search(r"part P, which missed certification by (\d+) of ([\d,]+) groups", DFR).groups()
+FLG = re.search(r"moves step time by ([-+\d.]+)% to ([-+\d.]+)% on the (\d+) large settings", " ".join(R.load("dtt_fast_done", "flag/REPORT.md").split())).groups()
+print("**The fast pieces change no number beyond rounding.** On five real cases (the DrivAerML Volume task with the vehicle "
+      "and with the whole boundary, AeroZoo, the AirfRANS interior task and the GINOT bracket lug; one training step at 2,000 "
+      "prediction points with the same parameters), the class under `\"auto\"` and the same class without the fast pieces, "
+      "each run in its own process, give pair lists equal entry for entry on every case. In float64 their losses, outputs "
+      f"and gradients differ by at most {sci(EQ64)} relative. In float32, the fast pieces' distance to float64 is at most "
+      f"{EQ32:.2f} times the reference's, against a bound of 2. In bfloat16 the test is a family of seven one-ulp "
+      "perturbations of the reference's inputs, the reference's own spread under rounding, measured on the DrivAerML Volume "
+      "task with the vehicle and on AirfRANS. Per tensor group the fast pieces' distance to float64 lies inside that "
+      f"family's range on both, except for single-run maxima (the DrivAerML vehicle's kernel basis at "
+      f"{R.num(bf_k['head family'], 2):.2f} against {R.num(bf_k['reference family min / median / max'], 2):.2f}, AirfRANS's "
+      f"blocks at {R.num(bf_b['head family'], 2):.2f} in one run of seven against "
+      f"{R.num(bf_b['reference family min / median / max'], 2):.2f}) and one group on AirfRANS, the remaining parameter "
+      f"gradients, whose family runs {bf_new[0]:.2f} to {bf_new[2]:.2f} (median {bf_new[1]:.2f}) against the reference's "
+      f"{bf_ref[0]:.2f} to {bf_ref[2]:.2f}. The supervisor accepts that read: the reference's own family moves by more than "
+      "that excess between two jobs whose code differs only in a geometry change shared by both arms (its blocks' maximum "
+      f"{FAM_B[0]:.2f} in one and {FAM_B[1]:.2f} in the other), no tensor lies above the reference in every run, and float64 and float32 are "
+      "equivalent. The forest build synchronizes the host with the GPU "
+      f"{SYNC_B[1]} times where the reference synchronizes {SYNC_B[0]}, and the walk once where it "
+      f"synchronizes {SYNC_W[0]}; the read's reverse pass runs {BWD[0]} times faster than the reference's, and the "
+      f"basis's {BWD[1]} times. The version and the state dict are those of the class without them. Data: "
+      f"{R.source('dtt_fast_done', 'integration/RESULTS.md')} (Remerge); {R.source('dtt_fast_done', 'FINAL_REPORT.md')}.")
+print()
+print("**One execution attribute, `tree_read_kernel`, selects the path: `\"auto\"` (the default) or `\"reference\"`.** "
+      "Under `\"auto\"` each piece checks its own requirements and logs its choice once: the build runs its Warp kernels on "
+      "CUDA where Warp imports, in two or three dimensions (`resolve_tree_build`); the walk runs its Warp kernels on CUDA "
+      "where the forest's depth fits the walk's stack (`resolve_walk`); and the read and its node means run fused on CUDA "
+      "where Triton imports, in any precision but float64 (`ISLA.resolve_tree_read_kernel`). Any other case runs the "
+      "piece's reference, and `\"reference\"` runs every reference. The reference path is the code the reference tests "
+      "check and the class's whole path on the CPU; in float64 on CUDA the read and its node means run their reference, "
+      "and the build and the walk keep their Warp kernels. Checkpoints do not store the attribute, and a loaded model "
+      "starts at `\"auto\"`.")
+print()
+print("Three choices of the supervisor stand beside the fast pieces. PyTorch's default reduced-precision reduction in "
+      "bfloat16 matrix products (`allow_bf16_reduced_precision_reduction`) stays on: turning it off moves the median step "
+      f"time by {FLG[0]}% to {FLG[1]}% on the {FLG[2]} large settings timed and removes no measured error, since a cold "
+      "compile of the bfloat16 step picks some kernels by timing, which moves the one-ulp families as much as the setting "
+      "does. The read's projections stay out of the compiled blocks: compiled, they missed the certification of compiled "
+      f"regions on {PART_P[0]} of {PART_P[1]} tensor groups, at the bound, although every group lies inside eager's family "
+      "of one-ulp draws. And the read of bfloat16 equivalence above stands for AirfRANS; "
+      "the certification of the compiled path (@sec-arch-cost) checks every dataset with families of its own. "
+      f"Data: {R.source('dtt_fast_done', 'flag/REPORT.md')}; "
+      f"{R.source('dtt_fast_done', 'integration/RESULTS.md')} (Pass 3, part P).")
 ```
 
 ::: {.callout-note collapse="true" title="The read-only task and the forest in the code"}
@@ -2126,7 +2240,7 @@ The read-only points' measure bias, the read after each layer, and one point's w
 ```{python}
 #| label: code-read-only
 #| output: asis
-listing("model.py", "ISLA._forward_tokens", start="if self.query_independent:", end="else:")
+listing("model.py", "ISLA._query_tokens", start="if self.query_independent:", end="else:")
 listing("model.py", "ISLA._forward_tokens", start="for i, block in enumerate(self._block_callables()):", end="### The tokens the head reads")
 listing("tree_read.py", "BoundaryForest.point_pairs")
 listing("tree_read.py", "node_means")
@@ -2529,7 +2643,7 @@ dataset, and the ledger (@sec-ledger) tracks it.
 :::
 
 **Where a training step's time goes.** @fig-arch-step-breakdown takes one
-warm training step of ISLA and of ISLA-DTT apart on AeroZoo, on one node of
+warm training step of interacting ISLA apart on AeroZoo, on one node of
 four GB300 GPUs under data parallelism (each GPU trains on its own case and
 the gradients are averaged across them, an *all-reduce*, during the reverse
 pass). The profile is of the code of the nearest-token form
@@ -2542,8 +2656,8 @@ two stages' cost.
 ```{python}
 #| label: fig-arch-step-breakdown
 #| fig-cap: >
-#|   One warm training step of ISLA and of ISLA-DTT at their reference
-#|   configurations on AeroZoo (`family_non_box` split, 200,000 interior
+#|   One warm training step of interacting ISLA at its reference
+#|   configuration on AeroZoo (`family_non_box` split, 200,000 interior
 #|   cells, bfloat16, per-block compile, one node of four GB300 GPUs, data
 #|   parallel; mean over 150 steps and the four ranks). (a) The wall time of
 #|   the step by phase (upper bar of each pair), and the time the GPU spends
@@ -2556,17 +2670,17 @@ two stages' cost.
 #|   case, measured with that preparation at the start of the step, where
 #|   the recipe runs it during the reverse pass (see the text). The
 #|   module "nearest-token geometry" is the nearest-token form's search
-#|   (@sec-checkpoint-form), not the exact geometry. Data:
-#|   results/perf_2026-10-18/step_breakdown.json.
+#|   (@sec-checkpoint-form), not the exact geometry. ISLA-DTT's step is
+#|   @sec-using-dtt-cost. Data: results/perf_2026-10-18/step_breakdown.json.
 #| code-fold: true
 PB = json.load(open(RES / "perf_2026-10-18" / "step_breakdown.json"))
 HT, GK, FM = PB["host_timeline_ms"], PB["gpu_kernels_ms"], PB["forward_modules_ms"]
 PH = [("data", ("data_consume", "data_collective"), MUTED), ("forward", ("fwd_host", "fwd_collective"), VIOLET),
       ("backward and all-reduce wait", ("bwd_host", "gradnorm_drain"), "#b3abe0"), ("optimizer and logging", ("opt_host", "log"), BASELINE)]
 GPH = {"data": ("data",), "forward": ("fwd",), "backward and all-reduce wait": ("bwd",), "optimizer and logging": ("opt",)}
-fig, axes = plt.subplots(2, 1, figsize=(8, 6.2), gridspec_kw=dict(hspace=0.95, height_ratios=[1.25, 1.0]))
+fig, axes = plt.subplots(2, 1, figsize=(8, 4.4), gridspec_kw=dict(hspace=1.3, height_ratios=[1.0, 0.7]))
 ax = axes[0]
-for row, (key, name) in enumerate((("isla", "ISLA"), ("isla_dtt", "ISLA-DTT"))):
+for row, (key, name) in enumerate((("isla", "ISLA"),)):
     y0 = 1.6 * (1 - row)
     x = 0.0
     for lab, parts, col in PH:
@@ -2582,19 +2696,16 @@ for row, (key, name) in enumerate((("isla", "ISLA"), ("isla_dtt", "ISLA-DTT"))):
         ax.barh(y0 - 0.3, w, left=x, height=0.5, color=col, edgecolor=WHITE, alpha=0.85)
         x += w
     ax.text(x + 12, y0 - 0.3, f"GPU kernels {x:,.0f} ms", va="center", fontsize=8.5, color=MUTED)
-ax.set_yticks([1.6, 0.0]); ax.set_yticklabels(["ISLA", "ISLA-DTT"], fontsize=9.5)
-ax.set_xlim(0, 1750); ax.set_xlabel("time per training step [ms]")
+ax.set_yticks([1.92, 1.3]); ax.set_yticklabels(["wall", "GPU"], fontsize=9.5); ax.set_ylim(0.9, 2.3)
+ax.set_xlim(0, 1100); ax.set_xlabel("time per training step [ms]")
 ax.set_title("(a) the step by phase: wall time (upper) and GPU kernel time (lower)", fontsize=9.5, loc="left")
 ax.legend(handles=[plt.Rectangle((0, 0), 1, 1, color=c) for _, _, c in PH], labels=[l for l, _, _ in PH],
           fontsize=8, ncol=4, loc="upper center", bbox_to_anchor=(0.5, -0.3), frameon=False)
 for sp in ("top", "right"): ax.spines[sp].set_visible(False)
 ax.grid(axis="y", visible=False)
 ax = axes[1]
-MODS = [("slice blocks", lambda m: m["blocks"], VIOLET), ("nearest-token geometry", lambda m: m["nearest_boundary_geometry"], AQUA),
-        ("tree: forest build", lambda m: m.get("tree_forest_build", 0), "#5f5e58"),
-        ("tree: walk, plan and basis", lambda m: m.get("tree_walk", 0) + m.get("tree_pair_plan", 0) + m.get("tree_basis", 0), MUTED),
-        ("tree reads", lambda m: m.get("tree_reads", 0), BASELINE)]
-for row, (key, name) in enumerate((("isla", "ISLA"), ("isla_dtt", "ISLA-DTT"))):
+MODS = [("slice blocks", lambda m: m["blocks"], VIOLET), ("nearest-token geometry", lambda m: m["nearest_boundary_geometry"], AQUA)]
+for row, (key, name) in enumerate((("isla", "ISLA"),)):
     m = FM[key]; x = 0.0
     for lab, f, col in MODS:
         w = f(m)
@@ -2606,7 +2717,7 @@ for row, (key, name) in enumerate((("isla", "ISLA"), ("isla_dtt", "ISLA-DTT"))):
     rest = m["total"] - x
     ax.barh(1 - row, rest, left=x, height=0.55, color=WHITE, edgecolor=MUTED, lw=0.6)
     ax.text(m["total"] + 10, 1 - row, f"forward {m['total']:.0f} ms", va="center", fontsize=8.5, color=INK)
-ax.set_yticks([1, 0]); ax.set_yticklabels(["ISLA", "ISLA-DTT"], fontsize=9.5)
+ax.set_yticks([1]); ax.set_yticklabels(["ISLA"], fontsize=9.5); ax.set_ylim(0.5, 1.5)
 ax.set_xlim(0, 750); ax.set_xlabel("time in the forward pass, synchronized [ms]")
 ax.set_title("(b) the forward pass by module (open: the rest)", fontsize=9.5, loc="left")
 ax.legend(handles=[plt.Rectangle((0, 0), 1, 1, color=c) for _, _, c in MODS], labels=[l for l, _, _ in MODS],
@@ -2623,8 +2734,8 @@ gb = lambda k: PB["gpu_busy_unprofiled_fraction"][k]
 pa = PB["prefetch_ab_ms"]
 sav = sorted(100 * (1 - np.mean(r["fix"]) / r["base"]) for r in (pa["isla_aba_269723"], pa["isla_abab_270549"]))
 ri, dd = PB["rank_imbalance"], PB["ddp_allreduce"]
-bc, sy, mem = PB["boundary_cells_per_rank"]["isla"], PB["host_syncs_per_step"]["isla_dtt"], PB["peak_memory_gib"]
-FMi, FMd = FM["isla"], FM["isla_dtt"]
+bc, mem = PB["boundary_cells_per_rank"]["isla"], PB["peak_memory_gib"]
+FMi = FM["isla"]
 print(f"**The step is bound by the GPU, and what is left is waiting.** ISLA's warm step takes {HT['isla']['step']:,.0f} ms and keeps "
       f"the GPUs running kernels for about {100 * gb('isla'):.0f}% of it; its forward and reverse passes issue their kernels faster "
       f"than the GPU runs them ({HT['isla']['fwd_host']:.0f} ms of host time against {GK['isla']['fwd']:.0f} ms of kernels in the "
@@ -2646,17 +2757,8 @@ print(f"**The step is bound by the GPU, and what is left is waiting.** ISLA's wa
       f"that makes ISLA's step {sav[0]:.1f} to {sav[1]:.1f}% shorter on AeroZoo "
       f"({pa['isla_aba_269723']['base']} against {pa['isla_aba_269723']['fix']} ms, and {pa['isla_abab_270549']['base']} against "
       f"{np.mean(pa['isla_abab_270549']['fix']):.0f}, in two comparisons on one node). "
-      f"Peak memory is {mem['isla']['allocated']} GiB allocated per GPU ({mem['isla']['reserved']} GiB reserved by PyTorch's caching allocator).")
-print()
-print(f"**ISLA-DTT's forward waits on the host.** Its step takes {HT['isla_dtt']['step']:,.0f} ms with the GPU busy about "
-      f"{100 * gb('isla_dtt'):.0f}% of it, at {mem['isla_dtt']['allocated']} GiB allocated ({mem['isla_dtt']['reserved']} reserved). The Barnes–Hut forest is built from the data in each "
-      f"forward ({FMd['tree_forest_build']:.0f} ms, of {FMd['tree_total']:.0f} ms for the whole tree stage), and its sizes are known "
-      f"only on the host, so the forward synchronizes host and GPU {sy['fwd']} times per step and launches "
-      f"{PB['kernel_launches_per_step']['isla_dtt']['fwd']:,} kernels against ISLA's {PB['kernel_launches_per_step']['isla']['fwd']:,}. "
-      f"The slice blocks cost what they cost in ISLA ({FMd['blocks']:.0f} ms); the twelve tree reads add {FMd['tree_reads']:.0f}. "
-      f"Its reverse pass is host-bound as well, which is why loading the next batch during it does not shorten its step. "
-      "These are means over the warm steps of one profiled run of each model on one split. "
-      "Data: results/perf_2026-10-18/step_breakdown.json.")
+      f"Peak memory is {mem['isla']['allocated']} GiB allocated per GPU ({mem['isla']['reserved']} GiB reserved by PyTorch's caching allocator). "
+      "These are means over the warm steps of one profiled run on one split. Data: results/perf_2026-10-18/step_breakdown.json.")
 ```
 
 **How the step scales with the case.** On one GPU, from 100,000 tokens per case up, ISLA's memory grows linearly in
@@ -2707,9 +2809,17 @@ out += (f"| `geo_kernel` attribute (`{REF.geo_kernel!r}`) | 3 | not an argument 
         f"CUDA, Triton is importable, `dim == 3`, there is at least one global direction, the global directions and the shared "
         f"vector channels number at most {GK.MAX_DIRECTIONS} together, there are at most {GK.MAX_SLICES:,} slices and no shared "
         f"tensor channel, and to the eager region otherwise (`resolve_geo_kernel`); set `\"eager\"` or `\"fused\"` to force one |\n")
+out += (f"| `geometry_kernel` attribute (`{REF.geometry_kernel!r}`) | interior | not stored in a checkpoint: the implementation of "
+        "the prediction points' exact geometry search; `\"auto\"` takes the fast search on CUDA where Triton imports, which "
+        "returns the same geometry bitwise, and the reference search otherwise (`resolve_geometry_kernel`); set "
+        "`\"reference\"` or `\"fast\"` to force one |\n")
+out += (f"| `tree_read_kernel` attribute (`{REF.tree_read_kernel!r}`) | after each layer | not stored in a checkpoint: the "
+        "implementation of ISLA-DTT's tree read; `\"auto\"` runs each piece's GPU kernels where its requirements hold, the "
+        "same forest and pairs and the same read up to summation order, and `\"reference\"` runs every reference "
+        "(@sec-arch-tree-exec) |\n")
 print(out)
 print(": The constructor's keyword-only arguments, each default read from `inspect.signature(ISLA.__init__)` as the page "
-      "renders, and the one execution attribute. How to read this: `hidden`, `n_layers` and `n_slices` default to the reference "
+      "renders, and the three execution attributes. How to read this: `hidden`, `n_layers` and `n_slices` default to the reference "
       "configuration; `boundary_schemas` has no default; `query_independent`'s `None` follows the task, ISLA-DTT on the "
       "interior task; and every other default is the surface task with no global inputs.")
 ```

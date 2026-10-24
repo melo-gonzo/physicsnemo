@@ -1123,8 +1123,7 @@ RS = J("renderings_2026-10-22/cost_sweep_ref_090_gb300_bf16.json")["arms"]
 RS_ARMS = [("isla_surface_090", "isla_ref", "ISLA (DrivAerML Surface)", dict(color=BLUE, ls="-")),
            ("geotransolver_surface_256", "gt", "GeoTransolver (DrivAerML Surface)", dict(color=RED, ls="-")),
            ("transolver_surface_512x16", "t", "Transolver (DrivAerML Surface)", dict(ls="-")),
-           ("isla_volume_090", "isla_ref", "ISLA (DrivAerML Volume)", dict(color=BLUE, ls="--", mfc="white")),
-           ("isla_dtt_volume_090", "isla_ref", "ISLA-DTT (DrivAerML Volume)", dict(color=BLUE_LIGHT, ls="--", mfc="white"))]
+           ("isla_volume_090", "isla_ref", "interacting ISLA (DrivAerML Volume)", dict(color=BLUE, ls="--", mfc="white"))]
 TAIL = "isla_surface_090_codeR090"   # the same ISLA on the code its DrivAerML lanes trained on, not drawn
 ok = lambda arm: sorted([r for r in RS[arm]["runs"] if r["status"] == "ok"], key=lambda r: r["tokens"])
 oom = lambda arm: [r["tokens"] for r in RS[arm]["runs"] if r["status"] == "oom"]
@@ -1170,20 +1169,20 @@ print("**From 100,000 tokens per case up, the memory and the time of a training 
 #|   Training-step time (top) and allocator peak memory (bottom) of the reference
 #|   configurations against tokens per case, on one GB300 with bfloat16 autocast, a batch of
 #|   one real DrivAerML case, the optimizer step included; median of 25 timed steps after 8
-#|   warm-up steps, each model on its own GPU of one node. ISLA and ISLA-DTT compile each
+#|   warm-up steps, each model on its own GPU of one node. ISLA compiles each
 #|   slice block on its own with Inductor's mix-order reduction off and the baselines are
 #|   compiled whole. Solid: the DrivAerML Surface task, 25,000 to 800,000 surface cells.
 #|   Dashed, open markers: the DrivAerML Volume task, where a token count of $N$ means $N$
-#|   prediction points, measured from 100,000; ISLA and ISLA-DTT read the vehicle surface
-#|   whole and draw their boundary tokens inside the model, so their boundary token count does
-#|   not follow $N$. On either task, a count above the last marker ran out of the GPU's
+#|   prediction points, measured from 100,000, for interacting ISLA; it reads the vehicle surface
+#|   whole and draws its boundary tokens inside the model, so its boundary token count does
+#|   not follow $N$. ISLA-DTT's step is @tbl-using-dtt-cost. On either task, a count above the last marker ran out of the GPU's
 #|   memory. Not drawn: ISLA on the code its DrivAerML lanes trained on, with the mix-order
 #|   reduction at Inductor's default, which the text compares. How to read this:
 #|   all axes are logarithmic and the lines join measurements, not fits; a slope of one decade
 #|   per decade is linear cost. The panel ranks per-step cost on one GPU; it does not give the
 #|   wall-clock time of a training run, which @tbl-ref-cost gives. Data:
 #|   results/renderings_2026-10-22/cost_sweep_ref_090_gb300_bf16.json.
-#| fig-alt: "Two stacked log-log panels against tokens per case from 25,000 to 800,000: step time and peak memory of ISLA, GeoTransolver and Transolver on the surface task and of ISLA and ISLA-DTT on the volume task; memory and step time rise linearly, and on the volume task ISLA's step rises less than in proportion from a large fixed part, with ISLA-DTT's steps well above ISLA's."
+#| fig-alt: "Two stacked log-log panels against tokens per case from 25,000 to 800,000: step time and peak memory of ISLA, GeoTransolver and Transolver on the surface task and of interacting ISLA on the volume task; memory and step time rise linearly, and on the volume task ISLA's step rises less than in proportion from a large fixed part."
 fig, (ax0, ax1) = plt.subplots(2, 1, figsize=(8.0, 7.0), sharex=True, gridspec_kw=dict(hspace=0.08))
 for arm, key, lab, ov in RS_ARMS:
     rows = ok(arm); xs = [r["tokens"] for r in rows]
@@ -1208,7 +1207,6 @@ plt.show()
 ```{python}
 #| label: tbl-cost-slopes
 #| output: asis
-assert FITS["isla_dtt_volume_090"]["n"] == 2
 out = ("| configuration | parameters | step per 100,000 tokens [ms] | memory per 100,000 tokens [GiB] | fitted range | "
        "largest residual of the line, step / memory |\n|---|--:|--:|--:|--:|--:|\n")
 for arm, key, lab, _ in RS_ARMS:
@@ -1218,9 +1216,7 @@ for arm, key, lab, _ in RS_ARMS:
 print(out)
 print(": The per-token cost of each reference configuration: the slope of a straight line fitted to step time and to allocator peak over "
       "the measured counts from 100,000 tokens up, and the largest relative deviation of a measured point from that line. On the Volume task "
-      f"a token count is the prediction points, beside the {VB:,} boundary tokens ISLA and ISLA-DTT draw inside the model; ISLA-DTT's line "
-      f"passes through its only {S._COUNT[FITS['isla_dtt_volume_090']['n']]} counts that fit on one "
-      "GPU, so its residual is zero by construction. *Instrument:* as @fig-cost-sweep. How to read this: the slopes rank "
+      f"a token count is the prediction points, beside the {VB:,} boundary tokens ISLA draws inside the model. *Instrument:* as @fig-cost-sweep. How to read this: the slopes rank "
       "what a token costs each configuration on one GPU, not what a training run costs. "
       "Data: results/renderings_2026-10-22/cost_sweep_ref_090_gb300_bf16.json.")
 ```
@@ -1236,19 +1232,16 @@ assert fg["kt"] < min(fi["kt"], ft["kt"]) and fg["km"] < min(fi["km"], ft["km"])
 TOP = max(r["tokens"] for a in SA for r in ok(a))
 fits_top = [lab.split(" (")[0] for a, _, lab, _ in RS_ARMS if a in SA and TOP not in oom(a)]
 out_top = [lab.split(" (")[0] for a, _, lab, _ in RS_ARMS if a in SA and TOP in oom(a)]
-VI, VD = ({r["tokens"]: r for r in ok(a)} for a in ("isla_volume_090", "isla_dtt_volume_090"))
-both = sorted(set(VI) & set(VD))
-v2, d2 = VI[200000], VD[200000]
-DOOM = min(oom("isla_dtt_volume_090"))
+VI = {r["tokens"]: r for r in ok("isla_volume_090")}
+v2 = VI[200000]
 tail = [pt(TAIL, r["tokens"])["step_ms_median"] / r["step_ms_median"] - 1 for r in ok("isla_surface_090")]
-# ISLA-DTT at 400,000 prediction points on the Volume task with the whole boundary, leaves of 4 cells, by opening angle:
-# measured (in brackets in the record) where the step ran, and the memory fit's largest count that fits one GB300
-PJ = {r["read"]: r for r in R.md_table("dtt_knobs", "cost/cost_table.md", "Projection: DrivAerML Volume") if r["leaf"] == "4"}
-m400 = lambda t: re.search(r"\((\d+) / (\d+)\)", PJ[f"coupled theta {t}"]["Q 400k: ms / GiB"]).groups()
-RUN400 = {t: tuple(map(int, m400(t))) for t in ("3", "2", "1.5")}
-assert "OOM" in PJ["coupled theta 1"]["Q 400k: ms / GiB"]
-QMAX1 = PJ["coupled theta 1"]["largest Q that fits"].replace("k", ",000")
-I400 = int(re.search(r"(\d+) / \d+ at 400k", " ".join(R.load("dtt_knobs", "cost/cost_table.md").split())).group(1))
+rng2 = lambda xs: f"{min(xs):.2f} to {max(xs):.2f}"
+# ISLA-DTT against interacting ISLA on the class, the car alone: DTT-FAST's table on the final heads (one job per count,
+# the recipe's own step, bfloat16, per-block compile); not the sweep's runs
+F2 = {(r_["case"], int(R.num(r_["points"]))): r_ for r_ in R.md_table("dtt_fast_done", "final2/TABLE.md", "Main table")}
+F2V = {n: (R.num(r_["ISLA-DTT 4d281a702"], 0), R.num(r_["interacting ISLA b4b10d5a9"], 0), R.num(r_["ISLA-DTT 4d281a702"], 1),
+           R.num(r_["interacting ISLA b4b10d5a9"], 1)) for (c, n), r_ in F2.items() if c == "DrivAerML vehicle"}
+F2REF_OOM = [n for (c, n), r_ in F2.items() if c.startswith("DrivAerML") and r_["ISLA-DTT ref b4b10d5a9"].startswith("OOM")]
 assert all(pt(TAIL, r["tokens"])["peak_allocated_gib"] == r["peak_allocated_gib"] for r in ok("isla_surface_090"))
 print(f"Three readings follow. At {i25['tokens']:,} tokens ISLA's step ({i25['step_ms_median']:.0f} ms) is "
       f"{i25['step_ms_median'] / g25['step_ms_median']:.1f} times GeoTransolver's ({g25['step_ms_median']:.0f} ms) and "
@@ -1260,46 +1253,58 @@ print(f"Three readings follow. At {i25['tokens']:,} tokens ISLA's step ({i25['st
       f"{' and '.join(fits_top)} still train a case of {TOP:,} tokens on one GPU, and {' and '.join(out_top)} runs out of its memory there. "
       f"At 200,000 tokens the surface steps take {i2['step_ms_median']:.0f}, {g2['step_ms_median']:.0f} and "
       f"{t2['step_ms_median']:.0f} ms. On the Volume task, with the exact wall geometry of every prediction point, "
-      f"ISLA's step at 200,000 prediction points is {v2['step_ms_median']:.0f} ms at {v2['peak_allocated_gib']:.0f} GiB, "
-      f"and ISLA-DTT's {d2['step_ms_median']:,.0f} ms at {d2['peak_allocated_gib']:.0f} GiB. ISLA-DTT's step is "
-      + " and ".join(f"{VD[n]['step_ms_median'] / VI[n]['step_ms_median']:.2f} times ISLA's at {n:,}" for n in both)
-      + " prediction points: its Barnes–Hut forest is built from each case on the host (@sec-arch-cost), and it runs out of one "
-      f"GPU's memory at {DOOM:,}, where ISLA's step is {VI[DOOM]['step_ms_median']:.0f} ms at {VI[DOOM]['peak_allocated_gib']:.0f} GiB. "
-      "How far a cheaper read moves that limit was measured on the Volume task with the whole boundary (the car and the tunnel "
-      "box) at 200,000 boundary tokens, random weights, bfloat16 training steps and leaves of 4 cells: 400,000 prediction points fit one GB300 at "
-      "$\\theta \\geq 1.5$ (" + ", ".join(f"{ms:,} ms at {gib} GiB at $\\theta = {t}$" for t, (ms, gib) in RUN400.items())
-      + f") and run out of its memory at $\\theta = 1$, where the memory fit puts the largest count at {QMAX1}. The settings "
-      f"that fit take {min(ms for ms, _ in RUN400.values()) / I400:.1f} to {max(ms for ms, _ in RUN400.values()) / I400:.1f} "
-      f"times interacting ISLA's {I400} ms at 400,000, measured with the car alone. A larger $\\theta$ costs accuracy on a model "
-      "trained at $\\theta = 1$ (@sec-arch-tree-read), so these settings need models trained there (@sec-oq-dtt-theta; "
-      f"{R.source('dtt_knobs', 'cost/cost_table.md')}, the projection). "
+      f"interacting ISLA's step at 200,000 prediction points is {v2['step_ms_median']:.0f} ms at {v2['peak_allocated_gib']:.0f} GiB "
+      "in this sweep. ISLA-DTT's step on the same task with the car alone, against interacting ISLA's measured beside it on the "
+      f"class's code in the recipe's own step ({F2V[200000][1]:,.0f} ms at 200,000), is "
+      + " and ".join(f"{F2V[n][0] / F2V[n][1]:.2f} times at {n:,}" for n in sorted(F2V))
+      + " prediction points, at " + rng2([F2V[n][2] / F2V[n][3] for n in F2V]) + " times its peak memory, the peak of one "
+      f"chunk of every point (@tbl-using-dtt-cost); at {min(F2REF_OOM):,} the read's reference implementation in one unchunked step runs out of one "
+      "GPU's memory, and the chunked step does not. "
       "ISLA's DrivAerML standing lanes trained on code that runs the compiled blocks with Inductor's mix-order reduction at its "
       f"default; timed on that code, ISLA's surface step is within {100 * max(abs(x) for x in tail):.1f}% of the one shown at every "
       "count, at the same peak memory.")
-# DEFAULT-DTT's training checks of the class as it is: per interior dataset, 40 steps of each form per-block compiled
-# in one job on one GB300 (bfloat16, seed 42, each dataset's reference split and resolution)
+# DEFAULT-DTT's training checks of the class's interior configurations: 40 steps of each form per dataset on one GB300
 DD = R.md_table("default_dtt", "FINAL_REPORT.md", index=1)
 DDF = " ".join(R.load("default_dtt", "FINAL_REPORT.md").split())
-dd_x = lambda col: [float(r[col].rstrip("x")) for r in DD]
-dd_vol = next(r for r in DD if r["Dataset"].startswith("DrivAerML Vol"))["Step time, DTT vs ISLA (s)"].split(" vs ")
-assert "whole boundary" in DD[0]["Dataset"] and len(DD) == 5 and "both arms per-block compiled" in DDF
+assert len(DD) == 5 and "both arms per-block compiled" in DDF
 T2D_LOSS = re.search(r"\*\*Tensile2d\*\* builds and trains ISLA-DTT: the loss falls from ([\d.]+) to ([\d.]+)", DDF).groups()
 print()
-print("**In the recipe's interior configurations, with ISLA-DTT the class's interior default, ISLA-DTT's training step is "
-      f"{min(dd_x('Step ratio')):.1f} to {max(dd_x('Step ratio')):.1f} times interacting ISLA's, at "
-      f"{min(dd_x('Memory ratio')):.1f} to {max(dd_x('Memory ratio')):.1f} times its peak memory.** Each of the five interior "
-      "datasets trained each form for 40 steps on one GB300, both per-block compiled, in bfloat16, at the dataset's reference split "
-      "and resolution, on the class without its derived bands and without the fast search's fused thin-cell kernels, both "
-      f"confined to the geometry call; on the DrivAerML Volume task with the whole boundary ISLA-DTT's step took {dd_vol[0]} s against interacting "
-      f"ISLA's {dd_vol[1]} s. These runs check that every configuration builds and trains ISLA-DTT, Tensile2d's included, whose "
-      f"loss fell from {T2D_LOSS[0]} to {T2D_LOSS[1]}; they are not the timings of @fig-cost-sweep or of @tbl-isla-cost. "
+print("Every interior configuration of the recipe builds ISLA-DTT and trains it: each of the five interior datasets "
+      "trained it for 40 steps on one GB300, per-block compiled, in bfloat16, at the dataset's reference split and "
+      f"resolution, Tensile2d's loss falling from {T2D_LOSS[0]} to {T2D_LOSS[1]}; @tbl-using-dtt-cost times the recipe's "
+      "chunked step on four of them, every one but Tensile2d. "
       f"Data: {R.source('default_dtt', 'FINAL_REPORT.md')} (per interior dataset).")
 ```
 
-::: {.callout-note title="In flight"}
-These numbers come from ISLA-DTT's read as it is. A faster read and query-chunked training are being
-measured, and the ledger (@sec-ledger) tracks it.
-:::
+### ISLA-DTT's form of the surface task {#sec-cost-surface-form}
+
+```{python}
+#| label: para-cost-surface-form
+#| output: asis
+# DTT-FAST's surface rows: SURFACE's harness (the model's own forward, loss and backward, no optimizer, no chunks) on
+# DrivAerML run_1 with the whole boundary; option A, the surface task, timed by the same harness in another job
+SF = {int(R.num(r_["count"])): r_ for r_ in R.md_table("dtt_fast_done", "final2/TABLE.md", "Surface task, DrivAerML run_1")}
+sf = lambda n, col: (R.num(SF[n][col], 0), R.num(SF[n][col], 1))
+SF_DTT = {n: sf(n, "4d281a702 (371869)") for n in (200_000, 400_000)}
+SF_A = {n: sf(n, "option A (367436)") for n in (200_000, 400_000)}
+SF_R = {n: R.num(SF[n]["4d281a702 / option A (time)"]) for n in (200_000, 400_000)}
+DFR = " ".join(R.load("dtt_fast_done", "FINAL_REPORT.md").split())
+assert "HiLift still runs out of memory in the geometry call" in DFR
+RULING_SURF = "You can do A for now, but then revisit ISLA-DTT after the kernel speedups / memory savings land."
+print("**On a DrivAerML case with the whole boundary, ISLA-DTT's form of the surface task costs about four times the "
+      "surface task's step.** In that form the body's cell "
+      "centroids are the read-only prediction points of an ISLA-DTT model that reads every named boundary, in place of the "
+      "surface task's tokens, which are the cells themselves (@sec-arch-modes). On a DrivAerML case with the whole boundary, "
+      f"the car and the tunnel's four other pieces, at {200_000:,} cells, its forward pass, loss and reverse pass take "
+      f"{SF_DTT[200_000][0]:,.0f} ms at {SF_DTT[200_000][1]:.1f} GB, against {SF_A[200_000][0]:,.0f} ms at "
+      f"{SF_A[200_000][1]:.1f} GB for the surface task, {SF_R[200_000]:.1f} times the step, and at {400_000:,} cells "
+      f"{SF_R[400_000]:.1f} times ({SF_DTT[400_000][0]:,.0f} against {SF_A[400_000][0]:,.0f} ms; one GB300, bfloat16, the "
+      "blocks compiled one by one, no optimizer step and no chunks; the surface task timed in another job; GB = $10^9$ "
+      "bytes). On HiLiftAeroML's wings it runs out of the GPU's memory in the prediction points' geometry. Peter's ruling "
+      f"for the surface task reads: \"{RULING_SURF}\" A is the surface task as the class runs it, with interacting "
+      "tokens. The supervisor's reading of the revisit, on these numbers, is that the surface task keeps that form. Data: "
+      f"{R.source('dtt_fast_done', 'final2/TABLE.md')} (Surface task); {R.source('dtt_fast_done', 'FINAL_REPORT.md')}.")
+```
 
 ::: {.callout-tip title="Choosing a token budget"}
 Train at 100,000 to 200,000 cells per case: the error has saturated (@tbl-cells-ladder) and the
