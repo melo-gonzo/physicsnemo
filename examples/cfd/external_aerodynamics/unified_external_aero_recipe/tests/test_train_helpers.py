@@ -428,6 +428,19 @@ def test_query_chunk_chunks_isla_dtt(monkeypatch):
     assert train._query_chunk(isla(False), batch(50)) is None
 
 
+def test_chunked_forward_backward_refuses_batched_targets():
+    """The chunked step slices the targets by point: targets over more than the
+    points' axis (a batch of cases) are refused before the model runs."""
+    model, batch, target_config = _isla_dtt_case(20)
+    batch["targets"] = batch["targets"].unsqueeze(0)
+    lc = train.LossCalculator(target_config, loss_type="mse")
+    mc = train.MetricCalculator(target_config, metrics=["mae"])
+    with pytest.raises(ValueError, match="one case's targets"):
+        train.chunked_forward_backward(
+            batch, model, "float32", lc, mc, target_config=target_config, chunk=7
+        )
+
+
 ### ---------------------------------------------------------------------------
 ### _walk_batch_for_logging
 ### ---------------------------------------------------------------------------

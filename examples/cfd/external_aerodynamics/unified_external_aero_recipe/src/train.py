@@ -420,6 +420,11 @@ def chunked_forward_backward(
     ddp = isinstance(model, torch.nn.parallel.DistributedDataParallel)
     core = model.module if ddp else model
     targets: TensorDict = batch["targets"].float()
+    if targets.batch_dims != 1:
+        raise ValueError(
+            "chunked_forward_backward takes one case's targets over its prediction"
+            f" points, batch size (n_points,); got {tuple(targets.batch_size)}"
+        )
     measure = batch.get("target_measure")
     measure = None if measure is None else measure.float()
     with get_autocast_context(precision):
