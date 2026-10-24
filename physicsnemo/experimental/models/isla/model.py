@@ -157,8 +157,13 @@ quadrature measure enters the routing as a log-space bias, so slice states
 are measure-weighted (quadrature) means; with no measures the weights are
 uniform.
 
-**Surface and interior tasks.** ``interior=False`` (a surface task) predicts
-at the boundary cells themselves. ``interior=True`` (an interior task)
+**Surface and interior tasks.** Both tasks read the whole boundary: every cell of
+every mesh in ``boundary_meshes`` is a token (the interior task's a sample of
+them). ``interior=False`` (a surface task) predicts at the cells of the
+``prediction_boundaries`` given to ``forward``, the names of the conditions that
+carry the outputs (a vehicle's wall, with the tunnel's floor, walls, inlet and
+outlet read as conditions only); its output points are those cells' centroids.
+``interior=True`` (an interior task)
 predicts at the ``prediction_points`` given to ``forward`` (a point-cloud
 ``Mesh``, whose ``points`` alone are read, or a bare ``(N, d)`` tensor): they
 join the encoder as interacting tokens next to the boundary cells and the
@@ -227,7 +232,8 @@ along the space-filling curve, so every part of the surface is represented. In
 training the draw's start is uniform from the global torch RNG
 (``torch.manual_seed`` reproduces it), in evaluation it is fixed, so inference
 is deterministic. A surface task reads every cell it is given (its outputs are
-predicted there) and samples none.
+predicted at the cells of its prediction boundaries, which must all be tokens) and
+samples none.
 
 **Global inputs.** Rank-1 global inputs are the :math:`K` global directions:
 each is normalized to a unit direction inside the model (a direction is what
@@ -260,8 +266,9 @@ then a model with rank-2 boundary inputs runs the eager region.
 Every constructor argument and every ``forward`` input is keyword-only, so a
 call reads as the recipe's ``forward_kwargs`` mapping does and models can be
 swapped without positional bookkeeping. ``forward(boundary_meshes=...,
-prediction_points=..., global_data=...)`` returns a point-cloud ``Mesh``; see
-:meth:`ISLA.forward`.
+prediction_points=..., global_data=...)`` (interior) and ``forward(boundary_meshes=...,
+prediction_boundaries=..., global_data=...)`` (surface) return a point-cloud ``Mesh``;
+see :meth:`ISLA.forward`.
 
 **Data layout.** Inside ``forward`` the tokens stay TensorDicts: each boundary
 condition's cells (centroid, normal, measure, and the invariants of its declared
@@ -465,10 +472,12 @@ class ISLA(Module):
     :class:`~physicsnemo.mesh.Mesh` objects keyed by the declared
     boundary-condition names (each a ``Mesh[dim - 1, dim]`` whose cells have
     normals; any non-empty subset of the declared names), the
-    per-case data as a TensorDict, and, for an interior task, the prediction
-    points as a point-cloud ``Mesh`` (its ``points``) or a bare ``(N, dim)``
-    tensor. It returns a point-cloud ``Mesh`` whose
-    ``point_data`` holds the declared outputs. Details under ``forward``.
+    per-case data as a TensorDict, and where the outputs are: for an interior
+    task the prediction points as a point-cloud ``Mesh`` (its ``points``) or a
+    bare ``(N, dim)`` tensor, for a surface task the names of the boundaries at
+    whose cells they are predicted (``prediction_boundaries``). It returns a
+    point-cloud ``Mesh`` whose ``point_data`` holds the declared outputs.
+    Details under ``forward``.
 
     **Execution.** The ``geo_kernel`` attribute (``"auto"``; set ``"eager"`` or
     ``"fused"`` to force one) selects how the per-layer geometry region is
@@ -518,7 +527,8 @@ class ISLA(Module):
             geometry region and the head basis. Read from ``global_data`` by
             name; extra leaves there are ignored.
         interior: The task structure. ``False`` (default): a surface task,
-            the outputs are predicted at the boundary cells themselves;
+            the outputs are predicted at the cells of the boundaries ``forward``
+            names in ``prediction_boundaries`` (every given boundary is read);
             ``forward`` takes no ``prediction_points`` and the model has no
             prediction-point parameters. ``True``: an interior task, the
             outputs are predicted at ``prediction_points``, which join the
@@ -541,8 +551,8 @@ class ISLA(Module):
             its cells kept is read as given. In training the draw's start is
             uniform from the global torch RNG (``torch.manual_seed`` reproduces
             it), in evaluation (``model.eval()``) it is fixed, so inference is
-            deterministic. A surface task predicts at every cell it is given
-            and samples none: it takes only the default.
+            deterministic. A surface task reads every cell it is given and
+            samples none: it takes only the default.
         query_independent: Interior task only; the choice between ISLA and
             ISLA-DTT. ``False`` (default, ISLA): the prediction points interact,
             their total routing weight a learned fraction of the boundary
@@ -727,9 +737,9 @@ class ISLA(Module):
             "global_schema", global_schema, max_rank=1, allow_odd=False
         )
         self._init_scales(out_extras, b_extras, g_extras, reynolds, output_stats)
-        ### The task structure: a surface task predicts at the boundary cells and
-        ### has no prediction-point parameters; an interior task predicts at
-        ### prediction points that join the encoder as tokens.
+        ### The task structure: a surface task predicts at the cells of the boundaries
+        ### forward names and has no prediction-point parameters; an interior task
+        ### predicts at prediction points that join the encoder as tokens.
         self.interior = bool(interior)
         if self.interior and self.dim not in (2, 3):
             raise NotImplementedError(
@@ -740,14 +750,14 @@ class ISLA(Module):
         if self.query_independent and not self.interior:
             raise ValueError(
                 "query_independent=True concerns the prediction points of the interior "
-                "task; build with interior=True (a surface task predicts at its input cells)"
+                "task; build with interior=True (a surface task predicts at boundary cells)"
             )
         if isinstance(boundary_tokens, bool) or int(boundary_tokens) != boundary_tokens or boundary_tokens < 1:
             raise ValueError(f"boundary_tokens must be a positive integer; got {boundary_tokens!r}")
         if not self.interior and boundary_tokens != BOUNDARY_TOKENS:
             raise ValueError(
                 "boundary_tokens is the interior task's budget of boundary tokens; a surface "
-                "task (interior=False) predicts at every boundary cell it is given and samples "
+                "task (interior=False) reads every boundary cell it is given and samples "
                 f"none, so it takes the default ({BOUNDARY_TOKENS}); got {boundary_tokens!r}"
             )
         self.boundary_tokens = int(boundary_tokens)
@@ -1439,9 +1449,10 @@ class ISLA(Module):
                     f"got {tuple(t.shape)}"
                 )
 
-    def _validate_meshes(self, boundary_meshes, prediction_points) -> None:
+    def _validate_meshes(self, boundary_meshes, prediction_points, prediction_boundaries) -> None:
         """Mesh-level checks for :meth:`forward`: dimensions, declared fields
-        and the task structure (``interior``, ``query_independent``)."""
+        and the task structure (``interior``, ``query_independent``, where the
+        outputs are)."""
         d = self.dim
         if not isinstance(boundary_meshes, Mapping) or not boundary_meshes:
             raise ValueError("boundary_meshes must be a non-empty mapping of name to Mesh")
@@ -1481,6 +1492,7 @@ class ISLA(Module):
                     "points; pass prediction_points (a point-cloud Mesh or an (N, dim) "
                     "tensor)"
                 )
+            self._validate_prediction_boundaries(prediction_boundaries, boundary_meshes)
             return
         if not self.interior:
             raise ValueError(
@@ -1488,11 +1500,40 @@ class ISLA(Module):
                 "the boundary cells), so prediction_points must be None; build with "
                 "interior=True for an interior task"
             )
+        if prediction_boundaries is not None:
+            raise ValueError(
+                "this model was built with interior=True and predicts at prediction_points, "
+                "so prediction_boundaries must be None (a surface task names the boundaries "
+                "it predicts on)"
+            )
         self._validate_point_set(prediction_points, "prediction_points")
         if not any(mesh.n_cells for mesh in boundary_meshes.values()):
             raise ValueError(
                 "boundary_meshes have no cells: the interior task's prediction points "
                 "measure their distance to the boundary surface"
+            )
+
+    def _validate_prediction_boundaries(self, names, boundary_meshes) -> None:
+        """A surface task's prediction boundaries: a non-empty sequence of distinct
+        names of given boundaries (not a bare string)."""
+        if names is None:
+            raise ValueError(
+                "this model was built with interior=False (a surface task) and predicts at "
+                "the cells of named boundaries; pass prediction_boundaries, the names of "
+                f"the given boundaries that carry the outputs (given: {sorted(boundary_meshes)!r})"
+            )
+        if isinstance(names, str) or not isinstance(names, (list, tuple)) or not names:
+            raise ValueError(
+                "prediction_boundaries must be a non-empty list or tuple of boundary names; "
+                f"got {names!r}"
+            )
+        if len(set(names)) != len(names):
+            raise ValueError(f"prediction_boundaries names a boundary twice: {list(names)!r}")
+        absent = [n for n in names if n not in boundary_meshes]
+        if absent:
+            raise ValueError(
+                f"prediction_boundaries names {absent!r}, which are not in boundary_meshes "
+                f"({sorted(boundary_meshes)!r}); the outputs are predicted at given cells"
             )
 
     def _validate_point_set(self, pts, label: str) -> None:
@@ -1543,9 +1584,15 @@ class ISLA(Module):
         *,
         boundary_meshes: Mapping[str, Mesh],
         prediction_points: Mesh | Float[torch.Tensor, "n_points dim"] | None = None,
+        prediction_boundaries: list[str] | tuple[str, ...] | None = None,
         global_data: TensorDict | Mapping[str, torch.Tensor] | None = None,
     ) -> Mesh:
         r"""Predict the declared output fields for one case.
+
+        Both tasks read the whole boundary in ``boundary_meshes``; where the outputs
+        are is the second argument: ``prediction_points`` for an interior task,
+        ``prediction_boundaries`` for a surface task (exactly one of them, as the
+        task requires).
 
         Args:
             boundary_meshes: The boundary, as ``Mesh[dim - 1, dim]`` objects
@@ -1562,7 +1609,9 @@ class ISLA(Module):
                 ``boundary_schemas`` fields are read from its mesh's
                 ``cell_data`` by their (possibly dotted) names; other cell data
                 are ignored. A surface task's tokens are
-                every cell. An interior task takes the boundaries at full
+                every cell of every given boundary, those of its prediction
+                boundaries and those read as conditions only (a tunnel's floor,
+                walls, inlet and outlet). An interior task takes the boundaries at full
                 resolution: their cells are the surface of the prediction
                 points' geometry, and its tokens are ``boundary_tokens`` of
                 them drawn inside the model (module docstring), each kept cell
@@ -1577,8 +1626,16 @@ class ISLA(Module):
                 from it, is computed inside the model from the exact closest
                 point on the surface's cells (:func:`exact_boundary_geometry`)
                 and is never an input. ``None`` for a surface task
-                (``interior=False``): the outputs are predicted at the boundary
-                tokens.
+                (``interior=False``).
+            prediction_boundaries: The surface task's output boundaries
+                (``interior=False``, required): a non-empty list or tuple of
+                distinct names of given boundaries, at whose cells the outputs
+                are predicted (DrivAerML Surface: ``["vehicle"]``, its floor,
+                walls, inlet and outlet read as conditions only; a surface whose
+                conditions together carry the outputs names them all). Their
+                order does not matter. It owns no parameters: the head reads the
+                same tokens whichever boundaries carry the outputs, only the rows
+                it returns differ. ``None`` for an interior task.
             global_data: The case's per-case fields, a TensorDict (or mapping)
                 with the ``global_schema`` fields as leaves (a rank-0 field a
                 scalar, a rank-1 field a ``(dim,)`` vector); extra leaves are
@@ -1587,9 +1644,9 @@ class ISLA(Module):
 
         Returns:
             A point-cloud ``Mesh`` whose ``points`` are the prediction points
-            (interior) or the boundary token positions in token order
-            (surface: the given conditions in sorted name order, each
-            condition's cells in its mesh's order), whose ``point_data`` holds one leaf per declared output
+            (interior) or the cell centroids of the prediction boundaries
+            (surface: those boundaries in sorted name order, each one's cells in
+            its mesh's order), whose ``point_data`` holds one leaf per declared output
             at its natural shape (``(N,)`` at rank 0, ``(N, dim)`` at rank 1,
             ``(N, dim, dim)`` at rank 2, nested per the dotted names), and
             whose ``global_data`` is the selected ``global_data`` passed
@@ -1598,10 +1655,22 @@ class ISLA(Module):
         ### Validation at the API boundary (skipped under torch.compile): fail
         ### here with the offending mesh, not inside the network.
         if not torch.compiler.is_compiling():
-            self._validate_meshes(boundary_meshes, prediction_points)
+            self._validate_meshes(boundary_meshes, prediction_points, prediction_boundaries)
         ### The given conditions in canonical order.
         names = [name for name in self.boundary_names if name in boundary_meshes]
         meshes = [boundary_meshes[name] for name in names]
+        ### A surface task's outputs: the token rows of its prediction boundaries, as
+        ### (start, stop) ranges in token order, adjacent conditions' ranges merged.
+        out_rows = None
+        if prediction_points is None:
+            out_rows, start = [], 0
+            for name, m in zip(names, meshes):
+                if name in prediction_boundaries:
+                    if out_rows and out_rows[-1][1] == start:
+                        out_rows[-1] = (out_rows[-1][0], start + m.n_cells)
+                    else:
+                        out_rows.append((start, start + m.n_cells))
+                start += m.n_cells
         measures = [cell_measures(m) for m in meshes]
         like = meshes[0].points
         global_td = self._select_global_data(global_data, like.device)
@@ -1635,7 +1704,7 @@ class ISLA(Module):
         )
         query = None
         if prediction_points is None:
-            out_points = boundary["points"][0]
+            out_points = torch.cat([boundary["points"][0, a:b] for a, b in out_rows])
         else:
             query = self._point_set(prediction_points)
             out_points = query["points"]
@@ -1665,7 +1734,9 @@ class ISLA(Module):
             boundary = boundary.apply(lambda t: t[:, kept], batch_size=[1, kept.shape[0]])
             boundary["measure"] = weights[None]
             query = query[None]
-        fields = self._redimensionalize(self._forward_tokens(boundary, query, g_unit, g_scalars, gauge=gauge), scales)
+        fields = self._redimensionalize(
+            self._forward_tokens(boundary, query, g_unit, g_scalars, gauge=gauge, out_rows=out_rows), scales
+        )
         return Mesh(
             points=out_points,
             point_data=fields[0].to(out_points.device),
@@ -1792,6 +1863,7 @@ class ISLA(Module):
         g_unit: torch.Tensor,
         g_scalars: torch.Tensor | None,
         gauge: torch.Tensor | None = None,
+        out_rows: list[tuple[int, int]] | None = None,
     ) -> TensorDict:
         """The batched network on the token inputs.
 
@@ -1804,7 +1876,9 @@ class ISLA(Module):
         (:func:`exact_boundary_geometry`);
         ``g_unit`` ``(B, K, d)`` and ``g_scalars`` ``(B, S)`` (or ``None``) the
         global inputs (:meth:`_global_fields`); ``gauge`` ``(B, 1, 1)`` the length
-        unit (``None``: measured on the given boundary tokens).
+        unit (``None``: measured on the given boundary tokens); ``out_rows`` the
+        surface task's output tokens as ``(start, stop)`` ranges of the boundary
+        tokens (``None``: every boundary token).
         Returns the declared outputs over the ``(B, N_out)`` tokens the head reads.
 
         The token state is one TensorDict over ``(B, N)``, the boundary tokens
@@ -1919,9 +1993,14 @@ class ISLA(Module):
         tokens.set("h", h)
 
         ### The tokens the head reads: the prediction points in the interior mode,
-        ### every token otherwise. The head frame builds its slice anchors from ALL
-        ### tokens (r, log_w and h).
-        out = tokens if query is None else tokens[:, n_boundary:]
+        ### the prediction boundaries' cells in the surface mode. The head frame builds
+        ### its slice anchors from ALL tokens (r, log_w and h).
+        if query is not None:
+            out = tokens[:, n_boundary:]
+        elif out_rows is None:
+            out = tokens
+        else:
+            out = torch.cat([tokens[:, a:b] for a, b in out_rows], dim=1)
         ### With declared scales or output_stats the head and the assembly run in the
         ### parameters' precision under autocast: bf16's relative step (4e-3) would be
         ### carried into the physical outputs (Pa pressure) by the redimensionalization.

@@ -64,7 +64,9 @@ IO = dict(
 CONFIGS = {
     "default": dict(hidden=32, n_layers=2, n_slices=8, **IO),
     "interior": dict(hidden=32, n_layers=2, n_slices=8, interior=True, **IO),
-    "dtt": dict(hidden=32, n_layers=2, n_slices=8, interior=True, query_independent=True, **IO),
+    "dtt": dict(
+        hidden=32, n_layers=2, n_slices=8, interior=True, query_independent=True, **IO
+    ),
 }
 
 
@@ -105,9 +107,16 @@ def _make_inputs(device, query: bool = False, seed: int = 1234) -> dict:
     nrm = torch.nn.functional.normalize(torch.randn(n, 3, generator=gen), dim=-1)
     w = torch.rand(n, generator=gen) + 0.5
     g = torch.nn.functional.normalize(torch.randn(3, generator=gen), dim=-1)
-    inputs = dict(boundary_meshes={"wall": soup(pts, nrm, w).to(device)}, global_data={"g": g.to(device)})
+    inputs = dict(
+        boundary_meshes={"wall": soup(pts, nrm, w).to(device)},
+        global_data={"g": g.to(device)},
+    )
     if query:
-        inputs["prediction_points"] = (torch.randn(40, 3, generator=gen) * 2.0).to(device)
+        inputs["prediction_points"] = (torch.randn(40, 3, generator=gen) * 2.0).to(
+            device
+        )
+    else:
+        inputs["prediction_boundaries"] = ["wall"]
     return inputs
 
 
@@ -117,7 +126,9 @@ def _load_or_create_reference(file_name: str, output: dict) -> dict:
     path = DATA_DIR / file_name
     if not path.exists():
         torch.save({"output": {k: v.detach().cpu() for k, v in output.items()}}, path)
-        raise IOError(f"Golden output {path} was missing and has been created; commit it and re-run.")
+        raise IOError(
+            f"Golden output {path} was missing and has been created; commit it and re-run."
+        )
     ref = torch.load(path, weights_only=True)["output"]
     return {k: v.to(next(iter(output.values())).device) for k, v in ref.items()}
 
@@ -133,7 +144,9 @@ def _assert_dict_close(out: dict, ref: dict, atol: float, rtol: float) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("config", ["minimal", "custom"], ids=["with_defaults", "with_custom_args"])
+@pytest.mark.parametrize(
+    "config", ["minimal", "custom"], ids=["with_defaults", "with_custom_args"]
+)
 def test_isla_constructor_attributes(config):
     if config == "minimal":
         m = ISLA(**IO)
@@ -158,7 +171,10 @@ def test_isla_constructor_attributes(config):
                 "stress": {"rank": 2, "symmetric": True},
             },
             global_schema={"g1": {"rank": 1}, "g2": {"rank": 1}, "re": {"rank": 0}},
-            boundary_schemas={"wall": {"trace": {"rank": 0}, "traction": {"rank": 1}}, "outlet": {}},
+            boundary_schemas={
+                "wall": {"trace": {"rank": 0}, "traction": {"rank": 1}},
+                "outlet": {},
+            },
             interior=True,
             hidden=64,
             n_layers=3,
@@ -231,7 +247,10 @@ def test_mesh_wrapper_is_exact_over_the_batched_routine(device, config):
             eps, depth = torch.finfo(torch.float32).eps, mesh.n_cells
             ref = v[0]
             torch.testing.assert_close(
-                via_mesh.point_data[k], ref, rtol=depth * eps, atol=depth * eps * float(ref.square().mean().sqrt())
+                via_mesh.point_data[k],
+                ref,
+                rtol=depth * eps,
+                atol=depth * eps * float(ref.square().mean().sqrt()),
             )
         else:
             assert torch.equal(via_mesh.point_data[k], v[0]), k
@@ -252,7 +271,9 @@ def test_isla_backbone_matches_the_recorded_backbone():
     ref = torch.load(DATA_DIR / "isla_backbone_v1.pth", weights_only=True)["default"]
     model = _instantiate_model(**CONFIGS["default"])
     captured = {}
-    model.norm_out.register_forward_hook(lambda mod, i, o: captured.setdefault("x", o.detach().clone()))
+    model.norm_out.register_forward_hook(
+        lambda mod, i, o: captured.setdefault("x", o.detach().clone())
+    )
     with torch.no_grad():
         model._forward_tensors(**_make_tensors("cpu"))
     torch.testing.assert_close(captured["x"], ref["norm_out"], atol=1e-6, rtol=1e-5)
@@ -274,10 +295,19 @@ def test_isla_save_from_checkpoint_round_trip(device, tmp_path):
     ### starts at "auto" (fused on CUDA), so it takes the saved model's choice.
     assert loaded.geo_kernel == "auto"
     loaded.geo_kernel = model.geo_kernel
-    for name in ("n_slices", "interior", "n_global_vectors", "output_schema", "boundary_schemas", "global_schema"):
+    for name in (
+        "n_slices",
+        "interior",
+        "n_global_vectors",
+        "output_schema",
+        "boundary_schemas",
+        "global_schema",
+    ):
         assert getattr(loaded, name) == getattr(model, name), name
     with torch.no_grad():
-        _assert_dict_close(outputs(loaded(**inputs)), outputs(model(**inputs)), atol=0.0, rtol=0.0)
+        _assert_dict_close(
+            outputs(loaded(**inputs)), outputs(model(**inputs)), atol=0.0, rtol=0.0
+        )
 
 
 def test_isla_reference_checkpoint_matches_golden(device):
@@ -287,13 +317,19 @@ def test_isla_reference_checkpoint_matches_golden(device):
     ckpt = DATA_DIR / "isla_default_v1.mdlus"
     if not ckpt.exists():
         _instantiate_model(seed=7, **CONFIGS["default"]).save(ckpt)
-        raise IOError(f"Reference checkpoint {ckpt} was missing and has been created; commit it and re-run.")
+        raise IOError(
+            f"Reference checkpoint {ckpt} was missing and has been created; commit it and re-run."
+        )
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         model = Module.from_checkpoint(str(ckpt)).to(device).eval()
     assert not [w for w in caught if "checkpoint" in str(w.message)]
     assert isinstance(model, ISLA)
-    assert model.n_slices == 8 and model.geo_kernel == "auto" and list(model.output_schema) == ["p", "v"]
+    assert (
+        model.n_slices == 8
+        and model.geo_kernel == "auto"
+        and list(model.output_schema) == ["p", "v"]
+    )
     assert model.interior is False and model.boundary_schemas == {"wall": {}}
     inputs = _make_inputs(device)
     with torch.no_grad():
@@ -303,7 +339,9 @@ def test_isla_reference_checkpoint_matches_golden(device):
     _assert_dict_close(out, ref, atol=tol, rtol=tol)
 
 
-@pytest.mark.parametrize("version", ["0.3.0", "0.4.0", "0.5.0", "0.6.0", "0.7.0", "0.8.0"])
+@pytest.mark.parametrize(
+    "version", ["0.3.0", "0.4.0", "0.5.0", "0.6.0", "0.7.0", "0.8.0"]
+)
 def test_isla_checkpoint_of_an_earlier_version_is_refused(tmp_path, version):
     """ISLA keeps no upgrade path: a checkpoint written at an earlier version (here
     the reference checkpoint relabelled) fails to load with an error naming both
@@ -312,7 +350,10 @@ def test_isla_checkpoint_of_an_earlier_version_is_refused(tmp_path, version):
     import zipfile
 
     old = tmp_path / f"isla_{version}.mdlus"
-    with zipfile.ZipFile(DATA_DIR / "isla_default_v1.mdlus") as zin, zipfile.ZipFile(old, "w") as zout:
+    with (
+        zipfile.ZipFile(DATA_DIR / "isla_default_v1.mdlus") as zin,
+        zipfile.ZipFile(old, "w") as zout,
+    ):
         for item in zin.infolist():
             data = zin.read(item.filename)
             if item.filename == "metadata.json":
@@ -321,7 +362,12 @@ def test_isla_checkpoint_of_an_earlier_version_is_refused(tmp_path, version):
                 data = json.dumps(meta).encode()
             zout.writestr(item, data)
     assert ISLA.__model_checkpoint_version__ == "0.9.0"
-    with pytest.raises(IOError, match=re.escape(f"version {version} is not compatible with current version 0.9.0")):
+    with pytest.raises(
+        IOError,
+        match=re.escape(
+            f"version {version} is not compatible with current version 0.9.0"
+        ),
+    ):
         Module.from_checkpoint(str(old))
 
 
@@ -337,7 +383,11 @@ def test_isla_earlier_state_dict_is_refused_on_every_loading_path(tmp_path):
     model = _instantiate_model(**CONFIGS["interior"])
     path = tmp_path / "isla.mdlus"
     model.save(path)
-    old = {k: v for k, v in model.state_dict().items() if not k.startswith(("boundary_conditions.", "qt.seed."))}
+    old = {
+        k: v
+        for k, v in model.state_dict().items()
+        if not k.startswith(("boundary_conditions.", "qt.seed."))
+    }
     old["embed.0.weight"] = torch.zeros(32, 2)
     old["qt.type_offset"] = torch.zeros(32)
     old["qt.embed.0.weight"] = torch.zeros(32, 2)
@@ -346,20 +396,31 @@ def test_isla_earlier_state_dict_is_refused_on_every_loading_path(tmp_path):
     stale = tmp_path / "isla_0.6.0_weights.mdlus"
     with zipfile.ZipFile(path) as zin, zipfile.ZipFile(stale, "w") as zout:
         for item in zin.infolist():
-            zout.writestr(item, buf.getvalue() if item.filename == "model.pt" else zin.read(item.filename))
+            zout.writestr(
+                item,
+                buf.getvalue()
+                if item.filename == "model.pt"
+                else zin.read(item.filename),
+            )
     fresh = ISLA(**CONFIGS["interior"])
-    with pytest.raises(RuntimeError, match="parameter layout of a checkpoint before version 0.7.0"):
+    with pytest.raises(
+        RuntimeError, match="parameter layout of a checkpoint before version 0.7.0"
+    ):
         fresh.load(str(stale), strict=True)
     with pytest.raises(RuntimeError, match="no upgrade path"):
         fresh.load_state_dict(old, strict=False)
     ### a DDP-style prefix is seen through
     with pytest.raises(RuntimeError, match="before version 0.7.0"):
-        torch.nn.ModuleDict({"module": fresh}).load_state_dict({f"module.{k}": v for k, v in old.items()})
+        torch.nn.ModuleDict({"module": fresh}).load_state_dict(
+            {f"module.{k}": v for k, v in old.items()}
+        )
     fresh.load(str(path))  # the current layout loads
 
 
 @pytest.mark.parametrize("release, version", [("0.7.0", 1), ("0.8.0", 8)])
-def test_isla_0_7_0_and_0_8_0_state_dicts_are_refused_on_every_loading_path(tmp_path, release, version):
+def test_isla_0_7_0_and_0_8_0_state_dicts_are_refused_on_every_loading_path(
+    tmp_path, release, version
+):
     """0.7.0 and 0.8.0 have the current parameter layout but an earlier forward (the
     prediction points' geometry encoding before 0.8.0, the interior task's length unit
     measured on the drawn tokens before 0.9.0): their state dicts, told apart by the
@@ -380,9 +441,16 @@ def test_isla_0_7_0_and_0_8_0_state_dicts_are_refused_on_every_loading_path(tmp_
     stale = tmp_path / f"isla_{release}_weights.mdlus"
     with zipfile.ZipFile(path) as zin, zipfile.ZipFile(stale, "w") as zout:
         for item in zin.infolist():
-            zout.writestr(item, buf.getvalue() if item.filename == "model.pt" else zin.read(item.filename))
+            zout.writestr(
+                item,
+                buf.getvalue()
+                if item.filename == "model.pt"
+                else zin.read(item.filename),
+            )
     fresh = ISLA(**CONFIGS["interior"])
-    with pytest.raises(RuntimeError, match=rf"before version 0\.9\.0 \(state-dict version {version}"):
+    with pytest.raises(
+        RuntimeError, match=rf"before version 0\.9\.0 \(state-dict version {version}"
+    ):
         fresh.load(str(stale), strict=True)
     with pytest.raises(RuntimeError, match="no upgrade path"):
         fresh.load_state_dict(old, strict=False)

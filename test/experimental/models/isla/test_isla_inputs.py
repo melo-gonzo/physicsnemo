@@ -40,7 +40,12 @@ from test.experimental.models.isla._meshes import (
 
 D = torch.float64
 OUT = {"p": {"rank": 0}, "v": {"rank": 1}, "sig": {"rank": 2, "symmetric": True}}
-BIN = {"trac": {"rank": 1}, "T": {"rank": 2, "symmetric": True}, "A": {"rank": 2}, "tag": {"rank": 0}}
+BIN = {
+    "trac": {"rank": 1},
+    "T": {"rank": 2, "symmetric": True},
+    "A": {"rank": 2},
+    "tag": {"rank": 0},
+}
 DRV = torch.tensor([0.3, 1.0, 0.2], dtype=D)
 
 
@@ -59,7 +64,9 @@ def _fields(n, seed, symmetric_names, vector_names, scalar_names):
 
 def _boundary_fields(n, seed=1):
     f = _fields(n, seed, ["T"], ["trac"], ["tag"])
-    f["A"] = torch.randn(n, 3, 3, dtype=D, generator=torch.Generator().manual_seed(seed + 10))
+    f["A"] = torch.randn(
+        n, 3, 3, dtype=D, generator=torch.Generator().manual_seed(seed + 10)
+    )
     return f
 
 
@@ -75,7 +82,14 @@ def _move(fields, specs, R):
 
 def _model(**kw):
     torch.manual_seed(0)
-    base = dict(output_schema=OUT, boundary_schemas={"wall": {}}, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=2, n_slices=8)
+    base = dict(
+        output_schema=OUT,
+        boundary_schemas={"wall": {}},
+        global_schema={"g": {"rank": 1}},
+        hidden=32,
+        n_layers=2,
+        n_slices=8,
+    )
     base.update(kw)
     return ISLA(**base).double().eval()
 
@@ -86,7 +100,10 @@ def _assert_covariant(m, call, improper):
     R = orthogonal(3, 4, improper)
     out = call(R, torch.tensor([2.0, -5.0, 1.0], dtype=D))
     for name, spec in m.output_schema.items():
-        assert torch.allclose(out[name], law(base[name], R, spec.rank), atol=1e-11), (name, improper)
+        assert torch.allclose(out[name], law(base[name], R, spec.rank), atol=1e-11), (
+            name,
+            improper,
+        )
     return base
 
 
@@ -100,21 +117,45 @@ def test_boundary_inputs_covariance(improper):
     def call(R, shift):
         with torch.no_grad():
             return outputs(
-                m(boundary_meshes={"wall": transform(mesh, R, shift, specs=m.boundary_schemas["wall"])}, global_data={"g": DRV @ R.T})
+                m(
+                    prediction_boundaries=["wall"],
+                    boundary_meshes={
+                        "wall": transform(
+                            mesh, R, shift, specs=m.boundary_schemas["wall"]
+                        )
+                    },
+                    global_data={"g": DRV @ R.T},
+                )
             )
 
     base = _assert_covariant(m, call, improper)
     ### the fields are live: scaling the traction changes every output
     with torch.no_grad():
         other = outputs(
-            m(boundary_meshes={"wall": soup(pts, nrm, w, cell_data={**bf, "trac": 2.0 * bf["trac"]})}, global_data={"g": DRV})
+            m(
+                prediction_boundaries=["wall"],
+                boundary_meshes={
+                    "wall": soup(
+                        pts, nrm, w, cell_data={**bf, "trac": 2.0 * bf["trac"]}
+                    )
+                },
+                global_data={"g": DRV},
+            )
         )
     assert all(not torch.allclose(other[k], base[k], atol=1e-6) for k in base)
     ### a rotation of the fields ALONE (geometry fixed) is not a symmetry
     R = orthogonal(3, 6, False)
     with torch.no_grad():
         skew = outputs(
-            m(boundary_meshes={"wall": soup(pts, nrm, w, cell_data=_move(bf, m.boundary_schemas["wall"], R))}, global_data={"g": DRV})
+            m(
+                prediction_boundaries=["wall"],
+                boundary_meshes={
+                    "wall": soup(
+                        pts, nrm, w, cell_data=_move(bf, m.boundary_schemas["wall"], R)
+                    )
+                },
+                global_data={"g": DRV},
+            )
         )
     assert not torch.allclose(skew["p"], base["p"], atol=1e-6)
 
@@ -126,7 +167,9 @@ def test_geometry_width_and_seed_width():
     for K in (0, 1, 2):
         m = _model(
             global_schema={f"g{k}": {"rank": 1} for k in range(K)},
-            boundary_schemas={"wall": {"v": {"rank": 1}, "T": {"rank": 2, "symmetric": True}}},
+            boundary_schemas={
+                "wall": {"v": {"rank": 1}, "T": {"rank": 2, "symmetric": True}}
+            },
         )
         F = 1 + K
         assert m.blocks[0].n_geo == 5 + K + (1 + F) + 1
@@ -136,7 +179,10 @@ def test_geometry_width_and_seed_width():
         assert wall.seed.in_features == 1 + K + wall.inputs.n_features
     ### a non-symmetric rank-2 input contracts both T a and T^T a and all F^2 pairs
     m = _model(boundary_schemas={"wall": {"A": {"rank": 2}}})
-    assert m.n_block_vecs == 2 * 2 and m.boundary_conditions["wall"].inputs.n_features == 4 + 2
+    assert (
+        m.n_block_vecs == 2 * 2
+        and m.boundary_conditions["wall"].inputs.n_features == 4 + 2
+    )
 
 
 def test_field_validation_errors():
@@ -146,18 +192,55 @@ def test_field_validation_errors():
     pts, nrm, w, _ = cloud(20)
     gd = {"g": torch.ones(3, dtype=D)}
     trac, tag = torch.randn(20, 3, dtype=D), torch.rand(20, dtype=D)
-    with pytest.raises(ValueError, match="cell_data is missing the declared fields \\['tag'\\]"):
-        m(boundary_meshes={"wall": soup(pts, nrm, w, cell_data={"trac": trac})}, global_data=gd)
-    with pytest.raises(ValueError, match="cell_data is missing the declared fields \\['tag', 'trac'\\]"):
-        m(boundary_meshes={"wall": soup(pts, nrm, w)}, global_data=gd)
-    with pytest.raises(ValueError, match="\\['trac'\\]: expected shape \\(20, 3\\) \\(rank 1\\), got \\(20, 2\\)"):
-        m(boundary_meshes={"wall": soup(pts, nrm, w, cell_data={"trac": trac[:, :2], "tag": tag})}, global_data=gd)
+    with pytest.raises(
+        ValueError, match="cell_data is missing the declared fields \\['tag'\\]"
+    ):
+        m(
+            prediction_boundaries=["wall"],
+            boundary_meshes={"wall": soup(pts, nrm, w, cell_data={"trac": trac})},
+            global_data=gd,
+        )
+    with pytest.raises(
+        ValueError, match="cell_data is missing the declared fields \\['tag', 'trac'\\]"
+    ):
+        m(
+            prediction_boundaries=["wall"],
+            boundary_meshes={"wall": soup(pts, nrm, w)},
+            global_data=gd,
+        )
+    with pytest.raises(
+        ValueError,
+        match="\\['trac'\\]: expected shape \\(20, 3\\) \\(rank 1\\), got \\(20, 2\\)",
+    ):
+        m(
+            prediction_boundaries=["wall"],
+            boundary_meshes={
+                "wall": soup(pts, nrm, w, cell_data={"trac": trac[:, :2], "tag": tag})
+            },
+            global_data=gd,
+        )
     ### extras in cell_data are ignored
-    out = m(boundary_meshes={"wall": soup(pts, nrm, w, cell_data={"trac": trac, "tag": tag, "extra": tag})}, global_data=gd)
+    out = m(
+        prediction_boundaries=["wall"],
+        boundary_meshes={
+            "wall": soup(
+                pts, nrm, w, cell_data={"trac": trac, "tag": tag, "extra": tag}
+            )
+        },
+        global_data=gd,
+    )
     assert out.point_data["p"].shape == (20,)
     ### every boundary mesh carries its own condition's fields
-    m2 = _model(boundary_schemas={"a": {"trac": {"rank": 1}, "tag": {"rank": 0}}, "b": {"tag": {"rank": 0}}})
-    with pytest.raises(ValueError, match="boundary_meshes\\['b'\\].cell_data is missing the declared fields \\['tag'\\]"):
+    m2 = _model(
+        boundary_schemas={
+            "a": {"trac": {"rank": 1}, "tag": {"rank": 0}},
+            "b": {"tag": {"rank": 0}},
+        }
+    )
+    with pytest.raises(
+        ValueError,
+        match="boundary_meshes\\['b'\\].cell_data is missing the declared fields \\['tag'\\]",
+    ):
         m2(
             boundary_meshes={
                 "a": soup(pts, nrm, w, cell_data={"trac": trac, "tag": tag}),
@@ -169,13 +252,23 @@ def test_field_validation_errors():
     mq = _model(interior=True)
     q = pts[:7] * 2
     with pytest.raises(ValueError, match="prediction_points has 2 spatial dimensions"):
-        mq(boundary_meshes={"wall": soup(pts, nrm, w)}, prediction_points=points_mesh(q[:, :2]), global_data=gd)
+        mq(
+            boundary_meshes={"wall": soup(pts, nrm, w)},
+            prediction_points=points_mesh(q[:, :2]),
+            global_data=gd,
+        )
 
 
 def test_fused_kernel_auto_falls_back_with_tensor_inputs():
     """The fused kernel does not take rank-2 inputs: auto falls back to eager (off CUDA
     it does anyway)."""
-    base = dict(output_schema=OUT, global_schema={"g": {"rank": 1}}, hidden=32, n_layers=1, n_slices=8)
+    base = dict(
+        output_schema=OUT,
+        global_schema={"g": {"rank": 1}},
+        hidden=32,
+        n_layers=1,
+        n_slices=8,
+    )
     m = ISLA(interior=True, boundary_schemas={"wall": {"S": {"rank": 2}}}, **base)
     assert m.geo_kernel == "auto"
     assert m.resolve_geo_kernel(torch.zeros(1, 4, 3)) == "eager"
@@ -187,15 +280,21 @@ def test_fields_keep_their_declaration_order_as_columns():
     layer reading only its constant and its first field column and the head
     writing only its first coefficient,
     the first declared input alone moves the first declared output."""
-    m = ISLA(
-        output_schema={"z": {"rank": 0}, "a": {"rank": 0}},
-        boundary_schemas={"wall": {"y": {"rank": 0}, "b.c": {"rank": 0}}},
-        hidden=16,
-        n_layers=1,
-        n_slices=4,
-    ).double().eval()
+    m = (
+        ISLA(
+            output_schema={"z": {"rank": 0}, "a": {"rank": 0}},
+            boundary_schemas={"wall": {"y": {"rank": 0}, "b.c": {"rank": 0}}},
+            hidden=16,
+            n_layers=1,
+            n_slices=4,
+        )
+        .double()
+        .eval()
+    )
     with torch.no_grad():
-        m.boundary_conditions["wall"].seed.weight[:, 2:] = 0  # [1, y, b.c]: no global inputs
+        m.boundary_conditions["wall"].seed.weight[:, 2:] = (
+            0  # [1, y, b.c]: no global inputs
+        )
         m.head.weight[1:] = 0
         m.head.bias[1:] = 0
     pts, nrm, w, _ = cloud(30, seed=0)
@@ -204,10 +303,15 @@ def test_fields_keep_their_declaration_order_as_columns():
     def run(y, c):
         with torch.no_grad():
             mesh = soup(pts, nrm, w, cell_data={"y": y, "b": {"c": c}})
-            return outputs(m(boundary_meshes={"wall": mesh}))
+            return outputs(
+                m(prediction_boundaries=["wall"], boundary_meshes={"wall": mesh})
+            )
 
     base = run(y, c)
     assert list(base) == ["z", "a"]
-    assert torch.equal(base["a"], torch.zeros_like(base["a"])) and base["z"].abs().max() > 0
+    assert (
+        torch.equal(base["a"], torch.zeros_like(base["a"]))
+        and base["z"].abs().max() > 0
+    )
     assert torch.equal(run(y, c + 1)["z"], base["z"])
     assert not torch.allclose(run(y + 1, c)["z"], base["z"])

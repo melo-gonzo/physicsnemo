@@ -66,7 +66,13 @@ def test_centered_prototypes_keep_every_contract():
 
     def run(mesh, g):
         with torch.no_grad():
-            return outputs(m(boundary_meshes={"wall": mesh}, global_data={"g": g}))
+            return outputs(
+                m(
+                    prediction_boundaries=["wall"],
+                    boundary_meshes={"wall": mesh},
+                    global_data={"g": g},
+                )
+            )
 
     base = run(mesh, drv)
     rot = run(transform(mesh, q), drv @ q.T)

@@ -193,7 +193,14 @@ def _spy(m):
 
 def _run(m, meshes, gd, q=None):
     with torch.no_grad():
-        return outputs(m(boundary_meshes=meshes, prediction_points=q, global_data=gd))
+        return outputs(
+            m(
+                boundary_meshes=meshes,
+                prediction_points=q,
+                prediction_boundaries=None if q is not None else list(meshes),
+                global_data=gd,
+            )
+        )
 
 
 @pytest.mark.parametrize("dtt", [False, True], ids=["isla", "isla_dtt"])
