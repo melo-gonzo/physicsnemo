@@ -79,6 +79,13 @@ BLOCK_PAIRS = 32
 NUM_WARPS = 1
 SOURCE_CHUNK = 512
 
+#: Registers per thread of the by-point and by-source backward kernels under a narrow
+#: basis (launch constants: these one-warp kernels are latency-bound, and on GB300 at
+#: DrivAerML scale the caps, at a few spilled registers, let more programs reside per
+#: SM and ran them 1.15x and 1.07x faster).
+POINT_MAXNREG = 128
+SOURCE_MAXNREG = 96
+
 
 def _pow2(n: int) -> bool:
     return n > 0 and n & (n - 1) == 0
@@ -188,9 +195,9 @@ if HAS_TRITON:
         """One point: dq[s], the basis gradient of its pairs through this block's
         weights added to dbasis (BASIS_GRAD), its part of the weights' gradient,
         dw[s] (2H, F) float32 with the heads at the even rows, and each pair's softmax
-        weight and logit gradient, float32 and interleaved by head, in the pair's row
-        of prdz in the plan's by-source order (inv: each pair's position there).
-        NARROW: the basis is bfloat16 or float16."""
+        weights and logit gradients (H each, float32) in the pair's row of prdz in the
+        plan's by-source order (inv: each pair's position there). NARROW: the basis is
+        bfloat16 or float16."""
         s = tl.program_id(0).to(tl.int64)
         start = tl.load(off_ptr + s)
         end = tl.load(off_ptr + s + 1)
@@ -233,12 +240,9 @@ if HAS_TRITON:
             dp = tl.sum(v * dout[None, :, :], axis=2)  # (BLOCK, H)
             dz = pr * (dp - dsum[None, :])  # (BLOCK, H)
             dq += tl.sum(dz[:, :, None] * k, axis=0) * scale
-            ip = tl.load(inv_ptr + p, mask=msk, other=0).to(tl.int64)
-            tl.store(
-                prdz_ptr + ip[:, None] * (2 * H) + rr[None, :],
-                tl.reshape(tl.join(pr, dz), [BLOCK, 2 * H]),
-                mask=msk[:, None],
-            )
+            row = prdz_ptr + tl.load(inv_ptr + p, mask=msk, other=0).to(tl.int64)[:, None] * (2 * H)
+            tl.store(row + hh[None, :], pr, mask=msk[:, None])
+            tl.store(row + H + hh[None, :], dz, mask=msk[:, None])
             ### The kernel-term gradient in the basis's dtype; NARROW: as a (BLOCK, 2H)
             ### matrix with the heads at the even columns, for tl.dot.
             dker_lp = dz.to(basis_ptr.dtype.element_ty)
@@ -282,15 +286,15 @@ if HAS_TRITON:
         chunk = tl.load(item_chunk_ptr + item).to(tl.int64)
         start = tl.load(boff_ptr + j) + chunk * CHUNK
         end = tl.minimum(tl.load(boff_ptr + j + 1), start + CHUNK)
-        rr = tl.arange(0, 2 * H)
+        hh = tl.arange(0, H)
         dk = tl.zeros([H, KC], tl.float32)
         dv = tl.zeros([H, C], tl.float32)
         for i0 in range(start, end, BLOCK):
             i = i0 + tl.arange(0, BLOCK)
             msk = i < end
             qi = tl.load(qib_ptr + i, mask=msk, other=0).to(tl.int64)
-            prdz = tl.load(prdz_ptr + i[:, None] * (2 * H) + rr[None, :], mask=msk[:, None], other=0.0)
-            pr, dz = tl.split(tl.reshape(prdz, [BLOCK, H, 2]))
+            pr = tl.load(prdz_ptr + i[:, None] * (2 * H) + hh[None, :], mask=msk[:, None], other=0.0)
+            dz = tl.load(prdz_ptr + i[:, None] * (2 * H) + H + hh[None, :], mask=msk[:, None], other=0.0)
             q = tl.reshape(
                 tl.load(
                     q_ptr + qi[:, None] * (H * KC) + tl.arange(0, H * KC)[None, :],
@@ -566,11 +570,12 @@ class _FusedKernelRead(torch.autograd.Function):
         dv = torch.empty(plan.n_b, h, c, device=q.device, dtype=torch.float32)
         src, chunk_idx, item_off, inv = _plan_source_items(plan)
         prdz = torch.empty(inv.shape[0], 2 * h, device=q.device, dtype=torch.float32)
+        narrow = _narrow(basis)
         if n_q:
             _fkr_bwd_point_kernel[(n_q,)](
                 plan.q_offsets, plan.bj, basis, w, logm, q, k, v, lse, dsum, dout, inv, dq, dbasis, dw_parts, prdz,
                 scale, H=h, C=c, KC=kc, F=f, BLOCK=BLOCK_PAIRS, BASIS_GRAD=acc is not None,
-                NARROW=_narrow(basis), num_warps=NUM_WARPS,
+                NARROW=narrow, num_warps=NUM_WARPS, **({"maxnreg": POINT_MAXNREG} if narrow else {}),
             )  # fmt: skip
         if plan.n_b:
             ### Each source's dk and dv: every item's part, then their sum in item order.
@@ -579,6 +584,7 @@ class _FusedKernelRead(torch.autograd.Function):
                 _fkr_bwd_source_kernel[(src.shape[0],)](
                     plan.b_offsets, src, chunk_idx, plan.qi_by_b, prdz, q, dout, parts, scale, SOURCE_CHUNK,
                     H=h, C=c, KC=kc, BLOCK=BLOCK_PAIRS, num_warps=NUM_WARPS,
+                    **({"maxnreg": SOURCE_MAXNREG} if narrow else {}),
                 )  # fmt: skip
             del prdz
             _fkr_source_sum_kernel[(plan.n_b,)](item_off, parts, dk, dv, H=h, C=c, KC=kc, num_warps=1)
