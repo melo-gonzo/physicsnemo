@@ -523,8 +523,30 @@ def _chunked_basis(basis: _KernelBasis, qi, si, geometry: dict) -> torch.Tensor:
     return torch.cat(parts)
 
 
-def tree_read_pairs(
-    basis: _KernelBasis,
+@dataclass
+class TreeReadWalk:
+    """Every case's forest and point lists (:func:`tree_read_walk`), before the kernel
+    basis: per case the pairs ``(qi, si, n_node)`` sorted by point, the inputs of their
+    invariants (:func:`tree_pair_invariants`) and the sources' log measures.
+    :func:`walk_pairs` assembles the pairs of any range of points from it."""
+
+    forests: list[BoundaryForest]
+    lists: list[tuple[torch.Tensor, torch.Tensor, int]]
+    geometry: list[dict]
+    src_logm: list[torch.Tensor]
+    omega: torch.Tensor  # (B * N,) the cells' measure fractions
+    n_cells: int
+    n_queries: int
+
+
+def tree_read_pairs(basis: _KernelBasis, **walk) -> TreeReadPairs:
+    """The tree read's pairs of every point of a batch of cases, with their kernel
+    basis: :func:`walk_pairs` of :func:`tree_read_walk` (which takes the keyword
+    arguments)."""
+    return walk_pairs(basis, tree_read_walk(**walk))
+
+
+def tree_read_walk(
     *,
     query_r: torch.Tensor,
     query_n: torch.Tensor,
@@ -536,8 +558,8 @@ def tree_read_pairs(
     g_unit: torch.Tensor,
     theta: float,
     eps: float,
-) -> TreeReadPairs:
-    r"""Build the tree read's pairs for a batch of cases.
+) -> TreeReadWalk:
+    r"""Walk the tree read's forests for a batch of cases.
 
     ``query_r``, ``query_n`` ``(B, Q, d)`` (frame units; the point's built-in
     direction), ``query_wall`` ``(B, Q)`` the point's built-in wall distance;
@@ -550,17 +572,15 @@ def tree_read_pairs(
     (:meth:`BoundaryForest.point_pairs`), so each point's list is a set of cells and
     a set of nodes that together cover every cell exactly once; the nodes' virtual
     cells (centroid, renormalized mean normal, mean rank-1 inputs, total measure)
-    come with the forest; the kernel basis of every pair in chunks. The forest and
-    the walk run without gradient (a numerical device); the invariants and the basis
-    carry gradients to the kernel MLP.
+    come with the forest. The forest and the walk run without gradient (a numerical
+    device); the invariants and the basis (:func:`walk_pairs`) carry gradients to the
+    kernel MLP.
     """
     b, nq, d = query_r.shape
     n = boundary_r.shape[1]
     tiny = torch.finfo(torch.float32).tiny
     has_vecs = boundary_vecs is not None and bool(boundary_vecs.shape[2])
-    qis, sis, bases, logms, forests, offsets = [], [], [], [], [], []
-    src_off = 0
-    n_pairs_node = 0
+    forests, lists, geometries, src_logms = [], [], [], []
     for i in range(b):
         with torch.no_grad():
             omega = torch.exp(log_frac[i])
@@ -593,15 +613,46 @@ def tree_read_pairs(
             "g_unit": g_unit[i],
             "eps": eps,
         }
-        bases.append(_chunked_basis(basis, qi, si, geometry))
-        logms.append(src_logm[si])
-        qis.append(qi + i * nq)
-        sis.append(si + src_off)
         forests.append(forest)
+        lists.append((qi, si, n_node))
+        geometries.append(geometry)
+        src_logms.append(src_logm)
+    return TreeReadWalk(
+        forests=forests,
+        lists=lists,
+        geometry=geometries,
+        src_logm=src_logms,
+        omega=torch.exp(log_frac).reshape(-1),
+        n_cells=n,
+        n_queries=nq,
+    )
+
+
+def walk_pairs(basis: _KernelBasis, walk: TreeReadWalk, start: int = 0, stop: int | None = None) -> TreeReadPairs:
+    """The pairs of the points ``start`` to ``stop`` (default: every point) of each
+    case of ``walk``, numbered from ``start``, with the kernel basis of every pair in
+    chunks: each point's list is the walk's, so a range of points reads exactly what
+    it reads among all of them."""
+    n, nq_all = walk.n_cells, walk.n_queries
+    stop = nq_all if stop is None else stop
+    nq = stop - start
+    qis, sis, bases, logms, offsets = [], [], [], [], []
+    src_off = 0
+    n_pairs_node = 0
+    for i, forest in enumerate(walk.forests):
+        qi, si, n_node = walk.lists[i]
+        if (start, stop) != (0, nq_all):
+            a, b = torch.searchsorted(qi, qi.new_tensor([start, stop])).tolist()
+            qi, si = qi[a:b], si[a:b]
+            n_node = int((si >= n).sum())
+        bases.append(_chunked_basis(basis, qi, si, walk.geometry[i]))
+        logms.append(walk.src_logm[i][si])
+        qis.append(qi + (i * nq - start))
+        sis.append(si + src_off)
         offsets.append(src_off)
         src_off += n + forest.n_nodes
         n_pairs_node += n_node
-    plan_all = PairPlan.build(torch.cat(qis), torch.cat(sis), b * nq, src_off)
+    plan_all = PairPlan.build(torch.cat(qis), torch.cat(sis), len(walk.forests) * nq, src_off)
     if plan_all.qi.shape[0] < 2**31:
         ### 32-bit pair indices (the fused read widens them on load): half the plan's memory.
         plan_all = dataclasses.replace(
@@ -615,8 +666,8 @@ def tree_read_pairs(
         plan=plan_all,
         basis=torch.cat(bases),
         log_m=torch.cat(logms),
-        omega=torch.exp(log_frac).reshape(-1),
-        forests=forests,
+        omega=walk.omega,
+        forests=walk.forests,
         src_offsets=offsets,
         n_cells=n,
         n_queries=nq,
@@ -656,10 +707,13 @@ class _TreeKernelRead(nn.Module):
         nn.init.zeros_(self.out.weight)
 
     def forward(self, h_b, h_q, pairs: TreeReadPairs):
-        nh, c, kc = KERNEL_READ_HEADS, KERNEL_READ_WIDTH // KERNEL_READ_HEADS, KERNEL_READ_KEY
+        return self.read(self.sources(h_b, pairs), h_q, pairs)
+
+    def sources(self, h_b, pairs: TreeReadPairs | TreeReadWalk):
+        """The virtual sources' keys and values at this depth, ``(sources, H KC + W)``,
+        from the boundary states ``h_b``."""
         hb = self.norm_b(h_b)
         v_c, k_c = self.value(hb), self.key(hb)
-        q = self.query(self.norm_q(h_q)).view(-1, nh, kc)
         ### The virtual sources, case by case: the cells, then the forest's node means
         ### of the keys and values together (one scatter and one sweep per case).
         n = pairs.n_cells
@@ -668,7 +722,12 @@ class _TreeKernelRead(nn.Module):
             sl = slice(i * n, (i + 1) * n)
             kv_c = torch.cat([k_c[sl], v_c[sl]], dim=-1)
             kv_parts += [kv_c, node_means(kv_c, forest, pairs.omega[sl])]
-        kv_src = torch.cat(kv_parts)
+        return torch.cat(kv_parts)
+
+    def read(self, kv_src, h_q, pairs: TreeReadPairs):
+        """The points' residual update from the sources' keys and values (:meth:`sources`)."""
+        nh, c, kc = KERNEL_READ_HEADS, KERNEL_READ_WIDTH // KERNEL_READ_HEADS, KERNEL_READ_KEY
+        q = self.query(self.norm_q(h_q)).view(-1, nh, kc)
         k_src = kv_src[:, : nh * kc].reshape(-1, nh, kc)
         v_src = kv_src[:, nh * kc :].reshape(-1, nh, c)
         ### The pairs' kernel terms at this block: the shared basis through the block's

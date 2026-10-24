@@ -830,3 +830,80 @@ def test_tree_read_cuda_matches_cpu_float64(theta, monkeypatch):
             f"{k}: max abs {d.max().item():.3e}, of the allclose bound {(d / (1e-9 + 1e-5 * cpu[k].abs())).max().item():.3e}"
         )
     assert same(gpu, cpu, atol=1e-9)
+
+
+def _chunked_step(m, kw, loss_of, size):
+    """One step through :meth:`ISLA.query_chunks` in chunks of ``size`` points: the
+    chunks' outputs, concatenated."""
+    chunks = m.query_chunks(**kw)
+    parts = []
+    for a in range(0, chunks.n_points, size):
+        rows = slice(a, min(a + size, chunks.n_points))
+        out = outputs(chunks(rows.start, rows.stop))
+        loss_of(out, rows).backward()
+        parts.append({k: v.detach() for k, v in out.items()})
+    chunks.backward()
+    return {k: torch.cat([p[k] for p in parts]) for k in parts[0]}
+
+
+@pytest.mark.parametrize("vectors", [False, True], ids=["plain", "boundary_vectors"])
+@pytest.mark.parametrize("theta", [0.0, TREE_READ_THETA])
+def test_query_chunks_equal_the_forward_pass_and_its_gradients(theta, vectors):
+    """ISLA.query_chunks (the boundary side once, the points chunk by chunk, then the
+    boundary side's backward with the leaves' gradients): in training mode, from the
+    same token draw, the outputs of forward and every parameter's gradient of a loss
+    summed over the points, to float64 roundoff."""
+    extra = {"boundary_schemas": {"wall": {"tr": {"rank": 1}}}} if vectors else {}
+    m = _model(3, theta, **extra).double()
+    with torch.no_grad():
+        for p in m.blocks.parameters():
+            p.add_(0.05 * torch.randn_like(p))
+    mesh, drv, q = _case()
+    if vectors:
+        g = torch.Generator().manual_seed(4)
+        data = dict(mesh.cell_data.items())
+        data["tr"] = torch.randn(mesh.n_cells, 3, generator=g, dtype=D)
+        mesh = mesh.with_data(cell_data=data)
+    kw = {
+        "boundary_meshes": {"wall": mesh},
+        "prediction_points": points_mesh(q),
+        "global_data": {"g": drv},
+    }
+    target = torch.randn(
+        q.shape[0], 4, generator=torch.Generator().manual_seed(9), dtype=D
+    )
+
+    def loss_of(out, rows):
+        return (out["p"] - target[rows, 0]).square().sum() + (
+            out["v"] - target[rows, 1:]
+        ).square().sum()
+
+    torch.manual_seed(3)
+    full = outputs(m(**kw))
+    loss_of(full, slice(None)).backward()
+    ref = {n: p.grad.clone() for n, p in m.named_parameters()}
+    m.zero_grad(set_to_none=True)
+    torch.manual_seed(3)
+    chunked = _chunked_step(m, kw, loss_of, 37)
+    assert same(chunked, {k: v.detach() for k, v in full.items()}, atol=1e-12)
+    ### gradients that vanish analytically (a bias every slice logit shares) are roundoff on both sides
+    scale = max(float(g.abs().max()) for g in ref.values())
+    for name, p in m.named_parameters():
+        assert p.grad is not None, name
+        assert torch.allclose(p.grad, ref[name], rtol=1e-9, atol=1e-12 * scale), name
+
+
+def test_query_chunks_need_query_independent_points():
+    m = ISLA(
+        output_schema=PV,
+        global_schema=G,
+        boundary_schemas={"wall": {}},
+        interior=True,
+        hidden=16,
+        n_layers=1,
+    )
+    mesh, drv, q = _case(n=50, nq=20)
+    with pytest.raises(ValueError, match="query_independent"):
+        m.query_chunks(
+            boundary_meshes={"wall": mesh}, prediction_points=q, global_data={"g": drv}
+        )

@@ -340,6 +340,8 @@ from physicsnemo.experimental.models.isla.tree_read import (
     _TreeKernelRead,
     kernel_geo_width,
     tree_read_pairs,
+    tree_read_walk,
+    walk_pairs,
 )
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.calculus.measure import cell_measures
@@ -669,6 +671,7 @@ class ISLA(Module):
         ### on DrivAerML Volume, losses at bfloat16 roundoff of the eager path.
         self.compile_blocks = bool(compile_blocks)
         self._block_forwards: list | None = None
+        self._block_reads: list | None = None
         ### The spatial dimension of the points. Every geometric quantity is built
         ### for d dimensions; the head's basis and the coefficient count depend on
         ### d (pseudovectors exist by the Levi-Civita construction: perpendiculars
@@ -1210,6 +1213,18 @@ class ISLA(Module):
             ]
         return self._block_forwards
 
+    def _block_read_callables(self):
+        """The slice blocks' passive reads (:meth:`_SliceBlock.read`), compiled as
+        :meth:`_block_callables` compiles their forwards."""
+        if not self.compile_blocks or torch.compiler.is_compiling():
+            return [block.read for block in self.blocks]
+        if self._block_reads is None:
+            self._block_reads = [
+                torch.compile(block.read, options=_BLOCK_COMPILE_OPTIONS)
+                for block in self.blocks
+            ]
+        return self._block_reads
+
     def _apply_geo_kernel(self, points: torch.Tensor) -> str | None:
         """Write the resolved kernel name into the blocks, once per resolution.
         Under torch.compile the blocks are left untouched: the kernel is returned
@@ -1597,6 +1612,55 @@ class ISLA(Module):
             whose ``global_data`` is the selected ``global_data`` passed
             through.
         """
+        boundary, query, g_unit, g_scalars, gauge, scales, out_points, global_td = self._case_inputs(
+            boundary_meshes, prediction_points, global_data
+        )
+        fields = self._redimensionalize(self._forward_tokens(boundary, query, g_unit, g_scalars, gauge=gauge), scales)
+        return Mesh(
+            points=out_points,
+            point_data=fields[0].to(out_points.device),
+            global_data=global_td,
+        )
+
+    def query_chunks(
+        self,
+        *,
+        boundary_meshes: Mapping[str, Mesh],
+        prediction_points: Mesh | Float[torch.Tensor, "n_points dim"],
+        global_data: TensorDict | Mapping[str, torch.Tensor] | None = None,
+    ) -> "_QueryChunks":
+        r"""ISLA-DTT's :meth:`forward` in chunks of prediction points, for a training
+        step that holds the activations of one chunk of points at a time.
+
+        Runs the boundary side of the forward pass once, from the same arguments:
+        the case's inputs (the token draw included, which consumes the global RNG
+        as :meth:`forward` does), the boundary tokens through every block, the forest
+        and every point's walk of it. What the prediction points read of each block
+        (its prototypes, anchors and slice states, the boundary read's keys and
+        values) and the head frame's prototypes and anchors become leaves that
+        accumulate gradients. The result ``chunks`` is then called as
+        ``chunks(start, stop)``: the output Mesh of ``prediction_points[start:stop]``,
+        equal to those rows of :meth:`forward` up to summation order (each point
+        reads exactly what it reads among all of them), differentiable in the
+        parameters and the leaves. After the chunks' backward passes,
+        ``chunks.backward()`` carries the leaves' gradients through the boundary side
+        once, so the parameters' gradients are those of the unchunked step whose
+        loss is the sum of the chunks' (``chunks.n_points`` points in all).
+        ``query_independent=True`` only: interacting points are not a function of
+        each point alone.
+        """
+        if not self.query_independent:
+            raise ValueError(
+                "query_chunks needs query_independent=True: with interacting prediction points "
+                "a prediction depends on every point of the request"
+            )
+        return _QueryChunks(self, self._case_inputs(boundary_meshes, prediction_points, global_data))
+
+    def _case_inputs(self, boundary_meshes, prediction_points, global_data) -> tuple:
+        """One case's inputs to :meth:`_forward_tokens` from :meth:`forward`'s:
+        ``(boundary, query, g_unit, g_scalars, gauge, scales)`` (the interior task's
+        boundary tokens drawn, the prediction points with their geometry), then the
+        output points and the selected global data."""
         ### Validation at the API boundary (skipped under torch.compile): fail
         ### here with the offending mesh, not inside the network.
         if not torch.compiler.is_compiling():
@@ -1669,12 +1733,7 @@ class ISLA(Module):
             boundary = boundary.apply(lambda t: t[:, kept], batch_size=[1, kept.shape[0]])
             boundary["measure"] = weights[None].to(boundary["measure"].dtype)
             query = query[None]
-        fields = self._redimensionalize(self._forward_tokens(boundary, query, g_unit, g_scalars, gauge=gauge), scales)
-        return Mesh(
-            points=out_points,
-            point_data=fields[0].to(out_points.device),
-            global_data=global_td,
-        )
+        return boundary, query, g_unit, g_scalars, gauge, scales, out_points, global_td
 
     @staticmethod
     def _point_set(pts) -> TensorDict:
@@ -1683,17 +1742,17 @@ class ISLA(Module):
         points = pts.points if isinstance(pts, Mesh) else pts
         return TensorDict(points=points, batch_size=points.shape[:1])
 
-    def _tree_read_pairs(self, bnd: TensorDict, qry: TensorDict, q_wall, g_unit):
+    def _tree_read_pairs(self, bnd: TensorDict, qry: TensorDict, q_wall, g_unit, walk: bool = False):
         """The boundary read's pairs (:mod:`tree_read`): each point's near cells and
         admitted clusters at the forest's opening angle, their kernel basis
         and log measures; ``bnd`` and ``qry`` are the boundary's and the points'
         tokens and ``q_wall`` ``(B, Q)`` the points' built-in wall distance (frame
-        units)."""
+        units). With ``walk`` the forest and the points' lists only
+        (:func:`~physicsnemo.experimental.models.isla.tree_read.tree_read_walk`)."""
         r, n_hat, vecs, log_w = bnd["r"], bnd["n_hat"], bnd.get("vecs", None), bnd["log_w"]
         q_r, q_nhat = qry["r"], qry["n_hat"]
         log_frac = log_w[..., 0] - torch.logsumexp(log_w[..., 0], dim=1, keepdim=True)
-        return tree_read_pairs(
-            self.kernel_basis,
+        return (tree_read_walk if walk else lambda **kw: tree_read_pairs(self.kernel_basis, **kw))(
             query_r=q_r,
             query_n=q_nhat,
             query_wall=q_wall,
@@ -1816,6 +1875,43 @@ class ISLA(Module):
         ``g_hat``, ``log_w`` and the block-level ``vecs`` and ``tens``; the slice
         blocks take its tensors (module docstring, *Data layout*).
         """
+        tokens, gauge, geo_kernel = self._boundary_tokens(boundary, g_unit, gauge)
+        b, n = tokens.batch_size
+
+        ### n_boundary counts the boundary tokens only: the kernel reads update
+        ### the tokens appended below.
+        n_boundary = n
+        if query is not None:
+            q_tokens, q_wall = self._query_tokens(query, tokens["log_w"], g_unit, g_scalars, gauge, boundary["points"])
+            if self.kernel_reads is not None:
+                kernel_pairs = self._tree_read_pairs(tokens, q_tokens, q_wall, g_unit)
+            tokens = torch.cat([tokens, q_tokens], dim=1)
+            _hint_token_axis(n + q_tokens.shape[1], self._token_widths)
+
+        h, log_w, r = tokens["h"], tokens["log_w"], tokens["r"]
+        vecs, tens = tokens.get("vecs", None), tokens.get("tens", None)
+        for i, block in enumerate(self._block_callables()):
+            h = block(h, log_w, r, tokens["n_hat"], tokens["g_hat"], EPS, vecs, tens, geo_kernel=geo_kernel)
+            if self.kernel_reads is not None:
+                ### The points' residual update from the boundary cells' states at this
+                ### depth; the boundary tokens (and so the slices) are untouched.
+                h_b, h_p = h[:, :n_boundary], h[:, n_boundary:]
+                delta = self.kernel_reads[i](
+                    h_b.reshape(-1, h.shape[-1]), h_p.reshape(-1, h.shape[-1]), kernel_pairs
+                )
+                h = torch.cat([h_b, h_p + delta.view_as(h_p)], dim=1)
+        tokens.set("h", h)
+
+        ### The tokens the head reads: the prediction points in the interior mode,
+        ### every token otherwise. The head frame builds its slice anchors from ALL
+        ### tokens (r, log_w and h).
+        out = tokens if query is None else tokens[:, n_boundary:]
+        return self._head(out, self._frame_anchors(h, log_w, r) if self.needs_frame else None)
+
+    def _boundary_tokens(self, boundary: TensorDict, g_unit: torch.Tensor, gauge: torch.Tensor | None):
+        """The boundary tokens' state over ``(B, N)`` (:meth:`_forward_tokens`), the
+        length unit (measured on the tokens when ``gauge`` is ``None``) and the
+        geometry kernel the blocks are called with."""
         points = boundary["points"]
         b, n, _ = points.shape
         _hint_token_axis(n, self._token_widths)
@@ -1855,83 +1951,87 @@ class ISLA(Module):
             **self._block_extras(b_vecs, b_tens, b, n, points),
             batch_size=[b, n],
         )
+        return tokens, gauge, geo_kernel
 
-        ### n_boundary counts the boundary tokens only: the kernel reads update
-        ### the tokens appended below.
-        n_boundary = n
-        if query is not None:
-            query_points = query["points"]
-            nq = query_points.shape[1]
-            ### The query's geometry from the boundary surface: the signed distance
-            ### to it (the built-in channels s and asinh(s / 1e-6)) and the gradient
-            ### of the signed distance, sign(d) u with sign(0) = +1 (the token's
-            ### "normal" in every invariant), from the exact closest point. Both are
-            ### continuous through the surface, so a point on it (d zero or a rounding
-            ### error of either sign) gets the code of its neighbours on either side.
-            with torch.autocast(points.device.type, enabled=False):
-                dist = query["wall_distance"].to(points.dtype)
-                u = query["wall_direction"].to(points.dtype)
-                q_nhat = torch.where((dist >= 0)[..., None], u, -u)
-                s = (dist / gauge.squeeze(-1))[..., None]  # (B, Q, 1), in frame units
-                builtin = torch.cat([s, soft_log_length(s)], -1)
-            q_g = g_unit[:, None].expand(b, nq, K, dim)
-            q_seed = [self._dots(q_nhat, q_g)]
-            if g_scalars is not None:
-                q_seed.append(g_scalars[:, None, :].expand(b, nq, -1).to(points.dtype))
-            h_q = self.embed(self.qt.seed(torch.cat([*q_seed, builtin], -1)))
-            if self.query_independent:
-                ### Passive queries: log-weight -inf leaves them out of every softmax
-                ### over points (routing prototypes, anchors, slice states, head-frame
-                ### anchors), so they read every block's slices and never write.
-                q_logw = log_w.new_full((b, nq, 1), -math.inf)
-            else:
-                ### The query tokens' total routing weight is a learned fraction of the
-                ### total boundary measure, split equally (see __init__): rescaling the
-                ### geometry (areas x k^2) shifts every token's log-weight by the same
-                ### 2 log k, so the similarity-gauge contract holds exactly.
-                q_logw = (
-                    self.qt.logw.to(log_w.dtype)
-                    + torch.logsumexp(log_w, dim=1, keepdim=True)
-                    - _log_count(nq, log_w)
-                )
-            q_tokens = TensorDict(
-                h=h_q,
-                r=query_points / gauge,
-                n_hat=q_nhat,
-                g_hat=q_g,
-                log_w=q_logw.expand(b, nq, 1),
-                **self._block_extras(None, None, b, nq, points),
-                batch_size=[b, nq],
+    def _query_tokens(self, query: TensorDict, log_w, g_unit, g_scalars, gauge, like):
+        """The prediction points' tokens over ``(B, Q)`` (:meth:`_forward_tokens`) and
+        their built-in wall distance ``(B, Q)`` in frame units; ``log_w`` and ``like``
+        are the boundary tokens' log weights and points."""
+        b = like.shape[0]
+        K, dim = self.n_global_vectors, self.dim
+        query_points = query["points"]
+        nq = query_points.shape[1]
+        q_nhat, s, builtin = self._query_geometry(query, gauge, like)
+        q_g = g_unit[:, None].expand(b, nq, K, dim)
+        q_seed = [self._dots(q_nhat, q_g)]
+        if g_scalars is not None:
+            q_seed.append(g_scalars[:, None, :].expand(b, nq, -1).to(like.dtype))
+        h_q = self.embed(self.qt.seed(torch.cat([*q_seed, builtin], -1)))
+        if self.query_independent:
+            ### Passive queries: log-weight -inf leaves them out of every softmax
+            ### over points (routing prototypes, anchors, slice states, head-frame
+            ### anchors), so they read every block's slices and never write.
+            q_logw = log_w.new_full((b, nq, 1), -math.inf)
+        else:
+            ### The query tokens' total routing weight is a learned fraction of the
+            ### total boundary measure, split equally (see __init__): rescaling the
+            ### geometry (areas x k^2) shifts every token's log-weight by the same
+            ### 2 log k, so the similarity-gauge contract holds exactly.
+            q_logw = (
+                self.qt.logw.to(log_w.dtype)
+                + torch.logsumexp(log_w, dim=1, keepdim=True)
+                - _log_count(nq, log_w)
             )
-            if self.kernel_reads is not None:
-                kernel_pairs = self._tree_read_pairs(tokens, q_tokens, s[..., 0].abs(), g_unit)
-            tokens = torch.cat([tokens, q_tokens], dim=1)
-            _hint_token_axis(n + nq, self._token_widths)
+        q_tokens = TensorDict(
+            h=h_q,
+            r=query_points / gauge,
+            n_hat=q_nhat,
+            g_hat=q_g,
+            log_w=q_logw.expand(b, nq, 1),
+            **self._block_extras(None, None, b, nq, like),
+            batch_size=[b, nq],
+        )
+        return q_tokens, s[..., 0].abs()
 
-        h, log_w, r = tokens["h"], tokens["log_w"], tokens["r"]
-        vecs, tens = tokens.get("vecs", None), tokens.get("tens", None)
-        for i, block in enumerate(self._block_callables()):
-            h = block(h, log_w, r, tokens["n_hat"], tokens["g_hat"], EPS, vecs, tens, geo_kernel=geo_kernel)
-            if self.kernel_reads is not None:
-                ### The points' residual update from the boundary cells' states at this
-                ### depth; the boundary tokens (and so the slices) are untouched.
-                h_b, h_p = h[:, :n_boundary], h[:, n_boundary:]
-                delta = self.kernel_reads[i](
-                    h_b.reshape(-1, h.shape[-1]), h_p.reshape(-1, h.shape[-1]), kernel_pairs
-                )
-                h = torch.cat([h_b, h_p + delta.view_as(h_p)], dim=1)
-        tokens.set("h", h)
+    @staticmethod
+    def _query_geometry(query: TensorDict, gauge, like):
+        """The prediction points' direction ``(B, Q, d)``, signed distance ``s``
+        ``(B, Q, 1)`` in frame units and built-in channels ``(B, Q, 2)``."""
+        ### The query's geometry from the boundary surface: the signed distance
+        ### to it (the built-in channels s and asinh(s / 1e-6)) and the gradient
+        ### of the signed distance, sign(d) u with sign(0) = +1 (the token's
+        ### "normal" in every invariant), from the exact closest point. Both are
+        ### continuous through the surface, so a point on it (d zero or a rounding
+        ### error of either sign) gets the code of its neighbours on either side.
+        with torch.autocast(like.device.type, enabled=False):
+            dist = query["wall_distance"].to(like.dtype)
+            u = query["wall_direction"].to(like.dtype)
+            q_nhat = torch.where((dist >= 0)[..., None], u, -u)
+            s = (dist / gauge.squeeze(-1))[..., None]  # (B, Q, 1), in frame units
+            builtin = torch.cat([s, soft_log_length(s)], -1)
+        return q_nhat, s, builtin
 
-        ### The tokens the head reads: the prediction points in the interior mode,
-        ### every token otherwise. The head frame builds its slice anchors from ALL
-        ### tokens (r, log_w and h).
-        out = tokens if query is None else tokens[:, n_boundary:]
+    def _frame_anchors(self, h, log_w, r):
+        """The head frame's prototypes ``(B, S, hidden)`` and slice anchors ``(B, S, d)``
+        from the tokens' states, log weights and positions."""
+        ### The frame's prototypes are synthesized once from the tokens with their
+        ### measures (the same quadrature that weights the anchors), so the frame is
+        ### refinement invariant like the blocks; both routings read those prototypes.
+        protos_f = self.frame_assign.prototypes(h, log_w)
+        a_f = _softmax_over_points(self.frame_assign.logits(h, protos_f) + log_w)
+        return protos_f, torch.einsum("bns,bnc->bsc", a_f, r)
+
+    def _head(self, out: TensorDict, frame) -> TensorDict:
+        """The declared outputs of the tokens ``out`` (their ``h``, ``r``, ``n_hat`` and
+        ``g_hat``), with the head frame's ``(prototypes, anchors)``
+        (:meth:`_frame_anchors`; ``None`` without outputs of rank 1 or more)."""
+        K, dim = self.n_global_vectors, self.dim
         ### With declared scales or output_stats the head and the assembly run in the
         ### parameters' precision under autocast: bf16's relative step (4e-3) would be
         ### carried into the physical outputs (Pa pressure) by the redimensionalization.
         head_dtype = self.head.weight.dtype
         if self._fp32_head:
-            head_ctx = lambda: torch.autocast(points.device.type, enabled=False)  # noqa: E731
+            head_ctx = lambda: torch.autocast(out["h"].device.type, enabled=False)  # noqa: E731
             h_out = out["h"].to(head_dtype)
         else:
             head_ctx, h_out = contextlib.nullcontext, out["h"]
@@ -1942,13 +2042,8 @@ class ISLA(Module):
             return coeffs
         ### Head frame: the radial basis vector is the direction from the token's
         ### soft slice anchor (measure-weighted mean of token positions), not
-        ### from a centroid; translation covariant. The frame's prototypes are
-        ### synthesized once from ALL tokens with their measures (the same
-        ### quadrature that weights the anchors), so the frame is refinement
-        ### invariant like the blocks; both routings read those prototypes.
-        protos_f = self.frame_assign.prototypes(h, log_w)
-        a_f = _softmax_over_points(self.frame_assign.logits(h, protos_f) + log_w)
-        z_f = torch.einsum("bns,bnc->bsc", a_f, r)
+        ### from a centroid; translation covariant.
+        protos_f, z_f = frame
         b_f = torch.softmax(self.frame_assign.logits(out["h"], protos_f), dim=-1)
         r_out = out["r"]
         u = r_out - torch.einsum("bns,bsc->bnc", b_f, z_f).to(r_out.dtype)
@@ -1986,3 +2081,72 @@ class ISLA(Module):
                     index = getattr(self, f"_output_index_{i}")
                     coeffs.set(key, _assemble_output(coeffs.get(key), layout, true_vecs, pseudo_vecs, index))
         return coeffs
+
+
+class _QueryChunks:
+    """The result of :meth:`ISLA.query_chunks`: ISLA-DTT's boundary side run once,
+    what the prediction points read of it held as leaves, and the points' side by
+    ranges of points (``chunks(start, stop)``), then ``chunks.backward()``."""
+
+    def __init__(self, model: ISLA, inputs: tuple) -> None:
+        boundary, query, g_unit, g_scalars, gauge, scales, out_points, global_td = inputs
+        self.model, self.query, self.g_unit, self.g_scalars = model, query, g_unit, g_scalars
+        self.scales, self.out_points, self.global_td = scales, out_points, global_td
+        self._roots, self._leaves = [], []
+        tokens, self.gauge, self.geo_kernel = model._boundary_tokens(boundary, g_unit, gauge)
+        self.like, self.log_w = boundary["points"], tokens["log_w"]
+        q_nhat, s, _ = model._query_geometry(query, self.gauge, self.like)
+        self.walk = model._tree_read_pairs(
+            tokens, {"r": query["points"] / self.gauge, "n_hat": q_nhat}, s[..., 0].abs(), g_unit, walk=True
+        )
+        h, log_w, r = tokens["h"], tokens["log_w"], tokens["r"]
+        vecs, tens = tokens.get("vecs", None), tokens.get("tens", None)
+        self.slices, self.sources = [], []
+        for i, block in enumerate(model._block_callables()):
+            h, slices = block(
+                h, log_w, r, tokens["n_hat"], tokens["g_hat"], EPS, vecs, tens, geo_kernel=self.geo_kernel, slices=True
+            )
+            self.slices.append(tuple(self._leaf(t) for t in slices))
+            self.sources.append(self._leaf(model.kernel_reads[i].sources(h.reshape(-1, h.shape[-1]), self.walk)))
+        self.frame = (
+            tuple(self._leaf(t) for t in model._frame_anchors(h, log_w, r)) if model.needs_frame else None
+        )
+
+    @property
+    def n_points(self) -> int:
+        return int(self.query.shape[1])
+
+    def _leaf(self, t: torch.Tensor) -> torch.Tensor:
+        leaf = t.detach().requires_grad_(t.requires_grad)
+        self._roots.append(t)
+        self._leaves.append(leaf)
+        return leaf
+
+    def __call__(self, start: int, stop: int) -> Mesh:
+        """The output Mesh of the prediction points ``start`` to ``stop``."""
+        m = self.model
+        q_tokens, _ = m._query_tokens(
+            self.query[:, start:stop], self.log_w, self.g_unit, self.g_scalars, self.gauge, self.like
+        )
+        pairs = walk_pairs(m.kernel_basis, self.walk, start, stop)
+        h = q_tokens["h"]
+        vecs, tens = q_tokens.get("vecs", None), q_tokens.get("tens", None)
+        for i, read in enumerate(m._block_read_callables()):
+            h = read(
+                h, self.slices[i], q_tokens["r"], q_tokens["n_hat"], q_tokens["g_hat"], EPS, vecs, tens,
+                geo_kernel=self.geo_kernel,
+            )  # fmt: skip
+            delta = m.kernel_reads[i].read(self.sources[i], h.reshape(-1, h.shape[-1]), pairs)
+            h = h + delta.view_as(h)
+        q_tokens.set("h", h)
+        fields = m._redimensionalize(m._head(q_tokens, self.frame), self.scales)
+        points = self.out_points[start:stop]
+        return Mesh(points=points, point_data=fields[0].to(points.device), global_data=self.global_td)
+
+    def backward(self) -> None:
+        """The boundary side's backward pass with the gradients the chunks' backward
+        passes accumulated in the leaves; releases the boundary side's graph."""
+        roots = [(t, leaf.grad) for t, leaf in zip(self._roots, self._leaves) if leaf.grad is not None]
+        self._roots, self._leaves = [], []
+        if roots:
+            torch.autograd.backward([t for t, _ in roots], [g for _, g in roots])

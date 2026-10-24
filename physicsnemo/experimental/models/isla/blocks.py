@@ -293,11 +293,15 @@ class _SliceBlock(nn.Module):
         vecs=None,
         tens=None,
         geo_kernel: GeoKernel | None = None,
+        slices: bool = False,
     ) -> Float[torch.Tensor, "batch tokens hidden"]:
+        """The block over every token; with ``slices`` also what a passive token reads
+        of it, ``(prototypes, z_pos, m_s, z)``, for :meth:`read`."""
         ### Soft assignment of points to slices; measure weights enter as a
         ### log-space bias so slice states are quadrature-weighted means.
         h_n = self.norm_assign(h)
-        logits = self.assign(h_n, log_w)  # (B, N, S)
+        protos = self.assign.prototypes(h_n, log_w)
+        logits = self.assign.logits(h_n, protos)  # (B, N, S)
         a = _softmax_over_points(logits + log_w)  # normalized over points
         ### Equivariant anchors: weighted mean position AND mean normal
         ### direction per slice -- anchors gain orientation.
@@ -310,6 +314,30 @@ class _SliceBlock(nn.Module):
         ### slices), but the saved activation is (B, N, geo) instead of
         ### (B, N, S, hidden/2) -- ~0.5 GB per layer at 10k tokens, 256 slices,
         ### hidden 192.
+        bias, point_mix, pooled = self._geo(logits, r, n_hat, g_hat, z_pos, m_s, eps, vecs, tens, geo_kernel)
+        logits = logits + bias
+        a = _softmax_over_points(logits + log_w)
+        ### The slice sublayer reads the normalized state, as a pre-LN sublayer does:
+        ### the pooling and the broadcast both read norm_assign(h), so the raw h
+        ### enters the block only in the residual identity and norm_mlp.
+        z = torch.einsum("bns,bnh->bsh", a, h_n)  # slice states
+        z = z + self.slice_mlp(z)
+        h = self._update(h, h_n, point_mix, pooled, z)
+        return (h, (protos, z_pos, m_s, z)) if slices else h
+
+    def read(self, h, slices, r, n_hat, g_hat, eps: float, vecs=None, tens=None, geo_kernel: GeoKernel | None = None):
+        """The block over passive tokens (log weight -inf) given the ``slices`` the
+        other tokens formed (``forward(..., slices=True)``): the arithmetic
+        :meth:`forward` gives them, which they enter only through their own routing
+        and readback."""
+        protos, z_pos, m_s, z = slices
+        h_n = self.norm_assign(h)
+        logits = self.assign.logits(h_n, protos)
+        _, point_mix, pooled = self._geo(logits, r, n_hat, g_hat, z_pos, m_s, eps, vecs, tens, geo_kernel)
+        return self._update(h, h_n, point_mix, pooled, z)
+
+    def _geo(self, logits, r, n_hat, g_hat, z_pos, m_s, eps, vecs, tens, geo_kernel):
+        """The geometry region: ``(bias, point_mix, pooled)``."""
         ### geo_kernel overrides self.geo_kernel for this call (the model's
         ### resolution under torch.compile, which writes no module state).
         if (self.geo_kernel if geo_kernel is None else geo_kernel) == "fused":
@@ -342,13 +370,10 @@ class _SliceBlock(nn.Module):
                 tens,
                 use_reentrant=False,
             )
-        logits = logits + bias
-        a = _softmax_over_points(logits + log_w)
-        ### The slice sublayer reads the normalized state, as a pre-LN sublayer does:
-        ### the pooling and the broadcast both read norm_assign(h), so the raw h
-        ### enters the block only in the residual identity and norm_mlp.
-        z = torch.einsum("bns,bnh->bsh", a, h_n)  # slice states
-        z = z + self.slice_mlp(z)
+        return bias, point_mix, pooled
+
+    def _update(self, h, h_n, point_mix, pooled, z):
+        """Each token's readback of the slice states ``z`` and the MLP sublayer."""
         back = torch.einsum("bns,bsh->bnh", point_mix, z)
         geo_pool = self.geo_feat(pooled)
         h = h + self.broadcast(torch.cat([h_n, back, geo_pool], dim=-1))
