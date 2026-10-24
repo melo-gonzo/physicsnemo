@@ -88,13 +88,13 @@ class PairPlan:
     ) -> "PairPlan":
         """Index the pair list (``qi`` non-decreasing) by point and by source."""
 
-        def offsets(idx, n):
-            o = idx.new_zeros(n + 1)
-            o[1:] = torch.cumsum(torch.bincount(idx, minlength=n), 0)
-            return o
+        def offsets(sorted_idx, n):
+            bounds = torch.arange(n + 1, device=sorted_idx.device, dtype=sorted_idx.dtype)
+            return torch.searchsorted(sorted_idx, bounds)
 
-        perm = torch.argsort(bj, stable=True)
-        return cls(qi, bj, n_q, n_b, offsets(qi, n_q), perm, offsets(bj, n_b), qi[perm])
+        ### A stable sort is unique, so 32-bit keys give the same permutation.
+        perm = torch.argsort(bj.int() if n_b <= 2**31 else bj, stable=True)
+        return cls(qi, bj, n_q, n_b, offsets(qi, n_q), perm, offsets(bj[perm], n_b), qi[perm])
 
 
 def supported(*tensors: torch.Tensor) -> bool:

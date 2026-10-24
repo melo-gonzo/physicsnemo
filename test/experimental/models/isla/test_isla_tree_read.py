@@ -871,6 +871,47 @@ def test_tree_read_cuda_fused_and_compiled_training_path():
     )
 
 
+@pytest.mark.parametrize(
+    "device",
+    ["cpu", pytest.param("cuda", marks=cuda_only)],
+)
+def test_pair_plan_is_the_histogram_plan_and_builds_without_a_host_sync(device):
+    """The plan's offsets and stable permutation equal a histogram of each index and a
+    stable sort of the 64-bit source indices, field by field, with points and sources
+    that have no pairs (the last ones among them); on CUDA it builds without a host
+    sync."""
+    from physicsnemo.experimental.models.isla.segment_softmax import PairPlan
+
+    g = torch.Generator().manual_seed(4)
+    n_q, n_b = 300, 5000
+    counts = torch.randint(0, 900, (n_q,), generator=g)
+    counts[::7] = 0
+    counts[-3:] = 0
+    qi = torch.repeat_interleave(torch.arange(n_q), counts).to(device)
+    bj = torch.randint(0, n_b - 40, (qi.shape[0],), generator=g).to(device)
+    bj[: qi.shape[0] // 3] = 17  # one source read by a third of the pairs
+
+    def offsets(idx, n):
+        o = idx.new_zeros(n + 1)
+        o[1:] = torch.cumsum(torch.bincount(idx, minlength=n), 0)
+        return o
+
+    perm = torch.argsort(bj, stable=True)
+    ref = (offsets(qi, n_q), perm, offsets(bj, n_b), qi[perm])
+    if device == "cuda":
+        torch.cuda.synchronize()
+        torch.cuda.set_sync_debug_mode("error")
+        try:
+            plan = PairPlan.build(qi, bj, n_q, n_b)
+        finally:
+            torch.cuda.set_sync_debug_mode("default")
+    else:
+        plan = PairPlan.build(qi, bj, n_q, n_b)
+    got = (plan.q_offsets, plan.perm, plan.b_offsets, plan.qi_by_b)
+    for name, a, b in zip(("q_offsets", "perm", "b_offsets", "qi_by_b"), got, ref):
+        assert a.dtype == b.dtype and torch.equal(a, b), name
+
+
 @cuda_only
 @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16], ids=["fp32", "bf16"])
 def test_fused_segment_softmax_read_matches_eager(dtype):
