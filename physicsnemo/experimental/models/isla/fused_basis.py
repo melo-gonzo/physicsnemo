@@ -64,7 +64,9 @@ if HAS_TRITON:
 
 #: Pairs per tile and warps per program of the forward and backward basis kernels, and
 #: the backward's programs per multiprocessor (each sums the weight gradients of its
-#: tiles); launch constants (fastest on GB300 at DrivAerML scale, 1.4e8 pairs).
+#: tiles); launch constants (fastest on GB300 at DrivAerML scale, 1.4e8 pairs). The
+#: backward's program count follows the GPU's multiprocessor count, so its float32 weight
+#: gradient sums group by GPU model: deterministic on one model, not bitwise across models.
 BASIS_BLOCK = 128
 BASIS_WARPS = 8
 BACKWARD_BLOCK = 32
@@ -76,26 +78,36 @@ def _pow2(n: int) -> bool:
     return n >= 16 and n & (n - 1) == 0
 
 
-def supported(basis: torch.nn.Module, geometry: dict) -> bool:
-    """The fused basis applies to ``basis`` (a ``_KernelBasis``) on one case's
-    ``geometry`` (the keyword arguments of ``tree_pair_invariants``): Triton importable,
-    CUDA float32 geometry and parameters, two or three dimensions, power-of-two hidden
-    and basis widths, and either no autocast or a bfloat16 or float16 autocast with its
-    weight cache on (the reference then casts the weights once per forward pass)."""
+def unsupported_reason(basis: torch.nn.Module, geometry: dict) -> str | None:
+    """Why the fused basis does not apply to ``basis`` (a ``_KernelBasis``) on one case's
+    ``geometry`` (the keyword arguments of ``tree_pair_invariants``), or None when it
+    does: Triton importable, CUDA float32 geometry and parameters, two or three
+    dimensions, power-of-two hidden and basis widths of at least 16, and either no
+    autocast or a bfloat16 or float16 autocast with its weight cache on (the reference
+    then casts the weights once per forward pass)."""
     if not HAS_TRITON:
-        return False
+        return "Triton with libdevice is not importable"
     lin = (basis.net[0], basis.net[2], basis.net[4])
     params = [t for m in lin for t in (m.weight, m.bias)]
     geo = [geometry[k] for k in ("query_r", "query_n", "query_wall", "src_r", "src_n", "g_unit")]
     if geometry["src_vecs"] is not None:
         geo.append(geometry["src_vecs"])
     if not all(t.is_cuda and t.dtype == torch.float32 for t in geo + params):
-        return False
+        return "the geometry or the basis MLP's parameters are not CUDA float32"
     if torch.is_autocast_enabled("cuda") and not (
         torch.get_autocast_dtype("cuda") in (torch.bfloat16, torch.float16) and torch.is_autocast_cache_enabled()
     ):
-        return False
-    return geometry["query_r"].shape[1] in (2, 3) and _pow2(lin[0].out_features) and _pow2(lin[2].out_features)
+        return "autocast is not bfloat16 or float16 with its weight cache on"
+    if geometry["query_r"].shape[1] not in (2, 3):
+        return "the geometry is not two- or three-dimensional"
+    if not (_pow2(lin[0].out_features) and _pow2(lin[2].out_features)):
+        return "the basis MLP's hidden or basis width is not a power of two of at least 16"
+    return None
+
+
+def supported(basis: torch.nn.Module, geometry: dict) -> bool:
+    """Whether the fused basis applies (:func:`unsupported_reason`)."""
+    return unsupported_reason(basis, geometry) is None
 
 
 def mlp_weights(basis: torch.nn.Module) -> tuple[torch.Tensor, ...]:

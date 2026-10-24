@@ -93,6 +93,7 @@ GLOBE).
 """
 
 import dataclasses
+import logging
 import math
 from dataclasses import dataclass
 
@@ -108,6 +109,10 @@ from physicsnemo.experimental.models.isla.segment_softmax import (
 )
 from physicsnemo.mesh.spatial._ragged import _ragged_arange
 from physicsnemo.mesh.spatial.cluster_tree import ClusterTree
+
+logger = logging.getLogger(__name__)
+#: Why the fused read used the reference kernel basis, each reason logged once.
+_BASIS_FALLBACKS_LOGGED: set[str] = set()
 
 #: Heads of the read; each head owns ``KERNEL_READ_WIDTH // KERNEL_READ_HEADS`` value
 #: channels.
@@ -664,11 +669,11 @@ def tree_read_pairs(
             qi_by_b=plan_all.qi_by_b.int(),
         )
     ### One cast of the MLP's weights for every case and chunk, as autocast's weight cache gives the reference.
-    weights = (
-        fused_basis.mlp_weights(basis)
-        if deferred and all(fused_basis.supported(basis, d[-1]) for d in deferred)
-        else None
-    )
+    reason = next(filter(None, (fused_basis.unsupported_reason(basis, item[-1]) for item in deferred)), None)
+    weights = fused_basis.mlp_weights(basis) if deferred and reason is None else None
+    if reason is not None and reason not in _BASIS_FALLBACKS_LOGGED:
+        _BASIS_FALLBACKS_LOGGED.add(reason)
+        logger.info("ISLA fused tree read: the reference kernel basis is used (%s)", reason)
     for a, e, q_off, s_off, geometry in deferred:
         bases.append(_chunked_basis_from_plan(basis, plan_all, a, e, q_off, s_off, geometry, weights))
     basis_all = torch.cat(bases)

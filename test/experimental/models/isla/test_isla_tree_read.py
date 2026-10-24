@@ -35,6 +35,7 @@ starts at zero, so most tests give every read parameter a random value first.
 
 import copy
 import itertools
+import logging
 import math
 import types
 
@@ -1020,10 +1021,15 @@ def test_fused_reads_sum_their_basis_gradients_as_autograd_does():
 
 
 @pytest.mark.parametrize("dim", [3, 2])
-def test_tree_read_pairs_basis_from_the_plan_is_exact_for_a_batch(dim):
+def test_tree_read_pairs_basis_from_the_plan_is_exact_for_a_batch(
+    dim, caplog, monkeypatch
+):
     """Two cases in one batch: the basis built from the plan (the fused path's) has the
     reference's plan, values and basis-MLP gradients, bitwise, so each case's point,
-    source and pair offsets are right."""
+    source and pair offsets are right. The fallback to the reference basis (here, on
+    CPU) is logged once."""
+    monkeypatch.setattr(tree_read, "_BASIS_FALLBACKS_LOGGED", set())
+    caplog.set_level(logging.INFO, logger=tree_read.__name__)
     torch.manual_seed(0)
     cases = [cloud(400 + 60 * i, d=dim, seed=3 + i) for i in range(2)]
     n = min(c[0].shape[0] for c in cases)
@@ -1075,6 +1081,9 @@ def test_tree_read_pairs_basis_from_the_plan_is_exact_for_a_batch(dim):
     )  # the second case has pairs
     assert torch.equal(ref.basis, fus.basis)
     assert all(torch.equal(a, b) for a, b in zip(g_ref, g_fus))
+    tree_read_pairs(basis, kernel="fused", **kw)
+    logged = [r.getMessage() for r in caplog.records]
+    assert sum("reference kernel basis" in m for m in logged) == 1, logged
 
 
 class _SinkProbeRead(torch.autograd.Function):
@@ -1379,6 +1388,18 @@ def test_fused_kernel_basis_matches_the_reference_basis(
         d_ref = (b.double().cpu() - e).abs().max() / scale
         print(f"{name}: fused {d_fused:.2e}, reference {d_ref:.2e}")
         assert d_fused <= 2 * d_ref + floor, name
+    if autocast:
+        ### The reference's rounding points, which a lost rounding would pass above: the
+        ### basis bitwise but where summation order flips a last bit, and the gradients
+        ### within a few bf16 ulps (at each tensor's largest value) of the reference's.
+        same = (fused[0] == ref[0]).double().mean()
+        ulps = [
+            float((a - b).abs().max() / 2.0 ** (b.abs().max().log2().floor() - 7))
+            for a, b in zip(fused[1:], ref[1:])
+        ]
+        print(f"basis bitwise {same:.6f}; gradient ulps {ulps}")
+        assert same >= 0.99
+        assert max(ulps) <= 4, dict(zip(names[1:], ulps))
 
 
 @cuda_only
