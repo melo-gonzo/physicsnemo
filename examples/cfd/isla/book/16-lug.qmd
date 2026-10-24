@@ -368,8 +368,10 @@ print("- **The standing is of the interacting form.** ISLA-DTT, whose prediction
       "of the gap sits on the surface nodes. Scored in bfloat16, the 16-bit floating-point format training runs in, the two forms "
       f"read level ({R.num(GL1['test bf16']):.3f}), mostly because bfloat16's read-out noise, about twice the lug's float32 errors, "
       f"compresses the gap toward 1; even so ISLA-DTT is worse in {GL_BF_WORSE}% of the test cases and on the surface nodes "
-      f"({R.num(GL3['bf16']):.2f}). Rotated and translated, ISLA-DTT's error on the lug is not its native error, because rounding "
-      f"decides the octant tree of most of its cells (@sec-arch-tree-read; {R.source('dtt_knobs', 'gap/gap_table.md')}). Which "
+      f"({R.num(GL3['bf16']):.2f}; {R.source('dtt_knobs', 'gap/gap_table.md')}). Rotated and translated, ISLA-DTT's error on "
+      "the lug is 1.53 and 1.98 times its native error (seeds 42 and 43), most likely because rounding decides the sign "
+      "octant of most of its cells' normals; that cause is inferred, not tested "
+      f"(@sec-arch-tree-read; {R.source('dtt_knobs', 'sens/sens_table.md')}). Which "
       "form is ISLA's interior model is open (@sec-oq-dtt).")
 ```
 

@@ -1167,7 +1167,7 @@ cut = [1 - c["geo_fast"] / c["geo_ref"] for k, c in GEO_COST.items() if not k.st
 print(f"**The exact interior geometry adds {100 * (min(r_f.values()) - 1):.0f} to {100 * (max(r_f.values()) - 1):.0f}% to a "
       "training step on a body alone under the default search, most on the largest boundary** (@tbl-using-geometry-cost). "
       "The geometry call computes every candidate distance in float64, every tie set and least-norm direction, and the "
-      f"winding number at every prediction point; on the {hi_k.split(' (')[0]} case that call is "
+      f"winding number at every prediction point; on the {hi_k.split(' (')[0].replace(', vehicle', '')} case with the vehicle alone that call is "
       f"{body[hi_k]['geo_fast'] / body[hi_k]['geo_base']:.1f} times the standings' geometry call. The default, "
       '`geometry_kernel="auto"`, takes the fast search on CUDA where Triton imports, which returns the same geometry '
       f"bitwise and cuts the three-dimensional geometry call by {100 * min(cut):.0f} to {100 * max(cut):.0f}%: it lowers "
@@ -1175,7 +1175,7 @@ print(f"**The exact interior geometry adds {100 * (min(r_f.values()) - 1):.0f} t
       "asks: "
       '"If the speedup experiment works, then add an optional fast path (like our other kernels, where we default iff '
       'triton is installed), and then remove the documented limitation / change it." Where Triton is absent, or on the '
-      f"CPU, the reference search runs, and a step costs {100 * (min(r_r.values()) - 1):.0f} to "
+      f"CPU, the reference search runs; on the GB300 it makes a step cost {100 * (min(r_r.values()) - 1):.0f} to "
       f"{100 * (max(r_r.values()) - 1):.0f}% more than the standings' (the reference column). To force one search, set "
       '`geometry_kernel` to `"reference"` or `"fast"`; checkpoints do not store it. With the DrivAerML tunnel box read '
       f"beside the vehicle the class's step is {whole['step_fast'] / whole['step_base']:.2f} times the standings' under "
@@ -1263,7 +1263,8 @@ print(f"- **Compile block by block where the whole graph breaks.** `compile_bloc
       f"ISLA's von Mises error is {lug_t:.3f} times that of the same run without it, both scored eagerly "
       f"({R.source('ref090', 'r090_final_tables.md')}). With the setting, block by block against eager on trained ISLA-DTT "
       "checkpoints, the compiled blocks agree to 1.5e-5 relative in float32 and at roundoff in float64; in bfloat16 they "
-      "round fewer intermediates than eager does, with an error against float64 no larger than eager's on the outputs "
+      "round fewer intermediates than eager does: each block's output is no farther from float64 than eager's, and the "
+      "model's outputs and parameter gradients are 1.0 to 1.4 times eager's distance to float64 "
       f"(@sec-arch-cost; {R.source('dtt_fast_compile', 'RESULTS.md')}).")
 ```
 

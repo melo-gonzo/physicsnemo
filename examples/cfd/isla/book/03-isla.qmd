@@ -1601,10 +1601,13 @@ quadrature means, and the one mean position in the model sits inside the
 scalar $L$. ISLA-DTT's Barnes–Hut forest is built in a frame the boundary
 carries (its measure-weighted centroid and principal axes, signed by the
 third moments), but only to group cells for speed; no learned map reads
-it. Every pose of a case gets the same clusters. Where that frame ties, on
-a body with equal principal variances or a symmetric axis, a rotation
-regroups clusters and moves the read only by the tree's error, which
-vanishes as $\theta \to 0$ (@sec-arch-modes). The two properties the relative
+it. In exact arithmetic every pose of a case gets the same clusters. Where
+that frame ties, on a body with equal principal variances or a symmetric
+axis, or where rounding decides the sign octant of a cell's normal, as for
+most of the lug's cells, a rotation can regroup clusters, and that moves the
+read only by the tree's error, which vanishes as $\theta \to 0$; under
+bfloat16 training the forest is built from rounded coordinates and is not
+pose-invariant (@sec-arch-modes, @sec-arch-tree-read). The two properties the relative
 construction buys, pose and discretization, are the subject of
 @sec-invariances.
 

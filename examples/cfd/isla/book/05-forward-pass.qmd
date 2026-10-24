@@ -1353,11 +1353,13 @@ the segment or the point its vertices span. Such a cell never supplies a
 normal or an on-wall direction, and its winding contribution is zero. A
 zero-area cell lying along the edges or at the vertices of the other cells is
 left out, so the outputs are those of the mesh without it. The test is exact,
-with no tolerance: a float64 filter with a bound on its rounding error
+with no tolerance, for every float32 coordinate and for float64 coordinates of
+magnitude between $2^{-485}$ and $2^{510}$: a float64 filter with a bound on its rounding error
 clears most cells, and the cells it leaves get exact products. Every input
 without such a cell gives bitwise the outputs it gave before the test, and on
 the DrivAerML Volume task's whole boundary of 16.65 million cells the test
-costs 2.4 ms. None of the 36 million cells of the real cases checked has
+costs 2.4 ms. None of the 36 million cells of the real cases checked has two
+coincident vertices, and none of the 16.65 million cells of that boundary has
 zero area (results/campaigns_2026-10-23/geo_fast/FINAL_REPORT.md;
 results/campaigns_2026-10-23/geo_degen/RESULTS.md).
 
@@ -1763,20 +1765,21 @@ only at the size of the tree's error, which vanishes as $\theta \to 0$. So
 can the octant split, at a normal component that is zero but for rounding
 in that frame: its sign, and so the cell's tree, then rests on rounding.
 
-**On the lug, rounding decides the octant of most cells.** In the forest's
-frame, 84% of the lug's cells (the median over cases, 76 to 91%) have a
-normal component below $10^{-5}$, measured under bfloat16 autocast, so the
+**On the lug, rounding decides the octant of most cells, at least in
+bfloat16.** In the forest's frame, 84% of the lug's cells (the median over
+cases, 76 to 91%) have a normal component below $10^{-5}$, measured under
+bfloat16 autocast (the float32 share was not measured), so the
 sign test that picks their octant reads a rounding residue, natively as
 well as posed. ISLA-DTT's posed error on the lug, scored in float32 at
 $\theta = 1$, is 1.53 and 1.98 times its native error (seeds 42 and 43),
-the posed forest holds 1.29 times the pairs, and at $\theta = 0$, where no
+the posed lists hold 1.29 times the pairs, and at $\theta = 0$, where no
 cluster forms, posed and native agree to $10^{-4}$. That the pose flips
 those signs and so builds another forest is inferred, not tested: the posed
 octant labels were not compared with the native ones, no tie-breaking rule
 was tried, and near-ties of the frame itself (third moments of about
 $10^{-6}$ against the code's tie threshold of $10^{-9}$) are not excluded.
 On the AirfRANS interior task posed equals native to 0.25% at every
-opening angle, with the same pairs
+opening angle, with the same pair counts
 (results/campaigns_2026-10-23/dtt_knobs/CODE_FACTS.md, section 2;
 results/campaigns_2026-10-23/dtt_knobs/sens/sens_table.md).
 
@@ -2198,14 +2201,16 @@ sizes of meshes whose cell counts are equal in the first case and guards
 the input meshes' caches by their size, so the whole-model graph recompiles
 case after case, and `isla_volume_aerozoo.yaml` compiles per block.
 
-**The compiled blocks compute the eager blocks' function, and in bfloat16
-they round elsewhere.** Block by block against eager, on the same inputs, on
+**In float32 and float64 the compiled blocks compute the eager blocks'
+function; in bfloat16 they round elsewhere, so they compute a slightly
+different one.** Block by block against eager, on the same inputs, on
 trained ISLA-DTT checkpoints of AeroZoo and the AirfRANS interior task (two
 seeds each, at full size), the compiled blocks agree with eager to
 $1.5 \times 10^{-5}$ relative or better in float32, the largest on AeroZoo,
-whose first block is so ill-conditioned that its eager float32 output is
+where the first block is so ill-conditioned that its eager float32 output is
 itself $8.5 \times 10^{-4}$ from float64, and at roundoff in float64 ($2.3 \times
-10^{-13}$ or better, outputs and parameter gradients). In bfloat16, the
+10^{-13}$ or better, outputs, and parameter gradients on 20,000 points). In
+bfloat16, the
 16-bit format training runs in, they do not keep eager's rounding points:
 Inductor by default leaves out the casts to bfloat16 between the operations
 it fuses (its `emulate_precision_casts` option is off), so a compiled
@@ -2216,8 +2221,12 @@ is no larger than eager's on the block outputs, and on the gradients it is
 policy for every compiled ISLA region is this one: Inductor's default casts,
 certified block by block against eager at $10^{-5}$ in float32 and at
 roundoff in float64, with a bfloat16 check that the region's error against
-float64 stays within 1.5 times eager's
-(results/campaigns_2026-10-23/dtt_fast_compile/RESULTS.md, section 2).
+float64 stays within 1.5 times eager's. The current blocks are kept under
+it, although their largest float32 deviation, on AeroZoo, is
+$1.5 \times 10^{-5}$, and one bfloat16 scalar, the loss of a randomly
+initialized DrivAerML model with the whole boundary, reads 1.70 times
+eager's distance (results/campaigns_2026-10-23/dtt_fast_compile/RESULTS.md,
+section 2).
 
 **Where a training step's time goes.** @fig-arch-step-breakdown takes one
 warm training step of ISLA and of ISLA-DTT apart on AeroZoo, on one node of

@@ -99,8 +99,9 @@ weights), on the global directions and, for the interior task, on the prediction
 tolerance is an absolute bound on the output difference in float64, except the two-dimensional test, which runs in float32
 at a relative tolerance of $10^{-4}$; a contract that holds here holds for every set of weights, trained or not. ISLA-DTT's forest read keeps the rotation and translation rows at its working opening angle; where the
 frame the forest is built in ties, a rigid motion regroups clusters and moves the read only by the tree's error, which
-vanishes as $\theta \to 0$. Where rounding decides the sign octant of a cell's normal, as on most of the lug's cells, a
-rigid motion changes the forest as well (@sec-arch-tree-read). The test functions are listed below. Source:
+vanishes as $\theta \to 0$. Where rounding decides the sign octant of a cell's normal, as it does for most of the lug's
+cells, a rigid motion can change the forest as well; on the lug that is the likely cause, inferred and
+not tested, of a posed error unlike the native one (@sec-arch-tree-read). The test functions are listed below. Source:
 `test/experimental/models/isla/`.
 {#tbl-contracts tbl-colwidths="[36,50,14]"}
 
@@ -204,7 +205,8 @@ canonical frame of the boundary (measure-weighted centroid, principal axes signe
 @sec-arch-tree-read) only to group cells for speed, so a tie of that frame moves its read by the tree's error, not by the
 $O(1)$ jump of a network fed canonical coordinates. The forest also splits the cells by the sign octant of their normals
 in that frame, and where a normal's component there is zero but for rounding, rounding decides the octant: on the lug,
-where most cells are such, ISLA-DTT's posed error is not its native error (@sec-arch-tree-read). In these
+where most cells are such, ISLA-DTT's posed error is not its native error, most likely for that
+reason, which is inferred, not tested (@sec-arch-tree-read). In these
 settings the contract separates a working surrogate from one whose error a random orientation multiplies by the factors
 of @fig-contract-shifts.
 
