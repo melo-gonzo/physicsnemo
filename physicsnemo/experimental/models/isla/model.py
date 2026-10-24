@@ -476,7 +476,10 @@ class ISLA(Module):
     ``"fused"`` to force one) selects how the per-layer geometry region is
     executed, not what it computes (:meth:`resolve_geo_kernel`). It is an
     execution choice, not a constructor argument: checkpoints do not store it,
-    and a loaded model starts at ``"auto"``.
+    and a loaded model starts at ``"auto"``. The ``tree_build`` attribute
+    (``"auto"``; set ``"reference"`` or ``"fast"`` to force one) likewise selects
+    how ISLA-DTT's boundary forest is built, not what it is
+    (:func:`~physicsnemo.experimental.models.isla.tree_build.resolve_tree_build`).
 
     Args:
         output_schema: Output fields, a rank spec per name. Each field is a leaf of
@@ -924,6 +927,9 @@ class ISLA(Module):
         ### tests set to 0 for the exact read). Registered after everything else, so
         ### every other model owns exactly the parameters it has without the read.
         self._tree_read_theta = TREE_READ_THETA
+        ### How the forest is built, not what it is (tree_build.py): an execution
+        ### choice like geo_kernel, "auto" resolving to the fast build on CUDA.
+        self.tree_build = "auto"
         self.kernel_basis = None
         self.kernel_reads = None
         if self.query_independent:
@@ -1704,6 +1710,7 @@ class ISLA(Module):
             g_unit=g_unit,
             theta=self._tree_read_theta,
             eps=EPS,
+            build=self.tree_build,
         )
 
     def _forward_tensors(

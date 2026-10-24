@@ -830,3 +830,143 @@ def test_tree_read_cuda_matches_cpu_float64(theta, monkeypatch):
             f"{k}: max abs {d.max().item():.3e}, of the allclose bound {(d / (1e-9 + 1e-5 * cpu[k].abs())).max().item():.3e}"
         )
     assert same(gpu, cpu, atol=1e-9)
+
+
+_TREE_FIELDS = (
+    "node_aabb_min",
+    "node_aabb_max",
+    "node_diameter_sq",
+    "node_left_child",
+    "node_right_child",
+    "leaf_start",
+    "leaf_count",
+    "node_range_start",
+    "node_range_count",
+    "node_total_area",
+    "sorted_source_order",
+    "source_points",
+    "max_depth",
+    "root_ids",
+)
+_FOREST_FIELDS = (
+    "frame",
+    "node_offset",
+    "cells",
+    "range_start",
+    "range_count",
+    "left",
+    "right",
+    "leaf_ids",
+    "position_leaf",
+    "aabb_min",
+    "aabb_max",
+    "diameter_sq",
+    "center",
+    "normal",
+    "vecs",
+    "measure",
+    "coherent",
+)
+
+
+def _bitwise(a, b) -> bool:
+    if a is None or b is None:
+        return a is None and b is None
+    if a.dtype != b.dtype or a.shape != b.shape:
+        return False
+    if a.is_floating_point():
+        ints = {8: torch.int64, 4: torch.int32, 2: torch.int16}[a.element_size()]
+        a, b = a.contiguous().view(ints), b.contiguous().view(ints)
+    return torch.equal(a, b)
+
+
+def _forest_differences(ref, fast) -> list[str]:
+    """The fields in which two forests differ in any bit, their trees' included."""
+    bad = [k for k in _FOREST_FIELDS if not _bitwise(getattr(ref, k), getattr(fast, k))]
+    if len(ref.levels) != len(fast.levels) or not all(
+        _bitwise(x, y) for a, b in zip(ref.levels, fast.levels) for x, y in zip(a, b)
+    ):
+        bad.append("levels")
+    if len(ref.trees) != len(fast.trees):
+        return [*bad, "trees"]
+    for t, (a, b) in enumerate(zip(ref.trees, fast.trees)):
+        bad += [
+            f"trees[{t}].{k}"
+            for k in _TREE_FIELDS
+            if not _bitwise(getattr(a, k), getattr(b, k))
+        ]
+        if not _bitwise(ref.tree_cells[t], fast.tree_cells[t]):
+            bad.append(f"tree_cells[{t}]")
+    return bad
+
+
+def _build_cases(dim, dtype):
+    """Boundaries for the fast build: a random cloud with rank-1 inputs, half of it on
+    one point (equal Morton codes, midpoint splits), and tiny ones (a tree of one cell,
+    trees no larger than a leaf), at three leaf sizes."""
+    pts, nrm, w, _ = cloud(1500, d=dim, seed=21, dtype=dtype)
+    vecs = torch.randn(1500, 2, dim, dtype=dtype)
+    dup = pts.clone()
+    dup[:700] = dup[0]
+    yield pts, w, nrm, vecs, 4
+    yield dup, w, nrm, None, 4
+    yield pts, w, nrm, vecs[:, :1], 1
+    yield pts, w, nrm, None, 8
+    for n in (1, 3, 9, 40):
+        yield pts[:n], w[:n], nrm[:n], vecs[:n], 4
+
+
+def _check_fast_build(dim, dtype, device):
+    for pts, w, nrm, vecs, leaf in _build_cases(dim, dtype):
+        pts, w, nrm = pts.to(device), w.to(device), nrm.to(device)
+        vecs = None if vecs is None else vecs.to(device)
+        forests = [
+            BoundaryForest.build(pts, w, nrm, vecs, theta=1.0, leaf_size=leaf, build=b)
+            for b in ("reference", "fast")
+        ]
+        assert not _forest_differences(*forests), (pts.shape[0], leaf)
+        q = pts[:50] * 1.5 + 0.25
+        (qa, sa, na), (qb, sb, nb) = (f.point_pairs(q) for f in forests)
+        assert torch.equal(qa, qb) and torch.equal(sa, sb) and na == nb
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, D], ids=["float32", "float64"])
+@pytest.mark.parametrize("dim", [3, 2])
+def test_fast_forest_build_is_the_reference_forest(dim, dtype):
+    """The fast build (one pass over all octants, Warp's CPU backend here) gives the
+    reference's forest in every bit: node table, levels, boxes, diameters, virtual
+    cells, measures, coherence and every tree's own fields, so the reference walk
+    makes the same pair lists on it."""
+    _check_fast_build(dim, dtype, "cpu")
+
+
+def test_tree_build_auto_resolves_to_the_reference_off_cuda():
+    """``tree_build`` is an execution choice: "auto" by default, the reference build
+    off CUDA, a forced "fast" gives the model the same outputs, and an unknown name
+    is refused."""
+    from physicsnemo.experimental.models.isla.tree_build import resolve_tree_build
+
+    pts = torch.zeros(4, 3)
+    assert resolve_tree_build("auto", pts) == "reference"
+    assert resolve_tree_build("fast", pts) == "fast"
+    with pytest.raises(ValueError, match="build must be"):
+        resolve_tree_build("gpu", pts)
+    m = _tree(3, 1.0)
+    assert m.tree_build == "auto" and "tree_build" not in m.state_dict()
+    mesh, drv, q = _case(n=400, nq=60)
+    ref = outputs(_run(m, mesh, drv, q))
+    m.tree_build = "fast"
+    fast = outputs(_run(m, mesh, drv, q))
+    assert all(torch.equal(v, fast[k]) for k, v in ref.items())
+
+
+@cuda_only
+@pytest.mark.parametrize("dtype", [torch.float32, D], ids=["float32", "float64"])
+@pytest.mark.parametrize("dim", [3, 2])
+def test_fast_forest_build_is_the_reference_forest_on_cuda(dim, dtype):
+    """On CUDA, where "auto" picks it, the fast build gives the reference's forest in
+    every bit."""
+    from physicsnemo.experimental.models.isla.tree_build import resolve_tree_build
+
+    assert resolve_tree_build("auto", torch.zeros(1, dim, device="cuda")) == "fast"
+    _check_fast_build(dim, dtype, "cuda")

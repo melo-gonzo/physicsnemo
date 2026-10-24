@@ -105,6 +105,7 @@ from physicsnemo.experimental.models.isla.segment_softmax import (
     PairPlan,
     segment_softmax_read,
 )
+from physicsnemo.experimental.models.isla.tree_build import forest_tables, resolve_tree_build
 from physicsnemo.mesh.spatial._ragged import _ragged_arange
 from physicsnemo.mesh.spatial.cluster_tree import ClusterTree
 
@@ -251,10 +252,14 @@ class BoundaryForest:
         theta: float,
         leaf_size: int = TREE_READ_LEAF_SIZE,
         eps: float = 1e-12,
+        build: str = "auto",
     ) -> "BoundaryForest":
         """The forest over cells at ``points`` ``(N, d)`` with ``measure`` ``(N,)``,
         unit ``normals`` ``(N, d)`` and rank-1 inputs ``vecs`` ``(N, P, d)`` or
-        ``None``. No gradient flows into it (a numerical device)."""
+        ``None``. No gradient flows into it (a numerical device). ``build`` picks how
+        it is built, not what it is (:func:`~.tree_build.resolve_tree_build`): the
+        per-octant cluster trees below, or the same forest from one pass over all
+        octants (:func:`~.tree_build.forest_tables`)."""
         points, measure, normals = points.detach(), measure.detach(), normals.detach()
         vecs = None if vecs is None else vecs.detach()
         n, d = points.shape
@@ -266,6 +271,21 @@ class BoundaryForest:
         frame = canonical_frame(points, measure)
         points_f, normals_f = points @ frame, normals @ frame
         octant = normal_octants(normals_f)
+        if resolve_tree_build(build, points) == "fast":
+            tables = forest_tables(
+                points, measure, normals, vecs, points_f, octant, leaf_size=leaf_size
+            )
+            if tables is not None:
+                mean_n = tables.pop("mean_n")
+                length = mean_n.norm(dim=-1)
+                return cls(
+                    n_cells=n,
+                    theta=float(theta),
+                    frame=frame,
+                    **tables,
+                    normal=mean_n / length[:, None].clamp_min(eps),
+                    coherent=length > coherent_length,
+                )
         trees, tree_cells, cells, offsets = [], [], [], [0]
         starts, counts, lefts, rights, boxes = [], [], [], [], []
         centers, nrm, vec, meas = [], [], [], []
@@ -536,6 +556,7 @@ def tree_read_pairs(
     g_unit: torch.Tensor,
     theta: float,
     eps: float,
+    build: str = "auto",
 ) -> TreeReadPairs:
     r"""Build the tree read's pairs for a batch of cases.
 
@@ -552,7 +573,8 @@ def tree_read_pairs(
     cells (centroid, renormalized mean normal, mean rank-1 inputs, total measure)
     come with the forest; the kernel basis of every pair in chunks. The forest and
     the walk run without gradient (a numerical device); the invariants and the basis
-    carry gradients to the kernel MLP.
+    carry gradients to the kernel MLP. ``build`` is the forest's build
+    (:meth:`BoundaryForest.build`).
     """
     b, nq, d = query_r.shape
     n = boundary_r.shape[1]
@@ -572,6 +594,7 @@ def tree_read_pairs(
                 theta=theta,
                 leaf_size=TREE_READ_LEAF_SIZE,
                 eps=eps,
+                build=build,
             )
             qi, si, n_node = forest.point_pairs(query_r[i])
             node_measure = forest.measure.to(log_frac.dtype)
