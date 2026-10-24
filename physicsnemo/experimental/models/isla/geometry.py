@@ -483,10 +483,11 @@ _SWITCH_UNITS = 1
 #: unit (none for float32 inputs whose exponents lie within 29 bits of ``c``'s), and
 #: the second-order terms and the band's own float64 evaluation two more (rounding is
 #: monotone, so ``fl(D - E) <= fl(D + E)`` needs no margin): 91 in three dimensions.
-#: In two, an edge point's 15 units, the centring's 1 and one more: 17. Torch evaluates each operation by itself (no fused multiply-add, which
-#: would only remove roundings in the bounds; :func:`_two_product` and
-#: :func:`_two_sum` need it absent). Float64 inputs are covered where every product
-#: stays normal, about ``|v| < 1e76`` with nonzero differences above ``1e-76``.
+#: In two, an edge point's 15 units, the centring's 1 and one more: 17. Torch evaluates
+#: each operation by itself (no fused multiply-add, which would only remove roundings in
+#: the bounds; :func:`_two_product` and :func:`_two_sum` need it absent). Float64 inputs
+#: are covered where every product stays normal, about ``|v| < 1e76`` with nonzero
+#: differences above ``1e-76``.
 _BAND_UNITS = {2: 17, 3: _SWITCH_UNITS + _FOOT_UNITS + 3}
 
 
