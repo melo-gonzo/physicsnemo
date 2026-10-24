@@ -20,6 +20,13 @@ source. Do not edit by hand.
 | `surface_bc/` | SURFACE-BC: a surface task that reads the whole boundary and predicts at the boundaries it names, built and timed | `scratch/isla-surface-bc-2026-10-23/` |
 | `surfqpop/` | SURF-QPOP: how a DrivAerML Surface prediction depends on the other requested cells | `scratch/isla-surf-probe-2026-10-23/` |
 | `slices_af/` | SLICES-AF: ISLA with 128 slices against the 512-slice AirfRANS standing | `scratch/isla-slices-2026-10-23/` |
+| `tie_exp/` | TIE-EXP: ISLA with the least-norm tie rules trained on the lug and Tensile2d, read on flip symmetry, native accuracy and pose | `scratch/isla-tie-2026-10-22/` |
+| `fold_sign/` | FOLD-SIGN: the wall distance signed by the generalized winding number, the registered f32floor rerun on AeroZoo | `scratch/isla-fold-sign-2026-10-22/` |
+| `token_draw/` | TOKEN-DRAW: the boundary-token draw in float64 in the boundary's canonical frame, measured under precision, pose and renumbering | `scratch/isla-token-draw-2026-10-22/` |
+| `bundle_merge/` | BUNDLE-MERGE: the geometry robustness bundle merged as ISLA 0.11.0, its version change and tests | `scratch/isla-bundle-merge-2026-10-24/` |
+| `geo_fast/` | GEO-FAST: the exact geometry's fast path, its bitwise checks and its GB300 timing, and the zero-area-cell defect | `scratch/isla-geo-fast-2026-10-23/` |
+| `align8/` | ALIGN8: the step cost of token counts that are not a multiple of 8 or 32, and the padding fix | `scratch/isla-align8-2026-10-23/` |
+| `bc_sidecar/` | BC-SIDECAR: the SHIFT-SUV box and the HiLiftAeroML far field and symmetry plane, built and checked | `scratch/isla-bc-sidecar-2026-10-23/` |
 
 | topic | file | source | md5 |
 | --- | --- | --- | --- |
@@ -127,3 +134,23 @@ source. Do not edit by hand.
 | slices_af | reading.md | scratch/isla-slices-2026-10-23/reading.md | 9d73e2c6a8a39d354bb0e38094932849 |
 | slices_af | reading.json | scratch/isla-slices-2026-10-23/reading.json | b7c3e76fbd71c97a1619e058e395a88a |
 | slices_af | nearwall/nearwall_table.md | scratch/isla-slices-2026-10-23/nearwall/nearwall_table.md | 8d69f64113cd92de5d7c4292020e56e4 |
+| tie_exp | RESULTS.md | scratch/isla-tie-2026-10-22/RESULTS.md | 4c2cbd599dfd58bb7e666bce0b9b0ab5 |
+| tie_exp | PREREG.md | scratch/isla-tie-2026-10-22/PREREG.md | f0e70cb27eee686c3877b7f91eb86686 |
+| tie_exp | JOBS.md | scratch/isla-tie-2026-10-22/JOBS.md | 6c18a17e2044618ec3fd4cefde77b418 |
+| tie_exp | read/results.md | scratch/isla-tie-2026-10-22/read/results.md | 1da6c5776d71c1c044093059aa7cee76 |
+| tie_exp | read/results.json | scratch/isla-tie-2026-10-22/read/results.json | 43f42f214c59bee626b412bb382cea51 |
+| fold_sign | PREREG.md | scratch/isla-fold-sign-2026-10-22/PREREG.md | 3fe4597743bb7af6f23fe1e3d707523f |
+| fold_sign | f32floor_tables.md | scratch/isla-fold-sign-2026-10-22/f32floor_tables.md | a7974465df17c0b179041e2d7f410230 |
+| token_draw | DESIGN.md | scratch/isla-token-draw-2026-10-22/DESIGN.md | 00038f90939bb2c811ac06531a7e2f3d |
+| bundle_merge | REPORT.md | scratch/isla-bundle-merge-2026-10-24/REPORT.md | 764a8dc3f644e89648bc8eb1cb893d02 |
+| bundle_merge | FINAL_REPORT.md | scratch/isla-bundle-merge-2026-10-24/FINAL_REPORT.md | 71f404a48d9a50174cf652117be44dfb |
+| geo_fast | RESULTS.md | scratch/isla-geo-fast-2026-10-23/RESULTS.md | cd9aae8a28eba697fcbe569f0b05eaea |
+| geo_fast | FINAL_REPORT.md | scratch/isla-geo-fast-2026-10-23/FINAL_REPORT.md | ffdbf2d2f9f0a4be90dc19db253ff5a9 |
+| geo_fast | DESIGN.md | scratch/isla-geo-fast-2026-10-23/DESIGN.md | 4e38af756908e3ea7850a46c3d8dceda |
+| geo_fast | lhr/final2_table.md | scratch/isla-geo-fast-2026-10-23/lhr/final2_table.md | 1abb1a21c5e63ea773e008e96618e467 |
+| align8 | FINAL_REPORT.md | scratch/isla-align8-2026-10-23/FINAL_REPORT.md | ff1d1a6667efd962eeab64ab9b7fd7a9 |
+| align8 | results/repro_table.md | scratch/isla-align8-2026-10-23/results/repro_table.md | 7881b73b38eccbb7bead66a25420648a |
+| align8 | exposure/exposure_gpuh.md | scratch/isla-align8-2026-10-23/exposure/exposure_gpuh.md | 6d8273e26cdc11a62c73fc746d5657ac |
+| align8 | exposure/exposure_classes.tsv | scratch/isla-align8-2026-10-23/exposure/exposure_classes.tsv | eed81eda1832a1a4f169b1790d9b0ca9 |
+| bc_sidecar | REPORT.md | scratch/isla-bc-sidecar-2026-10-23/REPORT.md | 5954c6c2aa03d130a1897b8f91eb2f58 |
+| bc_sidecar | FINAL_REPORT.md | scratch/isla-bc-sidecar-2026-10-23/FINAL_REPORT.md | 1dd633f229de15e97177f773396ab495 |

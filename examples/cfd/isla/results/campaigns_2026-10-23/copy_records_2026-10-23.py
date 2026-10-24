@@ -199,6 +199,52 @@ RECORDS = {
             "nearwall/nearwall_table.md",
         ],
     ),
+    "tie_exp": (
+        "isla-tie-2026-10-22",
+        "TIE-EXP: ISLA with the least-norm tie rules trained on the lug and Tensile2d, read on flip symmetry, native accuracy and pose",
+        [
+            "RESULTS.md",
+            "PREREG.md",
+            "JOBS.md",
+            "read/results.md",
+            "read/results.json",
+        ],
+    ),
+    "fold_sign": (
+        "isla-fold-sign-2026-10-22",
+        "FOLD-SIGN: the wall distance signed by the generalized winding number, the registered f32floor rerun on AeroZoo",
+        ["PREREG.md", "f32floor_tables.md"],
+    ),
+    "token_draw": (
+        "isla-token-draw-2026-10-22",
+        "TOKEN-DRAW: the boundary-token draw in float64 in the boundary's canonical frame, measured under precision, pose and renumbering",
+        ["DESIGN.md"],
+    ),
+    "bundle_merge": (
+        "isla-bundle-merge-2026-10-24",
+        "BUNDLE-MERGE: the geometry robustness bundle merged as ISLA 0.11.0, its version change and tests",
+        ["REPORT.md", "FINAL_REPORT.md"],
+    ),
+    "geo_fast": (
+        "isla-geo-fast-2026-10-23",
+        "GEO-FAST: the exact geometry's fast path, its bitwise checks and its GB300 timing, and the zero-area-cell defect",
+        ["RESULTS.md", "FINAL_REPORT.md", "DESIGN.md", "lhr/final2_table.md"],
+    ),
+    "align8": (
+        "isla-align8-2026-10-23",
+        "ALIGN8: the step cost of token counts that are not a multiple of 8 or 32, and the padding fix",
+        [
+            "FINAL_REPORT.md",
+            "results/repro_table.md",
+            "exposure/exposure_gpuh.md",
+            "exposure/exposure_classes.tsv",
+        ],
+    ),
+    "bc_sidecar": (
+        "isla-bc-sidecar-2026-10-23",
+        "BC-SIDECAR: the SHIFT-SUV box and the HiLiftAeroML far field and symmetry plane, built and checked",
+        ["REPORT.md", "FINAL_REPORT.md"],
+    ),
 }
 
 

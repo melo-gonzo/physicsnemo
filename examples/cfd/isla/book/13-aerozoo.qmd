@@ -787,13 +787,15 @@ F32 = R.md_table("az_diag", "f32floor/README.md", "3. Results")
 flips = [int(R.num(r["sign flips (CPU)"])) for r in F32 if r["run"] != "controls" and R.num(r["sign flips (CPU)"]) > 0]
 cells = [abs(R.num(r["cells D32≠D64"], k)) for r in F32 if r["run"] != "controls" for k in range(len(_re.findall(r"\d+", r["cells D32≠D64"])))]
 gaps = [R.num(r["gap"]) for r in F32 if r["run"] == "ISLA"]
-print("- **Float32 geometry is not exact on folded boundaries.** On a few `full` test cases ISLA's float32 and float64 forwards "
+print("- **In the geometry the standings trained with, float32 geometry is not exact on folded boundaries.** On a few `full` "
+      "test cases ISLA's float32 and float64 forwards "
       f"differ by {min(gaps):.0e} to {max(gaps):.0e} of the target's RMS, and computing only the geometry in float64 removes the "
       "difference. Two steps of the geometry turn roundoff into large changes. The sign of the wall distance flips between float32 and "
       f"float64 for {min(flips)} to {max(flips)} of the 200,000 prediction points of a case; every one has an edge or a vertex as its "
       "closest feature, where the pseudo-normals cancel and the sign is ill-posed even in exact arithmetic. And the token draw inside "
       f"the model picks {int(min(cells))} to {int(max(cells)):,} of its 200,000 boundary cells differently in the two precisions. "
-      "Which construction of the geometry removes both is open (@sec-limits); "
+      "The class signs the distance by the generalized winding number and draws its tokens in float64, which removes both "
+      "(@sec-medial-ties); what rounding still decides there is @sec-oq-precision; "
       f"{R.source('az_diag', 'f32floor/README.md')}.")
 print("- **Not part of the protocol:** the surface task (the boundary solution and the wall shear from the same inputs), and the "
       "uniform-point-cloud and rotated-and-translated scorings of the other chapters (the stored poses are already random; the pose "

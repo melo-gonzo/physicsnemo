@@ -495,20 +495,23 @@ print(f"These constants, the two of `reynolds` and every $c$, belong to a split 
 prediction points as bare positions: the model computes each point's
 geometry exactly from the whole surface and draws its own boundary tokens.**
 For each prediction point $x_q$ the model finds the closest point $p_q$ on
-the union of the given meshes' cells (point to face, a Warp BVH search in
-three dimensions and a brute force over the segments in two). The signed
-distance $d_q = \pm|x_q - p_q|$ takes the sign of the pseudo-normal of the
-closest feature, positive on the side the normals point to; the direction
-$u_q$ is the cell's normal turned toward the query when $p_q$ lies inside a
-cell, else $(x_q - p_q)/|x_q - p_q|$. The point reads $s_q = d_q / L$, in the length unit $L$ (@sec-arch-frame), and
+the union of the given meshes' cells (point to face, a search of the
+model's own tree over the cells in three dimensions and a brute force over
+the segments in two). The signed distance $d_q = \pm|x_q - p_q|$ takes the
+sign of the generalized winding number of the oriented cells, positive on
+the side the normals point to; the direction $u_q$ is the cell's normal
+turned toward the query when $p_q$ lies inside a cell, the least-norm point
+of the tied features' directions where several features tie, else
+$(x_q - p_q)/|x_q - p_q|$. The point reads $s_q = d_q / L$, in the length unit $L$ (@sec-arch-frame), and
 $\operatorname{asinh}(s_q / 10^{-6})$ as its two distance channels and
 $\hat\nu_q = \operatorname{sign}(d_q)\, u_q$, with $\operatorname{sign}(0) =
 +1$, as its direction (@sec-arch-interior-geometry). Both are continuous
 through the surface, the same for every draw of the boundary tokens,
 unchanged when a cell is split, and convergent as $O(h^2)$ under refinement,
 like a stored signed-distance field computed from the same surface. The
-model therefore reads no stored field and takes no per-point input at all.
-The datasets compute `sdf` and `sdf_normals` for the baselines, whose
+model therefore reads no stored field and takes no per-point input at all,
+as Peter's boundary-only input ruling has it: "just pass in the
+full-resolution boundary surfaces and ONLY that". The datasets compute `sdf` and `sdf_normals` for the baselines, whose
 inputs they are.
 
 The boundary tokens are a sample of the same cells, drawn inside the
@@ -522,7 +525,7 @@ forward pass (`sampling.sample_boundary_cells`):
   draw has static shapes and compiles into the one whole-model graph.
 - **Law.** A cell is kept with probability $\pi_i$ proportional to its
   measure, capped at one, by systematic sampling along the Morton order of
-  the centroids: one start $u$, then every unit step along the cells laid end
+  the centroids in the boundary's canonical frame, computed in float64: one start $u$, then every unit step along the cells laid end
   to end, each as an interval of length $\pi_i$. The sample is spread over
   the surface rather than clumped.
 - **Weights.** Each kept cell carries its Horvitz–Thompson measure $a_i /
@@ -582,8 +585,8 @@ boundary wound the other way presents negative distances and reversed
 normals to every invariant: a different input, not a symmetry the model
 undoes. The model cannot choose the orientation itself, because a mesh
 does not say which side is the domain (an inlet, an open wall or a duct has
-no inside), and the pseudo-normal sign assumes a closed, consistently
-oriented surface. On the surface task the orientation enters only through
+no inside), and the winding-number sign assumes consistently oriented
+cells: it is positive on the side their normals point to. On the surface task the orientation enters only through
 the normals' invariants and needs only to be the same across a dataset's
 cases.
 
@@ -923,8 +926,8 @@ Monte Carlo. The headline comparisons of the book on the surface tasks use
 the independent draw; a deployment at a reduced budget should use the
 stratified draw or more cells. The interior task needs no such stage: the
 model reads its boundary whole and draws its tokens itself, by systematic
-sampling along the same Morton order with inclusion probabilities
-proportional to area (@sec-using-interior).
+sampling along a Morton order in the boundary's canonical frame, with
+inclusion probabilities proportional to area (@sec-using-interior).
 
 **On a surface task, ask for a sample that covers the whole body, even when only one region's values are wanted, and
 read the region from the output.** The sampled cells are ISLA's view of the body as well as the points it predicts at:
@@ -1010,10 +1013,11 @@ print(f"**A checkpoint of any version other than {ISLA.__model_checkpoint_versio
       "load weights into a built model (`Module.load`, `load_checkpoint`, the recipe's resume, `init_from` and inference, "
       "and `load_state_dict` itself) go through a pre-hook that refuses a state dict with the parameter layout of a "
       "checkpoint before 0.7.0, or with torch's state-dict version of the module other than the class's "
-      f"`_version = {ISLA._version}`. The second mark tells apart a state dict of 0.7.0 or 0.8.0, whose layout is the current "
-      "one but whose weights were trained on another forward: in 0.7.0 another geometry encoding of the prediction points, and in both a length "
-      "unit from the given or drawn cells' centroids alone instead of the full-resolution boundary with each cell's own second "
-      "moment. The cell above marks "
+      f"`_version = {ISLA._version}`. The second mark tells apart a state dict of 0.7.0 to 0.10.0, whose layout is the current "
+      "one but whose weights were trained on another forward: in 0.7.0 another geometry encoding of the prediction points; in 0.7.0 "
+      "and 0.8.0 a length unit from the given or drawn cells' centroids alone instead of the full-resolution boundary with each "
+      "cell's own second moment; in 0.9.0, the version the standings' checkpoints were trained with, the interior geometry of "
+      "@sec-standing-geometry; and 0.10.0 names a head-frame variant the class does not have. The cell above marks "
       "the example's file as written by 0.8.0 and its state dict with 0.8.0's version mark; both are refused:")
 print()
 for label, msg in refusals.items():
@@ -1102,6 +1106,77 @@ print(": Training footprint of the reference configurations (ISLA and ISLA-DTT w
       + "How to read this: memory is the budget the configurations were selected under (80 GiB on DrivAerML Surface); a step time "
       "is a cost on this hardware, and parameters are not a measure of capacity across architectures. Data: "
       f"results/char/{S.COST_FILE}.")
+```
+
+```{python}
+#| label: tbl-using-geometry-cost
+#| output: asis
+# GEO-FAST's GB300 timing: columns are case, geometry call (base, f13eb5ce0, head reference, head fast), step (the same four);
+# base is the standings' code, "head, reference" the class's geometry (the commits after it add only the fast path)
+GT_ = R.path("geo_fast", "RESULTS.md").read_text().split("## Timing")[1].split("\n\n")
+GT_ = next(b for b in GT_ if b.lstrip().startswith("| case")).strip().splitlines()[2:]
+GT_ = [[c.strip() for c in ln.strip().strip("|").split("|")] for ln in GT_]
+pair = lambda c: (R.num(c, 0) + R.num(c, 1)) / 2
+GEO_COST = {r[0]: dict(geo_base=pair(r[1]), geo=pair(r[3]), step_base=pair(r[5]), step=pair(r[7])) for r in GT_}
+o = ("| case (prediction points / boundary cells) | geometry call, standings' geometry [ms] | geometry call, ISLA [ms] | "
+     "step, standings' geometry [ms] | step, ISLA [ms] | step ratio |\n|---|--:|--:|--:|--:|--:|\n")
+for k, c in GEO_COST.items():
+    o += (f"| {k} | {c['geo_base']:,.0f} | {c['geo']:,.0f} | {c['step_base']:,.0f} | {c['step']:,.0f} | "
+          f"{c['step'] / c['step_base']:.2f} |\n")
+print(o)
+print(": The cost of ISLA's interior geometry in training: the geometry call and the training step with the geometry the "
+      "standings' checkpoints trained with (@sec-standing-geometry) and with the class's (@sec-arch-interior-geometry), the same "
+      "recipe, settings and network otherwise. One GB300, bfloat16, eager, one case per step; each entry is the mean of two passes "
+      "with the GPUs rotated, each pass the median after five warm-up calls or steps. *Step ratio*: the class's step ÷ the "
+      "standings' step. How to read this: the whole-boundary row reads the DrivAerML tunnel box beside the vehicle; there the "
+      "standings' geometry seeded its search with a query that cost about two seconds, which the class's cell-tree seed does not "
+      "have. Peak memory of the training process is the same in both columns. Data: "
+      f"{R.source('geo_fast', 'RESULTS.md')} (Timing), from {R.source('geo_fast', 'lhr/final2_table.md')}. {{#tbl-using-geometry-cost}}")
+```
+
+```{python}
+#| label: para-using-geometry-cost
+#| output: asis
+r_ = {k: c["step"] / c["step_base"] for k, c in GEO_COST.items()}
+lo_k, hi_k = min((v, k) for k, v in r_.items() if "whole" not in k), max((v, k) for k, v in r_.items() if "whole" not in k)
+print(f"**The exact interior geometry adds {100 * (lo_k[0] - 1):.0f} to {100 * (hi_k[0] - 1):.0f}% to a training step on a "
+      "body alone, most on the largest boundary** (@tbl-using-geometry-cost). The geometry call computes every candidate "
+      "distance in float64, every tie set and least-norm direction, and the winding number at every prediction point; on the "
+      f"{hi_k[1].split(' (')[0]} case that call is {GEO_COST[hi_k[1]]['geo'] / GEO_COST[hi_k[1]]['geo_base']:.1f} times the "
+      "standings' geometry call. With the DrivAerML tunnel box read beside the vehicle the class's step is "
+      f"{r_[next(k for k in r_ if 'whole' in k)]:.2f} times the standings', because the standings' geometry spent about two "
+      "seconds of every call on the query that seeded its search, and the class seeds it on its own cell tree.")
+print()
+print('::: {.callout-note title="In flight"}\nThese costs are those of the class\'s reference geometry. A fast path that '
+      "computes the same geometry bitwise on CUDA when Triton is installed, chosen automatically, replaces them where it runs, "
+      "once a fix for cells of zero area, which is being checked, is in it; the ledger (@sec-ledger) tracks it.\n:::")
+```
+
+```{python}
+#| label: para-using-alignment
+#| output: asis
+AL = R.md_table("align8", "results/repro_table.md")
+al = lambda ds, path: next(r for r in AL if r["dataset"] == ds and r["path"] == path and r["quantity"] == "step")
+AL_BIG = [al(ds, p) for ds in ("drivaer_ml_surface", "aerozoo_uvolume") for p in ("eager", "compile_blocks")]
+odd = [R.num(r["base odd / fix"]) for r in AL_BIG]; even = [R.num(r["base even / fix"]) for r in AL_BIG]
+EXP = R.load("align8", "exposure/exposure_classes.tsv")
+ex = lambda ds, v: 1 - float(next(r for r in EXP if r["dataset"] == ds and r["variant"].startswith(v))["frac_32"])
+MIS = [("AirfRANS", ex("AirfRANS", "airfoil (")), ("the lug", ex("lug", "surface")), ("Tensile2d", ex("Tensile2d", "outer")),
+       ("DeepJEB++", ex("DeepJEB++", "surface"))]
+print("**A token count that is a multiple of 32 trains fastest.** In bfloat16 on a GB300, on the DrivAerML Surface task and "
+      f"AeroZoo, a step at an odd token count takes {min(odd):.2f} to {max(odd):.2f} times as long as at the same count padded to "
+      f"a multiple of 32, and at an even count that is not a multiple of 8, {min(even):.2f} to {max(even):.2f} times, eager and "
+      "with the blocks compiled alike. The time goes to the slice attention's matrix products along the token axis, whose fast "
+      "kernels need a token stride of 16 bytes, and to LayerNorm's backward pass, whose weight-gradient reduction takes its fast "
+      "path only at a multiple of 32 rows. The count is the boundary tokens and prediction points of a case, fixed per case. "
+      "AeroZoo, the DrivAerML tasks on the vehicle and SHIFT-SUV draw a budget that is a multiple of 32 on every case; the "
+      "cases whose count is not a multiple of 32 are " + ", ".join(f"{100 * f:.0f}% on {n}" for n, f in MIS[:-1])
+      + f" and {100 * MIS[-1][1]:.0f}% on {MIS[-1][0]}. On AirfRANS an odd count costs "
+      f"{R.num(al('airfrans_uvolume_2d', 'eager')['base odd / fix']):.2f} times in the eager step, and on the smaller cases "
+      "the cost is within the run-to-run spread of the wall time, while the profiled GPU time of a step grows 5% on the lug and "
+      "8.6% on Tensile2d at one token more than an aligned count. Where the "
+      "count is the user's choice, a multiple of 32 avoids the cost. Data: "
+      f"{R.source('align8', 'results/repro_table.md')}; {R.source('align8', 'exposure/exposure_classes.tsv')}.")
 ```
 
 Three practical consequences follow.

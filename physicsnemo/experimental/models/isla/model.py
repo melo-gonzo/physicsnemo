@@ -479,9 +479,13 @@ class ISLA(Module):
     **Execution.** The ``geo_kernel`` attribute (``"auto"``; set ``"eager"`` or
     ``"fused"`` to force one) selects how the per-layer geometry region is
     executed, not what it computes (:meth:`resolve_geo_kernel`). The
-    ``tree_read_kernel`` attribute does the same for ISLA-DTT's tree read: under
-    ``"auto"`` each of its pieces (the forest build, the walk, the read with its
-    node means) runs its fast kernel where that piece's requirements hold
+    ``geometry_kernel`` attribute (``"auto"``; set ``"reference"`` or ``"fast"``) does
+    the same for the search of the prediction points' boundary geometry
+    (:meth:`resolve_geometry_kernel`), whose two implementations give the same
+    outputs bitwise. The ``tree_read_kernel`` attribute does the same for
+    ISLA-DTT's tree read: under ``"auto"`` each of its pieces (the forest build,
+    the walk, the read with its node means) runs its fast kernel where that
+    piece's requirements hold
     (:func:`~physicsnemo.experimental.models.isla.tree_build.resolve_tree_build`,
     ``tree_read.resolve_walk``, :meth:`resolve_tree_read_kernel`), each choice
     logged once, and its reference otherwise; ``"reference"`` runs every piece's
@@ -810,6 +814,11 @@ class ISLA(Module):
         ### can run and to "eager" otherwise; the blocks read the resolved name.
         ### Writable: tests and debugging set "eager" or "fused" to force one.
         self.geo_kernel = "auto"
+        ### geometry_kernel names the implementation of exact_boundary_geometry's search,
+        ### not its arithmetic: "reference" defines it, "fast" gives the same outputs
+        ### bitwise from a faster traversal. "auto" resolves at the first forward pass
+        ### (resolve_geometry_kernel). Writable, as geo_kernel.
+        self.geometry_kernel = "auto"
         self.n_slices = int(n_slices)
         ### Each boundary condition's fields, each set with its own invariant layout
         ### (_InputSet). A condition's block vectors and tensors reach the slice
@@ -1256,6 +1265,32 @@ class ISLA(Module):
             points.is_cuda,
             HAS_TRITON,
             points.dtype,
+        )
+        return chosen
+
+    def resolve_geometry_kernel(self, points: torch.Tensor) -> str:
+        """The implementation of the boundary geometry's search this forward pass will
+        use (``kernel`` of :func:`exact_boundary_geometry`).
+
+        ``"reference"`` or ``"fast"`` when the ``geometry_kernel`` attribute forces it;
+        under the default (``"auto"``) the fast search when ``points`` is on CUDA and
+        Triton is importable (its weld and canonical-cell kernels), else the
+        reference. The decision is cached per device and logged once.
+        """
+        if self.geometry_kernel != "auto":
+            return self.geometry_kernel
+        key = (points.device.type, points.device.index)
+        cached = getattr(self, "_geometry_kernel_cache", None)
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        from .geometry_fast import HAS_TRITON
+
+        chosen = "fast" if points.is_cuda and HAS_TRITON else "reference"
+        if torch.compiler.is_compiling():
+            return chosen
+        self._geometry_kernel_cache = (key, chosen)
+        logger.info(
+            "ISLA geometry_kernel=auto resolved to %r on %s (cuda=%s, triton=%s)", chosen, points.device, points.is_cuda, HAS_TRITON
         )
         return chosen
 
@@ -1711,7 +1746,9 @@ class ISLA(Module):
                     offsets.append(offsets[-1] + m.n_points)
                 points = torch.cat([m.points.to(q_points.device, q_points.dtype) for m in meshes])
                 cells = torch.cat([m.cells.to(q_points.device) + o for m, o in zip(meshes, offsets)])
-                dist, direction = exact_boundary_geometry(q_points, points, cells)
+                dist, direction = exact_boundary_geometry(
+                    q_points, points, cells, kernel=self.resolve_geometry_kernel(q_points)
+                )
             query["wall_distance"], query["wall_direction"] = dist, direction
             ### The boundary tokens: the sample of the cells (sample_boundary_cells),
             ### each kept cell with its Horvitz-Thompson measure. A uniform start
@@ -1836,7 +1873,9 @@ class ISLA(Module):
         query = None
         if query_points is not None:
             geometry = [
-                exact_boundary_geometry(query_points[i], surface_points[i], surface_cells[i])
+                exact_boundary_geometry(
+                    query_points[i], surface_points[i], surface_cells[i], kernel=self.resolve_geometry_kernel(query_points)
+                )
                 for i in range(b)
             ]
             query = TensorDict(
