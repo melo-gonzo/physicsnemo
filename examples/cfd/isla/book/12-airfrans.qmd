@@ -188,7 +188,8 @@ print("- **The domain's boundary.** The converted files store the airfoil alone,
       f"{re.match(r'[\d,]+-[\d,]+ segments', ff).group(0).replace('-', ' to ')}, a half circle of radius 200 chords upstream closed "
       "by the lines $x = 200$ and $y = \\pm 200$ downstream. ISLA's configuration reads the far field as well, as the "
       "condition `freestream` with no field (its prescribed value is the inlet velocity ISLA already reads); the "
-      "standing's checkpoints were trained with the airfoil alone (@sec-standing-geometry). With it ISLA's length unit $L$, the RMS pairwise distance of the given "
+      "standing's checkpoints were trained with the airfoil alone (@sec-standing-geometry). With the far field "
+      "ISLA's length unit $L$, the RMS pairwise distance of the given "
       f"boundary, is {re.search(r'[\d.]+', L_w).group(0)} chords on every case, against "
       f"{L_af.split(' (')[0].replace('-', ' to ')} chords with the airfoil alone. Data: {R.source('af_whole', 'PREREG.md')} (section 3), {R.source('boundary_audit', 'REPORT.md')} (section 5).")
 ```

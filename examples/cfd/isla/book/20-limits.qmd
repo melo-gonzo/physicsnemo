@@ -533,8 +533,8 @@ print("**ISLA's input is the whole boundary of the PDE domain, every piece a dat
       "reads every boundary it is given and predicts at the cells of those it names (`prediction_boundaries`, required: "
       + lst([f"{WB_CFG[n][0]} names " + ", ".join(f"`{b}`" for b in PRED[n]) for n in PRED])
       + "), so on the DrivAerML Surface task the tunnel's four pieces are read as conditions only. SHIFT-SUV's files store the "
-      "vehicle alone. The surface configuration reads the tunnel's four pieces beside it, and the recipe refuses that pairing, "
-      "since the pieces it is told to read are missing; it does not train ISLA on the vehicle alone. How SHIFT-SUV gets the rest "
+      "vehicle alone. The surface configuration reads the tunnel's four pieces beside it, and on these files the recipe's "
+      "path resolver raises a `KeyError` on each of the missing paths; the recipe does not train ISLA on the vehicle alone. How SHIFT-SUV gets the rest "
       "of its boundary is open (@sec-oq-whole-boundary). The standings' checkpoints were trained with the body alone on the "
       "DrivAerML tasks, SHIFT-SUV, HiLiftAeroML and AirfRANS (@sec-standing-geometry), so those standings are of ISLA reading "
       "part of its boundary. On the DrivAerML Volume task ISLA's far-field eddy-viscosity error follows the height above the "
@@ -613,7 +613,7 @@ rows = [
      "retrained with the class's geometry, scored rotated and translated, and in float32 against float64 on the AeroZoo cases of "
      "the float32 comparison", "the standings' training with the class's geometry, then scoring"),
     ("How large is ISLA-DTT's tree error at $\\theta = 1$ where its forest's frame ties? (@sec-oq-dtt-frame)", "ISLA-DTT scored rotated and translated, and under boundary redraws, on cases whose boundary has near-equal principal variances", "scoring only"),
-    ("What signs the canonical frame of a nearly mirror-symmetric boundary? (@sec-oq-frame-sign)", "a sign rule that is a function of the boundary alone where an axis's third moment lies within its rounding, or a draw and a forest that do not depend on the sign, checked on mirror-symmetric boundaries and on the lug in every pose", "none for the check; a change of the draw changes every interior model's input"),
+    ("Which rule should sign the canonical frame of a nearly mirror-symmetric boundary? (@sec-oq-frame-sign)", "a sign rule that is a function of the boundary alone where an axis's third moment lies within its rounding, or a draw and a forest that do not depend on the sign, checked on mirror-symmetric boundaries and on the lug in every pose", "none for the check; a change of the draw changes every interior model's input"),
     ("Does a cheaper or a finer read pay once ISLA-DTT is trained with it? (@sec-oq-dtt-theta)", "ISLA-DTT trained on AirfRANS at $\\theta$ = 2, 0.5 and 0, with a read after every second layer, and with 8 basis functions, against the $\\theta = 1$ model, two seeds each, under its standing's protocol", f"about {fmt_h(q_knobs[0])} to {fmt_h(q_knobs[1])}"),
     ("Does ISLA transfer better on SHIFT-SUV from fastbacks to estates? (@sec-oq-transfer)", "two more seeds of each of the three fastback-trained models, scored on both families and read by the same registered rules", f"{fmt_h(q_transfer)}"),
     ("Does ISLA's far-field eddy-viscosity error on the DrivAerML Volume task come from the ground and domain walls it is not given? (@sec-oq-far-field)",
@@ -805,7 +805,8 @@ print("**The tie direction where tied normals nearly coincide is measured, and t
       "whether a certified treatment of thin cells changes any output on stored data.** At a closest-feature tie the class takes "
       "the least-norm point of the hull of the tied directions, and on the wall the same point of the hull of the unit normals "
       "of the cells that hold the point (@sec-arch-interior-geometry). Where those normals nearly coincide the point is "
-      "continuous in them, of order one half, and rounding decides which of them it rests on, with the same value either way. "
+      "continuous in them, of order one half, and rounding decides which of them it rests on; either way the result is the "
+      "least-norm point of the rounded normals. "
       f"On the lug and Tensile2d a one-ulp move of every float32 vertex changes the direction at tied queries by at most "
       f"{TIE_DU[0]} and {TIE_DU[1]}, at most {GT_R} times the normals' own change, and the set of normals it rests on changes at "
       f"no persisting tie. Retrained with the class's rule, ISLA's posed ÷ native on the lug is {TX_PN:.4f} (@sec-limits-ties). "
@@ -877,8 +878,9 @@ print("**The open question is how large ISLA-DTT's tree error is at $\\theta = 1
       "sampled cells and the principal axes of their measure-weighted covariance, each signed so that the third moment along it is "
       "positive (`tree_read.canonical_frame`). That frame moves with a rigid motion, so in exact arithmetic the forest, and with it "
       "every point's list of far clusters at a finite opening angle $\\theta$, is the same in every pose. Where two principal "
-      "variances are equal, or the third moment along an axis vanishes, the axis or its sign is decided by rounding "
-      "(@sec-oq-frame-sign), and a rotation can regroup the clusters. A redraw of the boundary moves the centroid and the moments "
+      "variances are equal the axis is decided by rounding, and where the normalized third moment along an axis falls below "
+      "`CANONICAL_SKEW_TIE` its sign follows the dataset's axes rather than the body (@sec-oq-frame-sign); either way a "
+      "rotation can regroup the clusters. A redraw of the boundary moves the centroid and the moments "
       "by quadrature noise, which regroups clusters near a tie as well. A regrouping moves the read only by the tree's error, an "
       "approximation that vanishes as $\\theta \\to 0$. The size of that approximation is measured under refinement of the "
       "AirfRANS airfoil: splitting every segment in two or four, or refining its front more finely than its rear, changes "
@@ -915,12 +917,13 @@ from physicsnemo.experimental.models.isla.tree_read import CANONICAL_SKEW_TIE
 MEC = " ".join(R.load("dtt_pose", "MECHANISMS.md").split())
 SK = re.search(r"skews ([\d.e-]+) and ([\d.e-]+) \(median\), reproduced under pose to ([\d.e-]+) \(max ([\d.e-]+)", MEC).groups()
 SKB = re.search(r"is ([\d.e-]+) / ([\d.e-]+), above the skew in (\d+) / (\d+) of 24 cases", MEC).groups()
-print("**The open question is what signs the canonical frame of a boundary that is nearly its own mirror image.** The frame of "
+print("**The open question is which rule should sign the canonical frame of a boundary that is nearly its own mirror image.** The frame of "
       "`canonical_frame`, which the interior task's token draw orders its cells in (@sec-arch-boundary-draw) and ISLA-DTT's forest "
       "is built in (@sec-arch-tree-read), signs each principal axis so that the measure-weighted third moment of the positions "
       f"along it, over the axis's variance to the power 3/2, is positive. Below `CANONICAL_SKEW_TIE` = {sci(CANONICAL_SKEW_TIE)} it "
       "takes instead the sign of whichever of the dataset's axes the principal axis overlaps most, which stays fixed while the "
-      "body turns, so there the frame need not move with a rigid motion. On the lug the two nearly symmetric axes have third moments of "
+      "body turns, so there the frame need not move with a rigid motion. On the lug the two nearly symmetric axes have normalized third "
+      "moments of "
       f"{sci(float(SK[0]))} and {sci(float(SK[1]))} (medians over 24 test cases), which a rigid motion moves by at most "
       f"{sci(float(SK[3]))}, so the threshold decides no sign there and the frame moves with the body to rounding. A threshold "
       "derived from the arithmetic would not keep that: a first-order bound on the rounding of the third moment, about "

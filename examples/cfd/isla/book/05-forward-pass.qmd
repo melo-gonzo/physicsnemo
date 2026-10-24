@@ -245,8 +245,8 @@ print(": The boundary conditions of the recipe's ISLA configurations, read from 
       "class as the page renders, conditions in the stored (sorted) order. The input-layer columns are $1 + K + n_\\beta + S$ "
       "(the constant, the $K$ normal-direction cosines, the invariants of the condition's own fields, the $S$ global "
       "scalars); a condition's vectors are its rank-1 fields, and the shared channels number as many as the widest "
-      "condition has. Each configuration reads every piece of the domain's boundary its dataset stores: the DrivAerML "
-      "configurations the vehicle and the wind tunnel's four other pieces, the AirfRANS one the airfoil and the far field "
+      "condition has. Each configuration reads every piece of the domain's boundary its dataset stores (on HiLiftAeroML "
+      "the wing, the only piece all but two of its files store): the DrivAerML configurations the vehicle and the wind tunnel's four other pieces, the AirfRANS one the airfoil and the far field "
       "`freestream`. The standings' checkpoints were trained with configurations that read the body alone "
       "(@sec-standing-geometry). How to read this: a condition without fields still has its own input layer; the table does not "
       "show the labels by which the lug, Tensile2d and DeepJEB++ datasets mark their conditions inside one mesh, which a "
@@ -1380,8 +1380,8 @@ sign test, the float64 test drops a cell whose computed distance exceeds
 the search radius, and the closest point's barycentric weights, ratios of
 determinants of size $\rho^2$ built from products of order one, move the
 point along the face by about the unit roundoff over $\rho^2$, relative to
-the cell. On a cube with a thin cap or needle in one face, rotated and
-shifted, queries fail from $\rho \approx 10^{-6}$ in float32 and
+the cell. On a cube with a thin cap or needle in one face, rotated and shifted, queries
+fail from $\rho \approx 10^{-5}$ in float32 (a needle; a cap from $10^{-6}$) and from
 $\rho \approx 10^{-3}$ in float64, and on float64 soups of slivers
 $10^{-13}$ off the line 8 of 10 soups raise. No stored dataset is exposed:
 of 310,545 queries of the recipe's draws checked against an exact rational
@@ -1790,10 +1790,10 @@ level). That forest is not pose-invariant: on the rotated and translated
 lug, reading it gives 1.90 times the error of reading the float32 forest
 (1.95 and 1.85, seeds 42 and 43), and on AirfRANS 1.012 to 1.033 times.
 Each of the two candidate causes breaks pose on its own. With the octant
-labels held at the native float32 ones, the float32 product about the
-origin of the raw coordinates, rounded to bfloat16, changes the list of
-every posed point of the lug and of 87% (the median over cases) of
-AirfRANS's, and the cast of the two factors to bfloat16 before the product
+labels held at the native float32 ones and the box test given its error band,
+the float32 product about the origin of the raw coordinates, rounded to
+bfloat16, changes the list of nearly every posed point of the lug (the median
+over cases 100%, at least 98%) and of 87% of AirfRANS's (the median), and the cast of the two factors to bfloat16 before the product
 does the same; the same product about the boundary's centroid, rounded to
 bfloat16, changes the list of one point (the median over cases) on the lug
 and four on AirfRANS. The canonical frame itself moves with the body to
@@ -1843,7 +1843,7 @@ $\theta$ by a factor $1 \pm 10^{-6}$ changes 6.7% of the lists, against
 $\theta = 1$, is 1.53 and 1.98 times its native error (seeds 42 and 43),
 the posed lists hold 1.29 times the pairs, and at $\theta = 0$, where no
 cluster forms, posed and native agree to $10^{-4}$. The frame is not the
-cause: the third moments of its two nearly symmetric axes, about
+cause: the normalized third moments of its two nearly symmetric axes, about
 $10^{-6}$, move under pose by at most $1.1 \times 10^{-7}$, so the code's
 tie threshold of $10^{-9}$ decides no sign. On the AirfRANS interior task no
 normal has a component below $10^{-5}$, 0 to 8 cells change octant, and

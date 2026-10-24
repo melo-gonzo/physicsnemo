@@ -670,8 +670,8 @@ DrivAerML, AirfRANS and HiLiftAeroML no condition declares a field: the
 DrivAerML configurations read the vehicle and the four other pieces of the
 wind tunnel's box (`no_slip`, the ground under and behind the car; `slip`,
 the sides, the roof and the ground upstream; `inlet`; `outlet`), the
-AirfRANS one the airfoil and the far field `freestream`, and the
-HiLiftAeroML one the wing, the only piece its files store. AeroZoo's
+AirfRANS one the airfoil and the far field `freestream`, and the HiLiftAeroML one the wing, the only piece all but two of its files
+store. AeroZoo's
 four boundaries are four conditions read directly from the dataset, each
 declaring only the values it prescribes. The GINOT bracket lug, PLAID
 Tensile2d and DeepJEB++ store their conditions in one labelled boundary,
@@ -1236,8 +1236,8 @@ print(f"**ISLA pads its token axis to a multiple of {TOKEN_ALIGNMENT}, because a
       f"AeroZoo, a step at an odd token count takes {min(odd):.2f} to {max(odd):.2f} times as long as at the same count padded to "
       f"a multiple of 32, and at an even count that is not a multiple of 8, {min(even):.2f} to {max(even):.2f} times, eager and "
       "with the blocks compiled alike. The time goes to the slice attention's matrix products along the token axis, whose fast "
-      "kernels need a token stride of 16 bytes, and to LayerNorm's backward pass, whose weight-gradient reduction takes its fast "
-      "path only at a multiple of 32 rows. The count is the boundary tokens and prediction points of a case, fixed per case. So "
+      "kernels need a token stride of 16 bytes, and to LayerNorm's backward pass, whose weight-gradient reduction over more "
+      "than 65,536 rows takes its fast path only at a multiple of 32 rows. The count is the boundary tokens and prediction points of a case, fixed per case. So "
       f"`_forward_tokens` completes the token set to a multiple of `TOKEN_ALIGNMENT` = {TOKEN_ALIGNMENT} with tokens whose fields "
       "are zero and whose log measure is $-\\infty$: they hold no measure in any softmax over points, so no other token reads "
       "them, and no output is read from them, so outputs and gradients are the unpadded ones up to the summation order of the "

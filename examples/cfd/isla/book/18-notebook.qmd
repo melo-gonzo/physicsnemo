@@ -41116,9 +41116,8 @@ forests; the lug's 24 test cases posed by the scorer's dataset, 24 AirfRANS case
 whole boundary; $\theta = 1$, leaves of 4).
 
 - **Octants, in float32 too.** The lug's faces are parallel to its principal axes, so most normal components are exactly
-  zero in the canonical frame and the stored ones are rounding residues: 86% of the lug's cells (78 to 90%) have a
-  smallest component below the bound on its rounding from the cell's float32 vertices, the same share DTT-KNOBS measured
-  in bfloat16. Posed against native 11% of the cells (4 to 20%) flip octant and every point's list changes. Built with
+  zero in the canonical frame and the stored ones are rounding residues: 86% of the lug's cells (78 to 90%) have a smallest component below the bound on its rounding from the cell's float32 vertices, and 84% one below
+  $10^{-5}$, the share DTT-KNOBS measured below $10^{-5}$ in bfloat16. Posed against native 11% of the cells (4 to 20%) flip octant and every point's list changes. Built with
   the native octant labels, the posed forest gives 94% of the points their native list back.
 - **Box-test ties.** The lug's prediction points are its hexahedral mesh's nodes, commensurate with its boundary cells, so
   at $\theta = 1$ the admission test is an exact equality for many pairs: a change of $\theta$ by $1 \pm 10^{-6}$ changes
@@ -41128,7 +41127,8 @@ whole boundary; $\theta = 1$, leaves of 4).
   extent and no axis changes sign in 32 cases; the two nearly symmetric axes' third moments, $1.1$ and
   $1.3 \times 10^{-6}$, move under pose by at most $1.1 \times 10^{-7}$, so `CANONICAL_SKEW_TIE` decides nothing.
 - **bfloat16.** Under autocast `points @ frame` casts both factors to bfloat16 and rounds the product. With the labels and
-  the box band held, the uncentred product rounded to bfloat16 changes every posed lug list and 87% of AirfRANS's, and the
+  the box band held, the uncentred product rounded to bfloat16 changes nearly every posed lug list (the median 100%, at least 98%) and 87%
+  of AirfRANS's (the median), and the
   cast of the factors does the same, so both candidate mechanisms break pose on their own; a centred product rounded to
   bfloat16 changes one lug list and four AirfRANS lists (medians) but is still not the float32 forest. The boxes and the
   node measures are bfloat16, which scales every node's mean keys and values by up to $2^{-9}$ and shifts its log measure
@@ -41162,9 +41162,14 @@ native in float32, and a bfloat16-autocast forward against the float32 one).
 
 Interacting ISLA, which builds no forest, is bitwise unchanged. What no construction removes is a generic residual:
 posing in float32 moves every input by its rounding, so a few cells per case sit within rounding of a face's edge or a
-Morton grid line (DrivAerML's 0.52% of pairs). Phase C is RUNNING: ISLA 0.12.0 on psharpe/isla-dtt-pose (4242962e0, merged
-with 1b25eb899 as 0f06e4065), the ISLA test directory 375 passed (367224); on 24 lug cases the random-weight forward moves
-under pose by 1.53e-7 at the median and 1.74e-5 at most (366947).
+Morton grid line (DrivAerML's 0.52% of pairs). Phase C is DONE (07:01 EDT): ISLA 0.12.0 on psharpe/isla-dtt-pose (0673bff1d, 40b411df5, 4242962e0, refusing every
+earlier state dict; merged with 1b25eb899 as 0f06e4065; not merged into psharpe/isla), the ISLA test directory 375 passed
+(367224). Its registered bound, the random-weight lug forward posed against native at most 1e-6 on every one of 24
+cases, is not met as stated: 23 of 24 meet it (median 1.5e-7), and on case 1884 (1.74e-5) the forest is identical posed
+and native and the excess is the same at $\theta = 0$, with no forest, on 0.11.0 and 0.12.0 (366947, 367092), so it
+comes from the query geometry. Trained 0.9.0 checkpoints read through the new forest score posed ÷ native 1.0000 to
+1.0003, with native errors 1.9 to 7.0 times their own, since they were trained on the octant forest; only the retrain
+check prices the change (scratch/isla-dtt-pose-2026-10-24/FINAL_REPORT.md).
 
 **The retrain check, registered** (lane DTT-POSE-EXP, launched by the supervisor at 06:51 EDT; PREREG md5 2f46a10c,
 approved at 07:10 EDT with the supervisor's amendments before submission A1.1 to A1.5; cap 650 GPU-h). Arms: ISLA-DTT
@@ -41213,7 +41218,7 @@ of them, in both seeds.
 **Adversarial queries** (A2b, A3). On the 50 thinnest cells of each stored mesh, 5,000 queries on and off the face: in
 float32 none is wrong; in float64 the recipe's AeroZoo dump and stored case 0 raise a device-side assert under both
 kernels (no candidate survives). On a cube with a thin cap or needle in one face, rotated and shifted, queries fail from
-$\rho \approx 10^{-6}$ in float32 and $\rho \approx 10^{-3}$ in float64, and GEO-DEGEN's float64 sliver soups at
+$\rho \approx 10^{-5}$ in float32 (a needle; a cap from $10^{-6}$) and $\rho \approx 10^{-3}$ in float64, and GEO-DEGEN's float64 sliver soups at
 $10^{-13}$ raise in 8 of 10. The causes: the float32 lower bound reads each edge plane's side by a rounded sign test; the
 float64 ball test drops a cell whose computed distance exceeds the radius; and Ericson's closest-point weights, ratios of
 determinants of size $\rho^2$, move the point along the face by about the unit roundoff over $\rho^2$. With exact weights
@@ -41237,7 +41242,8 @@ change, checked bitwise as GEO-DEGEN's check a.
 **For the book.** 05 states the three kinds of input as limits with their counts and the certified fix in an In-flight
 callout; 20's `sec-oq-ties` states the tie direction as measured and leaves thin cells as its open part, with a callout.
 
-Cost: within GEO-THIN's cap of 8 GPU-h (scratch/isla-geo-thin-2026-10-24/JOBS.md).
+Cost: GB300 short and cpu-short jobs within GEO-THIN's cap of 8 GPU-h; its JOBS.md lists them and gives no total
+(scratch/isla-geo-thin-2026-10-24/JOBS.md).
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-boundary-2026-10-24/SECOND_READ_BOUNDARY.md).*
 
@@ -41290,8 +41296,7 @@ proposal is the CFD box built in the recipe from constants (psharpe/isla-bc-side
 
 **The book on 2b15490b2.** MERGE-PREP's seven one-argument edits make 06's demos name their prediction boundaries, with
 every printed number unchanged but the conditions table and the AirfRANS scale. Chapter 20's whole-boundary cell, which
-counted SHIFT-SUV under `isla_surface`, now reads each dataset's own configuration. 05, 06, 07, 09, 12, 19, 20 and 21 state
-what canonical ISLA reads and keep it apart from the standings, whose checkpoints were trained by 0.9.0 on the body alone
+counted SHIFT-SUV under `isla_surface`, now reads each dataset's own configuration. 03, 05, 06, 07, 09, 11, 12, 19, 20 and 21 state what canonical ISLA reads and keep it apart from the standings, whose checkpoints were trained by 0.9.0 on the body alone
 (@sec-standing-geometry). On this tree every cell of the changed chapters runs: 03 (22 cells), 04 (26), 05 (41), 06 (32),
 07 (15), 09 (35), 11 (18), 12 (36), 16 (14), 19 (35), 20 (35), 21 (7), 0 failed, and the full render is the test of the rest.
 

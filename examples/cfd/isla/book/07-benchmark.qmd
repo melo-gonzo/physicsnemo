@@ -121,7 +121,8 @@ BC = "boundary cells: position, normal, measure weight"
 NT = "prediction points as tokens, with their exact wall distance and direction to the boundary meshes"
 GP = "per point: coordinates centered on the case, unit normal"
 GV = "per point: coordinates, the stored `sdf` and `sdf_normals`; no boundary mesh"
-# the stored pieces of the domain's boundary beyond the body, read by configurations that have no standing (@sec-oq-whole-boundary)
+# the stored pieces of the domain's boundary beyond the body, read by ISLA's configurations; the standings'
+# checkpoints were trained without them (@sec-standing-geometry)
 DRV_DOM = ("; ISLA's configuration also reads the four other stored pieces of the domain's boundary (`no_slip`, "
            "`slip`, `inlet`, `outlet`, named conditions without fields){}, and the standing's checkpoints were trained "
            "with the vehicle alone (@sec-standing-geometry)")
@@ -718,9 +719,9 @@ are held out per checkpoint but do not confirm a result across the whole set of 
 
 **Every standing's ISLA checkpoints were trained with ISLA 0.9.0, whose interior geometry differs from the class's in four
 steps, and the class refuses those checkpoints (@sec-using-checkpoint).** The parameters and the network are the same; the
-forward differs only in how a prediction point's wall geometry is built and how the boundary tokens are drawn. They were
-trained with configurations that read the body alone: on the DrivAerML tasks and SHIFT-SUV the vehicle, on AirfRANS the
-airfoil, on HiLiftAeroML the wing. The recipe's configurations read every stored piece of the domain's boundary, so on
+forward differs only in how a prediction point's wall geometry is built and how the boundary tokens are drawn. On the DrivAerML tasks,
+SHIFT-SUV, AirfRANS and HiLiftAeroML they were trained with configurations that read the body alone (the
+vehicle, the airfoil, the wing); on AeroZoo, the lug, Tensile2d and DeepJEB++ with every stored piece. The recipe's configurations read every stored piece of the domain's boundary, so on
 the DrivAerML tasks and AirfRANS they read more than the standings were trained with (@sec-limits-whole-boundary). On a surface
 task, which computes no wall geometry and draws no tokens, the four steps do not arise. @tbl-standing-geometry lists them.
 
