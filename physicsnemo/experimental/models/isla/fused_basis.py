@@ -32,9 +32,13 @@ products in the order of PyTorch's reductions. Each linear layer is a dot produc
 operands in the MLP's dtype accumulated in float32, plus its bias, rounded to that
 dtype: under autocast the invariants, weights and biases are rounded to bfloat16 (or
 float16) and every layer's output too, as autocast's GEMMs do; in float32 the dots are
-IEEE (``input_precision="ieee"``, no TF32). GELU is the erf form computed in float32
-from its rounded input and rounded to the MLP's dtype, forward and backward, as
-PyTorch's CUDA kernels compute it. Backward rounds every layer's input gradient to the
+IEEE (``input_precision="ieee"``, no TF32). GELU (the erf form) is PyTorch's own
+under autocast: its 16-bit input indexes a table of PyTorch's float32 GELU and of its
+gradient factor at every 16-bit value (:func:`_gelu_tables`), which is bitwise what
+PyTorch's bfloat16 and float16 kernels compute (they run the float32 kernel on the
+upcast input and round; Triton's libdevice ``erf`` differs from CUDA's ``erff`` in the
+last bit at a few hundred inputs). In float32 GELU is computed from the erf form, to
+float32 roundoff of PyTorch's. Backward rounds every layer's input gradient to the
 MLP's dtype, as the reference GEMMs' outputs are; each chunk's weight and bias
 gradients are float32 sums over its pairs rounded once to that dtype, and autograd sums
 the chunks' through one cast of the weights per forward pass (:func:`mlp_weights`), as
@@ -58,11 +62,13 @@ if HAS_TRITON:
     except Exception:  # pragma: no cover - a Triton without libdevice is treated as absent
         HAS_TRITON = False
 
-#: Pairs per tile and warps per program of the basis kernels, and the backward's
-#: programs per multiprocessor (each sums the weight gradients of its tiles); launch
-#: constants.
-BASIS_BLOCK = 64
-BASIS_WARPS = 4
+#: Pairs per tile and warps per program of the forward and backward basis kernels, and
+#: the backward's programs per multiprocessor (each sums the weight gradients of its
+#: tiles); launch constants (fastest on GB300 at DrivAerML scale, 1.4e8 pairs).
+BASIS_BLOCK = 128
+BASIS_WARPS = 8
+BACKWARD_BLOCK = 32
+BACKWARD_WARPS = 4
 BACKWARD_PROGRAMS_PER_SM = 4
 
 
@@ -116,9 +122,15 @@ if HAS_TRITON:
             return a + b
 
     @triton.jit
-    def _mm3(ax, ay, az, bx, by, bz, D: tl.constexpr):
-        """A row of a float32 matmul with an inner dimension of D = 2 or 3: a chain of
-        fused multiply-adds from the first term, as cuBLAS's."""
+    def _mm3(ax, ay, az, bx, by, bz, D: tl.constexpr, K: tl.constexpr):
+        """A row of a float32 ``(P, D) @ (D, K)`` matmul with D = 2 or 3, in cuBLAS's
+        order: for K = 1 the first and last terms fused, then the middle one added; else
+        a chain of fused multiply-adds from the first term."""
+        if K == 1:
+            if D == 3:
+                return tl.fma(az, bz, ax * bx) + ay * by
+            else:
+                return ax * bx + ay * by
         acc = tl.fma(ay, by, ax * bx)
         if D == 3:
             acc = tl.fma(az, bz, acc)
@@ -166,8 +178,8 @@ if HAS_TRITON:
             gz = 0.0
             if D == 3:
                 gz = tl.load(g_ptr + k * D + 2)
-            inv = tl.where(cols == 6 + k, _mm3(hx, hy, hz, gx, gy, gz, D)[:, None], inv)
-            inv = tl.where(cols == 6 + K + k, _mm3(jx, jy, jz, gx, gy, gz, D)[:, None], inv)
+            inv = tl.where(cols == 6 + k, _mm3(hx, hy, hz, gx, gy, gz, D, K)[:, None], inv)
+            inv = tl.where(cols == 6 + K + k, _mm3(jx, jy, jz, gx, gy, gz, D, K)[:, None], inv)
         for u in tl.static_range(PB):
             ux, uy, uz = _load3(sv_ptr + u * D, si, PB * D, msk, D)
             inv = tl.where(cols == 6 + 2 * K + u, _sum3(hx * ux, hy * uy, hz * uz, D)[:, None], inv)
@@ -200,30 +212,51 @@ if HAS_TRITON:
         return _dot(dy, w, tl.zeros([dy.shape[0], IN], tl.float32), NARROW)
 
     @triton.jit
-    def _gelu(x):
-        """GELU (erf form) of float32 ``x``, as PyTorch's CUDA kernel."""
-        return x * 0.5 * (1.0 + libdevice.erf(x * 0.7071067690849304))
+    def _bits(x):
+        """The bit patterns of 16-bit ``x`` as int32 indices 0..65535."""
+        return x.to(tl.int16, bitcast=True).to(tl.int32) & 0xFFFF
 
     @triton.jit
-    def _gelu_grad(dy, x):
-        """GELU's backward at float32 ``x``, as PyTorch's CUDA kernel (its last
-        multiply-add fused)."""
-        cdf = 0.5 * (1.0 + libdevice.erf(x * 0.7071067690849304))
-        pdf = libdevice.exp(-0.5 * x * x) * 0.3989422917366028
-        return dy * tl.fma(x, pdf, cdf)
+    def _gelu(x, ftab_ptr, NARROW: tl.constexpr):
+        """GELU (erf form) of ``x`` in the MLP's dtype: PyTorch's, from its table, for a
+        16-bit ``x``; else computed in float32."""
+        if NARROW:
+            return tl.load(ftab_ptr + _bits(x))
+        else:
+            return x * 0.5 * (1.0 + libdevice.erf(x * 0.7071067690849304))
 
     @triton.jit
-    def _hidden(inv, w1_ptr, b1_ptr, w2_ptr, b2_ptr, G: tl.constexpr, GP: tl.constexpr, HID: tl.constexpr,
+    def _gelu_grad(dy, x, gtab_ptr, NARROW: tl.constexpr):
+        """GELU's backward in float32 for the gradient ``dy`` and input ``x``, both in the
+        MLP's dtype: ``dy`` times PyTorch's gradient factor from its table for 16-bit
+        ``x``; else computed in float32."""
+        if NARROW:
+            return dy.to(tl.float32) * tl.load(gtab_ptr + _bits(x))
+        else:
+            cdf = 0.5 * (1.0 + libdevice.erf(x * 0.7071067690849304))
+            pdf = libdevice.exp(-0.5 * x * x) * 0.3989422917366028
+            return dy * (cdf + x * pdf)
+
+    @triton.jit
+    def _hidden(inv, w1_ptr, b1_ptr, w2_ptr, b2_ptr, ftab_ptr, G: tl.constexpr, GP: tl.constexpr, HID: tl.constexpr,
                 NARROW: tl.constexpr):  # fmt: skip
         """The MLP's input and hidden activations in its dtype: the rounded invariants,
         the first layer's output and GELU, the second's and GELU."""
         dt = w1_ptr.dtype.element_ty
         x0 = inv.to(dt)
         h1 = _linear(x0, w1_ptr, b1_ptr, G, GP, HID, NARROW).to(dt)
-        a1 = _gelu(h1.to(tl.float32)).to(dt)
+        a1 = _gelu(h1, ftab_ptr, NARROW).to(dt)
         h2 = _linear(a1, w2_ptr, b2_ptr, HID, HID, HID, NARROW).to(dt)
-        a2 = _gelu(h2.to(tl.float32)).to(dt)
+        a2 = _gelu(h2, ftab_ptr, NARROW).to(dt)
         return x0, h1, a1, h2, a2
+
+    @triton.jit
+    def _kahan(acc, comp, x):
+        """``acc + x`` with the compensation ``comp`` (Kahan): a program's bias gradient
+        sums thousands of tiles, the reference's one tree reduction."""
+        y = x - comp
+        t = acc + y
+        return t, (t - acc) - y
 
     @triton.jit
     def _pair_rows(qi_ptr, si_ptr, tile, n, q_off, s_off, BLOCK: tl.constexpr):
@@ -249,21 +282,21 @@ if HAS_TRITON:
     @triton.jit
     def _basis_fwd_kernel(
         qi_ptr, si_ptr, n, q_off, s_off, qr_ptr, qn_ptr, qw_ptr, sr_ptr, sn_ptr, sv_ptr, g_ptr,
-        w1_ptr, b1_ptr, w2_ptr, b2_ptr, w3_ptr, b3_ptr, out_ptr, eps,
+        w1_ptr, b1_ptr, w2_ptr, b2_ptr, w3_ptr, b3_ptr, ftab_ptr, out_ptr, eps,
         D: tl.constexpr, K: tl.constexpr, PB: tl.constexpr, G: tl.constexpr, GP: tl.constexpr,
         HID: tl.constexpr, F: tl.constexpr, BLOCK: tl.constexpr, NARROW: tl.constexpr,
     ):  # fmt: skip
         """One tile of pairs: invariants, MLP, basis ``(BLOCK, F)`` in the MLP's dtype."""
         p, msk, qi, si = _pair_rows(qi_ptr, si_ptr, tl.program_id(0).to(tl.int64), n, q_off, s_off, BLOCK)
         inv = _invariants(qi, si, msk, qr_ptr, qn_ptr, qw_ptr, sr_ptr, sn_ptr, sv_ptr, g_ptr, eps, D, K, PB, GP, BLOCK)
-        _, _, _, _, a2 = _hidden(inv, w1_ptr, b1_ptr, w2_ptr, b2_ptr, G, GP, HID, NARROW)
+        _, _, _, _, a2 = _hidden(inv, w1_ptr, b1_ptr, w2_ptr, b2_ptr, ftab_ptr, G, GP, HID, NARROW)
         out = _linear(a2, w3_ptr, b3_ptr, HID, HID, F, NARROW).to(out_ptr.dtype.element_ty)
         tl.store(out_ptr + p[:, None] * F + tl.arange(0, F)[None, :], out, mask=msk[:, None])
 
     @triton.jit
     def _basis_bwd_kernel(
         qi_ptr, si_ptr, n, n_tiles, q_off, s_off, qr_ptr, qn_ptr, qw_ptr, sr_ptr, sn_ptr, sv_ptr, g_ptr,
-        w1_ptr, b1_ptr, w2_ptr, b2_ptr, w3_ptr, b3_ptr, dout_ptr, part_ptr, eps,
+        w1_ptr, b1_ptr, w2_ptr, b2_ptr, w3_ptr, b3_ptr, ftab_ptr, gtab_ptr, dout_ptr, part_ptr, eps,
         D: tl.constexpr, K: tl.constexpr, PB: tl.constexpr, G: tl.constexpr, GP: tl.constexpr,
         HID: tl.constexpr, F: tl.constexpr, BLOCK: tl.constexpr, NARROW: tl.constexpr,
     ):  # fmt: skip
@@ -280,23 +313,24 @@ if HAS_TRITON:
         db1 = tl.zeros([HID], tl.float32)
         db2 = tl.zeros([HID], tl.float32)
         db3 = tl.zeros([F], tl.float32)
+        c1, c2, c3 = tl.zeros_like(db1), tl.zeros_like(db2), tl.zeros_like(db3)
         for tile in range(pid, n_tiles, tl.num_programs(0)):
             p, msk, qi, si = _pair_rows(qi_ptr, si_ptr, tile, n, q_off, s_off, BLOCK)
             inv = _invariants(
                 qi, si, msk, qr_ptr, qn_ptr, qw_ptr, sr_ptr, sn_ptr, sv_ptr, g_ptr, eps, D, K, PB, GP, BLOCK
             )
-            x0, h1, a1, h2, a2 = _hidden(inv, w1_ptr, b1_ptr, w2_ptr, b2_ptr, G, GP, HID, NARROW)
+            x0, h1, a1, h2, a2 = _hidden(inv, w1_ptr, b1_ptr, w2_ptr, b2_ptr, ftab_ptr, G, GP, HID, NARROW)
             dy = tl.load(dout_ptr + p[:, None] * F + ff[None, :], mask=msk[:, None], other=0.0)
             dw3 = _dot(tl.trans(dy), a2, dw3, NARROW)
-            db3 += tl.sum(dy.to(tl.float32), axis=0)
+            db3, c3 = _kahan(db3, c3, tl.sum(dy.to(tl.float32), axis=0))
             da2 = _input_grad(dy, w3_ptr, F, HID, NARROW).to(dt)
-            dh2 = _gelu_grad(da2.to(tl.float32), h2.to(tl.float32)).to(dt)
+            dh2 = _gelu_grad(da2, h2, gtab_ptr, NARROW).to(dt)
             dw2 = _dot(tl.trans(dh2), a1, dw2, NARROW)
-            db2 += tl.sum(dh2.to(tl.float32), axis=0)
+            db2, c2 = _kahan(db2, c2, tl.sum(dh2.to(tl.float32), axis=0))
             da1 = _input_grad(dh2, w2_ptr, HID, HID, NARROW).to(dt)
-            dh1 = _gelu_grad(da1.to(tl.float32), h1.to(tl.float32)).to(dt)
+            dh1 = _gelu_grad(da1, h1, gtab_ptr, NARROW).to(dt)
             dw1 = _dot(tl.trans(dh1), x0, dw1, NARROW)
-            db1 += tl.sum(dh1.to(tl.float32), axis=0)
+            db1, c1 = _kahan(db1, c1, tl.sum(dh1.to(tl.float32), axis=0))
         part = part_ptr + pid * (HID * GP + 2 * HID + HID * HID + F * HID + F)
         tl.store(part + hh[:, None] * GP + tl.arange(0, GP)[None, :], dw1)
         part += HID * GP
@@ -312,6 +346,22 @@ if HAS_TRITON:
 
 
 _SM_COUNT: dict = {}
+_GELU_TABLES: dict = {}
+
+
+def _gelu_tables(device: torch.device, dtype: torch.dtype) -> tuple[torch.Tensor, torch.Tensor]:
+    """PyTorch's GELU at every value of the 16-bit ``dtype``, indexed by bit pattern:
+    ``gelu(x)`` rounded to ``dtype`` and the float32 factor ``gelu_backward(1, x)``,
+    both from PyTorch's float32 kernels on the upcast values (built once per device and
+    dtype)."""
+    key = (device, dtype)
+    if key not in _GELU_TABLES:
+        with torch.no_grad(), torch.autocast(device.type, enabled=False):
+            x = torch.arange(1 << 16, dtype=torch.int32, device=device).to(torch.int16).view(dtype).float()
+            f = torch.nn.functional.gelu(x).to(dtype)
+            g = torch.ops.aten.gelu_backward(torch.ones_like(x), x)
+        _GELU_TABLES[key] = (f, g)
+    return _GELU_TABLES[key]
 
 
 def _sm_count(device: torch.device) -> int:
@@ -346,32 +396,34 @@ class _FusedBasis(torch.autograd.Function):
         if meta["G"] != 6 + 2 * meta["K"] + 2 * pb:
             raise ValueError(f"the basis MLP takes {meta['G']} invariants; the geometry gives {6 + 2 * meta['K'] + 2 * pb}")
         meta["NARROW"] = w1.dtype in (torch.bfloat16, torch.float16)
+        ftab, gtab = _gelu_tables(qi.device, w1.dtype) if meta["NARROW"] else (b1, b1)
         n = int(qi.shape[0])
         out = torch.empty(n, meta["F"], device=qi.device, dtype=w1.dtype)
         if n:
             _basis_fwd_kernel[(triton.cdiv(n, BASIS_BLOCK),)](
-                qi, si, n, q_off, s_off, qr, qn, qw, sr, sn, sv, gu, w1, b1, w2, b2, w3, b3, out, eps,
+                qi, si, n, q_off, s_off, qr, qn, qw, sr, sn, sv, gu, w1, b1, w2, b2, w3, b3, ftab, out, eps,
                 BLOCK=BASIS_BLOCK, num_warps=BASIS_WARPS, enable_fp_fusion=False, **meta,
             )  # fmt: skip
         ctx.save_for_backward(qi, si, qr, qn, qw, sr, sn, sv, gu, w1, b1, w2, b2, w3, b3)
-        ctx.args = (q_off, s_off, eps, meta)
+        ctx.args = (q_off, s_off, eps, meta, ftab, gtab)
         return out
 
     @staticmethod
     @once_differentiable
     def backward(ctx, dout):
         qi, si, qr, qn, qw, sr, sn, sv, gu, w1, b1, w2, b2, w3, b3 = ctx.saved_tensors
-        q_off, s_off, eps, meta = ctx.args
+        q_off, s_off, eps, meta, ftab, gtab = ctx.args
         hid, g, gp, f = meta["HID"], meta["G"], meta["GP"], meta["F"]
         sizes = (hid * gp, hid, hid * hid, hid, f * hid, f)
         n = int(qi.shape[0])
-        n_tiles = triton.cdiv(n, BASIS_BLOCK)
+        n_tiles = triton.cdiv(n, BACKWARD_BLOCK)
         progs = max(1, min(n_tiles, BACKWARD_PROGRAMS_PER_SM * _sm_count(qi.device)))
         parts = torch.zeros(progs, sum(sizes), device=qi.device, dtype=torch.float32)
         if n:
             _basis_bwd_kernel[(progs,)](
-                qi, si, n, n_tiles, q_off, s_off, qr, qn, qw, sr, sn, sv, gu, w1, b1, w2, b2, w3, b3,
-                dout.contiguous(), parts, eps, BLOCK=BASIS_BLOCK, num_warps=BASIS_WARPS, enable_fp_fusion=False, **meta,
+                qi, si, n, n_tiles, q_off, s_off, qr, qn, qw, sr, sn, sv, gu, w1, b1, w2, b2, w3, b3, ftab, gtab,
+                dout.contiguous(), parts, eps, BLOCK=BACKWARD_BLOCK, num_warps=BACKWARD_WARPS, enable_fp_fusion=False,
+                **meta,
             )  # fmt: skip
         dw1, db1, dw2, db2, dw3, db3 = parts.sum(0).split(sizes)
         ### Each a float32 sum over the chunk's pairs, rounded once, as the reference GEMMs' are.

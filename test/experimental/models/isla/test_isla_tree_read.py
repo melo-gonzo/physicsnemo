@@ -1382,6 +1382,26 @@ def test_fused_kernel_basis_matches_the_reference_basis(
 
 
 @cuda_only
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16], ids=["bf16", "fp16"])
+def test_fused_basis_gelu_tables_are_pytorchs_gelu_on_every_input(dtype):
+    """The fused basis's GELU tables give PyTorch's 16-bit GELU and its backward
+    bitwise at every input value (the backward for random gradients)."""
+    from physicsnemo.experimental.models.isla import fused_basis
+
+    dev = torch.device("cuda")
+    f, g = fused_basis._gelu_tables(dev, dtype)
+    bits = torch.arange(1 << 16, dtype=torch.int32, device=dev)
+    x = bits.to(torch.int16).view(dtype)
+    ok = torch.isfinite(x)
+    gen = torch.Generator(device=dev).manual_seed(0)
+    assert torch.equal(f[ok], torch.nn.functional.gelu(x)[ok])
+    for _ in range(8):
+        dy = torch.randn(x.shape, generator=gen, device=dev).mul(4).to(dtype)
+        ref = torch.ops.aten.gelu_backward(dy, x)
+        assert torch.equal((dy.float() * g).to(dtype)[ok], ref[ok])
+
+
+@cuda_only
 def test_tree_read_pairs_fused_on_cuda_builds_the_basis_in_the_fused_kernel(
     monkeypatch,
 ):
@@ -1420,5 +1440,5 @@ def test_tree_read_pairs_fused_on_cuda_builds_the_basis_in_the_fused_kernel(
     assert len(calls) == 1
     assert torch.equal(ref.plan.qi.long(), fus.plan.qi.long())
     assert torch.equal(ref.plan.bj.long(), fus.plan.bj.long())
-    scale = ref.basis.abs().max()
+    scale = float(ref.basis.abs().max())
     assert torch.allclose(fus.basis, ref.basis, rtol=1e-5, atol=1e-5 * scale)
