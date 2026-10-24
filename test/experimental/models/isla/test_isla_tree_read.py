@@ -1635,8 +1635,9 @@ def test_query_chunks_equal_the_forward_pass_and_its_gradients(theta, vectors):
     """ISLA.query_chunks (the boundary side once, the points chunk by chunk, then the
     boundary side's backward with the leaves' gradients): in training mode, from the
     same token draw, the outputs of forward and every parameter's gradient of a loss
-    summed over the points, to float64 roundoff. The forward pads its token axis and
-    the chunks run unpadded."""
+    summed over the points, to float64 roundoff. The forward pads its token axis, the
+    chunks' boundary side pads its own (both unaligned here) and the points run
+    unpadded."""
     import physicsnemo.experimental.models.isla.model as isla_model
 
     extra = {"boundary_schemas": {"wall": {"tr": {"rank": 1}}}} if vectors else {}
@@ -1646,6 +1647,7 @@ def test_query_chunks_equal_the_forward_pass_and_its_gradients(theta, vectors):
             p.add_(0.05 * torch.randn_like(p))
     mesh, drv, q = _case()
     assert (mesh.n_cells + q.shape[0]) % isla_model.TOKEN_ALIGNMENT
+    assert mesh.n_cells % isla_model.TOKEN_ALIGNMENT
     if vectors:
         g = torch.Generator().manual_seed(4)
         data = dict(mesh.cell_data.items())
@@ -1678,6 +1680,30 @@ def test_query_chunks_equal_the_forward_pass_and_its_gradients(theta, vectors):
     for name, p in m.named_parameters():
         assert p.grad is not None, name
         assert torch.allclose(p.grad, ref[name], rtol=1e-9, atol=1e-12 * scale), name
+
+
+def test_query_chunks_pad_the_boundary_side_to_the_token_alignment():
+    """The boundary side of :meth:`ISLA.query_chunks` runs the slice blocks on its
+    tokens completed to a multiple of TOKEN_ALIGNMENT, as forward runs its own."""
+    import physicsnemo.experimental.models.isla.model as isla_model
+
+    m = _model(3, TREE_READ_THETA).double()
+    mesh, drv, q = _case(n=300, nq=40)
+    seen = []
+    hook = m.blocks[0].register_forward_pre_hook(
+        lambda mod, args, kwargs: seen.append(args[0].shape[1]), with_kwargs=True
+    )
+    try:
+        m.query_chunks(
+            boundary_meshes={"wall": mesh},
+            prediction_points=points_mesh(q),
+            global_data={"g": drv},
+        )
+    finally:
+        hook.remove()
+    align = isla_model.TOKEN_ALIGNMENT
+    assert mesh.n_cells % align
+    assert seen == [mesh.n_cells + (-mesh.n_cells) % align]
 
 
 def test_query_chunks_need_query_independent_points():

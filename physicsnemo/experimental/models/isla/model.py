@@ -2253,6 +2253,11 @@ class _QueryChunks:
         self.walk = model._tree_read_walk(
             tokens, {"r": query["points"] / self.gauge, "n_hat": q_nhat}, s[..., 0].abs(), g_unit
         )
+        ### The boundary side's token axis completed as forward completes its own
+        ### (_pad_tokens): at an unaligned count cuBLAS reduces some token-axis bf16
+        ### products, the slice anchors among them, with split-K partial sums rounded to bf16.
+        n_cells = tokens.batch_size[1]
+        tokens = _pad_tokens(tokens, TOKEN_ALIGNMENT)
         h, log_w, r = tokens["h"], tokens["log_w"], tokens["r"]
         vecs, tens = tokens.get("vecs", None), tokens.get("tens", None)
         self.slices, self.sources = [], []
@@ -2261,7 +2266,8 @@ class _QueryChunks:
                 h, log_w, r, tokens["n_hat"], tokens["g_hat"], EPS, vecs, tens, geo_kernel=self.geo_kernel, slices=True
             )
             self.slices.append(tuple(self._leaf(t) for t in slices))
-            self.sources.append(self._leaf(model.kernel_reads[i].sources(h.reshape(-1, h.shape[-1]), self.walk)))
+            h_b = h[:, :n_cells].reshape(-1, h.shape[-1])
+            self.sources.append(self._leaf(model.kernel_reads[i].sources(h_b, self.walk)))
         self.frame = (
             tuple(self._leaf(t) for t in model._frame_anchors(h, log_w, r)) if model.needs_frame else None
         )
