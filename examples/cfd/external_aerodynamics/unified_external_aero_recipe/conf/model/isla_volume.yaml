@@ -27,18 +27,34 @@
 # TensorDict, one case per call; the output is a point-cloud Mesh at the
 # prediction points with the output_schema fields in its point_data.
 #
-# The vehicle boundary is the full-resolution surface (the reference dataset
-# files read it whole, its normals reoriented into the fluid). Each prediction
-# point's built-in geometry, its signed distance to that surface and the
-# direction from it, is computed inside the model from the exact closest point
-# on its cells (positive in the fluid) and is never an input. The boundary
-# tokens are drawn from the same cells inside the model: `boundary_tokens`
-# (200,000, the class default) cells with probability proportional to their
-# area, each carrying its Horvitz-Thompson measure, so the measure-weighted
-# reads are quadratures of the whole surface; a uniform draw per step in
-# training, a fixed one in evaluation. This configuration declares no
-# `query_schema`, so the dataset's stored sdf / sdf_normals (the baselines'
-# inputs) are not read. Pair this model config
+# The boundary is the whole boundary of the PDE's domain, every mesh the case
+# files store, each a boundary condition by its name in the file (as on AeroZoo,
+# isla_volume_aerozoo.yaml):
+#
+#   vehicle   the car, a no-slip wall (the dataset file reverses its stored
+#             winding, which points into the body);
+#   no_slip   the ground under the car and downstream (x = -2.34 m to the
+#             outlet, the full span, at the wheels' contact height);
+#   slip      the domain's slip walls: the two sides, the roof and the ground
+#             upstream of no_slip;
+#   inlet     the upstream face of the domain box (x = -40 m);
+#   outlet    the downstream face (x = 80 m).
+#
+# The files store no cell data on the four domain meshes, so none declares a
+# field; their stored faces point into the fluid on every case, so they are read
+# as stored. Each is read whole at full resolution. Each prediction point's
+# built-in geometry, its signed distance to the union of the five surfaces and
+# the direction from it, is computed inside the model from the exact closest
+# point on their cells (positive in the fluid) and is never an input. The
+# boundary tokens are drawn from the same cells inside the model:
+# `boundary_tokens` (200,000, the class default) cells, shared over the five by
+# water filling (the domain meshes, a few thousand faces, are kept whole), with
+# probability proportional to their area, each carrying its Horvitz-Thompson
+# measure, so the measure-weighted reads are quadratures of the whole boundary;
+# a uniform draw per step in training, a fixed one in evaluation. The length
+# unit is taken from all five, so the domain, not the car, sets it. This
+# configuration declares no `query_schema`, so the dataset's stored sdf /
+# sdf_normals (the baselines' inputs) are not read. Pair this model config
 # with datasets/drivaer_ml_volume_reference.yaml, which also writes the unit
 # freestream direction `U_inf_dir` the model reads.
 input_type: mesh
@@ -79,7 +95,11 @@ compile_options:
 
 forward_kwargs:
   boundary_meshes:
-    vehicle: boundaries.vehicle       # Mesh[2, 3]: the full-resolution vehicle surface, normals into the fluid
+    vehicle: boundaries.vehicle       # Mesh[2, 3] each, full resolution, normals into the fluid
+    no_slip: boundaries.no_slip
+    slip: boundaries.slip
+    inlet: boundaries.inlet
+    outlet: boundaries.outlet
   prediction_points: interior         # the interior point-cloud Mesh (its points)
   global_data: global_data            # the case's TensorDict; the model selects its declared leaves
 
@@ -91,6 +111,10 @@ model:
     nut: {rank: 0}
   boundary_schemas:              # the boundary conditions by name, each with its own per-cell fields
     vehicle: {}                  # the vehicle surface, a no-slip wall: no per-cell fields
+    no_slip: {}                  # the ground, a no-slip wall: no per-cell fields
+    slip: {}                     # the slip walls: no per-cell fields
+    inlet: {}                    # the inlet face: no per-cell fields (the files store no prescribed values)
+    outlet: {}                   # the outlet face: no per-cell fields
   global_schema:
     U_inf_dir: {rank: 1}         # the unit freestream direction, read from global_data.U_inf_dir
   interior: true                 # predict at prediction_points, which join the encoder as tokens

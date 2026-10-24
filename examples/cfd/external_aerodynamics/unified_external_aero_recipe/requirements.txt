@@ -1,2 +1,3 @@
 tabulate
 tensorboard
+pyvista>=0.49  # AirfRANS far field: the raw release's _freestream.vtp (VtkBoundaryDomainMeshReader)
