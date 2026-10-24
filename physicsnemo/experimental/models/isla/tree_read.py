@@ -396,6 +396,7 @@ class TreeReadPairs:
     n_queries: int
     n_pairs_node: int  # (point, node) pairs over every case
     kernel: str = "reference"  # the blocks' read: "reference" or "fused" (fused_read.py)
+    src_log_m: torch.Tensor | None = None  # (n_b,) every source's log measure; log_m = src_log_m[plan.bj]
     basis_sink: tuple | None = None  # the fused reads' shared basis gradient (fused_read.basis_sink)
 
     @property
@@ -590,7 +591,7 @@ def tree_read_pairs(
     n = boundary_r.shape[1]
     tiny = torch.finfo(torch.float32).tiny
     has_vecs = boundary_vecs is not None and bool(boundary_vecs.shape[2])
-    qis, sis, bases, logms, forests, offsets = [], [], [], [], [], []
+    qis, sis, bases, logms, src_logms, forests, offsets = [], [], [], [], [], [], []
     deferred = []
     src_off = 0
     pair_off = 0
@@ -633,6 +634,7 @@ def tree_read_pairs(
             bases.append(_chunked_basis(basis, qi, si, geometry))
         pair_off += int(qi.shape[0])
         logms.append(src_logm[si])
+        src_logms.append(src_logm)
         qis.append(qi + i * nq)
         sis.append(si + src_off)
         forests.append(forest)
@@ -663,6 +665,7 @@ def tree_read_pairs(
         n_queries=nq,
         n_pairs_node=n_pairs_node,
         kernel=kernel,
+        src_log_m=torch.cat(src_logms),
         basis_sink=fused_read.basis_sink(basis_all) if kernel == "fused" else None,
     )
 
@@ -710,24 +713,40 @@ class _TreeKernelRead(nn.Module):
         for i, forest in enumerate(pairs.forests):
             sl = slice(i * n, (i + 1) * n)
             kv_c = torch.cat([k_c[sl], v_c[sl]], dim=-1)
-            kv_parts += [kv_c, node_means(kv_c, forest, pairs.omega[sl])]
+            means = (
+                fused_read.fused_node_means
+                if pairs.kernel == "fused" and fused_read.node_means_supported(kv_c)
+                else node_means
+            )
+            kv_parts += [kv_c, means(kv_c, forest, pairs.omega[sl])]
         kv_src = torch.cat(kv_parts)
         k_src = kv_src[:, : nh * kc].reshape(-1, nh, kc)
         v_src = kv_src[:, nh * kc :].reshape(-1, nh, c)
         ### The pairs' kernel terms at this block: the shared basis through the block's
         ### kernel weights (a matmul; its gradient to the basis accumulates over blocks).
         if pairs.kernel == "fused" and fused_read.supported(pairs.basis, q, k_src, v_src):
-            ### The same read with the kernel term computed inside it (fused_read.py).
+            ### The same read with the kernel term computed inside it (fused_read.py), its
+            ### output rounded where the reference's is: to h_q's dtype if that is narrow,
+            ### else at the output projection's input under autocast.
+            low = (torch.bfloat16, torch.float16)
+            dev = h_q.device.type
+            if h_q.dtype in low:
+                out_dtype = h_q.dtype
+            elif torch.is_autocast_enabled(dev) and torch.get_autocast_dtype(dev) in low:
+                out_dtype = torch.get_autocast_dtype(dev)
+            else:
+                out_dtype = torch.float32
             read = fused_read.fused_kernel_read(
                 pairs.basis,
                 self.kernel.weight.to(pairs.basis.dtype),
-                pairs.log_m,
+                pairs.src_log_m,
                 q,
                 k_src,
                 v_src,
                 pairs.plan,
                 scale=1.0 / math.sqrt(kc),
                 sink=pairs.basis_sink,
+                out_dtype=out_dtype,
             )
         else:
             ker = pairs.basis @ self.kernel.weight.t().to(pairs.basis.dtype)

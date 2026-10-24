@@ -906,7 +906,7 @@ def test_fused_kernel_read_matches_the_reference_read(dtype):
         torch.randn(n_b, h, kc, generator=g, dtype=D),
         torch.randn(n_b, h, c, generator=g, dtype=D),
     ]
-    logm = -torch.rand(p, generator=g, dtype=D) * 8
+    logm = -torch.rand(n_b, generator=g, dtype=D) * 8  # per source
     seed = torch.randn(n_q, h, c, generator=g, dtype=D)
 
     def run(kind, device, dt):
@@ -919,9 +919,13 @@ def test_fused_kernel_read_matches_the_reference_read(dtype):
             assert supported(b, q, k, v)
             out = fused_kernel_read(b, w, lm, q, k, v, plan, 0.5)
         elif kind == "reference":
-            out = segment_softmax_read(b @ w.t(), lm, q, k, v, plan, 0.5)
+            out = segment_softmax_read(
+                b @ w.t(), lm[plan.bj.long()], q, k, v, plan, 0.5
+            )
         else:
-            out = _eager_segment_softmax_read(b @ w.t(), lm, q, k, v, plan, 0.5)
+            out = _eager_segment_softmax_read(
+                b @ w.t(), lm[plan.bj.long()], q, k, v, plan, 0.5
+            )
         (out.double() * seed.to(device)).sum().backward()
         return [out.detach().double().cpu()] + [t.grad.double().cpu() for t in ins]
 
@@ -987,7 +991,7 @@ def test_fused_reads_sum_their_basis_gradients_as_autograd_does():
     qi = torch.repeat_interleave(torch.arange(n_q, device=dev), counts)
     bj = torch.randint(0, n_b, (qi.shape[0],), generator=g, device=dev)
     plan = PairPlan.build(qi, bj, n_q, n_b)
-    logm = -8 * torch.rand(qi.shape[0], generator=g, device=dev)
+    logm = -8 * torch.rand(n_b, generator=g, device=dev)
     reads = [
         [
             torch.randn(*s, generator=g, device=dev).to(bf)
@@ -1162,7 +1166,7 @@ def test_fused_read_partial_backward_matches_the_reference_read():
     qi = torch.repeat_interleave(torch.arange(n_q, device=dev), counts)
     bj = torch.randint(0, n_b, (qi.shape[0],), generator=g, device=dev)
     plan = PairPlan.build(qi, bj, n_q, n_b)
-    logm = -8 * torch.rand(qi.shape[0], generator=g, device=dev)
+    logm = -8 * torch.rand(n_b, generator=g, device=dev)
     inv = torch.randn(qi.shape[0], f, generator=g, device=dev)
     theta = torch.randn(f, generator=g, device=dev).requires_grad_(True)
     ws = [
@@ -1185,7 +1189,8 @@ def test_fused_read_partial_backward_matches_the_reference_read():
             ]
         else:
             outs = [
-                segment_softmax_read(basis @ w.t(), logm, *qkv, plan, 0.5) for w in ws
+                segment_softmax_read(basis @ w.t(), logm[plan.bj], *qkv, plan, 0.5)
+                for w in ws
             ]
         return (sum(outs) * x).square().sum()
 
@@ -1196,3 +1201,35 @@ def test_fused_read_partial_backward_matches_the_reference_read():
             (a - b).abs().max(),
             b.abs().max(),
         )
+
+
+@cuda_only
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16], ids=["fp32", "bf16"])
+def test_fused_node_means_match_the_reference(dtype):
+    """The fused node means against ``node_means`` on a forest of a sphere: the
+    backward bitwise (the same float32 additions, one per node), the forward to
+    float32 roundoff before the cast (the reference sums each leaf's cells by atomics,
+    in no fixed order)."""
+    from physicsnemo.experimental.models.isla.fused_read import fused_node_means
+
+    mesh, _, _ = _sphere_case(n=3000, nq=10)
+    dev = torch.device("cuda")
+    pts = mesh.cell_centroids.float().to(dev)
+    nrm = mesh.cell_normals.float().to(dev)
+    w = mesh.cell_data[EFFECTIVE_MEASURE_KEY].float().to(dev)
+    omega = w / w.sum()
+    forest = BoundaryForest.build(pts, omega, nrm, None, theta=1.0)
+    g = torch.Generator(device=dev).manual_seed(6)
+    x0 = torch.randn(pts.shape[0], 96, generator=g, device=dev).to(dtype)
+    gout = torch.randn(forest.n_nodes, 96, generator=g, device=dev).to(dtype)
+    res = []
+    for fn in (tree_read.node_means, fused_node_means):
+        x = x0.clone().requires_grad_(True)
+        y = fn(x, forest, omega)
+        y.backward(gout)
+        res.append((y.detach().float(), x.grad))
+    tol = 1e-6 if dtype == torch.float32 else 8e-3
+    assert torch.allclose(
+        res[1][0], res[0][0], rtol=tol, atol=tol * res[0][0].abs().max()
+    )
+    assert torch.equal(res[1][1], res[0][1])
