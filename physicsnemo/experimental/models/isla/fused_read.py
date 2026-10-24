@@ -36,12 +36,14 @@ The blocks' basis gradients are summed in place, in one buffer, in the order and
 the rounding points of autograd's own sum over the basis's uses (each block's
 contribution rounded, then added to the running sum and rounded again), and handed to
 the basis once, after the last read's backward (:func:`basis_sink`): no block's
-gradient is materialized beside the sum.
+gradient is materialized beside the sum. A backward pass that will not reach the basis
+(``torch.autograd.grad`` of other inputs, ``backward(inputs=...)``) adds nothing to it.
 The small products are float32 broadcast sums. Triton (3.7, GB300) turns a sum over
-the middle axis, ``(M, K, 1) * (1, K, N)`` summed over ``K``, into a ``tl.dot`` at
-TF32 precision: exact products when the operands are bfloat16 or float16 (the basis
-gradient under autocast takes that form, the fastest), 1e-3 relative error in
-float32, where the basis gradient is summed head by head instead.
+the middle axis, ``(M, K, 1) * (1, K, N)`` summed over ``K``, into a TF32 ``tl.dot``:
+with bfloat16 or float16 operands its products are exact and it accumulates in
+float32 on the tensor cores, as the reference's bfloat16 GEMM does (the basis
+gradient under autocast takes that form, the fastest); with float32 operands it is
+1e-3 off, so there the basis gradient is summed head by head instead.
 """
 
 from __future__ import annotations
@@ -49,6 +51,7 @@ from __future__ import annotations
 import importlib
 
 import torch
+from torch.autograd.function import once_differentiable
 
 from physicsnemo.core.version_check import is_package_available
 from physicsnemo.experimental.models.isla.segment_softmax import (
@@ -289,6 +292,7 @@ class _BasisSink(torch.autograd.Function):
         return basis.new_empty(0)
 
     @staticmethod
+    @once_differentiable
     def backward(ctx, _):
         acc, ctx.grad.acc = ctx.grad.acc, None
         return acc, None
@@ -302,6 +306,19 @@ def basis_sink(basis: torch.Tensor) -> tuple[torch.Tensor, _BasisGrad] | None:
         return None
     grad = _BasisGrad()
     return _BasisSink.apply(basis, grad), grad
+
+
+def _basis_grad_target(ctx, basis: torch.Tensor) -> torch.Tensor | None:
+    """The running sum a read's backward adds its basis gradient into, or ``None`` when
+    this backward pass will not run the basis's sink (a pass of other inputs only),
+    whose part would otherwise stay in the sum and be added to a later pass's.
+    ``ctx.grad`` and ``ctx.sink_node`` are the read's sink, set in its forward."""
+    grad = ctx.grad
+    if grad is None or not torch._C._will_engine_execute_node(ctx.sink_node):
+        return None
+    if grad.acc is None:
+        grad.acc = torch.zeros_like(basis)
+    return grad.acc
 
 
 class _FusedKernelRead(torch.autograd.Function):
@@ -319,9 +336,11 @@ class _FusedKernelRead(torch.autograd.Function):
             )  # fmt: skip
         ctx.save_for_backward(basis, w, logm, q, k, v, out, lse)
         ctx.plan, ctx.scale, ctx.grad = plan, scale, grad
+        ctx.sink_node = None if token is None else token.grad_fn
         return out
 
     @staticmethod
+    @once_differentiable
     def backward(ctx, dout):
         basis, w, logm, q, k, v, out, lse = ctx.saved_tensors
         plan, scale = ctx.plan, ctx.scale
@@ -330,17 +349,15 @@ class _FusedKernelRead(torch.autograd.Function):
         dout = dout.contiguous().float()
         dsum = (dout * out).sum(-1)  # (n_q, H)
         dq = torch.empty(n_q, h, kc, device=q.device, dtype=torch.float32)
-        grad = ctx.grad
-        if grad is not None and grad.acc is None:
-            grad.acc = torch.zeros_like(basis)
-        dbasis = grad.acc if grad is not None else basis
+        acc = _basis_grad_target(ctx, basis)
+        dbasis = acc if acc is not None else basis
         dw_parts = torch.empty(n_q, h, f, device=q.device, dtype=torch.float32)
         dk = torch.zeros(plan.n_b, h, kc, device=q.device, dtype=torch.float32)
         dv = torch.zeros(plan.n_b, h, c, device=q.device, dtype=torch.float32)
         if n_q:
             _fkr_bwd_point_kernel[(n_q,)](
                 plan.q_offsets, plan.bj, basis, w, logm, q, k, v, lse, dsum, dout, dq, dbasis, dw_parts, scale,
-                H=h, C=c, KC=kc, F=f, BLOCK=BLOCK_PAIRS, BASIS_GRAD=grad is not None,
+                H=h, C=c, KC=kc, F=f, BLOCK=BLOCK_PAIRS, BASIS_GRAD=acc is not None,
                 NARROW=basis.dtype in (torch.bfloat16, torch.float16), num_warps=NUM_WARPS,
             )  # fmt: skip
         if plan.n_b:
@@ -352,7 +369,7 @@ class _FusedKernelRead(torch.autograd.Function):
                     H=h, C=c, KC=kc, F=f, BLOCK=BLOCK_PAIRS, num_warps=NUM_WARPS,
                 )  # fmt: skip
         dw = dw_parts.sum(0).to(w.dtype)
-        dtoken = None if grad is None else basis.new_empty(0)
+        dtoken = None if acc is None else basis.new_empty(0)
         return None, dtoken, None, dw, None, dq.to(q.dtype), dk.to(k.dtype), dv.to(v.dtype), None, None
 
 
@@ -374,6 +391,8 @@ def fused_kernel_read(
     Differentiable in ``basis``, ``w``, ``q``, ``k`` and ``v``; requires
     :func:`supported`. Reads of one basis share its :func:`basis_sink` (``sink``);
     without one, the read's basis gradient is its own."""
+    if w.dtype != basis.dtype:
+        raise TypeError(f"the kernel weights ({w.dtype}) must be in the basis's dtype ({basis.dtype})")
     if sink is None:
         sink = basis_sink(basis)
     token, grad = sink if sink is not None else (None, None)
