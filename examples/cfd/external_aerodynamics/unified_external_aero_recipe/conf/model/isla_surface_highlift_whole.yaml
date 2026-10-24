@@ -1,0 +1,71 @@
+# @package _global_
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ISLA, surface task, on HiLift with the whole boundary of the PDE domain (highlift_surface_whole): the reference
+# configuration of isla_surface_highlift.yaml, reading the wing and the hemisphere far field (inlet, outlet) and the
+# symmetry plane of the boundary sidecar, and predicting at the wing's cells. The sidecar's pieces point into the
+# fluid; the stored wing is wound into the body (its signed volume is negative on the 4 cases checked), so it is
+# reversed for ISLA only, as isla_surface.yaml reverses DrivAerML's vehicle.
+
+input_type: mesh
+output_type: mesh
+
+dataset_append_transforms:
+  - _target_: ${dp:FlipBoundaryOrientation}
+    boundaries: [vehicle]
+
+training:
+  optimizer:
+    lr: 3.75e-4
+
+compile: true
+compile_options:
+  fullgraph: true
+  dynamic: true
+  options:                       # mode max-autotune-no-cudagraphs's options, with mix-order reduction off
+    max_autotune: true           # (torch 2.12-2.13 miscompile it; see isla_volume_airfrans.yaml)
+    coordinate_descent_tuning: true
+    triton.mix_order_reduction: false
+
+forward_kwargs:
+  boundary_meshes:                    # Mesh[2, 3] each; centroids, normals and measures are read from them
+    vehicle: boundaries.vehicle       # the subsampled wing, with its Horvitz-Thompson measures
+    inlet: boundaries.inlet           # the hemisphere's upstream half, whole, from the sidecar
+    outlet: boundaries.outlet         # its downstream half
+    symmetry: boundaries.symmetry     # the symmetry plane, the wing root cut out
+  prediction_boundaries: {literal: [vehicle]}   # the outputs are predicted at the wing's cells only
+  global_data: global_data            # the case's TensorDict; the model selects its declared leaves
+
+model:
+  _target_: physicsnemo.experimental.models.isla.ISLA
+  output_schema:                 # the HiLift wing targets, by name and tensor rank (0 scalar, 1 vector)
+    pressure: {rank: 0}
+    temperature: {rank: 0}
+    density: {rank: 0}
+    velocity: {rank: 1}
+    tau_wall: {rank: 1}
+  boundary_schemas:              # the boundary conditions by name, each with its own per-cell fields
+    vehicle: {}                  # the wing surface, a no-slip wall: no per-cell fields
+    inlet: {}                    # uniform plug flow; no field is stored: each condition is its name
+    outlet: {}                   # characteristic non-reflecting outflow at a given pressure
+    symmetry: {}                 # no-stress symmetry plane
+  global_schema:
+    U_inf_dir: {rank: 1}         # a rank-1 global input, read from global_data.U_inf_dir; normalized to a unit direction inside the model
+  hidden: 512                  # the reference configuration (REF-80 verdict, 2026-10-04); equal to the class defaults
+  n_layers: 12
+  n_slices: 512
+  compile_blocks: false          # the recipe compiles the whole model (compile_options above)

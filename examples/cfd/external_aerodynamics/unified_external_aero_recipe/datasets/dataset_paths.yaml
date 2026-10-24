@@ -22,6 +22,9 @@
 
 drivaer_ml: ???
 highlift_aero_ml: ???
+# HiLift's hemisphere far field and symmetry plane, a boundary-only sidecar in the case files'
+# layout (highlift_surface_whole.yaml).
+highlift_aero_ml_boundaries: ???
 shift_suv: ???
 # AeroZoo v1.2: the row-shuffled derived copy of the release (same tree; interior memmaps row-permuted by
 # kernel/aerozoo/aerozoo_shuffle.py so the reader's contiguous block draw is a spatial sample, see

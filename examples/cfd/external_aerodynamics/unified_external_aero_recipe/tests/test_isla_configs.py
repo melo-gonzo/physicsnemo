@@ -261,6 +261,96 @@ def test_isla_surface_composes_and_runs():
     assert torch.equal(out.global_data["U_inf_dir"], domain.global_data["U_inf_dir"])
 
 
+def _surface_sample(
+    cell_data: dict, walls: dict[str, Mesh], n_cells: int = 12
+) -> DomainMesh:
+    """A surface dataset's output: a 1-in-3 subsample of a random surface carrying ``cell_data``
+    beside the domain's other boundaries ``walls``, through SurfaceMeshToDomainMesh."""
+    g = torch.Generator().manual_seed(0)
+    mesh = Mesh(
+        points=torch.randn(n_cells * 3, 3, generator=g),
+        cells=torch.arange(n_cells * 3).reshape(n_cells, 3),
+        cell_data={
+            k: torch.randn(n_cells, *shape, generator=g)
+            for k, shape in cell_data.items()
+        },
+    )
+    scale_measures(mesh, 3.0)
+    mesh.cell_data["normals"] = mesh.cell_normals
+    gd = {"U_inf_dir": torch.tensor([1.0, 0.0, 0.0]), "L_ref": torch.tensor(5.0)}
+    sample = DomainMesh(interior=mesh, boundaries=walls, global_data=gd)
+    return SurfaceMeshToDomainMesh(cell_data_targets=list(cell_data)).apply_to_domain(
+        sample
+    )
+
+
+def test_isla_surface_shift_suv_reads_the_box_and_predicts_at_the_vehicle():
+    """SHIFT-SUV: the model reads the vehicle and the five pieces of the CFD box its datasets
+    build (AddBoxBoundaries, normals into the fluid), each a condition by its name, and predicts
+    at the vehicle's cells only. The stored vehicle points into the fluid already, so nothing
+    is reversed."""
+    from domain_transforms import AddBoxBoundaries
+
+    box = ["inlet", "outlet", "floor", "side_walls", "roof"]
+    cfg = _compose("isla_surface_shift_suv", "shift_suv_surface", *SMALL)
+    assert cfg.forward_kwargs.boundary_meshes == {
+        n: f"boundaries.{n}" for n in ("vehicle", *box)
+    }
+    assert OmegaConf.to_container(cfg.model.boundary_schemas) == {
+        n: {} for n in ("vehicle", *box)
+    }
+    assert OmegaConf.to_container(cfg.forward_kwargs.prediction_boundaries) == {
+        "literal": ["vehicle"]
+    }
+    assert "dataset_append_transforms" not in cfg
+    ds = OmegaConf.load(_RECIPE_ROOT / "datasets" / "shift_suv_surface.yaml")
+    built = OmegaConf.to_container(ds.pipeline.transforms, resolve=False)[0]
+    assert sorted(built["faces"]) == sorted(box)
+    walls = AddBoxBoundaries(
+        bounds=[[-8.0, 16.0], [-4.0, 4.0], [-1.0, 3.0]],
+        faces=built["faces"],
+        n_per_side=(3, 3),
+    )(Mesh(points=torch.zeros(1, 3))).boundaries
+    domain = _surface_sample(
+        {"pressure": (), "wss": (3,)},
+        {n: ComposeQuadratureMeasure()(walls[n]) for n in walls.keys()},
+    )
+    batch, out, pred = _run(cfg, domain, _targets("shift_suv_surface"))
+    assert set(batch["forward_kwargs"]["boundary_meshes"]) == {"vehicle", *box}
+    torch.testing.assert_close(out.points, domain.interior.points)
+    assert pred["pressure"].shape == (12,) and pred["wss"].shape == (12, 3)
+
+
+def test_isla_surface_highlift_whole_reads_the_sidecar_and_predicts_at_the_wing():
+    """HiLift with the whole boundary: the model reads the wing and the sidecar's inlet, outlet
+    and symmetry plane, predicts at the wing's cells only, and reverses the wing's winding (into
+    the body as stored) for ISLA only."""
+    names = ("vehicle", "inlet", "outlet", "symmetry")
+    cfg = _compose("isla_surface_highlift_whole", "highlift_surface_whole", *SMALL)
+    assert cfg.forward_kwargs.boundary_meshes == {n: f"boundaries.{n}" for n in names}
+    assert OmegaConf.to_container(cfg.model.boundary_schemas) == {n: {} for n in names}
+    appended = OmegaConf.to_container(cfg.dataset_append_transforms, resolve=False)
+    assert [t["boundaries"] for t in appended] == [["vehicle"]]
+    body = _compose("isla_surface_highlift", "highlift_surface", *SMALL)
+    assert OmegaConf.to_container(cfg.model.output_schema) == OmegaConf.to_container(
+        body.model.output_schema
+    )
+    walls = {
+        name: ComposeQuadratureMeasure()(_wall(axis, c, up))
+        for name, axis, c, up in zip(
+            names[1:], (0, 0, 1), (-4.0, 4.0, -3.0), (True, False, True)
+        )
+    }
+    targets = _targets("highlift_surface_whole")
+    domain = _surface_sample(
+        {k: () if v == "scalar" else (3,) for k, v in targets.items()}, walls
+    )
+    batch, out, pred = _run(cfg, domain, targets)
+    assert set(batch["forward_kwargs"]["boundary_meshes"]) == set(names)
+    torch.testing.assert_close(out.points, domain.interior.points)
+    assert pred["velocity"].shape == (12, 3) and pred["density"].shape == (12,)
+
+
 def test_isla_volume_composes_and_runs():
     """Interior task: the interior Mesh is the prediction-point cloud, whose points
     alone the model reads (not the stored sdf / sdf_normals)."""
