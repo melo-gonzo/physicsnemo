@@ -467,6 +467,25 @@ RECORDS = {
             "lhr/timing_table.md",
         ],
     ),
+    "dtt_fast_done": (
+        "isla-dtt-fast-2026-10-23",
+        "DTT-FAST, done: ISLA-DTT's exact speedups as merged, their equivalence, the step on the final heads, the pose port, "
+        "the compiled bf16 gradient spike and the bf16 reduction flag",
+        [
+            "FINAL_REPORT.md",
+            "integration/RESULTS.md",
+            "final2/TABLE.md",
+            "pose/RESULTS.md",
+            "spike/RESULTS.md",
+            "flag/RESULTS.md",
+            "flag/REPORT.md",
+        ],
+    ),
+    "dtt_fast_final_table_p5": (
+        "isla-dtt-fast-2026-10-23/final",
+        "DTT-FAST, pass 2's table with its pass-3 columns added, as it now stands",
+        ["TABLE.md"],
+    ),
 }
 
 
@@ -476,6 +495,7 @@ KEPT = {
     ("geo_thin", "DESIGN.md"): "f7f8ed6849f68cc8a4584989afb1a27e",
     ("geo_thin", "RESULTS.md"): "6daa28650f27ed75c455c12e89fbd25d",
     ("dtt_fast_final", "TABLE.md"): "a6f352dfc32a342dc1f95a90bba69c17",
+    ("dtt_knobs", "PREREG.md"): "e601d4af9ff793a7570af7acd9929f43",
 }
 
 

@@ -56,6 +56,8 @@ source. Do not edit by hand.
 | `default_dtt/` | DEFAULT-DTT: ISLA-DTT the default interior form, its tests, smokes and query-independence check | `scratch/isla-default-dtt-2026-10-24/` |
 | `dtt_default_int/` | DTT-DEFAULT-INT: the default switch integrated with ISLA 0.12.0, and its fixture test reworked | `scratch/isla-dtt-default-int-2026-10-24/` |
 | `geo_thinfast/` | GEO-THINFAST: the thin-cell guard and the accurate closest point fused into the fast path, its equality and timing | `scratch/isla-geo-thinfast-2026-10-24/` |
+| `dtt_fast_done/` | DTT-FAST, done: ISLA-DTT's exact speedups as merged, their equivalence, the step on the final heads, the pose port, the compiled bf16 gradient spike and the bf16 reduction flag | `scratch/isla-dtt-fast-2026-10-23/` |
+| `dtt_fast_final_table_p5/` | DTT-FAST, pass 2's table with its pass-3 columns added, as it now stands | `scratch/isla-dtt-fast-2026-10-23/final/` |
 
 | topic | file | source | md5 |
 | --- | --- | --- | --- |
@@ -291,3 +293,11 @@ source. Do not edit by hand.
 | geo_thinfast | RESULTS.md | scratch/isla-geo-thinfast-2026-10-24/RESULTS.md | 137b55986608d7a51fcbdce76576c0a2 |
 | geo_thinfast | REVIEW.md | scratch/isla-geo-thinfast-2026-10-24/REVIEW.md | fbe1ab69c0e59019899e1e9c5639d601 |
 | geo_thinfast | lhr/timing_table.md | scratch/isla-geo-thinfast-2026-10-24/lhr/timing_table.md | c6326b24b902dc7b703a3e324abccce7 |
+| dtt_fast_done | FINAL_REPORT.md | scratch/isla-dtt-fast-2026-10-23/FINAL_REPORT.md | c198248873c77f006cd667dcd416e9dc |
+| dtt_fast_done | integration/RESULTS.md | scratch/isla-dtt-fast-2026-10-23/integration/RESULTS.md | 21462acfca849c21c635f470a288db5b |
+| dtt_fast_done | final2/TABLE.md | scratch/isla-dtt-fast-2026-10-23/final2/TABLE.md | 1d256f9fbf240a7dc1676b0a001d44db |
+| dtt_fast_done | pose/RESULTS.md | scratch/isla-dtt-fast-2026-10-23/pose/RESULTS.md | 4f2daf8f3af4c3db8d79826892ff3f35 |
+| dtt_fast_done | spike/RESULTS.md | scratch/isla-dtt-fast-2026-10-23/spike/RESULTS.md | c710b48e47df4b2069b16274a2082a47 |
+| dtt_fast_done | flag/RESULTS.md | scratch/isla-dtt-fast-2026-10-23/flag/RESULTS.md | c37e8f62600a678b9be3474728c53635 |
+| dtt_fast_done | flag/REPORT.md | scratch/isla-dtt-fast-2026-10-23/flag/REPORT.md | 846bcae76c1ff1ff9e69ae4547b02431 |
+| dtt_fast_final_table_p5 | TABLE.md | scratch/isla-dtt-fast-2026-10-23/final/TABLE.md | 9602478cd5dca559fdd1a5326785be17 |
