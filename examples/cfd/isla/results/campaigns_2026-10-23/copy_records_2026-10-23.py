@@ -351,6 +351,21 @@ RECORDS = {
             "FINAL_REPORT.md",
         ],
     ),
+    "geo_thin_final": (
+        "isla-geo-thin-2026-10-24",
+        "GEO-THIN, final: the thin-cell fix as merged, its amended design (what is derived and what is estimated), checks, cost and limits",
+        ["FINAL_REPORT.md", "DESIGN.md", "RESULTS.md"],
+    ),
+    "nearwall_final": (
+        "isla-nearwall-2026-10-24",
+        "NEARWALL, final: the comment fix as merged, the contingency drafted for AF-WHOLE and the geometry note",
+        ["FINAL_REPORT.md", "PREREG_CONTINGENCY.md", "GEOMETRY_NOTE.md"],
+    ),
+    "dtt_fast_bf16diag": (
+        "isla-dtt-fast-2026-10-23/bf16diag",
+        "DTT-FAST, BF16-DIAG: where the chunked step's bf16 excess on AirfRANS comes from, its remedy, and the one-ulp yardstick",
+        ["REPORT.md", "RESULTS.md"],
+    ),
 }
 
 
