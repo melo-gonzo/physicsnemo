@@ -979,6 +979,7 @@ def test_fused_reads_sum_their_basis_gradients_as_autograd_does():
     bitwise as autograd sums them when each read passes its own (bfloat16, the
     running sum rounded after every read), and the step leaves no memory behind."""
     from physicsnemo.experimental.models.isla.fused_read import (
+        _plan_source_items,
         basis_sink,
         fused_kernel_read,
     )
@@ -1000,6 +1001,7 @@ def test_fused_reads_sum_their_basis_gradients_as_autograd_does():
         for _ in range(3)
     ]
     basis0 = torch.randn(qi.shape[0], f, generator=g, device=dev).to(bf)
+    _plan_source_items(plan)  # the plan keeps its by-source work items for every block
     base = torch.cuda.memory_allocated()
     grads = []
     for shared in (True, False):
