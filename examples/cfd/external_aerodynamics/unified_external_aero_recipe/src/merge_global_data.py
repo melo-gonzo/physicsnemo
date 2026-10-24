@@ -40,16 +40,23 @@ module before Hydra instantiation.
 
 from __future__ import annotations
 
+import logging
 import zlib
 from typing import Any
 
 import torch
+from dedup import ComputedDuplicates, DuplicateMask
 from tensordict import TensorDict
 
+from physicsnemo.datapipes._indexing import _cyclic_block_indices
+from physicsnemo.datapipes._rng import spawn_generator
 from physicsnemo.datapipes.keys import key_to_str, leaf_keys
-from physicsnemo.datapipes.readers.mesh import MeshReader
+from physicsnemo.datapipes.readers.mesh import MeshReader, _subsample_mesh_points
 from physicsnemo.datapipes.registry import register
 from physicsnemo.mesh import Mesh
+from physicsnemo.mesh.calculus.measure import scale_measures
+
+logger = logging.getLogger(__name__)
 
 
 @register()
@@ -91,6 +98,21 @@ class MeshReaderWithGlobalData(MeshReader):
         ``meta.json`` plus ``*.memmap`` files).  When ``None``
         (default) this class behaves exactly like
         :class:`MeshReader`.
+    drop_duplicate_cells : bool, default False
+        Drop every extra copy of a cell (a cell whose sorted vertex triple
+        repeats a lower-indexed cell's; see :mod:`dedup`) before the model
+        sees the mesh. With ``subsample_n_cells`` the cyclic block is drawn
+        over all stored cells exactly as :class:`MeshReader` draws it, the
+        drawn copies are then dropped, and the kept cells keep the factor
+        ``N / k``: each first copy still has inclusion probability ``k / N``,
+        so measure-weighted sums estimate the deduplicated mesh without bias,
+        on slightly fewer than ``k`` cells.
+    duplicate_cell_masks : str or None
+        Directory of cached masks (``<case>.npy`` and ``<case>.json``,
+        ``tools/build_duplicate_masks.py``), checked against each case's
+        connectivity fingerprint at every load; a mismatch is an error.
+        ``None`` computes the copies at load (exact, about 4 minutes for a
+        HiLift wing).
     **kwargs
         Forwarded to :class:`MeshReader`.
     """
@@ -100,10 +122,19 @@ class MeshReaderWithGlobalData(MeshReader):
         *args: Any,
         merge_global_data_from: str | None = None,
         store_case_key: bool = False,
+        drop_duplicate_cells: bool = False,
+        duplicate_cell_masks: str | None = None,
         **kwargs: Any,
     ) -> None:
+        if duplicate_cell_masks is not None and not drop_duplicate_cells:
+            raise ValueError(
+                "duplicate_cell_masks is set but drop_duplicate_cells is false"
+            )
         super().__init__(*args, **kwargs)
         self._merge_rel_path = merge_global_data_from
+        self._drop_duplicates = bool(drop_duplicate_cells)
+        self._duplicate_masks = duplicate_cell_masks
+        self._duplicate_logged = 0
         ### POSE-BENCH (transfer program, 2026-09-09): a stable per-case integer,
         ### the CRC-32 of the case directory name (the first path component
         ### below the reader root, e.g. ``run_1``), stored as the 0-dim int64
@@ -175,3 +206,79 @@ class MeshReaderWithGlobalData(MeshReader):
         merged.update(ext_td)
 
         return mesh.with_data(global_data=merged)
+
+    def _duplicates(self, index: int, mesh: Mesh):
+        sample_path = self._paths[index]
+        if (sample_path / "zarr.json").exists():
+            raise NotImplementedError(
+                "drop_duplicate_cells reads memmap meshes only, not zarr stores"
+            )
+        if self._duplicate_masks is None:
+            return ComputedDuplicates(mesh.cells)
+        case = sample_path.relative_to(self._root).parts[0]
+        return DuplicateMask(self._duplicate_masks, case, mesh.cells)
+
+    def __getitem__(self, index: int) -> tuple[Mesh, dict[str, Any]]:
+        if not self._drop_duplicates:
+            return super().__getitem__(index)
+        mesh = self._load_sample(index)
+        duplicates = self._duplicates(index, mesh)
+        generator = (
+            None
+            if self._seed_base is None
+            else spawn_generator(self._seed_base, self._epoch, index)
+        )
+        n_stored = mesh.n_cells
+        mesh = drop_duplicates_and_subsample(
+            mesh, duplicates, self.subsample_n_cells, generator=generator
+        )
+        if self._duplicate_logged < 3:
+            self._duplicate_logged += 1
+            logger.info(
+                f"drop_duplicate_cells: {self._paths[index]} fingerprint checked; {duplicates.n_extra} of "
+                f"{n_stored} stored cells are extra copies; {mesh.n_cells} cells kept"
+            )
+        if self.subsample_n_points is not None:
+            mesh = _subsample_mesh_points(
+                mesh, self.subsample_n_points, generator=generator
+            )
+        if self.pin_memory:
+            mesh = mesh.pin_memory()
+        metadata = self._get_sample_metadata(index)
+        if self.include_index_in_metadata:
+            metadata["index"] = index
+        return mesh, metadata
+
+
+def drop_duplicates_and_subsample(
+    mesh: Mesh,
+    duplicates,
+    n_cells: int | None,
+    generator: torch.Generator | None = None,
+    start: int | None = None,
+) -> Mesh:
+    """``mesh`` without the extra copies that ``duplicates`` marks, drawn as
+    :func:`~physicsnemo.datapipes.readers.mesh._subsample_mesh_cells` draws.
+
+    The cyclic block of ``n_cells`` is drawn over all ``N`` stored cells (from
+    ``generator``, or at ``start``); the drawn extra copies are dropped and the
+    kept cells' measures are multiplied by ``N / n_cells``. With ``n_cells`` unset
+    or at least ``N``, every kept cell is returned with its own measure.
+    """
+    n_total = mesh.n_cells
+    if n_cells is None or n_total <= n_cells:
+        idx = torch.nonzero(~duplicates.all().to(mesh.cells.device)).flatten()
+        factor = None
+    else:
+        block = _cyclic_block_indices(
+            n_total, n_cells, start=start, device=mesh.cells.device, generator=generator
+        )
+        idx = block[~duplicates[block]]
+        factor = n_total / n_cells
+    mesh = mesh.slice_cells(idx)
+    referenced = torch.unique(mesh.cells)
+    if referenced.numel() < mesh.n_points:
+        mesh = mesh.slice_points(referenced)
+    if factor is not None:
+        scale_measures(mesh, factor)
+    return mesh
