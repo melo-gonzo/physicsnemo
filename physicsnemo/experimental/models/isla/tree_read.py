@@ -93,6 +93,7 @@ GLOBE).
 """
 
 import dataclasses
+import logging
 import math
 from dataclasses import dataclass
 
@@ -105,8 +106,11 @@ from physicsnemo.experimental.models.isla.segment_softmax import (
     PairPlan,
     segment_softmax_read,
 )
+from physicsnemo.experimental.models.isla.tree_walk import walk_fits, walk_pairs
 from physicsnemo.mesh.spatial._ragged import _ragged_arange
 from physicsnemo.mesh.spatial.cluster_tree import ClusterTree
+
+logger = logging.getLogger(__name__)
 
 #: Heads of the read; each head owns ``KERNEL_READ_WIDTH // KERNEL_READ_HEADS`` value
 #: channels.
@@ -354,16 +358,20 @@ class BoundaryForest:
         return self.cells[pos], which
 
     def point_pairs(
-        self, points: torch.Tensor, theta: float | None = None
+        self, points: torch.Tensor, theta: float | None = None, walk: str = "auto"
     ) -> tuple[torch.Tensor, torch.Tensor, int]:
         """Every point's list: ``(qi, si, n_node)`` sorted by point, where ``si`` below
         ``n_cells`` names a cell and ``n_cells + m`` names node ``m``; ``n_node`` is the
         number of node entries. Each tree is walked once per point at ``theta``
         (the forest's own by default); a node is admitted only when its box is well
         separated from the point and its normals are coherent, so each point's list
-        holds every cell exactly once, as itself or inside one node."""
+        holds every cell exactly once, as itself or inside one node. ``walk`` names
+        how, not what (:func:`resolve_walk`): the fast walk gives the same lists in
+        the same order."""
         theta = self.theta if theta is None else float(theta)
         points_f = points.detach() @ self.frame  # the trees' coordinates
+        if resolve_walk(walk, points, theta, self) == "fast":
+            return walk_pairs(self, points_f, theta)
         qs, ss, n_node = [], [], 0
         for t, tree in enumerate(self.trees):
             a, b = int(self.node_offset[t]), int(self.node_offset[t + 1])
@@ -376,6 +384,46 @@ class BoundaryForest:
         qi, si = torch.cat(qs), torch.cat(ss)
         order = torch.argsort(qi, stable=True)
         return qi[order], si[order], n_node
+
+
+_WALKS_LOGGED: set[tuple[str, str]] = set()
+
+
+def resolve_walk(walk: str, points: torch.Tensor, theta: float, forest: BoundaryForest) -> str:
+    """The walk :meth:`BoundaryForest.point_pairs` runs: ``"reference"`` (GLOBE's
+    cluster-tree traversal, tree by tree) or ``"fast"`` (:mod:`tree_walk`'s Warp
+    kernels, the same pairs in the same order). ``"auto"`` picks the fast walk for
+    CUDA points when the forest's depth fits its stack, else the reference, logged
+    once per device type and choice; a forced name is kept (``"fast"`` runs on CPU
+    too). At ``theta = 0`` there is no walk (the plan is every pair) and the
+    reference's construction runs either way. Under autocast the forest's
+    coordinates are in the autocast dtype (``points @ frame``), and the fast walk
+    rounds as its torch kernels do."""
+    if walk not in ("auto", "reference", "fast"):
+        raise ValueError(f"walk must be 'auto', 'reference' or 'fast', got {walk!r}")
+    if theta == 0:
+        return "reference"
+    if walk == "fast" and not walk_fits(forest):
+        raise ValueError(
+            f"the fast walk does not take this forest ({len(forest.levels)} levels, {forest.aabb_min.dtype} boxes)"
+        )
+    if walk != "auto":
+        return walk
+    fits = walk_fits(forest)
+    chosen = "fast" if points.is_cuda and fits else "reference"
+    key = (points.device.type, chosen)
+    if key not in _WALKS_LOGGED:
+        _WALKS_LOGGED.add(key)
+        logger.info(
+            "ISLA tree walk=auto resolved to %r on %s (cuda=%s, forest depth %d, %s boxes, fits=%s)",
+            chosen,
+            points.device.type,
+            points.is_cuda,
+            len(forest.levels),
+            forest.aabb_min.dtype,
+            fits,
+        )
+    return chosen
 
 
 @dataclass
@@ -536,6 +584,7 @@ def tree_read_pairs(
     g_unit: torch.Tensor,
     theta: float,
     eps: float,
+    walk: str = "auto",
 ) -> TreeReadPairs:
     r"""Build the tree read's pairs for a batch of cases.
 
@@ -552,7 +601,8 @@ def tree_read_pairs(
     cells (centroid, renormalized mean normal, mean rank-1 inputs, total measure)
     come with the forest; the kernel basis of every pair in chunks. The forest and
     the walk run without gradient (a numerical device); the invariants and the basis
-    carry gradients to the kernel MLP.
+    carry gradients to the kernel MLP. ``walk`` names the walk's implementation
+    (:func:`resolve_walk`).
     """
     b, nq, d = query_r.shape
     n = boundary_r.shape[1]
@@ -573,7 +623,7 @@ def tree_read_pairs(
                 leaf_size=TREE_READ_LEAF_SIZE,
                 eps=eps,
             )
-            qi, si, n_node = forest.point_pairs(query_r[i])
+            qi, si, n_node = forest.point_pairs(query_r[i], walk=walk)
             node_measure = forest.measure.to(log_frac.dtype)
         src_r = torch.cat([boundary_r[i], forest.center.to(boundary_r.dtype)])
         src_n = torch.cat([boundary_n[i], forest.normal.to(boundary_n.dtype)])

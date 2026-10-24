@@ -463,6 +463,53 @@ def test_point_pairs_admit_only_separated_coherent_nodes_and_cover_every_cell(th
     assert bool((qi_one == 0).all())
 
 
+@pytest.mark.parametrize("theta", [0.5, 1.0])
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64, "bfloat16 autocast"])
+@pytest.mark.parametrize("dim", [2, 3])
+def test_fast_walk_gives_the_reference_lists_in_the_reference_order(dim, dtype, theta):
+    """The fast walk (Warp; forced here, on CPU) gives the reference walk's lists
+    entry for entry and in its order, with the same node count, for points near and
+    far from the boundary, a NaN point (opened down to every cell) and an infinite
+    one; under bfloat16 autocast (as in training) the forest's coordinates are
+    bfloat16, and the walk rounds as torch does."""
+    autocast = dtype == "bfloat16 autocast"
+    dtype = torch.float32 if autocast else dtype
+    pts, nrm, w, _ = cloud(900, d=dim, seed=3, dtype=dtype)
+    q, _, _, _ = cloud(150, d=dim, seed=4, dtype=dtype, scale=(3.0,) * dim)
+    q[5] = float("nan")
+    q[6, 0] = float("inf")
+    with torch.autocast("cpu", dtype=torch.bfloat16, enabled=autocast):
+        f = BoundaryForest.build(pts, w, nrm, None, theta=theta)
+        qi, si, n_node = f.point_pairs(q, walk="reference")
+        qi_f, si_f, n_node_f = f.point_pairs(q, walk="fast")
+    assert f.aabb_min.dtype == (torch.bfloat16 if autocast else dtype)
+    assert torch.equal(qi_f, qi) and torch.equal(si_f, si)
+    assert n_node_f == n_node > 0
+    assert torch.equal(torch.sort(si[qi == 5]).values, torch.arange(f.n_cells))
+
+
+def test_tree_walk_resolution_and_the_models_walks_agree():
+    """``auto`` walks by the reference on CPU and at theta 0, a forced walk is kept and
+    an unknown one refused; the model's ``tree_walk`` reaches the walk, and its two
+    walks give the same pairs, so the same outputs bitwise."""
+    pts, nrm, w, _ = cloud(300, d=3, seed=1)
+    f = BoundaryForest.build(pts, w, nrm, None, theta=1.0)
+    assert tree_read.resolve_walk("auto", pts, 1.0, f) == "reference"
+    assert tree_read.resolve_walk("fast", pts, 1.0, f) == "fast"
+    assert tree_read.resolve_walk("fast", pts, 0.0, f) == "reference"
+    with pytest.raises(ValueError, match="walk must be"):
+        tree_read.resolve_walk("warp", pts, 1.0, f)
+    tree = _tree(3, 0.5)
+    mesh, drv, q = _sphere_case(n=1500, nq=120)
+    runs = {}
+    for walk in ("reference", "fast"):
+        tree.tree_walk = walk
+        runs[walk] = outputs(_run(tree, mesh, drv, q))
+    assert all(
+        torch.equal(runs["fast"][k], runs["reference"][k]) for k in runs["reference"]
+    )
+
+
 @pytest.mark.parametrize("improper", [False, True], ids=["rotation", "reflection"])
 def test_forest_and_every_list_are_the_same_in_every_pose_at_finite_theta(improper):
     """The trees live in the boundary's own frame (principal axes signed by the third
@@ -783,6 +830,24 @@ def test_fused_segment_softmax_read_matches_eager(dtype):
     for a, b, name in zip(dev_in, ref_in, ("ker", "q", "k", "v")):
         ga, gb_ = a.grad.cpu().double(), b.grad
         assert torch.allclose(ga, gb_, atol=tol * gb_.abs().max(), rtol=tol), name
+
+
+@cuda_only
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+@pytest.mark.parametrize("dim", [2, 3])
+def test_fast_walk_on_cuda_gives_the_reference_lists_in_the_reference_order(dim, dtype):
+    """On CUDA, ``auto`` picks the fast walk, which gives the reference walk's lists
+    on the same device entry for entry and in its order."""
+    dev = torch.device("cuda")
+    pts, nrm, w, _ = cloud(3000, d=dim, seed=8, dtype=dtype)
+    q, _, _, _ = cloud(2000, d=dim, seed=9, dtype=dtype, scale=(3.0,) * dim)
+    pts, nrm, w, q = (t.to(dev) for t in (pts, nrm, w, q))
+    f = BoundaryForest.build(pts, w, nrm, None, theta=TREE_READ_THETA)
+    assert tree_read.resolve_walk("auto", q, TREE_READ_THETA, f) == "fast"
+    qi, si, n_node = f.point_pairs(q, walk="reference")
+    qi_f, si_f, n_node_f = f.point_pairs(q)
+    assert torch.equal(qi_f, qi) and torch.equal(si_f, si)
+    assert n_node_f == n_node > 0
 
 
 @cuda_only
