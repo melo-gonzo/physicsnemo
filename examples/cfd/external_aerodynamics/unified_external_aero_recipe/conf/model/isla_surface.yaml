@@ -25,14 +25,23 @@
 # (the same contract as GLOBE; the recipe keeps the DomainMesh end-to-end
 # for `input_type: mesh`).
 #
-# Surface task (`interior: false`, the class default): the outputs are
-# predicted at the boundary cells themselves, so no prediction points are
-# passed. The surface dataset's `MeshToDomainMesh` (interior_points:
+# Surface task (`interior: false`, the class default) on DrivAerML Surface,
+# reading the whole boundary of the PDE domain: the vehicle and the four
+# tunnel boundaries every case file stores beside it (inlet, no_slip, outlet,
+# slip; the dataset's `domain_boundaries`, read whole and moved with the
+# vehicle by every augmentation). The outputs are predicted at the vehicle's
+# cells only (`prediction_boundaries`); the tunnel's cells are tokens, read as
+# conditions. The dataset's `SurfaceMeshToDomainMesh` (interior_points:
 # cell_centroids) makes `interior` a point cloud at the vehicle's cell
 # centroids, in cell order, with the targets in its point_data, and keeps the
-# whole triangulated surface as `boundaries.vehicle`: the output Mesh's
-# points are the boundary cells in that same order, so predictions and
-# targets align point for point.
+# subsampled surface as `boundaries.vehicle`: the output Mesh's points are
+# the vehicle's cells in that same order, so predictions and targets align
+# point for point.
+#
+# Orientation: the tunnel boundaries are wound with their normals into the
+# fluid on every file, the vehicle into the body; FlipBoundaryOrientation
+# (dataset_append_transforms below, for this model only) reverses the
+# vehicle, so every boundary points into the fluid, as on DrivAerML Volume.
 #
 # From each boundary Mesh the model reads its cell centroids, cell normals
 # and cell measures; the quadrature measure is
@@ -43,8 +52,9 @@
 #
 # Frame: no origin (positions enter only through point-to-anchor
 # differences) and one length unit, the measure-weighted RMS pairwise
-# distance of the boundary sample; translation invariance is exact without
-# centering and no per-dataset reference length is needed.
+# distance of all five boundaries (about 59.5 m on DrivAerML, set by the
+# tunnel; about 2.1 m for the vehicle alone); translation invariance is exact
+# without centering and no per-dataset reference length is needed.
 #
 # Global inputs are read from `global_data` by the declared name. External
 # aerodynamics has one global direction, the unit freestream `U_inf_dir`
@@ -52,6 +62,11 @@
 # their own global vectors and scalars under their dataset's leaf names.
 input_type: mesh
 output_type: mesh
+
+# ISLA-only step after the dataset's own chain (the baselines read the dataset as it is).
+dataset_append_transforms:
+  - _target_: ${dp:FlipBoundaryOrientation}
+    boundaries: [vehicle]
 
 # Learning rate: 3.75e-4, the reference configuration's rate (REF-80 verdict,
 # 2026-10-04), which is the width rule lr = 1e-3 x 192 / hidden at hidden 512.
@@ -75,8 +90,13 @@ compile_options:
     triton.mix_order_reduction: false
 
 forward_kwargs:
-  boundary_meshes:
-    vehicle: boundaries.vehicle       # Mesh[2, 3]; centroids, normals and measures are read from it
+  boundary_meshes:                    # Mesh[2, 3] each; centroids, normals and measures are read from them
+    vehicle: boundaries.vehicle       # the subsampled vehicle surface, with its Horvitz-Thompson measures
+    inlet: boundaries.inlet           # the tunnel's boundaries, whole, as stored
+    no_slip: boundaries.no_slip
+    outlet: boundaries.outlet
+    slip: boundaries.slip
+  prediction_boundaries: {literal: [vehicle]}   # the outputs are predicted at the vehicle's cells only
   global_data: global_data            # the case's TensorDict; the model selects its declared leaves
 
 model:
@@ -84,8 +104,12 @@ model:
   output_schema:                 # the dataset's targets, by name and tensor rank (0 scalar, 1 vector)
     pressure: {rank: 0}
     wss: {rank: 1}
-  boundary_schemas:              # the boundary conditions by name, each with its own per-cell fields
+  boundary_schemas:              # the boundary conditions by name (as in the case files), each with its own per-cell fields
     vehicle: {}                  # the vehicle surface, a no-slip wall: no per-cell fields
+    inlet: {}                    # the files store no field on the tunnel's boundaries: each condition is its name
+    no_slip: {}
+    outlet: {}
+    slip: {}
   global_schema:
     U_inf_dir: {rank: 1}         # a rank-1 global input, read from global_data.U_inf_dir; normalized to a unit direction inside the model
   hidden: 512                  # the reference configuration (REF-80 verdict, 2026-10-04): most accurate under 80 GiB per GPU on DrivAerML Surface and the 210-wing rung; equal to the class defaults

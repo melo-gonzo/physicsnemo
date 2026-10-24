@@ -369,12 +369,18 @@ print("- **The standing is of the interacting form.** ISLA-DTT, whose prediction
       f"read level ({R.num(GL1['test bf16']):.3f}), mostly because bfloat16's read-out noise, about twice the lug's float32 errors, "
       f"compresses the gap toward 1; even so ISLA-DTT is worse in {GL_BF_WORSE}% of the test cases and on the surface nodes "
       f"({R.num(GL3['bf16']):.2f}; {R.source('dtt_knobs', 'gap/gap_table.md')}). Rotated and translated, ISLA-DTT's error on "
-      "the lug is 1.53 and 1.98 times its native error (seeds 42 and 43), most likely because rounding decides the sign "
-      "octant of most of its cells' normals; that cause is inferred, not tested "
-      f"(@sec-arch-tree-read; {R.source('dtt_knobs', 'sens/sens_table.md')}). Which "
+      "the lug is 1.53 and 1.98 times its native error (seeds 42 and 43): rounding decides the sign octant of most of "
+      "its cells' normals and many exact ties of the forest's box test, so the posed lug gets another forest "
+      f"(@sec-arch-tree-read; {R.source('dtt_knobs', 'sens/sens_table.md')}; {R.source('dtt_pose', 'MECHANISMS.md')}). Which "
       "form is ISLA's interior model is open (@sec-oq-dtt).")
 ```
 
 - **No tensor target and no geometry class change.** Tensile2d measures a tensor target (@sec-interior-tensile2d); the lug's shapes are one topology.
 - **Against Transolver the inputs differ.** Transolver reads no boundary-condition label, and knows the clamp and the load only through the shape in its fixed pose; GeoTransolver reads the four labels, and ISLA the same conditions as named boundaries (@tbl-model-inputs).
 - **Not matched in cost**, and the published GINOT, Transolver and GNOT numbers are on the authors' split: comparable in kind, not in value.
+
+::: {.callout-note title="In flight"}
+ISLA-DTT's posed ÷ native on the lug comes from its forest as the code builds it. ISLA-DTT retrained with a
+forest that depends on the boundary alone (@sec-arch-tree-read) is being measured, and the ledger
+(@sec-ledger) tracks it.
+:::

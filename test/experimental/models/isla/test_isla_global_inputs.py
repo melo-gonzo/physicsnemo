@@ -51,7 +51,18 @@ def _model(global_schema=None, **kw):
     if global_schema is None:
         global_schema = {"g": {"rank": 1}}
     kw.setdefault("boundary_schemas", {"wall": {}})
-    return ISLA(output_schema=PV, global_schema=global_schema, hidden=32, n_layers=2, n_slices=8, **kw).to(D).eval()
+    return (
+        ISLA(
+            output_schema=PV,
+            global_schema=global_schema,
+            hidden=32,
+            n_layers=2,
+            n_slices=8,
+            **kw,
+        )
+        .to(D)
+        .eval()
+    )
 
 
 def _rotate_globals(m, gd, R):
@@ -61,14 +72,24 @@ def _rotate_globals(m, gd, R):
 
 def _run(m, mesh, gd, q=None):
     with torch.no_grad():
-        return m(boundary_meshes={"wall": mesh}, prediction_points=q, global_data=gd)
+        return m(
+            boundary_meshes={"wall": mesh},
+            prediction_points=q,
+            prediction_boundaries=None if q is not None else ["wall"],
+            global_data=gd,
+        )
 
 
 def _assert_se3(m, mesh, gd, q=None, atol=1e-10):
     R = orthogonal(3, 5)
     t = torch.tensor([2.0, -5.0, 1.0], dtype=D)
     base = _run(m, mesh, gd, q)
-    moved = _run(m, transform(mesh, R, t), _rotate_globals(m, gd, R), None if q is None else q @ R.T + t)
+    moved = _run(
+        m,
+        transform(mesh, R, t),
+        _rotate_globals(m, gd, R),
+        None if q is None else q @ R.T + t,
+    )
     assert torch.allclose(moved.point_data["p"], base.point_data["p"], atol=atol)
     assert torch.allclose(moved.point_data["v"], base.point_data["v"] @ R.T, atol=atol)
     ### Measure-scale invariance: the RMS-distance unit uses normalized weights and
@@ -93,7 +114,9 @@ def test_zero_global_vectors():
     assert same(none, base, atol=0.0, rtol=0.0)
     ### extra leaves in global_data are ignored, and the output carries none of them
     extra = _run(m, mesh, {"g": torch.randn(3, dtype=D)})
-    assert same(extra, base, atol=0.0, rtol=0.0) and list(extra.global_data.keys()) == []
+    assert (
+        same(extra, base, atol=0.0, rtol=0.0) and list(extra.global_data.keys()) == []
+    )
 
 
 def test_two_global_vectors():
@@ -104,7 +127,9 @@ def test_two_global_vectors():
     mesh = _boundary()
     gv = torch.randn(2, 3, dtype=D, generator=torch.Generator().manual_seed(1))
     gd = {"g1": gv[0], "g2": gv[1]}
-    assert m.boundary_conditions["wall"].seed.in_features == 1 + 2  # the constant, n.g_1, n.g_2
+    assert (
+        m.boundary_conditions["wall"].seed.in_features == 1 + 2
+    )  # the constant, n.g_1, n.g_2
     assert m.n_true_basis == 7 and m.n_pseudo_basis == 6
     base = _assert_se3(m, mesh, gd)
     scaled = _run(m, mesh, {"g1": 3.0 * gv[0], "g2": 0.2 * gv[1]})
@@ -125,17 +150,33 @@ def test_a_derived_direction_counts_among_the_global_vectors(declared):
     the head basis and every covariance contract count it, and it rotates with the
     source."""
     gs = {f"g{k}": {"rank": 1} for k in range(declared)}
-    m = _model(gs, boundary_schemas={"wall": {"u": {"rank": 1, "units": {"U": 1}, "velocity_scale": True}}})
+    m = _model(
+        gs,
+        boundary_schemas={
+            "wall": {"u": {"rank": 1, "units": {"U": 1}, "velocity_scale": True}}
+        },
+    )
     K = declared + 1
     assert m.n_global_vectors == K and m.n_true_basis == 3 + 2 * K
-    assert m.boundary_conditions["wall"].seed.in_features == 1 + K + (K + 1) + 1  # 1, n.g_k, u.(n, g_k), |u|
+    assert (
+        m.boundary_conditions["wall"].seed.in_features == 1 + K + (K + 1) + 1
+    )  # 1, n.g_k, u.(n, g_k), |u|
     pts, nrm, w, _ = cloud(200, seed=0, scale=(1.0, 1.0, 1.0))
-    u = torch.randn(200, 3, dtype=D, generator=torch.Generator().manual_seed(3)) + torch.tensor([4.0, 0, 0], dtype=D)
+    u = torch.randn(
+        200, 3, dtype=D, generator=torch.Generator().manual_seed(3)
+    ) + torch.tensor([4.0, 0, 0], dtype=D)
     mesh = soup(pts, nrm, w, cell_data={"u": u})
-    gd = {f"g{k}": torch.randn(3, dtype=D, generator=torch.Generator().manual_seed(k)) for k in range(declared)}
+    gd = {
+        f"g{k}": torch.randn(3, dtype=D, generator=torch.Generator().manual_seed(k))
+        for k in range(declared)
+    }
     R, t = orthogonal(3, 5), torch.tensor([2.0, -5.0, 1.0], dtype=D)
     base = _run(m, mesh, gd)
-    moved = _run(m, transform(mesh, R, t, specs=m.boundary_schemas["wall"]), _rotate_globals(m, gd, R))
+    moved = _run(
+        m,
+        transform(mesh, R, t, specs=m.boundary_schemas["wall"]),
+        _rotate_globals(m, gd, R),
+    )
     assert torch.allclose(moved.point_data["p"], base.point_data["p"], atol=1e-10)
     assert torch.allclose(moved.point_data["v"], base.point_data["v"] @ R.T, atol=1e-10)
 
@@ -154,19 +195,43 @@ def test_global_scalars_condition_every_token():
     reach the prediction-point side too, and leave every covariance contract intact.
     A TensorDict with nested groups is read by dotted name."""
     mesh = _boundary()
-    m = _model({"g": {"rank": 1}, "cond.kappa": {"rank": 0}, "cond.E": {"rank": 0}}, interior=True)
-    assert m.boundary_conditions["wall"].seed.in_features == 1 + 1 + 2  # the constant, n.g and the two scalars
+    m = _model(
+        {"g": {"rank": 1}, "cond.kappa": {"rank": 0}, "cond.E": {"rank": 0}},
+        interior=True,
+    )
+    assert (
+        m.boundary_conditions["wall"].seed.in_features == 1 + 1 + 2
+    )  # the constant, n.g and the two scalars
     assert m.n_global_scalars == 2
     gv = torch.randn(3, dtype=D, generator=torch.Generator().manual_seed(1))
-    gd = {"g": gv, "cond.kappa": torch.tensor(0.3, dtype=D), "cond.E": torch.tensor(-1.2, dtype=D)}
+    gd = {
+        "g": gv,
+        "cond.kappa": torch.tensor(0.3, dtype=D),
+        "cond.E": torch.tensor(-1.2, dtype=D),
+    }
     q = torch.randn(30, 3, dtype=D, generator=torch.Generator().manual_seed(2))
     base = _assert_se3(m, mesh, gd, q=q)
-    other = _run(m, mesh, {**gd, "cond.kappa": gd["cond.kappa"] + 1.0, "cond.E": gd["cond.E"] + 1.0}, q)
+    other = _run(
+        m,
+        mesh,
+        {**gd, "cond.kappa": gd["cond.kappa"] + 1.0, "cond.E": gd["cond.E"] + 1.0},
+        q,
+    )
     assert not same(other, base, atol=1e-3)
-    nested = _run(m, mesh, TensorDict({"g": gv, "cond": {"kappa": gd["cond.kappa"], "E": gd["cond.E"]}}, batch_size=[]), q)
+    nested = _run(
+        m,
+        mesh,
+        TensorDict(
+            {"g": gv, "cond": {"kappa": gd["cond.kappa"], "E": gd["cond.E"]}},
+            batch_size=[],
+        ),
+        q,
+    )
     assert same(nested, base, atol=0.0, rtol=0.0)
     assert nested.global_data["cond", "kappa"].shape == ()
-    with pytest.raises(ValueError, match="missing the declared fields \\['cond.E', 'cond.kappa'\\]"):
+    with pytest.raises(
+        ValueError, match="missing the declared fields \\['cond.E', 'cond.kappa'\\]"
+    ):
         _run(m, mesh, {"g": gv}, q)
     ### a rank-0 global input is one scalar; a parameter vector is several names
     with pytest.raises(ValueError, match="unknown keys"):
@@ -179,7 +244,9 @@ def test_no_global_inputs_at_all_with_scalars_only():
     """K = 0 with S = 1: a parameterized PDE family with no preferred direction."""
     mesh = _boundary()
     m = _model({"kappa": {"rank": 0}})
-    assert m.boundary_conditions["wall"].seed.in_features == 1 + 1  # the constant and the scalar
+    assert (
+        m.boundary_conditions["wall"].seed.in_features == 1 + 1
+    )  # the constant and the scalar
     base = _assert_se3(m, mesh, {"kappa": torch.tensor([0.5], dtype=D)})
     other = _run(m, mesh, {"kappa": torch.tensor([1.0], dtype=D)})
     assert not same(other, base, atol=1e-3)
@@ -197,9 +264,23 @@ def test_one_vector_layout():
 
 def test_bad_global_specs_rejected():
     with pytest.raises(ValueError, match="non-negative"):
-        ISLA(output_schema=PV, boundary_schemas={"wall": {}}, global_schema={"g": {"rank": -1}}, hidden=32, n_layers=1, n_slices=8)
+        ISLA(
+            output_schema=PV,
+            boundary_schemas={"wall": {}},
+            global_schema={"g": {"rank": -1}},
+            hidden=32,
+            n_layers=1,
+            n_slices=8,
+        )
     with pytest.raises(NotImplementedError, match="rank 2 is not supported"):
-        ISLA(output_schema=PV, boundary_schemas={"wall": {}}, global_schema={"T": {"rank": 2}}, hidden=32, n_layers=1, n_slices=8)
+        ISLA(
+            output_schema=PV,
+            boundary_schemas={"wall": {}},
+            global_schema={"T": {"rank": 2}},
+            hidden=32,
+            n_layers=1,
+            n_slices=8,
+        )
 
 
 def test_boundary_data_reaches_the_interior_prediction():
@@ -210,8 +291,14 @@ def test_boundary_data_reaches_the_interior_prediction():
     bsc = torch.randn(200, dtype=D, generator=torch.Generator().manual_seed(3))
     q = torch.randn(30, 3, dtype=D, generator=torch.Generator().manual_seed(2)) * 0.5
     gd = {"kappa": torch.tensor(0.7, dtype=D)}
-    m = _model(global_schema={"kappa": {"rank": 0}}, boundary_schemas={"wall": {"trace": {"rank": 0}}}, interior=True)
-    assert m.boundary_conditions["wall"].seed.in_features == 1 + 2  # the constant, the boundary scalar and the global scalar (no directions)
+    m = _model(
+        global_schema={"kappa": {"rank": 0}},
+        boundary_schemas={"wall": {"trace": {"rank": 0}}},
+        interior=True,
+    )
+    assert (
+        m.boundary_conditions["wall"].seed.in_features == 1 + 2
+    )  # the constant, the boundary scalar and the global scalar (no directions)
     base = _assert_se3(m, soup(pts, nrm, w, cell_data={"trace": bsc}), gd, q=q)
     other = _run(m, soup(pts, nrm, w, cell_data={"trace": bsc + 1.0}), gd, q)
     assert base.point_data["p"].shape == (30,) and not same(other, base, atol=1e-3)

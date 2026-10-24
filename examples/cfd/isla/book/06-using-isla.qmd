@@ -168,7 +168,8 @@ data. The inputs that are easy to get wrong are the measures, which must be
 proportional to the measure each cell represents, with one constant across
 every boundary mesh, the orientation of the cells, and the global
 directions, which must be directions.**
-The forward call is keyword-only and takes three arguments:
+The forward call is keyword-only and takes four arguments, of which a
+task passes three:
 
 - `boundary_meshes`: a mapping from the boundary-condition names declared
   in `boundary_schemas` to `Mesh[dim - 1, dim]` objects, a triangulated
@@ -181,7 +182,9 @@ The forward call is keyword-only and takes three arguments:
   a condition left out contributes nothing, as one with zero cells does. A
   name that is not declared is an error. Each mesh's `cell_data` carries its
   own condition's declared fields, read by name; other cell data are
-  ignored. On the surface task every cell is a token. On the interior task
+  ignored. On the surface task every cell of every given mesh is a token,
+  those of the boundaries it predicts at and those read as conditions only
+  (a wind tunnel's floor, walls, inlet and outlet). On the interior task
   every mesh goes in at full resolution: its cells are the surface the
   prediction points' geometry is measured against, and the model draws its
   boundary tokens from them (@sec-using-interior).
@@ -189,7 +192,14 @@ The forward call is keyword-only and takes three arguments:
   which only the `points` are read, or a bare `(Q, dim)` tensor. A
   prediction point carries no declared field: its position, and the
   geometry the model computes for it, are all it has. Omitted on a surface
-  task, where the outputs come back at the boundary cells.
+  task.
+- `prediction_boundaries`: for the surface task, and required there, a
+  non-empty list of distinct names of given boundaries, at whose cells the
+  outputs are predicted (DrivAerML Surface: `["vehicle"]`, the tunnel's
+  four pieces read as conditions only). Their order does not matter, and
+  the argument owns no parameters: the head reads the same tokens whichever
+  boundaries carry the outputs, and only the rows it returns differ.
+  Omitted on an interior task, which refuses it.
 - `global_data`: a TensorDict or a mapping with the `global_schema` fields
   as leaves, a `(dim,)` vector for a rank-1 field and a scalar for a rank-0
   field. Extra leaves are ignored; a missing one is an error.
@@ -227,7 +237,7 @@ surface = ISLA(output_schema={"cp": {"rank": 0}, "tau": {"rank": 1}}, boundary_s
                global_schema={"freestream": {"rank": 1}},
                hidden=32, n_layers=2, n_slices=8, dim=2).double().eval()
 with torch.no_grad():
-    out = surface(boundary_meshes={"airfoil": airfoil}, global_data={"freestream": freestream})
+    out = surface(boundary_meshes={"airfoil": airfoil}, prediction_boundaries=["airfoil"], global_data={"freestream": freestream})
 
 interior = ISLA(output_schema={"p": {"rank": 0}, "u": {"rank": 1}}, boundary_schemas={"airfoil": {}},
                 global_schema={"freestream": {"rank": 1}}, interior=True,
@@ -252,7 +262,7 @@ rows = [
     ("read by the model", "`airfoil.cell_areas`", shp(airfoil.cell_areas), "measure weights $w_i$ (segment lengths)"),
     ("input", "`global_data[\"freestream\"]`", shp(freestream), "the global direction $g_1$"),
     ("input", "`prediction_points` (interior)", shp(grid), "the prediction points $x_q$"),
-    ("output, surface", "`out.points`", shp(out.points), "the boundary token positions"),
+    ("output, surface", "`out.points`", shp(out.points), "the prediction boundary's cell centroids"),
     ("output, surface", "`out.point_data[\"cp\"]`", shp(out.point_data["cp"]), "rank 0"),
     ("output, surface", "`out.point_data[\"tau\"]`", shp(out.point_data["tau"]), "rank 1"),
     ("output, interior", "`field.points`", shp(field.points), "the prediction points"),
@@ -262,14 +272,14 @@ rows = [
 o = "| | tensor | shape | meaning |\n|:----|:------|:--|:------|\n" + "".join(f"| {a} | {b} | {c} | {d} |\n" for a, b, c, d in rows)
 print(o)
 print(": What goes in and what comes out of the example above, read from the tensors as the page renders. How to read this: "
-      "a rank-$r$ output has $r$ trailing axes of size `dim`; the surface outputs are at the boundary cells in token order, the "
+      "a rank-$r$ output has $r$ trailing axes of size `dim`; the surface outputs are at the prediction boundaries' cells in token order, the "
       "interior outputs at the prediction points in request order. The model's outputs here are untrained.")
 ```
 
 The output is a point-cloud `Mesh`. On the surface task its `points` are
-the boundary cells' centroids, the given conditions in sorted name order and
-each condition's cells in its mesh's order; on the interior task they are
-the prediction points. Its `point_data` holds one leaf per declared output
+the centroids of the prediction boundaries' cells, those boundaries in
+sorted name order and each one's cells in its mesh's order; on the interior
+task they are the prediction points. Its `point_data` holds one leaf per declared output
 at its natural shape, and its `global_data` is the selected `global_data`
 passed through.
 
@@ -318,17 +328,17 @@ two = ISLA(output_schema={"cp": {"rank": 0}, "tau": {"rank": 1}},
            hidden=32, n_layers=2, n_slices=8, dim=2).double().eval()
 g = {"freestream": freestream}
 with torch.no_grad():
-    a = two(boundary_meshes={"wall": wall, "jet": jet}, global_data=g)
-    b = two(boundary_meshes={"jet": jet, "wall": wall}, global_data=g)
-    alone = two(boundary_meshes={"wall": wall}, global_data=g)
-# One Mesh at the given conditions' cells, sorted by name: split it per condition.
+    a = two(boundary_meshes={"wall": wall, "jet": jet}, prediction_boundaries=["jet", "wall"], global_data=g)
+    b = two(boundary_meshes={"jet": jet, "wall": wall}, prediction_boundaries=["jet", "wall"], global_data=g)
+    alone = two(boundary_meshes={"wall": wall}, prediction_boundaries=["wall"], global_data=g)
+# One Mesh at the prediction boundaries' cells, sorted by name: split it per condition.
 counts = [{"jet": jet, "wall": wall}[name].n_cells for name in two.boundary_names]
 cp_by_condition = dict(zip(two.boundary_names, torch.split(a.point_data["cp"], counts)))
 
 refused = {}
 for label, call in {
     "an nn.ModuleDict attribute as a name": lambda: ISLA(output_schema={"cp": {"rank": 0}}, boundary_schemas={"keys": {}}, dim=2),
-    "an undeclared name in forward": lambda: two(boundary_meshes={"flap": wall}, global_data=g),
+    "an undeclared name in forward": lambda: two(boundary_meshes={"flap": wall}, prediction_boundaries=["flap"], global_data=g),
 }.items():
     try:
         call()
@@ -344,8 +354,9 @@ print(f"`two.boundary_names` is {two.boundary_names}: declared as `wall`, `jet`,
       f"cells and the wall {wall.n_cells}; the output has {a.n_points} points, the slot's first. The two orders of the mapping give "
       f"{'bitwise equal' if same else 'different'} outputs, and the wall alone gives {alone.n_points} points, a prediction "
       "for a case without the slot. `torch.split` by the conditions' cell counts, in `boundary_names` order, gives each "
-      f"condition its own rows ({', '.join(f'`{k}`: {tuple(v.shape)}' for k, v in cp_by_condition.items())}). The two "
-      "refused calls raise `ValueError`:")
+      f"condition its own rows ({', '.join(f'`{k}`: {tuple(v.shape)}' for k, v in cp_by_condition.items())}). Both "
+      "conditions carry outputs here, so both are named in `prediction_boundaries`; a task whose outputs live on one "
+      "boundary names that one, and the others are read as conditions only. The two refused calls raise `ValueError`:")
 print()
 for label, msg in refused.items():
     print(f"- {label}: \"{msg}\"")
@@ -475,7 +486,8 @@ print(f"**The constant $c$ starts the head at the right size.** A freshly initia
       f"Made dimensionless by $U L$, an eddy viscosity is far smaller: on AeroZoo's training cases the per-case RMS of "
       f"$\\nu_t / (U L)$ has the median {_e(_az['output_scale']['nut'])} (quartiles {_e(_fit['nut'][0])} and {_e(_fit['nut'][2])}), "
       f"and that of $\\omega L / U$ the median {_az['output_scale']['omega']:,.0f} (quartiles {_fit['omega'][0]:,.0f} and "
-      f"{_fit['omega'][2]:,.0f}); on AirfRANS's, $\\nu_t / (U L)$ has the median {_e(_af['output_scale']['nut'])}. Without $c$ the "
+      f"{_fit['omega'][2]:,.0f}); on AirfRANS's, whose length unit the far field sets, $\\nu_t / (U L)$ has the median "
+      f"{_e(_af['output_scale']['nut'])}. Without $c$ the "
       f"head would start {min(_orders):.0f} to {max(_orders):.0f} orders of magnitude off on these fields; with it, each starts at "
       "order one and learns the spread around the median.")
 print()
@@ -537,7 +549,8 @@ forward pass (`sampling.sample_boundary_cells`):
   (`EVAL_START` in `model.py`), so inference is deterministic.
 
 A surface model reads every cell it is given and samples none: it predicts
-at those cells, and its constructor raises a `ValueError` for any
+at the cells of its prediction boundaries, and its constructor raises a
+`ValueError` for any
 `boundary_tokens` other than the default. The cell below draws 40 tokens from the
 airfoil's 80 segments with an interior model.
 
@@ -640,18 +653,25 @@ conditions.
 from.** A recipe model configuration declares `input_type: mesh` and
 `output_type: mesh`. Under the first, the datapipe's `Mesh` objects and
 per-case tensors pass to `forward` as they are, one case per step with no
-batch axis, through a `forward_kwargs` mapping whose keys are the three
+batch axis, through a `forward_kwargs` mapping whose keys are the
 argument names above and whose values name the datapipe fields (one
 `boundaries.<name>` per condition under `boundary_meshes`, the interior
 point cloud under `prediction_points`, the case's global tensors under
-`global_data`). Under the second, the recipe reads its targets out of the
+`global_data`); a surface configuration gives its prediction boundaries
+as a literal list of names (`prediction_boundaries: {literal: [vehicle]}`). Under the second, the recipe reads its targets out of the
 returned mesh's `point_data` by the names of the `output_schema`
 declaration. GLOBE, another surrogate the recipe trains
 (`conf/model/globe_surface.yaml`), uses the same contract, so the two models
 are swapped by changing the model block alone.
 
-The configurations fall into three families. On DrivAerML, HiLiftAeroML
-and AirfRANS one condition, a no-slip wall, declares no field. AeroZoo's
+Each configuration reads every piece of the domain's boundary its dataset
+stores, by name, and the configurations fall into three families. On
+DrivAerML, AirfRANS and HiLiftAeroML no condition declares a field: the
+DrivAerML configurations read the vehicle and the four other pieces of the
+wind tunnel's box (`no_slip`, the ground under and behind the car; `slip`,
+the sides, the roof and the ground upstream; `inlet`; `outlet`), the
+AirfRANS one the airfoil and the far field `freestream`, and the HiLiftAeroML one the wing, the only piece all but two of its files
+store. AeroZoo's
 four boundaries are four conditions read directly from the dataset, each
 declaring only the values it prescribes. The GINOT bracket lug, PLAID
 Tensile2d and DeepJEB++ store their conditions in one labelled boundary,
@@ -683,8 +703,12 @@ for n, c in ISLA_CFGS.items():
         o += (f"| {'`' + n + '`' if i == 0 else ''} | `{name}` ({fields(schemas[name])}) | `{given[name]}` | "
               f"{how if i == 0 else ''} |\n")
 print(o)
+PB = {n: c["forward_kwargs"]["prediction_boundaries"]["literal"] for n, c in ISLA_CFGS.items() if "prediction_boundaries" in c["forward_kwargs"]}
+assert set(PB) == {n for n, c in ISLA_CFGS.items() if not c["model"].get("interior")}, PB
 print(": The boundary conditions of every ISLA configuration of the recipe, in the model's sorted order, with the datapipe "
-      "boundary each is read from and the split that makes it (`conf/model/isla_*.yaml`, read as the page renders). How to read "
+      "boundary each is read from and the split that makes it (`conf/model/isla_*.yaml`, read as the page renders). The surface "
+      "configurations predict at " + "; ".join(f"`{n}`: " + ", ".join(f"`{b}`" for b in PB[n]) for n in PB)
+      + " (`forward_kwargs.prediction_boundaries`). How to read "
       "this: a condition with no field is a wall or a free surface whose identity is its own input layer; \"first wins\" is the "
       "priority where two labels mark one cell. The table does not show the global inputs or the outputs (@tbl-using-configs).")
 ```
@@ -768,8 +792,9 @@ ISLA needs no augmentation.** From the recipe root
 # DrivAerML Surface task (sampling_resolution defaults to 200,000 cells per case).
 python src/train.py model=isla_surface dataset=drivaer_ml_surface
 
-# DrivAerML Volume task: boundary -> interior, interacting prediction points. The dataset file reads the vehicle
-# whole and reverses it into the fluid; the model draws its 200,000 boundary tokens from it.
+# DrivAerML Volume task: boundary -> interior, interacting prediction points. The dataset file reads the vehicle and
+# the tunnel's four pieces whole and reverses the vehicle into the fluid; the model draws its 200,000 boundary tokens
+# from the five.
 python src/train.py model=isla_volume dataset=drivaer_ml_volume_reference
 
 # The same interior task with read-only prediction points (ISLA-DTT): its boundary read breaks the whole-model
@@ -930,7 +955,7 @@ sampling along a Morton order in the boundary's canonical frame, with
 inclusion probabilities proportional to area (@sec-using-interior).
 
 **On a surface task, ask for a sample that covers the whole body, even when only one region's values are wanted, and
-read the region from the output.** The sampled cells are ISLA's view of the body as well as the points it predicts at:
+read the region from the output.** The cells given for the prediction boundaries are ISLA's view of the body as well as the points it predicts at, as the docstring of `prediction_boundaries` states:
 the slices are measure-weighted means over them, so a cell's prediction depends on the other cells sampled with it
 through the quadrature error of those means, which falls as the sample grows (@sec-limits-query-independence). A
 larger sample, or the mean of the predictions of several independent samples, lowers the error.
@@ -970,7 +995,7 @@ path = os.path.join(tempfile.mkdtemp(), "isla_airfoil.mdlus")
 surface.save(path)
 loaded = ISLA.from_checkpoint(path).double().eval()
 with torch.no_grad():
-    again = loaded(boundary_meshes={"airfoil": airfoil}, global_data={"freestream": freestream})
+    again = loaded(boundary_meshes={"airfoil": airfoil}, prediction_boundaries=["airfoil"], global_data={"freestream": freestream})
 with zipfile.ZipFile(path) as z:
     meta, args = json.loads(z.read("metadata.json")), json.loads(z.read("args.json"))["__args__"]
 
@@ -1032,13 +1057,16 @@ DrivAerML Surface:
 
 ```python
 model = ISLA.from_checkpoint("runs/<run_id>/checkpoints/<file>.mdlus").eval()
-out = model(boundary_meshes={"vehicle": vehicle}, global_data={"U_inf_dir": g_hat})
+tunnel = {"inlet": inlet, "no_slip": no_slip, "outlet": outlet, "slip": slip}   # the tunnel's four pieces, whole
+out = model(boundary_meshes={"vehicle": vehicle, **tunnel}, prediction_boundaries=["vehicle"],
+            global_data={"U_inf_dir": g_hat})
 p, tau = out.point_data["pressure"], out.point_data["wss"]      # (N,) and (N, 3), at out.points
 ```
 
 `vehicle` is a `Mesh` whose cells are the sampled surface, with the
 Horvitz–Thompson measures in its `_effective_measure` cell field when the
-surface is subsampled. For an interior model, pass every boundary
+surface is subsampled, and the four tunnel meshes are the case's stored
+pieces, whole; the outputs come back at the vehicle's cells. For an interior model, pass every boundary
 condition's mesh at full resolution, oriented as in training, and
 `prediction_points`, and read the outputs at those points; in evaluation
 mode the boundary draw has its fixed start, so the prediction is
@@ -1193,22 +1221,35 @@ AL_BIG = [al(ds, p) for ds in ("drivaer_ml_surface", "aerozoo_uvolume") for p in
 odd = [R.num(r["base odd / fix"]) for r in AL_BIG]; even = [R.num(r["base even / fix"]) for r in AL_BIG]
 EXP = R.load("align8", "exposure/exposure_classes.tsv")
 ex = lambda ds, v: 1 - float(next(r for r in EXP if r["dataset"] == ds and r["variant"].startswith(v))["frac_32"])
-MIS = [("AirfRANS", ex("AirfRANS", "airfoil (")), ("the lug", ex("lug", "surface")), ("Tensile2d", ex("Tensile2d", "outer")),
-       ("DeepJEB++", ex("DeepJEB++", "surface"))]
-print("**A token count that is a multiple of 32 trains fastest.** In bfloat16 on a GB300, on the DrivAerML Surface task and "
+MIS = [("the DrivAerML Surface task", ex("DrivAerML Surface", "whole")), ("AirfRANS", ex("AirfRANS", "airfoil + freestream")),
+       ("the lug", ex("lug", "surface")), ("Tensile2d", ex("Tensile2d", "outer")), ("DeepJEB++", ex("DeepJEB++", "surface"))]
+assert ex("DrivAerML Volume", "whole") == 0 and all(ex("AeroZoo", v) == 0 for v in ("4 boundaries (azc full",))
+from physicsnemo.experimental.models.isla.model import TOKEN_ALIGNMENT
+# MERGE-PREP's interleaved GB300 timing of the padding (job 366130): GPU time per training step, padded ÷ unpadded code
+TM = R.md_table("boundary_merge", "results/TIMING.md")
+gpu = lambda case: [R.num(r["GPU ms / step, fix / base"]) for r in TM if r["case, mode"].startswith(case) and r["N (mod 32)"].startswith("natural")]
+pad_cut = [1 - g for c in ("lug", "Tensile2d") for g in gpu(c)]
+same = [R.num(r["GPU ms / step, fix / base"]) for r in TM if r["case, mode"].endswith("eager") and r["N (mod 32)"].startswith("aligned")]
+assert len(pad_cut) == 4 and max(abs(s - 1) for s in same) < 0.0015
+print(f"**ISLA pads its token axis to a multiple of {TOKEN_ALIGNMENT}, because a token count that is not one trains "
+      "slower.** Unpadded, in bfloat16 on a GB300, on the DrivAerML Surface task and "
       f"AeroZoo, a step at an odd token count takes {min(odd):.2f} to {max(odd):.2f} times as long as at the same count padded to "
       f"a multiple of 32, and at an even count that is not a multiple of 8, {min(even):.2f} to {max(even):.2f} times, eager and "
       "with the blocks compiled alike. The time goes to the slice attention's matrix products along the token axis, whose fast "
-      "kernels need a token stride of 16 bytes, and to LayerNorm's backward pass, whose weight-gradient reduction takes its fast "
-      "path only at a multiple of 32 rows. The count is the boundary tokens and prediction points of a case, fixed per case. "
-      "AeroZoo, the DrivAerML tasks on the vehicle and SHIFT-SUV draw a budget that is a multiple of 32 on every case; the "
-      "cases whose count is not a multiple of 32 are " + ", ".join(f"{100 * f:.0f}% on {n}" for n, f in MIS[:-1])
-      + f" and {100 * MIS[-1][1]:.0f}% on {MIS[-1][0]}. On AirfRANS an odd count costs "
-      f"{R.num(al('airfrans_uvolume_2d', 'eager')['base odd / fix']):.2f} times in the eager step, and on the smaller cases "
-      "the cost is within the run-to-run spread of the wall time, while the profiled GPU time of a step grows 5% on the lug and "
-      "8.6% on Tensile2d at one token more than an aligned count. Where the "
-      "count is the user's choice, a multiple of 32 avoids the cost. Data: "
-      f"{R.source('align8', 'results/repro_table.md')}; {R.source('align8', 'exposure/exposure_classes.tsv')}.")
+      "kernels need a token stride of 16 bytes, and to LayerNorm's backward pass, whose weight-gradient reduction over more "
+      "than 65,536 rows takes its fast path only at a multiple of 32 rows. The count is the boundary tokens and prediction points of a case, fixed per case. So "
+      f"`_forward_tokens` completes the token set to a multiple of `TOKEN_ALIGNMENT` = {TOKEN_ALIGNMENT} with tokens whose fields "
+      "are zero and whose log measure is $-\\infty$: they hold no measure in any softmax over points, so no other token reads "
+      "them, and no output is read from them, so outputs and gradients are the unpadded ones up to the summation order of the "
+      "longer reductions. Where nothing is padded, the eager forward runs no padding at all and its outputs and gradients are "
+      "bitwise those of the unpadded code. The pad runs on " + ", ".join(f"{100 * f:.0f}% of the training cases of {n}" for n, f in MIS[:-1])
+      + f" and {100 * MIS[-1][1]:.0f}% of {MIS[-1][0]}, and on none of AeroZoo's or the DrivAerML Volume task's. Where it "
+      f"pads, on a case of the lug and of Tensile2d, a training step takes {100 * min(pad_cut):.0f} to {100 * max(pad_cut):.0f}% "
+      "less GPU time than unpadded, eager and with the blocks compiled (one GB300, bfloat16, interleaved runs). Under the "
+      "whole-model compile the pad always runs, since a test for an empty pad would guard the dynamic count; that path's step "
+      "time was not measured, and its compile tests pass on a GB300. Data: "
+      f"{R.source('align8', 'results/repro_table.md')}; {R.source('align8', 'exposure/exposure_classes.tsv')}; "
+      f"{R.source('boundary_merge', 'results/TIMING.md')}; {R.source('boundary_merge', 'REPORT.md')} (part 1).")
 ```
 
 Three practical consequences follow.
@@ -1265,7 +1306,9 @@ print(f"- **Compile block by block where the whole graph breaks.** `compile_bloc
       "checkpoints, the compiled blocks agree to 1.5e-5 relative in float32 and at roundoff in float64; in bfloat16 they "
       "round fewer intermediates than eager does: each block's output is no farther from float64 than eager's, and the "
       "model's outputs and parameter gradients are 1.0 to 1.4 times eager's distance to float64 "
-      f"(@sec-arch-cost; {R.source('dtt_fast_compile', 'RESULTS.md')}).")
+      f"({R.source('dtt_fast_compile', 'RESULTS.md')}). Whether they meet the supervisor's certification policy for "
+      "compiled regions, which compares each tensor group with eager's own change under a one-ulp perturbation of its "
+      "inputs, is not measured (@sec-arch-cost).")
 ```
 
 ## Contracts you can check on your own data {#sec-using-contracts}
@@ -1285,7 +1328,7 @@ unchanged and vectors must rotate with the body.
 #| code-fold: false
 def run(mesh, g):
     with torch.no_grad():
-        o = surface(boundary_meshes={"airfoil": mesh}, global_data={"freestream": g})
+        o = surface(boundary_meshes={"airfoil": mesh}, prediction_boundaries=["airfoil"], global_data={"freestream": g})
     return o.point_data["cp"], o.point_data["tau"]
 
 rel = lambda a, b: float((a - b).norm() / b.norm())

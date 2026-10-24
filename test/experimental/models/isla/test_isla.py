@@ -78,6 +78,7 @@ def _run(m, mesh, drv, q=None, **kw):
         return m(
             boundary_meshes={"wall": mesh},
             prediction_points=q,
+            prediction_boundaries=None if q is not None else ["wall"],
             global_data={"g": drv},
             **kw,
         )
@@ -218,7 +219,13 @@ def test_head_runs_under_bf16_autocast():
     pts, nrm, w, drv = cloud(128, dtype=torch.float32)
     mesh = soup(pts, nrm, w)
     with torch.autocast("cpu", dtype=torch.bfloat16):
-        out = outputs(m(boundary_meshes={"wall": mesh}, global_data={"g": drv}))
+        out = outputs(
+            m(
+                prediction_boundaries=["wall"],
+                boundary_meshes={"wall": mesh},
+                global_data={"g": drv},
+            )
+        )
     sum(o.float().sum() for o in out.values()).backward()
     assert all(torch.isfinite(o.float()).all() for o in out.values())
 
@@ -236,6 +243,7 @@ def test_every_parameter_receives_a_gradient(interior):
         m(
             boundary_meshes={"wall": soup(pts, nrm, w)},
             prediction_points=q,
+            prediction_boundaries=None if q is not None else ["wall"],
             global_data={"g": drv},
         )
     )
@@ -549,7 +557,11 @@ def test_constructor_and_forward_are_keyword_only():
     m = _isla(hidden=32, n_layers=1, n_slices=8)
     with pytest.raises(TypeError):
         m({"wall": mesh}, None, {"g": drv})
-    out = m(boundary_meshes={"wall": mesh}, global_data={"g": drv})
+    out = m(
+        prediction_boundaries=["wall"],
+        boundary_meshes={"wall": mesh},
+        global_data={"g": drv},
+    )
     assert out.point_data["p"].shape == (16,) and out.point_data["v"].shape == (16, 3)
     assert torch.allclose(out.points, mesh.cell_centroids)
     assert all(torch.isfinite(o).all() for o in outputs(out).values())
@@ -601,7 +613,11 @@ def test_interior_flag_structures_the_forward():
         )
     interior = _isla(hidden=32, n_layers=1, n_slices=8, interior=True)
     with pytest.raises(ValueError, match="pass prediction_points"):
-        interior(boundary_meshes={"wall": mesh}, global_data={"g": drv})
+        interior(
+            prediction_boundaries=["wall"],
+            boundary_meshes={"wall": mesh},
+            global_data={"g": drv},
+        )
     out = interior(
         boundary_meshes={"wall": mesh},
         prediction_points=points_mesh(pts[:3] * 2),
@@ -630,23 +646,39 @@ def test_mesh_validation_errors():
     with pytest.raises(ValueError, match="non-empty mapping"):
         m(boundary_meshes={}, global_data={"g": drv})
     with pytest.raises(TypeError, match="must be a physicsnemo.mesh.Mesh"):
-        m(boundary_meshes={"wall": pts}, global_data={"g": drv})
+        m(
+            prediction_boundaries=["wall"],
+            boundary_meshes={"wall": pts},
+            global_data={"g": drv},
+        )
     with pytest.raises(
         ValueError,
         match="boundary_meshes\\['wall'\\]: the boundary of a 3-dimensional domain is a Mesh\\[2, 3\\]",
     ):
-        m(boundary_meshes={"wall": Mesh(points=pts)}, global_data={"g": drv})
+        m(
+            prediction_boundaries=["wall"],
+            boundary_meshes={"wall": Mesh(points=pts)},
+            global_data={"g": drv},
+        )
     pts2, nrm2, w2, _ = cloud(20, d=2, dtype=torch.float32)
     with pytest.raises(
         ValueError, match="has 2 spatial dimensions; this model has dim=3"
     ):
-        m(boundary_meshes={"wall": soup(pts2, nrm2, w2)}, global_data={"g": drv})
+        m(
+            prediction_boundaries=["wall"],
+            boundary_meshes={"wall": soup(pts2, nrm2, w2)},
+            global_data={"g": drv},
+        )
     with pytest.raises(
         ValueError, match="global_data is missing the declared fields \\['g'\\]"
     ):
-        m(boundary_meshes={"wall": soup(pts, nrm, w)})
+        m(prediction_boundaries=["wall"], boundary_meshes={"wall": soup(pts, nrm, w)})
     with pytest.raises(TypeError, match="global_data must be"):
-        m(boundary_meshes={"wall": soup(pts, nrm, w)}, global_data=drv)
+        m(
+            prediction_boundaries=["wall"],
+            boundary_meshes={"wall": soup(pts, nrm, w)},
+            global_data=drv,
+        )
 
 
 def test_rms_distance_scale_contracts():

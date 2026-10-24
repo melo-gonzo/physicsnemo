@@ -22,7 +22,7 @@ units (a seeded 20,000-point interior sample, as the output_stats fit; velocity 
 Per split: reynolds = {mean, std (population)} of log10 Re over the train cases; scale c = the median over the train
 cases of the per-case RMS.
 usage: isla_constants_fit.py aerozoo <data> <model yaml> <out.jsonl> <shard> <n_shards> <workers>
-       isla_constants_fit.py airfrans <data> <model yaml> <out.jsonl> <workers> [<split>...]
+       isla_constants_fit.py airfrans <dataset yaml> <model yaml> <out.jsonl> <workers> [<split>...]
        isla_constants_fit.py summarize <aerozoo manifest> <airfrans manifest> <out.json> <jsonl...>
        isla_constants_fit.py airfrans_fit <airfrans manifest> <out.json> <split,...> <jsonl...>
 
@@ -31,7 +31,11 @@ each case's freestream speed, angle of attack and Reynolds number and the mean a
 interior point (the converter's per-case statistics). airfrans_fit fits each named split on its own cases only:
 isla_constants as above, the nut NormalizeMeshFields stats as the mean over the cases of the per-case mean and of the
 per-case std (how the dataset files' 7.9e-4 / 2.4e-3 were made, there over every case), and the mean and population
-std of U_inf_mag (the baselines' SplitGlobalVector)."""
+std of U_inf_mag (the baselines' SplitGlobalVector).
+
+AF-WHOLE (2026-10-23): the airfrans scan reads the case files and the far field where the dataset yaml's reader does
+(train_datadir, and vtk_boundaries through the recipe's own read_vtk_boundary), so L is that of every boundary the
+model config declares."""
 
 import glob
 import json
@@ -192,26 +196,38 @@ def aerozoo_case(arg):
 def airfrans_case(arg):
     """Fit inputs for one AirfRANS case.
 
-    Returns ISLA's scales on the in-plane airfoil, the dimensionless RMS of nut,
+    Returns ISLA's scales on the in-plane boundaries the model declares (the
+    file's airfoil and the reader's vtk_boundaries), the dimensionless RMS of nut,
     the nut and freestream statistics, or an error row.
     """
-    path, yaml = arg
+    path, yaml, vtk = arg
     torch.set_num_threads(1)
     from physicsnemo.mesh import DomainMesh, Mesh
 
     try:
+        from domain_transforms import read_vtk_boundary
+
         m = _model(yaml, 2)
         dm = DomainMesh.load(path)
-        foil = dm.boundaries["airfoil"]
-        foil2 = Mesh(
-            points=foil.points[:, :2].double(), cells=foil.cells
-        )  # RestrictToPlane (axis 2)
+        case = os.path.basename(os.path.dirname(path))
+        bnd = dict(dm.boundaries)
+        bnd.update(
+            {
+                k: read_vtk_boundary(t.format(case=case), dm.interior.points, 2)
+                for k, t in vtk.items()
+            }
+        )
+        names = list(m.boundary_names)
+        meshes = [
+            Mesh(points=bnd[n].points[:, :2].double(), cells=bnd[n].cells)
+            for n in names
+        ]  # RestrictToPlane (axis 2)
         gd = dm.global_data.to(torch.float64).clone()
         gd["U_inf"] = gd["U_inf"][:2]
         gd["nu"] = torch.tensor(
             1.56e-5, dtype=torch.float64
         )  # the config's SetGlobalField
-        s = _scales(m, ["airfoil"], [foil2], gd)
+        s = _scales(m, names, meshes, gd)
         idx = torch.randperm(
             dm.interior.n_points, generator=torch.Generator().manual_seed(0)
         )[:20000]
@@ -300,12 +316,22 @@ if __name__ == "__main__":
         print("cases", len(cases), "to do", len(paths), flush=True)
         _run(aerozoo_case, [(p, yaml) for p in paths], out, nw)
     elif mode == "airfrans":
-        data, yaml, out, nw = sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5])
+        from omegaconf import OmegaConf
+
+        ds, yaml, out, nw = sys.argv[2], sys.argv[3], sys.argv[4], int(sys.argv[5])
+        sys.path.insert(
+            0, os.path.join(os.path.dirname(os.path.abspath(yaml)), "..", "..", "src")
+        )
+        ds = OmegaConf.load(ds)
+        data = ds.train_datadir
+        vtk = OmegaConf.to_container(
+            ds.pipeline.reader.get("vtk_boundaries", {}), resolve=True
+        )
         man = json.load(open(os.path.join(data, "manifest.json")))
         cases = sorted(set().union(*(man[s] for s in (sys.argv[6:] or [AF_SPLIT]))))
         paths = [p for c in cases for p in glob.glob(os.path.join(data, c, "*.pdmsh"))]
-        print("cases", len(cases), "paths", len(paths), flush=True)
-        _run(airfrans_case, [(p, yaml) for p in paths], out, nw)
+        print("cases", len(cases), "paths", len(paths), "vtk", vtk, flush=True)
+        _run(airfrans_case, [(p, yaml, vtk) for p in paths], out, nw)
     elif mode == "airfrans_fit":
         af_man, out, splits = json.load(open(sys.argv[2])), sys.argv[3], sys.argv[4]
         rows = [json.loads(line) for f in sys.argv[5:] for line in open(f)]

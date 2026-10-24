@@ -46,6 +46,9 @@ pipeline:
     # templates that consume only the interior explicitly opt into dropping
     # them to skip per-sample subsampling (expensive, GIL-held) and pinning.
     drop_in_file_boundaries: false
+    # The four domain meshes come through unread by this file's models, and as stored:
+    # 2.4 mm low on 297 of 484 files. PlaceGroundUnderBody (drivaer_ml_volume_reference.yaml)
+    # corrects them only from the whole vehicle, which the cell subsample above is not.
     extra_boundaries:
       stl_geometry:
         pattern: "*_single_solid.stl.pmsh"

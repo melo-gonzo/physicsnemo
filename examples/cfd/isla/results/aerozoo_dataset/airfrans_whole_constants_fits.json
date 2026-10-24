@@ -1,0 +1,141 @@
+{
+ "note": "AF-WHOLE (2026-10-23): ISLA constants with the far field (L of the airfoil and the far field). Scan: LHR cpu-short job 361288, isla_constants_fit.py airfrans on all 1,000 cases; fits: airfrans_fit with the dataset manifest and, for full_train_s504, kernel/afxs/manifest_s504.json.",
+ "fits": {
+  "airfrans.full_train": {
+   "inputs": {},
+   "n_cases": 800,
+   "reynolds": {
+    "mean": 9.065177215271671,
+    "std": 0.13382262277241108
+   },
+   "scale": {
+    "nut": 1.0449714419794384e-07
+   },
+   "scale_quartiles": {
+    "nut": [
+     8.467913421438296e-08,
+     1.0449714419794384e-07,
+     1.505861639087612e-07
+    ]
+   },
+   "n_train": 800,
+   "nut_norm": {
+    "mean": 0.0007958161876030009,
+    "std": 0.00239317429167727
+   },
+   "U_inf_mag": {
+    "mean": 62.115981311798095,
+    "std": 17.913957300424666
+   }
+  },
+  "airfrans.reynolds_train": {
+   "inputs": {},
+   "n_cases": 504,
+   "reynolds": {
+    "mean": 9.083761020682992,
+    "std": 0.06180890759096993
+   },
+   "scale": {
+    "nut": 1.0379937651736249e-07
+   },
+   "scale_quartiles": {
+    "nut": [
+     8.281407134393533e-08,
+     1.0379937651736249e-07,
+     1.5198680084985988e-07
+    ]
+   },
+   "n_train": 504,
+   "nut_norm": {
+    "mean": 0.0007967174426661756,
+    "std": 0.002383338895146808
+   },
+   "U_inf_mag": {
+    "mean": 62.58657545513577,
+    "std": 8.761762768491108
+   }
+  },
+  "airfrans.aoa_train": {
+   "inputs": {},
+   "n_cases": 804,
+   "reynolds": {
+    "mean": 9.067389594653408,
+    "std": 0.13212995568790198
+   },
+   "scale": {
+    "nut": 1.0480029233289653e-07
+   },
+   "scale_quartiles": {
+    "nut": [
+     8.431150370600624e-08,
+     1.0480029233289653e-07,
+     1.3527050425467326e-07
+    ]
+   },
+   "n_train": 804,
+   "nut_norm": {
+    "mean": 0.0007121936420281405,
+    "std": 0.0021308379031506736
+   },
+   "U_inf_mag": {
+    "mean": 62.36345647935251,
+    "std": 17.775638327196138
+   }
+  },
+  "airfrans.full_train+full_test": {
+   "inputs": {},
+   "n_cases": 1000,
+   "reynolds": {
+    "mean": 9.065855923319583,
+    "std": 0.13326343294067142
+   },
+   "scale": {
+    "nut": 1.0599369650598917e-07
+   },
+   "scale_quartiles": {
+    "nut": [
+     8.516560177327973e-08,
+     1.0599369650598917e-07,
+     1.489284883750062e-07
+    ]
+   },
+   "n_train": 1000,
+   "nut_norm": {
+    "mean": 0.0007964863134908186,
+    "std": 0.0023975860755210397
+   },
+   "U_inf_mag": {
+    "mean": 62.19104202461243,
+    "std": 17.87670363348403
+   }
+  },
+  "airfrans.full_train_s504": {
+   "inputs": {},
+   "n_cases": 504,
+   "reynolds": {
+    "mean": 9.065975929104814,
+    "std": 0.13468470593089524
+   },
+   "scale": {
+    "nut": 1.0664117868320247e-07
+   },
+   "scale_quartiles": {
+    "nut": [
+     8.545445744910327e-08,
+     1.0664117868320247e-07,
+     1.5098980877709714e-07
+    ]
+   },
+   "n_train": 504,
+   "nut_norm": {
+    "mean": 0.0007975109043260533,
+    "std": 0.002403963451706093
+   },
+   "U_inf_mag": {
+    "mean": 62.25993656355237,
+    "std": 18.004247634859688
+   }
+  }
+ },
+ "n_errors": 0
+}

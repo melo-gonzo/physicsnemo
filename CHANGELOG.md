@@ -76,8 +76,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `FieldSchema` under Changed); every input enters through O(d)-invariants and
   every output leaves through an exactly equivariant basis (ranks up to 4, even
   or odd parity). `forward` is mesh-native, as GLOBE's: it takes the boundary as
-  named `Mesh` objects, the case's `global_data`, and for an interior task
-  (`interior=True`) the prediction points as a point-cloud `Mesh`, and returns a
+  named `Mesh` objects, the case's `global_data`, and where the outputs are:
+  for an interior task (`interior=True`) the prediction points as a point-cloud
+  `Mesh`, for a surface task the names of the boundaries that carry them
+  (`prediction_boundaries`, every other boundary read as a condition), and returns a
   point-cloud `Mesh` carrying the outputs in its `point_data`. Constructor and
   `forward` are keyword-only. An exact fused Triton kernel for the per-layer
   geometry region is selected automatically on CUDA. The unified
