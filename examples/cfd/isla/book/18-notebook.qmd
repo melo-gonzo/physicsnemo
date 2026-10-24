@@ -40997,6 +40997,8 @@ Cost: 4.79 of 6 GPU-h (eight GB300 jobs, 363857 to 365445; cpu-short 365063).
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-geofast-2026-10-24/SECOND_READ_GEOFAST.md).*
 
+**Later (2026-10-24).** The supervisor restated the policy at 06:51 EDT (LANE_RULES "Compiled regions"). It certifies each compiled region per tensor group (the block outputs and each group of parameter gradients) against float64 eager on the same inputs: in each precision the compiled region's distance to float64 may exceed eager's by at most eager's own change under a one-ulp perturbation of the region's inputs, measured; in float64 the two agree at roundoff; a scalar loss is reported beside and never gated, since its eager error can sit near zero by chance. It replaces the 1e-5 bound and the bare 1.5 ratio: the first fails an ill-conditioned block however accurate its compiled path (AeroZoo block 0, whose eager float32 output is itself 8.5e-4 from float64), and the second fails where eager sits within an ulp of float64 (AirfRANS seed 42). Whether the current compiled blocks pass the restated policy has not been measured; 05 states the policy as the supervisor's, with an In-flight callout (@sec-arch-cost).
+
 ## 2026-10-24 — The exact geometry's fast path merged with the zero-area fix (7213c70c5): the default on CUDA where Triton imports, bitwise the reference; under it the step is 1.07 to 1.40 times 0.9.0's on a body alone, against 1.06 to 1.53 under the reference; the supervisor reads Peter's ruling on the fast path as met {#sec-nb-geo-fast-merged}
 
 **The merge.** Lane FAST-MERGE merged psharpe/isla (045dd14fe) into psharpe/isla-geo-fast (1086cf42e) as 5219f2e8f, with no
@@ -41048,6 +41050,254 @@ callout is cut, and 05 states what the class does with a zero-area cell, with GE
 Cost: 1.95 of 3 GPU-h (365757, 365898; cpu-short 365758, 365934, 366144).
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-geofast-2026-10-24/SECOND_READ_GEOFAST.md).*
+
+## 2026-10-24 — The token padding merged (1b25eb899): ISLA pads its token axis to a multiple of 32 with tokens of no measure, bitwise unchanged where nothing is padded, 8 to 13 percent less GPU time per step where it pads on the lug and Tensile2d {#sec-nb-align8-merged}
+
+**The merge.** Lane MERGE-PREP, launched by the supervisor at 04:18 EDT 2026-10-24, took ALIGN8's fix (psharpe/isla-align8
+e60be94d4, @sec-nb-align8), made it a strict no-op where nothing is padded (1062d6086), and merged psharpe/isla 7213c70c5
+into it with no conflicts (17c9df5c0); the supervisor merged it into psharpe/isla as 1b25eb899 at 06:48 EDT. ISLA stays
+0.11.0. Records: scratch/isla-merge-prep-2026-10-24/REPORT.md (md5 511537a4, part 1) and results/TIMING.md (md5 e0f06a4a);
+copies in results/campaigns_2026-10-23/boundary_merge/.
+
+**What the class does.** `_pad_tokens` completes the token set to a multiple of `TOKEN_ALIGNMENT` = 32 with tokens whose
+fields are zero and whose log-weight is $-\infty$: like read-only prediction points they hold no measure in any softmax
+over points, so no other token reads them, and no output is read from them. e60be94d4 ran the padding even at an aligned
+count (`F.pad` with zero padding is a clone), and its surface gradients were not bitwise. With 1062d6086 an aligned count
+runs no padding in eager mode: outputs, every gradient and the aten compute ops are bitwise the base's on 20 cases (surface
+in three and two dimensions, interior, ISLA-DTT, interior in two dimensions; float32 and float64; train and eval), before
+and after the merge with 7213c70c5. Under the whole-model compile the pad always runs, since a test for an empty pad would
+guard the dynamic token count.
+
+**The timing** (GB300 366130; base 32fa15389 without padding against the fix 1062d6086, base, fix, base, fix per case and
+mode; case 0 of each training split at its natural token count and at the largest multiple of 32 below it; medians over
+30 steps; GPU time the profiler's kernel time per step).
+
+| case, mode | aligned: GPU time, fix ÷ base | natural count (mod 32): GPU time, fix ÷ base | natural: wall, fix ÷ base |
+|---|--:|--:|--:|
+| lug, eager | 1.000 | 12,981 (21): 0.885 | 1.020 |
+| lug, compile_blocks | 0.987 | 0.888 | 0.937 |
+| Tensile2d, eager | 1.000 | 6,639 (15): 0.923 | 1.061 |
+| Tensile2d, compile_blocks | 0.971 | 0.870 | 0.974 |
+| DeepJEB++, eager | 0.999 | 50,040 (24): 0.998 | 1.001 |
+| DeepJEB++, compile_blocks | 0.999 | 0.956 | 1.004 |
+
+: The token padding's cost and gain on one GB300, bfloat16 (results/TIMING.md). {#tbl-nb-align8-merged}
+
+Where nothing is padded the eager fix launches exactly the base's kernels, and every wall ratio lies inside the base's
+own spread between its two runs. Where it pads, the GPU time falls 8 to 13% on the lug and Tensile2d and 0.2 to 4% on
+DeepJEB++, whose count is already a multiple of 8. ALIGN8's open lug reading (the fix about 10% slower at an aligned count)
+was noise: there both codes run the same kernels. The whole-model compile was not timed: one process did not finish
+compiling within its 720 s guard, for the base or the fix.
+
+**Tests on 17c9df5c0.** The ISLA test directory on CPU 367 passed, 0 failed (366325); the recipe tests 523 passed
+locally; test_isla_compile.py 14 of 14 on a GB300 (366724); the release, padding and geometry files on a GB300 all passed.
+Every cell of the ten chapters that build or run ISLA (293) passed on both trees, and 3 printed differently: the two
+listings that now show the padding lines, and float64 contract residuals at roundoff (the demo's 80-cell airfoil pads to
+96 tokens).
+
+**For the book.** 06's `para-using-alignment` states the padding as the class does it, with this timing; the training
+cost table is unchanged, since its standings trained unpadded.
+
+Cost: part of MERGE-PREP's 6.98 GPU-h (366130: 2.18 GPU-h).
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-boundary-2026-10-24/SECOND_READ_BOUNDARY.md).*
+
+## 2026-10-24 — DTT-POSE: what makes ISLA-DTT's forest depend on pose and precision is measured (rounded octant labels and exact box-test ties on the lug, bfloat16 coordinates under autocast); the supervisor approves a forest that depends on the boundary alone, which makes ISLA 0.12.0, and its retrain check is registered as DTT-POSE-EXP {#sec-nb-dtt-pose-design}
+
+**Question.** DTT-KNOBS stage 1 found two code facts (@sec-nb-dtt-knobs-stage1): under bfloat16 autocast the forest is
+built from rounded coordinates, which is not pose-invariant and differs from the float32 forest a score builds; and on the
+lug ISLA-DTT's posed error at $\theta = 1$ is 1.53 / 1.98 times native, attributed, without a test, to octant labels that
+rounding decides. Lane DTT-POSE, launched by the supervisor on 2026-10-24, measured why and designed a forest that is a
+function of the boundary alone. Records: scratch/isla-dtt-pose-2026-10-24/MECHANISMS.md (md5 2e89f066) and DESIGN.md
+(md5 8420670e); copies in results/campaigns_2026-10-23/dtt_pose/.
+
+**The mechanisms** (phase A; GB300 probes of a copy of the 0.11.0 forest checked bitwise against the real one on all 106
+forests; the lug's 24 test cases posed by the scorer's dataset, 24 AirfRANS cases, two DrivAerML Volume cases with the
+whole boundary; $\theta = 1$, leaves of 4).
+
+- **Octants, in float32 too.** The lug's faces are parallel to its principal axes, so most normal components are exactly
+  zero in the canonical frame and the stored ones are rounding residues: 86% of the lug's cells (78 to 90%) have a
+  smallest component below the bound on its rounding from the cell's float32 vertices, the same share DTT-KNOBS measured
+  in bfloat16. Posed against native 11% of the cells (4 to 20%) flip octant and every point's list changes. Built with
+  the native octant labels, the posed forest gives 94% of the points their native list back.
+- **Box-test ties.** The lug's prediction points are its hexahedral mesh's nodes, commensurate with its boundary cells, so
+  at $\theta = 1$ the admission test is an exact equality for many pairs: a change of $\theta$ by $1 \pm 10^{-6}$ changes
+  6.7% of the lug's lists, against 0.001% on AirfRANS and 0.07% on DrivAerML. With the labels forced and the box test
+  given its error band, the median lug case differs at one point.
+- **The frame is not the cause.** Posed and native canonical coordinates differ by at most $2.6 \times 10^{-7}$ of the
+  extent and no axis changes sign in 32 cases; the two nearly symmetric axes' third moments, $1.1$ and
+  $1.3 \times 10^{-6}$, move under pose by at most $1.1 \times 10^{-7}$, so `CANONICAL_SKEW_TIE` decides nothing.
+- **bfloat16.** Under autocast `points @ frame` casts both factors to bfloat16 and rounds the product. With the labels and
+  the box band held, the uncentred product rounded to bfloat16 changes every posed lug list and 87% of AirfRANS's, and the
+  cast of the factors does the same, so both candidate mechanisms break pose on their own; a centred product rounded to
+  bfloat16 changes one lug list and four AirfRANS lists (medians) but is still not the float32 forest. The boxes and the
+  node measures are bfloat16, which scales every node's mean keys and values by up to $2^{-9}$ and shifts its log measure
+  by as much.
+- **Why AirfRANS was spared.** Its normals have no component below $10^{-5}$, only 0 to 8 cells flip octant, and its
+  points are not on a lattice commensurate with its cells.
+- Renumbering the cells changed no list in any case.
+
+**The design** (DESIGN.md; approved by the supervisor at 06:07 EDT 2026-10-24). D1: build and walk with autocast
+disabled, in the inputs' precision. D2: centred canonical coordinates in float64, about the measure-weighted centroid,
+rounded once. D3: the cube face of each normal (the axis of its largest component, with its sign; $2d$ classes) in place
+of the $2^d$ octants, with a tie band of twice the bound on the components' rounding and the frame's rotation, ties to the
+lowest axis. D4: the box test with its error band, so an exact tie opens the node in every pose. D5: each token's normal
+error bound carried into the forest. A face holds normals with $\lvert n_k \rvert \geq 1/\sqrt d$, as an octant does, so
+the coherence test still admits every node at $\theta = 1$, and a normal and its negative still land in different trees.
+It changes ISLA-DTT's function on every case, so it is ISLA 0.12.0 and merges only after a registered retrain check;
+interacting ISLA computes the same function.
+
+**Measured on the prototype** (GB300 366658, 366705; a random-weight ISLA-DTT, hidden 64, two layers; posed against
+native in float32, and a bfloat16-autocast forward against the float32 one).
+
+| | lug, 12 test cases | AirfRANS, 12 cases | DrivAerML Volume, 2 cases |
+|---|--:|--:|--:|
+| forward, posed against native, RMS difference ÷ RMS: 0.11.0 / prototype | 2.1e-6 / 1.6e-7 | 7.1e-5 / 7.1e-5 (pressure; not the forest) | 3.3e-5 / 3.3e-5 (not the forest) |
+| forest pairs unmatched, posed against native: 0.11.0 / prototype | 52% / 0.0002% | 9.5% / 0.001% | 5.0% / 0.52% |
+| bfloat16 forest bitwise the float32 one: 0.11.0 / prototype | 0 / 12 of 12 | 0 / 12 of 12 | 0 / 2 of 2 |
+| pairs per point: 0.11.0 / prototype | 117 / 112 | 21.6 / 21.1 | 706 / 586 |
+| `tree_read_pairs`, eager [ms]: 0.11.0 / prototype | 115 / 95 | 65 / 59 | 230 / 192 |
+
+: DTT-POSE's prototype against the 0.11.0 forest (DESIGN.md section 3). {#tbl-nb-dtt-pose}
+
+Interacting ISLA, which builds no forest, is bitwise unchanged. What no construction removes is a generic residual:
+posing in float32 moves every input by its rounding, so a few cells per case sit within rounding of a face's edge or a
+Morton grid line (DrivAerML's 0.52% of pairs). Phase C is RUNNING: ISLA 0.12.0 on psharpe/isla-dtt-pose (4242962e0, merged
+with 1b25eb899 as 0f06e4065), the ISLA test directory 375 passed (367224); on 24 lug cases the random-weight forward moves
+under pose by 1.53e-7 at the median and 1.74e-5 at most (366947).
+
+**The retrain check, registered** (lane DTT-POSE-EXP, launched by the supervisor at 06:51 EDT; PREREG md5 2f46a10c,
+approved at 07:10 EDT with the supervisor's amendments before submission A1.1 to A1.5; cap 650 GPU-h). Arms: ISLA-DTT
+trained with the new forest, ported to 0.9.0, on the lug and the AirfRANS interior task, two seeds each, every other byte
+the controls' (the standings' ISLA-DTT pairs). Rules: native accuracy N per field, cost if
+$D = \ln(\text{arm} \div \text{control}) > \ln 1.10$ and $\lvert D \rvert > 2\,\mathrm{SE}$; on the lug also a paired
+reading, cost if both seeds' ratios exceed 1.10 (amendment A1.3); the pose check P, posed ÷ native within 1.02 on each lug
+seed; the precision check Q, the bfloat16 forest bitwise the float32 one on every scored case. The supervisor's adoption
+rule: the forest goes into canonical ISLA if no field reads cost and P and Q pass; a cost goes to Peter. Predictions (the
+lane's): any cost 0.10, adoption 0.75.
+
+**For the book.** 05 states the lug's mechanisms as measured and the design with the prototype's numbers; 03, 04, 09, 16, 20
+and 21 drop "inferred, not tested"; In-flight callouts in 05, 16 and 20 point at the retrain check; 20 adds the frame's
+sign rule as an open question (@sec-oq-frame-sign), since `canonical_frame` is shared by the token draw and the forest.
+
+Cost: 3.41 GPU-h of DTT-POSE's 13 by 07:00 EDT.
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-boundary-2026-10-24/SECOND_READ_BOUNDARY.md).*
+
+## 2026-10-24 — GEO-THIN phase A: no stored dataset is exposed to thin cells (0 wrong of 310,545 recipe queries against an exact rational brute force, in both precisions and under both kernels), adversarial float64 queries on the thinnest stored AeroZoo faces raise, and the tie direction at near-duplicate normals moves at most 3.9e-5 under one-ulp vertex moves; the supervisor approves a certified design {#sec-nb-geo-thin-census}
+
+**Question.** GEO-DEGEN left two limits of the exact geometry (@sec-nb-geo-degen): thin cells of nonzero area and
+overlapping coplanar cells. Lane GEO-THIN, launched by the supervisor at 04:18 EDT 2026-10-24, counted them in every
+stored boundary mesh, checked the geometry on the recipe's draws and on adversarial ones, and took over the
+tie-conditioning probe. Records: scratch/isla-geo-thin-2026-10-24/RESULTS.md (md5 6daa2865, phase A) and DESIGN.md
+(md5 f7f8ed68); copies in results/campaigns_2026-10-23/geo_thin/. Code under test: the geometry of 7213c70c5.
+
+**The census** (A1; per mesh, after the weld; $\rho$ is twice a triangle's area over its longest edge squared).
+
+- No stored mesh has a cell whose float64 normal is uncertain beyond 4 float32 ulps, so the float32 lower bound's failure
+  does not occur on stored data.
+- DrivAerML (both tasks, whole boundary and vehicle), SHIFT-SUV, the lug: $\rho \geq 0.037$, no cell near the failure
+  index. AeroZoo: $\rho$ down to $6.5 \times 10^{-7}$ in the recipe's dump, 2 cells past the float32 index and 156 past the
+  float64 one; DeepJEB++ 1,169 to 1,779 per case past the float64 index; HiLiftAeroML's wing, read by no exact geometry,
+  $\rho$ down to $2.5 \times 10^{-11}$.
+- No coplanar fold and no overlap in an axis plane anywhere; AeroZoo's dump has 4 near folds $3 \times 10^{-4}$ rad from
+  flat. DrivAerML's whole boundary has 110 exact T-junction vertices on 74 edges of the tunnel floor.
+
+**Against an exact rational brute force** (A2; jobs 366241, 366627). Every query of each recipe dump through the op; 310,545
+of them checked: 0 raises, 0 wrong distances, cells or signs, 0 on-wall decisions wrong, in float32 and float64, under the
+reference and the fast kernel. AeroZoo's recipe queries near its 4 near folds get bitwise the same distance and direction
+without the thinner cell. T-junctions (366938): no query of a 200,000-point draw has its closest point at one, and with
+every cell over such an edge split at its T vertices the distance, the direction and the sign are bitwise unchanged at all
+of them, in both seeds.
+
+**Adversarial queries** (A2b, A3). On the 50 thinnest cells of each stored mesh, 5,000 queries on and off the face: in
+float32 none is wrong; in float64 the recipe's AeroZoo dump and stored case 0 raise a device-side assert under both
+kernels (no candidate survives). On a cube with a thin cap or needle in one face, rotated and shifted, queries fail from
+$\rho \approx 10^{-6}$ in float32 and $\rho \approx 10^{-3}$ in float64, and GEO-DEGEN's float64 sliver soups at
+$10^{-13}$ raise in 8 of 10. The causes: the float32 lower bound reads each edge plane's side by a rounded sign test; the
+float64 ball test drops a cell whose computed distance exceeds the radius; and Ericson's closest-point weights, ratios of
+determinants of size $\rho^2$, move the point along the face by about the unit roundoff over $\rho^2$. With exact weights
+and both prunings off, every thin-cell set is correct; the winding number gave no wrong sign on any clearly off-wall query.
+
+**The tie direction** (A4). On the lug and Tensile2d, a random one-ulp move of every float32 vertex changes the direction
+at tied queries by at most $3.9 \times 10^{-5}$ and $6.4 \times 10^{-6}$, at most 2.6 times the normals' own change, and
+the least-norm point's active set changed at no persisting tie. Which queries tie is itself decided by rounding (the
+lug's 1,639 tied queries become 5,777 to 5,823), with the direction continuous through it. On synthetic near-duplicate
+normals the point is Hölder-continuous of order 1/2. This settles the tie-conditioning question.
+
+**The design** (DESIGN.md; approved by the supervisor at 06:27 EDT 2026-10-24 with conditions 1 to 7). F1: edge planes
+oriented by the cell's vertex order, with the cell's normal certified, and a cell whose normal is not certified never
+rejected by them. F2: the float64 ball test keeps a cell unless its distance less a certified bound on Ericson's error
+exceeds the radius. F3: where that bound exceeds the arithmetic's, an accurate closest point in the frame of the cell's
+longest edge, taken only where the two answers differ beyond the bound. Every certificate is a derived bound on IEEE
+float64 rounding, and every cell without the defect keeps its arithmetic bitwise. Overlapping coplanar cells and
+T-junctions stay limits. Phase C is RUNNING (a lane-writer from 06:35 EDT); the expected effect on stored data is no
+change, checked bitwise as GEO-DEGEN's check a.
+
+**For the book.** 05 states the three kinds of input as limits with their counts and the certified fix in an In-flight
+callout; 20's `sec-oq-ties` states the tie direction as measured and leaves thin cells as its open part, with a callout.
+
+Cost: within GEO-THIN's cap of 8 GPU-h (scratch/isla-geo-thin-2026-10-24/JOBS.md).
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-boundary-2026-10-24/SECOND_READ_BOUNDARY.md).*
+
+## 2026-10-24 — The whole boundary merged with the surface task (2b15490b2): canonical ISLA reads every stored piece of the domain's boundary by name with its condition type, a surface task names the boundaries it predicts at, bitwise 0.11.0 wherever every given boundary is named; SHIFT-SUV has no ISLA configuration {#sec-nb-boundary-merged}
+
+**The rulings.** Peter, 17:08 EDT 2026-10-23: "not only CAN it read the whole boundary - it SHOULD read the whole
+boundary!"; and 23:26 EDT, on the surface task: "You can do A for now, but then revisit ISLA-DTT after the kernel speedups
+/ memory savings land." Option A is SURFACE-BC's (@sec-nb-surface-bc).
+
+**The merge** (MERGE-PREP part 2, psharpe/isla-boundary-merge, pushed). 6215af9a7 merged psharpe/isla-whole-boundary
+(4b772ec59) with no conflicts; 658289991 merged psharpe/isla-surface-bc (e636f29bd) with four conflicts; f6c8e5429 and
+8dcfc24f5 are below; e94d91c86 merged psharpe/isla 7213c70c5 with no conflicts; and 2b15490b2 merged psharpe/isla 1b25eb899,
+the token padding, with one conflict, in the head read of `_forward_tokens`, which rerere resolved as the reviewed trial
+ea44c3c55, byte for byte. Records: scratch/isla-merge-prep-2026-10-24/REPORT.md (md5 511537a4), FINAL_REPORT.md (md5
+1a67141e), book/BOOK_CHANGES.md (md5 bf07eb9c); copies in results/campaigns_2026-10-23/boundary_merge/. The supervisor
+merges 2b15490b2 into psharpe/isla together with this book batch, whose chapter 06 demos fail on the branch until they
+name their prediction boundaries.
+
+**What canonical ISLA reads.** The DrivAerML Volume and Surface configurations read the vehicle and the tunnel's four other
+pieces whole (`no_slip`, the ground under and behind the car; `slip`, the sides, the roof and the ground upstream;
+`inlet`; `outlet`), placed by the recipe transform `PlaceGroundUnderBody` so that the ground meets the vehicle's lowest
+point (DRV-GROUND: 2.4 mm on 297 of the 484 files). The AirfRANS configuration reads the airfoil and the far field
+`freestream` from the release's `_freestream.vtp`, so the length unit spans the far field (305.3 chords) and the eddy
+viscosity's declared scale is refitted (median 7.5e-5 to 1.0e-7). A surface task now requires `prediction_boundaries`, the
+names of the given boundaries at whose cells it predicts; every given boundary is read, and the argument owns no
+parameters. The DrivAerML Surface configuration names `[vehicle]`, so the tunnel's pieces are conditions only. 8dcfc24f5
+puts the request contract in the argument's docstring: a request must cover the body (half a car raises the DrivAerML
+Surface pressure and wall-shear errors 10 to 18 times), and the spread between requests falls about as one over the
+square root of the request's cell count (@sec-nb-surf-qpop).
+
+**The conflicts.** In model.py one docstring hunk: psharpe/isla's float64-draw sentence and the branch's surface-task
+sentence are both kept. Three test files reformatted on psharpe/isla's side: the base and both sides were ruff-formatted
+and merged line by line, with no line conflict either way, and every top-level node of the result is the version of the
+side that changed it. ISLA stays 0.11.0 (`_version` 11).
+
+**The bitwise checks.** As first merged, interior forwards were bitwise psharpe/isla's, but a vehicle-only surface
+forward's gradients were not: the surface branch always set `out_rows`, so naming every given boundary read a copy of the
+token rows. f6c8e5429 leaves `out_rows` unset when every given boundary is named, decided by name. Then all 28 cases
+(surface in three dimensions at 203 and 224 cells and in two, interior with one and two boundaries, ISLA-DTT, interior in
+two dimensions; float32 and float64; train and eval) are bitwise psharpe/isla's, before and after the merge with 7213c70c5.
+On 2b15490b2: the ISLA test directory on CPU 374 passed, 0 failed (367120); the recipe tests 553 passed locally; on a
+GB300 (367119) test_isla_compile.py 14 passed, the release, surface-condition and padding files 45, the geometry files 166
+with 1 skipped.
+
+**SHIFT-SUV.** `isla_surface.yaml` now names the tunnel's four pieces, which SHIFT-SUV's files do not store, so the recipe
+refuses the pairing: its path resolver raises a `KeyError` on a missing path (MERGE-PREP read this from the code and did
+not run it), and the recipe has no SHIFT-SUV configuration of ISLA. It does not train on the vehicle alone. The SHIFT-SUV
+standing stays 0.9.0's, on the vehicle. Supplying SHIFT-SUV's missing pieces is Peter's open decision; the supervisor's
+proposal is the CFD box built in the recipe from constants (psharpe/isla-bc-sidecar, @sec-nb-bc-sidecar).
+
+**The book on 2b15490b2.** MERGE-PREP's seven one-argument edits make 06's demos name their prediction boundaries, with
+every printed number unchanged but the conditions table and the AirfRANS scale. Chapter 20's whole-boundary cell, which
+counted SHIFT-SUV under `isla_surface`, now reads each dataset's own configuration. 05, 06, 07, 09, 12, 19, 20 and 21 state
+what canonical ISLA reads and keep it apart from the standings, whose checkpoints were trained by 0.9.0 on the body alone
+(@sec-standing-geometry). On this tree every cell of the changed chapters runs: 03 (22 cells), 04 (26), 05 (41), 06 (32),
+07 (15), 09 (35), 11 (18), 12 (36), 16 (14), 19 (35), 20 (35), 21 (7), 0 failed, and the full render is the test of the rest.
+
+Cost: MERGE-PREP's 6.98 GPU-h over both parts.
+
+*Read by the supervisor and second-read by a lane reviewer on 2026-10-24 (scratch/isla-book-boundary-2026-10-24/SECOND_READ_BOUNDARY.md).*
 
 ## 2026-10-22 — MECH-090: on Tensile2d the fixed compiled path's float32 gradients sit at a one-ulp eager floor, and pytorch/pytorch#195845 added a unit-dependent sink to ISLA's slice-state softmax (registered emulations not confirmed; a post-smoke emulation matches) {#sec-nb-mech090}
 
