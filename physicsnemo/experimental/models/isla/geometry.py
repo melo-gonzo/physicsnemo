@@ -204,7 +204,16 @@ def _closest_weights(q, simplex, flat=None):
     (``flat`` ``(P,)``, :func:`_zero_area`; canonical vertices) is the union of its
     two edges between consecutive vertices, since on a line the lexicographic order
     is the order along it: its closest point is the nearer of theirs (the first at
-    equal distances), computed as a triangle sharing that edge computes it."""
+    equal distances), computed as a triangle sharing that edge computes it.
+
+    On a thin triangle Ericson's face-region weights move the point along the face
+    by up to :func:`_ericson_error`. A pair where that bound reaches one unit of the
+    arithmetic, ``u64 (|x| + R_k)`` (``R_k`` the cell's greatest vertex norm), is
+    guarded: it keeps Ericson's weights only where its distance is within ``(13 -
+    12) u64 (|x| + R_k)`` of the accurate point's (:func:`_accurate_weights`), within
+    ``12`` units of the exact one (``_FOOT_UNITS``), so that Ericson's is within the
+    tie bound's arithmetic share, 13 units; otherwise it takes the accurate point.
+    At every pair below the guard, Ericson's weights stand, bitwise."""
     if q.shape[-1] == 2:
         t = _segment_t(q, simplex[:, 0], simplex[:, 1])
         return torch.stack([1 - t, t], -1)
@@ -215,6 +224,18 @@ def _closest_weights(q, simplex, flat=None):
     a, b = s.gather(1, ends[:, :1, None].expand(-1, 1, 3))[:, 0], s.gather(1, ends[:, 1:, None].expand(-1, 1, 3))[:, 0]
     t = _segment_t(q[edge], a, b)
     w[edge] = torch.zeros_like(s[..., 0]).scatter(1, ends, torch.stack([1 - t, t], -1))
+    _, kappa, longest = _thin_bounds(simplex)
+    dist = (q - (w[..., None] * simplex).sum(1)).norm(dim=-1)
+    unit = 2.0**-53 * (q.norm(dim=-1) + simplex.norm(dim=-1).amax(-1))
+    l2 = (q[:, None] - simplex).square().sum(-1).amax(-1)
+    guard = ~(_ericson_error(dist, kappa * l2, longest) < unit)
+    if flat is not None:
+        guard &= ~flat
+    rows = guard.nonzero()[:, 0]
+    if rows.numel():
+        acc, d_acc = _accurate_weights(q[rows], simplex[rows])
+        switch = (d_acc - dist[rows]).abs() > (_ERICSON_UNITS - _FOOT_UNITS) * unit[rows]
+        w[rows] = torch.where(switch[:, None], acc, w[rows])
     if flat is not None:
         v0, v1, v2 = simplex.unbind(1)
         t1, t2 = _segment_t(q, v0, v1), _segment_t(q, v1, v2)
@@ -281,19 +302,210 @@ def _zero_area(simplex: torch.Tensor, cells: torch.Tensor):
     v = simplex[rows].unbind(1)
     zero = torch.ones_like(rows, dtype=torch.bool)
     for i, j in axes:
-        terms = []
-        for x, y in ((v[0], v[1]), (v[1], v[2]), (v[2], v[0])):
-            terms += [*_two_product(x[:, i], y[:, j]), *(-t for t in _two_product(x[:, j], y[:, i]))]
-        expansion = terms[:1]
-        for t in terms[1:]:
-            grown = []
-            for e in expansion:
-                t, h = _two_sum(t, e)
-                grown.append(h)
-            expansion = [*grown, t]
-        zero &= (torch.stack(expansion) == 0).all(0)
+        zero &= (torch.stack(_cross_expansion(*v, i, j)) == 0).all(0)
     flat[rows] = zero
     return flat, bool(zero.any())
+
+
+def _cross_expansion(v0, v1, v2, i, j):
+    """The component ``(i, j)`` of ``(v1 - v0) x (v2 - v0)`` of each row, exactly, as
+    ``v0 x v1 + v1 x v2 + v2 x v0``: six exact products (:func:`_two_product`) summed
+    as a nonoverlapping expansion (Shewchuk's Grow-Expansion), a list of terms of
+    increasing magnitude (zeros anywhere)."""
+    terms = []
+    for x, y in ((v0, v1), (v1, v2), (v2, v0)):
+        terms += [*_two_product(x[:, i], y[:, j]), *(-t for t in _two_product(x[:, j], y[:, i]))]
+    expansion = terms[:1]
+    for t in terms[1:]:
+        grown = []
+        for e in expansion:
+            t, h = _two_sum(t, e)
+            grown.append(h)
+        expansion = [*grown, t]
+    return expansion
+
+
+#: Ericson's float64 closest point on a triangle of nonzero area is misplaced by at
+#: most ``Delta = K u l^2 / (rho^2 L)`` (``u = 2^-53``, ``L`` the longest edge, ``rho =
+#: 2 A / L^2``, ``l`` the greatest distance from the query to a vertex) wherever
+#: ``Delta <= L``. First-order rounding analysis of :func:`_triangle_distance2` and
+#: :func:`_closest_point_weights` as coded, each operation ``(1 + delta)``, ``|delta|
+#: <= u``:
+#:
+#: 1. ``d1 .. d6``: an edge vector ``s`` (``ab``, ``ac``, ``|s| <= L``) dotted with a
+#:    query offset ``t`` (``ap``, ``bp``, ``cp``, ``|t| <= l``): two differences, a
+#:    product and two sums, at most five roundings per term, so ``|d~ - d| <= 5 u |s|
+#:    |t| <= 5 u L l``.
+#: 2. ``va = d3 d6 - d5 d4`` (``vb``, ``vc`` alike): each of the four factors' error
+#:    times its partner (``|d| <= L l``), ``20 u L^2 l^2``, the two products'
+#:    roundings, ``2 u L^2 l^2``, and the difference's, ``u |va|``: ``|Dva| = |va~ -
+#:    va| <= 22 u L^2 l^2 + u |va|``.
+#: 3. In the face region the exact ``va, vb, vc >= 0`` sum to ``D = (2 A)^2 = rho^2
+#:    L^4`` and the closest point is ``P = a + (vb ab + vc ac) / D``. The computed one
+#:    before the last roundings, ``P' = a + (vb~ ab + vc~ ac) / denom~``, satisfies
+#:    exactly ``P' - P = -[(P - a) Dva + (P - b) Dvb + (P - c) Dvc + (P - a) r] /
+#:    denom~`` (``r`` the rounding of the two sums of ``denom``, ``|r| <= 2 u D``): it
+#:    moves along the face. With ``|P - v| <= L``, ``|P' - P| <= (66 u L^3 l^2 + 5 u L
+#:    D) / denom~``, and ``denom~ >= (1 - theta) D``, ``theta = 66 u l^2 / (rho^2 L^2)
+#:    + 3 u``.
+#: 4. The rest moves the distance by at most ``4 u L + 5.5 u l``: the weights'
+#:    divisions ``u L``, ``ap`` ``u l``, ``ab`` and ``ac`` ``u L``, their products with
+#:    the weights ``u L``, the two differences ``u (l + L) + u l``, the squared norm
+#:    and its root ``2.5 u l``. With step 3's ``5 u L``: ``9 u L + 5.5 u l <= 23.5 u
+#:    l``, as ``L <= 2 l``.
+#: 5. ``u l <= 1.5 u l^2 / (rho^2 L)``, as ``rho^2 <= 3 / 4`` and ``L <= 2 l``; so
+#:    ``|d~ - d| <= (66 + 1.5 * 23.5) / (1 - theta) u l^2 / (rho^2 L) = 101.25 / (1 -
+#:    theta) u l^2 / (rho^2 L)``. Where ``Delta <= L``, ``theta <= 66 / K + 3 u``, and
+#:    ``K = 101.25 / (1 - 66 / K)`` gives ``K = 167.25``: 168.
+#: 6. A region decided wrongly by rounding: an exact face point taken on the edge
+#:    ``ab`` has ``vc <= |Dvc|``, so it lies within ``(vc / D) L <= 22 u l^2 / (rho^2
+#:    L) + u L`` of that edge; an exact edge point taken on the face is beyond the
+#:    plane's foot, which step 3 bounds; vertex and edge regions confused with each
+#:    other cost ``O(u l)`` (``sqrt(75) u l`` at most); each within ``Delta``.
+#:
+#: The point moves along the face (step 3), so for a face-region point ``d~^2 = d^2 +
+#: |P' - P|^2`` and ``|d~ - d| <= min(Delta, Delta^2 / (2 (d~ - Delta)))``
+#: (:func:`_ericson_error`). ``rho`` is replaced by its certified lower bound
+#: (:func:`_thin_bounds`), which only raises ``Delta``; the relative rounding of
+#: ``kappa``, ``Delta`` and ``eps`` themselves (a few ``u``) is within the margin of
+#: ``K`` over 166.8. The point the weights of :func:`_closest_point_weights` denote,
+#: ``a + w_b ab + w_c ac``, is bounded alike; their sum's rounding and the closest
+#: point's assembly from the vertices are the arithmetic share of the tie bound.
+_ERICSON_K = 168.0
+
+#: The tie bound's arithmetic share in three dimensions, ``(3 d + 4) u64 (|x| + R_k)``
+#: (:func:`_closest_candidates_impl`), in units of ``u64 (|x| + R_k)``.
+_ERICSON_UNITS = 13
+
+#: The bound on the accurate point's distance error (:func:`_accurate_weights`), in
+#: units of ``u64 (|x| + R_k)``. First-order rounding analysis as coded (``y = x -
+#: A``, ``l`` the greatest distance from ``x`` to a vertex, ``|y| <= l``, ``L = |B -
+#: A|`` the longest edge, ``F`` the exact foot):
+#:
+#: 1. The cross product, rounded once from its exact expansion (the partial sums of
+#:    its smaller terms lie below an ulp of the largest): ``u`` per component. Its
+#:    norm (three squares, two sums, a root) ``2.5 u`` more, the division ``u``:
+#:    ``|n~ - n| <= 5.5 u``.
+#: 2. ``B - A`` ``u`` per component, its norm ``3.5 u`` relative, the division ``u``:
+#:    ``|e~ - e| <= 5.5 u``; ``m~ = n~ x e~``, ``11 u`` from its factors and ``4 u``
+#:    of its own: ``|m~ - m| <= 15 u``.
+#: 3. ``y`` ``u l``, each dot product ``3 u l``: ``s1`` and ``h`` err by ``9.5 u l``,
+#:    ``s2`` by ``19 u l``.
+#: 4. ``hc`` (``8 u`` relative) and the division: the point's offset along ``m``,
+#:    ``lambda_C hc``, errs by ``19 u l + 9 u L``. ``tc`` errs by ``9.5 u L``; the
+#:    offset along ``e``, ``lambda_B |B - A| + lambda_C tc``, by ``9.5 u l + 10.5 u L``
+#:    (the error of ``lambda_C`` along ``e`` cancels in ``lambda_B``). So ``A +
+#:    lambda_B (B - A) + lambda_C (C - A)`` lies in the plane within ``delta = 28.5 u
+#:    l + 19.5 u L`` of ``F``, and the sum of the weights (``2 u``) and the assembly
+#:    from the vertices (``3 u``) move it by ``5 u R_k`` more.
+#: 5. The face candidate's distance ``|h|`` errs by ``9.5 u l``, and where rounding
+#:    admits a foot outside the face it lies within ``delta`` of it: ``38 u l + 19.5 u
+#:    L``. An edge point (:func:`_segment_t`, ``11 u l`` along the edge; its assembly
+#:    ``3 u R_k``; the difference and the norm ``3.5 u l``): ``14.5 u l + 3 u R_k``.
+#:    The least of the candidates errs by at most the largest of their errors.
+#: 6. With ``l <= |x| + R_k`` and ``L <= 2 R_k``: at most ``77 u64 (|x| + R_k)``.
+#:
+#: That worst case is not 12: the 12 is the design's figure, above the largest
+#: error observed against exact rational arithmetic (2.03, over 600,000 pairs of
+#: slivers, caps and needles, for the distance recomputed from the weights).
+_FOOT_UNITS = 12
+
+
+def _thin_bounds(simplex: torch.Tensor):
+    """Per triangle ``abc`` of ``simplex`` ``(F, 3, 3)`` (float64): ``delta``, a bound
+    on the angle between its computed float64 normal and the exact one, ``|E| /
+    |X|`` with ``X`` the cross product ``(b - a) x (c - a)`` and ``E`` its components'
+    a-priori error bounds, Shewchuk's ``_ORIENT_ERRBOUND (|l| + |r|)`` (as
+    :func:`_zero_area`'s filter); ``kappa = K u64 / (rho_low^2 L)`` (``_ERICSON_K``),
+    with ``rho_low = (|X| - |E|) / L^2`` a certified lower bound of ``2 A / L^2``,
+    ``inf`` where it is not positive; and ``L``, the longest edge."""
+    a, b, c = simplex.unbind(1)
+    e1, e2, e3 = b - a, c - a, c - b
+    cross2, bound2 = torch.zeros_like(a[:, 0]), torch.zeros_like(a[:, 0])
+    for i, j in ((1, 2), (2, 0), (0, 1)):
+        left, right = e1[:, i] * e2[:, j], e1[:, j] * e2[:, i]
+        cross2 = cross2 + (left - right).square()
+        bound2 = bound2 + (_ORIENT_ERRBOUND * (left.abs() + right.abs())).square()
+    cross, bound = cross2.sqrt(), bound2.sqrt()
+    longest2 = torch.stack([(e * e).sum(-1) for e in (e1, e2, e3)]).amax(0)
+    longest = longest2.sqrt()
+    rho_low = (cross - bound) / longest2
+    kappa = torch.where(rho_low > 0, _ERICSON_K * 2.0**-53 / (rho_low * rho_low * longest), torch.inf)
+    return bound / cross, kappa, longest
+
+
+def _ericson_error(dist, delta, longest):
+    """The bound on the error of Ericson's distance ``dist`` to a cell whose point
+    is misplaced by at most ``delta`` (``kappa l^2``, :func:`_thin_bounds`) along the
+    face: ``min(delta, delta^2 / (2 (dist - delta)))``, ``delta`` where ``dist <=
+    delta``, and ``inf`` where ``delta`` exceeds the cell's longest edge (the bound's
+    analysis then does not hold), as :func:`_ericson_error_wp`."""
+    eps = torch.where(dist > delta, torch.minimum(delta, delta * delta / (2 * (dist - delta))), delta)
+    return torch.where(delta <= longest, eps, torch.inf)
+
+
+@wp.func
+def _ericson_error_wp(dist: wp.float64, delta: wp.float64, longest: wp.float64) -> wp.float64:
+    """:func:`_ericson_error` in Warp."""
+    if not (delta <= longest):
+        return wp.float64(wp.inf)
+    if dist <= delta:
+        return delta
+    return wp.min(delta, delta * delta / (wp.float64(2.0) * (dist - delta)))
+
+
+def _accurate_weights(q: torch.Tensor, simplex: torch.Tensor):
+    """The barycentric weights ``(P, 3)`` of the point of each triangle ``simplex``
+    ``(P, 3, 3)`` (canonical, nonzero area) closest to its query ``q`` ``(P, 3)``,
+    float64, accurate whatever its shape, and that point's distance ``(P,)``: the
+    nearest (the first at equal distances) of the three edge points, computed as
+    :func:`_closest_weights` computes an edge point (on the canonical pairs (0, 1),
+    (0, 2), (1, 2), so bitwise every neighbour's), and of the face foot where it lies
+    on the face, at distance ``|h|``. The foot is found in the frame of the longest
+    edge ``AB`` (C the third vertex): ``n = X / |X|``, ``X`` the cross product ``(B -
+    A) x (C - A)`` rounded once from its exact value (:func:`_cross_expansion`,
+    summed smallest term first), ``e = (B - A) / |B - A|``, ``m = n x e`` (towards
+    ``C``), ``s1 = (x - A) . e``, ``s2 = (x - A) . m``, ``h = (x - A) . n``; with ``hc =
+    |X| / |B - A|`` and ``tc = (C - A) . e``, ``lambda_C = s2 / hc``, ``lambda_B = (s1 -
+    lambda_C tc) / |B - A|``, ``lambda_A = 1 - lambda_B - lambda_C``, the foot lying on
+    the face when all three are ``>= 0``. Along ``e`` the error of ``lambda_C``
+    cancels in ``lambda_B``'s, so the point is accurate to rounding of the
+    coordinates whatever ``rho``."""
+    pairs = ((0, 1), (0, 2), (1, 2))
+    weights, dists = [], []
+    for i, j in pairs:
+        t = _segment_t(q, simplex[:, i], simplex[:, j])
+        w = torch.zeros_like(q)
+        w[:, i], w[:, j] = 1 - t, t
+        weights.append(w)
+        dists.append((q - (w[..., None] * simplex).sum(1)).norm(dim=-1))
+    length2 = torch.stack([((simplex[:, j] - simplex[:, i]) ** 2).sum(-1) for i, j in pairs], 1)
+    slots = torch.tensor([[0, 1, 2], [0, 2, 1], [1, 2, 0]], device=q.device)[length2.argmax(1)]
+    a, b, c = (simplex.gather(1, slots[:, k, None, None].expand(-1, 1, 3))[:, 0] for k in range(3))
+    cross = []
+    for i, j in ((1, 2), (2, 0), (0, 1)):
+        expansion = _cross_expansion(a, b, c, i, j)
+        total = expansion[0]
+        for term in expansion[1:]:
+            total = total + term
+        cross.append(total)
+    cross = torch.stack(cross, -1)
+    size = cross.norm(dim=-1)
+    n = cross / size[:, None]
+    ab = b - a
+    lab = ab.norm(dim=-1)
+    e = ab / lab[:, None]
+    m = torch.linalg.cross(n, e, dim=-1)
+    y = q - a
+    s1, s2, h = (y * e).sum(-1), (y * m).sum(-1), (y * n).sum(-1)
+    lam_c = s2 / (size / lab)
+    lam_b = (s1 - lam_c * ((c - a) * e).sum(-1)) / lab
+    lam = torch.stack([1 - lam_b - lam_c, lam_b, lam_c], -1)
+    weights.append(torch.zeros_like(q).scatter(1, slots, lam))
+    dists.append(torch.where((lam >= 0).all(-1), h.abs(), torch.inf))
+    dists = torch.stack(dists, 1)
+    best = dists.argmin(1)
+    return torch.stack(weights, 1).gather(1, best[:, None, None].expand(-1, 1, 3))[:, 0], dists.gather(1, best[:, None])[:, 0]
 
 
 def _covered(cells: torch.Tensor, flat: torch.Tensor, n_vertices: int) -> torch.Tensor:
@@ -430,6 +642,21 @@ def _triangle_distance2(p: wp.vec3d, a: wp.vec3d, b: wp.vec3d, c: wp.vec3d) -> w
     return wp.dot(r, r)
 
 
+@wp.func
+def _beyond(x: wp.vec3d, a: wp.vec3d, b: wp.vec3d, c: wp.vec3d, thin: wp.vec2d, r: wp.float64, r2: wp.float64) -> bool:
+    """Whether the triangle ``abc`` lies provably farther than ``r`` (``r2`` its
+    square) from ``x``: Ericson's float64 distance less the bound on its error
+    (:func:`_ericson_error_wp`, ``thin`` the cell's ``kappa`` and longest edge,
+    :func:`_thin_bounds`) exceeds it; never on a degenerate triangle (NaN)."""
+    d2 = _triangle_distance2(x, a, b, c)
+    far = d2 > r2
+    if far:
+        l2 = wp.max(wp.max(wp.length_sq(x - a), wp.length_sq(x - b)), wp.length_sq(x - c))
+        dt = wp.sqrt(d2)
+        far = dt - _ericson_error_wp(dt, thin[0] * l2, thin[1]) > r
+    return far
+
+
 @wp.kernel
 def _ball_candidates_kernel(
     node_lo: wp.array(dtype=wp.vec3f),
@@ -438,6 +665,7 @@ def _ball_candidates_kernel(
     escape: wp.array(dtype=wp.int32),
     leaf_cell: wp.array(dtype=wp.int64),
     corners: wp.array(dtype=wp.vec3d),
+    thin: wp.array(dtype=wp.vec2d),
     planes: wp.array(dtype=wp.vec4f),
     query: wp.array(dtype=wp.vec3d),
     query32: wp.array(dtype=wp.vec3f),
@@ -453,11 +681,12 @@ def _ball_candidates_kernel(
     depth-first traversal of the BVH (``escape`` is the node after a node's
     subtree), pruning the nodes whose boxes lie farther than ``radius32`` (float32
     boxes rounded outward, a radius padded over float32 rounding), then the cells
-    farther than ``radius`` (float64; ``corners`` holds each cell's three
-    vertices), after a float32 lower bound on their distance rejects the far ones:
-    the distance to the cell's plane and beyond its farthest edge, from the unit
-    normals in ``planes`` (the plane's, then each edge's outward one in the plane,
-    with their offsets), against ``reach32``. Writes the first ``cap`` of them from
+    farther than ``radius`` (float64, :func:`_beyond`; ``corners`` holds each cell's
+    three vertices, ``thin`` its ``kappa`` and longest edge), after a float32 lower
+    bound on their distance rejects the far ones: the distance to the cell's plane
+    and beyond its farthest edge, from the unit normals in ``planes`` (the plane's,
+    then each edge's outward one in the plane, with their offsets), against
+    ``reach32``. Writes the first ``cap`` of them from
     ``tid * cap`` on and counts them all."""
     tid = wp.tid()
     q = rows[tid]
@@ -487,8 +716,8 @@ def _ball_candidates_kernel(
                     o = wp.max(o, h[0] * x32[0] + h[1] * x32[1] + h[2] * x32[2] - h[3])
                 ### (not ``<=``: a NaN, from a degenerate cell, keeps it)
                 i = c * wp.int64(3)
-                if not (s * s + o * o > reach2) and not (
-                    _triangle_distance2(x, corners[i], corners[i + wp.int64(1)], corners[i + wp.int64(2)]) > r2
+                if not (s * s + o * o > reach2) and not _beyond(
+                    x, corners[i], corners[i + wp.int64(1)], corners[i + wp.int64(2)], thin[c], radius[q], r2
                 ):
                     if k < cap:
                         cells_out[wp.int64(tid) * cap + k] = c
@@ -724,25 +953,31 @@ def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.T
     output ``(Q,)``, the winding number times ``4 pi``. ``reach``, the greatest
     norm of a vertex, when the caller has it. The zero-area cells ``flat`` ``(F,)``
     (:func:`_zero_area`) have no plane, and the float64 distance is not defined on
-    them: they are kept wherever their boxes are reached."""
+    them: they are kept wherever their boxes are reached. Nor are the planes of a
+    cell whose float64 normal is not certified to its float32 rounding (``delta >
+    u32``, :func:`_thin_bounds`); its float64 distance is rejected only beyond the
+    bound on its error (:func:`_beyond`)."""
     dev = query.device
     left, _, escape, _, leaf_cell, lo, hi = tree
-    ### Each cell's unit normal and its edges' outward unit normals in its plane,
-    ### with their offsets: a point's distance to the cell is at least the root sum
-    ### of squares of its height over the plane and of its largest edge offset.
+    ### Each cell's unit normal and its edges' outward unit normals in its plane
+    ### (outward by the vertex order alone, the edges taken cyclically), with their
+    ### offsets: a point's distance to the cell is at least the root sum of squares
+    ### of its height over the plane and of its largest edge offset.
     a, b, c = simplex.unbind(1)
     n = torch.nn.functional.normalize(torch.linalg.cross(b - a, c - a, dim=-1), dim=-1, eps=0.0)
     rows_ = [torch.cat([n, (n * a).sum(-1, keepdim=True)], -1)]
-    for p0, p1, opp in ((a, b, c), (b, c, a), (c, a, b)):
+    for p0, p1 in ((a, b), (b, c), (c, a)):
         m = torch.nn.functional.normalize(torch.linalg.cross(p1 - p0, n, dim=-1), dim=-1, eps=0.0)
-        m = torch.where(((m * (opp - p0)).sum(-1, keepdim=True) > 0), -m, m)
         rows_.append(torch.cat([m, (m * p0).sum(-1, keepdim=True)], -1))
     planes = torch.stack(rows_, 1).float().reshape(-1, 4)
+    delta, kappa, longest = _thin_bounds(simplex)
+    ### (NaN fails every rejection test of the kernel)
+    unsure = delta > torch.finfo(torch.float32).eps / 2
     corners = simplex
     if flat is not None:
-        ### (NaN fails every rejection test of the kernel)
-        planes = torch.where(flat.repeat_interleave(4)[:, None], torch.nan, planes)
+        unsure = unsure | flat
         corners = torch.where(flat[:, None, None], torch.nan, simplex)
+    planes = torch.where(unsure.repeat_interleave(4)[:, None], torch.nan, planes)
     q32 = query.float()
     ### (the query's own rounding, then a relative pad far above float32's on the
     ### box test's few operations)
@@ -761,6 +996,7 @@ def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.T
         wp.from_torch(escape.int().contiguous(), dtype=wp.int32),
         wp.from_torch(leaf_cell.contiguous(), dtype=wp.int64),
         wp.from_torch(corners.reshape(-1, 3).contiguous(), dtype=wp.vec3d),
+        wp.from_torch(torch.stack([kappa, longest], -1).contiguous(), dtype=wp.vec2d),
         wp.from_torch(planes.contiguous(), dtype=wp.vec4f),
         wp.from_torch(query.contiguous(), dtype=wp.vec3d),
         wp.from_torch(q32.contiguous(), dtype=wp.vec3f),
@@ -1076,6 +1312,7 @@ def _ball_winding_kernel(
     escape: wp.array(dtype=wp.int32),
     leaf_cell: wp.array(dtype=wp.int64),
     corners: wp.array(dtype=wp.vec3d),
+    thin: wp.array(dtype=wp.vec2d),
     planes: wp.array(dtype=wp.vec4f),
     query: wp.array(dtype=wp.vec3d),
     query32: wp.array(dtype=wp.vec3f),
@@ -1155,8 +1392,8 @@ def _ball_winding_kernel(
                     h = planes[j + wp.int64(m)]
                     o = wp.max(o, h[0] * x32[0] + h[1] * x32[1] + h[2] * x32[2] - h[3])
                 i = c * wp.int64(3)
-                if not (sp * sp + o * o > reach2) and not (
-                    _triangle_distance2(x, corners[i], corners[i + wp.int64(1)], corners[i + wp.int64(2)]) > r2
+                if not (sp * sp + o * o > reach2) and not _beyond(
+                    x, corners[i], corners[i + wp.int64(1)], corners[i + wp.int64(2)], thin[c], radius[q], r2
                 ):
                     if k < cap:
                         cells_out[wp.int64(tid) * cap + k] = c
