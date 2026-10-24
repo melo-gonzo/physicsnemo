@@ -1336,7 +1336,7 @@ def test_float32_points_within_the_bound_are_on_the_wall(surface):
 def test_float64_points_beyond_the_bound_are_off_the_wall(dim):
     """A posed float64 box, at its vertices, its cells' edge midpoints and
     centroids, and at its centroids moved along the outward normal by a quarter of
-    the closest cell's error bound E and by four times it (E ~ 3e-15 here): the
+    the closest cell's error bound E and by four times it (E ~ 1e-14 here): the
     first are on the wall (d = 0, u the least-norm normal), the last off it, with d
     its distance and u the normal, since float64 resolves them (a fixed cutoff of
     1e-12 put every point within 1e-12 on the wall)."""
@@ -1345,8 +1345,11 @@ def test_float64_points_beyond_the_bound_are_off_the_wall(dim):
     moved, q, nu = transform(mesh, R, t), q @ R.T + t, nu @ R.T
     rows = slice(mesh.n_points, mesh.n_points + mesh.n_cells)
     c, n = q[rows], nu[rows]
-    coef = (1 + 3 * dim + 4) * torch.finfo(D).eps / 2
-    e = coef * (c.norm(dim=-1) + moved.points[moved.cells].norm(dim=-1).amax(-1))
+    u64, tri = torch.finfo(D).eps / 2, moved.points[moved.cells]
+    origin = geometry._centroid(tri)
+    e = u64 * (c.norm(dim=-1) + tri.norm(dim=-1).amax(-1)) + geometry._BAND_UNITS[
+        dim
+    ] * u64 * ((c - origin).norm(dim=-1) + (tri - origin).norm(dim=-1).amax(-1))
     d, u = _geometry(
         torch.cat([q, c + e[:, None] / 4 * n, c + 4 * e[:, None] * n]), moved
     )
