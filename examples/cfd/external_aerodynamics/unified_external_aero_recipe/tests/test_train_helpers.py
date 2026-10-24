@@ -263,6 +263,36 @@ def test_chunked_forward_backward_equals_the_unchunked_step(loss_type, measured)
         )
 
 
+def test_resolve_query_chunk_defaults_to_chunks_for_one_pass_losses():
+    """training.query_chunk: unset, ISLA-DTT takes chunks of 100000 points under a
+    one-pass loss and none under a two-pass one; a number sets it for any loss;
+    null or 0 turns it off; an interacting ISLA never chunks."""
+    from physicsnemo.experimental.models.isla import ISLA
+
+    def isla(query_independent):
+        return ISLA(
+            output_schema={"pressure": {"rank": 0}},
+            boundary_schemas={"vehicle": {}},
+            interior=True,
+            query_independent=query_independent,
+            hidden=16,
+            n_layers=1,
+            n_slices=4,
+        )
+
+    dtt, interacting = isla(True), isla(False)
+    unset = OmegaConf.create({"num_epochs": 1})
+    assert train.resolve_query_chunk(dtt, unset, "huber") == 100000
+    assert train.resolve_query_chunk(dtt, unset, "relative_mse") == 100000
+    assert train.resolve_query_chunk(dtt, unset, "case_relative_l2") is None
+    for value, expected in ((5000, 5000), (None, None), (0, None)):
+        cfg = OmegaConf.create({"query_chunk": value})
+        for loss_type in ("mse", "relative_l2"):
+            assert train.resolve_query_chunk(dtt, cfg, loss_type) == expected
+    for cfg in (unset, OmegaConf.create({"query_chunk": 5000})):
+        assert train.resolve_query_chunk(interacting, cfg, "huber") is None
+
+
 ### ---------------------------------------------------------------------------
 ### _walk_batch_for_logging
 ### ---------------------------------------------------------------------------

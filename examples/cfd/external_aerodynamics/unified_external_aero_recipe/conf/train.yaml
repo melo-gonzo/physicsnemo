@@ -90,6 +90,14 @@ training:
   # initialize this run; optimizer, scheduler and epoch start fresh. Ignored
   # once the run has its own checkpoints (chained links resume normally).
   init_from: null
+  # ISLA-DTT (model.query_independent=true) trains in chunks of prediction
+  # points: the boundary side once, then `query_chunk` points at a time, with
+  # the unchunked step's loss and gradients up to summation order and one
+  # chunk's activations held at a time. Unset: chunks of 100000 points when the
+  # loss takes one pass (huber, mse, relative_mse); relative_l2 and
+  # case_relative_l2 take two passes (8-17% more time) and stay unchunked.
+  # `++training.query_chunk=<n>` sets the chunk for any loss and
+  # `++training.query_chunk=null` turns chunking off. Other models ignore it.
   optimizer:
     lr: 3.0e-3
   scheduler:
