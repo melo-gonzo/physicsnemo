@@ -973,7 +973,7 @@ print("**The open question is whether ISLA with a quarter of its slices costs no
 ```
 
 ::: {.callout-note title="In flight"}
-These numbers come from one planar dataset. ISLA with 128 slices against the standing's 512 on a DrivAerML task is being
+These numbers come from one planar dataset. ISLA with 128 slices against the standing's 512 on the DrivAerML Volume task is being
 measured, and the ledger (@sec-ledger) tracks it.
 :::
 
