@@ -302,14 +302,15 @@ _QUERY_CHUNK = 100_000
 ### peak reserved memory above the memory allocated once the boundary side and the
 ### walk have run, in GiB per million walk pairs and per 100,000 points, and the
 ### margin, the fit's largest held-out residual. Least squares on GB300 over
-### DrivAerML Volume (vehicle, whole boundary) and AeroZoo at 200,000 tokens, the
-### largest point count of each held out: bfloat16 on 29 rows at 100k-600k points
-### (residuals up to 1.8 GiB, 10.9 held out), float32 on 11 at 50k-250k (1.5, 4.5).
+### DrivAerML Volume (vehicle, whole boundary) and AeroZoo at 200,000 tokens with
+### the fused read, the largest point count of each held out: bfloat16 on 10 rows
+### at 100k-500k points and 3 held out at 400k-600k (residuals up to 0.74 GiB, 0.82
+### held out), float32 on 9 at 50k-200k and 3 at 150k-250k (1.15, 5.41).
 ### Refit (fit_one_chunk.py of DTT-FAST QCHUNK, on the cost probe's one-chunk rows)
 ### when the read's or the blocks' memory per pair or per point changes.
 _ONE_CHUNK_GIB: dict[str, tuple[float, float, float]] = {
-    "bfloat16": (0.324, 24.22, 10.9),
-    "float32": (0.647, 43.08, 4.5),
+    "bfloat16": (0.082, 24.75, 0.9),
+    "float32": (0.151, 45.49, 5.5),
 }
 
 _LOGGER = logging.getLogger("training.step")

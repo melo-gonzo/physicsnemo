@@ -303,14 +303,18 @@ def test_one_chunk_rule_decides_from_sizes(monkeypatch, caplog):
     """The predicted peak of ISLA-DTT's step with every point in one chunk, from
     the walk's pairs, the points and the memory allocated after the boundary side;
     the decision against the capacity, logged at its first call and on change."""
-    ### AeroZoo in bfloat16 on a GB300 (275.0 GiB free and reserved; jobs 365629,
-    ### 366092): 400k points ran in one chunk (197.7 GiB reserved), 800k did not fit.
-    assert train._one_chunk_peak_gib(83_886_094, 400_000, 73.9, "bfloat16") < 275.0
-    assert train._one_chunk_peak_gib(169_149_486, 800_000, 75.1, "bfloat16") > 275.0
-    ### DrivAerML Volume in float32 (job 366197, 366092): the whole boundary at 150k
-    ### points ran in one chunk (263.8 GiB reserved), the vehicle at 200k did not fit.
-    assert train._one_chunk_peak_gib(126_390_000, 150_000, 112.9, "float32") < 275.0
-    assert train._one_chunk_peak_gib(138_883_949, 200_000, 113.0, "float32") > 275.0
+    ### Held-out one-chunk steps on a GB300 (275.0 GiB free and reserved; DTT-FAST
+    ### jobs 366927, 367203): walk pairs, points, GiB allocated at the decision and
+    ### the step's peak reserved GiB, which the prediction covers within the device.
+    for pairs, points, allocated, reserved, precision in (
+        (275_254_825, 400_000, 77.14, 197.91, "bfloat16"),  # DrivAerML vehicle
+        (339_263_920, 400_000, 78.10, 204.12, "bfloat16"),  # whole boundary
+        (127_659_068, 600_000, 73.61, 232.84, "bfloat16"),  # AeroZoo
+        (126_352_902, 150_000, 112.01, 204.72, "float32"),  # whole boundary
+        (52_608_716, 250_000, 109.56, 230.85, "float32"),  # AeroZoo
+    ):
+        peak = train._one_chunk_peak_gib(pairs, points, allocated, precision)
+        assert reserved <= peak < 275.0
     chunks = SimpleNamespace(
         walk=SimpleNamespace(
             lists=[(torch.zeros(600), None, 0), (torch.zeros(400), None, 0)]
