@@ -1,0 +1,34 @@
+{
+ "run": "cap_drv_isla_p2ref_s44",
+ "code": "code_cmpaf_fix",
+ "train_velocity": {
+  "eager_vs_target": 0.01890283077955246,
+  "compiled_vs_target": 0.018902789801359177,
+  "compiled_vs_eager": 7.463202109647682e-06
+ },
+ "train_pressure": {
+  "eager_vs_target": 0.010457636788487434,
+  "compiled_vs_target": 0.010457622818648815,
+  "compiled_vs_eager": 2.6941863779939013e-06
+ },
+ "train_nut": {
+  "eager_vs_target": 0.033947836607694626,
+  "compiled_vs_target": 0.03394908830523491,
+  "compiled_vs_eager": 7.525505225203233e-06
+ },
+ "heldout_velocity": {
+  "eager_vs_target": 0.019203562289476395,
+  "compiled_vs_target": 0.019203579053282738,
+  "compiled_vs_eager": 6.801226390962256e-06
+ },
+ "heldout_pressure": {
+  "eager_vs_target": 0.010238063521683216,
+  "compiled_vs_target": 0.010238036513328552,
+  "compiled_vs_eager": 2.5603037556720665e-06
+ },
+ "heldout_nut": {
+  "eager_vs_target": 0.020728211849927902,
+  "compiled_vs_target": 0.020728273317217827,
+  "compiled_vs_eager": 5.830452664667973e-06
+ }
+}

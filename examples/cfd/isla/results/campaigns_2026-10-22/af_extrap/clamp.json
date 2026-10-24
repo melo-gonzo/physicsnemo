@@ -1,0 +1,314 @@
+{
+ "isla": {
+  "inside": 45,
+  "worst_inside_rel": 0.0,
+  "outside_changed": 902,
+  "outside_case_seeds": 902,
+  "sides": {
+   "below": {
+    "n": 241,
+    "ratio": {
+     "pressure_l2": 0.46930170537537125,
+     "velocity_l2": 0.8156545136829233,
+     "nut_l2": 1.0982460328334815
+    },
+    "per_seed": {
+     "42": {
+      "pressure_l2": 0.44610077961613603,
+      "velocity_l2": 0.7135444174537684,
+      "nut_l2": 1.2495259395140441
+     },
+     "43": {
+      "pressure_l2": 0.49589350187307946,
+      "velocity_l2": 0.9507276388090585,
+      "nut_l2": 0.9788216981282782
+     }
+    },
+    "reading": {
+     "pressure_l2": "lower (beyond 2\u03c3, both seeds)",
+     "velocity_l2": "lower (beyond 2\u03c3, both seeds)",
+     "nut_l2": "within noise"
+    },
+    "native": {
+     "pressure_l2": 0.05644415591599969,
+     "velocity_l2": 0.027882120224233732,
+     "nut_l2": 0.06606281097375505
+    },
+    "clamped": {
+     "pressure_l2": 0.026489338629852005,
+     "velocity_l2": 0.022742177211946164,
+     "nut_l2": 0.07255322006975468
+    }
+   },
+   "above": {
+    "n": 210,
+    "ratio": {
+     "pressure_l2": 0.8138251285834026,
+     "velocity_l2": 0.9057038287380136,
+     "nut_l2": 1.3509426081639833
+    },
+    "per_seed": {
+     "42": {
+      "pressure_l2": 0.8267944795024292,
+      "velocity_l2": 0.7708149508758194,
+      "nut_l2": 1.2660739887435557
+     },
+     "43": {
+      "pressure_l2": 0.7975711180604449,
+      "velocity_l2": 1.1103699225485275,
+      "nut_l2": 1.4466402392350415
+     }
+    },
+    "reading": {
+     "pressure_l2": "lower (beyond 2\u03c3, both seeds)",
+     "velocity_l2": "within noise",
+     "nut_l2": "higher (beyond 2\u03c3, both seeds)"
+    },
+    "native": {
+     "pressure_l2": 0.02273325212188952,
+     "velocity_l2": 0.012074716830448735,
+     "nut_l2": 0.027217927040709626
+    },
+    "clamped": {
+     "pressure_l2": 0.01850089183121565,
+     "velocity_l2": 0.010936117264264751,
+     "nut_l2": 0.036769857345193266
+    }
+   }
+  }
+ },
+ "dtt": {
+  "inside": 45,
+  "worst_inside_rel": 1.7671166452348785e-06,
+  "outside_changed": 902,
+  "outside_case_seeds": 902,
+  "sides": {
+   "below": {
+    "n": 241,
+    "ratio": {
+     "pressure_l2": 0.5836392464098484,
+     "velocity_l2": 0.9238085745606515,
+     "nut_l2": 0.8715146910424647
+    },
+    "per_seed": {
+     "42": {
+      "pressure_l2": 0.5858402757892648,
+      "velocity_l2": 0.8767364631972563,
+      "nut_l2": 0.8185033489856741
+     },
+     "43": {
+      "pressure_l2": 0.5815623025209485,
+      "velocity_l2": 0.9756396468527654,
+      "nut_l2": 0.9298751199265465
+     }
+    },
+    "reading": {
+     "pressure_l2": "lower (beyond 2\u03c3, both seeds)",
+     "velocity_l2": "within noise",
+     "nut_l2": "within noise"
+    },
+    "native": {
+     "pressure_l2": 0.04612469496649856,
+     "velocity_l2": 0.024582123501744137,
+     "nut_l2": 0.08400759444266742
+    },
+    "clamped": {
+     "pressure_l2": 0.02692018221113135,
+     "velocity_l2": 0.02270917647182014,
+     "nut_l2": 0.07321385271592197
+    }
+   },
+   "above": {
+    "n": 210,
+    "ratio": {
+     "pressure_l2": 0.8836663165747818,
+     "velocity_l2": 1.1139050680626206,
+     "nut_l2": 1.5046257165511145
+    },
+    "per_seed": {
+     "42": {
+      "pressure_l2": 0.9089767441146718,
+      "velocity_l2": 1.114999327741405,
+      "nut_l2": 1.509745410787904
+     },
+     "43": {
+      "pressure_l2": 0.8596452044401307,
+      "velocity_l2": 1.1127687146767664,
+      "nut_l2": 1.4985646816807816
+     }
+    },
+    "reading": {
+     "pressure_l2": "within noise",
+     "velocity_l2": "within noise",
+     "nut_l2": "higher (beyond 2\u03c3, both seeds)"
+    },
+    "native": {
+     "pressure_l2": 0.02075513523748322,
+     "velocity_l2": 0.010683361781273215,
+     "nut_l2": 0.03317879053453604
+    },
+    "clamped": {
+     "pressure_l2": 0.018340613905318257,
+     "velocity_l2": 0.01190025083210674,
+     "nut_l2": 0.04992166148232562
+    }
+   }
+  }
+ },
+ "gt": {
+  "inside": 0,
+  "worst_inside_rel": 0.0,
+  "outside_changed": 992,
+  "outside_case_seeds": 992,
+  "sides": {
+   "below": {
+    "n": 254,
+    "ratio": {
+     "pressure_l2": 0.8603589104172438,
+     "velocity_l2": 1.0188559056770499,
+     "nut_l2": 2.9318977842895557
+    },
+    "per_seed": {
+     "42": {
+      "pressure_l2": 0.7572320249734668,
+      "velocity_l2": 1.0109809647162116,
+      "nut_l2": 3.1671645894813656
+     },
+     "43": {
+      "pressure_l2": 1.0022218035752508,
+      "velocity_l2": 1.0267806746498935,
+      "nut_l2": 2.7303927378871564
+     }
+    },
+    "reading": {
+     "pressure_l2": "within noise",
+     "velocity_l2": "within noise",
+     "nut_l2": "higher (beyond 2\u03c3, both seeds)"
+    },
+    "native": {
+     "pressure_l2": 0.030280032468314365,
+     "velocity_l2": 0.04454662882187587,
+     "nut_l2": 0.059303349680560606
+    },
+    "clamped": {
+     "pressure_l2": 0.026051695741837712,
+     "velocity_l2": 0.045386595853171716,
+     "nut_l2": 0.17387135952938437
+    }
+   },
+   "above": {
+    "n": 242,
+    "ratio": {
+     "pressure_l2": 0.8107987822900731,
+     "velocity_l2": 1.0051143144523078,
+     "nut_l2": 2.4227665352169896
+    },
+    "per_seed": {
+     "42": {
+      "pressure_l2": 0.8519418789163093,
+      "velocity_l2": 1.006493210728604,
+      "nut_l2": 2.570636991322646
+     },
+     "43": {
+      "pressure_l2": 0.7726650175274755,
+      "velocity_l2": 1.0037775961979138,
+      "nut_l2": 2.288956993648964
+     }
+    },
+    "reading": {
+     "pressure_l2": "lower (beyond 2\u03c3, both seeds)",
+     "velocity_l2": "within noise",
+     "nut_l2": "higher (beyond 2\u03c3, both seeds)"
+    },
+    "native": {
+     "pressure_l2": 0.01861871454781999,
+     "velocity_l2": 0.04880201874285444,
+     "nut_l2": 0.03355876854736327
+    },
+    "clamped": {
+     "pressure_l2": 0.015096031083178914,
+     "velocity_l2": 0.04905160761261282,
+     "nut_l2": 0.08130506139964419
+    }
+   }
+  }
+ },
+ "t": {
+  "inside": 0,
+  "worst_inside_rel": 0.0,
+  "outside_changed": 992,
+  "outside_case_seeds": 992,
+  "sides": {
+   "below": {
+    "n": 254,
+    "ratio": {
+     "pressure_l2": 0.6541354757302235,
+     "velocity_l2": 0.9937265887876325,
+     "nut_l2": 3.2526628718475394
+    },
+    "per_seed": {
+     "42": {
+      "pressure_l2": 0.685568160584646,
+      "velocity_l2": 1.0166916697586235,
+      "nut_l2": 3.2154736862051645
+     },
+     "43": {
+      "pressure_l2": 0.6236602057250876,
+      "velocity_l2": 0.9724672652780749,
+      "nut_l2": 3.290639490374096
+     }
+    },
+    "reading": {
+     "pressure_l2": "lower (beyond 2\u03c3, both seeds)",
+     "velocity_l2": "within noise",
+     "nut_l2": "higher (beyond 2\u03c3, both seeds)"
+    },
+    "native": {
+     "pressure_l2": 0.03793043511329351,
+     "velocity_l2": 0.035681468537297305,
+     "nut_l2": 0.05404915924708352
+    },
+    "clamped": {
+     "pressure_l2": 0.024811643217488626,
+     "velocity_l2": 0.03545762401250169,
+     "nut_l2": 0.17580369353756367
+    }
+   },
+   "above": {
+    "n": 242,
+    "ratio": {
+     "pressure_l2": 0.9273349484284911,
+     "velocity_l2": 1.012975589434108,
+     "nut_l2": 2.1714950968017415
+    },
+    "per_seed": {
+     "42": {
+      "pressure_l2": 0.9338014053473596,
+      "velocity_l2": 1.0145406635788206,
+      "nut_l2": 2.2793409273870764
+     },
+     "43": {
+      "pressure_l2": 0.9209907063900967,
+      "velocity_l2": 1.0115167439639883,
+      "nut_l2": 2.0754264819386767
+     }
+    },
+    "reading": {
+     "pressure_l2": "within noise",
+     "velocity_l2": "within noise",
+     "nut_l2": "higher (beyond 2\u03c3, both seeds)"
+    },
+    "native": {
+     "pressure_l2": 0.01625891751705954,
+     "velocity_l2": 0.04063897340535379,
+     "nut_l2": 0.03886029798891549
+    },
+    "clamped": {
+     "pressure_l2": 0.015077462437185498,
+     "velocity_l2": 0.04116628803928529,
+     "nut_l2": 0.08438494654318457
+    }
+   }
+  }
+ }
+}

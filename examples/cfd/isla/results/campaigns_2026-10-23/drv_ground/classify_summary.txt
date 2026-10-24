@@ -1,0 +1,38 @@
+=== group match: 187 files
+  lo_off: {'[0.0, 0.0, 0.0]': 187}
+  hi_off: {'[0.0, 0.0, 0.0]': 187}
+  pure: {True: 187}
+  size_eq: {True: 187}
+  vehicle_eq_interior_zmin: {True: 187}
+  ground_flat: {True: 187}
+  rule_equals_offset: {True: 187}
+  dtypes: {'["float32", "float32"]': 187}
+  npts: {'[400, 1600, 400, 400]': 187}
+  interior zmin: {-0.31759700179100037: 187} zmax: {19.682403564453125: 187}
+  vehicle zmin: {-0.31759700179100037: 187}
+  ground: {-0.31759700179100037: 187} rule tz: {0.0: 187}
+  faces: {'{"no_slip": [-0.31759700179100037, -0.31759700179100037], "slip": [-0.31759700179100037, 19.682403564453125], "inlet": [-0.31759700179100037, 19.682403564453125], "outlet": [-0.31759700179100037, 19.682403564453125]}': 187}
+  pointwise vs run_1 : same_cells Counter({True: 187}) same_xy Counter({True: 187}) dz (min,max) {(0.0, 0.0): 187}
+  n_on_lowest_z: min 1504597 median 1580017 max 1657842 files>0 187
+  out_stored_above_z: min 0 median 0 max 0 files>0 0
+  out_stored: min 0 median 0 max 0 files>0 0
+  out_shifted: min 0 median 0 max 0 files>0 0
+=== group offset: 297 files
+  lo_off: {'[0.0, 0.0, 0.0024029910564422607]': 297}
+  hi_off: {'[0.0, 0.0, 0.00240325927734375]': 297}
+  pure: {True: 297}
+  size_eq: {True: 297}
+  vehicle_eq_interior_zmin: {True: 297}
+  ground_flat: {True: 297}
+  rule_equals_offset: {True: 297}
+  dtypes: {'["float32", "float32"]': 297}
+  npts: {'[400, 1600, 400, 400]': 297}
+  interior zmin: {-0.31759700179100037: 297} zmax: {19.682403564453125: 297}
+  vehicle zmin: {-0.31759700179100037: 297}
+  ground: {-0.3199999928474426: 297} rule tz: {0.0024029910564422607: 297}
+  faces: {'{"no_slip": [-0.3199999928474426, -0.3199999928474426], "slip": [-0.3199999928474426, 19.68000030517578], "inlet": [-0.3199999928474426, 19.68000030517578], "outlet": [-0.3199999928474426, 19.68000030517578]}': 297}
+  pointwise vs run_1 : same_cells Counter({True: 297}) same_xy Counter({True: 297}) dz (min,max) {(-0.00240325927734375, -0.0024023056030273438): 297}
+  n_on_lowest_z: min 1498578 median 1580976 max 1655843 files>0 297
+  out_stored_above_z: min 5117 median 5133 max 5227 files>0 297
+  out_stored: min 5117 median 5133 max 5227 files>0 297
+  out_shifted: min 0 median 0 max 0 files>0 0

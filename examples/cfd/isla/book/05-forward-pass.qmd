@@ -33,6 +33,18 @@ DEFAULTS = {k: v.default for k, v in inspect.signature(ISLA.__init__).parameters
 torch.manual_seed(0)
 REF = ISLA(output_schema={"pressure": {"rank": 0}, "wss": {"rank": 1}}, boundary_schemas={"vehicle": {}}, global_schema={"U_inf_dir": {"rank": 1}})
 cnt = lambda mod: sum(p.numel() for p in mod.parameters())
+import standing as S, records as R
+from IPython.display import Markdown
+_QD = R.load("probes090", "results/qpop_afeag/reduced.json")
+DTT_QDEV = max(abs(v - 1) for s in (42, 43) for m in _QD[f"r090eag_af_dtt_seed{s}"]["ratio_to_native_h"].values() for v in m.values())
+_RD = R.load("probes090", "results/remesh_afeag/reduced_full.json")["seed_mean_ratio"]["r090eag_af_dtt"]
+DTT_REFINE = [_RD[v]["pressure_l2"] for v in ("refine2", "refine4", "refine31")]   # refined ÷ native, ISLA-DTT at theta = 1
+_TH = json.load(open(RES / "campaigns_2026-10-22" / "book_A" / "book_a.json"))["theta"]
+DTT_THETA0 = max(abs(_TH["0.0"][v][f] - 1) for v in ("refine2", "refine4", "refine31") for f in ("pressure", "velocity", "nut"))
+def sci(x):
+    """A small number as $a \\times 10^{b}$."""
+    m, e = f"{x:.1e}".split("e")
+    return f"${m} \\times 10^{{{int(e)}}}$"
 ```
 
 ```{python}
@@ -330,9 +342,14 @@ each condition's cells in the Morton (Z-order, a space-filling curve) order
 of their centroids, each cell an interval as long as its probability, and
 the cells under the points $u, u + 1, u + 2, \dots$ are kept: *systematic
 sampling*, a single random start $u$ for the whole case. The Morton order is
-taken along the dataset's axes, so once a boundary is subsampled a rotated
-case draws other cells; @sec-isla-contracts states what that does to the pose
-contract. @fig-arch-boundary-draw
+taken in the boundary's canonical frame (its measure-weighted centroid and
+principal axes over every cell), and the centroids and measures it reads are
+computed in float64 from the mesh's coordinates as given, so a float32 and a
+float64 run on the same inputs keep the same cells. A rotated case draws the
+same cells up to the rounding of its coordinates across the grid lines of the
+Morton code, and more of them change where the boundary's principal moments
+nearly tie, which turns the frame; @sec-isla-contracts states what that does
+to the pose contract. @fig-arch-boundary-draw
 runs the class's own draw on the airfoil.
 
 ```{python}
@@ -880,6 +897,14 @@ is unchanged by a translation (`a_f`, `z_f`, `b_f`, `r_hat`; @sec-isla-heads
 draws the construction). A model whose outputs are all scalars has no head
 frame and no `frame_assign` parameters (`needs_frame`).
 
+The head frame reads the raw final state $h_i$, not $\tilde h_i$, so its
+logits grow with the residual stream, and on DeepJEB++ its routing
+concentrates on so few tokens that the frame degenerates (@sec-deepjeb
+measures it). Reading the normalized state there is a candidate fix for that
+logit growth that was tested and not adopted: in its registered test, on
+AeroZoo's held-out non-box family, it made the pressure error worse on both
+seeds, on a field where neither arm beats predicting zero.
+
 ::: {.callout-note collapse="true" title="Stage 4 in the code"}
 The head frame is the tail of `_forward_tokens`: one more routing map, read both ways, and a difference of positions.
 
@@ -1167,26 +1192,37 @@ for every draw of the boundary tokens, and they are continuous through the
 surface.** Stage 3 needs a direction at every token, and the input layer
 above needs a distance to the wall. Both are computed inside the model and
 never taken as inputs; the model reads no stored signed-distance field.
-Picture a point a hair off an airfoil whose tokens kept every fifth panel:
+That is Peter's boundary-only input ruling, to "just pass in the
+full-resolution boundary surfaces and ONLY that": the boundary meshes
+are the model's one geometric input, and every geometric quantity is
+computed from them inside the forward pass. Picture a point a hair off an airfoil whose tokens kept every fifth panel:
 the nearest kept token is up to a few panels away, but the nearest point of
 the airfoil is directly below the point. The model therefore searches the
 surface itself, the union of the cells of every given boundary mesh at full
 resolution, for the closest point $p_q$ to $x_q$: point to face, never point
 to centroid (`exact_boundary_geometry`).
 
-The distance is signed by the pseudo-normal $\hat N_q$ of the feature $p_q$
-lies on: the cell's normal inside a cell; on an edge or a vertex the sum of
-the normals of the cells that share it, angle-weighted at a vertex in three
-dimensions (the construction of Bærentzen and Aanæs). The pseudo-normal
-gets the sign right behind a sharp trailing edge and at a concave corner,
-where the normal of the one closest cell would flip it. The distance is
-positive on the side the cells' normals point to; the recipe orients each
-dataset's boundary with a transform set per dataset file
-(`FlipBoundaryOrientation`). The direction $u_q$ points from the surface to
-the point: the closest cell's normal turned toward the point when $p_q$ is
-inside a cell, the unit difference otherwise. The token then reads the
-distance in length units and the direction times the sign of the distance,
-which is the gradient of the signed distance. @fig-arch-exact-geometry
+The distance is signed by the generalized winding number $w(x_q)$ of the
+oriented cells (Jacobson, Kavan and Sorkine-Hornung), the solid angle the
+cells subtend at the point over that of a sphere: $\sigma$ inside a closed
+surface and 0 outside it, with $\sigma = \pm 1$ the sign of the volume the
+cells enclose. So $\sigma / 2 - w$ is $+1/2$ on the side the normals point to and $-1/2$ on the
+other, whichever way they point. The sign needs no closest feature, so it is
+right behind a sharp trailing edge, at a concave corner and at a fold, where
+cells meet back to back: the two sheets of a zero-thickness fold cancel in
+$w$, and both of its sides take the sign of the region around it. An open
+surface is signed by the threshold $w = 1/2$. The distance is positive on the
+side the cells' normals point to; the recipe orients each dataset's boundary
+with a transform set per dataset file (`FlipBoundaryOrientation`). The
+direction $u_q$ points from the surface to the point: the closest cell's
+normal turned toward the point when $p_q$ is inside a cell, the unit
+difference otherwise. Where several features tie for the closest point, as
+on the medial surface (a plate's mid-plane, a corner's bisector), $u_q$ is
+the point of the convex hull of their directions closest to the origin: the
+least-norm element of the Clarke generalized gradient of the distance, the
+midpoint of two directions and zero where they cancel. The token then reads
+the distance in length units and the direction times the sign of the
+distance, which is the gradient of the signed distance where it has one. @fig-arch-exact-geometry
 draws both on the airfoil, with the class's own functions.
 
 ```{python}
@@ -1242,13 +1278,15 @@ for sp in ("top", "right"): ax.spines[sp].set_visible(False)
 plt.show()
 ```
 
-In symbols, with $\hat n_f$ the normal of the cell $f$ that holds $p_q$:
+In symbols, with $\hat n_f$ the normal of the cell $f$ that holds $p_q$ and
+$u_k$ the directions of the tied features $k$:
 
 $$
-\delta_q \equiv \operatorname{sign}\big((x_q - p_q) \cdot \hat N_q\big)\, \lvert x_q - p_q \rvert,
+\delta_q \equiv \operatorname{sign}\big(\tfrac{\sigma}{2} - w(x_q)\big)\, \lvert x_q - p_q \rvert,
 \qquad
 u_q \equiv \begin{cases}
-  \operatorname{sign}(\delta_q)\, \hat n_f & p_q \text{ inside the cell } f, \\
+  \operatorname{sign}\big((x_q - p_q) \cdot \hat n_f\big)\, \hat n_f & p_q \text{ inside the cell } f, \\
+  \operatorname*{arg\,min}_{v \in \operatorname{conv}\{u_k\}} \lvert v \rvert & \text{at a tie,} \\
   (x_q - p_q) / \lvert x_q - p_q \rvert & \text{otherwise,}
 \end{cases}
 $$
@@ -1259,10 +1297,15 @@ s_q \equiv \delta_q / L, \qquad
 \hat\nu_q \equiv \operatorname{sign}(\delta_q)\, u_q, \quad \operatorname{sign}(0) \equiv +1 .
 $$
 
-A point on the surface ($\lvert x_q - p_q \rvert$ at most `EPS`) takes
-$\delta_q = 0$ and $u_q = \hat N_q$; coincident vertices are welded first, so
-a surface stored in pieces, one mesh per condition, has the pseudo-normals
-of the surface it describes. Inside a cell $\hat\nu_q = \hat n_f$ on both
+A point on the surface, whose float64 distance lies within the rounding
+bound of that distance (its coordinates cannot tell it from a point of the
+surface), takes $\delta_q = 0$ and the same rule with the unit normals of the
+cells that hold it in place of the directions: the cell's normal inside a
+cell, the least-norm point of the hull of the normals of the cells sharing an
+edge or a vertex, with the normals computed in float64 from the coordinates
+as given. Coincident vertices are welded first, so a surface stored in
+pieces, one mesh per condition, has the connectivity of the surface it
+describes. Inside a cell $\hat\nu_q = \hat n_f$ on both
 sides of the wall, and $\operatorname{asinh}(s / \varepsilon)$ is $s /
 \varepsilon$ near zero and $\operatorname{sign}(s) \log(2 \lvert s \rvert /
 \varepsilon)$ far from it (`soft_log_length`): the code of a point is
@@ -1280,21 +1323,49 @@ a stored signed-distance field computed from the same surface. Both are
 built from a difference of positions, so $\delta_q$ is invariant and $u_q$
 covariant under every rigid motion and reflection (with the cells
 re-oriented so that their normals follow the map), and $\delta_q$ scales
-with the geometry. $s_q = \delta_q / L$ inherits the draw only through
-$L$, a factor common to every point of the case, by $L$'s quadrature error
+with the geometry. $s_q = \delta_q / L$ is the same for every draw too,
+since $L$ is computed from the full-resolution boundary before the draw
 (stage 1).
 
 The search runs in `forward`, where the meshes are, before the draw, at the
-points' precision and outside autocast. In three dimensions it is a Warp
-bounding-volume-hierarchy query over the triangles (a torch custom
-operator, in float32, whose closest cell differs from the exact one only at
-a tie at float32 resolution); in two it is an exact brute force over the
-segments, chunked over the points (`_closest_cell`). The interior task is
-implemented in two and three dimensions. The search runs without gradient;
+points' precision and outside autocast (`_closest_features`, which calls the
+torch custom operator `_closest_candidates`). Every candidate distance is
+computed in float64 on the cell's vertices in the lexicographic order of
+their positions, with an error bound $E_k$ from the coordinates' rounding and
+the arithmetic's, and a cell ties when its interval $[D_k - E_k, D_k + E_k]$
+reaches the least upper end and its closest point is a local minimum of the
+distance on the surface. In three dimensions a float32 traversal of a
+bounding-volume hierarchy over the cells, the model's own cell tree, finds a
+nearest cell, whose exact distance plus its bound bounds the closest
+distance, and a second traversal of the same tree returns every cell within
+that radius; the winding number reads the same tree, with Barill et al.'s
+far-field expansion of distant nodes and exact float64 solid angles near the
+point. In two dimensions a brute force over the segments, chunked over the
+points, keeps the candidates. The interior task is implemented in two and
+three dimensions. The search runs without gradient;
 the closest point is then rebuilt from its cell's vertices with the
 barycentric weights of its region of the cell (computed in float64), so
 $\delta_q$ and $u_q$ are differentiable in the points and the vertex
-positions.
+positions. A cell of zero area, whose vertices coincide, is not handled: the
+search can raise on it or return a farther cell. None of the 36 million
+cells of the real cases checked is such a cell.
+
+::: {.callout-note title="In flight"}
+This limit is that of the search as it is. A search that reads a cell of zero area as the set
+its vertices span is being checked, and the ledger (@sec-ledger) tracks it.
+:::
+
+**No step of this geometry is left to the order of a search or to the sign
+of a cancelling sum.** The direction at a tie is a function of the tie set
+alone, not of the order of the vertices, the cells or the search, and a flip
+of the boundary's winding negates $\delta_q$ and $\operatorname{sign}(\delta_q)\,
+u_q$ bitwise. What rounding still decides is which features join a tie set,
+since a feature joins when its distance lies within the rounding bound of the
+least; and where the normals of a tie nearly coincide, as on a structured
+mesh's split faces, their least-norm point is ill-conditioned, so its float32
+and float64 values differ. @sec-medial-ties measures what the geometry does
+to the contracts, and @sec-standing-geometry gives the geometry the
+standings' checkpoints were trained with.
 
 ```{python}
 #| label: para-arch-sdf-configs
@@ -1328,8 +1399,10 @@ and every arm is otherwise of the nearest-token form: it still reads the
 stored signed distance and its direction as a prediction-point input on all
 three datasets (the second comparison's variant encodes that channel as it
 encodes $s_q$). The class reads no stored field, so neither comparison is a
-measurement of the class. Chapter 4 gives what the exact geometry does to the
-contracts (@sec-exact-geometry-draw, @sec-medial-ties).
+measurement of the class; they are the registered tests that chose the
+design, and @tbl-arch-attrib, below, measures the class. Chapter 4 gives what
+the exact geometry does to the contracts (@sec-exact-geometry-draw,
+@sec-medial-ties).
 
 ```{python}
 #| label: tbl-arch-geo-evidence
@@ -1390,6 +1463,48 @@ print(f"On the AirfRANS interior task, with the stored signed distance read in b
       f"(results/campaigns_2026-10-18/geo_cont/PREREG.md).")
 ```
 
+**On the class itself, putting back one earlier piece at a time measures
+what this stage's choices buy.** Each arm of @tbl-arch-attrib is ISLA at the
+reference configuration with one piece reverted: the stored signed distance
+read again as a prediction-point input, or the earlier prediction-point
+embedding (a type offset and a separate feature MLP added to the seed
+embedding, where ISLA puts the distance channels in the point's own input
+layer).
+
+```{python}
+#| label: tbl-arch-attrib
+#| output: asis
+AT_AF = {r["arm"].split()[0]: r for r in R.md_table("attrib090", "RESULTS.md", "2. AirfRANS")}
+AT_T2 = {r["arm"].split()[0]: r for r in R.md_table("attrib090", "RESULTS.md", "1. Tensile2d")}
+AT_ARMS = (("SDF", "the stored signed distance as a prediction-point input"), ("QEMB", "the earlier prediction-point embedding"))
+out = ("| put back into ISLA | AirfRANS: ÷ ISLA, pressure / velocity / eddy viscosity | registered reading | "
+       "PLAID Tensile2d: ÷ ISLA, displacement | registered reading |\n|---|---|---|--:|---|\n")
+for k, lab in AT_ARMS:
+    a, t = AT_AF[k], AT_T2[k]
+    out += f"| {lab} | {a['÷ B (p / v / nut)']} | {a['R2']} | {t['÷ B']} | {t['R1 / R2']} |\n"
+print(out)
+print(": Single-piece ablations of ISLA at the reference configuration, each arm's error over ISLA's, native meshes, float32, "
+      "scored eager, final checkpoints. AirfRANS interior task: 200 test cases, two seeds, every arm and ISLA trained with "
+      "the compiled training path after its fault was fixed, ratio of seed means. PLAID Tensile2d: 100 validation cases, four "
+      "seeds, every arm and ISLA trained under the compiled-path fault, ratio of geometric seed means; an ISLA-against-ISLA "
+      "ablation, not the Tensile2d standing. The readings are the registered labels: *no measurable effect*, and *moves, "
+      "opposes*, where putting the piece back moves the error against the step the study set out to explain. How to read "
+      "this: above one means ISLA's own piece is the more accurate; the table compares ISLA with itself. Data: "
+      + R.source("attrib090", "RESULTS.md") + ", sections 1 and 2.")
+```
+
+```{python}
+#| label: para-arch-attrib
+#| output: asis
+_seeds = lambda r: [float(x) for x in r["per seed"].split(",")]
+_q, _b = _seeds(AT_T2["QEMB"]), _seeds(AT_T2["B"])
+_qr = R.num(AT_T2["QEMB"]["÷ B"])
+print("ISLA reads no stored signed distance, and putting it back has no measurable effect on either task. The earlier "
+      "embedding is level on AirfRANS; on Tensile2d ISLA's own embedding gives a displacement error about "
+      f"{1 - 1 / _qr:.0%} lower" + (", with all four of the earlier embedding's seeds above all four of ISLA's" if min(_q) > max(_b) else "")
+      + ". The ablation does not isolate why.")
+```
+
 ::: {.callout-note collapse="true" title="The geometry in the code"}
 `forward` concatenates the given meshes into one surface and calls the exact geometry before the draw; the closest cell comes from the BVH in three dimensions and from the brute force in two; the soft logarithm is one line.
 
@@ -1398,7 +1513,7 @@ print(f"On the AirfRANS interior task, with the stored signed distance read in b
 #| output: asis
 listing("model.py", "ISLA.forward", start="### The points' geometry from the boundary surface", end="### The boundary tokens: the sample")
 listing("geometry.py", "exact_boundary_geometry")
-listing("geometry.py", "_closest_cell")
+listing("geometry.py", "_closest_features")
 listing("geometry.py", "soft_log_length")
 ```
 :::
@@ -1422,7 +1537,10 @@ $\pi_{qs}$, and it reads $b_q = \sum_s \pi_{qs} Z_s$ (step h). The boundary
 tokens therefore compute what they compute in the surface task whatever
 points are requested, and a request split into chunks, permuted, or reduced
 to one point returns the same predictions to $10^{-12}$ in float64
-(`test_query_independent_interior_contracts`). ISLA-DTT has no routing-mass
+(`test_query_independent_interior_contracts`). On the AirfRANS standing's
+checkpoints, trained without compilation, in float32 every change of the request of
+@tbl-query-population moves ISLA-DTT's error by at most
+`{python} Markdown(sci(DTT_QDEV))`, float32 roundoff. ISLA-DTT has no routing-mass
 parameter.
 
 A read-only point reads at matched depth: at layer $\ell$ it reads the
@@ -1593,7 +1711,15 @@ whichever of the dataset's axes it overlaps most. There a rigid motion can regro
 clusters, and the read moves only at the size of the tree's error, which
 vanishes as $\theta \to 0$. $\theta$ is a constant of the class (`TREE_READ_THETA`), not
 an argument: ISLA-DTT trains and is scored at $\theta = 1$, so its kernel,
-keys and values are learned as the forest groups the cells.
+keys and values are learned as the forest groups the cells. The tree's error
+is also what moves ISLA-DTT under an exact refinement of the boundary: on
+the AirfRANS interior task, with the standing's pair, trained without
+compilation, splitting the airfoil's panels raises its
+pressure error by `{python} f"{min(DTT_REFINE) - 1:.1%}"` to
+`{python} f"{max(DTT_REFINE) - 1:.1%}"` at $\theta = 1$, and on an ISLA-DTT
+pair trained under the compiled-path fault, read at $\theta = 0$, the same
+refinements move its error by at most `{python} f"{DTT_THETA0:.1%}"`
+(@sec-remesh-measured).
 
 ```{python}
 #| label: para-arch-tree-cost
@@ -1627,18 +1753,33 @@ listing("tree_read.py", "node_means")
 
 #### Read-only against interacting prediction points on AirfRANS {#sec-arch-dtt-evidence}
 
-**On the AirfRANS interior task ISLA-DTT is more accurate than interacting
-ISLA on pressure and velocity, at a higher cost per step; that is one
-dataset, and it does not settle which of the two forms is the reference.**
-One pre-registered comparison trained four interior designs alike on the
-AirfRANS uniform interior task: interacting ISLA; *passive* prediction
-points, read-only points without the boundary read, so that the boundary
-tokens are the only writers into the slices; ISLA-DTT, the passive points
-with the boundary read; and *ANCHOR*, passive points with 50,000 further
-interior points, placed by a law derived from the boundary alone, that
-write into the slices in the prediction points' place. The last three are
-query-independent. @tbl-arch-dtt-evidence gives each against interacting
-ISLA.
+```{python}
+#| label: para-arch-dtt-standing
+#| output: asis
+AFS = S.Standing("airfrans")
+_vd = {}
+for f in AFS.ds.headline:
+    _vd.setdefault(AFS.verdict("ISLA-DTT", f), []).append(AFS.fields[f])
+print("**On the AirfRANS interior task at the reference configuration, interacting ISLA "
+      + ", and ".join(f"{v} ISLA-DTT on {' and '.join(fs)}" for v, fs in _vd.items())
+      + "; that is one dataset, and it does not settle which of the two forms is the reference.** "
+      "ISLA-DTT \u00f7 ISLA is " + " / ".join(f"{AFS.ratio('ISLA-DTT', f):.3f}" for f in AFS.ds.headline) + " on "
+      + " / ".join(AFS.fields[f] for f in AFS.ds.headline) + " (a ratio of arithmetic seed means; ISLA-DTT's seeds "
+      + "; ".join(" / ".join(f"{x:.5f}" for x in AFS.seeds("ISLA-DTT", f)) + " against ISLA's "
+                  + " / ".join(f"{x:.5f}" for x in AFS.seeds("ISLA", f)) for f in AFS.ds.headline)
+      + f"; {AFS.source}). Which form is the reference is decided on AeroZoo's held-out splits (@sec-oq-dtt).\n")
+_azd = S.aerozoo()["arms"]["ISLA-DTT 512 with 512 slices"].get("in_flight")
+if _azd:
+    print(S.in_flight_callout({"what": "ISLA against ISLA-DTT on AirfRANS alone",
+                               "replacement": "ISLA-DTT on AeroZoo's seven splits, which decides the interior form,"}))
+```
+
+One pre-registered comparison, on checkpoints of the nearest-token form
+(@sec-checkpoint-form), tested a further query-independent design,
+*ANCHOR*: read-only prediction points with 50,000 further interior points,
+placed by a law derived from the boundary alone, that write into the slices
+in the prediction points' place. @tbl-arch-dtt-evidence gives it against
+interacting ISLA of the same form.
 
 ```{python}
 #| label: tbl-arch-dtt-evidence
@@ -1646,7 +1787,7 @@ ISLA.
 ANC = RES / "campaigns_2026-10-18" / "anchor" / "readout"
 SC = json.load(open(ANC / "scores.json"))
 COST = json.load(open(ANC / "cost_partial.json"))
-ARMS = (("isla", "interacting ISLA (control)"), ("passive", "passive prediction points"), ("dtt", "ISLA-DTT"), ("anchor", "ANCHOR"))
+ARMS = (("isla", "interacting ISLA (control)"), ("anchor", "ANCHOR"))
 FLD = (("pressure_l2", "p"), ("velocity_l2", "v"), ("nut_l2", "nut"))
 err = lambda a, s, prot, f: SC[f"anc_{a}_seed{s}/{prot}"][f]
 sm = lambda a, prot, f: np.mean([err(a, s, prot, f) for s in (42, 43)])
@@ -1664,7 +1805,7 @@ for a, lab in ARMS:
     out += (f"| {lab} | {' / '.join(f'{x:.5f}' for x in vals)} | {'–' if a == 'isla' else ' / '.join(f'{x:.3f}' for x in rat)} | "
             f"{'–' if a == 'isla' else (', '.join(below) or 'none')} | {100 * DA[a]['dev']:.2f}% | {DA[a]['step']:.2f} | {DA[a]['peak']:.1f} |\n")
 print(out)
-print(": Interior designs against interacting ISLA on the AirfRANS uniform interior task: area-weighted relative L2 of "
+print(": ANCHOR against interacting ISLA on the AirfRANS uniform interior task: area-weighted relative L2 of "
       "pressure / velocity / eddy viscosity (p / v / nut), seed means of two seeds (42, 43), native meshes, float32, final "
       "checkpoints, 200 test cases, 100,000 prediction points per case. Instrument: ISLA at the reference configuration "
       "with the normalized slice reads, 500 epochs, every design trained alike; checkpoints of the nearest-token form "
@@ -1680,16 +1821,11 @@ print(": Interior designs against interacting ISLA on the AirfRANS uniform inter
 ```{python}
 #| label: para-arch-dtt-evidence
 #| output: asis
-d, b, c = DA["dtt"], DA["passive"], DA["anchor"]
-print(f"ISLA-DTT's errors are {d['rat'][0]:.3f} / {d['rat'][1]:.3f} / {d['rat'][2]:.3f} times interacting ISLA's on pressure / "
-      f"velocity / eddy viscosity, with both seeds below on {' and '.join({'p': 'pressure', 'v': 'velocity', 'nut': 'eddy viscosity'}[x] for x in d['below'])}, "
-      f"at {d['step']:.2f} times its step time at mid-run and a peak of {d['peak']:.1f} against {DA['isla']['peak']:.1f} GB. The "
-      f"passive points, which have no boundary read, are at {b['rat'][0]:.3f} on pressure and {b['rat'][1]:.3f} on velocity: "
-      f"the boundary read is what puts ISLA-DTT ahead on velocity. Interacting ISLA, the passive points and ISLA-DTT keep "
-      f"posed equal to native within {100 * max(DA[a]['dev'] for a in ('isla', 'passive', 'dtt')):.2f}%. ANCHOR does not "
-      f"replace interacting ISLA under its registered rule ({c['rat'][0]:.3f} / {c['rat'][1]:.3f} / {c['rat'][2]:.3f}), and it "
-      f"is not pose-exact (a change of up to {100 * c['dev']:.0f}% under the posed scoring). This is AirfRANS evidence on "
-      "checkpoints of the nearest-token form, and it does not decide between ISLA and ISLA-DTT as the reference choice.")
+c = DA["anchor"]
+print(f"ANCHOR does not replace interacting ISLA under its registered rule ({c['rat'][0]:.3f} / {c['rat'][1]:.3f} / "
+      f"{c['rat'][2]:.3f} on pressure / velocity / eddy viscosity), and it is not pose-exact (a change of up to "
+      f"{100 * c['dev']:.0f}% under the posed scoring, against {100 * DA['isla']['dev']:.2f}% for interacting ISLA). It was "
+      "tested and not adopted.")
 ```
 
 ## What the pass never does {#sec-arch-never}
@@ -2104,7 +2240,7 @@ print(f"**ISLA-DTT's forward waits on the host.** Its step takes {HT['isla_dtt']
 
 **How the step scales with the case.** On one GPU, from 100,000 tokens per case up, ISLA's memory grows linearly in
 the number of tokens, as slice attention's $\mathcal{O}(NM)$ cost predicts, and so does its step time on the surface
-task; on the volume task its step grows faster. @fig-cost-sweep measures both for every reference configuration, and
+task; on the volume task its step grows less than in proportion, from a fixed cost per step. @fig-cost-sweep measures both for every reference configuration, and
 @tbl-cost-slopes gives what a token costs each of them.
 
 ## The switches {#sec-arch-switches}

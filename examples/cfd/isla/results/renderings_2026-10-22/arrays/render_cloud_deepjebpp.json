@@ -1,0 +1,191 @@
+{
+ "sample_id": "60073_611-092-IS06_hor_611-092-IS06_hor",
+ "source": {
+  "jeb_isla/native": {
+   "row": 9,
+   "run_id": "r090_jb_isla_seed42",
+   "dataset": "deepjebpp_surface",
+   "model": "isla_surface_deepjebpp",
+   "code": "code_r090",
+   "recipe": "recipe_r090",
+   "cells": 200000,
+   "replay": false,
+   "lhr_dump_job": 336070,
+   "dump": "$T/book_figs_2026-10-22/dump/jeb_isla/native/ (copy: scratch/isla-render090-2026-10-22/dump/jeb_isla/native/)",
+   "reused_2026_10_18_row": null,
+   "scorer_record": "$T/evals_r090/r090_jb_isla_seed42/native/r090_jb_isla_seed42/metrics.jsonl"
+  },
+  "jeb_gt/native": {
+   "row": 10,
+   "run_id": "cl_r_jeb_gt_seed42",
+   "dataset": "deepjebpp_surface",
+   "model": "geotransolver_surface_deepjebpp",
+   "code": "code_v20",
+   "recipe": "recipe_v8",
+   "cells": 200000,
+   "replay": false,
+   "lhr_dump_job": 275252,
+   "dump": "$T/book_figs_2026-10-18/dump/jeb_gt/native/ (copy: scratch/isla-render090-2026-10-22/dump/jeb_gt/native/)",
+   "reused_2026_10_18_row": 10,
+   "scorer_record": "results/campaigns_2026-10-02/char/protocols/cl_r_jeb_gt_seed42/native/metrics.jsonl"
+  },
+  "jeb_t/native": {
+   "row": 11,
+   "run_id": "cl_r_jeb_t_seed42",
+   "dataset": "deepjebpp_surface",
+   "model": "transolver_surface_deepjebpp",
+   "code": "code_v20",
+   "recipe": "recipe_v8",
+   "cells": 200000,
+   "replay": false,
+   "lhr_dump_job": 275252,
+   "dump": "$T/book_figs_2026-10-18/dump/jeb_t/native/ (copy: scratch/isla-render090-2026-10-22/dump/jeb_t/native/)",
+   "reused_2026_10_18_row": 11,
+   "scorer_record": "results/campaigns_2026-10-02/char/protocols/cl_r_jeb_t_seed42/native/metrics.jsonl"
+  }
+ },
+ "n_points_scored": 50024,
+ "load_dir": [
+  -1.0,
+  0.0,
+  0.0
+ ],
+ "load_magnitude": 37800.0,
+ "per_sample_rel_l2": {
+  "von_mises_l2": {
+   "ISLA": 0.4687863886356354,
+   "GeoTransolver": 0.44566091895103455,
+   "Transolver": 0.5468088984489441
+  },
+  "displacement_l2": {
+   "ISLA": 0.14975281059741974,
+   "GeoTransolver": 0.11530466377735138,
+   "Transolver": 0.1653471291065216
+  }
+ },
+ "views": {
+  "von_mises": {
+   "clim": [
+    0.0,
+    1193.303225097657
+   ],
+   "err_clim": 514.1948956298831
+  },
+  "displacement": {
+   "clim": [
+    0.0,
+    2.0866044485569004
+   ],
+   "err_clim": 0.27467748045921353
+  }
+ },
+ "mesh": {
+  "surface": "/home/psharpe/gh/physicsnemo/scratch/isla-render090-2026-10-22/geom/deepjebpp_611-092-IS06_hor_surface",
+  "n_triangles": 50024,
+  "n_distinct_points_used": 50024,
+  "centroid_match_distance_max_mm": 1.1154548513136538e-05
+ },
+ "point_order": {
+  "isla": "same order",
+  "gt": "permuted",
+  "t": "permuted"
+ },
+ "scorer_checks": [
+  {
+   "tag": "jeb_isla",
+   "protocol": "native",
+   "run_id": "r090_jb_isla_seed42",
+   "sample_id": "60073_611-092-IS06_hor_611-092-IS06_hor",
+   "scorer_record": "$T/evals_r090/r090_jb_isla_seed42/native/r090_jb_isla_seed42/metrics.jsonl",
+   "scorer_epoch": 40,
+   "scorer_rows_for_case": 1,
+   "scorer_rows_agree": true,
+   "scorer": {
+    "von_mises_l2": 0.4687863886356354,
+    "displacement_x_l2": 0.12928424775600433,
+    "displacement_y_l2": 0.8690239191055298,
+    "displacement_z_l2": 0.16802504658699036,
+    "displacement_l2": 0.14975281059741974
+   },
+   "dump": {
+    "von_mises_l2": 0.468786358833313,
+    "displacement_x_l2": 0.12928426265716553,
+    "displacement_y_l2": 0.8690250515937805,
+    "displacement_z_l2": 0.16802513599395752,
+    "displacement_l2": 0.14975285530090332
+   },
+   "rel_diff": {
+    "von_mises_l2": 6.357335261894559e-08,
+    "displacement_x_l2": 1.152589078135051e-07,
+    "displacement_y_l2": 1.3031727042658055e-06,
+    "displacement_z_l2": 5.321049985056718e-07,
+    "displacement_l2": 2.985151557637157e-07
+   },
+   "max_rel_diff": 1.3031727042658055e-06
+  },
+  {
+   "tag": "jeb_gt",
+   "protocol": "native",
+   "run_id": "cl_r_jeb_gt_seed42",
+   "sample_id": "60073_611-092-IS06_hor_611-092-IS06_hor",
+   "scorer_record": "results/campaigns_2026-10-02/char/protocols/cl_r_jeb_gt_seed42/native/metrics.jsonl",
+   "scorer_epoch": 40,
+   "scorer_rows_for_case": 2,
+   "scorer_rows_agree": true,
+   "scorer": {
+    "von_mises_l2": 0.44566091895103455,
+    "displacement_x_l2": 0.08902552723884583,
+    "displacement_y_l2": 0.6406094431877136,
+    "displacement_z_l2": 0.14510603249073029,
+    "displacement_l2": 0.11530466377735138
+   },
+   "dump": {
+    "von_mises_l2": 0.44566091895103455,
+    "displacement_x_l2": 0.08902552723884583,
+    "displacement_y_l2": 0.6406094431877136,
+    "displacement_z_l2": 0.14510603249073029,
+    "displacement_l2": 0.11530466377735138
+   },
+   "rel_diff": {
+    "von_mises_l2": 0.0,
+    "displacement_x_l2": 0.0,
+    "displacement_y_l2": 0.0,
+    "displacement_z_l2": 0.0,
+    "displacement_l2": 0.0
+   },
+   "max_rel_diff": 0.0
+  },
+  {
+   "tag": "jeb_t",
+   "protocol": "native",
+   "run_id": "cl_r_jeb_t_seed42",
+   "sample_id": "60073_611-092-IS06_hor_611-092-IS06_hor",
+   "scorer_record": "results/campaigns_2026-10-02/char/protocols/cl_r_jeb_t_seed42/native/metrics.jsonl",
+   "scorer_epoch": 40,
+   "scorer_rows_for_case": 1,
+   "scorer_rows_agree": true,
+   "scorer": {
+    "von_mises_l2": 0.5468088984489441,
+    "displacement_x_l2": 0.08240428566932678,
+    "displacement_y_l2": 0.7541852593421936,
+    "displacement_z_l2": 0.25446730852127075,
+    "displacement_l2": 0.1653471291065216
+   },
+   "dump": {
+    "von_mises_l2": 0.5468088984489441,
+    "displacement_x_l2": 0.08240428566932678,
+    "displacement_y_l2": 0.7541852593421936,
+    "displacement_z_l2": 0.25446730852127075,
+    "displacement_l2": 0.1653471291065216
+   },
+   "rel_diff": {
+    "von_mises_l2": 0.0,
+    "displacement_x_l2": 0.0,
+    "displacement_y_l2": 0.0,
+    "displacement_z_l2": 0.0,
+    "displacement_l2": 0.0
+   },
+   "max_rel_diff": 0.0
+  }
+ ]
+}

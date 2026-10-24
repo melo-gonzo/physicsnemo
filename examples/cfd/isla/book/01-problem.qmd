@@ -315,9 +315,13 @@ learned as a function of shape alone. When a global direction varies, the
 model must represent how the field turns with it. When a global scalar
 varies, it must represent how the field depends on a parameter of the
 physics. @tbl-parametric lists the datasets of the book by what varies.
-Coordinates enter in nondimensional form, scaled by each dataset's
-reference length, so no learned weight sees units. No architecture is told
-how the field depends on any global input.
+The baselines' coordinates enter in nondimensional form, scaled by each
+dataset's reference length, except on AeroZoo, whose protocol gives every
+model the PDE data in physical units (@sec-aerozoo-allowed). ISLA computes
+its own length, velocity and Reynolds number from each case and makes its
+inputs and outputs dimensionless with them (@sec-isla-frame,
+@sec-using-scales). No architecture is told how the field depends on any
+global input.
 
 | dataset | what varies across cases | global inputs | task |
 |:---|:---|:---|:---|
@@ -442,9 +446,10 @@ for one model on one dataset is $\varepsilon$ averaged over the validation
 cases.
 
 **Absolute values are comparable only within one dataset; ratios carry
-across.** The fields enter as the training pipeline presents them, each
-shifted and scaled by dataset statistics, so the denominator is the norm
-of the standardized label. The quantity that transfers from one dataset to
+across.** On every dataset but AeroZoo (@sec-aerozoo-allowed) the fields
+enter as the training pipeline presents them, each shifted and scaled by
+dataset statistics, so the denominator is the norm of the standardized
+label. The quantity that transfers from one dataset to
 another is the ratio between two models scored on the same cases. **Every
 cross-architecture ratio in the book is the named baseline's error divided
 by ISLA's error on the same cases, so a ratio above one favors ISLA.** The
