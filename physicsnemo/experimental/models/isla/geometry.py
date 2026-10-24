@@ -482,8 +482,8 @@ _SWITCH_UNITS = 1
 #: ``1 + 2 u`` units). The centring adds the rounding of ``x - c`` and ``v - c``, one
 #: unit (none for float32 inputs whose exponents lie within 29 bits of ``c``'s), and
 #: the second-order terms and the band's own float64 evaluation two more (rounding is
-#: monotone, so ``fl(D - E) <= fl(D + E)`` needs no margin): 91 in three dimensions,
-#: 17 in two. Torch evaluates each operation by itself (no fused multiply-add, which
+#: monotone, so ``fl(D - E) <= fl(D + E)`` needs no margin): 91 in three dimensions.
+#: In two, an edge point's 15 units, the centring's 1 and one more: 17. Torch evaluates each operation by itself (no fused multiply-add, which
 #: would only remove roundings in the bounds; :func:`_two_product` and
 #: :func:`_two_sum` need it absent). Float64 inputs are covered where every product
 #: stays normal, about ``|v| < 1e76`` with nonzero differences above ``1e-76``.
@@ -1842,9 +1842,10 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     exact distance plus its error bound bounds the closest distance, and a second
     traversal of the same BVH returns the cells within that radius; in two
     a brute force in the queries' precision, on the centred coordinates, keeps the
-    segments within its own rounding (``32 u (|x'| + max |v'|)`` on each side, against
-    a worst case of 14.5 units: the distance to a segment 12, the comparison's square
-    and root 2.5) and the error bounds of the least. The winding
+    segments within its own rounding (``40 u (|x'| + max |v'|)`` on each side, with
+    room over a first-order count of 33.5 units: the brute-force distance 14, the
+    centred copies' rounding 1, the comparison's square and root 2.5, and the
+    arithmetic share of the least's bound 16) and the error bounds of the least. The winding
     number takes the same BVH in three dimensions, unless cells repeat.
 
     ``fast`` changes how the three-dimensional candidates and the winding number are
@@ -1944,7 +1945,7 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
                 tree = _cell_tree(s_rep)
     else:
         w_sum = None
-        rounding = 32 * torch.finfo(query_points.dtype).eps / 2 * (q_norm + reach.max())
+        rounding = 40 * torch.finfo(query_points.dtype).eps / 2 * (q_norm + reach.max())
         li, pk = _segment_candidates(query_c, points_c, cells, (2 * (rounding + err_max)).to(query_points.dtype))
     ### In the order of (query, cell), so the first minimum is the least cell index.
     f = cells.shape[0]
