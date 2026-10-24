@@ -416,12 +416,9 @@ def test_the_interior_configs_build_their_model(model):
     dataset = paired.get(model, "drivaer_ml_volume_reference")
     cfg = _compose(model, dataset, *SMALL)
     ds = load_dataset_config(_RECIPE_ROOT / "datasets" / f"{dataset}.yaml")
-    assert (
-        hydra.utils.instantiate(
-            cfg.model, **model_dataset_constants(cfg.model, ds)
-        ).interior
-        is True
-    )
+    built = hydra.utils.instantiate(cfg.model, **model_dataset_constants(cfg.model, ds))
+    assert built.interior is True
+    assert built.query_independent is True  # ISLA-DTT
 
 
 def test_isla_volume_composes_with_the_corrected_measure_dataset():
@@ -518,6 +515,32 @@ def test_interior_isla_configs_use_the_class_default_boundary_budget(model):
         assert cfg.model.boundary_tokens == default == 200_000
     else:
         assert "boundary_tokens" not in cfg.model
+
+
+@pytest.mark.parametrize(
+    "model",
+    sorted(p.stem for p in (_RECIPE_ROOT / "conf" / "model").glob("isla*.yaml")),
+)
+def test_interior_isla_configs_run_isla_dtt_compiled_per_block(model):
+    """Every interior ISLA config (found by its `interior: true`, so a new one is covered)
+    states `model.query_independent: true`, ISLA-DTT, the interior task's reference form
+    and the class default, and compiles it per block (`compile: false`,
+    `model.compile_blocks: true`), since its boundary read breaks the whole-model
+    fullgraph trace; it keeps its `compile_options`, interacting ISLA's whole-model
+    compile. No surface config sets `query_independent: true`."""
+    path = _RECIPE_ROOT / "conf" / "model" / f"{model}.yaml"
+    raw = OmegaConf.load(path)
+    cfg = _compose(model, "drivaer_ml_volume_reference")
+    if raw.model.get("interior", False):
+        assert raw.model.get("query_independent") is True  # stated in the file
+        assert cfg.model.query_independent is True
+        assert cfg.model.compile_blocks is True
+        assert cfg.compile is False
+        assert raw.compile is False and raw.model.compile_blocks is True
+        assert raw.compile_options.fullgraph is True
+    else:
+        assert raw.model.get("query_independent") is not True
+        assert cfg.model.get("query_independent") is not True
 
 
 def test_corrected_measure_sees_the_surface_area():

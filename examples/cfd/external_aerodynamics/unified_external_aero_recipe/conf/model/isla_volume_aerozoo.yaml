@@ -67,12 +67,13 @@ training:
   field_weights:
     velocity: 3
 
-# Per-block compile here (compile_blocks below), not the whole-model compile of isla_volume.yaml: on
-# AeroZoo's four boundaries the whole-model graph recompiles (2026-10-16): Dynamo's duck sizing ties
+# Per-block compile (compile_blocks below), as in isla_volume.yaml: ISLA-DTT's boundary read breaks the
+# whole-model fullgraph trace. The blocks see the token count, which is the 200,000 boundary tokens plus the
+# interior sample whenever a case has more boundary faces than that. With compile=true
+# model.query_independent=false model.compile_blocks=false, interacting ISLA's whole model compiles with these
+# options; on AeroZoo's four boundaries that graph recompiles (2026-10-16): Dynamo's duck sizing ties
 # boundaries with equal cell counts in the first case, and the input meshes' caches, whose contents differ
-# by case with what the pipeline computed, are guarded by their size. The blocks see the token count, which
-# is the 200,000 boundary tokens plus the interior sample whenever a case has more boundary faces than that.
-# With compile=true model.compile_blocks=false the whole model compiles with these options.
+# by case with what the pipeline computed, are guarded by their size.
 compile: false
 compile_options:
   fullgraph: true
@@ -131,7 +132,8 @@ model:
   # dataset file's isla_constants.reynolds (injected by train.py and infer.py).
   reynolds: null
   output_stats: null             # injected by train.py: the dataset's NormalizeMeshFields stats of the targets
-  interior: true                 # predict at prediction_points, which join the encoder as tokens
+  interior: true                 # predict at prediction_points: passive tokens that read the boundary (ISLA-DTT)
+  query_independent: true        # ISLA-DTT, the interior task's reference form (the class default for interior: true, stated here)
   boundary_tokens: 200000        # boundary tokens drawn per case inside the model, water-filled over the four roles (equal to the class default)
   hidden: 512                  # the reference configuration (REF-80 verdict, 2026-10-04): most accurate under 80 GiB per GPU on DrivAerML Surface and the 210-wing rung; equal to the class defaults
   n_layers: 12
