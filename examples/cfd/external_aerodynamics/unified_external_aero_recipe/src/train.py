@@ -435,9 +435,9 @@ def chunked_forward_backward(
         pred = normalize_output_to_tensordict(out, target_config, "mesh").float()
         return pred.apply(lambda p, t: p.reshape(t.shape), targets[a:b])
 
-    def one_pass(ranges: list[tuple[int, int]]) -> TensorDict:
+    def one_pass(spans: list[tuple[int, int]]) -> TensorDict:
         parts = []
-        for a, b in ranges:
+        for a, b in spans:
             pred = predict(a, b)
             rest = targets.select(*pred.keys(include_nested=True, leaves_only=True))
             share, _ = loss_calculator(
@@ -447,14 +447,14 @@ def chunked_forward_backward(
             parts.append(pred.detach())
         return torch.cat(parts)
 
-    def two_pass(ranges: list[tuple[int, int]]) -> TensorDict:
+    def two_pass(spans: list[tuple[int, int]]) -> TensorDict:
         with torch.no_grad():
-            pred = torch.cat([predict(a, b) for a, b in ranges])
+            pred = torch.cat([predict(a, b) for a, b in spans])
         pred = pred.apply(lambda t: t.requires_grad_())
         loss, _ = loss_calculator(pred, targets, measure)
         loss.backward()
         keys = list(pred.keys(include_nested=True, leaves_only=True))
-        for a, b in ranges:
+        for a, b in spans:
             part = predict(a, b)
             torch.autograd.backward(
                 [part[k] for k in keys], [pred[k].grad[a:b] for k in keys]
@@ -473,7 +473,13 @@ def chunked_forward_backward(
         loss, loss_td = loss_calculator(pred, targets, measure)
     chunks.backward()
     if ddp:
-        grads = [p.grad for p in core.parameters() if p.grad is not None]
+        ### Paired across the ranks by position: every rank reduces the same list.
+        params = [p for p in core.parameters() if p.requires_grad]
+        if any(p.grad is None for p in params):
+            raise RuntimeError(
+                "chunked_forward_backward: a trainable parameter has no gradient"
+            )
+        grads = [p.grad for p in params]
         for g, r in zip(grads, fused_all_reduce(grads)):
             g.copy_(r / dist.get_world_size())
     with torch.no_grad():
@@ -576,11 +582,6 @@ def _run_epoch(
                     target_config=target_config,
                     chunk=chunk,
                 )
-                if i + 1 < num_steps:
-                    next_batch = load()
-                optimizer.step()
-                if cfg.training.get("scheduler_update_mode", "epoch") == "step":
-                    scheduler.step()
             else:
                 loss, losses, metrics = forward_pass(
                     batch,
@@ -592,8 +593,9 @@ def _run_epoch(
                     target_config=target_config,
                 )
 
-            if is_train and chunk is None:
-                optimizer.zero_grad()
+            if is_train:
+                if chunk is None:
+                    optimizer.zero_grad()
                 if precision == "float16" and scaler is not None:
                     scaler.scale(loss).backward()
                     if i + 1 < num_steps:
@@ -601,7 +603,8 @@ def _run_epoch(
                     scaler.step(optimizer)
                     scaler.update()
                 else:
-                    loss.backward()
+                    if chunk is None:
+                        loss.backward()
                     ### Load the next batch now, while the GPU still runs this
                     ### backward: the loader's host-side work (the lookahead
                     ### sample's host-to-device copy and transforms) then
@@ -1212,6 +1215,11 @@ def main(cfg: DictConfig) -> None:
             f" ({loss_type} is not pointwise) when its predicted peak memory fits"
             f" the device on every rank, else two passes over chunks of {_QUERY_CHUNK}"
         )
+        if cfg.compile:
+            logger.info(
+                "ISLA-DTT training step: compile=true does not compile the chunked"
+                " step (query_chunks runs eagerly; compile_blocks still applies)"
+            )
     logger.info(
         f"Model contract: input_type={cfg.input_type}, output_type={output_type}"
     )
