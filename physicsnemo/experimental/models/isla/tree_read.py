@@ -92,7 +92,9 @@ within 10% of this forest, which builds five times faster and shares its tree wi
 GLOBE).
 """
 
+import contextlib
 import dataclasses
+import logging
 import math
 from dataclasses import dataclass
 
@@ -101,12 +103,19 @@ import torch.nn as nn
 from tensordict import TensorDict
 from torch.utils.checkpoint import checkpoint
 
+from physicsnemo.experimental.models.isla import fused_basis, fused_read
 from physicsnemo.experimental.models.isla.segment_softmax import (
     PairPlan,
     segment_softmax_read,
 )
+from physicsnemo.experimental.models.isla.tree_build import forest_tables, resolve_tree_build
+from physicsnemo.experimental.models.isla.tree_walk import walk_fits, walk_pairs
 from physicsnemo.mesh.spatial._ragged import _ragged_arange
 from physicsnemo.mesh.spatial.cluster_tree import ClusterTree
+
+logger = logging.getLogger(__name__)
+#: Why the fused read used the reference kernel basis, each reason logged once.
+_BASIS_FALLBACKS_LOGGED: set[str] = set()
 
 #: Heads of the read; each head owns ``KERNEL_READ_WIDTH // KERNEL_READ_HEADS`` value
 #: channels.
@@ -251,10 +260,14 @@ class BoundaryForest:
         theta: float,
         leaf_size: int = TREE_READ_LEAF_SIZE,
         eps: float = 1e-12,
+        build: str = "auto",
     ) -> "BoundaryForest":
         """The forest over cells at ``points`` ``(N, d)`` with ``measure`` ``(N,)``,
         unit ``normals`` ``(N, d)`` and rank-1 inputs ``vecs`` ``(N, P, d)`` or
-        ``None``. No gradient flows into it (a numerical device)."""
+        ``None``. No gradient flows into it (a numerical device). ``build`` picks how
+        it is built, not what it is (:func:`~.tree_build.resolve_tree_build`): the
+        per-octant cluster trees below, or the same forest from one pass over all
+        octants (:func:`~.tree_build.forest_tables`)."""
         points, measure, normals = points.detach(), measure.detach(), normals.detach()
         vecs = None if vecs is None else vecs.detach()
         n, d = points.shape
@@ -266,6 +279,21 @@ class BoundaryForest:
         frame = canonical_frame(points, measure)
         points_f, normals_f = points @ frame, normals @ frame
         octant = normal_octants(normals_f)
+        if resolve_tree_build(build, points) == "fast":
+            tables = forest_tables(
+                points, measure, normals, vecs, points_f, octant, leaf_size=leaf_size
+            )
+            if tables is not None:
+                mean_n = tables.pop("mean_n")
+                length = mean_n.norm(dim=-1)
+                return cls(
+                    n_cells=n,
+                    theta=float(theta),
+                    frame=frame,
+                    **tables,
+                    normal=mean_n / length[:, None].clamp_min(eps),
+                    coherent=length > coherent_length,
+                )
         trees, tree_cells, cells, offsets = [], [], [], [0]
         starts, counts, lefts, rights, boxes = [], [], [], [], []
         centers, nrm, vec, meas = [], [], [], []
@@ -354,16 +382,39 @@ class BoundaryForest:
         return self.cells[pos], which
 
     def point_pairs(
-        self, points: torch.Tensor, theta: float | None = None
+        self, points: torch.Tensor, theta: float | None = None, walk: str = "auto"
     ) -> tuple[torch.Tensor, torch.Tensor, int]:
         """Every point's list: ``(qi, si, n_node)`` sorted by point, where ``si`` below
         ``n_cells`` names a cell and ``n_cells + m`` names node ``m``; ``n_node`` is the
         number of node entries. Each tree is walked once per point at ``theta``
         (the forest's own by default); a node is admitted only when its box is well
         separated from the point and its normals are coherent, so each point's list
-        holds every cell exactly once, as itself or inside one node."""
+        holds every cell exactly once, as itself or inside one node. ``walk`` names
+        how, not what (:func:`resolve_walk`): the fast walk gives the same lists in
+        the same order. Lists past Warp's array limit are walked by the reference
+        under ``"auto"`` and refused under ``"fast"``."""
+        return self.frame_pairs(points.detach() @ self.frame, theta, walk)
+
+    def frame_pairs(
+        self, points_f: torch.Tensor, theta: float | None = None, walk: str = "auto", count_only: bool = False
+    ) -> tuple[torch.Tensor, torch.Tensor, int] | torch.Tensor:
+        """:meth:`point_pairs` of points already in the trees' coordinates
+        (``points.detach() @ frame``, in the dtype the product gives); with
+        ``count_only`` each point's number of pairs ``(Q,)`` alone, which the fast walk
+        counts without making the lists (so past Warp's limit on the lists too)."""
         theta = self.theta if theta is None else float(theta)
-        points_f = points.detach() @ self.frame  # the trees' coordinates
+        if resolve_walk(walk, points_f, theta, self) == "fast":
+            pairs = walk_pairs(self, points_f, theta, count_only)
+            if pairs is not None:
+                return pairs
+            if walk == "fast":
+                raise ValueError(f"the fast walk's arrays for {points_f.shape[0]} points pass Warp's 2**31 elements")
+            key = (points_f.device.type, "reference past Warp's array limit")
+            if key not in _WALKS_LOGGED:
+                _WALKS_LOGGED.add(key)
+                logger.info(
+                    "ISLA tree walk=auto walks %d points by the reference: past Warp's array limit", points_f.shape[0]
+                )
         qs, ss, n_node = [], [], 0
         for t, tree in enumerate(self.trees):
             a, b = int(self.node_offset[t]), int(self.node_offset[t + 1])
@@ -374,8 +425,50 @@ class BoundaryForest:
             ss += [self.tree_cells[t][plan.near_source_ids], self.n_cells + a + plan.far_source_node_ids]
             n_node += plan.n_far
         qi, si = torch.cat(qs), torch.cat(ss)
+        if count_only:
+            return torch.bincount(qi, minlength=points_f.shape[0])
         order = torch.argsort(qi, stable=True)
         return qi[order], si[order], n_node
+
+
+_WALKS_LOGGED: set[tuple[str, str]] = set()
+
+
+def resolve_walk(walk: str, points: torch.Tensor, theta: float, forest: BoundaryForest) -> str:
+    """The walk :meth:`BoundaryForest.point_pairs` runs: ``"reference"`` (GLOBE's
+    cluster-tree traversal, tree by tree) or ``"fast"`` (:mod:`tree_walk`'s Warp
+    kernels, the same pairs in the same order). ``"auto"`` picks the fast walk for
+    CUDA points when the forest's depth fits its stack, else the reference, logged
+    once per device type and choice; a forced name is kept (``"fast"`` runs on CPU
+    too). At ``theta = 0`` there is no walk (the plan is every pair) and the
+    reference's construction runs either way. Under autocast the forest's
+    coordinates are in the autocast dtype (``points @ frame``), and the fast walk
+    rounds as its torch kernels do."""
+    if walk not in ("auto", "reference", "fast"):
+        raise ValueError(f"walk must be 'auto', 'reference' or 'fast', got {walk!r}")
+    if theta == 0:
+        return "reference"
+    if walk == "fast" and not walk_fits(forest):
+        raise ValueError(
+            f"the fast walk does not take this forest ({len(forest.levels)} levels, {forest.aabb_min.dtype} boxes)"
+        )
+    if walk != "auto":
+        return walk
+    fits = walk_fits(forest)
+    chosen = "fast" if points.is_cuda and fits else "reference"
+    key = (points.device.type, chosen)
+    if key not in _WALKS_LOGGED:
+        _WALKS_LOGGED.add(key)
+        logger.info(
+            "ISLA tree walk=auto resolved to %r on %s (cuda=%s, forest depth %d, %s boxes, fits=%s)",
+            chosen,
+            points.device.type,
+            points.is_cuda,
+            len(forest.levels),
+            forest.aabb_min.dtype,
+            fits,
+        )
+    return chosen
 
 
 @dataclass
@@ -394,6 +487,9 @@ class TreeReadPairs:
     n_cells: int
     n_queries: int
     n_pairs_node: int  # (point, node) pairs over every case
+    kernel: str = "reference"  # the blocks' read: "reference" or "fused" (fused_read.py)
+    src_log_m: torch.Tensor | None = None  # (n_b,) every source's log measure; log_m = src_log_m[plan.bj]
+    basis_sink: tuple | None = None  # the fused reads' shared basis gradient (fused_read.basis_sink)
 
     @property
     def n_pairs(self) -> int:
@@ -523,8 +619,74 @@ def _chunked_basis(basis: _KernelBasis, qi, si, geometry: dict) -> torch.Tensor:
     return torch.cat(parts)
 
 
-def tree_read_pairs(
+def _basis_of_pairs(basis: _KernelBasis, qi, si, q_off: int, s_off: int, geometry: dict) -> torch.Tensor:
+    with torch.no_grad():
+        inv = tree_pair_invariants(qi.long() - q_off, si.long() - s_off, **geometry)
+    return basis(inv)
+
+
+def _chunked_basis_from_plan(
     basis: _KernelBasis,
+    plan: PairPlan,
+    a: int,
+    b: int,
+    q_off: int,
+    s_off: int,
+    geometry: dict,
+    weights: tuple | None = None,
+) -> torch.Tensor:
+    """The kernel basis of one case's pairs, the plan's rows ``a:b``, in the chunks of
+    :func:`_chunked_basis` and with its values, but each chunk's invariants inside the
+    checkpoint too: backward rebuilds them from the plan's indices (``q_off`` and
+    ``s_off`` the case's first point and source), so nothing per pair but the basis
+    is kept. With ``weights`` (:func:`fused_basis.mlp_weights`) each chunk is one
+    fused kernel of the invariants and the MLP (:mod:`fused_basis`)."""
+    grad = torch.is_grad_enabled() and any(p.requires_grad for p in basis.parameters())
+    parts = []
+    for c in range(a, b, TREE_READ_PAIR_CHUNK):
+        e = min(c + TREE_READ_PAIR_CHUNK, b)
+        if weights is not None:
+            parts.append(fused_basis.fused_kernel_basis(weights, plan.qi[c:e], plan.bj[c:e], q_off, s_off, geometry))
+            continue
+        args = (basis, plan.qi[c:e], plan.bj[c:e], q_off, s_off, geometry)
+        parts.append(checkpoint(_basis_of_pairs, *args, use_reentrant=False) if grad else _basis_of_pairs(*args))
+    if not parts:
+        return geometry["query_r"].new_zeros(0, KERNEL_READ_BASIS)
+    return torch.cat(parts)
+
+
+@dataclass
+class TreeReadWalk:
+    """Every case's forest and point lists (:func:`tree_read_walk`), before the kernel
+    basis: per case the pairs ``(qi, si, n_node)`` sorted by point, the inputs of their
+    invariants (:func:`tree_pair_invariants`) and the sources' log measures.
+    :func:`walk_range_pairs` assembles the pairs of any range of points from it;
+    ``kernel`` is the read's implementation (:func:`tree_read_walk`). A walk made
+    with ``walk_points=False`` has no lists (``None`` per case) and keeps what
+    :func:`walk_points_range` walks a range of points with: per case the points in
+    the forest's frame, the walk's implementation and the autocast state."""
+
+    forests: list[BoundaryForest]
+    lists: list[tuple[torch.Tensor, torch.Tensor, int] | None]
+    geometry: list[dict]
+    src_logm: list[torch.Tensor]
+    omega: torch.Tensor  # (B * N,) the cells' measure fractions
+    n_cells: int
+    n_queries: int
+    kernel: str
+    points_f: list[torch.Tensor] | None = None
+    walk: str = "auto"
+    autocast: tuple[bool, torch.dtype] | None = None
+
+
+def tree_read_pairs(basis: _KernelBasis, **inputs) -> TreeReadPairs:
+    """The tree read's pairs of every point of a batch of cases, with their kernel
+    basis: :func:`walk_range_pairs` of :func:`tree_read_walk` (which takes the
+    keyword arguments)."""
+    return walk_range_pairs(basis, tree_read_walk(**inputs))
+
+
+def tree_read_walk(
     *,
     query_r: torch.Tensor,
     query_n: torch.Tensor,
@@ -536,8 +698,12 @@ def tree_read_pairs(
     g_unit: torch.Tensor,
     theta: float,
     eps: float,
-) -> TreeReadPairs:
-    r"""Build the tree read's pairs for a batch of cases.
+    walk: str = "auto",
+    build: str = "auto",
+    kernel: str = "reference",
+    walk_points: bool = True,
+) -> TreeReadWalk:
+    r"""Walk the tree read's forests for a batch of cases.
 
     ``query_r``, ``query_n`` ``(B, Q, d)`` (frame units; the point's built-in
     direction), ``query_wall`` ``(B, Q)`` the point's built-in wall distance;
@@ -550,17 +716,23 @@ def tree_read_pairs(
     (:meth:`BoundaryForest.point_pairs`), so each point's list is a set of cells and
     a set of nodes that together cover every cell exactly once; the nodes' virtual
     cells (centroid, renormalized mean normal, mean rank-1 inputs, total measure)
-    come with the forest; the kernel basis of every pair in chunks. The forest and
-    the walk run without gradient (a numerical device); the invariants and the basis
-    carry gradients to the kernel MLP.
+    come with the forest. The forest and the walk run without gradient (a numerical
+    device); the invariants and the basis (:func:`walk_range_pairs`) carry gradients
+    to the kernel MLP. ``walk`` names the walk's implementation
+    (:func:`resolve_walk`); ``build`` is the forest's build
+    (:meth:`BoundaryForest.build`); ``kernel`` is the read's, recorded for
+    :func:`walk_range_pairs` (with ``"fused"`` the blocks read through
+    :mod:`fused_read`, and the basis is built after the plan from its indices, the
+    same values with the invariants rebuilt in backward:
+    :func:`_chunked_basis_from_plan`, by one fused kernel per chunk where
+    :func:`fused_basis.supported` holds). With ``walk_points=False`` no point is
+    walked here: :func:`walk_points_range` walks any range of them later.
     """
     b, nq, d = query_r.shape
     n = boundary_r.shape[1]
     tiny = torch.finfo(torch.float32).tiny
     has_vecs = boundary_vecs is not None and bool(boundary_vecs.shape[2])
-    qis, sis, bases, logms, forests, offsets = [], [], [], [], [], []
-    src_off = 0
-    n_pairs_node = 0
+    forests, lists, geometries, src_logms, points_fs = [], [], [], [], []
     for i in range(b):
         with torch.no_grad():
             omega = torch.exp(log_frac[i])
@@ -572,8 +744,11 @@ def tree_read_pairs(
                 theta=theta,
                 leaf_size=TREE_READ_LEAF_SIZE,
                 eps=eps,
+                build=build,
             )
-            qi, si, n_node = forest.point_pairs(query_r[i])
+            points_f = query_r[i].detach() @ forest.frame
+            points_fs.append(points_f)
+            lists.append(forest.frame_pairs(points_f, walk=walk) if walk_points else None)
             node_measure = forest.measure.to(log_frac.dtype)
         src_r = torch.cat([boundary_r[i], forest.center.to(boundary_r.dtype)])
         src_n = torch.cat([boundary_n[i], forest.normal.to(boundary_n.dtype)])
@@ -593,15 +768,91 @@ def tree_read_pairs(
             "g_unit": g_unit[i],
             "eps": eps,
         }
-        bases.append(_chunked_basis(basis, qi, si, geometry))
-        logms.append(src_logm[si])
-        qis.append(qi + i * nq)
-        sis.append(si + src_off)
         forests.append(forest)
+        geometries.append(geometry)
+        src_logms.append(src_logm)
+    device = query_r.device.type
+    return TreeReadWalk(
+        forests=forests,
+        lists=lists,
+        geometry=geometries,
+        src_logm=src_logms,
+        omega=torch.exp(log_frac).reshape(-1),
+        n_cells=n,
+        n_queries=nq,
+        kernel=kernel,
+        points_f=None if walk_points else points_fs,
+        walk=walk,
+        autocast=(torch.is_autocast_enabled(device), torch.get_autocast_dtype(device)),
+    )
+
+
+@contextlib.contextmanager
+def _walk_context(walk: TreeReadWalk):
+    """No gradient, and the autocast state :func:`tree_read_walk` ran in: the opening
+    test's dtypes follow the autocast state (:func:`resolve_walk`)."""
+    enabled, dtype = walk.autocast
+    with torch.no_grad(), torch.autocast(walk.omega.device.type, dtype=dtype, enabled=enabled):
+        yield
+
+
+def walk_points_range(walk: TreeReadWalk, start: int, stop: int) -> TreeReadWalk:
+    """The walk of the points ``start`` to ``stop`` of a walk made without its lists
+    (``tree_read_walk(walk_points=False)``), numbered from ``start``, with those
+    points' geometry: each forest walked for those points alone, from the same
+    coordinates in its frame and in the same autocast state, so each point's list is
+    the one the walk of every point gives it, in the same order, and
+    :func:`walk_range_pairs` of the result is the pairs of that range."""
+    with _walk_context(walk):
+        lists = [f.frame_pairs(p[start:stop], walk=walk.walk) for f, p in zip(walk.forests, walk.points_f)]
+    rows = ("query_r", "query_n", "query_wall")
+    geometry = [{**g, **{k: g[k][start:stop] for k in rows}} for g in walk.geometry]
+    return dataclasses.replace(walk, lists=lists, geometry=geometry, n_queries=stop - start, points_f=None)
+
+
+def walk_pair_counts(walk: TreeReadWalk) -> torch.Tensor:
+    """The number of pairs of each point of ``walk`` ``(Q,)``, summed over the cases;
+    for a walk made without its lists, counted by each forest's walk without making
+    them."""
+    if walk.points_f is None:
+        return sum(torch.bincount(qi, minlength=walk.n_queries) for qi, _, _ in walk.lists)
+    with _walk_context(walk):
+        return sum(f.frame_pairs(p, walk=walk.walk, count_only=True) for f, p in zip(walk.forests, walk.points_f))
+
+
+def walk_range_pairs(
+    basis: _KernelBasis, walk: TreeReadWalk, start: int = 0, stop: int | None = None
+) -> TreeReadPairs:
+    """The pairs of the points ``start`` to ``stop`` (default: every point) of each
+    case of ``walk``, numbered from ``start``, with the kernel basis of every pair in
+    chunks: each point's list is the walk's, so a range of points reads exactly what
+    it reads among all of them."""
+    n, nq_all = walk.n_cells, walk.n_queries
+    stop = nq_all if stop is None else stop
+    nq = stop - start
+    qis, sis, bases, logms, offsets = [], [], [], [], []
+    deferred = []
+    src_off = 0
+    pair_off = 0
+    n_pairs_node = 0
+    for i, forest in enumerate(walk.forests):
+        qi, si, n_node = walk.lists[i]
+        if (start, stop) != (0, nq_all):
+            a, b = torch.searchsorted(qi, qi.new_tensor([start, stop])).tolist()
+            qi, si = qi[a:b], si[a:b]
+            n_node = int((si >= n).sum())
+        if walk.kernel == "fused":
+            deferred.append((pair_off, pair_off + int(qi.shape[0]), i * nq - start, src_off, walk.geometry[i]))
+        else:
+            bases.append(_chunked_basis(basis, qi, si, walk.geometry[i]))
+        pair_off += int(qi.shape[0])
+        logms.append(walk.src_logm[i][si])
+        qis.append(qi + (i * nq - start))
+        sis.append(si + src_off)
         offsets.append(src_off)
         src_off += n + forest.n_nodes
         n_pairs_node += n_node
-    plan_all = PairPlan.build(torch.cat(qis), torch.cat(sis), b * nq, src_off)
+    plan_all = PairPlan.build(torch.cat(qis), torch.cat(sis), len(walk.forests) * nq, src_off)
     if plan_all.qi.shape[0] < 2**31:
         ### 32-bit pair indices (the fused read widens them on load): half the plan's memory.
         plan_all = dataclasses.replace(
@@ -611,16 +862,28 @@ def tree_read_pairs(
             perm=plan_all.perm.int(),
             qi_by_b=plan_all.qi_by_b.int(),
         )
+    ### One cast of the MLP's weights for every case and chunk, as autocast's weight cache gives the reference.
+    reason = next(filter(None, (fused_basis.unsupported_reason(basis, item[-1]) for item in deferred)), None)
+    weights = fused_basis.mlp_weights(basis) if deferred and reason is None else None
+    if reason is not None and reason not in _BASIS_FALLBACKS_LOGGED:
+        _BASIS_FALLBACKS_LOGGED.add(reason)
+        logger.info("ISLA fused tree read: the reference kernel basis is used (%s)", reason)
+    for a, e, q_off, s_off, geometry in deferred:
+        bases.append(_chunked_basis_from_plan(basis, plan_all, a, e, q_off, s_off, geometry, weights))
+    basis_all = torch.cat(bases)
     return TreeReadPairs(
         plan=plan_all,
-        basis=torch.cat(bases),
+        basis=basis_all,
         log_m=torch.cat(logms),
-        omega=torch.exp(log_frac).reshape(-1),
-        forests=forests,
+        omega=walk.omega,
+        forests=walk.forests,
         src_offsets=offsets,
         n_cells=n,
         n_queries=nq,
         n_pairs_node=n_pairs_node,
+        kernel=walk.kernel,
+        src_log_m=torch.cat(walk.src_logm),
+        basis_sink=fused_read.basis_sink(basis_all) if walk.kernel == "fused" else None,
     )
 
 
@@ -656,10 +919,13 @@ class _TreeKernelRead(nn.Module):
         nn.init.zeros_(self.out.weight)
 
     def forward(self, h_b, h_q, pairs: TreeReadPairs):
-        nh, c, kc = KERNEL_READ_HEADS, KERNEL_READ_WIDTH // KERNEL_READ_HEADS, KERNEL_READ_KEY
+        return self.read(self.sources(h_b, pairs), h_q, pairs)
+
+    def sources(self, h_b, pairs: TreeReadPairs | TreeReadWalk):
+        """The virtual sources' keys and values at this depth, ``(sources, H KC + W)``,
+        from the boundary states ``h_b``."""
         hb = self.norm_b(h_b)
         v_c, k_c = self.value(hb), self.key(hb)
-        q = self.query(self.norm_q(h_q)).view(-1, nh, kc)
         ### The virtual sources, case by case: the cells, then the forest's node means
         ### of the keys and values together (one scatter and one sweep per case).
         n = pairs.n_cells
@@ -667,14 +933,49 @@ class _TreeKernelRead(nn.Module):
         for i, forest in enumerate(pairs.forests):
             sl = slice(i * n, (i + 1) * n)
             kv_c = torch.cat([k_c[sl], v_c[sl]], dim=-1)
-            kv_parts += [kv_c, node_means(kv_c, forest, pairs.omega[sl])]
-        kv_src = torch.cat(kv_parts)
+            means = (
+                fused_read.fused_node_means
+                if pairs.kernel == "fused" and fused_read.node_means_supported(kv_c)
+                else node_means
+            )
+            kv_parts += [kv_c, means(kv_c, forest, pairs.omega[sl])]
+        return torch.cat(kv_parts)
+
+    def read(self, kv_src, h_q, pairs: TreeReadPairs):
+        """The points' residual update from the sources' keys and values (:meth:`sources`)."""
+        nh, c, kc = KERNEL_READ_HEADS, KERNEL_READ_WIDTH // KERNEL_READ_HEADS, KERNEL_READ_KEY
+        q = self.query(self.norm_q(h_q)).view(-1, nh, kc)
         k_src = kv_src[:, : nh * kc].reshape(-1, nh, kc)
         v_src = kv_src[:, nh * kc :].reshape(-1, nh, c)
         ### The pairs' kernel terms at this block: the shared basis through the block's
         ### kernel weights (a matmul; its gradient to the basis accumulates over blocks).
-        ker = pairs.basis @ self.kernel.weight.t().to(pairs.basis.dtype)
-        read = segment_softmax_read(
-            ker, pairs.log_m, q, k_src, v_src, pairs.plan, scale=1.0 / math.sqrt(kc)
-        )
+        if pairs.kernel == "fused" and fused_read.supported(pairs.basis, q, k_src, v_src):
+            ### The same read with the kernel term computed inside it (fused_read.py), its
+            ### output rounded where the reference's is: to h_q's dtype if that is narrow,
+            ### else at the output projection's input under autocast.
+            low = (torch.bfloat16, torch.float16)
+            dev = h_q.device.type
+            if h_q.dtype in low:
+                out_dtype = h_q.dtype
+            elif torch.is_autocast_enabled(dev) and torch.get_autocast_dtype(dev) in low:
+                out_dtype = torch.get_autocast_dtype(dev)
+            else:
+                out_dtype = torch.float32
+            read = fused_read.fused_kernel_read(
+                pairs.basis,
+                self.kernel.weight.to(pairs.basis.dtype),
+                pairs.src_log_m,
+                q,
+                k_src,
+                v_src,
+                pairs.plan,
+                scale=1.0 / math.sqrt(kc),
+                sink=pairs.basis_sink,
+                out_dtype=out_dtype,
+            )
+        else:
+            ker = pairs.basis @ self.kernel.weight.t().to(pairs.basis.dtype)
+            read = segment_softmax_read(
+                ker, pairs.log_m, q, k_src, v_src, pairs.plan, scale=1.0 / math.sqrt(kc)
+            )
         return self.out(read.reshape(-1, nh * c).to(h_q.dtype))

@@ -381,7 +381,15 @@ the first compile's cost and the one exception); the per-block
 boundary read breaks the whole-model graph, so they set `compile: false` and
 `model.compile_blocks: true`; `compile=true model.query_independent=false
 model.compile_blocks=false` gives interacting ISLA's whole-model compile with the
-`compile_options` kept in each file.
+`compile_options` kept in each file. ISLA-DTT trains in chunks of
+prediction points, with the unchunked step's gradients up to summation order:
+the boundary side runs once, then the points in the fewest chunks whose peak
+memory, predicted from the walk's pair count and the point count once the
+boundary side has run, fits the device on every rank. One chunk of every point,
+when it fits, is the fastest form and leaner than the unchunked step; each extra
+chunk costs about 15 ms on DrivAerML Volume. Under relative_l2 and
+case_relative_l2, which are not sums over the points, more than one chunk takes
+two passes. A float16 run (under its GradScaler) keeps the unchunked step.
 
 **Learning rate.** 3.75e-4 at `hidden: 512`, pinned in every ISLA config
 (the recipe default of 3e-3 drives ISLA to a mean-field plateau within five
