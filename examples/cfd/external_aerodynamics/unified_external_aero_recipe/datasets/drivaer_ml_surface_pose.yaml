@@ -36,6 +36,13 @@ pipeline:
     path: ${train_datadir}
     pattern: "run_*/*.pdmsh/_tensordict/boundaries/vehicle"
     subsample_n_cells: ${sampling_resolution}
+    # The other boundaries of the PDE domain, stored beside the vehicle in every case file
+    # (the tunnel: inlet, outlet, and its floor, walls and roof as no_slip and slip), read
+    # whole; only the vehicle is subsampled. The sample is then a DomainMesh whose interior is
+    # the vehicle until SurfaceMeshToDomainMesh, so every transform below (rotation,
+    # translation, CenterMesh on the vehicle, the L_ref scaling) moves them with it. Models
+    # that read only `interior` and `boundaries.vehicle` see what they saw before.
+    domain_boundaries: [inlet, no_slip, outlet, slip]
     merge_global_data_from: "../../global_data"
     store_case_key: true
   augmentations:
@@ -72,7 +79,7 @@ pipeline:
       field_name: normals
     - _target_: ${dp:SubsampleMesh}
       n_cells: ${sampling_resolution}
-    - _target_: ${dp:MeshToDomainMesh}
+    - _target_: ${dp:SurfaceMeshToDomainMesh}
 
 targets:
   pressure: scalar

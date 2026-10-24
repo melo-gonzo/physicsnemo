@@ -32,8 +32,14 @@ the tensordict it points at, and merges its keys into the boundary
 ``transform_global_data: true``, ...) can read them straight off the
 loaded sample.
 
+With ``domain_boundaries`` the reader also loads the other boundaries of
+the PDE domain that a case file stores beside the surface (DrivAerML's
+tunnel: inlet, no_slip, slip, outlet), so that a model can read the whole
+boundary while it predicts on the surface; :class:`SurfaceMeshToDomainMesh`
+is that sample's terminal step.
+
 Recipe-local module registered into the global datapipe component
-registry so the class can be referenced via
+registry so the classes can be referenced via
 ``${dp:MeshReaderWithGlobalData}`` in Hydra YAML configs.  Import this
 module before Hydra instantiation.
 """
@@ -41,6 +47,7 @@ module before Hydra instantiation.
 from __future__ import annotations
 
 import zlib
+from collections.abc import Sequence
 from typing import Any
 
 import torch
@@ -49,7 +56,8 @@ from tensordict import TensorDict
 from physicsnemo.datapipes.keys import key_to_str, leaf_keys
 from physicsnemo.datapipes.readers.mesh import MeshReader
 from physicsnemo.datapipes.registry import register
-from physicsnemo.mesh import Mesh
+from physicsnemo.datapipes.transforms.mesh import MeshToDomainMesh
+from physicsnemo.mesh import DomainMesh, Mesh
 
 
 @register()
@@ -91,6 +99,17 @@ class MeshReaderWithGlobalData(MeshReader):
         ``meta.json`` plus ``*.memmap`` files).  When ``None``
         (default) this class behaves exactly like
         :class:`MeshReader`.
+    domain_boundaries : sequence of str
+        Names of the other boundaries of the PDE domain stored beside the
+        matched surface (siblings of its directory, ``.../boundaries/<name>``),
+        loaded whole, never subsampled.  With any name the sample is a
+        :class:`~physicsnemo.mesh.DomainMesh` whose interior is the surface
+        itself (subsampled and with its targets, as without them) until the
+        terminal :class:`SurfaceMeshToDomainMesh`, whose boundaries are these
+        meshes and whose ``global_data`` is the case's.  So every transform of
+        the chain (rotation, translation, centering, scaling) acts on all of
+        them through ``apply_to_domain`` while the surface's draw, centre and
+        pose stay those of the bare surface.  Empty (default): a ``Mesh``.
     **kwargs
         Forwarded to :class:`MeshReader`.
     """
@@ -100,10 +119,16 @@ class MeshReaderWithGlobalData(MeshReader):
         *args: Any,
         merge_global_data_from: str | None = None,
         store_case_key: bool = False,
+        domain_boundaries: Sequence[str] = (),
         **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
         self._merge_rel_path = merge_global_data_from
+        self._domain_boundaries = [str(n) for n in domain_boundaries]
+        if len(set(self._domain_boundaries)) != len(self._domain_boundaries):
+            raise ValueError(
+                f"domain_boundaries names a boundary twice: {self._domain_boundaries!r}"
+            )
         ### POSE-BENCH (transfer program, 2026-09-09): a stable per-case integer,
         ### the CRC-32 of the case directory name (the first path component
         ### below the reader root, e.g. ``run_1``), stored as the 0-dim int64
@@ -175,3 +200,65 @@ class MeshReaderWithGlobalData(MeshReader):
         merged.update(ext_td)
 
         return mesh.with_data(global_data=merged)
+
+    def _load_domain_boundary(self, index: int, name: str) -> Mesh:
+        path = self._paths[index].parent / name
+        if (path / "zarr.json").exists():
+            from physicsnemo.mesh.io import from_zarr
+
+            return from_zarr(path)
+        if not path.exists():
+            raise FileNotFoundError(
+                f"domain boundary {name!r} not found beside {self._paths[index]} (looked for {path})"
+            )
+        return Mesh.load(path, mode="r")
+
+    def __getitem__(self, index: int) -> tuple[Mesh | DomainMesh, dict[str, Any]]:
+        mesh, metadata = super().__getitem__(index)
+        if not self._domain_boundaries:
+            return mesh, metadata
+        boundaries = {}
+        for name in self._domain_boundaries:
+            b = self._load_domain_boundary(index, name)
+            boundaries[name] = b.pin_memory() if self.pin_memory else b
+        domain = DomainMesh(
+            interior=mesh.with_data(
+                global_data=TensorDict({}, batch_size=[], device=mesh.points.device)
+            ),
+            boundaries=boundaries,
+            global_data=mesh.global_data,
+        )
+        metadata["boundary_names"] = domain.boundary_names
+        return domain, metadata
+
+
+@register()
+class SurfaceMeshToDomainMesh(MeshToDomainMesh):
+    r""":class:`MeshToDomainMesh` for a surface read with the domain's other boundaries.
+
+    On a bare :class:`Mesh` it is :class:`MeshToDomainMesh`. On the
+    :class:`DomainMesh` of :class:`MeshReaderWithGlobalData` with
+    ``domain_boundaries``, whose interior is the surface, it applies
+    :class:`MeshToDomainMesh` to the surface (the interior becomes its cell
+    centroids with the targets, the surface the boundary ``boundary_name``) and
+    keeps the other boundaries and the domain-level ``global_data``. A domain
+    boundary named ``boundary_name`` is refused.
+    """
+
+    def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:  # type: ignore[override]
+        """The surface (``domain.interior``) to the centroid interior and the boundary
+        ``boundary_name``, beside the domain's other boundaries."""
+        if self._boundary_name in domain.boundary_names:
+            raise ValueError(
+                f"SurfaceMeshToDomainMesh: the domain already has a boundary {self._boundary_name!r}, "
+                "the name the surface takes"
+            )
+        surface = self(domain.interior)
+        return DomainMesh(
+            interior=surface.interior,
+            boundaries={
+                self._boundary_name: surface.boundaries[self._boundary_name],
+                **{name: domain.boundaries[name] for name in domain.boundary_names},
+            },
+            global_data=domain.global_data,
+        )

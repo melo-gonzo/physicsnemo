@@ -16,7 +16,7 @@
 
 """The ISLA recipe configurations compose to the mesh contract and run end to end.
 
-``model=isla_surface`` (surface task: predictions at the boundary cells) and
+``model=isla_surface`` (surface task: predictions at the vehicle's cells, the whole boundary read) and
 ``model=isla_volume`` (interior task: predictions at the
 dataset's interior points) all declare ``input_type: mesh`` / ``output_type: mesh`` and
 map the DomainMesh's boundary and global data onto ISLA's keyword-only mesh forward.
@@ -40,9 +40,9 @@ from collate import build_collate_fn  # noqa: E402
 from conftest import make_volume_domain_mesh  # noqa: E402
 from domain_transforms import ComposeQuadratureMeasure  # noqa: E402
 from loss import LossCalculator  # noqa: E402
+from merge_global_data import SurfaceMeshToDomainMesh  # noqa: E402
 from output_normalize import normalize_output_to_tensordict  # noqa: E402
 
-from physicsnemo.datapipes.transforms.mesh import MeshToDomainMesh  # noqa: E402
 from physicsnemo.mesh import DomainMesh, Mesh  # noqa: E402
 from physicsnemo.mesh.calculus.measure import (  # noqa: E402
     cell_measures,
@@ -75,9 +75,10 @@ def _compose(model, dataset, *extra):
 
 def _surface_domain(n_cells: int = 12) -> DomainMesh:
     """What drivaer_ml_surface.yaml hands the collate: a 1-in-3 cell subsample of a surface
-    with its Horvitz-Thompson measure, then MeshToDomainMesh (interior = cell centroids
-    carrying the targets; boundaries.vehicle = the surface, its cell_data keeping the
-    measure and the `normals` field the tensor-input models read)."""
+    with its Horvitz-Thompson measure and the four tunnel boundaries read whole beside it,
+    then SurfaceMeshToDomainMesh (interior = the vehicle's cell centroids carrying the
+    targets; boundaries.vehicle = the surface, its cell_data keeping the measure and the
+    `normals` field the tensor-input models read; the tunnel boundaries as they were)."""
     g = torch.Generator().manual_seed(0)
     mesh = Mesh(
         points=torch.randn(n_cells * 3, 3, generator=g),
@@ -94,7 +95,21 @@ def _surface_domain(n_cells: int = 12) -> DomainMesh:
     )
     scale_measures(mesh, 3.0)
     mesh.cell_data["normals"] = mesh.cell_normals
-    return MeshToDomainMesh(cell_data_targets=["pressure", "wss"])(mesh)
+    walls = {
+        name: _wall(axis, c, up)
+        for name, axis, c, up in zip(
+            DOMAIN_WALLS,
+            (2, 2, 0, 0),
+            (-3.0, 3.0, -4.0, 4.0),
+            (True, False, True, False),
+        )
+    }
+    gd = mesh.global_data
+    surface = Mesh(points=mesh.points, cells=mesh.cells, cell_data=mesh.cell_data)
+    sample = DomainMesh(interior=surface, boundaries=walls, global_data=gd)
+    return SurfaceMeshToDomainMesh(
+        cell_data_targets=["pressure", "wss"]
+    ).apply_to_domain(sample)
 
 
 DOMAIN_WALLS = ("no_slip", "slip", "inlet", "outlet")
@@ -165,8 +180,10 @@ def test_isla_configs_declare_the_mesh_contract(model, dataset):
     m = cfg.model
     assert m._target_ == ISLA_TARGET
     assert cfg.input_type == "mesh" and cfg.output_type == "mesh"
-    names = ("vehicle", *DOMAIN_WALLS) if model == "isla_volume" else ("vehicle",)
+    ### Both read the whole boundary: the vehicle and the four domain meshes of the files.
+    names = ("vehicle", *DOMAIN_WALLS)
     assert cfg.forward_kwargs.boundary_meshes == {n: f"boundaries.{n}" for n in names}
+    assert OmegaConf.to_container(m.boundary_schemas) == {n: {} for n in names}
     assert cfg.forward_kwargs.global_data == "global_data"
     assert OmegaConf.to_container(m.global_schema) == {"U_inf_dir": {"rank": 1}}
     assert (
@@ -207,18 +224,33 @@ def test_isla_configs_declare_the_mesh_contract(model, dataset):
 
 
 def test_isla_surface_composes_and_runs():
-    """Surface task: no prediction points; the output Mesh's points are the boundary cells
-    in cell order, which is where MeshToDomainMesh put the targets, and the boundary
-    measure ISLA reads is the corrected measure aligned with the target measure."""
+    """Surface task: no prediction points; the model reads the vehicle and the four
+    tunnel boundaries and predicts at the vehicle's cells only; the output Mesh's points
+    are the vehicle's cells in cell order, which is where SurfaceMeshToDomainMesh put the
+    targets, and the vehicle measure ISLA reads is the corrected measure aligned with the
+    target measure. The vehicle is reoriented into the fluid for ISLA only."""
     cfg = _compose("isla_surface", "drivaer_ml_surface", *SMALL)
     assert "prediction_points" not in cfg.forward_kwargs
     assert not cfg.model.get("interior", False)
+    assert set(cfg.forward_kwargs) == {
+        "boundary_meshes",
+        "prediction_boundaries",
+        "global_data",
+    }
+    assert OmegaConf.to_container(cfg.forward_kwargs.prediction_boundaries) == {
+        "literal": ["vehicle"]
+    }
+    appended = OmegaConf.to_container(cfg.dataset_append_transforms, resolve=False)
+    assert [str(t["_target_"]) for t in appended] == ["${dp:FlipBoundaryOrientation}"]
+    assert [t["boundaries"] for t in appended] == [["vehicle"]]
     assert OmegaConf.to_container(cfg.model.output_schema) == {
         "pressure": {"rank": 0},
         "wss": {"rank": 1},
     }
     domain = _surface_domain()
     batch, out, pred = _run(cfg, domain, _targets("drivaer_ml_surface"))
+    assert batch["forward_kwargs"]["prediction_boundaries"] == ["vehicle"]
+    assert set(batch["forward_kwargs"]["boundary_meshes"]) == {"vehicle", *DOMAIN_WALLS}
     torch.testing.assert_close(out.points, domain.interior.points)
     torch.testing.assert_close(
         cell_measures(batch["forward_kwargs"]["boundary_meshes"]["vehicle"]),
