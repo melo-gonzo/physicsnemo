@@ -57,6 +57,7 @@ source. Do not edit by hand.
 | `dtt_default_int/` | DTT-DEFAULT-INT: the default switch integrated with ISLA 0.12.0, and its fixture test reworked | `scratch/isla-dtt-default-int-2026-10-24/` |
 | `geo_thinfast/` | GEO-THINFAST: the thin-cell guard and the accurate closest point fused into the fast path, its equality and timing | `scratch/isla-geo-thinfast-2026-10-24/` |
 | `dtt_fast_done/` | DTT-FAST, done: ISLA-DTT's exact speedups as merged, their equivalence, the step on the final heads, the pose port, the compiled bf16 gradient spike and the bf16 reduction flag | `scratch/isla-dtt-fast-2026-10-23/` |
+| `hl_dup_stage2/` | HL-DUP, stage 2: ISLA and both unit-drive baselines retrained and scored on the deduplicated HiLift wing, its review, and the failed root-outline rebuild | `scratch/isla-hl-dup-2026-10-24/` |
 | `dtt_fast_final_table_p5/` | DTT-FAST, pass 2's table with its pass-3 columns added, as it now stands | `scratch/isla-dtt-fast-2026-10-23/final/` |
 
 | topic | file | source | md5 |
@@ -300,4 +301,10 @@ source. Do not edit by hand.
 | dtt_fast_done | spike/RESULTS.md | scratch/isla-dtt-fast-2026-10-23/spike/RESULTS.md | c710b48e47df4b2069b16274a2082a47 |
 | dtt_fast_done | flag/RESULTS.md | scratch/isla-dtt-fast-2026-10-23/flag/RESULTS.md | c37e8f62600a678b9be3474728c53635 |
 | dtt_fast_done | flag/REPORT.md | scratch/isla-dtt-fast-2026-10-23/flag/REPORT.md | 846bcae76c1ff1ff9e69ae4547b02431 |
+| hl_dup_stage2 | RESULTS_STAGE2.md | scratch/isla-hl-dup-2026-10-24/RESULTS_STAGE2.md | 4d9fe204add4b8495e8b549d4063c04f |
+| hl_dup_stage2 | stage2_table.md | scratch/isla-hl-dup-2026-10-24/stage2_table.md | d620b6a015d0efea3d8813e1e24bc953 |
+| hl_dup_stage2 | REVIEW_STAGE2.md | scratch/isla-hl-dup-2026-10-24/REVIEW_STAGE2.md | ff43023948b2e839396ed908cb90c234 |
+| hl_dup_stage2 | REVISION_NOTE_STAGE2.md | scratch/isla-hl-dup-2026-10-24/REVISION_NOTE_STAGE2.md | 91947532fa10cb88768927a7b09da87f |
+| hl_dup_stage2 | HOLE_CRUST.md | scratch/isla-hl-dup-2026-10-24/HOLE_CRUST.md | 64cc1c9b050c0498c0f2ae434ed45baa |
+| hl_dup_stage2 | FINAL_REPORT.md | scratch/isla-hl-dup-2026-10-24/FINAL_REPORT.md | 5b9c637c63009c38280fb691386f82d0 |
 | dtt_fast_final_table_p5 | TABLE.md | scratch/isla-dtt-fast-2026-10-23/final/TABLE.md | 9602478cd5dca559fdd1a5326785be17 |

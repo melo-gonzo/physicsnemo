@@ -89,6 +89,7 @@ FOLDER = {
     "geo_thinfast": "campaigns_2026-10-23",
     "dtt_fast_done": "campaigns_2026-10-23",
     "dtt_fast_final_table_p5": "campaigns_2026-10-23",
+    "hl_dup_stage2": "campaigns_2026-10-23",
 }
 
 
