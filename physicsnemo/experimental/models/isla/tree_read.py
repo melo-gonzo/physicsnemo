@@ -101,6 +101,7 @@ import torch.nn as nn
 from tensordict import TensorDict
 from torch.utils.checkpoint import checkpoint
 
+from physicsnemo.experimental.models.isla import fused_read
 from physicsnemo.experimental.models.isla.segment_softmax import (
     PairPlan,
     segment_softmax_read,
@@ -394,6 +395,7 @@ class TreeReadPairs:
     n_cells: int
     n_queries: int
     n_pairs_node: int  # (point, node) pairs over every case
+    kernel: str = "reference"  # the blocks' read: "reference" or "fused" (fused_read.py)
 
     @property
     def n_pairs(self) -> int:
@@ -523,6 +525,31 @@ def _chunked_basis(basis: _KernelBasis, qi, si, geometry: dict) -> torch.Tensor:
     return torch.cat(parts)
 
 
+def _basis_of_pairs(basis: _KernelBasis, qi, si, q_off: int, s_off: int, geometry: dict) -> torch.Tensor:
+    with torch.no_grad():
+        inv = tree_pair_invariants(qi.long() - q_off, si.long() - s_off, **geometry)
+    return basis(inv)
+
+
+def _chunked_basis_from_plan(
+    basis: _KernelBasis, plan: PairPlan, a: int, b: int, q_off: int, s_off: int, geometry: dict
+) -> torch.Tensor:
+    """The kernel basis of one case's pairs, the plan's rows ``a:b``, in the chunks of
+    :func:`_chunked_basis` and with its values, but each chunk's invariants inside the
+    checkpoint too: backward rebuilds them from the plan's indices (``q_off`` and
+    ``s_off`` the case's first point and source), so nothing per pair but the basis
+    is kept."""
+    grad = torch.is_grad_enabled() and any(p.requires_grad for p in basis.parameters())
+    parts = []
+    for c in range(a, b, TREE_READ_PAIR_CHUNK):
+        e = min(c + TREE_READ_PAIR_CHUNK, b)
+        args = (basis, plan.qi[c:e], plan.bj[c:e], q_off, s_off, geometry)
+        parts.append(checkpoint(_basis_of_pairs, *args, use_reentrant=False) if grad else _basis_of_pairs(*args))
+    if not parts:
+        return geometry["query_r"].new_zeros(0, KERNEL_READ_BASIS)
+    return torch.cat(parts)
+
+
 def tree_read_pairs(
     basis: _KernelBasis,
     *,
@@ -536,6 +563,7 @@ def tree_read_pairs(
     g_unit: torch.Tensor,
     theta: float,
     eps: float,
+    kernel: str = "reference",
 ) -> TreeReadPairs:
     r"""Build the tree read's pairs for a batch of cases.
 
@@ -552,14 +580,19 @@ def tree_read_pairs(
     cells (centroid, renormalized mean normal, mean rank-1 inputs, total measure)
     come with the forest; the kernel basis of every pair in chunks. The forest and
     the walk run without gradient (a numerical device); the invariants and the basis
-    carry gradients to the kernel MLP.
+    carry gradients to the kernel MLP. With ``kernel="fused"`` (the blocks read through
+    :mod:`fused_read`) the basis is built after the plan from its indices, the
+    same values with the invariants rebuilt in backward
+    (:func:`_chunked_basis_from_plan`).
     """
     b, nq, d = query_r.shape
     n = boundary_r.shape[1]
     tiny = torch.finfo(torch.float32).tiny
     has_vecs = boundary_vecs is not None and bool(boundary_vecs.shape[2])
     qis, sis, bases, logms, forests, offsets = [], [], [], [], [], []
+    deferred = []
     src_off = 0
+    pair_off = 0
     n_pairs_node = 0
     for i in range(b):
         with torch.no_grad():
@@ -593,7 +626,11 @@ def tree_read_pairs(
             "g_unit": g_unit[i],
             "eps": eps,
         }
-        bases.append(_chunked_basis(basis, qi, si, geometry))
+        if kernel == "fused":
+            deferred.append((pair_off, pair_off + int(qi.shape[0]), i * nq, src_off, geometry))
+        else:
+            bases.append(_chunked_basis(basis, qi, si, geometry))
+        pair_off += int(qi.shape[0])
         logms.append(src_logm[si])
         qis.append(qi + i * nq)
         sis.append(si + src_off)
@@ -611,6 +648,8 @@ def tree_read_pairs(
             perm=plan_all.perm.int(),
             qi_by_b=plan_all.qi_by_b.int(),
         )
+    for a, e, q_off, s_off, geometry in deferred:
+        bases.append(_chunked_basis_from_plan(basis, plan_all, a, e, q_off, s_off, geometry))
     return TreeReadPairs(
         plan=plan_all,
         basis=torch.cat(bases),
@@ -621,6 +660,7 @@ def tree_read_pairs(
         n_cells=n,
         n_queries=nq,
         n_pairs_node=n_pairs_node,
+        kernel=kernel,
     )
 
 
@@ -673,8 +713,21 @@ class _TreeKernelRead(nn.Module):
         v_src = kv_src[:, nh * kc :].reshape(-1, nh, c)
         ### The pairs' kernel terms at this block: the shared basis through the block's
         ### kernel weights (a matmul; its gradient to the basis accumulates over blocks).
-        ker = pairs.basis @ self.kernel.weight.t().to(pairs.basis.dtype)
-        read = segment_softmax_read(
-            ker, pairs.log_m, q, k_src, v_src, pairs.plan, scale=1.0 / math.sqrt(kc)
-        )
+        if pairs.kernel == "fused" and fused_read.supported(pairs.basis, q, k_src, v_src):
+            ### The same read with the kernel term computed inside it (fused_read.py).
+            read = fused_read.fused_kernel_read(
+                pairs.basis,
+                self.kernel.weight.to(pairs.basis.dtype),
+                pairs.log_m,
+                q,
+                k_src,
+                v_src,
+                pairs.plan,
+                scale=1.0 / math.sqrt(kc),
+            )
+        else:
+            ker = pairs.basis @ self.kernel.weight.t().to(pairs.basis.dtype)
+            read = segment_softmax_read(
+                ker, pairs.log_m, q, k_src, v_src, pairs.plan, scale=1.0 / math.sqrt(kc)
+            )
         return self.out(read.reshape(-1, nh * c).to(h_q.dtype))

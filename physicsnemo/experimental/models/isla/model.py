@@ -476,7 +476,9 @@ class ISLA(Module):
     ``"fused"`` to force one) selects how the per-layer geometry region is
     executed, not what it computes (:meth:`resolve_geo_kernel`). It is an
     execution choice, not a constructor argument: checkpoints do not store it,
-    and a loaded model starts at ``"auto"``.
+    and a loaded model starts at ``"auto"``. The ``tree_read_kernel`` attribute
+    does the same for ISLA-DTT's boundary read (``"auto"``, ``"reference"`` or
+    ``"fused"``; :meth:`resolve_tree_read_kernel`).
 
     Args:
         output_schema: Output fields, a rank spec per name. Each field is a leaf of
@@ -924,6 +926,12 @@ class ISLA(Module):
         ### tests set to 0 for the exact read). Registered after everything else, so
         ### every other model owns exactly the parameters it has without the read.
         self._tree_read_theta = TREE_READ_THETA
+        ### tree_read_kernel names the implementation of the read, as geo_kernel does
+        ### the geometry region's: "reference" (the kernel term a matmul, read by
+        ### segment_softmax.py) or "fused" (fused_read.py: the kernel term computed
+        ### inside the read, nothing per pair kept but the basis); "auto" resolves to
+        ### "fused" on CUDA with Triton (resolve_tree_read_kernel). Writable.
+        self.tree_read_kernel = "auto"
         self.kernel_basis = None
         self.kernel_reads = None
         if self.query_independent:
@@ -1196,6 +1204,40 @@ class ISLA(Module):
                 "ISLA: rank-1 or rank-2 boundary inputs are present, so the fused "
                 "geometry kernel is not used (kernel follow-up); running the eager region."
             )
+        return chosen
+
+    def resolve_tree_read_kernel(self, points: torch.Tensor) -> str:
+        """The ISLA-DTT read's implementation this forward pass will use.
+
+        ``"reference"`` or ``"fused"`` when the ``tree_read_kernel`` attribute forces
+        it; under the default (``"auto"``) the fused read when ``points`` is on CUDA, not
+        float64, and Triton is importable, else the reference read. Both compute the
+        same read up to summation order. The decision is cached per device and dtype
+        and logged once.
+        """
+        if self.tree_read_kernel != "auto":
+            return self.tree_read_kernel
+        key = (points.device.type, points.device.index, points.dtype)
+        cached = getattr(self, "_tree_read_kernel_cache", None)
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        try:
+            from .fused_read import HAS_TRITON
+        except Exception:  # pragma: no cover - a broken triton install falls back
+            HAS_TRITON = False
+        ok = points.is_cuda and HAS_TRITON and points.dtype != torch.float64
+        chosen = "fused" if ok else "reference"
+        if torch.compiler.is_compiling():
+            return chosen
+        self._tree_read_kernel_cache = (key, chosen)
+        logger.info(
+            "ISLA tree_read_kernel=auto resolved to %r on %s (cuda=%s, triton=%s, dtype=%s)",
+            chosen,
+            points.device,
+            points.is_cuda,
+            HAS_TRITON,
+            points.dtype,
+        )
         return chosen
 
     def _block_callables(self):
@@ -1704,6 +1746,7 @@ class ISLA(Module):
             g_unit=g_unit,
             theta=self._tree_read_theta,
             eps=EPS,
+            kernel=self.resolve_tree_read_kernel(q_r),
         )
 
     def _forward_tensors(

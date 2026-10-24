@@ -1,0 +1,331 @@
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+r"""The tree read with its kernel term fused in (Triton): nothing per pair is kept
+between forward and backward but the kernel basis and the plan.
+
+The reference read (:mod:`segment_softmax` behind
+:class:`~physicsnemo.experimental.models.isla.tree_read._TreeKernelRead`) takes each
+block's kernel term :math:`\kappa_{ph} = \sum_f \phi_{pf} W_{hf}` as a ``(P, H)``
+tensor, a matmul of the shared basis :math:`\phi` ``(P, F)`` with the block's kernel
+weights, which autograd keeps for backward in every block (2e8 to 7e8 pairs at
+DrivAerML scale). Here the read's kernels compute :math:`\kappa` per tile from the
+basis and the weights instead, in forward and again in backward (as flash attention
+recomputes its logits), so a block keeps only its per-point output and log-sum-exp.
+
+The arithmetic is the reference's but for summation order: :math:`\kappa` is a sum of
+exact products in float32 rounded to the basis's dtype (bfloat16 under autocast, as
+the reference matmul's output is), its gradient is rounded to that dtype before it
+reaches the basis and the weights (as the reference read's kernel-term gradient is),
+the basis gradient of each block is rounded to that dtype (the reference matmul's
+backward), and the weights' gradient is a float32 sum over every pair rounded once.
+The small products run as ``tl.dot`` in float32 (``ieee``) on operands padded to
+Triton's minimum of 16: the kernel weights are read as a ``(2H, F)`` matrix whose odd
+rows are zero, so ``basis @ W^T`` comes out with the heads interleaved with zeros.
+"""
+
+from __future__ import annotations
+
+import importlib
+
+import torch
+
+from physicsnemo.core.version_check import is_package_available
+from physicsnemo.experimental.models.isla.segment_softmax import (
+    BLOCK_PAIRS,
+    NUM_WARPS,
+    SOURCE_CHUNK,
+    PairPlan,
+    _source_items,
+)
+
+### Triton is an optional dependency, loaded through importlib (as in geo_kernel.py).
+HAS_TRITON = is_package_available("triton")
+if HAS_TRITON:
+    try:
+        triton = importlib.import_module("triton")
+        tl = importlib.import_module("triton.language")
+    except Exception:  # pragma: no cover - a broken triton install is treated as absent
+        HAS_TRITON = False
+
+
+def _pow2(n: int) -> bool:
+    return n > 0 and n & (n - 1) == 0
+
+
+def supported(basis: torch.Tensor, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> bool:
+    """The fused read applies: CUDA tensors, Triton importable, no float64 (the
+    reference read runs float64 eagerly), and power-of-two widths with ``2H`` and the
+    basis width at least 16 (``tl.dot``'s minimum)."""
+    h, kc, c, f = q.shape[1], q.shape[2], v.shape[2], basis.shape[1]
+    return (
+        HAS_TRITON
+        and all(t.is_cuda for t in (basis, q, k, v))
+        and torch.float64 not in (basis.dtype, q.dtype, k.dtype, v.dtype)
+        and all(_pow2(n) for n in (h, kc, c, f))
+        and 2 * h >= 16
+        and f >= 16
+    )
+
+
+if HAS_TRITON:
+
+    @triton.jit
+    def _padded_weights(w_ptr, H: tl.constexpr, F: tl.constexpr):
+        """The kernel weights ``(H, F)`` as a float32 ``(2H, F)`` matrix, row ``2h`` the
+        head ``h`` and every odd row zero."""
+        rr = tl.arange(0, 2 * H)
+        ff = tl.arange(0, F)
+        w = tl.load(w_ptr + (rr // 2)[:, None] * F + ff[None, :], mask=(rr % 2 == 0)[:, None], other=0.0)
+        return w.to(tl.float32)
+
+    @triton.jit
+    def _kernel_term(basis_ptr, p, msk, wi, H: tl.constexpr, F: tl.constexpr, BLOCK: tl.constexpr):
+        """The pairs' basis rows ``(BLOCK, F)`` and kernel terms ``(BLOCK, H)``, the
+        latter rounded to the basis's dtype (both returned in float32)."""
+        ff = tl.arange(0, F)
+        bas = tl.load(basis_ptr + p[:, None] * F + ff[None, :], mask=msk[:, None], other=0.0).to(tl.float32)
+        ker2 = tl.dot(bas, tl.trans(wi), input_precision="ieee")  # (BLOCK, 2H), heads at even columns
+        ker, _ = tl.split(tl.reshape(ker2, [BLOCK, H, 2]))
+        return bas, ker.to(basis_ptr.dtype.element_ty).to(tl.float32)
+
+    @triton.jit
+    def _fkr_fwd_kernel(
+        off_ptr, bj_ptr, basis_ptr, w_ptr, logm_ptr, q_ptr, k_ptr, v_ptr, out_ptr, lse_ptr,
+        scale, H: tl.constexpr, C: tl.constexpr, KC: tl.constexpr, F: tl.constexpr, BLOCK: tl.constexpr,
+    ):  # fmt: skip
+        """One point: online softmax over its pairs; out[s] (H, C), lse[s] (H)."""
+        s = tl.program_id(0).to(tl.int64)
+        start = tl.load(off_ptr + s)
+        end = tl.load(off_ptr + s + 1)
+        hh = tl.arange(0, H)
+        wi = _padded_weights(w_ptr, H, F)
+        q = tl.reshape(tl.load(q_ptr + s * (H * KC) + tl.arange(0, H * KC)).to(tl.float32), [H, KC])
+        m_run = tl.full([H], float("-inf"), tl.float32)
+        den = tl.zeros([H], tl.float32)
+        acc = tl.zeros([H, C], tl.float32)
+        for p0 in range(start, end, BLOCK):
+            p = p0 + tl.arange(0, BLOCK)
+            msk = p < end
+            bj = tl.load(bj_ptr + p, mask=msk, other=0).to(tl.int64)
+            _, ker = _kernel_term(basis_ptr, p, msk, wi, H, F, BLOCK)
+            k = tl.reshape(
+                tl.load(
+                    k_ptr + bj[:, None] * (H * KC) + tl.arange(0, H * KC)[None, :],
+                    mask=msk[:, None], other=0.0,
+                ).to(tl.float32),
+                [BLOCK, H, KC],
+            )
+            score = tl.sum(k * q[None, :, :], axis=2)  # (BLOCK, H)
+            logm = tl.load(logm_ptr + p, mask=msk, other=0.0).to(tl.float32)
+            z = ker + score * scale + logm[:, None]
+            z = tl.where(msk[:, None], z, float("-inf"))
+            m_new = tl.maximum(m_run, tl.max(z, axis=0))
+            alpha = tl.exp(m_run - m_new)
+            pe = tl.exp(z - m_new[None, :])
+            den = den * alpha + tl.sum(pe, axis=0)
+            v = tl.reshape(
+                tl.load(
+                    v_ptr + bj[:, None] * (H * C) + tl.arange(0, H * C)[None, :],
+                    mask=msk[:, None], other=0.0,
+                ).to(tl.float32),
+                [BLOCK, H, C],
+            )
+            acc = acc * alpha[:, None] + tl.sum(pe[:, :, None] * v, axis=0)
+            m_run = m_new
+        safe = tl.where(den > 0, den, 1.0)
+        out = acc / safe[:, None]
+        tl.store(out_ptr + s * (H * C) + tl.arange(0, H * C), tl.reshape(out, [H * C]))
+        tl.store(lse_ptr + s * H + hh, m_run + tl.log(safe))
+
+    @triton.jit
+    def _fkr_bwd_point_kernel(
+        off_ptr, bj_ptr, basis_ptr, w_ptr, logm_ptr, q_ptr, k_ptr, v_ptr, lse_ptr, dsum_ptr, dout_ptr,
+        dq_ptr, dbasis_ptr, dw_ptr,
+        scale, H: tl.constexpr, C: tl.constexpr, KC: tl.constexpr, F: tl.constexpr, BLOCK: tl.constexpr,
+    ):  # fmt: skip
+        """One point: dq[s], the basis gradient of its pairs (through this block's
+        weights), and its part of the weights' gradient, dw[s] (2H, F) float32."""
+        s = tl.program_id(0).to(tl.int64)
+        start = tl.load(off_ptr + s)
+        end = tl.load(off_ptr + s + 1)
+        hh = tl.arange(0, H)
+        ff = tl.arange(0, F)
+        wi = _padded_weights(w_ptr, H, F)
+        q = tl.reshape(tl.load(q_ptr + s * (H * KC) + tl.arange(0, H * KC)).to(tl.float32), [H, KC])
+        lse = tl.load(lse_ptr + s * H + hh)
+        dsum = tl.load(dsum_ptr + s * H + hh)
+        dout = tl.reshape(tl.load(dout_ptr + s * (H * C) + tl.arange(0, H * C)).to(tl.float32), [H, C])
+        dq = tl.zeros([H, KC], tl.float32)
+        dw = tl.zeros([2 * H, F], tl.float32)
+        for p0 in range(start, end, BLOCK):
+            p = p0 + tl.arange(0, BLOCK)
+            msk = p < end
+            bj = tl.load(bj_ptr + p, mask=msk, other=0).to(tl.int64)
+            bas, ker = _kernel_term(basis_ptr, p, msk, wi, H, F, BLOCK)
+            k = tl.reshape(
+                tl.load(
+                    k_ptr + bj[:, None] * (H * KC) + tl.arange(0, H * KC)[None, :],
+                    mask=msk[:, None], other=0.0,
+                ).to(tl.float32),
+                [BLOCK, H, KC],
+            )
+            score = tl.sum(k * q[None, :, :], axis=2)
+            logm = tl.load(logm_ptr + p, mask=msk, other=0.0).to(tl.float32)
+            z = ker + score * scale + logm[:, None]
+            pr = tl.exp(z - lse[None, :])
+            pr = tl.where(msk[:, None], pr, 0.0)  # (BLOCK, H)
+            v = tl.reshape(
+                tl.load(
+                    v_ptr + bj[:, None] * (H * C) + tl.arange(0, H * C)[None, :],
+                    mask=msk[:, None], other=0.0,
+                ).to(tl.float32),
+                [BLOCK, H, C],
+            )
+            dp = tl.sum(v * dout[None, :, :], axis=2)  # (BLOCK, H)
+            dz = pr * (dp - dsum[None, :])  # (BLOCK, H)
+            dq += tl.sum(dz[:, :, None] * k, axis=0) * scale
+            ### The kernel-term gradient in the basis's dtype, interleaved with zeros as
+            ### the padded weights' rows are.
+            dker = dz.to(basis_ptr.dtype.element_ty).to(tl.float32)
+            dker2 = tl.reshape(tl.join(dker, tl.zeros_like(dker)), [BLOCK, 2 * H])
+            dbas = tl.dot(dker2, wi, input_precision="ieee")  # (BLOCK, F)
+            tl.store(
+                dbasis_ptr + p[:, None] * F + ff[None, :], dbas.to(dbasis_ptr.dtype.element_ty), mask=msk[:, None]
+            )
+            dw += tl.dot(tl.trans(dker2), bas, input_precision="ieee")
+        tl.store(dq_ptr + s * (H * KC) + tl.arange(0, H * KC), tl.reshape(dq, [H * KC]))
+        rr = tl.arange(0, 2 * H)
+        tl.store(dw_ptr + s * (2 * H * F) + rr[:, None] * F + ff[None, :], dw)
+
+    @triton.jit
+    def _fkr_bwd_source_kernel(
+        boff_ptr, item_src_ptr, item_chunk_ptr, perm_ptr, qib_ptr, basis_ptr, w_ptr, logm_ptr, q_ptr, k_ptr,
+        v_ptr, lse_ptr, dsum_ptr, dout_ptr, dk_ptr, dv_ptr,
+        scale, CHUNK, H: tl.constexpr, C: tl.constexpr, KC: tl.constexpr, F: tl.constexpr, BLOCK: tl.constexpr,
+    ):  # fmt: skip
+        """One chunk of one source's pairs (the plan's by-source order): its part of
+        dk[j] and dv[j], added atomically."""
+        item = tl.program_id(0).to(tl.int64)
+        j = tl.load(item_src_ptr + item).to(tl.int64)
+        chunk = tl.load(item_chunk_ptr + item).to(tl.int64)
+        start = tl.load(boff_ptr + j) + chunk * CHUNK
+        end = tl.minimum(tl.load(boff_ptr + j + 1), start + CHUNK)
+        hh = tl.arange(0, H)
+        wi = _padded_weights(w_ptr, H, F)
+        kj = tl.reshape(tl.load(k_ptr + j * (H * KC) + tl.arange(0, H * KC)).to(tl.float32), [H, KC])
+        vj = tl.reshape(tl.load(v_ptr + j * (H * C) + tl.arange(0, H * C)).to(tl.float32), [H, C])
+        dk = tl.zeros([H, KC], tl.float32)
+        dv = tl.zeros([H, C], tl.float32)
+        for i0 in range(start, end, BLOCK):
+            i = i0 + tl.arange(0, BLOCK)
+            msk = i < end
+            p = tl.load(perm_ptr + i, mask=msk, other=0).to(tl.int64)
+            qi = tl.load(qib_ptr + i, mask=msk, other=0).to(tl.int64)
+            _, ker = _kernel_term(basis_ptr, p, msk, wi, H, F, BLOCK)
+            q = tl.reshape(
+                tl.load(
+                    q_ptr + qi[:, None] * (H * KC) + tl.arange(0, H * KC)[None, :],
+                    mask=msk[:, None], other=0.0,
+                ).to(tl.float32),
+                [BLOCK, H, KC],
+            )
+            score = tl.sum(q * kj[None, :, :], axis=2)
+            logm = tl.load(logm_ptr + p, mask=msk, other=0.0).to(tl.float32)
+            z = ker + score * scale + logm[:, None]
+            lse = tl.load(lse_ptr + qi[:, None] * H + hh[None, :], mask=msk[:, None], other=0.0)
+            dsum = tl.load(dsum_ptr + qi[:, None] * H + hh[None, :], mask=msk[:, None], other=0.0)
+            pr = tl.exp(z - lse)
+            pr = tl.where(msk[:, None], pr, 0.0)
+            dout = tl.reshape(
+                tl.load(
+                    dout_ptr + qi[:, None] * (H * C) + tl.arange(0, H * C)[None, :],
+                    mask=msk[:, None], other=0.0,
+                ).to(tl.float32),
+                [BLOCK, H, C],
+            )
+            dp = tl.sum(dout * vj[None, :, :], axis=2)
+            dz = pr * (dp - dsum)
+            dv += tl.sum(pr[:, :, None] * dout, axis=0)
+            dk += tl.sum(dz[:, :, None] * q, axis=0) * scale
+        tl.atomic_add(dk_ptr + j * (H * KC) + tl.arange(0, H * KC), tl.reshape(dk, [H * KC]))
+        tl.atomic_add(dv_ptr + j * (H * C) + tl.arange(0, H * C), tl.reshape(dv, [H * C]))
+
+
+class _FusedKernelRead(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, basis, w, logm, q, k, v, plan: PairPlan, scale: float):
+        n_q, h, kc = q.shape
+        c, f = v.shape[2], basis.shape[1]
+        basis, w, logm, q, k, v = (t.contiguous() for t in (basis, w, logm, q, k, v))
+        out = torch.empty(n_q, h, c, device=q.device, dtype=torch.float32)
+        lse = torch.empty(n_q, h, device=q.device, dtype=torch.float32)
+        if n_q:
+            _fkr_fwd_kernel[(n_q,)](
+                plan.q_offsets, plan.bj, basis, w, logm, q, k, v, out, lse, scale,
+                H=h, C=c, KC=kc, F=f, BLOCK=BLOCK_PAIRS, num_warps=NUM_WARPS,
+            )  # fmt: skip
+        ctx.save_for_backward(basis, w, logm, q, k, v, out, lse)
+        ctx.plan, ctx.scale = plan, scale
+        return out
+
+    @staticmethod
+    def backward(ctx, dout):
+        basis, w, logm, q, k, v, out, lse = ctx.saved_tensors
+        plan, scale = ctx.plan, ctx.scale
+        n_q, h, kc = q.shape
+        c, f = v.shape[2], basis.shape[1]
+        dout = dout.contiguous().float()
+        dsum = (dout * out).sum(-1)  # (n_q, H)
+        dq = torch.empty(n_q, h, kc, device=q.device, dtype=torch.float32)
+        dbasis = torch.empty_like(basis)
+        dw_parts = torch.empty(n_q, 2 * h, f, device=q.device, dtype=torch.float32)
+        dk = torch.zeros(plan.n_b, h, kc, device=q.device, dtype=torch.float32)
+        dv = torch.zeros(plan.n_b, h, c, device=q.device, dtype=torch.float32)
+        if n_q:
+            _fkr_bwd_point_kernel[(n_q,)](
+                plan.q_offsets, plan.bj, basis, w, logm, q, k, v, lse, dsum, dout, dq, dbasis, dw_parts, scale,
+                H=h, C=c, KC=kc, F=f, BLOCK=BLOCK_PAIRS, num_warps=NUM_WARPS,
+            )  # fmt: skip
+        if plan.n_b:
+            src, chunk_idx = _source_items(plan, SOURCE_CHUNK)
+            if src.shape[0]:
+                _fkr_bwd_source_kernel[(src.shape[0],)](
+                    plan.b_offsets, src, chunk_idx, plan.perm, plan.qi_by_b, basis, w, logm, q, k, v, lse, dsum,
+                    dout, dk, dv, scale, SOURCE_CHUNK,
+                    H=h, C=c, KC=kc, F=f, BLOCK=BLOCK_PAIRS, num_warps=NUM_WARPS,
+                )  # fmt: skip
+        dw = dw_parts[:, 0::2].sum(0).to(w.dtype)
+        return dbasis, dw, None, dq.to(q.dtype), dk.to(k.dtype), dv.to(v.dtype), None, None
+
+
+def fused_kernel_read(
+    basis: torch.Tensor,
+    w: torch.Tensor,
+    logm: torch.Tensor,
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    plan: PairPlan,
+    scale: float,
+) -> torch.Tensor:
+    """``segment_softmax_read(basis @ w.T, logm, q, k, v, plan, scale)`` with the kernel
+    term computed inside the read: ``basis`` ``(P, F)`` the pairs' kernel basis, ``w``
+    ``(H, F)`` the block's kernel weights in the basis's dtype; the rest as
+    :func:`~physicsnemo.experimental.models.isla.segment_softmax.segment_softmax_read`.
+    Differentiable in ``basis``, ``w``, ``q``, ``k`` and ``v``; requires
+    :func:`supported`."""
+    return _FusedKernelRead.apply(basis, w, logm, q, k, v, plan, float(scale))
