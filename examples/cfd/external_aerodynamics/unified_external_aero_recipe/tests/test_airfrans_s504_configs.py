@@ -33,14 +33,15 @@ SPEED_STD = {
     "std": 17.914,
 }
 
-#: AF-EXTRAP S-RE (2026-10-22): the 504-case in-distribution control's constants (fitted on full_train_s504, LHR job 326139).
+#: AF-EXTRAP S-RE (2026-10-22): the 504-case in-distribution control's constants (fitted on full_train_s504, LHR job 326139;
+#: ISLA's refit with the far field, AF-WHOLE 2026-10-23, LHR job 361288).
 S504 = {
     "manifest": "/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/kernel/afxs/manifest_s504.json",
     "nut": {"mean": 7.975e-4, "std": 2.404e-3},
     "speed": {"mean": 62.260, "std": 18.004},
     "isla": {
-        "reynolds": {"mean": 6.206, "std": 0.1354},
-        "output_scale": {"nut": 7.688e-05},
+        "reynolds": {"mean": 9.066, "std": 0.1347},
+        "output_scale": {"nut": 1.066e-07},
     },
 }
 
@@ -79,6 +80,6 @@ def test_lre_file_is_the_reynolds_file_with_the_fixed_reynolds_scale():
     b = OmegaConf.to_container(
         OmegaConf.load(datasets / "airfrans_uvolume_2d_reynolds.yaml"), resolve=False
     )
-    assert b["isla_constants"]["reynolds"] == {"mean": 6.223, "std": 0.06224}
+    assert b["isla_constants"]["reynolds"] == {"mean": 9.084, "std": 0.06181}
     b["isla_constants"]["reynolds"] = {"mean": 6.0, "std": 1.0}
     assert a == b

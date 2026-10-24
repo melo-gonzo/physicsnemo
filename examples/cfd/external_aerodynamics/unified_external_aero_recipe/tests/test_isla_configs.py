@@ -415,11 +415,12 @@ def test_cli_override_still_wins_over_the_pinned_rate():
 
 
 def _airfrans_case(s: float = 1.0, c: float = 1.0) -> DomainMesh:
-    """The synthetic AirfRANS case under x -> s x, U_inf -> c U_inf: velocity times c, kinematic pressure c^2,
-    nut s c, the airfoil's lengths s."""
-    from test_airfrans_configs import make_airfrans_case
+    """The synthetic AirfRANS case, with the far field the reader adds, under x -> s x, U_inf -> c U_inf:
+    velocity times c, kinematic pressure c^2, nut s c, the boundaries' lengths s."""
+    from test_airfrans_configs import make_airfrans_case, make_airfrans_freestream
 
     d = make_airfrans_case()
+    free = make_airfrans_freestream()
     pd = d.interior.point_data.clone()
     for name, k in (("velocity", c), ("pressure", c * c), ("nut", s * c)):
         pd[name] = pd[name] * k
@@ -432,7 +433,8 @@ def _airfrans_case(s: float = 1.0, c: float = 1.0) -> DomainMesh:
     return DomainMesh(
         interior=Mesh(points=d.interior.points * s, point_data=pd),
         boundaries={
-            "airfoil": Mesh(points=foil.points * s, cells=foil.cells, cell_data=cd)
+            "airfoil": Mesh(points=foil.points * s, cells=foil.cells, cell_data=cd),
+            "freestream": Mesh(points=free.points * s, cells=free.cells),
         },
         global_data=gd,
     )
@@ -550,6 +552,91 @@ def test_isla_airfrans_similarity_end_to_end():
         td["nut"] = td["nut"] * stats["std"] + stats["mean"]
     torch.testing.assert_close(t1["nut"], s * c * t0["nut"], atol=1e-9, rtol=1e-4)
     torch.testing.assert_close(y1["nut"], s * c * y0["nut"], atol=1e-9, rtol=1e-4)
+
+
+@pytest.mark.parametrize(
+    "dataset", ["airfrans_uvolume_2d", "airfrans_uvolume_2d_posed"]
+)
+def test_isla_airfrans_reads_the_airfoil_and_the_far_field(dataset, tmp_path):
+    """AF-WHOLE (2026-10-23): through the real reader, chain and collate, isla_volume_airfrans takes the airfoil
+    and the far field by name (no fields on either) and predicts at the interior points; its length unit is the
+    whole boundary's, which the far field sets (the synthetic far field is a 16-gon in a circle of radius 20,
+    whose RMS pairwise distance is 20 sqrt(2) for the exact circle, less a few percent for the polygon and the
+    airfoil's share of the measure)."""
+    from datasets import (
+        _apply_dataset_transform_appends,
+        _apply_dataset_transform_drops,
+        build_dataset,
+        load_dataset_config,
+    )
+    from output_normalize import model_dataset_constants, model_output_stats
+    from test_airfrans_configs import write_airfrans_case
+
+    from physicsnemo.datapipes.protocols import DatasetBase
+
+    write_airfrans_case(tmp_path)
+    cfg = _compose("isla_volume_airfrans", dataset, *SMALL)
+    assert OmegaConf.to_container(cfg.forward_kwargs.boundary_meshes) == {
+        "airfoil": "boundaries.airfoil",
+        "freestream": "boundaries.freestream",
+    }
+    assert OmegaConf.to_container(cfg.model.boundary_schemas) == {
+        "airfoil": {},
+        "freestream": {},
+    }
+    ds_yaml = load_dataset_config(_RECIPE_ROOT / "datasets" / f"{dataset}.yaml")
+    ds_cfg = OmegaConf.merge(
+        ds_yaml,
+        {
+            "train_datadir": str(tmp_path),
+            "manifest": str(tmp_path / "manifest.json"),
+            "raw_datadir": str(tmp_path / "raw"),
+            "sampling_resolution": 64,
+        },
+    )
+    ds_cfg = _apply_dataset_transform_appends(
+        _apply_dataset_transform_drops(ds_cfg, cfg), cfg
+    )
+    ds = build_dataset(ds_cfg, device=None, num_workers=1)
+    try:
+        sample = ds[0][0]
+    finally:
+        DatasetBase.close(ds)
+    (normalizer,) = [
+        hydra.utils.instantiate(t, _convert_="all")
+        for t in ds_cfg.pipeline.transforms
+        if "NormalizeMeshFields" in str(t["_target_"])
+    ]
+    torch.manual_seed(0)
+    model = hydra.utils.instantiate(
+        cfg.model,
+        _convert_="partial",
+        **model_output_stats(cfg.model, normalizer),
+        **model_dataset_constants(cfg.model, ds_yaml),
+    ).eval()
+    targets = _targets(dataset)
+    spec = OmegaConf.to_container(cfg.forward_kwargs, resolve=True)
+    batch = build_collate_fn(cfg.input_type, spec, targets)([(sample, {})])
+    meshes = batch["forward_kwargs"]["boundary_meshes"]
+    assert set(meshes) == {"airfoil", "freestream"}
+    measures = [
+        cell_measures(meshes[n].to(torch.float64)) for n in ("airfoil", "freestream")
+    ]
+    gauge = float(
+        model._gauge(
+            [meshes[n].to(torch.float64) for n in ("airfoil", "freestream")], measures
+        )
+    )
+    assert gauge == pytest.approx(20.0 * 2**0.5, rel=0.03)
+    assert gauge > 50 * float(
+        model._gauge([meshes["airfoil"].to(torch.float64)], measures[:1])
+    )
+    with torch.no_grad():
+        out = model(**batch["forward_kwargs"])
+    torch.testing.assert_close(out.points, sample.interior.points)
+    pred = normalize_output_to_tensordict(out, targets, cfg.output_type)
+    assert pred["velocity"].shape == (64, 2) and pred["pressure"].shape == (64,)
+    assert all(torch.isfinite(pred[k]).all() for k in targets)
 
 
 @pytest.mark.parametrize(

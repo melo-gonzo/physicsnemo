@@ -16,10 +16,11 @@
 # limitations under the License.
 
 # ISLA, interior task, on AirfRANS (airfrans_uvolume_2d, the uniform protocol): the reference configuration of isla_volume.yaml in two
-# dimensions, with the airfoil boundary and the farfield velocity U_inf as the global input.
+# dimensions, with the whole boundary of the PDE domain (the airfoil and the far field) and the farfield velocity
+# U_inf as the global input.
 #
-# ISLA brings its own scales (the model's docstring, *Scales*): the length L is the airfoil's RMS pairwise
-# distance (about 0.41 chord), the velocity U = |U_inf| (the farfield Dirichlet value, the global
+# ISLA brings its own scales (the model's docstring, *Scales*): the length L is the RMS pairwise distance of
+# the whole boundary, which the far field sets (305.3 chords; the airfoil's alone is 0.41-0.44), the velocity U = |U_inf| (the farfield Dirichlet value, the global
 # velocity_scale source, whose direction is the one global direction, K = 1) and nu the air's kinematic
 # viscosity, the constant 1.56e-5 m^2/s (SetGlobalField below; AirfRANS varies Re through U_inf alone), so the
 # standardized log10(U L / nu) is a global scalar in place of the raw speed in m/s. The velocity and pressure
@@ -31,10 +32,10 @@
 # The mesh contract is that of isla_volume.yaml: no query_schema, so the dataset's
 # stored sdf and sdf_normals (the baselines' inputs) are not read; each prediction
 # point's distance and direction to the airfoil are computed inside the model,
-# exactly, from the boundary mesh. The AirfRANS files read the airfoil whole (843 to 1,217 segments, normals pointing into the
-# fluid), which is the surface of the prediction points' exact geometry; it is
-# below the 200,000-token budget, so every segment is a boundary token with its
-# own length.
+# exactly, from the boundary meshes. The AirfRANS files read the airfoil whole (843 to 1,217 segments, normals pointing into the
+# fluid) and the dataset's reader adds the far field from the raw release (AF-WHOLE, 2026-10-23: 1,563 to 1,923
+# segments, normals into the fluid; the interior is the release's crop, whose edges are not a boundary of the PDE);
+# together they are below the 200,000-token budget, so every segment is a boundary token with its own length.
 input_type: mesh
 output_type: mesh
 
@@ -73,6 +74,7 @@ compile_options:
 forward_kwargs:
   boundary_meshes:
     airfoil: boundaries.airfoil       # Mesh[1, 2] after RestrictToPlane: line cells with in-plane normals and segment lengths
+    freestream: boundaries.freestream # Mesh[1, 2]: the far field, line cells (the reader's vtk_boundaries)
   prediction_points: interior         # the interior point-cloud Mesh
   global_data: global_data            # the case's TensorDict; the model selects its declared leaves
 
@@ -84,6 +86,7 @@ model:
     nut: {rank: 0, units: {U: 1, L: 1}, scale: null}   # m^2/s; c from the dataset file's isla_constants (train.py)
   boundary_schemas:              # the boundary conditions by name, each with its own per-cell fields
     airfoil: {}                  # the airfoil, a no-slip wall: no per-cell fields
+    freestream: {}               # the far field, OpenFOAM's freestream condition from U_inf (the global input): no per-cell fields
   global_schema:
     U_inf: {rank: 1, units: {U: 1}, velocity_scale: true}   # the farfield velocity (m/s): U = |U_inf|, g its direction
     nu: {rank: 0, units: {U: 1, L: 1}, role: viscosity}       # m^2/s, set above; consumed for Re
