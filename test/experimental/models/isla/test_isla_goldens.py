@@ -192,7 +192,7 @@ def test_the_golden_holds_every_case_and_its_manifest():
 
 
 @pytest.mark.parametrize("case, variant", _params("cpu"))
-def test_cpu_matches_the_golden(case, variant, golden, record_property):
+def test_cpu_matches_the_golden(case, variant, golden):
     """Each CPU variant of the case (the reference, and the fast build and walk, which
     claim the reference's results bitwise) against the committed golden: inputs and
     integers exact, floats within :data:`CPU_RTOL` of ``max|golden|``."""
@@ -202,13 +202,12 @@ def test_cpu_matches_the_golden(case, variant, golden, record_property):
         CPU_RTOL,
         overrides=case.tol,
     )
-    for dtype, rel in worst.items():
-        record_property(f"max_rel_err_{dtype}", f"{rel:.3e}")
+    print("largest relative error of the samples per dtype:", worst)  # shown with -rP
     assert not bad, "\n".join(bad)
 
 
 @pytest.mark.parametrize("case, variant", _params("cuda"))
-def test_cuda_matches_the_cpu_golden(case, variant, golden, record_property):
+def test_cuda_matches_the_cpu_golden(case, variant, golden):
     """Each CUDA variant (kernels auto: the fast build, walk and geometry search, the
     Triton and fused kernels; and the references on CUDA) against the committed CPU
     golden: inputs and integers exact, floats within :data:`CUDA_RTOL` of
@@ -229,8 +228,7 @@ def test_cuda_matches_the_cpu_golden(case, variant, golden, record_property):
         CUDA_RTOL,
         overrides={**case.tol, **case.cuda_tol},
     )
-    for dtype, rel in worst.items():
-        record_property(f"max_rel_err_{dtype}", f"{rel:.3e}")
+    print("largest relative error of the samples per dtype:", worst)  # shown with -rP
     assert not bad, "\n".join(bad)
 
 
