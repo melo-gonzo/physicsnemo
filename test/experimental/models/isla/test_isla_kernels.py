@@ -42,16 +42,24 @@ REF = dict(
 )
 
 
-def _boundary(n=700, seed=0, device="cuda", dtype=torch.float32, cell_data=None):
-    """One boundary soup of ``n`` cells with a global direction, and a target."""
-    pts, nrm, w, drv = cloud(n, seed=seed, dtype=torch.float32)
+def _boundary(
+    n=700,
+    seed=0,
+    device="cuda",
+    dtype=torch.float32,
+    cell_data=None,
+    d=3,
+    direction=True,
+):
+    """One boundary soup of ``n`` cells in ``d`` dimensions with a global direction
+    (unless ``direction`` is false), and a target."""
+    pts, nrm, w, drv = cloud(n, d, seed=seed, dtype=torch.float32)
     mesh = soup(pts, nrm, w, cell_data=cell_data).to(device).to(dtype)
-    tgt = torch.randn(n, 4, generator=torch.Generator().manual_seed(seed + 1)).to(
+    tgt = torch.randn(n, 1 + d, generator=torch.Generator().manual_seed(seed + 1)).to(
         device, dtype
     )
-    return dict(
-        boundary_meshes={"wall": mesh}, global_data={"g": drv.to(device, dtype)}
-    ), tgt
+    glob = {"g": drv.to(device, dtype)} if direction else None
+    return dict(boundary_meshes={"wall": mesh}, global_data=glob), tgt
 
 
 def _flat(o):
@@ -108,14 +116,30 @@ def _assert_same(ref, opt, dtype, out_tol, grad_tol, n=700):
 @pytest.mark.cuda
 @requires_cuda
 @pytest.mark.parametrize("dtype", [torch.float64, torch.float32])
+@pytest.mark.parametrize("dim", [3, 2])
 @pytest.mark.parametrize(
     "K,P",
-    [(1, 0), (2, 0), (3, 0), (4, 0), (1, 1), (1, 2), (1, 3), (2, 1), (2, 2), (3, 1)],
+    [
+        (0, 0),
+        (0, 1),
+        (0, 3),
+        (1, 0),
+        (2, 0),
+        (3, 0),
+        (4, 0),
+        (1, 1),
+        (1, 2),
+        (1, 3),
+        (2, 1),
+        (2, 2),
+        (3, 1),
+    ],
 )
-def test_fused_geo_region_matches_eager_region(dtype, K, P, monkeypatch):
+def test_fused_geo_region_matches_eager_region(dtype, K, P, dim, monkeypatch):
     """Region level: forward outputs (bias, mix, pooled) and every input gradient, for
-    K global directions plus P per-token rank-1 vectors (the (5 + K + P)-invariant set
-    in the eager order) with the linear routing-bias head."""
+    K global directions (none included) plus P per-token rank-1 vectors (the
+    (5 + K + P)-invariant set in the eager order) with the linear routing-bias head, in
+    three and two dimensions."""
     from physicsnemo.experimental.models.isla.geo_kernel import fused_geo_region
 
     monkeypatch.setattr(torch.backends.cuda.matmul, "allow_tf32", False)
@@ -127,23 +151,27 @@ def test_fused_geo_region_matches_eager_region(dtype, K, P, monkeypatch):
             (torch.randn(*shape, generator=g) * 0.1).to("cuda", dtype).requires_grad_()
         )
 
-    r, z = mk(b, n, 3), mk(b, s, 3)
+    r, z = mk(b, n, dim), mk(b, s, dim)
     nh = (
-        torch.nn.functional.normalize(torch.randn(b, n, 3, generator=g), dim=-1)
+        torch.nn.functional.normalize(torch.randn(b, n, dim, generator=g), dim=-1)
         .to("cuda", dtype)
         .requires_grad_()
     )
     ms = (
-        torch.nn.functional.normalize(torch.randn(b, s, 3, generator=g), dim=-1)
+        torch.nn.functional.normalize(torch.randn(b, s, dim, generator=g), dim=-1)
         .to("cuda", dtype)
         .requires_grad_()
     )
     d = (
-        torch.nn.functional.normalize(torch.randn(b, 1, K, 3, generator=g), dim=-1)
+        torch.nn.functional.normalize(torch.randn(b, 1, K, dim, generator=g), dim=-1)
         .to("cuda", dtype)
         .requires_grad_()
     )
-    v = (torch.randn(b, n, P, 3, generator=g) * 0.7).to("cuda", dtype).requires_grad_()
+    v = (
+        (torch.randn(b, n, P, dim, generator=g) * 0.7)
+        .to("cuda", dtype)
+        .requires_grad_()
+    )
     logits = torch.randn(b, n, s, generator=g).to("cuda", dtype).requires_grad_()
     torch.manual_seed(0)
     lin = torch.nn.Linear(5 + K + P, 1).to("cuda", dtype)
@@ -158,8 +186,8 @@ def test_fused_geo_region_matches_eager_region(dtype, K, P, monkeypatch):
         for t in leaves:
             t.grad = None
         d_n = d.expand(
-            b, n, K, 3
-        )  # both regions take the K global directions as (B, N, K, 3)
+            b, n, K, dim
+        )  # both regions take the K global directions as (B, N, K, dim)
         if fn is _geo_region:
             outs = fn(lin, logits, r, nh, d_n, z, ms, 1e-12, v if P else None)
         else:  # the fused kernel takes the directions and the token vectors as one (B, N, K + P, 3) set
@@ -187,7 +215,7 @@ def test_fused_geo_region_matches_eager_region(dtype, K, P, monkeypatch):
         assert _rel(a, bb) < tol, _rel(a, bb)
     for a, bb in zip(g_f, g_ref):
         if bb.numel() == 0:
-            continue  # the empty token-vector leaf when P = 0
+            continue  # the empty direction or token-vector leaf when K or P is 0
         assert _rel(a, bb) < (1e-11 if dtype == torch.float64 else 1e-5), _rel(a, bb)
 
 
@@ -317,6 +345,44 @@ def test_fused_geo_kernel_model_exact_in_float64():
 
 @pytest.mark.cuda
 @requires_cuda
+@pytest.mark.parametrize("d,direction", [(2, True), (3, False), (2, False)])
+def test_fused_geo_kernel_padded_models_exact_in_float64(d, direction):
+    """A two-dimensional model (the kernel's third component zero) and a model without a
+    global direction (one zero direction with a zero weight) resolve to the fused kernel
+    under "auto" and match the eager region to float64 roundoff."""
+    spec = {
+        **REF,
+        "n_spatial_dims": d,
+        "global_schema": REF["global_schema"] if direction else None,
+    }
+    torch.manual_seed(0)
+    ref = ISLA(**spec).to("cuda", torch.float64)
+    ref.geo_kernel = "eager"
+    torch.manual_seed(0)
+    opt = ISLA(**spec).to("cuda", torch.float64)
+    opt.load_state_dict(ref.state_dict())
+    inputs, tgt = _boundary(600, dtype=torch.float64, d=d, direction=direction)
+    assert opt.resolve_geo_kernel(inputs["boundary_meshes"]["wall"].points) == "fused"
+    o_ref, g_ref = _run(ref, inputs, tgt)
+    o_opt, g_opt = _run(opt, inputs, tgt)
+    assert _rel(o_opt, o_ref) < 1e-11, _rel(o_opt, o_ref)
+    total = torch.cat([g.flatten() for g in g_ref.values()]).norm()
+    for k, g in g_ref.items():
+        if g.norm() < 1e-6 * total:
+            continue
+        assert _rel(g_opt[k], g) < 1e-11, (k, _rel(g_opt[k], g))
+
+
+@pytest.mark.cuda
+@requires_cuda
+def test_geo_kernel_auto_stays_eager_above_three_dimensions():
+    """The kernel takes at most three components: a four-dimensional model runs the eager region."""
+    m = ISLA(**{**REF, "n_spatial_dims": 4})
+    assert m.resolve_geo_kernel(torch.zeros(1, 4, 4, device="cuda")) == "eager"
+
+
+@pytest.mark.cuda
+@requires_cuda
 def test_fused_geo_kernel_model_rank1_boundary_input_exact_in_float64():
     """A model with a rank-1 boundary input (the RANK-IO configuration) runs the fused
     kernel and matches the eager region to float64 roundoff."""
@@ -434,9 +500,10 @@ def test_query_independent_interior_fused_and_compiled_blocks_match_eager():
 ### 5 * 2**20 (and tokens >= 4096), and in torch 2.12 and 2.13 adds the padded rows of the
 ### last tile of tokens to that sum when the token count is not a multiple of the tile
 ### height (4 with 512 slices). The pair exists only in the eager geometry region (the
-### fused kernel is a leaf of the graph); the 2-D models and those without a global
-### direction run that region. The compiled blocks turn mix-order reduction off. These
-### tests run the eager region at a size where it would fuse, in float32 (it never fuses
+### fused kernel is a leaf of the graph), which a model runs off CUDA, under float16
+### autocast, above three dimensions, with rank-2 inputs or with more than four per-point
+### vectors. The compiled blocks turn mix-order
+### reduction off. These tests run the eager region at a size where it would fuse, in float32 (it never fuses
 ### float64), at token counts that are and are not multiples of 4. ISLA's forward pads
 ### the token axis to a multiple of TOKEN_ALIGNMENT (32), so the compiled blocks of a
 ### default forward never see such a count; the padding is not the fix, and the tests

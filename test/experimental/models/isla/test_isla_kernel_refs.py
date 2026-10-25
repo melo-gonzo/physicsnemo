@@ -732,11 +732,10 @@ def _geo_model(**kw):
 @requires_cuda_triton
 def test_geo_kernel_auto_disqualifiers_on_cuda():
     """On CUDA with Triton, ``geo_kernel="auto"`` picks the fused region for a model
-    it fits and the eager region for each disqualifier: no global direction, five
-    per-point vectors (five global directions, or two and three rank-1 boundary
-    inputs), more slices than ``MAX_SLICES``, a rank-2 boundary input, two spatial
-    dimensions, float16 autocast (the fused region's only autocast dtype is bfloat16;
-    the choice is re-made when the autocast dtype changes)."""
+    it fits and the eager region for each disqualifier: five per-point vectors (five
+    global directions, or two and three rank-1 boundary inputs), more slices than
+    ``MAX_SLICES``, a rank-2 boundary input, float16 autocast (the fused region's only
+    autocast dtype is bfloat16; the choice is re-made when the autocast dtype changes)."""
     pts = torch.zeros(4, 3, device="cuda")
     m = _geo_model()
     assert m.resolve_geo_kernel(pts) == "fused"
@@ -750,20 +749,16 @@ def test_geo_kernel_auto_disqualifiers_on_cuda():
     assert m.resolve_geo_kernel(pts) == "fused"
     five = {f"g{i}": {"rank": 1} for i in range(5)}
     cases = {
-        "no global direction": _geo_model(global_schema={"s": {"rank": 0}}),
         "five global directions": _geo_model(global_schema=five),
         "two directions, three boundary vectors": _geo_model(
             global_schema={"a": {"rank": 1}, "b": {"rank": 1}},
             boundary_schemas={"wall": {f"t{i}": {"rank": 1} for i in range(3)}},
         ),
         "slices past MAX_SLICES": _geo_model(n_slices=geo_kernel.MAX_SLICES + 1),
-        "two dimensions": _geo_model(n_spatial_dims=2),
         "rank-2 boundary input": _geo_model(
             boundary_schemas={"wall": {"tau": {"rank": 2, "symmetric": True}}}
         ),
     }
-    m = cases["no global direction"]
-    assert m.n_global_vectors == 0
     assert cases["five global directions"].n_global_vectors == 5
     m = cases["two directions, three boundary vectors"]
     assert m.n_global_vectors + m.n_block_vecs == 5

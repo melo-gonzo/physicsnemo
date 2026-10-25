@@ -532,7 +532,7 @@ def test_the_model_repeats_bitwise_on_cuda_with_kernels_auto(task, dims, autocas
     float32 and under bfloat16 autocast, on CUDA with every kernel "auto": one
     training step twice, the outputs, every parameter gradient and the draw bitwise.
     The kernels that resolve are recorded and asserted: the fused geometry region in
-    3-D (the eager region in 2-D, which it does not take), and for ISLA-DTT the fast
+    3-D and 2-D, and for ISLA-DTT the fast
     exact geometry, the fused read (seen running: the fused read and node means, not
     the segment softmax read), the fast forest build and the fast walk.
 
@@ -556,7 +556,7 @@ def test_the_model_repeats_bitwise_on_cuda_with_kernels_auto(task, dims, autocas
         kernels["walk"] = "fast" if walks and None not in walks else "reference"
         kernels["read_ran"] = {f.__name__ for f in reads if r.count(f)}
     print("resolved:", kernels)
-    want = {"geo": "fused" if dims == 3 else "eager"}
+    want = {"geo": "fused"}
     if task == "dtt":
         want.update(geometry="fast", tree_read="fused", build="fast", walk="fast")
         want["read_ran"] = {"fused_kernel_read", "fused_node_means"}
