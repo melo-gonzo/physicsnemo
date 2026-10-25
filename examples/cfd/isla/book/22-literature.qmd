@@ -84,6 +84,9 @@ for k in keys:
             if s.has(b):
                 cells.append((s.ds.name, s.fields[f], b, s.verdict(b, f)))
 held = [(S.DATASETS[k].short, S.Standing(k).fields[f]) for k in keys for f in S.DATASETS[k].provisional]
+AZE = S.aerozoo_spec()   # AeroZoo's own metrics: velocity_l2 below reads eps_U, pressure_l2 eps_p
+AZA = {a: {"splits": {sp: {"velocity_l2": c["eps_U"]["all"], "pressure_l2": c["eps_p"]["all"]} for sp, c in v["splits"].items()}}
+       for a, v in AZE["arms"].items() if a in ("ISLA", "ISLA-DTT", "GeoTransolver", "Transolver")}
 def az_verdict(b, f, split="full"):
     """The seed rule of standing.Standing.verdict on one AeroZoo split."""
     cb, ci = AZA[b]["splits"][split][f], AZA["ISLA"]["splits"][split][f]
@@ -121,8 +124,8 @@ print(f"At the reference configurations on the native mesh, over {len(keys)} dat
          if (nl := sum("lug" in c[0] and c[2] == "Transolver" for c in lead)) else "")
       + f", "
       f"is level in {level} and trails in {len(trail)}. It trails on: {group(trail)}. " + (S.tally_note() + " " if S.tally_note() else "")
-      + "AeroZoo counts on velocity only: on its "
-      "pressure both baselines are about a zero predictor, so " + " and ".join(f"{b} ÷ ISLA {S.fmt_ratio(r)}" for b, r in az_p.items())
+      + "AeroZoo, scored with its own metrics, counts on velocity only: on its "
+      "pressure both baselines are about a zero predictor, so " + " and ".join(f"{b} ÷ ISLA {r:#.3g}" for b, r in az_p.items())
       + " there compare ISLA with predicting zero (@sec-aerozoo-baselines). "
       + "".join(f"{d} {fl} is not counted: the baselines' error on it includes an out-of-plane component that ISLA's "
                 "planar prediction does not have (@sec-interior-airfrans). " for d, fl in held) +
@@ -139,7 +142,7 @@ notes = [S.DATASETS[k] for k in keys if not S.DATASETS[k].reference]
 if notes:
     print("\n\n" + " ".join(f"On {d.name}, ISLA's checkpoints are of the raw-read variant: its slice pooling "
                              f"and broadcast read the raw stream." for d in notes))
-print("\n\nData: " + ", ".join(S.Standing(k).source for k in keys + flight) + ", results/char/aerozoo_090_final.json. The standing row by row is @sec-standing.")
+print("\n\nData: " + ", ".join(S.Standing(k).source for k in keys + flight) + ", results/char/aerozoo_090_specmetric.json. The standing row by row is @sec-standing.")
 print()
 print(S.in_flight_callout("lug"))
 ```

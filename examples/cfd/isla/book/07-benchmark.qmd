@@ -679,7 +679,7 @@ dataset chapter gives its splits in full.
 ## The scoring protocol {#sec-protocol}
 
 **Every standing scores the final checkpoint of each seed in float32 on 200,000 sampled cells per case, as the area-weighted
-relative L2 error averaged over cases, and scores it three ways; AeroZoo is scored on the native mesh only, and HiLiftAeroML on
+relative L2 error averaged over cases, and scores it three ways; AeroZoo is scored on the native mesh only, with its own metrics first, and HiLiftAeroML on
 the native mesh and rotated and translated, over the distinct cells of its 200,000 drawn.** @tbl-protocol
 gives the settings. The metric is the
 area-weighted relative L2 error of @sec-metrics, computed per case and averaged over the cases with equal weight.
@@ -694,7 +694,7 @@ area-weighted relative L2 error of @sec-metrics, computed per case and averaged 
 | seeds | 42 and 43, both reported (42 to 45 for ISLA on Tensile2d); the standing quotes the seed mean and applies the seed rule of @sec-fair-comparison |
 | metric | area-weighted relative L2 per case, averaged over the scored cases (@sec-metrics) |
 | scorings | the *native mesh*; the *uniform point cloud*, the area-proportional law with exact Horvitz–Thompson weights; *rotated and translated*, a random rotation and a translation of one RMS radius per case (the root-mean-square distance of the case's points from their centroid; in-plane on the planar datasets) |
-| AeroZoo | the native mesh only, 200,000 interior points of each split's test cases, the relative L2 error per field and case in physical units averaged over cases, the checkpoint of epoch 250 (@sec-aerozoo-allowed) |
+| AeroZoo | the native mesh only, the checkpoint of epoch 250; AeroZoo's own interior metrics, the volume-weighted RMS velocity and pressure errors over every interior cell of each split's test cases in units of the case's reference scales, and their near-body $\varepsilon^N$, in float64, mean and median over all test cases and over its `mean_stable` ones (the primary numbers); beside them the registered readout's relative L2 error per field and case in physical units on 200,000 interior points (@sec-data-aerozoo) |
 
 : The scoring protocol of every standing. How to read this: the three scorings rescore one checkpoint and train nothing; a
 number outside this protocol says so in its caption. {#tbl-protocol}
@@ -738,7 +738,7 @@ task, which computes no wall geometry and draws no tokens, the four steps do not
 
 | step | the standings' checkpoints (ISLA 0.9.0) | the class (@sec-arch-interior-geometry, @sec-arch-boundary-draw) |
 |---|---|---|
-| the direction at a closest-feature tie | the first tied feature the float32 search meets | the least-norm point of the hull of the tied features' directions, a function of the tie set alone |
+| the direction at a closest-feature tie | the first tied feature the float32 search meets | the least-norm point of the hull of the tied features' directions, a function of the tie set alone where they are certified distinct (@sec-limits-tie-order) |
 | the sign of the wall distance | the closest feature's pseudo-normal, which cancels at a fold of the surface | the generalized winding number of the oriented cells |
 | the token draw | a Morton order along the dataset's axes, on centroids in the mesh's precision | a Morton order in the boundary's canonical frame, on float64 centroids and measures |
 | a point on the wall | a fixed cutoff of its distance, with float32 normals | its float64 distance within its own rounding bound, with float64 normals |

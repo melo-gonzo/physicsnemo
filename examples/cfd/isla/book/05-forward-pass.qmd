@@ -436,7 +436,8 @@ $$
 \mathbb{E}_u \Big[ \sum_{i \text{ kept}} w_i\, f_i \Big] = \sum_{\text{all cells}} \lvert C_i \rvert\, f_i ,
 $$
 
-and the sum is exact on a condition kept whole. Every measure-weighted
+and the sum is exact on a condition kept whole, to the rounding of its keep
+probabilities (@sec-limits-draw-ties). Every measure-weighted
 sum over the tokens (the slice states, the anchors) is therefore a quadrature of the full surface; the length unit
 and the declared scales are computed from the full surface itself, before
 the draw. The kept cells are spaced evenly in cumulative probability along
@@ -445,11 +446,13 @@ than clumped. In training $u$ is drawn uniform on $[0, 1)$ from the global
 torch random-number generator at every step (`torch.manual_seed` reproduces
 a run), so the model sees a new quadrature of the same surface each time;
 in evaluation (`model.eval()`) $u = 1/2$ (`EVAL_START`), so inference is
-deterministic. The selection runs without gradient, in float64 and outside
+deterministic on the CPU; on a GPU, where a share is a half integer, hits land
+exactly on cell boundaries and the rounding of the prefix sum decides them
+(@sec-limits-draw-ties). The selection runs without gradient, in float64 and outside
 autocast, and the kept cells' measures keep their gradient. It selects rows
 of the token set whose seeds stage 2 has already computed for every cell,
 and returns them in the cells' own order, so a condition kept whole is its
-mesh as given.
+mesh as given, except at those exact ties on a GPU.
 
 ::: {.column-margin}
 Why proportional to measure: an uncapped kept cell then stands for
@@ -1342,8 +1345,10 @@ layers code $\log d$: their response to a tenfold change of distance is
 flat over five decades. At fixed weights a tenfold change at AirfRANS's
 first nodes moves the input layer 38 times less in the linear part than in
 the logarithmic one, so with the whole boundary those weights resolve the
-near-wall distance on AirfRANS less finely; whether a model trained with
-the whole boundary recovers it is open (@sec-oq-nearwall;
+near-wall distance on AirfRANS less finely, and a model trained with the
+whole boundary does not recover it: its velocity error is largest in the
+first decades off the wall, and its velocity and eddy-viscosity errors are
+larger below the channel's knee than above it (@sec-limits-af-whole, @sec-oq-nearwall;
 results/campaigns_2026-10-23/nearwall/RESULTS.md, A1 to A3; results/campaigns_2026-10-23/nearwall/DESIGN.md, section 4).
 
 $\delta_q$ and $u_q$ are functions of the surface and its orientation alone:
@@ -1570,8 +1575,9 @@ bitwise unchanged at all of them (results/campaigns_2026-10-23/geo_degen/RESULTS
 check b; results/campaigns_2026-10-23/geo_thin_final/RESULTS.md, A1 to A3 and T-junctions).
 The other two are limits of the tie rule, below.
 
-**No step of this geometry is left to the order of a search or to the sign
-of a cancelling sum.** The direction at a tie is a function of the tie set
+**Where the tied directions are certified distinct, no step of this
+geometry is left to the order of a search or to the sign of a cancelling
+sum.** The direction at such a tie is a function of the tie set
 alone, not of the order of the vertices, the cells or the search, and a flip
 of the boundary's winding negates $\delta_q$ and $\operatorname{sign}(\delta_q)\,
 u_q$ bitwise. A point is tied only when two of its tied features' directions
@@ -1579,7 +1585,11 @@ are certified distinct: farther apart than the sum of bounds on their
 rounding, each $\sqrt 2$ times a bound on the sine of the computed
 direction's error (2 where that bound reaches 1). Directions that agree to
 within their rounding, such as the normals of a planar star of cells, do not
-make a tie. What rounding still decides is which features join a tie set,
+make a tie; on the wall the direction is then the normal of the cell of least
+index among those at the least distance, so it follows the cells' order, and
+since the certification's bound scales with the queries' precision, a float32
+point and its float64 copy can differ there (@sec-limits-tie-order). What
+rounding still decides is which features join a tie set,
 since a feature joins when its distance lies within the rounding bound of the
 least; and where the normals of a tie nearly coincide, as on a structured
 mesh's split faces, their least-norm point is ill-conditioned, so its float32
@@ -2036,11 +2046,17 @@ the posed lists hold 1.29 times the pairs, and at $\theta = 0$, where no
 cluster forms, posed and native agree to $10^{-4}$. The frame is not the
 cause: the normalized third moments of its two nearly symmetric axes, about
 $10^{-6}$, move under pose by at most $1.1 \times 10^{-7}$, so the code's
-tie threshold of $10^{-9}$ decides no sign. On the AirfRANS interior task no
-normal has a component below $10^{-5}$, 0 to 8 cells change octant, and
-posed equals native to 0.25% at every opening angle, with the same pair
-counts (results/campaigns_2026-10-23/dtt_pose/MECHANISMS.md, sections 1 and 3;
-results/campaigns_2026-10-23/dtt_knobs/sens/sens_table.md).
+tie threshold of $10^{-9}$ decides no sign. On the AirfRANS interior task with
+the airfoil alone no normal has a component below $10^{-5}$, 0 to 8 cells
+change octant, and posed equals native to 0.25% at every opening angle, with
+the same pair counts (results/campaigns_2026-10-23/dtt_pose/MECHANISMS.md, sections 1 and 3;
+results/campaigns_2026-10-23/dtt_knobs/sens/sens_table.md). With its far field
+it ties as the lug does: the far field's straight edges lie along the
+forest's axes, so one component of each normal is about $2 \times 10^{-6}$;
+posed against native 16 to 45% of the far-field cells (median 29%) change
+octant, and ISLA-DTT trained with the far field has a posed error 1.53 to
+2.52 times its native error (@sec-limits-af-whole;
+results/campaigns_2026-10-23/af_whole_read/RESULTS.md, sections 1 and 3).
 
 **A forest that depends on the boundary alone is designed and measured on a
 prototype.** The design, approved by the supervisor, changes five things.

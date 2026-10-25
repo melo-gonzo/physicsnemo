@@ -567,11 +567,14 @@ forward pass (`sampling.sample_boundary_cells`):
   the surface rather than clumped.
 - **Weights.** Each kept cell carries its Horvitz–Thompson measure $a_i /
   \pi_i$, so every measure-weighted sum over the tokens is an unbiased
-  quadrature of the full surface, exact on a condition kept whole.
+  quadrature of the full surface, exact on a condition kept whole up to
+  rounding.
 - **Start.** In training $u$ is uniform from the global torch RNG, a new
   quadrature of the same surface at every step (`torch.manual_seed`
   reproduces a run); in evaluation (`model.eval()`) $u = 0.5$
-  (`EVAL_START` in `model.py`), so inference is deterministic.
+  (`EVAL_START` in `model.py`), so inference is deterministic on the CPU;
+  on a GPU a half-integer share puts hits exactly on cell boundaries, and the
+  rounding of the prefix sum decides them (@sec-limits-draw-ties).
 
 A surface model reads every cell it is given and samples none: it predicts
 at the cells of its prediction boundaries, and its constructor raises a
@@ -1099,7 +1102,8 @@ pieces, whole; the outputs come back at the vehicle's cells. For an interior mod
 condition's mesh at full resolution, oriented as in training, and
 `prediction_points`, and read the outputs at those points; in evaluation
 mode the boundary draw has its fixed start, so the prediction is
-deterministic. The interior model, ISLA-DTT, is queried at any count,
+deterministic on the CPU, and on a GPU up to the draw's exact ties
+(@sec-limits-draw-ties). The interior model, ISLA-DTT, is queried at any count,
 alone or in chunks. The interior standings' interacting ISLA holds its
 numbers at its training point count (200,000 at the reporting protocol on
 DrivAerML), because an interacting point's prediction depends on the joint

@@ -62,6 +62,9 @@ SEEDS_TXT = f"{S._COUNT[_n0]} seeds" + "".join(f" ({S._COUNT[n]} for ISLA on {S.
 #| label: para-thesis
 #| output: asis
 n_lug = sum(k == "lug" and a == "Transolver" for k, _, a in V["leads"])
+_AZE = S.aerozoo_spec()   # AeroZoo's own metrics: held-out splits where ISLA beats predicting zero on pressure (and the free stream on velocity)
+_azb = [sp for sp in _AZE["held_out"] if _AZE["arms"]["ISLA"]["splits"][sp]["eps_p"]["all"]["mean"] < _AZE["references"]["zero"][sp]["eps_p"]["all"]["mean"]]
+assert _azb == [sp for sp in _AZE["held_out"] if _AZE["arms"]["ISLA"]["splits"][sp]["eps_U"]["all"]["mean"] < _AZE["references"]["freestream"][sp]["eps_U"]["all"]["mean"]]
 print(
     "**ISLA is a slice-attention transformer built to generalize: to predict the field on geometries, enclosures, inflow "
     "conditions and Reynolds numbers outside its training family, which is what design asks of a surrogate.** It is exactly "
@@ -69,8 +72,10 @@ print(
     "case, so a similarity of the problem leaves its internal states unchanged. "
     "AeroZoo, whose held-out splits take a whole enclosure family, geometry bank, inflow layout or Reynolds range out of training, "
     "is the book's test of generalization; @sec-aerozoo-why makes the case for it, and @sec-aerozoo gives ISLA's standing there. "
-    "On AeroZoo both baselines end as about a zero predictor on pressure, so a pressure comparison there is a comparison with "
-    "predicting zero, and there ISLA's two interior forms read a close call, which by Peter's ruling makes ISLA-DTT, whose "
+    "On AeroZoo, scored with its own metrics, both baselines end at the zero predictor on pressure and about at AeroZoo's "
+    "free stream on velocity, so a comparison there is a comparison with those references; ISLA beats both on "
+    f"{len(_azb)} of the {len(_AZE['held_out'])} held-out splits and is worse than both on the other {len(_AZE['held_out']) - len(_azb)}, "
+    "and there ISLA's two interior forms read a close call, which by Peter's ruling makes ISLA-DTT, whose "
     "prediction at a point does not depend on the other points queried, ISLA's interior form, on principle "
     "(@sec-aerozoo-form). "
     "The other benchmarks, DrivAerML, HiLiftAeroML, SHIFT-SUV, AirfRANS, Tensile2d, the lug and DeepJEB++, are here because the "

@@ -42465,6 +42465,323 @@ Records: results/campaigns_2026-10-23/isla_api_013/ and results/campaigns_2026-1
 *Applied for the supervisor by the book lane BOOK-API and second-read by a lane reviewer on 2026-10-25, its findings
 applied (scratch/isla-book-api-2026-10-25/SECOND_READ_API.md, SECOND_READ_DISPOSITION.md).*
 
+## 2026-10-24 — MAIN-MERGE: upstream main merged into psharpe/isla (22 commits), level, with no ISLA number changed; main's reversed torus winding exposed a defect of the on-wall direction at quad diagonals, recorded as a strict expected failure {#sec-nb-main-merge}
+
+**Why.** Peter's direction (d) of about 21:43 EDT 2026-10-24, verbatim: "be sure you merge main into this branch
+periodically. Now's a good time, for example." Lane MAIN-MERGE (records: results/campaigns_2026-10-23/main_merge/,
+FINAL_REPORT.md md5 b984edca, IMPACT.md, DEFECT_TORUS.md).
+
+**What ran.** psharpe/isla-main-merge-1024 merged upstream main 289e57382 (22 commits) into 5b70c8686 (a682959bc),
+changed the torus tests (15e9063aa) and merged psharpe/isla 2e3bfb66b (b8b1543c4); the supervisor merged it into
+psharpe/isla as 605b2b266. Only CHANGELOG.md conflicted. 3.15 of 4 GPU-h.
+
+**No ISLA number changes.** ISLA calls none of the measure, least-squares, facet or BVH-traversal code main fixed, and
+apart from the torus its test inputs are bitwise unchanged. The book rendered at the head and at the base exits 0 with the
+visible text of all 23 pages identical; one figure differs, 03's toy stream, which draws from an unseeded generator. The
+baselines alone can see a change: main's degenerate-face repair of the signed distance moves values near faces thinner than
+1e-4 of their longest edge, which the Transolver and GeoTransolver volume inputs read. Suites at the head: the ISLA
+directory on a GB300 with every CUDA test 709 passed, 1 skipped, 2 xfailed, and on CPU 461 passed, 241 skipped, 2 xfailed,
+as at the base; the recipe tests' two failures in `test_campaign_c_hooks` match the base's assertion messages.
+
+**The defect.** Main's #2148 reversed the winding of the torus primitive, so two ISLA tests that take `cells[:, :2]`
+midpoints now query quad diagonals, where the two triangles' normals agree to rounding. There the on-wall direction is not a
+function of the mesh alone: renumbering moves it at 51 of 1,152 points, by up to 1.79e-6, and float32 inputs differ from
+their float64 copies at 5 of 35. The defect is the same at 5b70c8686 and in either winding. On the supervisor's ruling
+(22:46 EDT) both tests are pinned to the earlier winding and `test_on_wall_direction_at_quad_diagonals`, a strict expected
+failure with both cases, records the defect; ISLA's geometry code is unchanged. GEO-TIEORDER takes it up
+(@sec-nb-geo-tieorder). The book states it as a limit (@sec-limits-tie-order).
+
+## 2026-10-24 — TEST-AUDIT: ISLA's tests cover 88 percent of its non-kernel lines on CPU and 94 percent with the GPU; MOD-008 is partly met; GPU eager is bitwise but for the draw's weights and exact-tie hits and the reference tree read; a four-phase plan, now being built by TEST-BUILD {#sec-nb-test-audit}
+
+**Why.** Peter's direction (c) of about 22:05 EDT 2026-10-24, verbatim: "It's high time we start making sure that ISLA has
+a really good test suite". Lane TEST-AUDIT, audit and plan only, at 5b70c8686 (records:
+results/campaigns_2026-10-23/test_audit/, FINAL_REPORT.md md5 8d41b666, AUDIT.md, COVERAGE.md, DETERMINISM.md,
+TEST_PLAN.md). LHR cpu-short 376354, GB300 376355 and 377000; 1.95 GPU-h.
+
+- **Coverage** (kernel bodies excluded): 88.2 percent of lines and 78.9 percent of branches on CPU, 94.4 and 85.1 percent
+  with the GPU. Full or nearly: blocks, heads, sampling, the fast geometry; low: segment softmax, the fused basis, the fused
+  read and the geometry kernel, mostly CUDA backward, which runs on autograd's own thread where coverage does not trace.
+  Never run: several rank-1 vectors on one condition, the ball search's second pass, the geometry kernel above 256 slices,
+  38 raises.
+- **MOD-008:** 008a partly (about 18 attributes not asserted), 008b in form only (one small float32 configuration, no
+  `query_chunks` golden), 008c for the surface task only (no ISLA-DTT `.mdlus`).
+- **Determinism on a GB300** (eager, kernels auto, six runs): bitwise for the geometry, the tokens, the fused read, every
+  block, the outputs and the surface task; not bitwise for the draw's float64 weights (CUDA's cumsum), for the kept cell
+  where a hit lands on a line boundary, and for the reference tree read (about 2e-6). DRAW-EXACT takes up the draw
+  (@sec-nb-draw-exact).
+- **Gaps, ranked:** no bitwise module golden; ISLA-API's converted interior tests ran ISLA-DTT with a read that adds zero;
+  interior cell permutation untested; patch-and-compare tests that could pass vacuously after the library moves; a
+  sampling-under-compile proof deleted; the fast geometry checked only in 3-D; chunking never tested with the draw active.
+- **Plan:** P0 an A/B harness with goldens under 1 MB, P1 MOD-008a/b/c, P2 properties, P3 gradcheck, opcheck, kernels and
+  determinism, P4 tiers; about 10 to 12 GPU-h. TEST-BUILD is building it.
+
+## 2026-10-24 — DTT-KNOBS stage 2, R5: ISLA-DTT without its physical scales, reading a standardized inlet speed, is about 20 percent worse on AirfRANS (1.208 / 1.203 / 1.177), so the scales carry ISLA-DTT's accuracy there, as far as two seeds can show; interacting ISLA's mirror arm needed none of them; velocity flagged {#sec-nb-dtt-knobs-r5}
+
+**The read** (results/campaigns_2026-10-23/dtt_knobs_r5/RESULTS.md, section R5, read by the coordinator at 22:58 EDT
+2026-10-24 and corrected at 23:30 after its second read, RESULTS_R5_REVIEW.md, "confirmed with corrections"; PREREG md5
+39d8272f, @sec-nb-dtt-knobs-prereg). DTT-NOSC-STD, ISLA-DTT without the scales and with the inlet speed standardized, two
+seeds of 500 epochs, scored by LHR 376686 (native and posed, 200 `full_test` cases, float32, eager) against B, the
+ISLA-DTT standing's pair r090fix_af_dtt. Every section-4 check passes.
+
+| field | DTT-NOSC-STD ÷ B, arithmetic (registered) | 2 SE | per seed | ÷ DTT-NOSC | registered reading |
+|---|---|---|---|---|---|
+| pressure | 1.208 | 0.101 | 1.128 / 1.288 | 0.955 | the scales carry it |
+| in-plane velocity | 1.203 | 0.173 | 1.022 / 1.382 | 0.982 | the scales carry it, flagged |
+| eddy viscosity | 1.177 | 0.149 | 1.164 / 1.188 | 1.018 | the scales carry it |
+
+: DTT-KNOBS R5 (results/campaigns_2026-10-23/dtt_knobs_r5/RESULTS.md). {#tbl-nb-dtt-knobs-r5}
+
+- On velocity the registered arithmetic form clears 2 SE by 7 percent while the geometric form reads unresolved (Δ 0.173
+  below its 2 SE), and its own seeds sit 36 percent apart; the flag stands beside the registered label. Posed agrees within
+  0.001 on the ratios. Predictions P10 ("removes" on pressure, 0.60) and P12 (eddy viscosity unresolved, 0.45) failed.
+- With the review's corrections applied: φ = Δ / G_f is 0.81 / 0.91 / 1.11 and Δ / D_DTT 1.83 / 1.18 / 6.26 in the
+  registered form (geometric 0.80 / 0.85 / 1.10 and 1.81 / 1.11 / 6.23); the bundle thread on pressure and eddy viscosity
+  reads that the cost sits in the scales, as far as two seeds can show, with no sign of an interaction with the raw speed.
+- Beside the rule: interacting ISLA's mirror, NOSC-STD ÷ B (ATTRIB 2c, geometric seed means), reads 1.003 / 1.029 / 1.043.
+  No registered rule tests the difference between the forms; a plain 2-SE check resolves it on pressure only (0.186 against
+  0.161), and on velocity (0.156 against 0.195) and eddy viscosity (0.121 against 0.190) it is within two seeds' noise. A
+  reading of why, not a test: ISLA-DTT's passive points never share state, and the physical scales may give them a frame that
+  interacting ISLA rebuilds from its coupled points.
+- Cost: 133.3 GPU-h of the registered 136; the median step 0.574 / 0.571 s against B's 0.566 / 0.575.
+- For the book: 20's question on the scales, 12's ISLA-DTT reference section and limits, and 21's scales row now say that
+  ISLA-DTT needs the scales on AirfRANS where interacting ISLA does not.
+
+## 2026-10-24 to 2026-10-25 — AZ-SPEC-AUDIT and AZ-RESCORE: no AeroZoo model gets data the specification forbids, but the standing used a different metric; rescored with AeroZoo's own interior metrics, three orders change, both baselines sit at AeroZoo's references, and both forms of ISLA are worse than them on two held-out families; the book's AeroZoo numbers become AeroZoo's own {#sec-nb-az-rescore}
+
+**The audit** (AZ-SPEC-AUDIT, read-only, 21:38 EDT 2026-10-24, revised 21:50 after its lane reviewer;
+results/campaigns_2026-10-23/az_spec_audit/AUDIT.md md5 448bd6f1). Spec: aerozoo `docs/book/06-splits.qmd` @ 96bd2b62.
+To Peter's question: no model gets unfair extra data. Every tensor that reaches a forward is the posed problem, something
+computed from it, or the query points; every fitted constant comes from the run's own training part; every run uses AeroZoo
+v1.2's split lists with no case missing. The deviations: M1, a different metric; T1, five of the seven interior fields; I1,
+Transolver without the boundary conditions; I2, the baselines' 50,000-face draw; L1, a loss not weighted by cell volume;
+S1, the interior form read on test sides; S1b, a design-time look at 22 test cases for the loss; R1, no release version,
+hash or `mean_stable` score in 13. The audit estimated that M1 could flip `family_non_box` velocity and E1-AZ's registered
+REJECT.
+
+**The rescore** (AZ-RESCORE, RESULTS.md md5 20ba0df7, written 06:40 EDT 2026-10-25; results/campaigns_2026-10-23/az_rescore/).
+All 48 AeroZoo checkpoints, E1-AZ and LRE-AZ included, rescored without retraining: chunked inference over every interior
+cell (0.6 to 24 million per case), each lane on its own snapshot, AeroZoo's reference functions verbatim in float64. ε_U and
+ε_p are the volume-weighted RMS velocity and pressure errors over every interior cell in units of the case's U_ref and q_ref;
+ε^N the same within one reference length of the body; mean and median over all test cases and over `mean_stable`. Jobs LHR
+376802, 376803, 376804, 376818, 378817, 378820; 258.2 GPU-h of the cap 265 after the supervisor's raises (150 to 220 at 23:02
+EDT, the validation re-read dropped; to 265 at 02:58).
+
+- **Checks.** The scorer reproduces the registered 200k relative L2 on the registered sample (0.0 difference; ISLA-DTT within
+  its float32 noise); an independent float64 implementation agrees within 2.4e-8; AeroZoo's own free-stream file is
+  reproduced on all 5,969 test case-splits within 4.8e-9. The full-mesh relative L2 equals the registered one within 0.5
+  percent, so the sample was not the issue; the metric was. Repartitioning moves interacting ISLA by at most 4.5e-4 relative,
+  ISLA-DTT by at most 1.9e-4 between chunk sizes (its float32 roundoff), GeoTransolver's draw by 1.8e-3.
+- **What changes.** Three orders, on case means over all test cases: on `family_non_box` velocity GeoTransolver moves ahead of
+  both forms of ISLA (ε_U 0.396 against 0.404 for ISLA-DTT and 0.418 for interacting ISLA); on pressure ISLA-DTT moves ahead
+  of interacting ISLA on `family_non_box` (0.706 against 0.720) and interacting ISLA ahead of ISLA-DTT on `reynolds` (0.371
+  against 0.401). On medians and `mean_stable` a few more pairs swap (21 of 96 rows change on at least one field, ORDERS.md).
+- **The references.** Both baselines are at the zero predictor on pressure (GeoTransolver's ε_p 1.00 to 1.03 times it) and
+  about at AeroZoo's free stream on velocity (0.97 to 1.90 times its ε_U, at most 3.4 percent below it). Both forms of ISLA are 0.16 to 0.27 of the
+  free stream's ε_U on `full`, `bank_zero_to_cad`, `bank_blobs` and `reynolds`, 0.77 to 0.83 on `profile_dual_inlet`, and
+  1.47 to 1.55 on `family_non_box` and `profile_crossflow`, where their ε_p is also above the zero predictor's (crossflow
+  5.01 and 4.74 against 2.59; non-box 0.720 and 0.706 against 0.467). GeoTransolver ÷ ISLA on ε_U: `full` 8.78, above one on
+  4 of the 6 held-out splits (5 of 6 on the relative L2).
+- **Registered readings, beside.** §12(f) on the test sides under ε: a close call again (six-split mean R 0.958 velocity,
+  0.990 pressure; `reynolds` pressure 1.082). LRE-AZ: *harms* on velocity under ε as under the relative L2 (ε_U 1.218, seeds
+  1.249 / 1.190; ε_p 1.433, *no change*, its two-seed spread too large), so it stays not adopted. E1-AZ (HEAD-NORM), in the
+  rule's form: velocity 1.075, pressure 1.064 (seeds 1.002 / 1.157), branch 1 would not fire (G14 0.992); on case medians it
+  fires (pressure 1.298, seeds 1.412 / 1.103); on ε^N case means 1.066 / 1.007; HEADNORM is worse than CONTROL on every row.
+
+**The supervisor's decisions** (2026-10-25, for this book batch):
+(a) AeroZoo's own metrics, ε_U, ε_p and ε^N, mean and median, over all cases and `mean_stable`, become the book's primary
+AeroZoo numbers in 13, 20 and the index, with the relative L2 beside them, as the specification asks ("beside these, but
+not instead of them"); BOOK-NIGHT applied the same to 08 and 22, which summarize them. (b) Medians follow AeroZoo's convention, the mean over seeds of
+each seed's median, said once. (c) The three order changes are stated as they are. (d) §12(f) on ε is also a close call; it
+decides nothing, because the interior form rests on Peter's rulings ("ISLA-DTT, on principle", 2026-10-23; "interior means
+"use DTT"", 2026-10-24). (e) E1-AZ: the registered REJECT stands, with the readings above beside it; HEAD-NORM stays rejected
+unless Peter overrides. (f) LRE-AZ still harms velocity under ε. (g) T1, I1, I2, R1, S1, S1b and L1 are disclosed in 13 as
+AZ-RESCORE's draft words them, with AeroZoo v1.2 and its `index.json` hash (sha256 c8e9508e8a9d8291e207470e7e5ecf2d44135ea0793aebe58cdb614da734b51b).
+
+**For Peter.** Whether HEAD-NORM's status changes now that the spec's case-mean ε would not fire branch 1 is his decision; it
+stays rejected until then.
+
+**Book changes.** 13 reports ε first: new standing tables over all test cases and `mean_stable` with the zero and free-stream
+rows, the relative L2 beside, the registered R1 readout kept with its ε ratios beside it, §12(f) on ε beside the registered
+read, the free-stream reading of the baselines, the failures on ε, the scoring's partition dependence, LRE-AZ on ε, and the
+deviations as limits. 08, 20, 22 and the index read the new file, results/char/aerozoo_090_specmetric.json, written by
+results/char/aerozoo_090_specmetric_2026-10-25.py from the committed record, which checks it against the registered
+standing and READINGS.md.
+
+## 2026-10-25 — LIB-TREE: the cluster tree's Warp build and walk and a grouped forest in physicsnemo.mesh.spatial, bitwise ISLA's on six real dumps and GLOBE's trees; a library-only branch, opened as NVIDIA/physicsnemo#2170 {#sec-nb-lib-tree}
+
+**Why.** Peter's direction (c) of about 21:43 EDT 2026-10-24, in part, verbatim: "it would be great if you could implement
+the performance improvements which aren't ISLA-specific inside the broader physicsnemo library, so that other modules can
+benefit." Lane LIB-TREE (results/campaigns_2026-10-23/lib_tree/, FINAL_REPORT.md md5 349e78de, RESULTS.md), written 01:12
+EDT 2026-10-25.
+
+- **Branch.** `pr/cluster-tree-warp` on upstream main 289e57382, head 42de1669d, opened as NVIDIA/physicsnemo#2170 on 2026-10-25 at Peter's answer "yes, you may open that PR".
+  `ClusterTree.from_points(..., implementation=None)` builds with Warp on CUDA and torch otherwise; `from_point_groups`
+  builds a forest of per-group trees; `find_point_interaction_pairs` returns streams grouped by target, with `count_only`.
+- **Bitwise.** ISLA's own build and walk in one process and the library in another, on six real dumps (DrivAerML bf16 and
+  fp32, AeroZoo, AirfRANS and AirfRANS with its far field, the lug): every tree field, the forest table, both streams in
+  order and the counts are sha256-equal under both implementations. GLOBE's trees and 15-step losses are bit-equal to main's.
+- **Speed.** GLOBE's DrivAerML step 0.4 and 0.15 percent faster at 80k and 200k cells (`from_points` alone 15.2 to 3.7 ms);
+  ISLA's DrivAerML forest 6.0 against 8.7 ms; the Warp walk at 400k targets 23.7 against 110 ms for torch; the torch walk
+  29 to 31 percent slower than main's for the order contract.
+- **Suites.** Merged with psharpe/isla: GB300 1,696 passed, CPU 1,110 passed, 0 failures. About 4.5 of 6 GPU-h.
+- **Open.** #2170's CI and review. ISLA does not call it yet; when it does, ISLA's
+  fast-against-reference tests must pass `implementation="torch"`.
+
+## 2026-10-25 — GEO-TIEORDER: the on-wall direction follows the cells' order and the queries' precision at near-equal normals; a rule that breaks exact distance ties by position and takes the holding normals' least-norm point on the wall removes it; a candidate for ISLA 0.14.0, not merged {#sec-nb-geo-tieorder}
+
+Lane GEO-TIEORDER, launched by the supervisor on MAIN-MERGE's defect (@sec-nb-main-merge); records
+results/campaigns_2026-10-23/geo_tieorder/ (FINAL_REPORT.md md5 e10e95eb, RESULTS.md md5 e73972e8, NOTEBOOK_DRAFT.md md5
+b2372ba7). GB300 377610, 377673, 377915, 377708, 378186, 378187, 378687; cpu-short 378185, 378676, 378382; 6.51 GPU-h of the
+cap the supervisor raised from 6 to 7.5.
+
+- **Two causes, both in `_closest_candidates_impl`.** Cells that share the closest point compute it bitwise, so they tie
+  exactly in float64, and the closest cell was the least cell index, the input order; that index reaches the untied on-wall
+  direction, the on-wall label and the off-wall rebuild. And on the wall the certified-distinct test chose between one normal
+  and the normals' least-norm point with a bound that scales with the queries' precision. The same causes act at a fine
+  polyline's vertices in 2-D and off the wall at edge and vertex closest points, at float64 rounding.
+- **Rule** (the supervisor's approval, 00:50 EDT, DESIGN.md v2): T1, exact distance ties broken by the cells' canonical
+  vertex positions, then parity; T2, on the wall, the least-norm point of the hull of the holding cells' normals wherever they
+  differ, certified or not, which lies within their certified uncertainty and is the certified case's own value; off the wall
+  the certified rule stands. No new constant. Reference and fast stay bitwise equal.
+- **float32 change** (378186): DrivAerML on-wall direction at 3.1k and 3.2k of 200k points (median 2.8e-4, largest 4.5e-3);
+  AirfRANS 70 to 93 airfoil nodes per draw (largest 1.6e-4); the lug at rounding; Tensile2d and AeroZoo none. The distance,
+  the sign and the on-wall label do not change. Renumbering moves (2.6k and 2.7k per DrivAerML draw) and float32/float64
+  mismatches (3.1k and 3.2k) fall to 0 on every dump.
+- **HiLift** (its surface task never calls the geometry): the full-resolution wing runs out of memory on a GB300 in the base
+  too; on a 2.4M-cell slab the base's direction moved under renumbering at 29 to 33 percent of queries and the head's at none.
+- **Pose:** DrivAerML's on-wall direction steadier (largest posed change 1.4e-2 to 3.1e-3; tie flips 630 to 0); on the lug's
+  planar faces the tie flag flips at about 2,000 points per case, which reaches only the direction's vertex gradient. The
+  lane recommends accepting these flips; the decision is open.
+- **Inference** (377708, GEO-BAND's checkpoints): no metric moves by more than 2.7e-4 in log (DrivAerML), 6.5e-5 (AirfRANS),
+  6.7e-7 (lug). **Cost:** the fast call 2 to 8 ms more; the step +1 percent on DrivAerML and at most +5 on the lug.
+- **Suites:** at 0f26e6db7, CPU 476 passed and GB300 734 passed, 1 skipped; merged with 0.13.0 (3a1a15d48), CPU 468 passed,
+  250 skipped and GB300 723 passed, 1 skipped.
+- **Left:** the winding sign's far field follows Morton ties, which follow the cell order, and flipped one float64 query
+  1.3e-10 off the wall under renumbering; the root fix numbers vertices by position at the weld.
+- **State.** psharpe/isla-geo-tieorder 0f26e6db7 with merge 3a1a15d48, a candidate for the 0.14.0 version commit, not
+  merged. The merged code keeps the defect, recorded by the strict expected failure; 20 states it as a limit
+  (@sec-limits-tie-order), and 05, 07 and 20 scope "a function of the tie set alone" to certified-distinct directions.
+
+## 2026-10-25 — DRAW-EXACT: today's GPU evaluation draw is not repeatable at AeroZoo's half-integer shares and there keeps duplicate cells and drops cells it must keep; an exact int64 line removes it; a candidate for ISLA 0.14.0 the supervisor intends to adopt, not merged {#sec-nb-draw-exact}
+
+Lane DRAW-EXACT (results/campaigns_2026-10-23/draw_exact/, FINAL_REPORT.md md5 a0700900, DESIGN.md md5 67dace2c);
+psharpe/isla-draw-exact 5b5e72c2f, pushed, not merged; LHR 377433, 377520, 378082, 378518, 378892 and cpu-short 378083,
+378832, 378893; 3.20 of 4 GPU-h.
+
+- **Mechanism.** In evaluation the systematic draw starts at 0.5, and AeroZoo's water filling often gives half-integer
+  shares (one case: 31,250, 58,315.5, 52,119 and 58,315.5), so hits land exactly on condition boundaries and on every cell
+  boundary of a condition kept whole that starts at a half-integer offset. The rounding of CUDA's float64 scan, which
+  varies from run to run, decides which side they fall on: over six runs one case's kept cells changed by up to 4 and
+  another's by up to 9, with 0 to 4 and 1 to 13 duplicate cells per run and as many cells of probability one dropped. This
+  is the mechanism behind REYNOLDS-OUT's unrepeatable AeroZoo case 0. Separately, with equal measures and share equal to
+  the cell count, the keep probability comes out one minus a few ulps on 26 of 244 cases.
+- **Options** (18 real cases, budget 200,000): an exact int64 line (A), a host cumsum (B, +26 ms and a sync), a
+  fixed-order Triton scan (C), ATen's deterministic scan under a global flag (D). Built: A for the line, with the tail sums
+  in a fixed-order float scan and π = 1 exactly where the share reaches the cell count.
+- **After** (378892): six runs bitwise on all six real boundaries checked, no duplicates, every cell of probability one
+  kept, CPU equal to GPU bitwise, compiled equal to eager. Against today's CPU draw: one kept cell of 200,000 in 5 of 18
+  evaluation draws, 27 over 544 random draws, the size of today's own CPU-to-GPU gap. The draw costs 1 to 3 ms more.
+- **Effect on scores.** One changed token moved AeroZoo case 0's outputs by 2.8e-6 to 8.8e-6, so the AeroZoo GPU scores
+  are not materially affected. 20 states the defect as a limit (@sec-limits-draw-ties), and 03, 05, 06 and 21 scope
+  "deterministic" and "exact on a condition kept whole" to it.
+- **Suites:** CPU 466 passed, 245 skipped, 2 xfailed; GB300 716 passed, 1 skipped, 2 xfailed; the new determinism tests
+  fail on the base.
+- **The supervisor's decision:** adopt it at the 0.14.0 assembly; Peter may veto.
+
+## 2026-10-25 — AF-WHOLE read: with the AirfRANS far field, ISLA reads a harm on every field (1.35 / 1.20 / 1.28), ISLA-DTT a harm and a broken pose through an octant tie; the velocity and eddy-viscosity harm sits at the wall, where the length unit of the whole boundary stretches the distance channel's softening over the boundary layer {#sec-nb-af-whole-read}
+
+AF-WHOLE trained ISLA 0.9.0 and ISLA-DTT on full AirfRANS with the far field read as the named condition `freestream`. The
+far field comes from the raw release's `_freestream.vtp`, geometry only, through `VtkBoundaryDomainMeshReader`
+(psharpe/isla-whole-boundary 8e93f2307). The arms are two seeds each, eager-trained like the standings, and the read is
+against r090eag_af_isla / r090eag_af_dtt (@sec-nb-af-whole-prereg). All checks and the supervisor's far-field guard
+passed. The input is Peter's ruling (2026-10-23); this measures its effect.
+
+**Result.**
+
+| pair | pressure | velocity | eddy viscosity | pose (posed / native) |
+|---|---|---|---|---|
+| ISLA, far field / standing | harms, 1.35 | harms, 1.20 | harms, 1.28 | holds, 1.0001-1.0014 |
+| ISLA-DTT, far field / standing | harms, 1.94 | harms, 1.53 | harms, 1.89 | **broken**, 1.53-2.52 |
+
+ISLA's pressure is 0.0164 / 0.0173 against 0.0132 / 0.0118. The far field beats the standing on 8-16 % of the test cases.
+
+**Where.**
+- ISLA's velocity and eddy-viscosity harm sits at the wall: 1.43 and 1.12 in the first decade off it (1e-6 to 1e-5
+  chords), falling to 1.01 and 1.00 at 0.1 to 1 chord. It is larger below the softening's knee, 1e-6 L = 3.05e-4 chords,
+  than above it on both seeds (velocity 1.24 against 1.12). The far field makes L = 305 chords and puts 20 % of the points
+  in the channel's linear part, so the trained model does not recover the log resolution NEARWALL found lost at fixed
+  weights (@sec-oq-nearwall).
+- ISLA's pressure harm does not sit at the wall: 1.01-1.07 there, 1.28 at 0.01-0.1 chord. One untested candidate: the far
+  field holds 99.86 % of the boundary measure that ISLA's slices are weighted by.
+- ISLA-DTT's harm is spread over every band (1.3-1.9).
+
+**ISLA-DTT's pose: the octant tie, now on AirfRANS.**
+- The far field's straight edges have normals on the dataset's axes, and so on the forest's frame, which the far field
+  sets (eigenvalue gap 3.3 %) and the airfoil tilts by about 1e-6.
+- Their small normal component is about 2e-6 (down to 1.7e-8), so the sign test that picks a cell's octant tree reads
+  that tilt and float32 rounding.
+- Posed against native, 16-45 % of the far-field cells (median 29 %, all 200 test cases) change octant, against a
+  median of 2 airfoil cells.
+- It is the lug's tie (05-forward-pass.qmd, the octant paragraph) at a larger scale. The frame itself does not tie: 0 sign
+  flips of either axis on the 200 cases.
+
+Cost: 397.5 of 520 GPU-h. Per step the far field costs nothing on AirfRANS (0.98x ISLA, 1.01x ISLA-DTT at the smoke).
+
+**What it leaves open, for the supervisor and Peter.**
+- NEARWALL's contingency trigger is met (a harm on velocity and eddy viscosity near the wall). The held viscous softening
+  asinh(d U / nu), trained with only the channel changed and two seeds, is the registered next test.
+- ISLA-DTT on AirfRANS with its far field needs an octant rule without exact ties, as on the lug, before its accuracy
+  can be read apart from the tie.
+- Whether the far-field runs replace the AirfRANS standings is the supervisor's call. Canonical ISLA reads the whole
+  boundary, so its AirfRANS numbers are these.
+
+Data: scratch/isla-af-whole-2026-10-23/RESULTS.md (sections 1-3), read.md, out/octant_pose_summary.txt,
+out/frame_pose_summary.txt; jobs in JOBS.md.
+
+**Side finding** (RESULTS.md section 6, no action): on 168 of the 1,000 AirfRANS case files (36 in `full_test`), the stored
+airfoil `normals` field disagrees with the polyline's geometric normals on 0.8 to 38.6 percent of the segments; the
+converter oriented each segment away from the polyline's mean point, which fails on cambered aft sections. No ISLA
+configuration reads that field; a baseline that reads `boundaries.airfoil.cell_data.normals` would see the flipped segments.
+
+**The supervisor's course** (07:24 EDT 2026-10-25). Peter's ruling stands: "not only CAN it read the whole boundary - it
+SHOULD read the whole boundary!", and "Even if there were an accuracy *cost* to reading the whole boundary (not that I expect
+it), I would recommend this." So the canonical code reads the far field, and on AirfRANS that costs, as the encoding stands,
+the amounts above. The AirfRANS standing stays B's, ISLA 0.9.0 with the airfoil alone, until the final rerun, marked by an
+In-flight callout in 08 and the limit in 20. The supervisor's course is to fix the encoding; lane AF-FIX designs the fixes:
+the near-wall length, ISLA-DTT's octant tie and the measure dominance. No fix is decided.
+
+**Book changes.** 20 gains `sec-limits-af-whole`; its near-wall question states the read and drops its In-flight callout;
+08 gains an In-flight callout on the AirfRANS standing; 05's distance-channel and octant paragraphs and 12's limits say
+what the far field does. Records: results/campaigns_2026-10-23/af_whole_read/ (FINAL_REPORT.md md5 114b737c, RESULTS.md
+c085e764, read.md 5bd11101, FACTS.md 8984de36, NOTEBOOK_DRAFT.md 09bb686a).
+
+*Drafted by AF-WHOLE; applied by BOOK-NIGHT for the supervisor on 2026-10-25.*
+
+## 2026-10-25 — SLICE-NORMAL-EXP, the DrivAerML Surface read of option (a): leaving the slice's mean normal unnormalized harms (pressure 1.167, wall shear 1.121, worse on 48 of 48 cases), so (a) is not a candidate; the combined arm's reads are still to come {#sec-nb-slice-normal-dra}
+
+The no-harm retrain check of SLICE-NORMAL's options (results/campaigns_2026-10-23/slice_normal_exp/, PREREG.md md5
+4580615d, reading_DRA.md md5 e9badbe9). Option (a) deletes the normalization `m_s / |m_s|.clamp_min(1e-12)`, leaving the mean
+normal unnormalized, with gain 1 and no constant. Arm DR-A trains option A, the surface form reading the five boundaries of
+the DrivAerML Surface task with the tunnel's pieces, against new control lanes on the same code, recipe and rows, both
+eager, two seeds each, scored by LHR 379296 (native and posed, 48 validation cases, 200,000 cells); the read was at 03:52 EDT
+2026-10-25.
+
+| protocol | field | control (s42, s43) | arm (s42, s43) | arm ÷ control | D | 2 SE | label |
+|---|---|---|---|---|---|---|---|
+| native | pressure | 0.0543, 0.0504 | 0.0641, 0.0581 | 1.167 | +0.154 | 0.123 | harms |
+| native | wall shear | 0.0823, 0.0783 | 0.0928, 0.0871 | 1.121 | +0.114 | 0.081 | harms |
+
+: SLICE-NORMAL-EXP, DR-A (results/campaigns_2026-10-23/slice_normal_exp/reading_DRA.md); posed reads the same. {#tbl-nb-slice-normal-dra}
+
+The arm is worse on every one of the 48 cases on both fields (median case ratio 1.149 / 1.121); posed ÷ native is 1.0000 to
+1.0001 for both arms. Under the registered amendments A3 and A5 a "harms" blocks, so option (a) is not a candidate whatever
+the AirfRANS and lug arms read. The combined arm (a)+(s), (s) the slice distance softened by the slice's own spread under
+the supervisor's amendment A6, runs on AirfRANS, the lug and the DrivAerML Surface task, and its reads are to come. 20's question on the slice mean normal states the (a) read and keeps its In-flight callout, now naming the combined
+arm.
+
+*Applied by BOOK-NIGHT for the supervisor on 2026-10-25, with the other 2026-10-24 and 2026-10-25 entries above; second-read by a lane reviewer
+(scratch/isla-book-night-2026-10-25/SECOND_READ_NIGHT.md).*
+
 ## 2026-10-22 — MECH-090: on Tensile2d the fixed compiled path's float32 gradients sit at a one-ulp eager floor, and pytorch/pytorch#195845 added a unit-dependent sink to ISLA's slice-state softmax (registered emulations not confirmed; a post-smoke emulation matches) {#sec-nb-mech090}
 
 **Question.** REF-090's Tensile2d control (@sec-nb-ref090-t2d-control) read (b) by its registered weighing, in which A2
@@ -43223,7 +43540,7 @@ fix as ISLA 0.11.0 (1e7f03d7d; @sec-nb-tie-exp-read, @sec-nb-geo-adopted).
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-geo-nb-2026-10-23/SECOND_READ_GEO.md).*
 
-## 2026-10-22 to 2026-10-23 — The outlet pressure gauge: ISLA can hold the measure-weighted mean of AeroZoo's prescribed outlet pressure by construction, a declared prescribed value fixing its output's additive constant at the outlet's tokens read as passive probes; applied post hoc to the trained ISLA 0.9.0, the same shift helps `profile_crossflow` and hurts every other split, so the construction is trained; the registered test runs, its smoke passed, and in the smoke B's step took 1.24 to 1.49 times A's {#sec-nb-outlet-gauge}
+## 2026-10-22 to 2026-10-25 — The outlet pressure gauge: ISLA holds AeroZoo's prescribed outlet pressure by construction on every test case; trained, it reads "no change" on `profile_crossflow` and `full` by the registered rule, though both crossflow seeds improved (pressure 0.46 and 0.27 of ISLA 0.9.0's); it costs 1.5 times ISLA's step as implemented, and it is not adopted {#sec-nb-outlet-gauge}
 
 **Question.** On `profile_crossflow`, ISLA 0.9.0 predicts 1.2 to 1.8 times the case's RMS pressure next to the outlet, where
 the truth is 0.017 (@sec-nb-azdiag). Incompressible flow fixes the pressure only up to a constant unless a boundary prescribes
@@ -43335,12 +43652,53 @@ geometry 7 percent, dynamic-shape kernels 2 percent, and the selection and shift
 whole backward pass by about 40 percent. The registered cost check reads B's lanes' own logs (median step within 25 percent
 of A's); if it fails, it is reported as "fails on cost as the code stands".
 
-**Lanes.** Submitted at 19:18 EDT 2026-10-22 (340874 to 340877). The two crossflow links died after 9 s on two faulty nodes
-and were resubmitted at 20:59 EDT as 342423 and 342424, with those nodes excluded. The registry expects the lanes to end by
-2026-10-25, and the read is expected about 2026-10-25 to 2026-10-26.
+The cap was raised to 800 GPU-h at 18:00 EDT 2026-10-23; the lane spent 750.2.
+
+**Lanes.** Submitted at 19:18 EDT 2026-10-22 (340874 to 340877). The two crossflow links died after 9 s when the LHR project
+share hit its 100 TB quota (about 17:38 to 17:51 PDT), unable to open their log files, and were resubmitted at 20:59 EDT as
+342423 and 342424. The two nodes they had landed on, nvl72d035-T06 and -T14, are not bad nodes.
+
+**Result** (OUTLET-EXP RESULTS.md md5 457eba6e, tables.md md5 1bdbde00; PREREG md5 69283aa5 with the 10-23 erratum, read as
+registered; results/campaigns_2026-10-23/outlet_exp/).
+
+- **The mechanism holds on every case.** On all 2,588 scored test cases of the four B runs, the measure-weighted mean of B's
+  pressure over the outlet's drawn tokens equals the prescribed 0 Pa to at most 1.4e-6 of the tolerance scale (registered
+  tolerance 1e-5), so B is valid. The declaration is in every B training and scorer config and in no A config. No lane
+  approached the event guard (largest validation-loss ratio 1.37).
+- **R1 reads no change on both splits.**
+
+| split | ISLA 0.9.0 (A) p / v, s42 / s43 | with the outlet level (B) p / v, s42 / s43 | seed-mean p ratio exp(D), 2 SE | verdict |
+|---|---|---|---|---|
+| `profile_crossflow` | 3.02 / 1.51; 1.89 / 1.41 | 1.39 / 1.18; 0.52 / 1.01 | 0.389, 2 SE 1.09 vs \|D\| 0.95 | no change |
+| `full` | 0.300 / 0.109; 0.271 / 0.103 | 0.288 / 0.109; 0.274 / 0.108 | 0.983, 2 SE 0.115 | no change |
+
+: Median relative L2 over the test cases per seed (pressure / velocity, seed 42; seed 43), float32, 200,000 interior points (OUTLET-EXP RESULTS.md, R1). {#tbl-nb-outlet-result}
+
+  On crossflow both seeds' pressure ratios (0.46, 0.27) and velocity ratios (0.78, 0.72) are below 0.85, but B's two seeds
+  differ by 2.7 times (A's by 1.6), so the registered noise floor (|D| > 2 SE) is not met. The direction is the same on
+  both seeds and both fields; two seeds do not resolve the size.
+- **The gauge was not crossflow's main error.** Next to the outlet, B's mean predicted pressure is still 0.65 and 0.89
+  times the case's RMS pressure (A 0.98 and 1.71; truth 0.017), although the outlet tokens' mean is exact. On `full` the
+  same band falls from 0.006 to 0.004 (truth 0.001).
+- **Cost: fails on cost as the code stands.** B's lanes' median step is 1.50 to 1.51 times A's (0.81 against 0.54 s), against
+  the registered 25 percent. A profile (descriptive) puts 87 percent of the extra time in the probe tokens through the blocks,
+  two thirds of it in backward; the median 50,000 probes are 12.5 percent more tokens. Dynamic shapes cost 2 percent, the
+  probes' geometry 7 percent. The probe count is an implementation choice, not part of the construction.
+- **Adoption.** Not adopted by the rule: the first clause needs "helps" on crossflow; the on-principle clause (helps nowhere,
+  harms nowhere) needs the cost check, which fails. **The supervisor's decision (2026-10-25 04:33 EDT): not adopted**,
+  because R1 reads no change on both splits, the near-outlet error shows the gauge is not crossflow's main error, and the
+  cost check fails at 1.5 times the step. It is not kept as an opt-in in the canonical code (Peter's standing rule for
+  ISLA: options are scaffolds, to be universalized or deleted); it lives only on the unmerged branch `psharpe/isla-outlet-gauge` at 9250072af, as
+  the record. No follow-up now; a bounded-probe design with more crossflow seeds is a candidate after the reruns.
+- Predictions: M1 passes (0.95) yes; crossflow no change (0.60) yes; full no change (0.85) yes; B's crossflow band below
+  0.3 RMS p (0.7) no; cost within 25 percent (0.85) no.
+- For the book: 13 states the result in place of its In-flight callout (@sec-aerozoo-failures), and 20's outlet question
+  now asks what sets the pressure level next to the outlet (@sec-oq-outlet).
 
 *Read by the supervisor and second-read by a lane reviewer on 2026-10-23 (scratch/isla-geo-nb-2026-10-23/SECOND_READ_OUTLET.md;
-the test sentence, scratch/isla-book-am-2026-10-23/SECOND_READ_OUTLET.md).*
+the test sentence, scratch/isla-book-am-2026-10-23/SECOND_READ_OUTLET.md). The result and the correction of the Lanes
+paragraph (the storage-quota event, not faulty nodes) were applied on 2026-10-25 by BOOK-NIGHT from OUTLET-EXP's
+NOTEBOOK_DRAFT_OUTLET.md, md5 7857d3c4.*
 
 ## 2026-10-22 — TIE-EXP registered: ISLA with the tie rules trained eager on the lug and Tensile2d against REF-090's eager-trained base, scored on flip symmetry, native accuracy and the lug's pose excess; gated before launch, with one supervisor-approved deviation (A7); read about 2026-10-24 {#sec-nb-tie-exp-prereg}
 

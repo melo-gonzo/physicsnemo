@@ -54,11 +54,15 @@ def tally():
             for b in S.BASELINES:
                 out[s.verdict(b, f)].append((k, f, b))
     return out
-# AeroZoo enters the tally on velocity only: on pressure both baselines are about a zero predictor (@sec-aerozoo-baselines)
+# AeroZoo enters the tally on velocity only: on pressure both baselines are about a zero predictor (@sec-aerozoo-baselines).
+# Its numbers are AeroZoo's own metrics (results/char/aerozoo_090_specmetric.json): eps_U for velocity, eps_p for pressure.
 AZS = S.aerozoo()
-AZA = {n.split()[0]: a for n, a in AZS["arms"].items()}
+AZE = S.aerozoo_spec()
+AZA = {a: {"splits": {sp: {"velocity_l2": c["eps_U"]["all"], "pressure_l2": c["eps_p"]["all"]} for sp, c in v["splits"].items()}}
+       for a, v in AZE["arms"].items() if a in ("ISLA", "ISLA-DTT", "GeoTransolver", "Transolver")}
 AZ_IN = "full"
 def az_cell(a, f, split=AZ_IN):
+    """AeroZoo's metric of arm a on a split: velocity_l2 is eps_U, pressure_l2 is eps_p (mean, per_seed, median)."""
     return AZA[a]["splits"][split][f]
 def az_ratio(b, f, split=AZ_IN):
     return az_cell(b, f, split)["mean"] / az_cell("ISLA", f, split)["mean"]
@@ -76,8 +80,8 @@ n_all = sum(len(v) for k, v in TAL.items() if k != "is not compared with")
 AZ_P = {b: az_ratio(b, "pressure_l2") for b in S.BASELINES if b in AZA}
 def az_pressure_clause():
     """AeroZoo's pressure cells, printed beside the tally and not counted in it."""
-    return (f"; AeroZoo counts on velocity only, because on pressure both baselines are about a zero predictor, so their pressure "
-            f"ratios on `{AZ_IN}`, " + " and ".join(f"{b} ÷ ISLA {fmt_ratio(r)}" for b, r in AZ_P.items())
+    return (f"; AeroZoo, scored with its own metrics, counts on velocity only, because on pressure both baselines are about a zero "
+            f"predictor, so their pressure ratios on `{AZ_IN}`, " + " and ".join(f"{b} ÷ ISLA {r:#.3g}" for b, r in AZ_P.items())
             + ", compare ISLA with predicting zero (@sec-aerozoo-baselines)")
 _nl = sum(k == "lug" and b == "Transolver" for k, _, b in TAL["leads"])
 LUGC = f" ({_nl} of them on the lug against Transolver, which reads no boundary-condition labels there)" if _nl else ""
@@ -377,7 +381,8 @@ print(f"**Rotated and translated, ISLA's error stays within {100 * worst:.1f}% o
       "checkpoints trained with (@sec-standing-geometry), the exact closest-point search keeps the feature it meets first, so the "
       "direction input at those nodes follows the order of the search, which rounding of the moved coordinates changes "
       "(@sec-lug-ties). The class takes, at a tie, the least-norm point of the hull of the tied directions, a function of the tie set "
-      "alone (@sec-arch-interior-geometry). ISLA retrained with it on the lug, two seeds, from the standing's snapshot and recipe with "
+      "alone where those directions are certified distinct (@sec-arch-interior-geometry; on the wall, where they agree only to within "
+      "their rounding, @sec-limits-tie-order). ISLA retrained with it on the lug, two seeds, from the standing's snapshot and recipe with "
       f"only the geometry changed, reads posed ÷ native {TX_PN:.4f} (a ratio of seed means), against "
       f"{1 + TXL['P']['von_mises_l2']['e_B']:.3f} for the standing's checkpoints on the same reading, and its native error is "
       f"{TXL['N']['von_mises_l2']['r']:.3f} times theirs, which the registered test reads as "
@@ -399,6 +404,85 @@ print(S.in_flight_callout("lug"))
 print('::: {.callout-note title="In flight"}\nThe lug standing\'s posed ÷ native comes from checkpoints trained with the '
       "geometry of @sec-standing-geometry. The lug standing trained with the class's geometry replaces it, and the ledger "
       "(@sec-ledger) tracks it.\n:::")
+```
+
+### The on-wall direction where the holding cells' normals nearly agree {#sec-limits-tie-order}
+
+```{python}
+#| label: para-limits-tie-order
+#| output: asis
+TD_ = R.md_table("main_merge", "DEFECT_TORUS.md", "What differs", 0)
+ren = next(r_ for r_ in TD_ if r_["case"].startswith("renumbering"))
+prc = next(r_ for r_ in TD_ if r_["case"].startswith("precision"))
+n_ren, n_q = int(R.num(ren["differ"])), int(R.num(ren["queries"]))
+n_prc, n_pq = int(R.num(prc["differ"])), int(R.num(prc["queries"], 1))
+GT_ = R.md_table("geo_tieorder", "RESULTS.md", "2. The function change", 0)
+drv = [r_ for r_ in GT_ if r_["dataset (dump, queries)"].startswith("DrivAerML")]
+af = next(r_ for r_ in GT_ if r_["dataset (dump, queries)"].startswith("AirfRANS"))
+mov = [int(R.num(r_["renumbering moves base -> head"])) for r_ in drv]
+mis = [(int(R.num(r_["float32 vs float64 mismatches (on the wall in both) base -> head"])),
+        int(R.num(r_["float32 vs float64 mismatches (on the wall in both) base -> head"], 1))) for r_ in drv]
+chg = [int(R.num(r_["u changed: count (on wall), max, median"])) for r_ in drv]
+du = [R.num(r_["u changed: count (on wall), max, median"], k) for r_ in drv for k in (2, 3)]
+assert all(r_["renumbering moves base -> head"].endswith("-> 0") for r_ in GT_ if not r_["dataset (dump, queries)"].startswith("HiLift"))
+flip = re.search(r"It flipped one query ([\d.e-]+) off the wall under renumbering", " ".join(R.load("geo_tieorder", "FINAL_REPORT.md").split())).group(1)
+assert all(r_["d changed"].startswith("0") or "lug" in r_["dataset (dump, queries)"] for r_ in GT_)
+GTF = " ".join(R.load("geo_tieorder", "FINAL_REPORT.md").split())
+inf = re.search(r"Largest \|log new/old\|: DrivAerML ([\d.e-]+), AirfRANS ([\d.e-]+), lug ([\d.e-]+); the worst single case is ([\d.e-]*\d)", GTF).groups()
+print("**On the wall, where the normals of the cells that hold a point agree only to within their rounding, the class's direction "
+      "follows the order of the cells and the precision of the inputs.** Cells that share a closest point compute it bitwise, so they "
+      "tie exactly in distance, and the search keeps the cell of least index. Where their normals are certified distinct, the tie rule "
+      "takes their least-norm point, a function of the tie set alone (@sec-arch-interior-geometry); where they are not, the direction "
+      "is that first cell's normal. The certification's bound scales with the precision of the queries, so a float32 point and its "
+      "float64 copy can fall on different sides of it. At the diagonal midpoints of a torus mesh of planar quads, renumbering the vertices and "
+      f"cells moves the direction at {n_ren} of {n_q:,} points, by up to {sci(R.num(ren['max abs diff in u']))}, and float32 "
+      f"inputs give a different direction from their float64 copies at {n_prc} of {n_pq}; the expected-failure test "
+      "`test_on_wall_direction_at_quad_diagonals` records both, and fails the suite if they stop failing. On the recipe's draws, "
+      f"renumbering moves the on-wall direction at {mov[0]:,} and {mov[1]:,} of 200,000 points of two DrivAerML Volume draws with the "
+      f"whole boundary and at {af['renumbering moves base -> head'].split(' ->')[0].replace('-', ' to ')} points of each AirfRANS draw, and float32 and "
+      f"float64 copies disagree at {mis[0][0]:,} of the {mis[0][1]:,} on-wall points of one DrivAerML draw. The wall distance does "
+      "not move. A rule that breaks exact distance ties by the cells' positions and, on the wall, takes the "
+      "least-norm point of the holding cells' normals wherever they differ removes every such move on the measured draws; it changes "
+      f"the direction at {min(chg):,} to {max(chg):,} of those 200,000 DrivAerML points (median {sci(min(du[1::2]))}, largest "
+      f"{sci(max(du[0::2]))}), changes no distance, sign or on-wall label, and moves no field metric of five trained checkpoints (the "
+      f"lug, AirfRANS with its far field, one DrivAerML case) by more than {sci(float(inf[0]))} in log, nor any single case by more "
+      f"than {sci(float(inf[3]))}. Whether "
+      "the class takes it is open. A residue of the same kind sits in the sign: the winding number's far field groups cells by a "
+      f"tree whose ties follow the cells' order, and it flipped the sign of one float64 point {sci(float(flip))} off the wall under renumbering. "
+      f"Data: {R.source('main_merge', 'DEFECT_TORUS.md')}; {R.source('geo_tieorder', 'RESULTS.md')} (section 2); "
+      f"{R.source('geo_tieorder', 'FINAL_REPORT.md')}.")
+```
+
+### The token draw on a GPU at exact ties {#sec-limits-draw-ties}
+
+```{python}
+#| label: para-limits-draw-ties
+#| output: asis
+DX = " ".join(R.load("draw_exact", "DESIGN.md").split())
+DF = " ".join(R.load("draw_exact", "FINAL_REPORT.md").split())
+shares = re.search(r"Case 0 has shares ([\d.]+), ([\d.]+), ([\d.]+) and ([\d.]+)", DX).groups()
+runs = re.search(r"up to (\d+) cells over 6 runs in case 0, (\d+) in case 050", DX).groups()
+dup = re.search(r"0 to (\d+) per run in case 0, (\d+) to (\d+) in case 050", DF).groups()
+ulp = re.search(r"pi comes out at 1 minus a few ulps \((\d+) of (\d+) cases\)", DF).groups()
+tok = re.search(r"one changed token moved AeroZoo case 0's outputs by ([\d.e-]+) to ([\d.e-]+)", DF).groups()
+fix = re.search(r"1 kept cell of 200,000 in (\d+) of (\d+) eval draws", DF).groups()
+assert "6 runs bitwise on all 6 real boundaries checked, 0 duplicates, every pi = 1 cell kept, CPU = GPU bitwise" in DF
+print("**On a GPU the evaluation draw is not repeatable where a share is a half integer, and there it can keep a cell twice and drop "
+      "a cell it must keep.** In evaluation the systematic draw starts at $u = 1/2$ (@sec-arch-boundary-draw). AeroZoo's water "
+      f"filling often gives a condition a half-integer share (one case's shares: {', '.join(f'{float(x):,g}' for x in shares[:3])} and "
+      f"{float(shares[3]):,g}), so hits land "
+      "exactly on the boundaries between conditions and, in a condition kept whole that starts at a half-integer offset, on every "
+      "boundary between its cells. Which side a hit falls on is then set by the rounding of the float64 prefix sum, which on CUDA "
+      f"varies from run to run: over six runs one case's kept cells changed by up to {runs[0]} and another's by up to {runs[1]}, and "
+      f"the runs kept 0 to {dup[0]} and {dup[1]} to {dup[2]} cells twice, dropping as many cells of a condition the draw must keep "
+      "whole. On the CPU the draw repeats. One changed token moves an AeroZoo case's outputs by "
+      f"{sci(float(tok[0]))} to {sci(float(tok[1]))}, so the AeroZoo scores, computed on GPUs, are not materially affected. With "
+      "equal measures and a share equal to the cell count, the keep probability also comes out one minus a few ulps "
+      f"({ulp[0]} of {ulp[1]} cases), so a condition kept whole is whole only to rounding. A line in exact integer arithmetic, with a "
+      "fixed-order scan for the tail sums, removes all of it: six runs bitwise on six real boundaries, no cell twice, every cell of "
+      f"probability one kept, and the CPU equal to the GPU; against today's CPU draw it changes one kept cell of 200,000 in {fix[0]} "
+      f"of {fix[1]} evaluation draws, the size of today's own CPU-to-GPU difference. Whether the class takes it is open. Data: "
+      f"{R.source('draw_exact', 'FINAL_REPORT.md')}; {R.source('draw_exact', 'DESIGN.md')}.")
 ```
 
 ### The prediction depends on the query set {#sec-limits-query-independence}
@@ -531,10 +615,11 @@ print("**Zero-shot transfer to a new geometry family is measured twice: on SHIFT
       + " and ".join(f"{gr(gcmp[b]):.3f} at {gcmp[b]['z']:.1f} standard errors against {b}" for b in S.BASELINES)
       + ", geometric seed means, " + " and ".join(sorted({f"*{c['verdict']}*" for c in gcmp.values()})) + " by the registered rule), "
       "and fastbacks are not harder in themselves, so most of the wall-shear gap is transfer; the reverse direction is @sec-oq-transfer. On AeroZoo, whose held-out splits hold out a geometry bank, an enclosure family, a boundary-condition layout or "
-      f"a Reynolds range, ISLA's velocity error on a held-out split is {min(zpen.values()):.1f} to {max(zpen.values()):.0f} times its "
-      f"`{AZ_IN}` error, and GeoTransolver ÷ ISLA on velocity is above one on {gt_above} of the {len(AZ_HELD)} held-out splits, against a "
-      "GeoTransolver whose velocity is not converged at the last epoch; on pressure both baselines are about a zero predictor "
-      "(@sec-interior-aerozoo). ISLA's own failures there are @sec-oq-aerozoo. Data: results/char/shift_suv_xfam_090.json, "
+      f"a Reynolds range, ISLA's velocity error on a held-out split, on AeroZoo's own metric, is {min(zpen.values()):.1f} to "
+      f"{max(zpen.values()):.0f} times its `{AZ_IN}` error, and GeoTransolver ÷ ISLA on velocity is above one on {gt_above} of the "
+      f"{len(AZ_HELD)} held-out splits, against a GeoTransolver whose velocity is not converged at the last epoch and sits about at "
+      "AeroZoo's free stream; on pressure both baselines are about a zero predictor (@sec-interior-aerozoo). ISLA's own failures there "
+      "are @sec-oq-aerozoo. Data: results/char/shift_suv_xfam_090.json, results/char/aerozoo_090_specmetric.json, "
       "results/char/aerozoo_090_final.json.")
 ```
 
@@ -593,6 +678,68 @@ print("**ISLA's input is the whole boundary of the PDE domain, every piece a dat
       f"{R.source('af_whole', 'PREREG.md')} (section 3).")
 ```
 
+### What the whole boundary costs on AirfRANS {#sec-limits-af-whole}
+
+```{python}
+#| label: para-limits-af-whole
+#| output: asis
+RD = R.md_table("af_whole_read", "read.md", "W-ISLA against B-ISLA", 0)
+RDD = R.md_table("af_whole_read", "read.md", "W-DTT against B-DTT", 0)
+BD = R.md_table("af_whole_read", "read.md", "W-ISLA against B-ISLA", 1)
+AFR = " ".join(R.load("af_whole_read", "RESULTS.md").split())
+AFF = R.load("af_whole_read", "FACTS.md")
+fct = lambda key: float(re.search(re.escape(key) + r": min [\d.e+-]+ median ([\d.e+-]+)", AFF).group(1))
+wb = lambda rows: [R.num(r_["W / B"]) for r_ in rows]
+assert all(r_["R1 (native)"] == "harms" for r_ in RD + RDD)
+assert "**R3: pose holds**" in R.load("af_whole_read", "read.md") and "**R3: pose broken**" in R.load("af_whole_read", "read.md")
+pose_d = [float(x) for x in re.search(r"W-DTT: pressure ([\d.]+) / ([\d.]+), velocity ([\d.]+) / ([\d.]+), nut ([\d.]+) / ([\d.]+)", AFR).groups()]
+pose_i = [float(x) for x in re.search(r"W-ISLA: pressure ([\d.]+) / ([\d.]+), velocity ([\d.]+) / ([\d.]+), nut ([\d.]+) / ([\d.]+)", AFR).groups()]
+band = {r_["band (chords)"]: r_ for r_ in BD}
+first = band["[1e-06,1e-05)"]; below = band["[-inf,0.000305)"]; above = band["[0.000305,inf)"]
+oct_ = re.search(r"moves \*\*(\d+)-(\d+) % \(median (\d+) %\) of the far-field cells", AFR).groups()
+comp = re.search(r"one component of every edge normal is about \+-([\d.e-]+) \(as low as ([\d.e-]+)\)", AFR).groups()
+share = re.search(r"the far field holds ([\d.]+) % of the boundary measure", AFR).group(1)
+step = re.search(r"W / B median step ([\d.]+) \(ISLA, [^)]*\) and ([\d.]+) \(DTT", AFR).groups()
+n_norm = re.search(r"On (\d+) of the ([\d,]+) case files", AFR).groups()
+L_w, knee = fct("L_whole (chords)"), fct("1e-6 L_whole (chords)")
+lin_w, lin_a = fct("linear-part fraction, all nodes, L_whole"), fct("linear-part fraction, all nodes, L_airfoil")
+print("**Reading the far field, as the class does, costs ISLA accuracy on the AirfRANS interior task as its encoding stands: "
+      f"{f3(wb(RD), 3)} times the airfoil-only standing's error on pressure / velocity / eddy viscosity, and ISLA-DTT "
+      f"{f3(wb(RDD), 3)} times, with its pose broken.** Both forms were trained with the far field as the named condition "
+      "`freestream`, two seeds each, on the standings' configuration and training path, and read against the eager-trained "
+      "standings by the rule registered for them, which reads *harms* on every field of both. ISLA's pose holds (posed ÷ "
+      f"native {min(pose_i):.4f} to {max(pose_i):.4f}); ISLA-DTT's does not ({min(pose_d):.2f} to {max(pose_d):.2f}). The step "
+      f"costs the same ({step[0]} and {step[1]} times the standings' on one node). Where the harm sits:")
+print()
+print(f"- **Velocity and eddy viscosity, at the wall.** With the far field, ISLA's length unit $L$ is {L_w:.1f} chords, so the "
+      f"distance channel's softening at $10^{{-6}} L$, ${knee * 1e4:.2f} \\times 10^{{-4}}$ chords, covers the boundary layer: {100 * lin_w:.1f}% of the "
+      f"interior nodes fall in its linear part, against {100 * lin_a:.2f}% with the airfoil alone (@sec-oq-nearwall). ISLA's "
+      f"velocity error is {R.num(first['velocity W / B (label)']):.2f} times the standing's in the first decade off the wall "
+      f"and {R.num(below['velocity W / B (label)']):.2f} below the softening's knee against "
+      f"{R.num(above['velocity W / B (label)']):.2f} above it; eddy viscosity {R.num(below['nut W / B (label)']):.2f} against "
+      f"{R.num(above['nut W / B (label)']):.2f}, larger below the knee on both seeds.")
+print("- **Pressure, not at the wall.** Its ratio is "
+      f"{R.num(band['[1e-06,1e-05)']['pressure W / B (label)']):.2f} to {R.num(band['[0.0001,0.001)']['pressure W / B (label)']):.2f} "
+      f"in the three bands nearest the wall and {R.num(band['[0.01,0.1)']['pressure W / B (label)']):.2f} at 0.01 to 0.1 chord. "
+      f"One candidate cause, untested: the far field holds {share}% of the boundary measure, which weights ISLA's slices.")
+print(f"- **ISLA-DTT's pose, an octant tie.** This is an analysis beside the registered read, from a probe. The far field's "
+      "straight edges have normals along the forest's axes, so one component of each is near zero (about "
+      f"{sci(float(comp[0]))}, down to {sci(float(comp[1]))}), and the sign test that sorts cells into octant trees "
+      f"(@sec-arch-tree-read) reads rounding there: posed against native, {oct_[0]} to {oct_[1]}% of the far-field cells "
+      f"(median {oct_[2]}%) change octant on the 200 test cases. It is the lug's tie (@sec-oq-dtt-frame) at a larger scale.")
+print()
+print("Peter's ruling stands: \"not only CAN it read the whole boundary - it SHOULD read the whole "
+      "boundary!\", and \"Even if there were an accuracy *cost* to reading the whole boundary (not that I expect it), I would "
+      "recommend this.\" So the open question is the encoding, not the input, and the supervisor's course is to change the "
+      "encoding. The three candidates the measurements point to "
+      "are a near-wall length that does not grow with the domain, an octant rule without exact ties, and a weighting that keeps "
+      "the far field from holding nearly all the slices' measure; none is decided. The AirfRANS standing is ISLA's airfoil-only "
+      f"one (@sec-standing-geometry). Beside it: on {n_norm[0]} of the {n_norm[1]} AirfRANS case files the stored airfoil "
+      "normals disagree with the polyline's winding on some segments; ISLA reads the geometric normals, not that field. Data: "
+      f"{R.source('af_whole_read', 'read.md')}; {R.source('af_whole_read', 'RESULTS.md')} (sections 1 to 3 and 6); "
+      f"{R.source('af_whole_read', 'FACTS.md')}.")
+```
+
 ## Open questions, and what would settle each {#sec-open-questions}
 
 **Each open question below names the measurement that would settle it and what that measurement
@@ -642,7 +789,7 @@ rows = [
     ("Do ISLA's declared scales add accuracy where the Reynolds number varies widely? (@sec-oq-scales)", "ISLA with and without its scales, the latter reading a standardized global input, on a dataset whose Reynolds number varies widely, such as AeroZoo", "not priced"),
     ("Which scale of ISLA's Reynolds input serves AirfRANS and AeroZoo alike? (@sec-oq-reynolds)", "a single program-wide fixed scale, trained on both `reynolds` splits, read against the fitted scale", "not priced"),
     ("Are ISLA's crossflow and non-box failures on AeroZoo limits of the architecture? (@sec-oq-aerozoo)", "for the non-box family, a training set whose velocity scales cover the ducts'", "not priced"),
-    ("Why does ISLA not hold the outlet at its prescribed pressure on the crossflow layout? (@sec-oq-outlet)", "the predicted gauge pressure on the outlet faces against the prescribed zero, on every split and for both forms", "scoring only"),
+    ("What sets ISLA's pressure level next to the outlet on the crossflow layout? (@sec-oq-outlet)", "more seeds of ISLA with and without the outlet's level held, on `profile_crossflow`, the outlet read through a bounded number of probe points; the predicted pressure along the path from the outlet into the interior, for both forms", "not priced"),
     ("Does what rounding still decides in the class's geometry move a trained model? (@sec-oq-precision)", "the standings "
      "retrained with the class's geometry, scored rotated and translated, and in float32 against float64 on the AeroZoo cases of "
      "the float32 comparison", "the standings' training with the class's geometry, then scoring"),
@@ -657,9 +804,9 @@ rows = [
     ("Do the SHIFT-SUV and HiLiftAeroML standings move when ISLA reads the pieces of their domains' boundaries that their files do not store? (@sec-oq-whole-boundary)",
      "the missing pieces built in the recipe, SHIFT-SUV's box from constants and HiLiftAeroML's inlet and outlet at the stored far-field radius and its symmetry plane from the source STL's root cap, the datasets unchanged; then each standing retrained with ISLA reading them, two seeds",
      "not priced (the supply sets the runs)"),
-    ("Does the whole boundary cost ISLA near-wall accuracy through its distance channel? (@sec-oq-nearwall)",
-     "ISLA trained on AirfRANS with its far field, read near the wall against the standing; if it reads a harm there, the viscous softening trained on the same configuration with only the channel changed, two seeds",
-     "in flight; then about 180 to 225 for the viscous softening"),
+    ("Which near-wall length removes the near-wall cost of the whole boundary on AirfRANS? (@sec-oq-nearwall)",
+     "a near-wall length that does not grow with the domain, such as the viscous softening, trained on AirfRANS with its far field with only the channel changed, two seeds, read near the wall against the standing",
+     "about 180 to 225 for the viscous softening"),
     ("Does a quarter of the slices cost nothing on ISLA-DTT and on the surface task? (@sec-oq-slices)",
      "ISLA-DTT with 128 slices against 512 on AirfRANS and the lug, and interacting ISLA with 128 against 512 on the DrivAerML Surface task, two seeds each, read for harm by the same rule",
      "not priced"),
@@ -699,17 +846,32 @@ step = [R.num(arm(t, "CONT")["÷ B"]) for t in AT]
 std = [R.num(arm(t, "NOSCSTD")["÷ B"]) for t in AT]
 phi = [R.num(arm(t, "NOSCSTD")["φ"]) for t in AT]
 assert all(arm(t, "NOSCSTD")["moves (R1)"] == "no" for t in AT)
-print("**On AirfRANS, standardizing ISLA's global input carries its gain over an earlier form of its code, and its declared scales add "
-      "nothing measurable; whether they add accuracy where the Reynolds number varies widely is untested.** Against that earlier form, "
+R5T = {r_["field"]: r_ for r_ in R.md_table("dtt_knobs_r5", "RESULTS.md", "R5", 0)}
+R5X = " ".join(R.load("dtt_knobs_r5", "RESULTS.md").split())
+r5 = [R.num(R5T[f_]["÷ B, arithmetic (registered)"]) for f_ in ("pressure", "in-plane velocity", "nut")]
+r5_lab = {R5T[f_]["registered reading"] for f_ in R5T}
+assert r5_lab == {"standardization leaves it (the scales carry it)"} and "flagged" in R5T["in-plane velocity"]["geometric form (beside)"]
+r5_v = re.search(r"velocity ([\d.]+) / ([\d.]+), nut", R5X).groups()
+r5_d = re.search(r"resolves it on pressure only \(([\d.]+) against 2 SE ([\d.]+)\)", R5X).groups()
+print("**On AirfRANS, interacting ISLA's declared scales add nothing measurable once its global input is standardized, while ISLA-DTT "
+      f"without them is about {100 * (min(r5) - 1):.0f} to {100 * (max(r5) - 1):.0f} percent worse; whether the scales add accuracy where "
+      "the Reynolds number varies widely is untested.** Against an earlier form of ISLA's code, "
       f"trained and scored alike, ISLA's error on the AirfRANS interior task is lower by a factor of {f3(step)} (pressure / velocity / "
       "eddy viscosity). An arm without the scales that reads the inlet speed standardized, as the baselines read it, has "
       f"{f3(std, 3)} times ISLA's error, a share {f3(phi)} of that step and no measurable effect on any field (each ratio exp(Δ), of "
       "geometric seed means), so by the rule registered for it standardizing the global input carries the step "
       "(@sec-airfrans-attribution). On AirfRANS the viscosity is constant and $L$ nearly so, so the log Reynolds number formed from the scales "
       "is close to a monotone reparametrization of the inlet speed, and the scales can add little there beyond a standardized input. "
+      "ISLA-DTT reads differently: without the scales and with the inlet speed standardized, its error is "
+      f"{f3(r5, 3)} times ISLA-DTT's (arithmetic seed means), which the rule registered for it reads as the scales carrying ISLA-DTT's "
+      f"accuracy on every field, as far as two seeds can show. The velocity reading is flagged: it rests on one seed ({r5_v[0]} and "
+      f"{r5_v[1]}), and its geometric form does not resolve. The difference between the two forms is resolved on pressure alone "
+      f"({r5_d[0]} against two standard errors of {r5_d[1]}); on velocity and eddy viscosity it is within two seeds' noise "
+      "(@sec-airfrans-dtt-reference). "
       "What would settle it: ISLA with and without its scales, the latter reading a standardized global input, on a dataset whose "
       "Reynolds number varies widely, such as AeroZoo, two seeds each. Every arm of the ablation, the base included, trained on the "
-      f"compiled path after its fault was fixed. Data: {R.source('attrib090', 'relaunch_native.md')}.")
+      f"compiled path after its fault was fixed. Data: {R.source('attrib090', 'relaunch_native.md')}; "
+      f"{R.source('dtt_knobs_r5', 'RESULTS.md')} (R5).")
 ```
 
 ### Reynolds extrapolation below the training band {#sec-oq-reynolds}
@@ -759,25 +921,33 @@ print("**On AirfRANS, the fitted, narrow scale of ISLA's Reynolds input sets mos
 VD = AZS["diagnostics"]["velocity_direction_and_speed"]["runs"]
 vd = lambda sp, col: [VD[f"azc_{sp}_isla_seed{s}"][col] for s in (42, 43)]
 zp = lambda sp, f: az_cell("ISLA", f, sp)
+zref = lambda r_, sp, f: AZE["references"][r_][sp][f]["all"]
 print("**The open question is whether ISLA's two held-out failures on AeroZoo are limits of the architecture or of what the training "
-      "set covers.** On `profile_crossflow`, whose outlet sits beside the inlet, a layout no training case has, ISLA's pressure error is "
-      f"{zp('profile_crossflow', 'pressure_l2')['mean']:.2f} in the mean and {zp('profile_crossflow', 'pressure_l2')['median']:.2f} in "
-      "the median, above the zero predictor's 1.0: its mean velocity points "
+      "set covers.** On `profile_crossflow`, whose outlet sits beside the inlet, a layout no training case has, ISLA's pressure error "
+      f"on AeroZoo's metric is {zp('profile_crossflow', 'pressure_l2')['mean']:.2f} in the mean and "
+      f"{zp('profile_crossflow', 'pressure_l2')['median']:.2f} in the median, against the zero predictor's "
+      f"{zref('zero', 'profile_crossflow', 'eps_p')['mean']:.2f} and {zref('zero', 'profile_crossflow', 'eps_p')['median']:.2f}, and "
+      f"its velocity error, {zp('profile_crossflow', 'velocity_l2')['mean']:.2f}, is above the free stream's "
+      f"{zref('freestream', 'profile_crossflow', 'eps_U')['mean']:.3f}: its mean velocity points "
       f"{f3(vd('profile_crossflow', 'angle_true_pred_means'), 0)} degrees from the true mean on the diagnosed cases (seed 42 / 43), "
       f"its RMS speed is {f3(vd('profile_crossflow', 'speed_ratio_rms'))} times the true one, and the pressure follows the speed. "
       "Its scales and its Reynolds input lie inside the training ranges there, so this is a failure to generalize to a layout. On "
       f"`family_non_box` its pressure error is {zp('nonbox', 'pressure_l2')['mean']:.2f} in the mean and "
-      f"{zp('nonbox', 'pressure_l2')['median']:.2f} in the median, an error of shape that depends on the body family, and part of it "
+      f"{zp('nonbox', 'pressure_l2')['median']:.2f} in the median, against the zero predictor's "
+      f"{zref('zero', 'nonbox', 'eps_p')['mean']:.2f} and {zref('zero', 'nonbox', 'eps_p')['median']:.2f}, and its velocity error, "
+      f"{zp('nonbox', 'velocity_l2')['mean']:.2f}, is above the free stream's {zref('freestream', 'nonbox', 'eps_U')['mean']:.2f}, "
+      "so the failure is not only in pressure. The pressure error is one of shape that depends on the body family, and part of it "
       "is scale extrapolation: some ducts' velocity scales lie below every training case (@sec-aerozoo-failures). ISLA-DTT fails on "
       "the same two splits: its pressure error is "
       + " and ".join(f"{az_cell('ISLA-DTT', 'pressure_l2', sp)['mean']:.2f} [{az_cell('ISLA-DTT', 'pressure_l2', sp)['median']:.2f}] on `{nm_}`"
                    for sp, nm_ in (("profile_crossflow", "profile_crossflow"), ("nonbox", "family_non_box")))
       + " (mean [median]), so neither failure is particular to the interacting form (@sec-aerozoo-form). No measurement in the "
       "book separates a limit of the architecture from one of the training set on these two splits. What would bear on it, for the "
-      "non-box family: a training set whose velocity scales cover the ducts'. Data: results/char/aerozoo_090_final.json.")
+      "non-box family: a training set whose velocity scales cover the ducts'. Data: results/char/aerozoo_090_specmetric.json; "
+      "results/char/aerozoo_090_final.json (`diagnostics`).")
 ```
 
-### The outlet pressure level {#sec-oq-outlet}
+### The pressure level next to the outlet {#sec-oq-outlet}
 
 ```{python}
 #| label: para-oq-outlet
@@ -785,16 +955,34 @@ print("**The open question is whether ISLA's two held-out failures on AeroZoo ar
 PD = R.load("az_diag", "pdiag/pdiag.tsv")
 pdm = lambda sp, seed, col: statistics.median(float(r_[col]) for r_ in PD if r_["split"] == sp and r_["seed"] == seed)
 seeds_x = sorted({r_["seed"] for r_ in PD if r_["split"] == "profile_crossflow"})
-print("**The open question is why ISLA does not hold the outlet at its prescribed zero gauge pressure on the crossflow layout.** ISLA "
-      "reads the value prescribed on each outlet face as an input of that boundary condition, and nothing in the architecture "
-      "constrains its prediction there. Next to the outlet, on "
+OX = " ".join(R.load("outlet_exp", "RESULTS.md").split())
+OT = R.md_table("outlet_exp", "RESULTS.md", "R1 (median", 0)
+OD = {(r_["split"], r_["field"]): r_ for r_ in R.md_table("outlet_exp", "RESULTS.md", "R1 (median", 1)}
+ot = lambda arm: [R.num(r_["median p_L2 s42 / s43"], k) for r_ in OT if r_["split"] == "profile_crossflow" and r_["arm"].startswith(arm) for k in (0, 1)]
+band = [float(x) for x in re.search(r"crossflow A [\d.]+ / [\d.]+, B ([\d.]+) / ([\d.]+), truth ([\d.]+)", OX).groups()]
+cost = [R.num(r_["B / A"], k) for r_ in R.md_table("outlet_exp", "RESULTS.md", "Cost", 0) if r_["B / A"] != "–" for k in (0, 1)]
+n_probe = re.search(r"[Tt]he median ([\d,]+) probes are", OX).group(1)
+share = re.search(r"the probe tokens through the blocks take (\d+) %", OX).group(1)
+assert "R1: no change on profile_crossflow, no change on full" in OX
+cp, ap = ot("B"), ot("A")
+print("**The open question is what sets ISLA's pressure level next to the outlet on the crossflow layout, since holding the outlet's "
+      "own level does not.** Next to the outlet, on "
       f"{sum(r_['split'] == 'profile_crossflow' and r_['seed'] == seeds_x[0] for r_ in PD)} random `profile_crossflow` cases per "
-      "seed (medians), it predicts "
-      + " / ".join(f"{pdm('profile_crossflow', s, 'near_outlet_pred_mean_rel'):.1f}" for s in seeds_x)
-      + f" times the case's RMS pressure, where the truth is {pdm('profile_crossflow', seeds_x[0], 'near_outlet_true_mean_rel'):.3f} "
-      "(@sec-aerozoo-failures). The pressure's mean level carries most of that split's error. What would settle whether the offset is "
-      "particular to the new layout: the predicted gauge pressure on the outlet faces against the prescribed zero, on every split and "
-      f"for both forms. Cost: scoring only. Data: {R.source('az_diag', 'pdiag/pdiag.tsv')}.")
+      "seed (medians), ISLA predicts "
+      + " / ".join(f"{pdm('profile_crossflow', s_, 'near_outlet_pred_mean_rel'):.1f}" for s_ in seeds_x)
+      + f" times the case's RMS pressure, where the truth is {pdm('profile_crossflow', seeds_x[0], 'near_outlet_true_mean_rel'):.3f}. "
+      "ISLA trained with its pressure shifted by the one constant that gives the outlet's drawn cells, weighted by their measure, the "
+      f"prescribed mean holds that mean exactly, yet there predicts {band[0]:.2f} / {band[1]:.2f} times the RMS pressure "
+      f"(@sec-aerozoo-failures). Its crossflow pressure error falls on both seeds ({cp[0]:.2f} and {cp[1]:.2f} against {ap[0]:.2f} and "
+      f"{ap[1]:.2f}, median relative L2), but its own two seeds differ by {max(cp) / min(cp):.1f} times, so the registered rule reads "
+      f"*no change* (seed-mean ratio {R.num(OD[('profile_crossflow', 'pressure')]['exp(D)']):.2f}, |D| "
+      f"{abs(R.num(OD[('profile_crossflow', 'pressure')]['D = ln(B/A)'])):.3f} against two standard errors of "
+      f"{R.num(OD[('profile_crossflow', 'pressure')]['2 SE']):.3f}). As implemented it costs {min(cost):.2f} to {max(cost):.2f} "
+      f"times ISLA's training step, {share}% of the extra time in the {n_probe} outlet points it reads as passive probes, far more "
+      "than a mean over the outlet needs. What would settle whether the held level helps on that layout: more seeds of both arms on "
+      "`profile_crossflow`, with the outlet read through a bounded number of probe points. What would locate the offset: the "
+      "predicted pressure along the path from the outlet into the interior, for both forms. Cost: not priced. Data: "
+      f"{R.source('az_diag', 'pdiag/pdiag.tsv')}; {R.source('outlet_exp', 'RESULTS.md')}.")
 ```
 
 ### What rounding still decides in the geometry {#sec-oq-precision}
@@ -864,7 +1052,8 @@ print("**The open question is how large ISLA-DTT's tree error is at $\\theta = 1
       "frame is not tied, but the forest as the code builds it lets rounding decide the sign octant of most cells' normals and "
       "many exact ties of its box test (@sec-arch-tree-read): ISLA-DTT's posed error at $\\theta = 1$ is "
       f"{' and '.join(f'{v:.2f}' for v in LPN['ref'])} times its native error (seeds 42 and 43), with {LPP:.2f} times the pairs "
-      f"posed, while at $\\theta = 0$ the two agree (posed ÷ native {' and '.join(f'{v:.4f}' for v in LPN['t0'])}). On boundaries "
+      f"posed, while at $\\theta = 0$ the two agree (posed ÷ native {' and '.join(f'{v:.4f}' for v in LPN['t0'])}). The same octant "
+      "tie breaks the pose of ISLA-DTT trained on AirfRANS with its far field (@sec-limits-af-whole). On boundaries "
       "with near-equal principal variances the error at $\\theta = 1$ is not measured. What would settle it: ISLA-DTT's "
       "checkpoints scored rotated and translated and under boundary redraws on cases whose principal variances are nearly "
       "equal, such as AeroZoo's sphere bodies and spherical enclosures, against the same scorings on cases with a "
@@ -1178,29 +1367,29 @@ NW_COST = re.search(r"Cost: about ([\d]+)-([\d]+) GPU-h for the AirfRANS pair", 
 # the viscous softening's input rounding at 30 chords (p99.9 / max); the arithmetic's share is removed by the float64 offset
 NW_IN = re.search(r"\| \(ii\) nu / U \| compute \|[^|]+\|[^|]+\|[^|]+\|[^|]+\|[^|]+\| \| \| input \| 0 \| [^|]+\| ([\d.]+) / ([\d.]+) \|", NWR).groups()
 assert re.search(r"\| \(i\) 1e-6 L whole \| compute \|[^|]+\|[^|]+\|[^|]+\|[^|]+\|[^|]+\| \| \| input \| 0 \| [^|]+\| [^|]+\| [\d.]+ / 0\.065 \|", NWR)
-print("**The open question is whether the whole boundary costs ISLA near-wall accuracy through its distance channel.** "
+print("**The whole boundary costs ISLA near-wall accuracy on AirfRANS through its distance channel; the open question is which "
+      "near-wall length removes the cost.** "
       "The channel $\\operatorname{asinh}(s_q / 10^{-6})$ is linear for distances below $10^{-6} L$, and with the whole "
       f"boundary that holds {NW_AF}% of AirfRANS's drawn points, its viscous sublayer, buffer layer and the start of its log "
       "layer, where the trained input layers code $\\log d$ (@sec-arch-interior-geometry). The supervisor holds one "
       "alternative ready: a viscous softening, $\\operatorname{asinh}(d U / \\nu)$, in which the length unit cancels, so the "
-      "near-wall code does not depend on how far out the domain's outer boundary is drawn. It is defined only where a "
+      "near-wall code does not depend on how far out the domain's outer boundary is drawn; it is one candidate, not a decided "
+      "change. It is defined only where a "
       "viscosity is declared (AirfRANS and AeroZoo); elsewhere the channel stays as it is. On AirfRANS with its far field its "
       f"knee sits at $U d / \\nu = 1$, against $10^{{-6}} \\mathrm{{Re}}_L$ = {NW_REL[0]} to {NW_REL[1]} for the present channel. "
       "It gives up the present channel's guarantee that storing the coordinates in float32 moves it by at most 0.065 wherever "
       "the body sits in its domain: with the body 30 chords from the origin of the coordinates, that rounding moves it by up to "
-      f"{NW_IN[1]} ({NW_IN[0]} at the 99.9th percentile), and points within that rounding of the wall are read as on it. It is "
-      "to be tested only if ISLA trained on AirfRANS with its far field reads a harm near the wall, and adopting "
-      "it is Peter's decision. What would settle it: that retrain read on velocity and eddy viscosity near the wall against "
-      "the standing; if it reads a harm there, the viscous softening trained on the same configuration with only the channel "
-      f"changed, two seeds. Cost: the retrain is in flight; the viscous arm about {NW_COST[0]} to {NW_COST[1]} GPU-hours. Data: "
+      f"{NW_IN[1]} ({NW_IN[0]} at the 99.9th percentile), and points within that rounding of the wall are read as on it. "
+      "ISLA trained on AirfRANS with its far field reads a harm there: its velocity error is largest in the first decades off "
+      "the wall, and its velocity and eddy-viscosity errors are larger below the channel's knee than above it, on both seeds "
+      "(@sec-limits-af-whole). "
+      "Adopting a new channel is Peter's decision. What would settle it: a near-wall length that does not grow with the domain, "
+      "such as the viscous softening, trained on the same configuration with only the channel changed, two seeds, and read near "
+      f"the wall against the airfoil-only standing. Cost: the viscous arm about {NW_COST[0]} to {NW_COST[1]} GPU-hours. Data: "
+      f"{R.source('af_whole_read', 'RESULTS.md')} (section 2); "
       f"{R.source('nearwall', 'RESULTS.md')} (A1 to A3); {R.source('nearwall', 'DESIGN.md')} (sections 3 and 4); "
       f"{R.source('geo_band_final', 'RESULTS.md')} (item 3).")
 ```
-
-::: {.callout-note title="In flight"}
-This question rests on probes of the standings' trained input layers at fixed weights. ISLA trained on
-AirfRANS with its far field, read near the wall, is being measured, and the ledger (@sec-ledger) tracks it.
-:::
 
 ### A slice's mean normal on a closed boundary {#sec-oq-slice-normal}
 
@@ -1244,9 +1433,22 @@ print("**The open question is whether a slice's mean normal should be normalized
       "checked by a deterministic test (a closed boundary with uniform routing, whose mean normal is exactly zero), then "
       "trained and read for harm against the standings. Cost: not priced. "
       f"Data: {R.source('dtt_fast_done', 'spike/RESULTS.md')} (sections 1 to 3).")
+DRA = {r_["field"]: r_ for r_ in R.md_table("slice_normal_exp", "reading_DRA.md", None, 0) if r_["protocol"] == "native"}
+dra = [R.num(DRA[f_]["arm ÷ control"]) for f_ in ("pressure_l2", "wss_l2")]
+assert all(DRA[f_]["label"] == "harms" for f_ in DRA)
+DRT = " ".join(R.load("slice_normal_exp", "reading_DRA.md").split())
+assert DRT.count("arm better on 0 % of cases") == 2
+n_dra = int(re.search(r"\((\d+) cases; native decides\)", DRT).group(1))
 print()
-print("::: {.callout-note title=\"In flight\"}\nThis question rests on the normalization with its clamp, as the code has it. A "
-      "smooth, constant-free form of the slice's mean-normal invariant is being designed, and the ledger (@sec-ledger) tracks it.\n:::")
+print("Leaving the mean normal unnormalized, which removes the constant and the gain at once, harms. Trained on the DrivAerML Surface "
+      "task with the tunnel's pieces read, two seeds against a control trained alike, it raises the error "
+      f"{dra[0]:.3f} times on pressure and {dra[1]:.3f} times on wall shear, worse on every one of the {n_dra} validation cases, which the "
+      "rule registered for it reads as harms; so that form is not a candidate, whatever the interior datasets read. "
+      f"Data: {R.source('slice_normal_exp', 'reading_DRA.md')}; {R.source('slice_normal_exp', 'PREREG.md')} (A section 5, A3 and A5).")
+print()
+print("::: {.callout-note title=\"In flight\"}\nThis question rests on the normalization with its clamp, as the code has it. ISLA "
+      "with the mean normal unnormalized and each slice's distances softened by the slice's own spread is being measured on AirfRANS, "
+      "the lug and the DrivAerML Surface task, and the ledger (@sec-ledger) tracks it.\n:::")
 ```
 
 ### A quarter of the slices {#sec-oq-slices}

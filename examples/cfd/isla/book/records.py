@@ -93,6 +93,17 @@ FOLDER = {
     "hl_dup_stage2_scores": "campaigns_2026-10-23",
     "hl_symplane": "campaigns_2026-10-23",
     "hl_dup_stage2_area": "campaigns_2026-10-23",
+    "az_spec_audit": "campaigns_2026-10-23",
+    "az_rescore": "campaigns_2026-10-23",
+    "outlet_exp": "campaigns_2026-10-23",
+    "geo_tieorder": "campaigns_2026-10-23",
+    "draw_exact": "campaigns_2026-10-23",
+    "slice_normal_exp": "campaigns_2026-10-23",
+    "dtt_knobs_r5": "campaigns_2026-10-23",
+    "main_merge": "campaigns_2026-10-23",
+    "lib_tree": "campaigns_2026-10-23",
+    "test_audit": "campaigns_2026-10-23",
+    "af_whole_read": "campaigns_2026-10-23",
 }
 
 

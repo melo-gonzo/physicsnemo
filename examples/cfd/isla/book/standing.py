@@ -79,6 +79,7 @@ _COUNT = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five"}
 #: The other results files of the standing, keyed as ``in_flight_callout`` accepts them.
 EXTRA = {
     "aerozoo": "aerozoo_090_final.json",
+    "aerozoo_spec": "aerozoo_090_specmetric.json",
     "suv_xfam": "shift_suv_xfam_090.json",
     "globe_airfrans": "globe_airfrans_090.json",
 }
@@ -510,20 +511,20 @@ def interior_form_callout(keys, aerozoo: bool = False) -> str:
                 f"{r:.3f} on the lug, both forms trained on the fixed compiled path"
             )
     if aerozoo:
-        az = _load("aerozoo")
-        A = {n.split()[0]: a for n, a in az["arms"].items()}
+        az = aerozoo_spec()
+        A = az["arms"]
         m = {
             f: sum(
-                A["ISLA-DTT"]["splits"][sp][f]["mean"]
-                / A["ISLA"]["splits"][sp][f]["mean"]
+                A["ISLA-DTT"]["splits"][sp][f]["all"]["mean"]
+                / A["ISLA"]["splits"][sp][f]["all"]["mean"]
                 for sp in az["held_out"]
             )
             / len(az["held_out"])
-            for f in ("velocity_l2", "pressure_l2")
+            for f in ("eps_U", "eps_p")
         }
         names.append("AeroZoo")
         parts.append(
-            f"{m['velocity_l2']:.3f} / {m['pressure_l2']:.3f} on AeroZoo (velocity / pressure, the six held-out splits' mean)"
+            f"{m['eps_U']:.3f} / {m['eps_p']:.3f} on AeroZoo (AeroZoo's velocity / pressure error, the six held-out splits' mean)"
         )
     if not names:
         return ""
@@ -550,6 +551,26 @@ def aerozoo() -> dict:
 
     ``median`` is the median over cases of the per-case seed mean; ``note`` says when an arm is about a zero predictor."""
     return _load("aerozoo")
+
+
+def aerozoo_spec() -> dict:
+    """The AeroZoo standing under AeroZoo's own interior metrics, results/char/aerozoo_090_specmetric.json
+    (results/char/aerozoo_090_specmetric_2026-10-25.py, from AZ-RESCORE's record)::
+
+        {"status": "final", "release": {"version", "index_sha256"},
+         "splits": [split], "held_out": [split], "fields": {key: label},
+         "n_cases": {split: {"all": n, "stable": n}},
+         "arms": {"ISLA" | "ISLA-DTT" | "GeoTransolver" | "Transolver" | "E1-AZ" | "LRE-AZ":
+                  {"name": str, "splits": {split: {field: {"all" | "stable": {"mean", "per_seed", "median",
+                   "per_seed_median", "median_of_case_seed_mean", "n_cases", "n_seeds"}}}}}},
+         "references": {"zero" | "freestream": {split: {field: {"all" | "stable": {"mean", "median", "n_cases"}}}}},
+         "readings": {"e1_az": {...}, "lre_az": {...}}}
+
+    Fields ``eps_U``, ``eps_p`` (volume-weighted RMS error over every interior cell, in the case's reference speed and
+    dynamic pressure), ``eps_U_near``, ``eps_p_near`` (within one reference length of a body face), ``rel_*`` (full-mesh
+    relative L2) and ``reg_rel_*`` (the registered 200,000-cell relative L2 of ``aerozoo()``). ``median`` is the seed
+    mean of the per-seed medians over cases (AeroZoo's convention); "ISLA" is interacting ISLA."""
+    return _load("aerozoo_spec")
 
 
 def suv_xfam() -> dict:
