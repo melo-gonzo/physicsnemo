@@ -36,6 +36,7 @@ Python function that launches it.
 """
 
 import sys
+import types
 
 import torch
 
@@ -46,7 +47,10 @@ _EVENTS = _monitoring.events.PY_START | _monitoring.events.PY_RETURN
 def code_of(fn):
     """The code object that runs when ``fn`` is called: a function, a bound method, a
     ``staticmethod`` or ``classmethod``, a ``torch.library.custom_op`` (its Python
-    implementation) or a ``torch.autograd.Function`` subclass (its ``forward``)."""
+    implementation), a ``torch.autograd.Function`` subclass (its ``forward``) or a code
+    object itself (a nested function's, from its parent's ``__code__.co_consts``)."""
+    if isinstance(fn, types.CodeType):
+        return fn
     if isinstance(fn, type) and issubclass(fn, torch.autograd.Function):
         fn = fn.forward
     fn = getattr(fn, "_init_fn", fn)  # torch.library.custom_op's CustomOpDef
