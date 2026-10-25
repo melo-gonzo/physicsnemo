@@ -434,6 +434,28 @@ def _chunk_spans(
     return spans, two
 
 
+def _average_gradients_(grads: list[torch.Tensor]) -> None:
+    """Average ``grads`` over the ranks in place: one flat buffer, one ``all_reduce``.
+
+    Bitwise ``g.copy_(r / world_size)`` for ``r`` in ``fused_all_reduce(grads)``,
+    without its per-tensor divisions: the buffer sums in the gradients' promoted
+    dtype, at least float32, and is divided once when every gradient has its
+    dtype; gradients of other dtypes are divided after the cast back, as there.
+    """
+    flat = torch.cat([g.reshape(-1) for g in grads])
+    flat = flat.to(torch.promote_types(flat.dtype, torch.float32))
+    dist.all_reduce(flat)
+    world_size = dist.get_world_size()
+    one_dtype = all(g.dtype == flat.dtype for g in grads)
+    if one_dtype:
+        flat.div_(world_size)
+    views = flat.split([g.numel() for g in grads])
+    torch._foreach_copy_(grads, [v.view_as(g) for v, g in zip(views, grads)])
+    if not one_dtype:
+        for g in grads:
+            g.div_(world_size)
+
+
 def chunked_forward_backward(
     batch: dict[str, Any],
     model: torch.nn.Module,
@@ -521,9 +543,7 @@ def chunked_forward_backward(
             raise RuntimeError(
                 "chunked_forward_backward: a trainable parameter has no gradient"
             )
-        grads = [p.grad for p in params]
-        for g, r in zip(grads, fused_all_reduce(grads)):
-            g.copy_(r / dist.get_world_size())
+        _average_gradients_([p.grad for p in params])
     with torch.no_grad():
         metric_td = metric_calculator(pred, targets, measure)
     return loss.detach(), loss_td.detach(), metric_td.detach()

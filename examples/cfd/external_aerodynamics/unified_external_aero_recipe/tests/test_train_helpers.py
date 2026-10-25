@@ -449,6 +449,52 @@ def test_chunked_forward_backward_agrees_across_ranks(tmp_path, loss_type):
     )
 
 
+def _average_gradients_rank(rank: int, store: str, world_size: int) -> None:
+    """Rank ``rank`` of :func:`test_average_gradients_equals_the_fused_reduction`."""
+    import torch.distributed as dist
+
+    from physicsnemo.distributed import fused_all_reduce
+
+    dist.init_process_group(
+        "gloo", init_method=f"file://{store}", rank=rank, world_size=world_size
+    )
+    try:
+        torch.manual_seed(rank)
+        shapes = [(), (1,), (7,), (3, 5), (4, 1, 6), (2, 3, 4, 5)]
+        lists = [
+            [torch.randn(s) for s in shapes],
+            [
+                torch.randn(s, dtype=d)
+                for s in shapes
+                for d in (torch.float32, torch.bfloat16)
+            ],
+            [torch.randn(s, dtype=torch.bfloat16) for s in shapes],
+        ]
+        for grads in lists:
+            expected = [
+                r / world_size for r in fused_all_reduce([g.clone() for g in grads])
+            ]
+            train._average_gradients_(grads)
+            for g, e in zip(grads, expected):
+                assert g.dtype == e.dtype and torch.equal(g, e)
+    finally:
+        dist.destroy_process_group()
+
+
+@pytest.mark.skipif(not torch.distributed.is_gloo_available(), reason="requires Gloo")
+@pytest.mark.parametrize("world_size", [1, 2, 3])
+def test_average_gradients_equals_the_fused_reduction(tmp_path, world_size):
+    """The chunked step's flat-buffer gradient average is bitwise the per-tensor
+    ``r / world_size`` of ``fused_all_reduce`` on every rank, for float32,
+    bfloat16 and mixed gradients of many shapes; one rank (fused_all_reduce's
+    no-op path) and three (a world size whose division is inexact) included."""
+    torch.multiprocessing.spawn(
+        _average_gradients_rank,
+        args=(str(tmp_path / "store"), world_size),
+        nprocs=world_size,
+    )
+
+
 def test_chunked_step_chunks_isla_dtt():
     """ISLA-DTT, the interior task (``interior=True``), takes the chunked step when
     the batch has prediction points; a surface ISLA never chunks."""
