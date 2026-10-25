@@ -402,6 +402,13 @@ def test_isla_volume_composes_and_runs():
     assert OmegaConf.to_container(cfg.model.boundary_schemas) == {
         name: {} for name in names
     }
+    ### The stored SDF, which only the baselines read, is not computed for ISLA.
+    from datasets import _apply_dataset_transform_drops
+
+    ds = OmegaConf.load(_RECIPE_ROOT / "datasets" / "drivaer_ml_volume_reference.yaml")
+    chain = _apply_dataset_transform_drops(ds, cfg).pipeline.transforms
+    kept = [t["_target_"] for t in OmegaConf.to_container(chain, resolve=False)]
+    assert "${dp:ComputeSDFFromBoundary}" not in kept and "${dp:DropBoundary}" in kept
     domain = _volume_domain()
     batch, out, pred = _run(cfg, domain, _targets("drivaer_ml_volume_reference"))
     assert set(batch["forward_kwargs"]["boundary_meshes"]) == set(names)
