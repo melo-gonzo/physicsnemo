@@ -358,7 +358,7 @@ answer. @sec-principle states this as the acceptance criterion it is, and
 from it inside the forward pass: a fixed budget of cells, each kept with a
 probability proportional to its area, each carrying the area it stands
 for.** A car's surface has up to 17 million cells and the token budget is
-200,000 (`boundary_tokens`), so the boundary tokens of an interior task are a
+200,000 (`n_boundary_tokens`), so the boundary tokens of an interior task are a
 quadrature of the surface, not the surface. ISLA draws that quadrature
 itself, so every dataset gets the same one, in three steps. The budget is
 shared over the named conditions by *water filling*: equal shares, a
@@ -511,11 +511,12 @@ seed is a constant, and every distinction between tokens comes from their
 relations to the anchors.
 
 **ISLA also computes the physical scales of each case.** Besides the length
-unit $L$, a case can declare a velocity scale $U$, taken from the inlet's
-boundary data or from a global velocity, a density $\rho$ and a viscosity
-$\nu$. With a viscosity the model appends the Reynolds number
-$\mathrm{Re} \equiv U L / \nu$ to the global scalars $\sigma$, as its
-standardized logarithm. Each input that declares its units enters divided
+unit $L$, a case can declare scales that its fields define: a velocity
+scale $U$, taken from the inlet's boundary data or from a global velocity,
+and a density $\rho$, say. The model names no physical quantity itself: a
+Reynolds number is an ordinary global scalar in $\sigma$, which the
+recipe computes for the configurations that read one, as the standardized
+logarithm of $U L / \nu$. Each input that declares its units enters divided
 by its scale, and each output leaves the head dimensionless and is
 multiplied by its own: a gauge pressure by $\rho U^2$, an eddy viscosity by
 $U L$. The scales are computed in float64 from the full-resolution boundary
@@ -1192,7 +1193,7 @@ plt.show()
 #|   bracket along its length into three regions, a weakly decided one over
 #|   the half toward the clamped root, the arm, and the head around the
 #|   hole, and in the last layer the anchors gather toward the head and
-#|   around the hole. Interacting ISLA (`query_independent=False`) at its
+#|   around the hole. Interacting ISLA at its
 #|   reference configuration, the standing's eagerly trained checkpoint on
 #|   each task, seed 42, final checkpoint; the
 #|   airfoil of @fig-airfrans-prediction and the lug of @fig-lug-prediction.
@@ -1475,7 +1476,7 @@ cells meet back to back. @sec-medial-ties measures both. @sec-exact-geometry-dra
 geometry changes against a distance read from the nearest drawn token.
 
 **Prediction points come in two kinds.** In interacting ISLA, the interior
-form with `query_independent=False`, the prediction points are **interacting** tokens: they carry routing mass,
+form whose checkpoints the interior standings score, the prediction points are **interacting** tokens: they carry routing mass,
 a learned fraction of the total boundary measure split equally among them,
 so they help form the slices and their anchors, and the prediction at one
 point depends on which other points are in the request. That dependence is
@@ -1486,8 +1487,8 @@ four chunks raises the error
 `{python} f"{min(QP_CHUNKS):.2f}"`-fold to `{python} f"{max(QP_CHUNKS):.2f}"`-fold,
 and queries of at most `{python} f"{int(QP_SUBS[0][3:]):,}"` points raise it
 `{python} f"{min(QP_SMALL):.1f}"`-fold to `{python} f"{max(QP_SMALL):.0f}"`-fold
-(@sec-query-population). ISLA-DTT
-(`query_independent=True`), ISLA's default interior form, makes the points **read-only**: they carry no
+(@sec-query-population). ISLA-DTT,
+ISLA's interior form, makes the points **read-only**: they carry no
 routing mass, so at every layer they read the slices the boundary formed
 and never write into them, and after every layer each point also reads
 every boundary cell directly, through a learned kernel of the pair's
@@ -1507,7 +1508,7 @@ answer. @fig-isla-dtt shows one point's read on the airfoil.
 #|   point (interacting ISLA, aqua) adds its weight to the slices (solid
 #|   arrows into the anchors) and reads them back (dashed arrows), so the
 #|   interior helps shape the partition. Right: a read-only point of ISLA-DTT,
-#|   ISLA's default interior form,
+#|   ISLA's interior form,
 #|   reads the boundary through a tree over 160 cells: the cells near it one
 #|   by one (black segments) and each distant cluster as one virtual cell
 #|   (violet diamonds at the cluster's measure-weighted centroid, area
@@ -1580,7 +1581,7 @@ _ruling = _re.search(r'Peter\'s ruling \("([^"]+)"\)', AZD_).group(1)
 _AZ = S.aerozoo(); _AZA = {n.split()[0]: a for n, a in _AZ["arms"].items()}
 _Rm = {f: sum(_AZA["ISLA-DTT"]["splits"][s][f]["mean"] / _AZA["ISLA"]["splits"][s][f]["mean"] for s in _AZ["held_out"])
        / len(_AZ["held_out"]) for f in ("velocity_l2", "pressure_l2")}
-print("**ISLA-DTT is ISLA's default interior form, on principle: its prediction at a point does not depend on which other "
+print("**ISLA-DTT is ISLA's interior form, on principle: its prediction at a point does not depend on which other "
       "points are queried.** Read-only points give up the coupling that lets the interior shape the partition, and the "
       "measurements do not make either form the more accurate everywhere. On AeroZoo's six held-out splits, the test of "
       "generalization registered to choose between them, ISLA-DTT ÷ ISLA averages "
@@ -1592,9 +1593,8 @@ print("**ISLA-DTT is ISLA's default interior form, on principle: its prediction 
       + " / ".join(_AF.fields[f] for f in _AF.ds.headline) + f", a ratio of arithmetic seed means; {_AF.source}). On the GINOT bracket lug, with both forms trained on the compiled "
       "training path after its fault was fixed, interacting ISLA leads ISLA-DTT on the von Mises stress (ISLA-DTT ÷ ISLA "
       f"{_ld['mean'] / _li['mean']:.3f} on the native mesh, a ratio of arithmetic seed means; {R.source('ref090', 'r090_final.json')}). "
-      "The class's default follows the task: `interior=True` alone builds ISLA-DTT, the surface task builds interacting "
-      "ISLA, and `query_independent=False` builds interacting ISLA for an interior task. Every interior configuration of "
-      "the recipe states `query_independent: true`. "
+      "The class follows the task: `interior=True` builds ISLA-DTT, with no switch of form, and the surface task is "
+      "interacting, every boundary cell a token that writes into the slices. "
       "The interior standings of Part IV are of interacting ISLA, and each says what ISLA-DTT measures there.\n")
 ```
 
@@ -1639,7 +1639,7 @@ the stages of that chapter.
 | 4 relational invariants | $\xi_{is}$; the routing refinement | 3 | `_relational_invariants`, `geo_kernel.py` |
 | 5 the slice layer | pooling, slice MLP, read-back, normalized reads | 3 | `_SliceBlock.forward` |
 | 6 the equivariant basis | coefficients times body-fixed directions | 4, 5 | `heads.py`, `frame_assign` |
-| 7 the interior | exact geometry against the full-resolution surface; its two distance channels; read-only (the default) or interacting points | 1, 3 | `exact_boundary_geometry`, `soft_log_length`, `_QueryTokens`, `tree_read.py` |
+| 7 the interior | exact geometry against the full-resolution surface; its two distance channels; read-only points (ISLA-DTT) | 1, 3 | `exact_boundary_geometry`, `soft_log_length`, `_QueryTokens`, `tree_read.py` |
 
 : The seven ideas of this chapter, the stage of the forward pass that holds
 each, and the code that implements it. How to read this: the stage numbers

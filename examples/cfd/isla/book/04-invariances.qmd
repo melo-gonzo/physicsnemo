@@ -6,7 +6,7 @@ rigid-motion equivariance, which ISLA holds to roundoff. The second gives a conv
 consistency, which ISLA holds in the fine-mesh limit and which decides whether a change to the architecture is adopted. This chapter states both as exact tests on the code. It then says what each one buys, draws the sampling
 laws through which the second is measured, and reads both off the standing of the three reference configurations on every
 dataset. It closes with what still moves ISLA's own error: the other prediction points of a request (interacting ISLA's; ISLA-DTT,
-the default interior form, is independent of them), a token budget below
+ISLA's interior form, is independent of them), a token budget below
 the boundary's resolution, a different surface, and float32 ties in the geometry.
 
 *Before this chapter:* @sec-isla (tokens, measure weights, the length unit $L$, slices and anchors, relational invariants,
@@ -134,7 +134,7 @@ quadrature over the split cells is the same sum. Refinement and resampling are s
 sections are about them.
 
 **On the interior task the boundary draw is pose-invariant in the limit of its token budget.** A boundary with more cells
-than the budget `boundary_tokens` is subsampled by the systematic draw of @sec-arch-boundary-draw, which lays the cells
+than the budget `n_boundary_tokens` is subsampled by the systematic draw of @sec-arch-boundary-draw, which lays the cells
 along a Morton order of their centroids taken in the boundary's canonical frame. The frame turns with the body, so a rotated
 case draws the same cells except where float32 rounding of its coordinates moves a centroid across a grid line of the Morton
 code, or where the boundary's principal moments nearly tie and the frame itself turns; there its prediction moves by the
@@ -149,11 +149,10 @@ so none of them moves with it.
 ::: {.callout-warning title="What is not a contract"}
 - **The magnitude of a global vector input.** It is discarded by design: a direction is normalized, and a magnitude that
   matters (a speed, a Reynolds number) enters as a global scalar.
-- **Independence from the other prediction points.** In ISLA's interacting interior form, every prediction point is a token
-  that writes into the slices, so a prediction depends on which other points are in the request
-  (@sec-query-population measures it). ISLA-DTT
-  (`query_independent=True`) makes its prediction points read-only, and its independence is a contract
-  (`test_query_independent_interior_contracts`; @sec-arch-modes).
+- **Independence from the other prediction points, for interacting ISLA.** In interacting ISLA, the form the interior
+  standings score, every prediction point is a token that writes into the slices, so a prediction depends on which other
+  points are in the request (@sec-query-population measures it). ISLA's interior form, ISLA-DTT, makes its prediction points
+  read-only, and its independence is a contract (`test_interior_task_contracts`; @sec-arch-modes).
 - **Completeness of the representation.** The anchors are first moments, so two arrangements with the same first moments
   per slice are indistinguishable to a layer (`results/isla_first_moment_collision_2026-09-08.json`).
 - **The deployed arithmetic.** The tests run in float64. On the GPU in float32 the algebra keeps the contract to float32
