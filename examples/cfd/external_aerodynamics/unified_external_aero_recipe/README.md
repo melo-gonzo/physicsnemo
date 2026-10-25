@@ -1000,9 +1000,13 @@ No Python code changes are needed.
 Training and validation metrics are logged in two places per run:
 
 - **TensorBoard** under `${output_dir}/${run_id}/tb/{train,val}/`. Per-step
-  loss / per-field loss / per-field metrics / learning rate / step time /
-  GPU memory go in the `train/` writer; per-epoch summaries (loss + metrics)
-  go in both writers.
+  loss / per-field loss / per-field metrics / learning rate / step and
+  iteration times / GPU memory go in the `train/` writer; per-epoch summaries
+  (loss + metrics) go in both writers. `step_time_s` is host time up to the
+  step's per-step loss reduction, without the device work still queued;
+  `iter_time_s` is the true time per iteration, between the ends of
+  consecutive reductions, which wait for the step's device work on every
+  rank (see `_run_epoch` in `src/train.py`).
 - **JSONL** at `${output_dir}/${run_id}/metrics.jsonl`. One record per
   line, tagged by a `phase` field: `config` (resolved run config),
   `dataset` (split sizes + targets), `train_step` / `val_step` (per-step

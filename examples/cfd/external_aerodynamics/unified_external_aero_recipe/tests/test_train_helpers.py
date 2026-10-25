@@ -736,6 +736,7 @@ def _run_test_epoch(
     dist_manager,
     loss_calculator=None,
     metric_calculator=None,
+    log_jsonl=None,
 ):
     """Run one :func:`train._run_epoch` on a one-field tensor model with SGD."""
     optimizer = torch.optim.SGD(model.parameters(), lr=0.1)
@@ -762,6 +763,7 @@ def _run_test_epoch(
         target_config={"pressure": "scalar"},
         optimizer=optimizer,
         scheduler=torch.optim.lr_scheduler.StepLR(optimizer, step_size=1),
+        log_jsonl=log_jsonl,
     )
 
 
@@ -814,3 +816,34 @@ def test_train_loads_the_next_batch_after_backward(monkeypatch):
         "forward 1", "backward", "load 2", "step",
         "forward 2", "backward", "step",
     ]  # fmt: skip
+
+
+@pytest.mark.parametrize("mode", ["train", "val"])
+def test_iter_time_is_the_whole_iteration(monkeypatch, mode):
+    """Every per-step record carries a positive ``iter_time_s`` at least its
+    ``step_time_s``, and the iteration times add up to the epoch's time."""
+    import time
+
+    model = torch.nn.Linear(1, 1, bias=False)
+
+    def forward(batch, *args, **kwargs):
+        time.sleep(0.05)
+        loss = model.weight.sum()
+        values = TensorDict({"loss/test": loss.detach()})
+        return loss, values, values.clone()
+
+    monkeypatch.setattr(train, "forward_pass", forward)
+    records = []
+    _run_test_epoch(
+        [{"k": k} for k in range(3)],
+        model,
+        mode=mode,
+        dist_manager=_single_rank(),
+        log_jsonl=records.append,
+    )
+    steps = [r for r in records if r["phase"] == f"{mode}_step"]
+    (summary,) = [r for r in records if r["phase"] == f"{mode}_summary"]
+    assert len(steps) == 3
+    assert all(0 < r["step_time_s"] <= r["iter_time_s"] for r in steps), steps
+    total = sum(r["iter_time_s"] for r in steps)
+    assert 0.9 * summary["epoch_seconds"] < total <= summary["epoch_seconds"]

@@ -581,8 +581,22 @@ def _run_epoch(
     step and emits per-step TensorBoard + JSONL entries (``phase: "step"``);
     val mode wraps the loop in ``torch.no_grad()``, skips TensorBoard
     per-step logging, and emits a lighter-weight JSONL record per step
-    (``phase: "val_step"``) carrying ``epoch``, ``val_step``, ``loss``
-    and ``step_time_s``.
+    (``phase: "val_step"``) carrying ``epoch``, ``val_step``, ``loss``,
+    ``step_time_s`` and ``iter_time_s``.
+
+    The two per-step times (console ``Step:`` and ``Iter:``, TensorBoard
+    ``iteration/performance/{step,iter}_time_s``):
+
+    - ``step_time_s``: host time from the end of the previous step's logging
+      (the start of the epoch, for the first) to just before this step's
+      per-step reduction; it misses the device work still queued and the wait
+      for the other ranks.
+    - ``iter_time_s``: the time between the ends of consecutive per-step
+      reductions (the first from the start of the epoch), the true time per
+      iteration: the reduction pulls its result to the host and, under DDP,
+      waits for every rank, so it ends after this step's device work on every
+      rank. The iteration times sum to the epoch's time but for the last
+      step's logging.
 
     Args:
         mode: ``"train"`` or ``"val"``. ``"train"`` requires *optimizer*
@@ -621,6 +635,7 @@ def _run_epoch(
     epoch_t0 = time.perf_counter()
     with grad_ctx:
         step_t0 = time.perf_counter()
+        iter_t0 = step_t0
         ### Iterated by hand: a train step fetches the next batch during its
         ### backward (below).
         batches = iter(dataloader)
@@ -714,6 +729,13 @@ def _run_epoch(
             step_loss, step_losses, step_metrics = _reduce_and_average(
                 loss_det, losses, metrics, 1, device=dist_manager.device
             )
+            ### iter_time_s, the true time per iteration, at no extra cost: the
+            ### reduction above synchronizes (its .cpu(), and its all_reduce under
+            ### DDP), so this clock reads after this step's device work on every
+            ### rank. It relies on that sync: without it this is host time too.
+            now = time.perf_counter()
+            iter_dt = now - iter_t0
+            iter_t0 = now
 
             ### Train mode includes Mem in the per-step line; val drops it
             ### because the no_grad path is the lowest-noise place to look.
@@ -721,7 +743,8 @@ def _run_epoch(
             logger.info(
                 f"{log_prefix} {epoch} [{i + 1}/{num_steps}] "
                 f"Loss: {step_loss:.6f} "
-                f"Step: {step_dt:.3f}s"
+                f"Step: {step_dt:.3f}s "
+                f"Iter: {iter_dt:.3f}s"
                 f"{mem_str}"
             )
 
@@ -758,6 +781,11 @@ def _run_epoch(
                             step_dt,
                             global_step=global_step,
                         )
+                        writer.add_scalar(
+                            "iteration/performance/iter_time_s",
+                            iter_dt,
+                            global_step=global_step,
+                        )
                     if log_jsonl is not None:
                         log_jsonl(
                             {
@@ -766,6 +794,7 @@ def _run_epoch(
                                 "loss": step_loss,
                                 "mem_gb": mem_gb,
                                 "step_time_s": step_dt,
+                                "iter_time_s": iter_dt,
                                 **step_losses,
                                 **step_metrics,
                             }
@@ -786,6 +815,7 @@ def _run_epoch(
                             "val_step": i,
                             "loss": step_loss,
                             "step_time_s": step_dt,
+                            "iter_time_s": iter_dt,
                             **step_losses,
                             **step_metrics,
                         }
