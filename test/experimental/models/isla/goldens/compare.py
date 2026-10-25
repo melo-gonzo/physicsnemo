@@ -50,8 +50,15 @@ from test.experimental.models.isla.goldens import record as R
 
 PASS, FAIL, INCONCLUSIVE = 0, 1, 2
 STATUS = {PASS: "PASS", FAIL: "FAIL", INCONCLUSIVE: "INCONCLUSIVE"}
-#: The draw's weights on CUDA: their float64 sums wobble by a few ulps run to run.
+#: DRAW-EXACT: the draw's weights on CUDA: their float64 sums wobble by a few ulps run
+#: to run (and a kept cell can flip, read INCONCLUSIVE below); DRAW-EXACT makes both
+#: bitwise.
 WEIGHTS_RTOL = 1e-15
+#: A family passes when the median cross-side distance is at most this many times the
+#: largest within-side distance: five runs a side estimate the family's spread from
+#: below (cross/within ratios up to 1.2 between two records of the same code, job
+#: 379129, query_chunks' reference read).
+FAMILY_SLACK = 2.0
 
 
 def _maxdiff(a: torch.Tensor, b: torch.Tensor) -> float:
@@ -142,7 +149,7 @@ def compare_case(a: dict, b: dict, key: str) -> tuple[int, list]:
             )
         elif family:
             d, spread = _family(a, b, key, n)
-            ok = d <= spread
+            ok = d <= FAMILY_SLACK * spread
             rows.append(
                 (
                     n,

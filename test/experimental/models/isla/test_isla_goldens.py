@@ -205,7 +205,10 @@ def test_the_golden_holds_every_case_and_its_manifest():
 def test_cpu_matches_the_golden(case, variant, golden):
     """Each CPU variant of the case (the reference, and the fast build and walk, which
     claim the reference's results bitwise) against the committed golden: inputs and
-    integers exact, floats within :data:`CPU_RTOL` of ``max|golden|``."""
+    integers exact, floats within :data:`CPU_RTOL` of ``max|golden|``. The G-SAMP draws
+    and G-MODEL/G-PARTS' dtt_draw pin today's draw (DRAW-EXACT); G-GEO's tie sets keep
+    off the tie selections (GEO-TIEORDER). Regenerate: ``python -m
+    test.experimental.models.isla.goldens.record --regenerate goldens_v1.pt``."""
     bad, worst = check(
         golden["cases"][case.id],
         C.run_case(case, "cpu", variant),
@@ -222,7 +225,9 @@ def test_cuda_matches_the_cpu_golden(case, variant, golden):
     Triton and fused kernels; and the references on CUDA) against the committed CPU
     golden: inputs and integers exact, floats within :data:`CUDA_RTOL` of
     ``max|golden|`` (or the case's own stated bound, ``Case.cuda_tol``); the draw's
-    kept cells exact and its weights at the float64 bound."""
+    kept cells exact and its weights at the float64 bound (DRAW-EXACT: today's draw).
+    Regenerate: ``python -m test.experimental.models.isla.goldens.record --regenerate
+    goldens_v1.pt``."""
     why = C.available(case, "cuda")
     if why:
         pytest.skip(why)
@@ -247,7 +252,8 @@ def test_the_draw_goldens_keep_off_the_cell_boundaries(spec):
     """No recorded draw has a hit within :data:`cases.DRAW_MARGIN` of a boundary
     between two cells on the line: the kept cells are the same with the start moved
     by that much either way (every hit moves with it). A draw whose golden held a hit
-    there would move with the rounding of the line's sums, not with the sampling."""
+    there would move with the rounding of the line's sums, not with the sampling
+    (DRAW-EXACT: its exact sums move them by that rounding)."""
     _, measures, centroids, budget, start = spec
     draw = C.target("sample_boundary_cells")
     kept = [
@@ -270,7 +276,9 @@ def test_the_ab_harness_passes_a_rerun_and_catches_a_one_ulp_change(tmp_path):
     """Recorded twice in one process on CPU (one thread), the harness reads PASS; the
     records survive a save and load; one output moved by one ulp reads FAIL, a missing
     case FAIL, a flipped kept cell on CUDA INCONCLUSIVE (on CPU FAIL), weights moved
-    within 1e-15 relative on CUDA PASS, and a declared family within its spread PASS."""
+    within 1e-15 relative on CUDA PASS, and a declared family within its spread PASS.
+    DRAW-EXACT: the kept and weights rules read today's CUDA draw, which is not
+    run-to-run bitwise."""
     threads = torch.get_num_threads()
     torch.set_num_threads(1)
     try:

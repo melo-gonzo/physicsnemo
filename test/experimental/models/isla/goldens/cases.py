@@ -341,6 +341,9 @@ def _pps_run(inputs, device, variant):
     return {f"out.pi_{s}": fn(a, a.new_tensor(s)) for s in _PPS_SHARES}
 
 
+### DRAW-EXACT: pins today's inclusion probabilities (DRAW-EXACT sums their tails in a
+### fixed-order scan); regenerate:
+### python -m test.experimental.models.isla.goldens.record --regenerate goldens_v1.pt
 _case("G-SAMP", "pps_inclusion_probabilities", _pps_build, _pps_run)
 
 _DRAWS = {
@@ -383,7 +386,7 @@ def _draw_run(sizes, draws):
     return run
 
 
-#: How far every recorded draw's hits ``start + m`` keep from the cells' boundaries on
+#: DRAW-EXACT: how far every recorded draw's hits ``start + m`` keep from the cells' boundaries on
 #: the line (``test_the_draw_goldens_keep_off_the_cell_boundaries``): far above the
 #: float64 rounding of the line's sums (at most ``k`` ulps of ``k``, 5e-10 here), so a
 #: change of their summation order (DRAW-EXACT's exact sums, CUDA's scan) keeps the
@@ -420,6 +423,9 @@ def draw_specs() -> list[tuple]:
     return specs
 
 
+### DRAW-EXACT: these goldens pin today's draw (its kept cells and weights; on CUDA,
+### kept compared first and the weights at 1e-15, compare.py); regenerate:
+### python -m test.experimental.models.isla.goldens.record --regenerate goldens_v1.pt
 for _name, (_sizes, _d, _draws) in _DRAWS.items():
     _case(
         "G-SAMP",
@@ -1057,8 +1063,8 @@ _GEO_DROP = {
     ### The closest point's weights on slivers 1e-13 off their line are ill-posed
     ### (x86 and Grace differ by 3e-5 on the same inputs); d and the rest stay.
     "sliver_soup": ("out.search.weights",),
-    ### At a tie the reported cell, its weights and the gradients (taken through that
-    ### cell: a selection from the subdifferential) differ between x86, Grace and
+    ### GEO-TIEORDER: at a tie the reported cell, its weights and the gradients (taken
+    ### through that cell: a selection from the subdifferential) differ between x86, Grace and
     ### GB300 on the same inputs, and move under a one-ulp change of the vertices;
     ### d, u, the tie flag, its direction, the sign and the winding numbers stay.
     "box_ties_3d": (
@@ -1139,8 +1145,8 @@ def _geo_run(inputs, device, variant, drop=()):
     out["out.search.sign"] = torch.where(wall, 0, out["out.search.sign"])
     if "out.w" in out:
         out["out.w"] = torch.where(wall, 0, out["out.w"])
-    ### Where the closest point lies on a cell's edge or vertex (a weight within 16 eps
-    ### of the queries' dtype of 0), every cell that shares it is at the same distance:
+    ### GEO-TIEORDER: where the closest point lies on a cell's edge or vertex (a weight
+    ### within 16 eps of the queries' dtype of 0), every cell that shares it is at the same distance:
     ### the reported cell and its weights are a selection among them, which the search's
     ### order of exact distance ties decides (GEO-TIEORDER's T1 changes it; README.md,
     ### "Exclusions"). They are recorded as -1 and 0 there; d and u stay.
@@ -1766,24 +1772,48 @@ def _soup_cells(n, d, seed, offset=0.0):
     return verts, torch.arange(n * d).reshape(n, d)
 
 
-def _sphere_cells(subdivisions, radius=1.0):
+### The interior cases' bodies have no symmetry: the boundary's canonical frame (the
+### axes of its second moments, the signs of its third) orders the forest and the
+### draw, and a sphere's, a circle's or a cube's axes are degenerate, so the forest
+### then differs between platforms with the rounding of the eigensolve (measured in
+### job 379129: pair counts and outputs off by 1e-6 on Grace).
+
+
+def _body(x: torch.Tensor) -> torch.Tensor:
+    """A smooth, orientation-preserving deformation of the unit sphere (or circle)
+    into a lopsided body with distinct axes, off the origin (``+ - *`` only)."""
+    if x.shape[-1] == 2:
+        u, v = x[:, 0], x[:, 1]
+        return torch.stack([1.4 * u + 0.2 * v * v + 0.3, 0.8 * v + 0.1 * u - 0.2], -1)
+    u, v, w = x[:, 0], x[:, 1], x[:, 2]
+    return torch.stack(
+        [1.5 * u + 0.2 * v * v + 0.3, v + 0.1 * w - 0.2, 0.6 * w + 0.15 * u * u + 0.1],
+        -1,
+    )
+
+
+def _sphere_cells(subdivisions):
+    """An icosphere deformed by :func:`_body`, outward."""
     from physicsnemo.mesh.primitives.surfaces import sphere_icosahedral
 
-    m = sphere_icosahedral.load(radius=radius, subdivisions=subdivisions)
-    return _oriented(m.points.double(), m.cells, lambda x: x)
+    m = sphere_icosahedral.load(radius=1.0, subdivisions=subdivisions)
+    p, c = _oriented(m.points.double(), m.cells, lambda x: x)
+    return _body(p), c
 
 
 def _shell_cells(levels, half):
-    """The cube surface ``[-half, half]^3`` (``half`` a power of two), outward."""
+    """The box surface ``[-half_k, half_k]`` (each a multiple of 1/2), outward."""
     m = _cube(levels)
-    return m.points * (2 * half), m.cells
+    return m.points * (2 * torch.tensor(half, dtype=D)), m.cells
 
 
 def _circle_cells(n=48):
+    """A circle polyline deformed by :func:`_body`, outward."""
     from physicsnemo.mesh.primitives.curves import circle_2d
 
     m = circle_2d.load(n_points=n)
-    return _oriented(m.points.double(), m.cells, lambda x: x)
+    p, c = _oriented(m.points.double(), m.cells, lambda x: x)
+    return _body(p), c
 
 
 def _model_build(spec: _ModelSpec):
@@ -1811,7 +1841,8 @@ def _model_build(spec: _ModelSpec):
             )
         params = _params(model, spec.seed + 2, std=0.1)
         if model.kernel_reads is not None:
-            live(model, spec.seed + 3)
+            ### (in float64: a float32 randn draws different values on x86 and Grace)
+            live(model.double(), spec.seed + 3)
             for n, p in model.named_parameters():
                 if n.startswith("kernel_reads.") and n.endswith(".out.weight"):
                     params[f"param.{n}"] = p.detach().double()
@@ -2055,6 +2086,9 @@ _MODEL_SPECS = {
         d=2,
     ),
     ### About 2,000 cells over two conditions, 512 tokens drawn (at the fixed start).
+    ### DRAW-EXACT: its G-MODEL and G-PARTS goldens pin today's draw (G-PARTS records
+    ### the kept cells and weights); regenerate:
+    ### python -m test.experimental.models.isla.goldens.record --regenerate goldens_v1.pt
     "dtt_draw": lambda dt: _ModelSpec(
         dict(
             **_MODEL_SMALL,
@@ -2064,7 +2098,10 @@ _MODEL_SPECS = {
             interior=True,
             n_boundary_tokens=512,
         ),
-        {"wall": lambda: _sphere_cells(3), "farfield": lambda: _shell_cells(3, 4.0)},
+        {
+            "wall": lambda: _sphere_cells(3),
+            "farfield": lambda: _shell_cells(3, (4.0, 3.0, 2.5)),
+        },
         dt,
         n_queries=60,
     ),
@@ -2082,15 +2119,21 @@ _MODEL_VARIANTS = {"cpu": ("reference",), "cuda": ("auto", "reference")}
 _MODEL_SAMPLES = {"grad.param.*": 4}
 #: The routings' gains and value projections (each slice block's ``assign`` and the
 #: head frame's) reach the loss through softmaxes over the slices whose terms nearly
-#: cancel: their gradients are 1e-5 to 1e-10 of the largest, and carry the rounding of
+#: cancel: their gradients are 1e-5 to 1e-11 of the largest, and carry the rounding of
 #: the terms. Measured between one, three and four threads (largest relative to their
-#: own largest element): 1.2e-11 in float64, 1.1e-2 in float32. Bounds: 1e-9 and
-#: 1e-1 (a sign or a term lost, not roundoff, in float32).
+#: own largest element): 1.1e-10 in float64, 4.2e-2 in float32. Bounds: 1e-8 in
+#: float64; not compared in float32, where they are mostly roundoff.
 _ROUTING_GRADS = ("grad.param.*assign.gain", "grad.param.*assign.v_proj.*")
 _MODEL_TOL = {
-    D: dict.fromkeys(_ROUTING_GRADS, 1e-9),
-    F: dict.fromkeys(_ROUTING_GRADS, 1e-1),
+    D: dict.fromkeys(_ROUTING_GRADS, 1e-8),
+    F: dict.fromkeys(_ROUTING_GRADS, None),
 }
+#: The scales' moments and factors are float64 sums of a float32 model's cell
+#: measures and fields, so they carry float32 rounding (CUDA's cell measures against
+#: the CPU's: 2e-9 relative, job 379129): the float32 bound there.
+_MODEL_TOL[F].update(
+    dict.fromkeys(("out.rms_moments.*", "out.scale_factor.*"), 1e-12 * 2**29)
+)
 #: On CUDA the reference read's node means, and the exact geometry's vertex
 #: gradient, accumulate by float atomics: ISLA-DTT's outputs and gradients are
 #: judged against their run-to-run family there.

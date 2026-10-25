@@ -420,6 +420,9 @@ def _forward_golden(config: str) -> dict:
 
 @pytest.mark.parametrize("config", list(CONFIGS))
 def test_isla_forward_non_regression(device, config):
+    """The outputs of ``CONFIGS[config]`` against ``isla_<config>_v1.pth``. Regenerate:
+    ``python -m test.experimental.models.isla.goldens.record --regenerate
+    isla_<config>_v1.pth``."""
     model = _instantiate_model(**CONFIGS[config]).to(device)
     inputs = _make_inputs(device, query=(config != "default"))
     with torch.no_grad():
@@ -441,7 +444,7 @@ V2_CONFIGS = {
     "dtt_f64": ("dtt", D),
     "rich_surface_f32": ("rich_surface", F),
     "dtt_2d_f64": ("dtt_2d", D),
-    "dtt_draw_f32": ("dtt_draw", F),
+    "dtt_draw_f32": ("dtt_draw", F),  # DRAW-EXACT: today's draw
 }
 #: Tolerances relative to each field's largest magnitude. CPU (reference kernels):
 #: float64 1e-12, which holds across BLAS builds, CPU architectures and thread counts
@@ -475,7 +478,10 @@ def _no_tf32():
 def test_isla_forward_non_regression_v2(device, config):
     """The outputs of each configuration of :data:`V2_CONFIGS` against
     ``isla_release_v2.pth`` (recorded on one CPU thread with the reference kernels),
-    at :data:`V2_TOL`."""
+    at :data:`V2_TOL`. ``dtt_draw_f32`` pins today's draw of 512 of its cells
+    (DRAW-EXACT; its hits keep 1e-9 off the cells' boundaries, test_isla_goldens).
+    Regenerate: ``python -m test.experimental.models.isla.goldens.record --regenerate
+    isla_release_v2.pth``."""
     tf32 = _no_tf32()
     try:
         out = _v2_outputs(config, device)
@@ -522,7 +528,9 @@ def test_isla_query_chunks_non_regression(device):
     ranges of ISLA-DTT's points, its pair counts (exact), and every parameter's
     gradient after the chunks' backward passes and ``chunks.backward()`` (each as a
     projection on a fixed random direction, within the float64 bound of
-    :data:`V2_TOL` of the largest sum of magnitudes of a projection's terms)."""
+    :data:`V2_TOL` of the largest sum of magnitudes of a projection's terms).
+    Regenerate: ``python -m test.experimental.models.isla.goldens.record --regenerate
+    isla_release_v2.pth``."""
     tf32 = _no_tf32()
     try:
         out = _chunks_golden(device)
@@ -610,7 +618,9 @@ def test_isla_backbone_matches_the_recorded_backbone():
     routine, which the Mesh wrapper calls. Compared at float32 tolerance: the same
     graph gives bitwise-identical values on the recording architecture and differs
     at the last bits across CPU architectures (BLAS reduction order), which is not a
-    property of the model."""
+    property of the model. Regenerate (only when the backbone changes by decision):
+    ``python -m test.experimental.models.isla.goldens.record --regenerate
+    isla_backbone_v1.pth``."""
     ref = _load_reference("isla_backbone_v1.pth", "default")
     torch.testing.assert_close(
         _backbone_golden(), ref["norm_out"], atol=1e-6, rtol=1e-5
@@ -657,7 +667,9 @@ def test_isla_reference_checkpoint_matches_golden(device, file_name):
     """A committed reference checkpoint (version 0.13.0) loads through
     ``Module.from_checkpoint`` without a warning, as the model of its configuration
     (every public attribute but the execution choices, which a loaded model starts at
-    "auto"), and keeps its outputs (``<name>_checkpoint_output_v1.pth``)."""
+    "auto"), and keeps its outputs (``<name>_checkpoint_output_v1.pth``). Regenerate
+    (at a version bump): ``python -m test.experimental.models.isla.goldens.record
+    --regenerate <name>_v1.mdlus <name>_checkpoint_output_v1.pth``."""
     path = DATA_DIR / file_name
     if not path.exists():
         pytest.fail(f"{path} is missing: regenerate it with `{REGENERATE} {file_name}`")

@@ -75,10 +75,13 @@ How compare.py reads the records:
     CUDA, so a kept cell can flip when a hit lands on a cell boundary. Rerun; never
     read it as a pass. (On CPU the draw is deterministic and a kept difference fails.)
   - the draw's Horvitz-Thompson weights compare at 1e-15 relative;
+  - (DRAW-EXACT: the two rules above read today's CUDA draw, which is not
+    run-to-run bitwise; once DRAW-EXACT makes it bitwise they can be dropped.)
   - the outputs a case declares as its `family` (float atomics: the reference read's
     node means, the Triton segment softmax's `dk`/`dv`, the exact geometry's vertex
-    gradient) must lie within the run-to-run spread of the 5 repeats of either side
-    (a family that repeats bitwise demands bitwise).
+    gradient) must lie within twice the run-to-run spread of the 5 repeats of either
+    side (`compare.FAMILY_SLACK`: five runs estimate the spread from below; a family
+    that repeats bitwise demands bitwise).
 - A tensor that varies between the repeats of one side without being declared a
   family fails: the change made something non-deterministic.
 
