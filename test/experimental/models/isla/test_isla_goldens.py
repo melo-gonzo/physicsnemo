@@ -241,6 +241,23 @@ def test_cuda_matches_the_cpu_golden(case, variant, golden):
     assert not bad, "\n".join(bad)
 
 
+@pytest.mark.parametrize("spec", C.draw_specs(), ids=lambda s: s[0])
+def test_the_draw_goldens_keep_off_the_cell_boundaries(spec):
+    """No recorded draw has a hit within :data:`cases.DRAW_MARGIN` of a boundary
+    between two cells on the line: the kept cells are the same with the start moved
+    by that much either way (every hit moves with it). A draw whose golden held a hit
+    there would move with the rounding of the line's sums, not with the sampling."""
+    _, measures, centroids, budget, start = spec
+    draw = C.target("sample_boundary_cells")
+    kept = [
+        draw(measures, centroids, budget, torch.tensor(start + s, dtype=torch.float64))[
+            0
+        ]
+        for s in (0.0, -C.DRAW_MARGIN, C.DRAW_MARGIN)
+    ]
+    assert torch.equal(kept[0], kept[1]) and torch.equal(kept[0], kept[2])
+
+
 # --------------------------------------------------------------------------- the A/B harness
 
 

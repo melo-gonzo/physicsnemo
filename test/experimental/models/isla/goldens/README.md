@@ -119,6 +119,29 @@ bitwise.
   subdifferential), differ between x86, Grace and GB300 on the same inputs and move
   under a one-ulp change of the vertices. They are not recorded; `d`, `u`, the tie
   flag and direction, the sign and the winding numbers are.
+- **The closest cell at an edge or a vertex.** Where the closest point lies on a
+  cell's edge or vertex (a weight within 16 eps of the queries' dtype of 0), every
+  cell sharing it is at the same distance, and the reported cell and weights are the
+  search's choice among them: GEO-TIEORDER's T1 (3a1a15d48) changes that choice at
+  13 of the G-GEO cases, and nothing else in them beyond the golden's bounds. The
+  cell is recorded as -1 and the weights as 0 there.
+- **On-wall `u` at ties.** The on-wall queries at the vertices and edges of the
+  sphere, circle, NACA section and the boxes' edges and corners are ties between
+  cells whose normals are far apart; no golden holds an on-wall `u` at a tie of
+  near-coplanar cells (above). GEO-TIEORDER at 3a1a15d48 leaves every recorded `u`,
+  `d` and gradient within the golden's bounds (CPU, run against this golden). If a
+  later change of the on-wall rule moves them, regenerate with
+  `python -m test.experimental.models.isla.goldens.record --regenerate` in its commit;
+  reason: the on-wall direction at a tie is defined by that rule.
+- **The draw's hits off the cells' boundaries.** Systematic sampling keeps the cell
+  whose interval on the line holds each hit `start + m`; a hit within rounding of a
+  boundary between two intervals would move with the summation order of the line
+  (CUDA's scan, DRAW-EXACT's exact sums). Every recorded draw keeps its hits at least
+  `cases.DRAW_MARGIN` = 1e-9 from every boundary (the float64 rounding of the line is
+  at most 5e-10 here), checked by `test_the_draw_goldens_keep_off_the_cell_boundaries`
+  (the kept cells are the same with the start moved by 1e-9 either way). The smallest
+  margins measured: 5.9e-5 (`sample_boundary_cells_2d`, budget 128), 1.4e-4 (3-D).
+  DRAW-EXACT at 02d5451fd passes every CPU golden unchanged.
 - **The 3-D winding numbers' values** follow the tree's float32 opening decisions,
   which differ between x86, Grace and GB300 on the same inputs (by up to 4.4e-3 near
   the sphere, within the far-field approximation). The CI golden compares their

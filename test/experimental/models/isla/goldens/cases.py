@@ -367,6 +367,26 @@ def _draw_run(sizes, draws):
     return run
 
 
+#: How far every recorded draw's hits ``start + m`` keep from the cells' boundaries on
+#: the line (``test_the_draw_goldens_keep_off_the_cell_boundaries``): far above the
+#: float64 rounding of the line's sums (at most ``k`` ulps of ``k``, 5e-10 here), so a
+#: change of their summation order (DRAW-EXACT's exact sums, CUDA's scan) keeps the
+#: same cells. Measured smallest margins: 5.9e-5 (G-SAMP), see README.md.
+DRAW_MARGIN = 1e-9
+
+
+def draw_specs() -> list[tuple]:
+    """Every draw a golden records: ``(name, measures, centroids, budget, start)``,
+    the inputs of ``sample_boundary_cells`` (float64, on the CPU)."""
+    specs = []
+    for name, (sizes, d, draws) in _DRAWS.items():
+        x = _draw_build(sizes, d)()
+        m = [x[f"in.measures_{i}"] for i in range(len(sizes))]
+        c = [x[f"in.centroids_{i}"] for i in range(len(sizes))]
+        specs += [(f"{name}_{b}_{s}", m, c, b, s) for b, s in draws]
+    return specs
+
+
 for _name, (_sizes, _d, _draws) in _DRAWS.items():
     _case(
         "G-SAMP",
@@ -1086,6 +1106,15 @@ def _geo_run(inputs, device, variant, drop=()):
     out["out.search.sign"] = torch.where(wall, 0, out["out.search.sign"])
     if "out.w" in out:
         out["out.w"] = torch.where(wall, 0, out["out.w"])
+    ### Where the closest point lies on a cell's edge or vertex (a weight within 16 eps
+    ### of the queries' dtype of 0), every cell that shares it is at the same distance:
+    ### the reported cell and its weights are a selection among them, which the search's
+    ### order of exact distance ties decides (GEO-TIEORDER's T1 changes it; README.md,
+    ### "Exclusions"). They are recorded as -1 and 0 there; d and u stay.
+    weights = out["out.search.weights"]
+    edge = weights.min(-1).values <= 16 * torch.finfo(x["in.queries"].dtype).eps
+    out["out.search.cell"] = torch.where(edge, -1, out["out.search.cell"])
+    out["out.search.weights"] = torch.where(edge[:, None], 0.0, weights)
     return {k: v for k, v in out.items() if k not in drop}
 
 
