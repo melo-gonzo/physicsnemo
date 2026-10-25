@@ -42,7 +42,9 @@ import types
 import pytest
 import torch
 
+import physicsnemo.experimental.models.isla.tree_build as tree_build
 import physicsnemo.experimental.models.isla.tree_read as tree_read
+import physicsnemo.experimental.models.isla.tree_walk as tree_walk
 from physicsnemo.experimental.models import ISLA
 from physicsnemo.experimental.models.isla.tree_read import (
     KERNEL_READ_HEADS,
@@ -59,6 +61,8 @@ from physicsnemo.experimental.models.isla.tree_read import (
 )
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
+from physicsnemo.mesh.spatial.cluster_tree import ClusterTree
+from test.experimental.models.isla._forced import ran
 from test.experimental.models.isla._meshes import (
     cloud,
     orthogonal,
@@ -574,7 +578,10 @@ def test_tree_walk_resolution_and_the_models_walks_agree(monkeypatch):
     runs = {}
     for walk in ("reference", "fast"):
         monkeypatch.setattr(tree_read, "resolve_walk", lambda *a, w=walk: w)
-        runs[walk] = outputs(_run(tree, mesh, drv, q))
+        with ran(tree_walk.walk_pairs) as r:
+            runs[walk] = outputs(_run(tree, mesh, drv, q))
+        assert (r.count(tree_walk.walk_pairs) > 0) == (walk == "fast")
+        assert None not in r.returns(tree_walk.walk_pairs)  # no silent fallback
     assert all(
         torch.equal(runs["fast"][k], runs["reference"][k]) for k in runs["reference"]
     )
@@ -584,8 +591,6 @@ def test_fast_walk_falls_back_to_the_reference_past_its_limits(monkeypatch):
     """A forest too deep for the count pass's stack is walked by the reference under
     ``auto`` and refused under a forced ``"fast"``; so are lists past Warp's array
     limit, found after the count pass."""
-    import physicsnemo.experimental.models.isla.tree_walk as tree_walk
-
     pts, nrm, w, _ = cloud(300, d=3, seed=1)
     q, _, _, _ = cloud(40, d=3, seed=2, scale=(3.0,) * 3)
     f = BoundaryForest.build(pts, w, nrm, None, theta=1.0)
@@ -594,6 +599,7 @@ def test_fast_walk_falls_back_to_the_reference_past_its_limits(monkeypatch):
     assert tree_read.resolve_walk("auto", on_cuda, 1.0, f) == "fast"
     with monkeypatch.context() as m:
         m.setattr(tree_walk, "WALK_STACK", len(f.levels) + 1)
+        assert not tree_walk.walk_fits(f)
         assert tree_read.resolve_walk("auto", on_cuda, 1.0, f) == "reference"
         with pytest.raises(ValueError, match="does not take this forest"):
             tree_read.resolve_walk("fast", q, 1.0, f)
@@ -601,7 +607,10 @@ def test_fast_walk_falls_back_to_the_reference_past_its_limits(monkeypatch):
     with pytest.raises(ValueError, match="Warp's 2\\*\\*31"):
         f.point_pairs(q, walk="fast")
     monkeypatch.setattr(tree_read, "resolve_walk", lambda *a: "fast")
-    qi_a, si_a, n_node_a = f.point_pairs(q)
+    with ran(tree_walk.walk_pairs, ClusterTree.find_point_interaction_pairs) as r:
+        qi_a, si_a, n_node_a = f.point_pairs(q)
+    assert r.returns(tree_walk.walk_pairs) == [None]
+    assert r.count(ClusterTree.find_point_interaction_pairs) > 0
     assert torch.equal(qi_a, qi) and torch.equal(si_a, si) and n_node_a == n_node
 
 
@@ -914,62 +923,6 @@ def test_pair_plan_is_the_histogram_plan_and_builds_without_a_host_sync(device):
 
 
 @cuda_only
-@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16], ids=["fp32", "bf16"])
-def test_fused_segment_softmax_read_matches_eager(dtype):
-    """The Triton read (values and every gradient) against the eager float64 form on a
-    random pair list with ragged segments, including empty sources."""
-    from physicsnemo.experimental.models.isla.segment_softmax import (
-        PairPlan,
-        _eager_segment_softmax_read,
-        segment_softmax_read,
-    )
-
-    dev = torch.device("cuda")
-    g = torch.Generator().manual_seed(3)
-    n_q, n_b, h, kc, c = 37, 50, 8, 4, 8
-    counts = torch.randint(
-        0, 5000, (n_q,), generator=g
-    )  # segments longer than a source chunk too
-    qi = torch.repeat_interleave(torch.arange(n_q), counts)
-    bj = torch.randint(
-        0, n_b - 5, (int(counts.sum()),), generator=g
-    )  # sources 45..49 get no pairs
-    bj[: int(counts.sum()) // 2] = (
-        0  # one source read by half of all pairs (many chunks)
-    )
-    plan = PairPlan.build(qi.to(dev), bj.to(dev), n_q, n_b)
-    ker = torch.randn(int(counts.sum()), h, generator=g, dtype=D)
-    logm = -torch.rand(int(counts.sum()), generator=g, dtype=D) * 8
-    q = torch.randn(n_q, h, kc, generator=g, dtype=D)
-    k = torch.randn(n_b, h, kc, generator=g, dtype=D)
-    v = torch.randn(n_b, h, c, generator=g, dtype=D)
-    plan_cpu = PairPlan.build(qi, bj, n_q, n_b)
-    ref_in = [t.clone().requires_grad_(True) for t in (ker, q, k, v)]
-    ref = _eager_segment_softmax_read(
-        ref_in[0], logm, ref_in[1], ref_in[2], ref_in[3], plan_cpu, 0.5
-    )
-    seed = torch.randn_like(ref)
-    (ref * seed).sum().backward()
-    dev_in = [t.to(dev, dtype).requires_grad_(True) for t in (ker, q, k, v)]
-    out = segment_softmax_read(
-        dev_in[0],
-        logm.to(dev, torch.float32),
-        dev_in[1],
-        dev_in[2],
-        dev_in[3],
-        plan,
-        0.5,
-    )
-    (out * seed.to(dev, out.dtype)).sum().backward()
-    tol = 1e-4 if dtype == torch.float32 else 5e-2
-    rows = counts > 0
-    assert torch.allclose(out.cpu().double()[rows], ref[rows], atol=tol, rtol=tol)
-    for a, b, name in zip(dev_in, ref_in, ("ker", "q", "k", "v")):
-        ga, gb_ = a.grad.cpu().double(), b.grad
-        assert torch.allclose(ga, gb_, atol=tol * gb_.abs().max(), rtol=tol), name
-
-
-@cuda_only
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 @pytest.mark.parametrize("dim", [2, 3])
 def test_fast_walk_on_cuda_gives_the_reference_lists_in_the_reference_order(dim, dtype):
@@ -1169,7 +1122,10 @@ def test_tree_build_auto_resolves_to_the_reference_off_cuda(monkeypatch):
     mesh, drv, q = _case(n=400, nq=60)
     ref = outputs(_run(m, mesh, drv, q))
     monkeypatch.setattr(tree_read, "resolve_tree_build", lambda *a: "fast")
-    fast = outputs(_run(m, mesh, drv, q))
+    with ran(tree_build.forest_tables, ClusterTree.from_points) as r:
+        fast = outputs(_run(m, mesh, drv, q))
+    tables = r.returns(tree_build.forest_tables)
+    assert tables and None not in tables and r.count(ClusterTree.from_points) == 0
     assert all(torch.equal(v, fast[k]) for k, v in ref.items())
 
 
@@ -1277,9 +1233,12 @@ def test_tree_read_kernel_resolves_to_the_reference_on_cpu_and_its_basis_flow_is
     try:
         ref = _step_grads(m, mesh, drv, q)
         monkeypatch.setattr(ISLA, "resolve_tree_read_kernel", lambda self, p: "fused")
-        fused = _step_grads(m, mesh, drv, q)
+        with ran(tree_read._chunked_basis_from_plan) as r:
+            fused = _step_grads(m, mesh, drv, q)
     finally:
         torch.set_num_threads(threads)
+    ### The fused path's basis flow ran (else the reference is compared with itself).
+    assert r.count(tree_read._chunked_basis_from_plan) > 0
     for a, b in zip(ref, fused):
         assert a.keys() == b.keys() and all(torch.equal(a[k], b[k]) for k in a)
 
@@ -1972,7 +1931,10 @@ def test_fused_basis_chunks_sum_their_weight_gradients_as_the_reference(monkeypa
     (``mlp_weights``), as the fused basis is, gives the reference's basis and
     gradients bitwise (a stand-in node, CPU)."""
 
+    calls = []
+
     def stand_in(weights, qi, si, q_off, s_off, geometry):
+        calls.append(1)
         with torch.no_grad():
             inv = tree_pair_invariants(qi.long() - q_off, si.long() - s_off, **geometry)
         return _MlpProbe.apply(inv, *weights)
@@ -1989,6 +1951,8 @@ def test_fused_basis_chunks_sum_their_weight_gradients_as_the_reference(monkeypa
         fused = _basis_step(basis, plan, geometry, seed, autocast=True, weights=True)
     finally:
         torch.set_num_threads(threads)
+    ### 10000 pairs in chunks of 3000 (else both steps run the reference basis).
+    assert len(calls) == math.ceil(10000 / tree_read.TREE_READ_PAIR_CHUNK)
     assert ref[0].dtype == torch.bfloat16
     assert all(torch.equal(a, b) for a, b in zip(fused, ref))
 

@@ -30,6 +30,7 @@ from physicsnemo.experimental.models.isla.geometry import exact_boundary_geometr
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.geometry._cell_normals import compute_cell_normals
 from physicsnemo.mesh.primitives.surfaces import cube_surface
+from test.experimental.models.isla._forced import ran
 from test.experimental.models.isla._meshes import orthogonal, outputs, transform
 from test.experimental.models.isla.test_isla_geometry_thin import (
     _capped_cube,
@@ -40,9 +41,12 @@ from test.experimental.models.isla.test_isla_geometry_thin import (
 from test.experimental.models.isla.test_isla_interior_geometry import (
     _box_ties,
     _box_wall,
+    _circle,
     _finned_cube,
     _interior,
+    _naca,
     _near_wall,
+    _polygon,
     _sphere,
     _torus,
 )
@@ -59,7 +63,9 @@ _DEVICES = [
 
 def _cases():
     """(name, surface, queries), float64: closed, open, folded, repeated surfaces and
-    a soup, with on-wall, tied and far queries."""
+    a soup, with on-wall, tied and far queries; in 3-D, then in 2-D (a NACA section
+    with its sharp trailing edge, a square's ties and walls in a generic pose, a
+    circle's vertices and edge midpoints on the wall, a square with a folded fin)."""
     g = torch.Generator().manual_seed(0)
     sphere = _sphere(3)
     edge_mid = sphere.points[sphere.cells[:, :2]].mean(1)
@@ -112,6 +118,58 @@ def _cases():
         [0.0, 0.0, 1e-3], dtype=D
     )
     yield "near-duplicate normals", Mesh(points=bumped, cells=flat.cells), q
+    naca = _polygon(_naca(65))
+    yield (
+        "2d naca",
+        naca,
+        torch.cat(
+            [
+                torch.rand(1500, 2, dtype=D, generator=g)
+                * torch.tensor([1.6, 0.6], dtype=D)
+                - torch.tensor([0.3, 0.3], dtype=D),
+                naca.points,
+                naca.cell_centroids,
+            ]
+        ),
+    )
+    R2, t2 = orthogonal(2, 7), torch.tensor([1.0, 2.0], dtype=D) / 3
+    for name, (mesh, q) in (
+        ("2d box ties", _box_ties(2)[:2]),
+        ("2d box wall", _box_wall(2)[:2]),
+    ):
+        yield name, transform(mesh, R2, t2), q @ R2.T + t2
+    circle = _circle(48)
+    yield (
+        "2d circle on the wall",
+        circle,
+        torch.cat(
+            [circle.points, circle.cell_centroids, _near_wall(2, 500, 5, band=0.3)]
+        ),
+    )
+    square = _polygon(
+        torch.tensor([[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]], dtype=D)
+    )
+    fin = torch.tensor([[0.5, 0.0], [1.5, 0.0]], dtype=D)
+    sheet = torch.tensor([[4, 5]])
+    folded = Mesh(
+        points=torch.cat([square.points, fin]),
+        cells=torch.cat([square.cells, sheet, sheet.flip(-1)]),
+    )
+    off = torch.tensor([1e-4, 1e-2, 0.1], dtype=D)[
+        torch.randint(3, (600,), generator=g)
+    ]
+    side = torch.where(torch.rand(600, dtype=D, generator=g) < 0.5, 1.0, -1.0)
+    along = 0.6 + 0.8 * torch.rand(600, dtype=D, generator=g)
+    yield (
+        "2d folded fin",
+        folded,
+        torch.cat(
+            [
+                torch.stack([along, side * off], -1),
+                torch.rand(600, 2, dtype=D, generator=g) * 2.4 - 0.9,
+            ]
+        ),
+    )
 
 
 def _run(kernel, q, points, cells, monkeypatch):
@@ -137,8 +195,15 @@ def _run(kernel, q, points, cells, monkeypatch):
         seen["w"] = tree_w(*args)
         return seen["w"]
 
+    segment_w = geometry._segment_winding_numbers
+
+    def spy_segment_w(*args):
+        seen["w"] = segment_w(*args)
+        return seen["w"]
+
     monkeypatch.setattr(geometry, "_winding_sign", spy_sign)
     monkeypatch.setattr(geometry, "_tree_winding_numbers", spy_tree_w)
+    monkeypatch.setattr(geometry, "_segment_winding_numbers", spy_segment_w)
     q, points = q.clone().requires_grad_(), points.clone().requires_grad_()
     d, u = exact_boundary_geometry(q, points, cells, kernel=kernel)
     (
@@ -377,7 +442,10 @@ def test_guard_kernel_without_guarded_pairs(monkeypatch):
     q = (1e2 * torch.randn(300, 3, dtype=D, generator=g)).cuda()
     s = torch.tensor([[0.0, 0, 0], [1, 0, 0], [0, 1, 0]], dtype=D).expand(300, 3, 3)
     s = s.contiguous().cuda()
-    ref = geometry._closest_weights(q, s)
+    ### (the premise, read where the torch code runs: no pair takes the accurate point)
+    with ran(geometry._accurate_weights) as r:
+        ref = geometry._closest_weights(q, s)
+    assert r.count(geometry._accurate_weights) == 0
 
     def unguarded(*args):
         raise AssertionError("a guarded pair")

@@ -193,6 +193,34 @@ def test_one_compiled_graph_for_every_cell_count():
         torch.testing.assert_close(out, ref, atol=1e-4, rtol=1e-4)
 
 
+def test_the_compiled_draw_runs_its_sums_as_the_opaque_scan():
+    """The draw traced with one graph (the graph Dynamo hands the backend, before
+    Inductor) runs its sums as the custom op ``physicsnemo::isla_cumsum`` and has no
+    cumsum of its own: the op keeps Inductor's split scan, whose kernel failed on
+    GB300 at full resolution under the recipe's max-autotune compile, out of the
+    compiled draw. This guards that fix on any device; test_isla_compile's
+    max-autotune test runs the full resolution on CUDA.
+
+    DRAW-EXACT: the 0.14.0 draw keeps the op (a fixed-order scan for floats, ATen's
+    for its int64 line), so this guard stays as it is."""
+    graphs = []
+
+    def capture(gm, example_inputs):
+        graphs.append(gm)
+        return gm.forward
+
+    torch._dynamo.reset()
+    compiled = torch.compile(
+        sample_boundary_cells, fullgraph=True, dynamic=True, backend=capture
+    )
+    measures, centroids = _conditions([40, 71])
+    kept, _ = compiled(measures, centroids, 60, torch.tensor(0.3, dtype=D))
+    assert kept.shape == (60,) and len(graphs) == 1
+    nodes = graphs[0].graph.nodes
+    scans = [n.target for n in nodes if "cumsum" in str(n.target)]
+    assert scans and set(scans) == {torch.ops.physicsnemo.isla_cumsum.default}, scans
+
+
 def test_the_length_unit_is_the_full_boundary_s_for_every_draw():
     """An interior model without declared scales takes its length unit from every
     cell of the full-resolution boundary before the draw: two training draws of 60
