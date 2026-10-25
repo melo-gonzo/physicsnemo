@@ -313,8 +313,13 @@ def test_the_interior_model_repeats_bitwise_on_cuda(budget):
     """One training step of the interior model on CUDA in float32, every kernel at
     ``auto`` (the fused geometry region and the fused tree read), from the same seed,
     three times: the outputs and every parameter gradient are bitwise the same, with
-    every cell kept and with the draw subsampling (its float64 weights keep the same
-    cells here). The surface model's run-twice baseline is test_isla_determinism.py's."""
+    every cell kept and with the draw subsampling. The surface model's run-twice
+    baseline is test_isla_determinism.py's.
+
+    DRAW-EXACT: this pins today's run-to-run behaviour of the draw on CUDA. Its float64
+    weights can differ by a few ulps run to run (CUDA's cumsum), which the cast to the
+    float32 token measures absorbs in this case (and no kept cell flips); the exact
+    draw makes the weights themselves bitwise."""
     pytest.importorskip("triton")
     m, mesh, drv, q = _float32_case("cuda", budget)
     m.train()

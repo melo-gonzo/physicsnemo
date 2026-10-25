@@ -496,6 +496,7 @@ def test_on_wall_queries_take_the_least_norm_normal(dim):
             0, mesh.cells.reshape(-1), n.repeat_interleave(2, 0)
         )
         assert torch.allclose(u, 0.5 * at, atol=1e-15, rtol=0)
+        ### GEO-TIEORDER: pins the on-wall u at the vertices (a tie of two segments).
         ### relative on purpose (the default rtol 1e-5): circle_2d places its
         ### vertices in float32, so the segments' angle is pi / 64 only to about 1e-8
         ### relative (measured 2e-8), which is the mesh and not the geometry's roundoff
