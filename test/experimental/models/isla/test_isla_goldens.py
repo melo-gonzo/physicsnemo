@@ -17,8 +17,9 @@
 """Committed characterization goldens of ISLA's modules (the regression guard).
 
 Every case of ``goldens/cases.py`` (G-FRAME, G-SAMP, G-FOREST, G-WALK, G-SEG, G-GEO,
-G-READ, G-BLOCKS, G-HEADS) is run here and compared with ``data/goldens_v1.pt``,
-which was recorded on one CPU (its manifest ``data/goldens_v1.json`` names it) and is
+G-READ, G-BLOCKS, G-HEADS, G-MODEL, G-PARTS) is run here and compared with
+``data/goldens_v1.pt``, which was recorded on one CPU (its manifest
+``data/goldens_v1.json`` names it) and is
 written only by ``python -m test.experimental.models.isla.goldens.record
 --regenerate``; a missing golden fails. The reading, per tensor:
 
@@ -96,7 +97,7 @@ def _float_failures(name, entry, t, rtol) -> list[str]:
             f"{name}: {int((~finite).sum())} non-finite elements, golden {entry['nonfinite']}"
         )
     ref = torch.tensor(entry["samples"], dtype=torch.float64)
-    got = x[R.sample_index(n)]
+    got = x[R.sample_index(n, len(ref))]
     same_nan = ref.isnan() == got.isnan()
     err = torch.where(
         ref.isfinite() & got.isfinite(),
@@ -171,7 +172,7 @@ def check(
         bad += _float_failures(name, entry, t, tol)
         if entry["scale"] > 0 and t.numel():
             ref = torch.tensor(entry["samples"], dtype=torch.float64)
-            got = t.reshape(-1).double()[R.sample_index(t.numel())]
+            got = t.reshape(-1).double()[R.sample_index(t.numel(), len(ref))]
             ok = ref.isfinite() & got.isfinite()
             diff = (got - ref).abs()[ok]
             rel = (float(diff.max()) if diff.numel() else 0.0) / entry["scale"]

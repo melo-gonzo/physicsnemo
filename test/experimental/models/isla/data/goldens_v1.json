@@ -1,8 +1,8 @@
 {
  "format": 1,
- "commit": "28421516b869603b1a5c741ad1ff804bcacd169d",
+ "commit": "62d0c38f7b2666c153c077df75874a9bedbd2310",
  "model_code_modified": false,
- "date": "2026-10-25T02:59:26-04:00",
+ "date": "2026-10-25T03:11:45-04:00",
  "platform": {
   "python": "3.13.8",
   "torch": "2.13.0+cu130",
@@ -34,6 +34,6 @@
   "physicsnemo.experimental.models.isla.tree_walk": "b52839a5d9becc4a0b9513637f08dbcc"
  },
  "samples": 16,
- "cases": 72,
- "tensors": 2210
+ "cases": 90,
+ "tensors": 3260
 }

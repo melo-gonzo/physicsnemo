@@ -30,11 +30,22 @@ the tied, on-wall, thin and degenerate sets; `run_start`, `canonical_cells`,
 `_TreeKernelRead`, `fused_kernel_read`, the fused basis), G-BLOCKS (`_SliceBlock`
 forward and read, `_RoutingLogits`, `_softmax_over_points`, `_relational_invariants`,
 `_geo_region`, `fused_geo_region`), G-HEADS (`_isotropic_tensors`, `_levi_civita`,
-`_OutputLayout`, `_assemble_output`, `_pseudovectors`, `_polar_complement`).
-Every case records its inputs, outputs and the gradients of a fixed cotangent.
-
-Not here yet (they wait for ISLA 0.13.0's constructor): the model, `query_chunks`,
-`scales`, `inputs`, `_QueryTokens`.
+`_OutputLayout`, `_assemble_output`, `_pseudovectors`, `_polar_complement`), G-MODEL
+(`ISLA.forward` on small models, hidden 32, two layers, eight slices: a surface model; a
+rich surface model with boundary fields of rank 0 to 2 on two conditions, a rank-1
+field and a rank-0 global defining scales, outputs of rank 0 to 2 with odd ones of
+rank 1 and 2, units, an output constant and `output_stats`; ISLA-DTT, with its
+boundary reads live; ISLA-DTT in 2-D; ISLA-DTT drawing 512 tokens of about 2,000 cells
+over two conditions; `query_chunks` over three ranges; float64 and float32; every
+output and every parameter's gradient), G-PARTS (the same forward passes with spies on
+the model's parts: each `_SliceBlock`'s output, the boundary reads' updates, the head
+frame's `_RoutingLogits` prototypes and logits, `_QueryTokens`' input layer, and the
+results of `cell_second_moments`, `rms_pairwise_distance`, `soft_log_length`,
+`rms_moments` and `scale_factor` (the scales), `sample_boundary_cells` (kept cells and
+weights), `_pseudovectors` and `_assemble_output`, call by call).
+Every case records its inputs, outputs and the gradients of a fixed cotangent. The
+models' parameters are one flat input (`in.params`, one hash), and the golden keeps 4
+elements of each parameter's gradient (beside its summaries) to stay within budget.
 
 ## A/B: prove a change bitwise
 

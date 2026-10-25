@@ -97,6 +97,9 @@ TARGETS = {
     "assemble_output": f"{ISLA}.heads:_assemble_output",
     "pseudovectors": f"{ISLA}.heads:_pseudovectors",
     "polar_complement": f"{ISLA}.heads:_polar_complement",
+    # G-MODEL, G-PARTS (the spies patch the names the model module calls)
+    "ISLA": f"{ISLA}.model:ISLA",
+    "model_module": f"{ISLA}.model",
 }
 
 
@@ -118,7 +121,9 @@ class Case:
     a relative tolerance (of ``max|golden|``) against the golden that replaces the
     dtype's, on every device (each with its reason and measurement at the case);
     ``cuda_tol`` does so for the CUDA variants alone, ``None`` meaning not compared
-    on CUDA. ``requires`` lists what the CUDA variants need beyond CUDA."""
+    on CUDA. ``requires`` lists what the CUDA variants need beyond CUDA. ``samples``
+    maps fnmatch patterns of float outputs to the number of their elements the
+    committed golden stores, where fewer than the default keep it within its budget."""
 
     group: str
     name: str
@@ -133,6 +138,7 @@ class Case:
     tol: dict = field(default_factory=dict)
     cuda_tol: dict = field(default_factory=dict)
     requires: tuple = ()
+    samples: dict = field(default_factory=dict)
 
     @property
     def id(self) -> str:
@@ -140,6 +146,16 @@ class Case:
 
     def matches(self, patterns, name: str) -> bool:
         return any(fnmatch.fnmatchcase(name, p) for p in patterns)
+
+    def n_samples(self, name: str) -> int:
+        """How many elements of the float tensor ``name`` the committed golden stores
+        (``samples`` maps fnmatch patterns to fewer than the default)."""
+        from test.experimental.models.isla.goldens.record import SAMPLES
+
+        return next(
+            (k for p, k in self.samples.items() if fnmatch.fnmatchcase(name, p)),
+            SAMPLES,
+        )
 
 
 CASES: list[Case] = []
@@ -384,6 +400,23 @@ def draw_specs() -> list[tuple]:
         m = [x[f"in.measures_{i}"] for i in range(len(sizes))]
         c = [x[f"in.centroids_{i}"] for i in range(len(sizes))]
         specs += [(f"{name}_{b}_{s}", m, c, b, s) for b, s in draws]
+    ### The model's draw (G-MODEL's dtt_draw): its conditions in canonical order, the
+    ### draw's inputs from the float32 meshes, the evaluation start.
+    from physicsnemo.mesh import Mesh
+
+    spec = _MODEL_SPECS["dtt_draw"](F)
+    x = _model_build(spec)()
+    draw = [
+        target("draw_inputs")(
+            Mesh(points=x[f"in.{n}.points"].to(F), cells=x[f"in.{n}.cells"])
+        )
+        for n in sorted(spec.meshes)
+    ]
+    budget = spec.cfg["n_boundary_tokens"]
+    start = target("model_module").EVAL_START
+    specs.append(
+        ("model_dtt_draw", [a for a, _ in draw], [c for _, c in draw], budget, start)
+    )
     return specs
 
 
@@ -1659,6 +1692,425 @@ def _assemble_run(inputs, device, variant):
 
 
 _case("G-HEADS", "assemble", _assemble_build, _assemble_run)
+
+
+# --------------------------------------------------------------------------- G-MODEL, G-PARTS
+### The model end to end on small configurations (hidden 32, two layers, eight slices):
+### every output, and every parameter's gradient under a fixed cotangent (G-MODEL); and
+### the intermediate values of the same forward pass, recorded by spies on the model's
+### parts, so that a model-level difference is located at once (G-PARTS). Every
+### parameter is drawn at random (std 0.1; ISLA-DTT's boundary-read projections, zero
+### at construction, from ``_meshes.live``), the inputs from correctly rounded
+### operations or the mesh primitives (hashed), in evaluation mode (the draw's fixed
+### start).
+
+_MODEL_IO = dict(
+    output_schema={"p": {"rank": 0}, "v": {"rank": 1}},
+    boundary_schemas={"wall": {}},
+    global_schema={"g": {"rank": 1}},
+)
+_MODEL_SMALL = dict(hidden=32, n_layers=2, n_slices=8)
+#: A surface model with every kind of input and output: boundary fields of rank 0, 1
+#: and 2 on two conditions, a rank-1 field that defines the velocity scale (so the
+#: derived direction g joins the global one), a rank-0 global that defines a density,
+#: a dimensionless global, outputs of rank 0, 1 and 2 (symmetric and general), odd
+#: outputs of rank 1 and 2, units, an output constant, and output_stats.
+_RICH = dict(
+    output_schema={
+        "p": {"rank": 0, "units": {"U": 2, "rho": 1}},
+        "v": {"rank": 1, "units": {"U": 1}},
+        "tau": {"rank": 2, "symmetric": True, "units": {"U": 2, "rho": 1}},
+        "grad_v": {"rank": 2, "units": {"U": 1, "L": -1}},
+        "omega": {"rank": 1, "parity": "odd", "units": {"U": 1, "L": -1}},
+        "spin": {"rank": 2, "parity": "odd"},
+        "nut": {"rank": 0, "units": {"U": 1, "L": 1}, "scale": 1e-3},
+    },
+    boundary_schemas={
+        "wall": {
+            "trace": {"rank": 0},
+            "traction": {"rank": 1, "units": {"U": 1}, "defines": "U"},
+            "stress": {"rank": 2, "symmetric": True, "units": {"U": 2, "rho": 1}},
+        },
+        "outlet": {"p_out": {"rank": 0, "units": {"U": 2, "rho": 1}}},
+    },
+    global_schema={
+        "g": {"rank": 1},
+        "rho": {"rank": 0, "defines": "rho"},
+        "re": {"rank": 0},
+    },
+    output_stats={"p": {"mean": 0.3, "std": 2.0}, "omega": {"mean": 0.0, "std": 1.5}},
+)
+
+
+@dataclass(frozen=True)
+class _ModelSpec:
+    """One model case: the constructor's arguments, the boundary meshes (condition name
+    -> maker of ``(points, cells)`` in float64), the surface task's prediction
+    boundaries or the interior task's number of prediction points, and the dtype."""
+
+    cfg: dict
+    meshes: dict
+    dtype: torch.dtype = D
+    prediction_boundaries: tuple = ()
+    n_queries: int = 0
+    d: int = 3
+    seed: int = 60
+
+
+def _soup_cells(n, d, seed, offset=0.0):
+    """``n`` random simplices (a triangle soup in 3-D, segments in 2-D) about an
+    anisotropic cloud: each vertex its point plus a Gaussian offset of 0.15."""
+    pts, _, _, _ = _cloud(n, d=d, seed=seed)
+    corners = 0.15 * torch.randn(n, d, d, generator=_gen(seed + 1), dtype=D)
+    verts = (pts[:, None] + offset + corners).reshape(-1, d)
+    return verts, torch.arange(n * d).reshape(n, d)
+
+
+def _sphere_cells(subdivisions, radius=1.0):
+    from physicsnemo.mesh.primitives.surfaces import sphere_icosahedral
+
+    m = sphere_icosahedral.load(radius=radius, subdivisions=subdivisions)
+    return _oriented(m.points.double(), m.cells, lambda x: x)
+
+
+def _shell_cells(levels, half):
+    """The cube surface ``[-half, half]^3`` (``half`` a power of two), outward."""
+    m = _cube(levels)
+    return m.points * (2 * half), m.cells
+
+
+def _circle_cells(n=48):
+    from physicsnemo.mesh.primitives.curves import circle_2d
+
+    m = circle_2d.load(n_points=n)
+    return _oriented(m.points.double(), m.cells, lambda x: x)
+
+
+def _model_build(spec: _ModelSpec):
+    def build():
+        from test.experimental.models.isla._meshes import live
+
+        g = _gen(spec.seed)
+        x = {}
+        model = target("ISLA")(**spec.cfg)
+        schemas = model.boundary_schemas
+        for name, maker in spec.meshes.items():
+            p, c = maker()
+            x[f"in.{name}.points"], x[f"in.{name}.cells"] = p, c
+            for f, fs in schemas[name].items():
+                t = torch.randn(c.shape[0], *[spec.d] * fs.rank, generator=g, dtype=D)
+                x[f"in.{name}.{f}"] = t + t.transpose(-1, -2) if fs.symmetric else t
+        for f, fs in model.global_schema.items():
+            if fs.rank == 1:
+                x[f"in.global.{f}"] = _directions(g, spec.d)
+            else:
+                x[f"in.global.{f}"] = 1.0 + torch.rand((), generator=g, dtype=D)
+        if spec.n_queries:
+            x["in.queries"] = _near_wall(
+                spec.d, spec.n_queries, spec.seed + 1, 0.8, 2.0
+            )
+        params = _params(model, spec.seed + 2, std=0.1)
+        if model.kernel_reads is not None:
+            live(model, spec.seed + 3)
+            for n, p in model.named_parameters():
+                if n.startswith("kernel_reads.") and n.endswith(".out.weight"):
+                    params[f"param.{n}"] = p.detach().double()
+        ### Every parameter in one flat input (one hash in the golden).
+        x["in.params"] = torch.cat([v.reshape(-1) for v in params.values()])
+        return x
+
+    return build
+
+
+def _model_kernels(model, variant: str):
+    """The reference of every piece (CPU, and the CUDA reference variant), or every
+    piece's fast path where it can run (``auto``)."""
+    ref = variant == "reference"
+    model.geo_kernel = "eager" if ref else "auto"
+    model.tree_read_kernel = "reference" if ref else "auto"
+    model.geometry_kernel = "reference" if ref else "auto"
+
+
+def _model_setup(spec: _ModelSpec, inputs, device, variant):
+    """The loaded model and the arguments of its forward pass."""
+    from physicsnemo.mesh import Mesh
+
+    x = _to(inputs, device)
+    dt = spec.dtype
+    model = target("ISLA")(**spec.cfg).to(device, dt).eval()
+    with torch.no_grad():
+        flat, i = x["in.params"], 0
+        for p in model.parameters():
+            p.copy_(flat[i : i + p.numel()].view_as(p))
+            i += p.numel()
+    _model_kernels(model, variant)
+    meshes = {}
+    for name in spec.meshes:
+        data = {f: x[f"in.{name}.{f}"].to(dt) for f in model.boundary_schemas[name]}
+        meshes[name] = Mesh(
+            points=x[f"in.{name}.points"].to(dt),
+            cells=x[f"in.{name}.cells"],
+            cell_data=data,
+        )
+    kw = dict(
+        boundary_meshes=meshes,
+        global_data={f: x[f"in.global.{f}"].to(dt) for f in model.global_schema},
+    )
+    if spec.n_queries:
+        kw["prediction_points"] = x["in.queries"].to(dt)
+    else:
+        kw["prediction_boundaries"] = list(spec.prediction_boundaries)
+    return model, kw
+
+
+def _flat_outputs(mesh) -> dict:
+    from test.experimental.models.isla._meshes import outputs
+
+    return outputs(mesh)
+
+
+def _cotangent_loss(fields: dict, seed: int) -> torch.Tensor:
+    return sum(
+        (t * _cotangent(t, seed + i)).sum()
+        for i, (_, t) in enumerate(sorted(fields.items()))
+    )
+
+
+#: Parameters whose gradient is zero in exact arithmetic (constants that cancel in a
+#: softmax: each slice block's geo_logit bias, a constant over the slices, and the
+#: boundary read's basis MLP's last bias, a per-head constant on every pair's logit),
+#: so that what is computed is roundoff alone.
+_MODEL_ZERO_GRADS = tuple(f"blocks.{i}.geo_logit.bias" for i in range(2)) + (
+    "kernel_basis.net.4.bias",
+)
+
+
+def _model_run(spec: _ModelSpec):
+    def run(inputs, device, variant):
+        """The forward pass's outputs, and every parameter's gradient of a fixed
+        cotangent on them."""
+        model, kw = _model_setup(spec, inputs, device, variant)
+        fields = _flat_outputs(model(**kw))
+        _cotangent_loss(fields, 70).backward()
+        out = {f"out.{k}": t.detach() for k, t in fields.items()}
+        out.update(_param_grads(model, zero=_MODEL_ZERO_GRADS))
+        return out
+
+    return run
+
+
+_CHUNKS = ((0, 20), (20, 45), (45, 60))
+
+
+def _chunks_run(spec: _ModelSpec):
+    def run(inputs, device, variant):
+        """``query_chunks`` over three ranges of the points: each range's outputs, the
+        pair counts, and every parameter's gradient after the chunks' backward passes
+        (a fixed cotangent per range) and ``chunks.backward()``."""
+        model, kw = _model_setup(spec, inputs, device, variant)
+        chunks = model.query_chunks(**kw)
+        out = {"out.pair_counts": chunks.pair_counts}
+        for i, (a, b) in enumerate(_CHUNKS):
+            fields = _flat_outputs(chunks(a, b))
+            _cotangent_loss(fields, 80 + 10 * i).backward()
+            out.update({f"out.range{i}.{k}": t.detach() for k, t in fields.items()})
+        chunks.backward()
+        out.update(_param_grads(model, zero=_MODEL_ZERO_GRADS))
+        return out
+
+    return run
+
+
+#: The functions of the model module whose results G-PARTS records, by the names the
+#: model calls them by (wherever they are defined).
+_PART_FUNCTIONS = (
+    "cell_second_moments",
+    "rms_pairwise_distance",
+    "soft_log_length",
+    "rms_moments",
+    "scale_factor",
+    "sample_boundary_cells",
+    "_pseudovectors",
+    "_assemble_output",
+)
+
+
+def _flatten(prefix: str, value, out: dict) -> None:
+    if isinstance(value, torch.Tensor):
+        out[prefix] = value.detach().clone()
+    elif isinstance(value, (tuple, list)):
+        for j, v in enumerate(value):
+            _flatten(f"{prefix}.{j}", v, out)
+
+
+def _parts_run(spec: _ModelSpec):
+    def run(inputs, device, variant):
+        """The forward pass's intermediate values, call by call: each slice block's
+        output and passive read, the boundary reads' updates, the head frame's routing
+        (prototypes and logits), the prediction points' input layer, and the results of
+        :data:`_PART_FUNCTIONS` (the length unit and the cells' second moments, the
+        soft log length, the scales' moments and factors, the draw, the pseudovectors
+        and each assembled output)."""
+        model, kw = _model_setup(spec, inputs, device, variant)
+        mod = target("model_module")
+        seen, counts = {}, {}
+
+        def record(name, value):
+            i = counts[name] = counts.get(name, -1) + 1
+            _flatten(f"out.{name}.{i}", value, seen)
+
+        def spy(name, fn):
+            def call(*a, **k):
+                y = fn(*a, **k)
+                record(name, y)
+                return y
+
+            return call
+
+        saved = {n: getattr(mod, n) for n in _PART_FUNCTIONS}
+        hooks = []
+        for i, block in enumerate(model.blocks):
+            hooks.append(
+                block.register_forward_hook(lambda m, a, y, i=i: record(f"block{i}", y))
+            )
+            block.read = spy(f"block{i}.read", block.read)
+        if model.frame_assign is not None:
+            fa = model.frame_assign
+            fa.prototypes = spy("frame.prototypes", fa.prototypes)
+            fa.logits = spy("frame.logits", fa.logits)
+        if model.qt is not None:
+            hooks.append(
+                model.qt.seed.register_forward_hook(
+                    lambda m, a, y: record("qt.seed", y)
+                )
+            )
+        for i, read in enumerate(model.kernel_reads or ()):
+            hooks.append(
+                read.register_forward_hook(lambda m, a, y, i=i: record(f"read{i}", y))
+            )
+        for n, f in saved.items():
+            setattr(mod, n, spy(n, f))
+        try:
+            with torch.no_grad():
+                model(**kw)
+        finally:
+            for n, f in saved.items():
+                setattr(mod, n, f)
+            for h in hooks:
+                h.remove()
+        return seen
+
+    return run
+
+
+_MODEL_SPECS = {
+    "surface": lambda dt: _ModelSpec(
+        dict(**_MODEL_SMALL, **_MODEL_IO),
+        {"wall": lambda: _soup_cells(150, 3, 61)},
+        dt,
+        prediction_boundaries=("wall",),
+    ),
+    "rich_surface": lambda dt: _ModelSpec(
+        dict(**_MODEL_SMALL, **_RICH),
+        {
+            "wall": lambda: _soup_cells(120, 3, 62),
+            "outlet": lambda: _soup_cells(40, 3, 63, offset=6.0),
+        },
+        dt,
+        prediction_boundaries=("wall",),
+    ),
+    "dtt": lambda dt: _ModelSpec(
+        dict(**_MODEL_SMALL, **_MODEL_IO, interior=True),
+        {"wall": lambda: _sphere_cells(2)},
+        dt,
+        n_queries=60,
+    ),
+    "dtt_2d": lambda dt: _ModelSpec(
+        dict(**_MODEL_SMALL, **_MODEL_IO, interior=True, n_spatial_dims=2),
+        {"wall": _circle_cells},
+        dt,
+        n_queries=60,
+        d=2,
+    ),
+    ### About 2,000 cells over two conditions, 512 tokens drawn (at the fixed start).
+    "dtt_draw": lambda dt: _ModelSpec(
+        dict(
+            **_MODEL_SMALL,
+            output_schema=_MODEL_IO["output_schema"],
+            global_schema=_MODEL_IO["global_schema"],
+            boundary_schemas={"wall": {}, "farfield": {}},
+            interior=True,
+            n_boundary_tokens=512,
+        ),
+        {"wall": lambda: _sphere_cells(3), "farfield": lambda: _shell_cells(3, 4.0)},
+        dt,
+        n_queries=60,
+    ),
+}
+_MODEL_DTYPES = {
+    "surface": ((D, "f64"), (F, "f32")),
+    "rich_surface": ((D, "f64"), (F, "f32")),
+    "dtt": ((D, "f64"), (F, "f32")),
+    "dtt_2d": ((D, "f64"),),
+    "dtt_draw": ((F, "f32"),),
+}
+_MODEL_VARIANTS = {"cpu": ("reference",), "cuda": ("auto", "reference")}
+#: Four elements of each parameter's gradient in the committed golden (beside its
+#: summaries over every element), to keep the models' goldens within their budget.
+_MODEL_SAMPLES = {"grad.param.*": 4}
+#: The routings' gains and value projections (each slice block's ``assign`` and the
+#: head frame's) reach the loss through softmaxes over the slices whose terms nearly
+#: cancel: their gradients are 1e-5 to 1e-10 of the largest, and carry the rounding of
+#: the terms. Measured between one, three and four threads (largest relative to their
+#: own largest element): 1.2e-11 in float64, 1.1e-2 in float32. Bounds: 1e-9 and
+#: 1e-1 (a sign or a term lost, not roundoff, in float32).
+_ROUTING_GRADS = ("grad.param.*assign.gain", "grad.param.*assign.v_proj.*")
+_MODEL_TOL = {
+    D: dict.fromkeys(_ROUTING_GRADS, 1e-9),
+    F: dict.fromkeys(_ROUTING_GRADS, 1e-1),
+}
+#: On CUDA the reference read's node means, and the exact geometry's vertex
+#: gradient, accumulate by float atomics: ISLA-DTT's outputs and gradients are
+#: judged against their run-to-run family there.
+_DTT_FAMILY = ("out.*", "grad.*")
+
+for _name, _make in _MODEL_SPECS.items():
+    for _dt, _dn in _MODEL_DTYPES[_name]:
+        _spec = _make(_dt)
+        _dtt = _spec.n_queries > 0
+        _kw = dict(
+            variants=_MODEL_VARIANTS,
+            samples=_MODEL_SAMPLES,
+            tol=_MODEL_TOL[_dt],
+            family=_DTT_FAMILY if _dtt else (),
+            requires=("warp", "triton"),
+        )
+        _case(
+            "G-MODEL",
+            f"model_{_name}_{_dn}",
+            _model_build(_spec),
+            _model_run(_spec),
+            **_kw,
+        )
+        if _name == "dtt":
+            _case(
+                "G-MODEL",
+                f"query_chunks_{_dn}",
+                _model_build(_spec),
+                _chunks_run(_spec),
+                **_kw,
+            )
+        _draw = ("out.sample_boundary_cells.*.0",) if _name == "dtt_draw" else ()
+        _weights = ("out.sample_boundary_cells.*.1",) if _name == "dtt_draw" else ()
+        _case(
+            "G-PARTS",
+            f"parts_{_name}_{_dn}",
+            _model_build(_spec),
+            _parts_run(_spec),
+            kept=_draw,
+            weights=_weights,
+            **_kw,
+        )
 
 
 GROUPS = tuple(dict.fromkeys(c.group for c in CASES))

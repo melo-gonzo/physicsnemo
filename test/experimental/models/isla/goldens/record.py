@@ -225,11 +225,10 @@ def _weights(n: int) -> torch.Tensor:
     return torch.frac(torch.arange(n, dtype=torch.float64) * 0.6180339887498949) - 0.5
 
 
-def sample_index(n: int) -> torch.Tensor:
+def sample_index(n: int, k: int = SAMPLES) -> torch.Tensor:
+    """``min(n, k)`` evenly spaced indices of a flattened tensor of ``n`` elements."""
     return torch.unique(
-        torch.linspace(0, max(n - 1, 0), min(n, SAMPLES), dtype=torch.float64)
-        .round()
-        .long()
+        torch.linspace(0, max(n - 1, 0), min(n, k), dtype=torch.float64).round().long()
     )
 
 
@@ -237,12 +236,12 @@ def is_output(name: str) -> bool:
     return name.startswith(("out.", "grad."))
 
 
-def summarize(t: torch.Tensor, exact: bool) -> dict:
+def summarize(t: torch.Tensor, exact: bool, samples: int = SAMPLES) -> dict:
     """What the golden keeps of a tensor: dtype and shape; the SHA-256 of integer and
     boolean tensors, and of every tensor with ``exact`` (the inputs); for floats the
     largest finite magnitude ``scale``, the sum of magnitudes ``l1`` and a fixed
     weighted sum ``dot`` of every finite element (in float64), the count of non-finite
-    elements, and :data:`SAMPLES` elements."""
+    elements, and ``samples`` elements (:data:`SAMPLES` unless the case says fewer)."""
     t = t.detach().cpu().contiguous()
     entry = {"dtype": str(t.dtype).removeprefix("torch."), "shape": list(t.shape)}
     if exact or not t.is_floating_point():
@@ -259,7 +258,7 @@ def summarize(t: torch.Tensor, exact: bool) -> dict:
         l1=float(xz.abs().sum()),
         dot=float((xz * _weights(x.numel())).sum()),
         nonfinite=int((~finite).sum()),
-        samples=x[sample_index(x.numel())].tolist(),
+        samples=x[sample_index(x.numel(), samples)].tolist(),
     )
     return entry
 
@@ -273,7 +272,8 @@ def regenerate(log=print) -> dict:
         variant = case.variants["cpu"][0]
         tensors = C.run_case(case, "cpu", variant)
         golden[case.id] = {
-            name: summarize(t, exact=not is_output(name)) for name, t in tensors.items()
+            name: summarize(t, not is_output(name), case.n_samples(name))
+            for name, t in tensors.items()
         }
         log(f"golden {case.id} ({variant}): {len(tensors)} tensors")
     try:
