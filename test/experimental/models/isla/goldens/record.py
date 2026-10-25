@@ -188,6 +188,13 @@ def record(cases, device: str, repeats: int = 1, log=print) -> dict:
                 "kept": [n for n in meta if case.matches(case.kept, n)],
                 "weights": [n for n in meta if case.matches(case.weights, n)],
                 "family": [n for n in meta if case.matches(case.family, n)],
+                "family_rtol": {
+                    n: next(
+                        v for q, v in case.family_rtol.items() if case.matches((q,), n)
+                    )
+                    for n in meta
+                    if case.matches(case.family_rtol, n)
+                },
                 "tensors": meta,
             }
             rec["tensors"][key] = store
@@ -283,9 +290,15 @@ def regenerate(log=print) -> dict:
         commit = subprocess.run(  # noqa: S603 - git and its arguments are constants
             [git, "rev-parse", "HEAD"], capture_output=True, text=True, cwd=DATA
         ).stdout.strip()
-        model = str(Path(sys.modules[C.ISLA].__file__).parent)
+        ### The code a golden depends on: the model's directory, every module TARGETS
+        ### names (the library's, after LIB-MOVE), and this harness with its cases.
+        paths = {
+            str(Path(sys.modules[C.ISLA].__file__).parent),
+            str(Path(__file__).parent),
+        }
+        paths |= {v["file"] for v in module_versions()["modules"].values()}
         status = subprocess.run(  # noqa: S603 - git and its arguments are constants
-            [git, "status", "--porcelain", "--", model],
+            [git, "status", "--porcelain", "--", *sorted(paths)],
             capture_output=True,
             text=True,
             cwd=DATA,
@@ -296,7 +309,11 @@ def regenerate(log=print) -> dict:
     manifest = {
         "format": 1,
         "commit": commit,
-        "model_code_modified": dirty,
+        "code_modified": dirty,
+        "harness": {
+            f.name: hashlib.md5(f.read_bytes(), usedforsecurity=False).hexdigest()
+            for f in sorted(Path(__file__).parent.glob("*.py"))
+        },
         "date": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
         "platform": fingerprint("cpu"),
         "versions": module_versions()["modules"],
@@ -336,7 +353,10 @@ def main(argv=None) -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     p.add_argument(
-        "--groups", nargs="*", help=f"case groups (default all): {' '.join(C.GROUPS)}"
+        "--groups",
+        nargs="*",
+        choices=C.GROUPS,
+        help=f"case groups (default all): {' '.join(C.GROUPS)}",
     )
     p.add_argument("--cases", nargs="*", help="fnmatch patterns of case names")
     p.add_argument("--device", choices=("cpu", "cuda"), default="cpu")
@@ -382,7 +402,13 @@ def main(argv=None) -> int:
         torch.backends.cuda.matmul.allow_tf32 = False
         torch.backends.cudnn.allow_tf32 = False
     repeats = args.repeats or (1 if args.device == "cpu" else 5)
-    rec = record(C.select(args.groups, args.cases), args.device, repeats)
+    cases = C.select(args.groups, args.cases)
+    unmatched = [q for q in args.cases or () if not C.select(args.groups, [q])]
+    if unmatched or not cases:
+        p.error(
+            f"no case matches {unmatched or args.cases} in the groups {args.groups or C.GROUPS}"
+        )
+    rec = record(cases, args.device, repeats)
     save(rec, args.out)
     print_versions(rec)
     for cid, why in rec["skipped"].items():

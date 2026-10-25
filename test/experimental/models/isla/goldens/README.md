@@ -70,18 +70,27 @@ How compare.py reads the records:
 
 - **CPU: bitwise**, every input, output and gradient.
 - **CUDA, kernels auto: bitwise**, except:
-  - the draw's kept cells are compared first; if they differ the case is
-    **INCONCLUSIVE**: the draw's float64 `cumsum` is not run-to-run deterministic on
-    CUDA, so a kept cell can flip when a hit lands on a cell boundary. Rerun; never
-    read it as a pass. (On CPU the draw is deterministic and a kept difference fails.)
-  - the draw's Horvitz-Thompson weights compare at 1e-15 relative;
+  - the draw's kept cells are compared first, in every repeat of both sides; if any
+    two differ the case is **INCONCLUSIVE**: the draw's float64 `cumsum` is not
+    run-to-run deterministic on CUDA, so a kept cell can flip when a hit lands on a
+    cell boundary. Rerun; never read it as a pass. An INCONCLUSIVE that repeats with
+    each side's repeats bitwise (the kept cells differ only across the sides) is a
+    FAIL: the change moved the draw. (On CPU the draw is deterministic and a kept
+    difference fails.)
+  - the draw's Horvitz-Thompson weights compare at 1e-15 relative, every pair of
+    repeats within a side or across;
   - (DRAW-EXACT: the two rules above read today's CUDA draw, which is not
     run-to-run bitwise; once DRAW-EXACT makes it bitwise they can be dropped.)
   - the outputs a case declares as its `family` (float atomics: the reference read's
     node means, the Triton segment softmax's `dk`/`dv`, the exact geometry's vertex
     gradient) must lie within twice the run-to-run spread of the 5 repeats of either
     side (`compare.FAMILY_SLACK`: five runs estimate the spread from below; a family
-    that repeats bitwise demands bitwise).
+    that repeats bitwise demands bitwise), and that spread must stay under a ceiling,
+    `compare.FAMILY_RTOL` of `max|A|` (float32 1e-4, float64 1e-11; measured at most
+    1.9e-5 and 4.6e-13 on GB300), or the case's own (`Case.family_rtol`), so that a
+    head with noisy repeats cannot widen its own tolerance.
+- A comparison of no case at all fails; `record.py` refuses unknown groups and
+  `--cases` patterns that match nothing.
 - A tensor that varies between the repeats of one side without being declared a
   family fails: the change made something non-deterministic.
 
@@ -89,9 +98,10 @@ How compare.py reads the records:
 
 `test_isla_goldens.py` runs every case's CPU variants (and, with CUDA, its CUDA
 variants) against `data/goldens_v1.pt`: inputs and integer outputs exact, float
-outputs within `rtol * max|golden|` on 16 stored elements and on three summaries over
-every element (see the test's docstring and `CPU_RTOL`/`CUDA_RTOL` for the bounds and
-their measurements). A missing golden fails.
+outputs within `rtol * max|golden|` on 16 stored elements and three summaries over
+every element within `sqrt(n) * rtol * max|golden|` (see the test's docstring and
+`CPU_RTOL`/`CUDA_RTOL` for the bounds and their measurements). A missing golden
+fails.
 
 Regenerate it only when a change is meant to move the numbers, and say so in the
 commit:
@@ -101,7 +111,8 @@ python -m test.experimental.models.isla.goldens.record --regenerate goldens_v1.p
 ```
 
 It records on one CPU thread and writes the golden and its manifest (commit, whether
-the model code was modified, library versions, CPU, BLAS/LAPACK, module md5s, date).
+the code it depends on (the model, the modules `TARGETS` names, this harness) was
+modified, the harness files' md5s, library versions, CPU, BLAS/LAPACK, module md5s, date).
 The same command writes every other file of `data/` (`--regenerate` alone: all of
 them; or name them): the goldens and reference checkpoints of `test_isla_release.py`
 (its `WRITERS`). Nothing else writes `data/`, and a missing file fails.

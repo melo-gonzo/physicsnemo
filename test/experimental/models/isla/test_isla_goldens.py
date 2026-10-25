@@ -30,9 +30,10 @@ written only by ``python -m test.experimental.models.isla.goldens.record
   search flags): exact (SHA-256);
 - float outputs: every stored element and the summaries over every element (largest
   magnitude, sum of magnitudes, a fixed weighted sum) within ``rtol * max|golden|``
-  per element, the summaries within the bound that per-element bound implies
-  (``n * rtol * max|golden|``, plus 1e-14 of the sum of magnitudes for float64
-  summation order). ``rtol`` is 1e-12 in float64, which holds across BLAS builds and
+  per element, the summaries within ``sqrt(n) * rtol * max|golden|`` (the rounding
+  of n elements adding up as a random walk; so one element of a large tensor cannot
+  move by much unseen), plus 1e-14 of the sum of magnitudes for float64 summation
+  order. ``rtol`` is 1e-12 in float64, which holds across BLAS builds and
   CPU architectures; float32 and bfloat16 bounds are stated at :data:`CPU_RTOL`; a
   case may state its own bound for a named output, with its reason
   (``Case.tol``, ``Case.cuda_tol``; ``None``: not compared, see goldens/README.md,
@@ -102,14 +103,18 @@ def _float_failures(name, entry, t, rtol) -> list[str]:
     err = torch.where(
         ref.isfinite() & got.isfinite(),
         (got - ref).abs(),
-        torch.where(got == ref, 0.0, math.inf),
+        torch.where((got == ref) | (got.isnan() & ref.isnan()), 0.0, math.inf),
     )
     worst = float(err.max()) if err.numel() else 0.0
     if not bool(same_nan.all()) or worst > tol:
         bad.append(
             f"{name}: samples off by {worst:.3e} > {tol:.3e} ({rtol:g} of max|golden| {scale:.3e})"
         )
-    slack = n * tol + 1e-14 * entry["l1"]
+    ### A sum of n elements, each within tol: rounding errors add up as a random walk,
+    ### sqrt(n) tol (a bound of n tol would let one element of a large tensor move by
+    ### max|golden| unseen), and 1e-14 of the sum of magnitudes for float64 summation
+    ### order.
+    slack = math.sqrt(n) * tol + 1e-14 * entry["l1"]
     stats = {
         "max": (float(xz.abs().max()) if n else 0.0, scale, tol),
         "l1": (float(xz.abs().sum()), entry["l1"], slack),
@@ -127,7 +132,6 @@ def check(
     golden_case: dict,
     tensors: dict,
     rtol: dict,
-    exact_inputs: bool = True,
     overrides=None,
 ) -> tuple[list, dict]:
     """The failures of ``tensors`` against one case of the golden, and the largest
@@ -150,7 +154,7 @@ def check(
             )
             continue
         if not R.is_output(name):
-            if exact_inputs and R.tensor_hash(t) != entry["sha256"]:
+            if R.tensor_hash(t) != entry["sha256"]:
                 bad.append(
                     f"{name}: the input differs from the golden's (fixture drift, not the module under test)"
                 )
@@ -338,3 +342,56 @@ def test_the_ab_harness_passes_a_rerun_and_catches_a_one_ulp_change(tmp_path):
         R.tensor_hash(spread["tensors"][key][grad_k][1])
     )
     assert K.compare(spread, shifted, log=quiet) == K.PASS
+
+
+def test_the_ab_harness_reads_every_repeat_and_refuses_an_empty_comparison(tmp_path):
+    """On CUDA a kept cell that flips between the repeats of one side reads
+    INCONCLUSIVE, weights that wobble within 1e-15 between repeats PASS (beyond it
+    FAIL), a family whose head repeats noisily beyond its ceiling FAILs even though
+    that noise widens its own spread, and a comparison of no case at all FAILs.
+    DRAW-EXACT: the kept and weights rules read today's CUDA draw."""
+    import copy
+
+    threads = torch.get_num_threads()
+    torch.set_num_threads(1)
+    try:
+        a = R.record(C.select(["G-SAMP", "G-SEG"]), "cpu", log=lambda *_: None)
+    finally:
+        torch.set_num_threads(threads)
+    for c in a["cases"].values():
+        c["device"] = "cuda"
+    quiet = lambda *_: None  # noqa: E731
+
+    def repeated(rec, key, name, t):
+        """``rec`` with one more repeat of ``name``, the tensor ``t``."""
+        rec = copy.deepcopy(rec)
+        rec["tensors"][key][name].append(t)
+        rec["cases"][key]["tensors"][name]["sha256"].append(R.tensor_hash(t))
+        return rec
+
+    ulp = lambda t: torch.nextafter(t, torch.full_like(t, math.inf))  # noqa: E731
+    draw = "G-SAMP/sample_boundary_cells_3d@cpu:reference"
+    kept, weights = "out.kept_300_0.37", "out.weights_300_0.37"
+    k0, w0 = a["tensors"][draw][kept][0], a["tensors"][draw][weights][0]
+    flip = torch.cat([k0[:-1], k0[-1:] + 1])
+    assert K.compare(a, repeated(a, draw, kept, flip), log=quiet) == K.INCONCLUSIVE
+    assert K.compare(a, repeated(a, draw, weights, ulp(w0)), log=quiet) == K.PASS
+    assert (
+        K.compare(a, repeated(a, draw, weights, w0 * (1 + 1e-12)), log=quiet) == K.FAIL
+    )
+    seg = "G-SEG/segment_softmax_read_f32@cpu:reference"
+    grad_k = a["tensors"][seg]["grad.k"][0]
+    noise = 1e-3 * float(grad_k.abs().max()) * torch.ones_like(grad_k)
+    noisy = repeated(a, seg, "grad.k", grad_k + noise)
+    noisy["tensors"][seg]["grad.k"][0] = grad_k - noise
+    noisy["cases"][seg]["tensors"]["grad.k"]["sha256"][0] = R.tensor_hash(
+        grad_k - noise
+    )
+    assert K.compare(a, noisy, log=quiet) == K.FAIL
+    assert K.compare(a, a, log=quiet, only=["G-GEO/nothing*"]) == K.FAIL
+    empty = {**a, "cases": {}, "tensors": {}}
+    assert K.compare(empty, empty, log=quiet) == K.FAIL
+    with pytest.raises(SystemExit):
+        R.main(["--groups", "G-Geo", "--out", str(tmp_path / "x")])
+    with pytest.raises(SystemExit):
+        R.main(["--cases", "no_such_case*", "--out", str(tmp_path / "x")])

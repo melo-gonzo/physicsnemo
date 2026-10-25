@@ -123,7 +123,10 @@ class Case:
     ``cuda_tol`` does so for the CUDA variants alone, ``None`` meaning not compared
     on CUDA. ``requires`` lists what the CUDA variants need beyond CUDA. ``samples``
     maps fnmatch patterns of float outputs to the number of their elements the
-    committed golden stores, where fewer than the default keep it within its budget."""
+    committed golden stores, where fewer than the default keep it within its budget.
+    ``family_rtol`` maps fnmatch patterns of family outputs to the largest run-to-run
+    spread the A/B harness allows them on CUDA (relative to ``max|A|``), where the
+    dtype's (``compare.FAMILY_RTOL``) is too tight, each with its measurement."""
 
     group: str
     name: str
@@ -139,6 +142,7 @@ class Case:
     cuda_tol: dict = field(default_factory=dict)
     requires: tuple = ()
     samples: dict = field(default_factory=dict)
+    family_rtol: dict = field(default_factory=dict)
 
     @property
     def id(self) -> str:
@@ -173,9 +177,9 @@ def _to(inputs: dict, device, keys=None) -> dict:
     return {k: v.to(device) for k, v in inputs.items() if keys is None or k in keys}
 
 
-### Inputs are built from correctly rounded operations only (+, -, *, /, one per
-### torch op, and float64 Generator draws, cast once to float32), so they are the
-### same bits on every platform: transcendental functions and even ``sqrt``, fused
+### Inputs are built from correctly rounded operations only (+, -, *, /, sqrt, one
+### per torch op, and float64 Generator draws, cast once to float32), so they are the
+### same bits on every platform: transcendental functions, float32 draws, fused
 ### reductions (``normalize``), matrix products and LAPACK (QR) round differently on
 ### x86 and Grace (measured in jobs 377631 and 377864), and a discontinuous output
 ### then moves with them.
@@ -573,7 +577,6 @@ for _d in (3, 2):
                 _forest_build(_d, _dt, _kind),
                 _forest_run,
                 variants=_BUILDS,
-                requires=("warp",),
             )
 
 
@@ -666,7 +669,6 @@ for _d in (3, 2):
                 _walk_build(_d, _dt),
                 _walk_run(_theta),
                 variants=_WALKS,
-                requires=("warp",),
             )
 
 
@@ -1183,7 +1185,6 @@ for _name, _maker in _GEO_SETS.items():
             variants={"cpu": ("reference",), "cuda": ("fast", "reference")},
             family=_GEO_FAMILY,
             tol={**_GEO_TOL["*"], **_GEO_TOL.get(_name, {})},
-            requires=("warp",),
         )
 
 
@@ -1371,7 +1372,7 @@ for _d, _dt, _dn, _nv in (
         _read_run(_nv),
         variants=_READS,
         family=_READ_FAMILY,
-        requires=("warp", "triton"),
+        requires=("triton",),
     )
 
 
@@ -2124,6 +2125,9 @@ _MODEL_SAMPLES = {"grad.param.*": 4}
 #: own largest element): 1.1e-10 in float64, 4.2e-2 in float32. Bounds: 1e-8 in
 #: float64; not compared in float32, where they are mostly roundoff.
 _ROUTING_GRADS = ("grad.param.*assign.gain", "grad.param.*assign.v_proj.*")
+#: Their run-to-run spread on CUDA in float32 (atomics upstream, then the
+#: cancellation): measured up to 2.2e-3 of their largest element (job 379129).
+_ROUTING_FAMILY = dict.fromkeys(_ROUTING_GRADS, 1e-2)
 _MODEL_TOL = {
     D: dict.fromkeys(_ROUTING_GRADS, 1e-8),
     F: dict.fromkeys(_ROUTING_GRADS, None),
@@ -2147,8 +2151,9 @@ for _name, _make in _MODEL_SPECS.items():
             variants=_MODEL_VARIANTS,
             samples=_MODEL_SAMPLES,
             tol=_MODEL_TOL[_dt],
+            family_rtol=_ROUTING_FAMILY if _dt == F else {},
             family=_DTT_FAMILY if _dtt else (),
-            requires=("warp", "triton"),
+            requires=("triton",),
         )
         _case(
             "G-MODEL",

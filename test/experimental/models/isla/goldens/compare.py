@@ -22,20 +22,22 @@ Exit 0 (PASS), 1 (FAIL) or 2 (INCONCLUSIVE). The reading rules:
 
 - **CPU: bitwise.** Every input, output and gradient has the same SHA-256 on both sides.
 - **CUDA (kernels auto): bitwise**, except
-  - the draw's kept cells are compared first: where they differ, the case is
-    INCONCLUSIVE (the draw's float64 ``cumsum`` is not run-to-run deterministic on
-    CUDA, so a kept cell can flip; rerun, never pass). On CPU a kept difference is a
-    FAIL (the CPU draw is deterministic);
-  - the draw's Horvitz-Thompson weights compare at 1e-15 relative to ``max|A|``;
+  - the draw's kept cells are compared first, in every repeat of both sides: where any
+    two differ, the case is INCONCLUSIVE (the draw's float64 ``cumsum`` is not
+    run-to-run deterministic on CUDA, so a kept cell can flip; rerun, never pass). On
+    CPU a kept difference is a FAIL (the CPU draw is deterministic). DRAW-EXACT;
+  - the draw's Horvitz-Thompson weights compare at 1e-15 relative to ``max|A|``, every
+    pair of repeats within a side or across;
   - the outputs a case names as its ``family`` (float atomics, measured) compare
     against the run-to-run family: the median over every pair of repeats across the
     sides of ``max|B_i - A_j|`` must not exceed the largest ``max|X_i - X_j|`` within
-    either side (one code, one distribution: a cross pair is then one more draw of
-    the within-side distances, so their median lies inside the within-side range; a
-    family that repeats bitwise demands bitwise).
+    either side times ``FAMILY_SLACK`` (one code, one distribution: a cross pair is
+    then one more draw of the within-side distances; a family that repeats bitwise
+    demands bitwise), and that spread must stay under ``FAMILY_RTOL[dtype] * max|A|``.
 - Any tensor not named a family that differs between the repeats of one side is a
   FAIL (non-determinism the case does not declare).
-- Cases or tensors present on one side only are a FAIL.
+- Cases or tensors present on one side only are a FAIL, and so is a comparison of no
+  case at all.
 """
 
 import argparse
@@ -59,6 +61,12 @@ WEIGHTS_RTOL = 1e-15
 #: below (cross/within ratios up to 1.2 between two records of the same code, job
 #: 379129, query_chunks' reference read).
 FAMILY_SLACK = 2.0
+#: The largest within-side spread a family may have, relative to ``max|A|`` by dtype,
+#: so that a head whose own repeats are noisy cannot widen its own tolerance (a case
+#: may state its own for named tensors, ``Case.family_rtol``). Measured on GB300 (jobs
+#: 377864, 379129; the largest spread of every family over 5 repeats): float32
+#: 1.9e-5 (the boundary reads' weight gradients), float64 4.6e-13, bfloat16 0.
+FAMILY_RTOL = {"float32": 1e-4, "float64": 1e-11, "bfloat16": 2**-6}
 
 
 def _maxdiff(a: torch.Tensor, b: torch.Tensor) -> float:
@@ -89,6 +97,15 @@ def _family(a: dict, b: dict, key: str, name: str) -> tuple[float, float]:
     return statistics.median(cross), max(within, default=0.0)
 
 
+def _all_pairs(a: dict, b: dict, key: str, name: str) -> float:
+    """The largest distance between any two repeats, within a side or across."""
+    runs = _runs(a, key, name) + _runs(b, key, name)
+    return max(
+        (_maxdiff(x, y) for i, x in enumerate(runs) for y in runs[i + 1 :]),
+        default=0.0,
+    )
+
+
 def compare_case(a: dict, b: dict, key: str) -> tuple[int, list]:
     """Status and rows ``(tensor, verdict, detail)`` of one case variant."""
     ca, cb = a["cases"][key], b["cases"][key]
@@ -99,9 +116,10 @@ def compare_case(a: dict, b: dict, key: str) -> tuple[int, list]:
         only = sorted(set(ta) ^ set(tb))
         return FAIL, [(n, "FAIL", "on one side only") for n in only]
     cuda = ca["device"] == "cuda"
+    ### DRAW-EXACT: the kept cells first, in every repeat of both sides.
     for n in ca["kept"]:
-        if ta[n]["sha256"][0] != tb[n]["sha256"][0]:
-            d = _maxdiff(a["tensors"][key][n][0], b["tensors"][key][n][0])
+        if len(set(ta[n]["sha256"]) | set(tb[n]["sha256"])) > 1:
+            d = _all_pairs(a, b, key, n)
             verdict = INCONCLUSIVE if cuda else FAIL
             rows.append(
                 (n, STATUS[verdict], f"kept cells differ (max index difference {d:g})")
@@ -122,7 +140,8 @@ def compare_case(a: dict, b: dict, key: str) -> tuple[int, list]:
             status = FAIL
             continue
         family = n in ca["family"] and cuda
-        if not family and (len(set(ha)) > 1 or len(set(hb)) > 1):
+        weights = n in ca["weights"] and cuda
+        if not (family or weights) and (len(set(ha)) > 1 or len(set(hb)) > 1):
             rows.append(
                 (
                     n,
@@ -132,33 +151,40 @@ def compare_case(a: dict, b: dict, key: str) -> tuple[int, list]:
             )
             status = FAIL
             continue
-        if ha[0] == hb[0]:
+        if len(set(ha) | set(hb)) == 1:
             rows.append((n, "PASS", "bitwise"))
             continue
-        x, y = a["tensors"][key][n][0], b["tensors"][key][n][0]
-        d = _maxdiff(x, y)
-        if cuda and n in ca["weights"]:
-            bound = WEIGHTS_RTOL * float(x.double().abs().max())
+        scale = float(a["tensors"][key][n][0].double().abs().max())
+        if weights:
+            ### DRAW-EXACT: every pair of repeats, within a side or across, at 1e-15.
+            d = _all_pairs(a, b, key, n)
+            bound = WEIGHTS_RTOL * scale
             ok = d <= bound
             rows.append(
                 (
                     n,
                     "PASS" if ok else "FAIL",
-                    f"weights: max diff {d:.3e}, bound {bound:.3e} (1e-15 relative)",
+                    f"weights: max diff over every pair of repeats {d:.3e}, bound {bound:.3e} (1e-15 relative)",
                 )
             )
         elif family:
             d, spread = _family(a, b, key, n)
-            ok = d <= FAMILY_SLACK * spread
+            rtol = ca.get("family_rtol", {}).get(
+                n, FAMILY_RTOL.get(ta[n]["dtype"], 0.0)
+            )
+            ceiling = rtol * scale
+            ok = d <= FAMILY_SLACK * spread and spread <= ceiling
             rows.append(
                 (
                     n,
                     "PASS" if ok else "FAIL",
-                    f"family: median cross-side max diff {d:.3e}, within-side spread {spread:.3e}",
+                    f"family: median cross-side max diff {d:.3e}, within-side spread {spread:.3e} "
+                    f"(ceiling {ceiling:.3e})",
                 )
             )
         else:
             ok = False
+            d = _maxdiff(a["tensors"][key][n][0], b["tensors"][key][n][0])
             rows.append((n, "FAIL", f"not bitwise: max diff {d:.3e}"))
         status = max(status, PASS if ok else FAIL)
     return status, rows
@@ -185,7 +211,10 @@ def compare(a: dict, b: dict, log=print, show_all: bool = False, only=None) -> i
         )
         counts["FAIL"] += 1
         worst = FAIL
+    raised = set(a.get("errors", {})) | set(b.get("errors", {}))
     for key in keys:
+        if key in raised:
+            continue  # counted above
         if key not in a["cases"] or key not in b["cases"]:
             status, rows = (
                 FAIL,
@@ -204,6 +233,12 @@ def compare(a: dict, b: dict, log=print, show_all: bool = False, only=None) -> i
         for n, verdict, detail in rows:
             if show_all or verdict != "PASS" or detail != "bitwise":
                 log(f"{key:<62} {n:<34} {verdict:<8} {detail}")
+    for side, rec in (("A", a), ("B", b)):
+        for cid, why in rec.get("skipped", {}).items():
+            log(f"skipped on side {side}: {cid}: {why}")
+    if not keys:
+        log("nothing compared: no case variant is in either record (or matches --only)")
+        worst = FAIL
     log(
         f"{len(keys)} case variants: "
         + ", ".join(f"{v} {k}" for k, v in counts.items())
