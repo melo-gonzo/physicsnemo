@@ -43,6 +43,7 @@ from physicsnemo.mesh.calculus.measure import cell_measures
 from test.experimental.models.isla._meshes import (
     cloud,
     law,
+    live,
     orthogonal,
     outputs,
     soup,
@@ -118,7 +119,7 @@ def _model(
     )
     m.geo_kernel = "eager"
     m._tree_read_theta = 0.0  # the exact boundary read
-    return m.double().eval()
+    return live(m.double().eval())
 
 
 def _case(schemas=SCHEMAS, sizes=SIZES, seed=0):

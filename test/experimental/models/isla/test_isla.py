@@ -28,10 +28,12 @@ import pytest
 import torch
 
 from physicsnemo.experimental.models import ISLA
+from physicsnemo.experimental.models.isla.tree_read import TREE_READ_THETA
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
 from test.experimental.models.isla._meshes import (
     cloud,
+    live,
     orthogonal,
     outputs,
     points_mesh,
@@ -236,7 +238,7 @@ def test_every_parameter_receives_a_gradient(interior):
     no prediction-point parameters and an interior model uses all of its own, so
     in both tasks every parameter receives a gradient."""
     torch.manual_seed(0)
-    m = _isla(hidden=32, n_layers=2, n_slices=8, interior=interior)
+    m = live(_isla(hidden=32, n_layers=2, n_slices=8, interior=interior))
     pts, nrm, w, drv = cloud(128, dtype=torch.float32)
     q = torch.randn(20, 3) if interior else None
     out = outputs(
@@ -285,7 +287,7 @@ def test_interior_task_contracts():
     pts, nrm, w, drv = cloud(400)
     mesh = soup(pts, nrm, w)
     qpts = torch.randn(150, 3, dtype=D) * 4.0
-    m = _isla(hidden=64, n_layers=2, n_slices=16, interior=True).double().eval()
+    m = live(_isla(hidden=64, n_layers=2, n_slices=16, interior=True).double().eval())
     assert not hasattr(m.qt, "logw") and not any(
         n == "qt.logw" for n, _ in m.named_parameters()
     )
@@ -318,7 +320,14 @@ def test_interior_task_contracts():
         atol=1e-10,
         rtol=0.0,
     )
-    assert same(_run(m, refine(mesh), drv, qpts), base, atol=1e-10, rtol=0.0)
+    ### Refinement invariance is exact for the exact read (theta = 0, every cell pair
+    ### read); at the default opening angle the refined boundary's forest differs and
+    ### the Barnes-Hut read is an approximation (measured 1.4e-4 on p, 1.9e-3 on v).
+    m._tree_read_theta = 0.0
+    assert same(
+        _run(m, refine(mesh), drv, qpts), _run(m, mesh, drv, qpts), atol=1e-10, rtol=0.0
+    )
+    m._tree_read_theta = TREE_READ_THETA
     m.train()
     out = outputs(
         m(
@@ -330,7 +339,7 @@ def test_interior_task_contracts():
     sum(o.square().mean() for o in out.values()).backward()
     missing = [n for n, p in m.named_parameters() if p.grad is None]
     assert not missing, missing
-    m32 = _isla(hidden=32, n_layers=2, n_slices=8, interior=True)
+    m32 = live(_isla(hidden=32, n_layers=2, n_slices=8, interior=True))
     with torch.autocast("cpu", dtype=torch.bfloat16):
         out = outputs(
             m32(
@@ -348,6 +357,30 @@ def test_interior_task_contracts():
         TypeError, match="unexpected keyword argument 'query_independent'"
     ):
         _isla(hidden=32, n_layers=1, n_slices=8, query_independent=True)
+
+
+def test_live_makes_the_boundary_read_contribute():
+    """The interior contract tests run ISLA-DTT through ``live``, which seeds the
+    boundary read's zero-initialized output projection: under it the read changes the
+    prediction (zeroing the projection again changes the outputs), so those tests
+    cannot pass with a read that adds nothing."""
+    torch.manual_seed(0)
+    pts, nrm, w, drv = cloud(200)
+    mesh = soup(pts, nrm, w)
+    q = pts[:20] * 1.5
+    m = _isla(hidden=32, n_layers=2, n_slices=8, interior=True).double().eval()
+    assert all(not r.out.weight.any() for r in m.kernel_reads)
+    dead = _run(m, mesh, drv, q)
+    live(m)
+    assert all(r.out.weight.any() for r in m.kernel_reads)
+    out = _run(m, mesh, drv, q)
+    assert (
+        max(float((outputs(out)[k] - outputs(dead)[k]).abs().max()) for k in PV) > 1e-3
+    )
+    with torch.no_grad():
+        for r in m.kernel_reads:
+            r.out.weight.zero_()
+    assert same(_run(m, mesh, drv, q), dead, atol=0.0, rtol=0.0)
 
 
 @pytest.mark.parametrize("interior", [False, True], ids=["surface", "interior"])
@@ -370,6 +403,7 @@ def test_geometric_scale_equivariance(interior):
         .double()
         .eval()
     )
+    live(m)
     assert not m._scaled
     k = 2.7
     shift = torch.tensor([3.0, -7.0, 11.0], dtype=D)
@@ -401,6 +435,7 @@ def test_boundary_scalars_reach_the_interior_prediction():
         .double()
         .eval()
     )
+    live(m)
     q = pts[:17] * 0.5
     out = _run(m, soup(pts, nrm, w, cell_data=bs), drv, q)
     out2 = _run(
@@ -457,7 +492,7 @@ def test_frame_is_sampling_consistent():
     pts, nrm, w, drv = cloud(100000)
     q = pts[:40] * 1.2
     torch.manual_seed(1)
-    m = _isla(hidden=32, n_layers=2, n_slices=8, interior=True).double().eval()
+    m = live(_isla(hidden=32, n_layers=2, n_slices=8, interior=True).double().eval())
     n_sub = 10000
     d_bias, d_noise = [], []
 
@@ -802,6 +837,7 @@ def test_scalar_only_model_has_no_frame_routing_and_every_parameter_gets_a_gradi
             n_slices=8,
             interior=True,
         )
+        live(m)
         has_vec = any(v["rank"] == 1 for v in outs.values())
         assert m.needs_frame == has_vec and (m.frame_assign is not None) == has_vec
         out = outputs(

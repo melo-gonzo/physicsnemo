@@ -29,6 +29,7 @@ from tensordict import TensorDict
 from physicsnemo.experimental.models import ISLA
 from test.experimental.models.isla._meshes import (
     cloud,
+    live,
     orthogonal,
     outputs,
     rescale_measures,
@@ -51,7 +52,7 @@ def _model(global_schema=None, **kw):
     if global_schema is None:
         global_schema = {"g": {"rank": 1}}
     kw.setdefault("boundary_schemas", {"wall": {}})
-    return (
+    return live(
         ISLA(
             output_schema=PV,
             global_schema=global_schema,

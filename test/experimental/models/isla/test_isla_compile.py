@@ -18,12 +18,14 @@
 
 The compiled model (Mesh inputs and output included) must match the eager model,
 outputs and gradients, and a case with other boundary counts must reuse the graph
-rather than recompile. Every model here is a surface task: the surface task has one
+rather than recompile. Every whole model compiled here is a surface task: the surface task has one
 boundary mesh; the inputs and scales tasks have two boundary meshes, so their token
 axis is a sum of two independent counts, and predict on one of them. The inputs
-task has a rank-2 boundary input and a rank-0 one. The interior task (ISLA-DTT) is
-not here: its boundary read sizes its pairs from the data and compiles per block
-(``compile_blocks``) instead.
+task has a rank-2 boundary input and a rank-0 one. The interior task (ISLA-DTT) does
+not compile as one graph: its boundary read sizes its pairs from the data and
+compiles per block (``compile_blocks``) instead. Its in-model boundary draw does: the
+last tests compile the interior model's case inputs (``ISLA._case_inputs``: the draw
+and the prediction points' geometry) with ``fullgraph=True`` and dynamic shapes.
 """
 
 import copy
@@ -31,6 +33,7 @@ import copy
 import pytest
 import torch
 from tensordict import TensorDict
+from torch._inductor.utils import fresh_cache
 
 from physicsnemo.experimental.models import ISLA
 from test.experimental.models.isla._meshes import cloud, outputs, soup
@@ -46,8 +49,10 @@ PV = {"p": {"rank": 0}, "v": {"rank": 1}}
 #: Per-case token counts, all distinct (and distinct from every other input
 #: dimension) so that duck sizing ties no two of them together.
 SIZES = [{"inlet": 23, "wall": 41}, {"inlet": 31, "wall": 37}]
-#: The conditions of the inputs and scales tasks, each with its own fields.
+#: The conditions of the interior draw, inputs and scales tasks, each with its own
+#: fields (the wall of the interior draw with none).
 SCHEMAS = {
+    "interior": {"inlet": {"bc": {"rank": 0}, "u_bc": {"rank": 1}}, "wall": {}},
     "inputs": {"inlet": {"T": {"rank": 2}}, "wall": {"bc": {"rank": 0}}},
     "scales": {
         "inlet": {
@@ -111,7 +116,7 @@ def _model(task: str) -> ISLA:
     return ISLA(output_schema=PV, hidden=32, n_layers=2, n_slices=8, **kw)
 
 
-def _case(task: str, sizes: dict, device, seed: int) -> dict:
+def _case(task: str, sizes: dict, device, seed: int, nq: int = 0) -> dict:
     g = torch.Generator().manual_seed(seed)
     if task in ("surface", "global_source"):
         sizes = {"wall": sum(sizes.values())}
@@ -130,7 +135,11 @@ def _case(task: str, sizes: dict, device, seed: int) -> dict:
     if task in ("scales", "global_source"):
         case["global_data"]["rho"] = torch.tensor(1.2, device=device)
         case["global_data"]["nu"] = torch.tensor(1.5e-5, device=device)
-    case["prediction_boundaries"] = ["wall"]
+    if task == "interior":
+        case["global_data"]["re"] = torch.tensor(0.3, device=device)
+        case["prediction_points"] = (2 * torch.randn(nq, 3, generator=g)).to(device)
+    else:
+        case["prediction_boundaries"] = ["wall"]
     return case
 
 
@@ -212,3 +221,133 @@ def test_whole_model_does_not_guard_on_the_key_order_of_its_inputs():
             _reversed_keys(case["global_data"])
         with torch._dynamo.config.patch(error_on_recompile=i > 0):
             compiled(**case)
+
+
+#: Cases on both sides of the interior budget of :func:`_budget_model` (60 tokens):
+#: 64, 111 and 50 boundary cells over two conditions, with their prediction points.
+BUDGET_SIZES = [
+    ({"inlet": 23, "wall": 41}, 57),
+    ({"inlet": 31, "wall": 80}, 45),
+    ({"inlet": 20, "wall": 30}, 40),
+]
+
+
+def _budget_model() -> ISLA:
+    """An interior model (ISLA-DTT) whose boundary_tokens (60) lies between the cell
+    counts of BUDGET_SIZES, in evaluation (the draw's fixed start)."""
+    torch.manual_seed(0)
+    return ISLA(
+        output_schema=PV,
+        boundary_schemas=SCHEMAS["interior"],
+        global_schema={"g": {"rank": 1}, "re": {"rank": 0}},
+        interior=True,
+        boundary_tokens=60,
+        hidden=32,
+        n_layers=2,
+        n_slices=8,
+    ).eval()
+
+
+def _drawn(fn, case) -> dict:
+    """The boundary tokens drawn and the prediction points with their geometry, as
+    ``fn`` (an interior model's ``_case_inputs``, compiled or eager) gives them for
+    ``case``: every leaf of both token sets by name."""
+    boundary, query = fn(
+        case["boundary_meshes"], case["prediction_points"], case["global_data"]
+    )[:2]
+    leaves = {}
+    for side, td in (("boundary", boundary), ("query", query)):
+        for k in td.keys(include_nested=True, leaves_only=True):
+            leaves[(side, k)] = td.get(k)
+    return leaves
+
+
+def test_the_in_model_boundary_draw_compiles_once_across_the_budget():
+    """The interior model's case inputs (the in-model draw, then the prediction
+    points' geometry) compiled with one graph, in evaluation (the fixed start), give
+    the eager draw, whether the cells are sampled down to the budget or all kept. In
+    training (a start from the global RNG inside the graph) they compile once more and
+    then reuse that graph."""
+    torch._dynamo.reset()
+    model = _budget_model()
+    eager = copy.deepcopy(model)  # never called under compile: no shared module state
+    compiled = torch.compile(model._case_inputs, fullgraph=True, dynamic=True)
+    for i, (s, nq) in enumerate(BUDGET_SIZES):
+        case = _case("interior", s, "cpu", seed=i, nq=nq)
+        with torch.no_grad(), torch._dynamo.config.patch(error_on_recompile=i > 0):
+            out = _drawn(compiled, case)
+        with torch.no_grad():
+            ref = _drawn(eager._case_inputs, case)
+        assert out.keys() == ref.keys()
+        assert out["boundary", "points"].shape[0:2] == (1, min(sum(s.values()), 60))
+        for k in ref:
+            _assert_close(out[k], ref[k], "cpu")
+    model.train()
+    for i, (s, nq) in enumerate(BUDGET_SIZES):
+        case = _case("interior", s, "cpu", seed=i, nq=nq)
+        with torch._dynamo.config.patch(error_on_recompile=i > 0):
+            out = _drawn(compiled, case)
+        assert all(torch.isfinite(v).all() for v in out.values())
+
+
+def test_a_warm_compile_cache_reuses_the_graph_across_the_budget():
+    """A second run on the first run's Inductor cache (a cache hit on its first
+    case) compiles no second graph for the cases on the other side of the budget.
+
+    Inductor's FX-graph cache replays a cached graph's shape guards on the new
+    run's symbolic sizes, evaluating them as Python code in which a ``Min`` of
+    the sizes is the builtin ``min``: its comparison fixed the token count's
+    ``Min(cells, budget)`` to one side of the budget (a recompile on the other)."""
+    with fresh_cache():
+        for sizes in (BUDGET_SIZES[:1], BUDGET_SIZES):  # cold, then warm
+            torch._dynamo.reset()
+            model = _budget_model()
+            compiled = torch.compile(model._case_inputs, fullgraph=True, dynamic=True)
+            for i, (s, nq) in enumerate(sizes):
+                case = _case("interior", s, "cpu", seed=i, nq=nq)
+                with (
+                    torch.no_grad(),
+                    torch._dynamo.config.patch(error_on_recompile=i > 0),
+                ):
+                    _drawn(compiled, case)
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA")
+def test_the_in_model_draw_compiles_under_max_autotune_at_full_resolution():
+    """The recipe's compile options (``max-autotune-no-cudagraphs``) on an interior
+    model's case inputs at 1.4 million boundary cells: the draw's float64 sums over
+    every cell are long enough for Inductor's split scan, whose kernel failed on GB300
+    in this compile; the draw runs them through ATen (``sampling._cumsum``). The
+    compiled draw gives the eager one."""
+    torch._dynamo.reset()
+    torch.manual_seed(0)
+    model = (
+        ISLA(
+            output_schema=PV,
+            boundary_schemas=SCHEMAS["interior"],
+            global_schema={"g": {"rank": 1}, "re": {"rank": 0}},
+            interior=True,
+            hidden=32,
+            n_layers=2,
+            n_slices=8,
+        )
+        .cuda()
+        .eval()
+    )
+    eager = copy.deepcopy(model)  # never called under compile: no shared module state
+    compiled = torch.compile(
+        model._case_inputs,
+        fullgraph=True,
+        dynamic=True,
+        mode="max-autotune-no-cudagraphs",
+    )
+    case = _case(
+        "interior", {"inlet": 700_000, "wall": 700_000}, "cuda", seed=0, nq=2000
+    )
+    with torch.no_grad():
+        out = _drawn(compiled, case)
+        torch.cuda.synchronize()
+        ref = _drawn(eager._case_inputs, case)
+    assert out.keys() == ref.keys()
+    for k in ref:
+        _assert_close(out[k], ref[k], "cuda")

@@ -34,6 +34,7 @@ from physicsnemo.mesh.fields import RankSpec
 from test.experimental.models.isla._meshes import (
     cloud,
     law,
+    live,
     orthogonal,
     outputs,
     points_mesh,
@@ -80,7 +81,7 @@ def _model(K=1, output_schema=OUTPUTS, **kw):
         global_schema=_globals(K),
     )
     base.update(kw)
-    return ISLA(**base).double().eval()
+    return live(ISLA(**base).double().eval())
 
 
 def _forward(m, mesh, drv, K, R=None, shift=None, q=None):

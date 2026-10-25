@@ -33,6 +33,7 @@ from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
 from test.experimental.models.isla._meshes import (
     cloud,
     law,
+    live,
     orthogonal,
     outputs,
     points_mesh,
@@ -97,7 +98,7 @@ def _interior(schemas):
 
 def _model(interior=False, schemas=SCHEMAS, output_schema=OUT, **kw):
     torch.manual_seed(0)
-    return (
+    return live(
         ISLA(
             output_schema=output_schema,
             boundary_schemas=_interior(schemas) if interior else schemas,
@@ -219,8 +220,12 @@ def _split(mesh: Mesh) -> Mesh:
 def test_remeshing_one_condition_changes_no_interior_prediction(name):
     """Splitting every cell of one condition into two half-measure copies with its
     fields (the budget above every cell count, so the draw keeps every cell) leaves
-    the interior predictions unchanged, for a condition with fields and without."""
+    the interior predictions unchanged, for a condition with fields and without. The
+    invariance is exact for ISLA-DTT's exact read (theta = 0, every cell pair read); at
+    the default opening angle the split boundary's forest differs and the Barnes-Hut
+    read is an approximation."""
     m = _model(interior=True)
+    m._tree_read_theta = 0.0
     meshes = _meshes()
     base = _run(m, meshes, q=Q)
     out = _run(m, {**meshes, name: _split(meshes[name])}, q=Q)

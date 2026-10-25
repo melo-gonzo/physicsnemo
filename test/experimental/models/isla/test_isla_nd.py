@@ -28,6 +28,7 @@ from physicsnemo.experimental.models.isla.heads import _levi_civita, _pseudovect
 from test.experimental.models.isla._meshes import (
     cloud,
     law,
+    live,
     orthogonal,
     outputs,
     soup,
@@ -51,14 +52,16 @@ def _problem(d: int, n: int = 160, seed: int = 0):
 def _model(d: int, outputs, **kw):
     torch.manual_seed(1)
     kw.setdefault("boundary_schemas", {"wall": {}})
-    return ISLA(
-        output_schema=outputs,
-        global_schema={"g": {"rank": 1}},
-        hidden=32,
-        n_layers=2,
-        n_slices=8,
-        n_spatial_dims=d,
-        **kw,
+    return live(
+        ISLA(
+            output_schema=outputs,
+            global_schema={"g": {"rank": 1}},
+            hidden=32,
+            n_layers=2,
+            n_slices=8,
+            n_spatial_dims=d,
+            **kw,
+        )
     )
 
 
