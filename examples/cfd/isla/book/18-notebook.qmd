@@ -42576,7 +42576,7 @@ EDT, the validation re-read dropped; to 265 at 02:58).
   of interacting ISLA on `family_non_box` (0.706 against 0.720) and interacting ISLA ahead of ISLA-DTT on `reynolds` (0.371
   against 0.401). On medians and `mean_stable` a few more pairs swap (21 of 96 rows change on at least one field, ORDERS.md).
 - **The references.** Both baselines are at the zero predictor on pressure (GeoTransolver's ε_p 1.00 to 1.03 times it) and
-  about at AeroZoo's free stream on velocity (0.97 to 1.90 times its ε_U, never more than 3 percent below it). Both forms of ISLA are 0.16 to 0.27 of the
+  about at AeroZoo's free stream on velocity (0.97 to 1.90 times its ε_U, at most 3.4 percent below it). Both forms of ISLA are 0.16 to 0.27 of the
   free stream's ε_U on `full`, `bank_zero_to_cad`, `bank_blobs` and `reynolds`, 0.77 to 0.83 on `profile_dual_inlet`, and
   1.47 to 1.55 on `family_non_box` and `profile_crossflow`, where their ε_p is also above the zero predictor's (crossflow
   5.01 and 4.74 against 2.59; non-box 0.720 and 0.706 against 0.467). GeoTransolver ÷ ISLA on ε_U: `full` 8.78, above one on
@@ -42707,7 +42707,7 @@ ISLA's pressure is 0.0164 / 0.0173 against 0.0132 / 0.0118. The far field beats 
 
 **Where.**
 - ISLA's velocity and eddy-viscosity harm sits at the wall: 1.43 and 1.12 in the first decade off it (1e-6 to 1e-5
-  chords), falling to 1.01 and 1.00 beyond 0.1 chord. It is larger below the softening's knee, 1e-6 L = 3.05e-4 chords,
+  chords), falling to 1.01 and 1.00 at 0.1 to 1 chord. It is larger below the softening's knee, 1e-6 L = 3.05e-4 chords,
   than above it on both seeds (velocity 1.24 against 1.12). The far field makes L = 305 chords and puts 20 % of the points
   in the channel's linear part, so the trained model does not recover the log resolution NEARWALL found lost at fixed
   weights (@sec-oq-nearwall).

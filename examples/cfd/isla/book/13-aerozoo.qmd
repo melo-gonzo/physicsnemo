@@ -652,7 +652,7 @@ print("**Scored with AeroZoo's own metrics, both baselines end at the zero predi
       "pressure, so it differs from split to split. AeroZoo's free stream predicts the area-weighted mean prescribed inlet velocity "
       "everywhere and zero pressure, so its $\\varepsilon_p$ is the zero predictor's. GeoTransolver's $\\varepsilon_U$ is "
       f"{min(gt_fs):.2f} to {max(gt_fs):.2f} times the free stream's and its $\\varepsilon_p$ {min(gt_z):.2f} to {max(gt_z):.2f} "
-      f"times the zero predictor's, so neither baseline has skill beyond the free stream by more than {(1 - min(gt_fs)) * 100:.0f}% on "
+      f"times the zero predictor's, so neither baseline has skill beyond the free stream by more than {(1 - min(gt_fs)) * 100:.1f}% on "
       "any split. The $\\varepsilon_U$ of the two "
       f"forms of ISLA is {fsr(grp['good'])} of the free stream's on {fp(grp['good'])}, {fsr(grp['mid'])} on {fp(grp['mid'])} and "
       f"{fsr(grp['bad'])} on {fp(grp['bad'])}. GeoTransolver leads ISLA on the velocity of {fp(gt_v_lead)} ("

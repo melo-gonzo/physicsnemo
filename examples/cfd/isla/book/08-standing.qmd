@@ -72,10 +72,10 @@ for k in KEYS:
                                    "replacement": s.in_flight["replacement"]}))
 print(S.interior_form_callout(KEYS))
 if "airfrans" in KEYS:
-    print(S.in_flight_callout({"what": "ISLA 0.9.0 on the AirfRANS interior task trained and scored with the airfoil alone, while the "
-                                       "class reads the far field as well, which on AirfRANS costs accuracy as its encoding stands "
-                                       "(@sec-limits-af-whole)",
-                               "replacement": "ISLA reading the far field, retrained in the final reference run,"}))
+    print('::: {.callout-note title="In flight"}\nThe AirfRANS numbers come from ISLA 0.9.0 on the AirfRANS interior task trained '
+          "and scored with the airfoil alone, while the class reads the far field as well, which on AirfRANS costs accuracy as its "
+          "encoding stands (@sec-limits-af-whole). ISLA reading the far field replaces them in the final reference run, which the "
+          "ledger (@sec-ledger) tracks.\n:::\n")
 ```
 
 ## The two invariances, measured {#sec-standing-invariances}

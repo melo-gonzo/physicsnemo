@@ -1346,8 +1346,9 @@ flat over five decades. At fixed weights a tenfold change at AirfRANS's
 first nodes moves the input layer 38 times less in the linear part than in
 the logarithmic one, so with the whole boundary those weights resolve the
 near-wall distance on AirfRANS less finely, and a model trained with the
-whole boundary does not recover it: its velocity and eddy-viscosity errors
-rise most in the first decades off the wall (@sec-limits-af-whole, @sec-oq-nearwall;
+whole boundary does not recover it: its velocity error is largest in the
+first decades off the wall, and its velocity and eddy-viscosity errors are
+larger below the channel's knee than above it (@sec-limits-af-whole, @sec-oq-nearwall;
 results/campaigns_2026-10-23/nearwall/RESULTS.md, A1 to A3; results/campaigns_2026-10-23/nearwall/DESIGN.md, section 4).
 
 $\delta_q$ and $u_q$ are functions of the surface and its orientation alone:
@@ -2051,7 +2052,7 @@ change octant, and posed equals native to 0.25% at every opening angle, with
 the same pair counts (results/campaigns_2026-10-23/dtt_pose/MECHANISMS.md, sections 1 and 3;
 results/campaigns_2026-10-23/dtt_knobs/sens/sens_table.md). With its far field
 it ties as the lug does: the far field's straight edges lie along the
-forest's axes, so one component of each normal is about $2 	imes 10^{-6}$;
+forest's axes, so one component of each normal is about $2 \times 10^{-6}$;
 posed against native 16 to 45% of the far-field cells (median 29%) change
 octant, and ISLA-DTT trained with the far field has a posed error 1.53 to
 2.52 times its native error (@sec-limits-af-whole;

@@ -278,8 +278,8 @@ print("**Velocity is measured alike for the three.** GeoTransolver and Transolve
 print(St.table("tbl-airfrans-protocols", f"The AirfRANS interior task (ISLA: interacting ISLA 0.9.0; ISLA-DTT: ISLA-DTT 0.9.0), `full` split, {N_TEST} test airfoils"))
 print(S.form_callout("its row here is ISLA-DTT 0.9.0, whose error is " + " / ".join(f"{St.ratio('ISLA-DTT', f):.3f}" for f in FK)
                      + " times interacting ISLA's on " + " / ".join(l for _, l in FIELDS),
-                     what="interacting ISLA 0.9.0 and ISLA-DTT 0.9.0 reading the airfoil alone",
-                     also="the same two trained with the far field as well (@sec-data-airfrans)"))
+                     what="interacting ISLA 0.9.0 and ISLA-DTT 0.9.0 reading the airfoil alone (trained with the far field as well, "
+                          "both read a harm: @sec-limits-af-whole)"))
 ```
 
 ```{python}
@@ -638,8 +638,9 @@ print("**ISLA-DTT's gap to interacting ISLA on AirfRANS is one of fit, and it si
 ```
 
 ::: {.callout-note title="In flight"}
-These numbers come from ISLA and ISLA-DTT reading the airfoil alone. The same two trained with the far field
-as well (@sec-data-airfrans) are being measured, and the ledger (@sec-ledger) tracks it.
+These numbers come from ISLA and ISLA-DTT reading the airfoil alone. Trained with the far field as well, both
+read a harm (@sec-limits-af-whole); ISLA reading the far field replaces them in the final reference run, which the
+ledger (@sec-ledger) tracks.
 :::
 
 ### Outside the training range: the extrapolation splits {#sec-interior-extrapolation}
