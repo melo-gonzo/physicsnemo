@@ -42607,14 +42607,14 @@ deviations as limits. 08, 20, 22 and the index read the new file, results/char/a
 results/char/aerozoo_090_specmetric_2026-10-25.py from the committed record, which checks it against the registered
 standing and READINGS.md.
 
-## 2026-10-25 — LIB-TREE: the cluster tree's Warp build and walk and a grouped forest in physicsnemo.mesh.spatial, bitwise ISLA's on six real dumps and GLOBE's trees; a library-only branch, and Peter is asked about an upstream pull request {#sec-nb-lib-tree}
+## 2026-10-25 — LIB-TREE: the cluster tree's Warp build and walk and a grouped forest in physicsnemo.mesh.spatial, bitwise ISLA's on six real dumps and GLOBE's trees; a library-only branch, opened as NVIDIA/physicsnemo#2170 {#sec-nb-lib-tree}
 
 **Why.** Peter's direction (c) of about 21:43 EDT 2026-10-24, in part, verbatim: "it would be great if you could implement
 the performance improvements which aren't ISLA-specific inside the broader physicsnemo library, so that other modules can
 benefit." Lane LIB-TREE (results/campaigns_2026-10-23/lib_tree/, FINAL_REPORT.md md5 349e78de, RESULTS.md), written 01:12
 EDT 2026-10-25.
 
-- **Branch.** `pr/cluster-tree-warp` on upstream main 289e57382, head 42de1669d, pushed to origin only; no pull request.
+- **Branch.** `pr/cluster-tree-warp` on upstream main 289e57382, head 42de1669d, opened as NVIDIA/physicsnemo#2170 on 2026-10-25 at Peter's answer "yes, you may open that PR".
   `ClusterTree.from_points(..., implementation=None)` builds with Warp on CUDA and torch otherwise; `from_point_groups`
   builds a forest of per-group trees; `find_point_interaction_pairs` returns streams grouped by target, with `count_only`.
 - **Bitwise.** ISLA's own build and walk in one process and the library in another, on six real dumps (DrivAerML bf16 and
@@ -42624,7 +42624,7 @@ EDT 2026-10-25.
   ISLA's DrivAerML forest 6.0 against 8.7 ms; the Warp walk at 400k targets 23.7 against 110 ms for torch; the torch walk
   29 to 31 percent slower than main's for the order contract.
 - **Suites.** Merged with psharpe/isla: GB300 1,696 passed, CPU 1,110 passed, 0 failures. About 4.5 of 6 GPU-h.
-- **Open.** Peter is asked whether it becomes an upstream pull request. ISLA does not call it yet; when it does, ISLA's
+- **Open.** #2170's CI and review. ISLA does not call it yet; when it does, ISLA's
   fast-against-reference tests must pass `implementation="torch"`.
 
 ## 2026-10-25 — GEO-TIEORDER: the on-wall direction follows the cells' order and the queries' precision at near-equal normals; a rule that breaks exact distance ties by position and takes the holding normals' least-norm point on the wall removes it; a candidate for ISLA 0.14.0, not merged {#sec-nb-geo-tieorder}
@@ -42686,7 +42686,7 @@ psharpe/isla-draw-exact 5b5e72c2f, pushed, not merged; LHR 377433, 377520, 37808
   "deterministic" and "exact on a condition kept whole" to it.
 - **Suites:** CPU 466 passed, 245 skipped, 2 xfailed; GB300 716 passed, 1 skipped, 2 xfailed; the new determinism tests
   fail on the base.
-- **The supervisor's intent:** adopt it at the 0.14.0 freeze; adopting the function change is Peter's decision.
+- **The supervisor's decision:** adopt it at the 0.14.0 assembly; Peter may veto.
 
 ## 2026-10-25 — AF-WHOLE read: with the AirfRANS far field, ISLA reads a harm on every field (1.35 / 1.20 / 1.28), ISLA-DTT a harm and a broken pose through an octant tie; the velocity and eddy-viscosity harm sits at the wall, where the length unit of the whole boundary stretches the distance channel's softening over the boundary layer {#sec-nb-af-whole-read}
 
@@ -43687,8 +43687,8 @@ registered; results/campaigns_2026-10-23/outlet_exp/).
 - **Adoption.** Not adopted by the rule: the first clause needs "helps" on crossflow; the on-principle clause (helps nowhere,
   harms nowhere) needs the cost check, which fails. **The supervisor's decision (2026-10-25 04:33 EDT): not adopted**,
   because R1 reads no change on both splits, the near-outlet error shows the gauge is not crossflow's main error, and the
-  cost check fails at 1.5 times the step. It is not kept as an opt-in in the canonical code (Peter's rule of 2026-10-17:
-  no parallel old implementations; and the supervisor's rule that options are scaffolds); it lives only on the unmerged branch `psharpe/isla-outlet-gauge` at 9250072af, as
+  cost check fails at 1.5 times the step. It is not kept as an opt-in in the canonical code (Peter's standing rule for
+  ISLA: options are scaffolds, to be universalized or deleted); it lives only on the unmerged branch `psharpe/isla-outlet-gauge` at 9250072af, as
   the record. No follow-up now; a bounded-probe design with more crossflow seeds is a candidate after the reruns.
 - Predictions: M1 passes (0.95) yes; crossflow no change (0.60) yes; full no change (0.85) yes; B's crossflow band below
   0.3 RMS p (0.7) no; cost within 25 percent (0.85) no.
