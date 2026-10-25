@@ -23,8 +23,10 @@ times) in one process on the same inputs and states what repeats:
 
 - bitwise: the fast exact geometry (d, u, the query gradient), the fused geometry
   region, the fused node means and the fused read with their backward passes, the
-  segment-softmax read's forward and its by-point gradients, the whole surface model
-  on CPU with one thread and on CUDA with kernels auto;
+  segment-softmax read's forward and its by-point gradients, the whole model (the
+  surface task and ISLA-DTT with its draw, in 3-D and 2-D, in float32 and under
+  bfloat16 autocast, forward and backward) on CPU with one thread and on CUDA with
+  kernels auto;
 - to a stated tolerance, where the code sums in an order CUDA does not fix: the
   draw's float64 Horvitz-Thompson weights (CUDA's floating-point ``cumsum``,
   ulps), the segment-softmax read's key and value gradients (atomic adds), the fast
@@ -46,7 +48,9 @@ from physicsnemo.experimental.models.isla import (
     geo_kernel,
     sampling,
     segment_softmax,
+    tree_build,
     tree_read,
+    tree_walk,
 )
 from physicsnemo.experimental.models.isla.geometry import exact_boundary_geometry
 from physicsnemo.experimental.models.isla.segment_softmax import PairPlan
@@ -57,7 +61,13 @@ from physicsnemo.experimental.models.isla.tree_read import (
     kernel_geo_width,
 )
 from test.experimental.models.isla._forced import ran
-from test.experimental.models.isla._meshes import cloud, outputs, soup
+from test.experimental.models.isla._meshes import (
+    cloud,
+    live,
+    outputs,
+    points_mesh,
+    soup,
+)
 from test.experimental.models.isla.test_isla_interior_geometry import (
     _near_wall,
     _sphere,
@@ -400,64 +410,138 @@ def test_the_reference_tree_read_on_cuda_spreads_within_its_bound():
 
 
 # --------------------------------------------------------------------------- the whole model
-_SURFACE = dict(
-    output_schema={"p": {"rank": 0}, "v": {"rank": 1}},
-    boundary_schemas={"wall": {}},
-    global_schema={"g": {"rank": 1}},
-    hidden=32,
-    n_layers=2,
-    n_slices=16,
-)
+#: The whole-model cases: the surface task and ISLA-DTT (its read live, its draw
+#: keeping 300 of 400 cells), each in 3-D and in 2-D.
+TASKS = ["surface", "dtt"]
+DIMS = [3, 2]
+PRECISIONS = [
+    pytest.param(False, id="fp32"),
+    pytest.param(True, id="bf16_autocast"),
+]
 
 
-def _surface_step(model, device, dtype=torch.float32, n=1500):
-    """One training step of the default 3-D surface model on a boundary soup: its
-    outputs and every parameter's gradient."""
-    pts, nrm, w, drv = cloud(n, seed=0, dtype=dtype)
-    mesh = soup(pts, nrm, w).to(device)
-    model.zero_grad(set_to_none=True)
-    out = outputs(
-        model(
-            boundary_meshes={"wall": mesh},
-            global_data={"g": drv.to(device)},
-            prediction_boundaries=["wall"],
-        )
+def _model(task, dims):
+    torch.manual_seed(0)
+    kw = dict(
+        output_schema={"p": {"rank": 0}, "v": {"rank": 1}},
+        boundary_schemas={"wall": {}},
+        global_schema={"g": {"rank": 1}},
+        n_spatial_dims=dims,
+        hidden=32,
+        n_layers=2,
+        n_slices=16,
     )
-    sum(o.double().square().mean() for o in out.values()).backward()
+    if task == "dtt":
+        kw.update(interior=True, n_boundary_tokens=300)
+    return live(ISLA(**kw))
+
+
+def _step(model, task, device, autocast, n=400, nq=120):
+    """One training step of ``model`` on a boundary soup of ``n`` cells (and, for
+    ISLA-DTT, ``nq`` prediction points), the global RNG seeded first (the draw's
+    start in training): the outputs, every parameter's gradient and the draw's kept
+    cells and weights, by name."""
+    dims = model.n_spatial_dims
+    pts, nrm, w, drv = cloud(n, d=dims, seed=0, dtype=torch.float32)
+    mesh = soup(pts, nrm, w).to(device)
+    if task == "dtt":
+        q = cloud(nq, d=dims, seed=1, dtype=torch.float32, scale=(3.0,) * dims)[0]
+        where = {"prediction_points": points_mesh(q.to(device))}
+    else:
+        where = {"prediction_boundaries": ["wall"]}
+    model.zero_grad(set_to_none=True)
+    torch.manual_seed(1)
+    with (
+        ran(sampling.sample_boundary_cells) as r,
+        torch.autocast(device, dtype=torch.bfloat16, enabled=autocast),
+    ):
+        out = outputs(
+            model(
+                boundary_meshes={"wall": mesh},
+                global_data={"g": drv.to(device)},
+                **where,
+            )
+        )
+        sum(o.double().square().mean() for o in out.values()).backward()
+    draws = r.returns(sampling.sample_boundary_cells)
+    assert len(draws) == (task == "dtt")
+    draw = {}
+    if draws:
+        draw = dict(zip(("draw.kept", "draw.weights"), draws[0]))
+        assert draw["draw.kept"].shape == (300,)  # the draw is active: 300 of 400 cells
     return {
         **{k: v.detach() for k, v in out.items()},
         **{n: p.grad for n, p in model.named_parameters()},
+        **draw,
     }
 
 
-def test_the_surface_model_repeats_bitwise_on_cpu_with_one_thread():
-    """The default 3-D surface model's forward and every parameter gradient, twice on
-    CPU with one thread, bitwise: the baseline the cleanup's A/B harness assumes."""
-    torch.manual_seed(0)
-    model = ISLA(**_SURFACE).double()
+def _not_bitwise(a, b) -> list:
+    assert a.keys() == b.keys()
+    bad = [k for k in a if not _bitwise(a[k], b[k])]
+    for k in bad:
+        print(f"{k}: run-to-run {_rel_max(a[k], b[k]):.2e}")
+    return bad
+
+
+@pytest.mark.parametrize("autocast", PRECISIONS)
+@pytest.mark.parametrize("dims", DIMS)
+@pytest.mark.parametrize("task", TASKS)
+def test_the_model_repeats_bitwise_on_cpu_with_one_thread(task, dims, autocast):
+    """The surface model and ISLA-DTT (read live, draw active), in 3-D and 2-D, in
+    float32 and under bfloat16 autocast: one training step twice on CPU with one
+    thread, the outputs, every parameter gradient and the draw bitwise (the baseline
+    the cleanup's A/B harness assumes)."""
+    model = _model(task, dims)
     threads = torch.get_num_threads()
     torch.set_num_threads(1)
     try:
-        a, b = (_surface_step(model, "cpu", D) for _ in range(2))
+        a, b = (_step(model, task, "cpu", autocast) for _ in range(2))
     finally:
         torch.set_num_threads(threads)
-    assert a.keys() == b.keys()
-    assert all(_bitwise(a[k], b[k]) for k in a), [
-        k for k in a if not _bitwise(a[k], b[k])
-    ]
+    assert not _not_bitwise(a, b)
+
+
+def _resolved(model, task, device):
+    """The kernels "auto" resolves to for ``model`` on ``device`` (float32 points):
+    the geometry region's, and for ISLA-DTT the exact geometry's and the read's."""
+    p = torch.zeros(1, model.n_spatial_dims, device=device)
+    kernels = {"geo": model.resolve_geo_kernel(p)}
+    if task == "dtt":
+        kernels["geometry"] = model.resolve_geometry_kernel(p)
+        kernels["tree_read"] = model.resolve_tree_read_kernel(p)
+    return kernels
 
 
 @pytest.mark.cuda
 @CUDA_TRITON
-def test_the_surface_model_repeats_bitwise_on_cuda_with_kernels_auto():
-    """The default 3-D surface model on CUDA in float32, kernels auto (the fused
-    geometry region resolves), twice: the outputs and every parameter gradient
-    bitwise."""
-    torch.manual_seed(0)
-    model = ISLA(**_SURFACE).cuda()
-    assert model.resolve_geo_kernel(torch.zeros(1, 3, device="cuda")) == "fused"
-    a, b = (_surface_step(model, "cuda") for _ in range(2))
-    bad = [k for k in a if not _bitwise(a[k], b[k])]
-    for k in bad:
-        print(f"{k}: run-to-run {_rel_max(a[k], b[k]):.2e}")
-    assert not bad
+@pytest.mark.parametrize("autocast", PRECISIONS)
+@pytest.mark.parametrize("dims", DIMS)
+@pytest.mark.parametrize("task", TASKS)
+def test_the_model_repeats_bitwise_on_cuda_with_kernels_auto(task, dims, autocast):
+    """The surface model and ISLA-DTT (read live, draw active), in 3-D and 2-D, in
+    float32 and under bfloat16 autocast, on CUDA with every kernel "auto": one
+    training step twice, the outputs, every parameter gradient and the draw bitwise.
+    The kernels that resolve are recorded and asserted: the fused geometry region in
+    3-D (the eager region in 2-D, which it does not take), and for ISLA-DTT the fast
+    exact geometry, the fused read, the fast forest build and the fast walk.
+
+    DRAW-EXACT: ISLA-DTT's draw (its float64 weights included) is bitwise here at 400
+    cells today; the 0.14.0 draw makes it so at any size, and this test stays."""
+    model = _model(task, dims).cuda()
+    with ran(tree_build.forest_tables, tree_walk.walk_pairs) as r:
+        a, b = (_step(model, task, "cuda", autocast) for _ in range(2))
+    kernels = _resolved(model, task, "cuda")
+    if task == "dtt":
+        tables, walks = (
+            r.returns(tree_build.forest_tables),
+            r.returns(tree_walk.walk_pairs),
+        )
+        kernels["build"] = "fast" if tables and None not in tables else "reference"
+        kernels["walk"] = "fast" if walks and None not in walks else "reference"
+    print("resolved:", kernels)
+    want = {"geo": "fused" if dims == 3 else "eager"}
+    if task == "dtt":
+        want.update(geometry="fast", tree_read="fused", build="fast", walk="fast")
+    assert kernels == want
+    assert not _not_bitwise(a, b)
