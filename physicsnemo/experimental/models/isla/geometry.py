@@ -31,6 +31,7 @@ from jaxtyping import Float, Int
 from physicsnemo.core.function_spec import FunctionSpec
 from physicsnemo.experimental.models.isla import geometry_fast
 from physicsnemo.experimental.models.isla.tree_read import canonical_frame, frame_coordinates
+from physicsnemo.experimental.models.isla.tree_walk import WARP_MAX_ELEMENTS
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.geometry._cell_normals import compute_cell_normals
 from physicsnemo.mesh.spatial._lbvh import build_lbvh_topology
@@ -1088,16 +1089,22 @@ def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.T
     def search(rows, cap, extra=None):
         count = torch.zeros(rows.shape[0], dtype=torch.int64, device=dev)
         out = torch.empty(rows.shape[0] * cap, dtype=torch.int64, device=dev)
+        ### Blocks of rows whose slots Warp takes as one array (under 2**31 entries:
+        ### 33,554,431 rows of 64); one block below that.
+        block = (WARP_MAX_ELEMENTS - 1) // cap
         with FunctionSpec.warp_stream_scope(stream):
             wp.init()
-            wp.launch(
-                _ball_candidates_kernel if extra is None else _ball_winding_kernel,
-                dim=rows.shape[0],
-                inputs=[*fixed, wp.from_torch(rows, dtype=wp.int64), cap,
-                        wp.from_torch(count, dtype=wp.int64), wp.from_torch(out, dtype=wp.int64), *(extra or [])],
-                device=device,
-                stream=stream,
-            )
+            for s in range(0, rows.shape[0], block):
+                e = min(s + block, rows.shape[0])
+                wp.launch(
+                    _ball_candidates_kernel if extra is None else _ball_winding_kernel,
+                    dim=e - s,
+                    inputs=[*fixed, wp.from_torch(rows[s:e], dtype=wp.int64), cap,
+                            wp.from_torch(count[s:e], dtype=wp.int64),
+                            wp.from_torch(out[s * cap : e * cap], dtype=wp.int64), *(extra or [])],
+                    device=device,
+                    stream=stream,
+                )
         return count, out.reshape(-1, cap)
 
     rows = _compute_morton_codes(query).argsort()
