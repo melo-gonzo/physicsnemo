@@ -310,6 +310,9 @@ def test_a_warm_compile_cache_reuses_the_graph_across_the_budget():
                     _drawn(compiled, case)
 
 
+### DRAW-EXACT: the 0.14.0 draw replaces isla_cumsum's body (a fixed-order float scan
+### in place of ATen's) and edits this docstring; the test stays.
+@pytest.mark.slow
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA")
 def test_the_in_model_draw_compiles_under_max_autotune_at_full_resolution():
     """The recipe's compile options (``max-autotune-no-cudagraphs``) on an interior
