@@ -92,7 +92,7 @@ print(
     + " and ".join(S.DATASETS[k].short for k in SOLID_STILL)
     + "".join(f" and moves {v:.2f}-fold on the {S.DATASETS[k].short}" for k, v in SOLID_MOVED.items())
     + " (@sec-invariances). "
-    f"Redraw the surface as a uniform point cloud, and on the {len(SURF)} surface tasks every baseline error grows at least "
+    f"Redraw the surface as a uniform point cloud, and on the {len(SURF)} surface tasks whose standing scores it every baseline error grows at least "
     f"{base_area:.1f}-fold while ISLA's stays within {100 * isla_area:.1f}%. "
     "Where ISLA trails, and where its own error moves, the book shows where the difference sits and what is known of its cause."
 )

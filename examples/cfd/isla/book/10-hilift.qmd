@@ -22,7 +22,7 @@ HL = S.Standing("hilift")
 HL_F = tuple(HL.fields)              # pressure_l2, tau_wall_l2
 CL = HL.raw["case_level"]   # the per-case readouts of the standing
 POSED_DEV = [p / n - 1 for f in HL_F for p, n in zip(HL.seeds("ISLA", f, "posed"), HL.seeds("ISLA", f))]   # ISLA's posed ÷ native - 1, per field and seed
-UDC = HL.raw["unit_drive_control"]   # the input-scale control, on the wing as stored: unit-direction and physical-vector baselines, ISLA
+HLUDC = HL.raw["unit_drive_control"]   # the input-scale control, on the wing as stored: unit-direction and physical-vector baselines, ISLA
 BANDS = CL["bands"]   # pressure by angle band: 4-12 and 14-22 degrees, and all cases
 SWB = HL.raw["stored_wing_b"]   # the stored-wing checkpoints scored over the same distinct cells (b), and as the old standing scored them (a)
 REG = HL.raw["registered"]["HL-DUP stage 2"]   # the registered rule of the deduplicated retrain
@@ -128,10 +128,12 @@ RATIO = {k: mean(v[3]) / mean(v[2]) for k, v in RUNGS.items()}
 ```{python}
 #| label: para-hilift-lede
 #| output: asis
+_pre, _post = BANDS["4-12"], BANDS["14-22"]
+assert _pre["Transolver"] < _pre["ISLA"] < _pre["GeoTransolver"] and _post["GeoTransolver"] < min(_post["ISLA"], _post["Transolver"])
 print(f"The three architectures are {S.CONFIG['ISLA']}, {S.CONFIG['GeoTransolver']} and {S.CONFIG['Transolver']}, each at its reference configuration (@sec-selection). "
-      + f"In one paragraph: at the 510-case rung on the native mesh {both(HL, HL_F)}; before stall ISLA's pressure error is below "
-        "GeoTransolver's, and GeoTransolver's lead comes from the angles at and past stall, while Transolver's comes from the "
-        "attached flow (@sec-hilift-deficit). "
+      + f"In one paragraph: at the 510-case rung of the deduplicated wing, on the native mesh, {both(HL, HL_F)}; on pressure "
+        f"before stall ISLA's error lies between Transolver's, the lowest, and GeoTransolver's, and past stall GeoTransolver's "
+        "is the lowest (@sec-hilift-deficit). "
       + "Only ISLA keeps its error under rotation and translation, so under that scoring ISLA leads "
       f"both baselines by a factor of {S.fmt_ratio(min(HL.ratio(b, f, 'posed') for b in S.BASELINES for f in HL_F))} or more (@sec-de-result). On the data-efficiency "
       "ladders, run on a smaller ISLA against unit-direction baselines, GeoTransolver is ahead or level on every rung, its lead largest "
@@ -338,7 +340,7 @@ print(f"**The Surface task of @sec-surface on the 510-case rung of the deduplica
       f"500 epochs, {n_seeds} seeds, scored in float32 as the area-weighted relative L2 of surface pressure and of the wall-shear "
       "vector (@sec-metrics) over the distinct cells of a 200,000-cell draw per case.** Training and scoring draw cells as "
       f"stored and drop the extra copies of the root cells (@sec-data-hilift), which leaves about {round(KEPT, -3):,.0f} of the 200,000 "
-      "scored cells on the mean case. ISLA receives the sampled surface cells with positions, outward normals and areas, and the unit "
+      "drawn cells to be scored on the mean case. ISLA receives the sampled surface cells with positions, outward normals and areas, and the unit "
       "far-field direction $\\hat g_1$, which carries the angle of attack. GeoTransolver and Transolver receive the cells' centered "
       "coordinates and normals and the same unit direction (@tbl-model-inputs). The three "
       "architectures run at their reference configurations "
@@ -517,8 +519,8 @@ plt.show()
 #| output: asis
 PB, W = CL["per_baseline"], CL["geotransolver_lead_in_isla_worst"]
 low = lambda b, f: f"{PB[b][f]['lower_on']} of {CL['n_cases']}, median per-case ratio {b} ÷ ISLA {PB[b][f]['median_ratio']:.2f}"
-print(f"**Against GeoTransolver on pressure the lead sits in ISLA's worst cases, at the high angles; against Transolver, and on "
-      f"wall shear against both, it is spread over the cases.** Paired case by case on the {CL['n_cases']} validation cases, seed means, "
+print(f"**Against GeoTransolver on pressure the lead sits in ISLA's worst cases, at the high angles; Transolver's lower pressure "
+      f"error, and on wall shear both baselines' leads, are spread over the cases.** Paired case by case on the {CL['n_cases']} validation cases, seed means, "
       f"Transolver's pressure error is below ISLA's on {low('Transolver', 'pressure_l2')}, and GeoTransolver's on "
       f"{low('GeoTransolver', 'pressure_l2')}, so on the typical case ISLA's pressure error is below GeoTransolver's. ISLA's {W['n_worst']} "
       f"worst cases, a tenth of the set, all sit at {min(W['aoa_deg'])}° to {max(W['aoa_deg'])}° (@fig-hilift-aoa), and they carry "
@@ -542,9 +544,9 @@ print("**Reading the freestream as the physical velocity vector in inch/s costs 
 print()
 print("| model and input | surface pressure | wall shear | uniform point cloud, pressure | ÷ ISLA, pressure |\n|---|--:|--:|--:|--:|")
 for b in S.BASELINES:
-    for lab, arm in (("unit direction", UDC[b]["unit"]), ("physical vector", UDC[b]["physical"])):
+    for lab, arm in (("unit direction", HLUDC[b]["unit"]), ("physical vector", HLUDC[b]["physical"])):
         print(f"| {b}, {lab} | {arm['native']['pressure_l2']['mean']:.4f} | {arm['native']['tau_wall_l2']['mean']:.4f} | "
-              f"{arm['area']['pressure_l2']['mean']:.4f} | {arm['native']['pressure_l2']['mean'] / UDC['ISLA']['native']['pressure_l2']['mean']:.2f} |")
+              f"{arm['area']['pressure_l2']['mean']:.4f} | {arm['native']['pressure_l2']['mean'] / HLUDC['ISLA']['native']['pressure_l2']['mean']:.2f} |")
 print()
 print(": The input-scale control on the HiLiftAeroML 510-case rung of the wing as stored, with its duplicated root cells: GeoTransolver "
       "and Transolver at their reference configurations with the freestream as its unit direction and as the physical vector in inch/s, "
@@ -573,14 +575,15 @@ basecut = lambda f: rng([x for b in S.BASELINES for x in cut(b, f)])
 moves = [c["change"] for c in REG["cells"].values()]
 CELL = lambda b, f: REG["cells"][f"{b}/{f}"]
 print(f"**On the deduplicated wing ISLA {band_verdict('GeoTransolver', '4-12')} GeoTransolver before stall and "
-      f"{band_verdict('GeoTransolver', '14-22')} it past stall; Transolver's pressure lead is in the attached flow.** At 4° to 12° "
+      f"{band_verdict('GeoTransolver', '14-22')} it past stall on pressure; it {band_verdict('Transolver', '4-12')} Transolver before stall "
+      f"and {band_verdict('Transolver', '14-22')} it past stall.** At 4° to 12° "
       f"({pre['n']} validation cases) GeoTransolver ÷ ISLA on pressure is {pre['ratio']['GeoTransolver']:.3f} (seeds {rs('4-12', 'GeoTransolver')}), "
       f"and ISLA's error is below GeoTransolver's on {pre['isla_lower_on']['GeoTransolver']} of the {pre['n']} cases; Transolver ÷ ISLA is "
       f"{pre['ratio']['Transolver']:.3f} (seeds {rs('4-12', 'Transolver')}). At 14° to 22° ({post['n']} cases) GeoTransolver ÷ ISLA is "
       f"{post['ratio']['GeoTransolver']:.3f} (seeds {rs('14-22', 'GeoTransolver')}) and Transolver ÷ ISLA {post['ratio']['Transolver']:.3f}, "
       f"its seeds on either side of one ({rs('14-22', 'Transolver')}). Over all {BANDS['all']['n']} cases ISLA's pressure error is below "
       f"GeoTransolver's on {BANDS['all']['isla_lower_on']['GeoTransolver']} and below Transolver's on {BANDS['all']['isla_lower_on']['Transolver']}; "
-      f"for ISLA's checkpoints trained on the stored wing, scored over the same distinct cells, the counts are "
+      f"for the three architectures' checkpoints trained on the stored wing, scored over the same distinct cells, the counts are "
       f"{BANDS['all']['isla_lower_on_stored_wing_b']['GeoTransolver']} and {BANDS['all']['isla_lower_on_stored_wing_b']['Transolver']}. "
       "Every number here is the native pressure error per case, seed means within the band, against the unit-direction baselines.")
 print()
@@ -787,8 +790,9 @@ print(f"The slat and the flap together are {100 * sum(area(c) for c in thin):.0f
 #|   validation cases above each bar. How to read this: both models' errors
 #|   rise steeply above 14°, where the flow separates; that part is the
 #|   physics. At 35 cases the ratio also falls at the high angles, but at 210
-#|   cases the ratio is nearly flat across angles, so the location of the
-#|   deficit is a small-data observation, not a property of either model.
+#|   cases of this instrument the ratio is nearly flat across angles, so on
+#|   this instrument the location of the deficit is a small-data observation;
+#|   the standing's own location is in @sec-hilift-deficit.
 #|   Instrument: ISLA at 384 wide, 256 slices, 5e-4, raw slice reads
 #|   (@sec-study-configurations). Data: results/hl35_percase_2026-09-23.json;
 #|   results/hl210_percase_2026-09-27.json (the 210-case reading).

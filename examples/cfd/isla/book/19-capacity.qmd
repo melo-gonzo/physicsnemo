@@ -360,7 +360,7 @@ rows = [
 out = "| the DrivAerML reading | what the 510-wing rung measures | on the wings |\n|---|---|---|\n"
 for r in rows: out += "| " + " | ".join(r) + " |\n"
 print(out)
-print(": The capacity readings on the 510-wing HiLiftAeroML rung: surface-pressure error on the 180 validation wings, float32, 100,000 training "
+print(": The capacity readings on the 510-wing HiLiftAeroML rung of the wing as stored: surface-pressure error on the 180 validation wings, float32, 100,000 training "
       "cells, 500 epochs, two seeds. *Instrument:* ISLA at 192 and 384 wide, 256 slices, 1e-3, raw slice reads (@sec-study-configurations); "
       "GeoTransolver at 256 and 512 wide and Transolver at 256 wide, 3e-3, both reading the freestream as a unit direction. How to read this: each row restates a reading of this chapter and says "
       "whether the wing rung reproduces it; a ratio below one in the last row means ISLA trails GeoTransolver at that pair. "

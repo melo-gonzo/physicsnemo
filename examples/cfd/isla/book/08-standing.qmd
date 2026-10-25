@@ -311,6 +311,8 @@ print(": The resources of the reference configurations on each task, from the tr
       "trainable parameters, the training peak device memory per GPU (the maximum over the ranks) and the median training step, "
       "leaving out the compile steps, seed means; AeroZoo's lanes are those of its `full` split, and its Transolver is AeroZoo's "
       f"own configuration, {ARM['Transolver']}. {COST_NOTE} "
+      f"The {S.DATASETS['hilift'].short} lanes priced are the same configurations trained on the wing as stored; its standing is "
+      "of the deduplicated wing, whose lanes drop the copies from each draw and are not priced here. "
       f"On {and_(FIXED)} the ISLA rows are the lanes trained on the compiled path with the mix-order setting, not the "
       "eagerly trained lanes behind the standing. "
       f"ISLA's lanes on {and_(BEFORE)} trained before the mix-order setting; where both were "

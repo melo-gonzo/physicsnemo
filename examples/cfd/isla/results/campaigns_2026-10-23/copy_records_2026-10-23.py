@@ -504,7 +504,6 @@ RECORDS = {
         "scores of the stored-wing checkpoints that its rule and its like-for-like figures read",
         [
             "scores_stage2/*/*/*/metrics.jsonl",
-            "scores_stage2/*/*/SNAPSHOT_USED",
             "scores_stage2/*/*/DATASET_USED",
             "score_summary.json",
             "score_table.md",
