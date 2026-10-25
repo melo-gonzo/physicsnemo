@@ -510,6 +510,12 @@ RECORDS = {
             "stage2_summary.json",
         ],
     ),
+    "hl_symplane": (
+        "isla-hl-symplane-2026-10-24",
+        "HL-SYMPLANE: HiLiftAeroML's symmetry plane built at load from the source STL's root cap, its per-case check and "
+        "tolerance, the census of the 690 canonical cases, the comparison with the curation pipeline's plane, and the book changes",
+        ["FINAL_REPORT.md", "RESULTS.md", "BOOK_CHANGES.md"],
+    ),
 }
 
 

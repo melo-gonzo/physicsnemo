@@ -60,6 +60,7 @@ source. Do not edit by hand.
 | `hl_dup_stage2/` | HL-DUP, stage 2: ISLA and both unit-drive baselines retrained and scored on the deduplicated HiLift wing, its review, and the failed root-outline rebuild | `scratch/isla-hl-dup-2026-10-24/` |
 | `dtt_fast_final_table_p5/` | DTT-FAST, pass 2's table with its pass-3 columns added, as it now stands | `scratch/isla-dtt-fast-2026-10-23/final/` |
 | `hl_dup_stage2_scores/` | HL-DUP, stage 2: the scorer's per-case rows of the six deduplicated-wing runs (native and posed), and the stage-1 scores of the stored-wing checkpoints that its rule and its like-for-like figures read | `scratch/isla-hl-dup-2026-10-24/` |
+| `hl_symplane/` | HL-SYMPLANE: HiLiftAeroML's symmetry plane built at load from the source STL's root cap, its per-case check and tolerance, the census of the 690 canonical cases, the comparison with the curation pipeline's plane, and the book changes | `scratch/isla-hl-symplane-2026-10-24/` |
 
 | topic | file | source | md5 |
 | --- | --- | --- | --- |
@@ -336,3 +337,6 @@ source. Do not edit by hand.
 | hl_dup_stage2_scores | score_summary.json | scratch/isla-hl-dup-2026-10-24/score_summary.json | b49b4a6baa0dcade745dc99c6df0848e |
 | hl_dup_stage2_scores | score_table.md | scratch/isla-hl-dup-2026-10-24/score_table.md | 17b91d1106afc2b951494c10a72fba37 |
 | hl_dup_stage2_scores | stage2_summary.json | scratch/isla-hl-dup-2026-10-24/stage2_summary.json | f08ac2ef904f1ef561cc67d2d646df28 |
+| hl_symplane | FINAL_REPORT.md | scratch/isla-hl-symplane-2026-10-24/FINAL_REPORT.md | 11ee5fb8db9ef973aa63092083ceaecd |
+| hl_symplane | RESULTS.md | scratch/isla-hl-symplane-2026-10-24/RESULTS.md | 399ad8e84bad76bbb3e70c2c5af556a7 |
+| hl_symplane | BOOK_CHANGES.md | scratch/isla-hl-symplane-2026-10-24/BOOK_CHANGES.md | 4c2a160497d0b3f05023f97e02e6b776 |
