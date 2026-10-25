@@ -37,6 +37,7 @@ Exit 0 (PASS), 1 (FAIL) or 2 (INCONCLUSIVE). The reading rules:
 """
 
 import argparse
+import fnmatch
 import sys
 from pathlib import Path
 
@@ -140,7 +141,7 @@ def compare_case(a: dict, b: dict, key: str) -> tuple[int, list]:
     return status, rows
 
 
-def compare(a: dict, b: dict, log=print, show_all: bool = False) -> int:
+def compare(a: dict, b: dict, log=print, show_all: bool = False, only=None) -> int:
     """Compare two records; print a per-tensor table (the differing rows, or every row
     with ``show_all``) and a summary; return PASS, FAIL or INCONCLUSIVE."""
     fa, fb = a["fingerprint"], b["fingerprint"]
@@ -150,6 +151,8 @@ def compare(a: dict, b: dict, log=print, show_all: bool = False) -> int:
                 f"WARNING: platform differs in {k}: {fa.get(k)!r} against {fb.get(k)!r} (an A/B comparison needs one machine)"
             )
     keys = sorted(set(a["cases"]) | set(b["cases"]))
+    if only:
+        keys = [k for k in keys if any(fnmatch.fnmatchcase(k, p) for p in only)]
     worst, counts = PASS, {s: 0 for s in STATUS.values()}
     log(f"{'case variant':<62} {'tensor':<34} verdict  detail")
     for key in keys:
@@ -190,11 +193,16 @@ def main(argv=None) -> int:
         action="store_true",
         help="print every tensor's row, not only the non-bitwise ones",
     )
+    p.add_argument(
+        "--only",
+        nargs="*",
+        help="fnmatch patterns of the case variants to compare (default all)",
+    )
     args = p.parse_args(argv)
     a, b = R.load(args.a), R.load(args.b)
     R.print_versions(a, "A ")
     R.print_versions(b, "B ")
-    return compare(a, b, show_all=args.all)
+    return compare(a, b, show_all=args.all, only=args.only)
 
 
 if __name__ == "__main__":

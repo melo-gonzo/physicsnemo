@@ -212,10 +212,15 @@ def test_cuda_matches_the_cpu_golden(case, variant, golden, record_property):
     why = C.available(case, "cuda")
     if why:
         pytest.skip(why)
+    tf32 = torch.backends.cuda.matmul.allow_tf32
     torch.backends.cuda.matmul.allow_tf32 = False
+    try:
+        tensors = C.run_case(case, "cuda", variant)
+    finally:
+        torch.backends.cuda.matmul.allow_tf32 = tf32
     bad, worst = check(
         golden["cases"][case.id],
-        C.run_case(case, "cuda", variant),
+        tensors,
         CUDA_RTOL,
         overrides=case.cuda_tol,
     )
