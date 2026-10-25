@@ -130,10 +130,8 @@ pooled over the boundary sources' full-resolution cells (a global source's
 magnitude), and with boundary sources :math:`\hat g = \sum a v / |\sum a v|` is
 appended to the global directions (a global source is a direction already); both
 are computed per case in float64 before the draw, and an absent or zero source
-is refused (in eager mode; torch.compile skips the data-dependent checks). Rank-0 globals with the ``role`` ``density`` and ``viscosity`` give
-:math:`\rho` and :math:`\nu` and are not appended; with ``reynolds={"mean": m,
-"std": s}`` the global scalar :math:`z = (\log_{10}(U L / \nu) - m) / s` is
-appended. Every declared boundary field and rank-0 global is divided by its
+is refused (in eager mode; torch.compile skips the data-dependent checks). A rank-0 global with the ``role`` ``density`` gives
+:math:`\rho` and is not appended. Every declared boundary field and rank-0 global is divided by its
 units' :math:`\prod \text{scale}^{\text{exp}}` and by its constant ``scale`` (the
 typical size of the dimensionless field, default 1) before it enters the invariants,
 and every output with units is the head's dimensionless prediction times both, then
@@ -295,7 +293,6 @@ import logging
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
-from numbers import Real
 
 import torch
 import torch.nn as nn
@@ -632,11 +629,6 @@ class ISLA(Module):
             implemented in two and three dimensions. A two-dimensional problem
             is passed with ``n_spatial_dims=2`` (polyline boundaries) rather
             than embedded with a zero third coordinate.
-        reynolds: ``{"mean": m, "std": s}``, the standardization of
-            ``log10(U L / nu)``, appended to the global scalars as ``z``
-            (module docstring, *Scales*); required with a global of the role
-            ``viscosity``, refused without one. ``None`` (default): no Reynolds
-            number.
         output_stats: ``{name: {"mean", "std"}}`` over declared outputs (the
             format of ``NormalizeMeshFields.stats``; ``type`` is ignored): each
             output, after its units are restored, is returned as ``(y - mean) /
@@ -646,7 +638,7 @@ class ISLA(Module):
             The units, sources and roles are declared in the schemas: each field's
             mapping may carry ``units`` ({``"L"``, ``"U"``, ``"rho"``} to
             exponents), ``velocity_scale`` (rank 1, boundary or global),
-            ``role`` (rank-0 global, ``"density"`` or ``"viscosity"``) and
+            ``role`` (rank-0 global, ``"density"``) and
             ``scale`` (an output's positive constant ``c``: ``y = c yhat prod
             scale^exp``). With any of them, or ``output_stats``, the head and
             the output assembly run in the parameters' precision under autocast.
@@ -709,7 +701,6 @@ class ISLA(Module):
         n_slices: int = 512,
         compile_blocks: bool = False,
         n_spatial_dims: int = 3,
-        reynolds: Mapping[str, float] | None = None,
         output_stats: Mapping[str, Mapping] | None = None,
     ) -> None:
         super().__init__(meta=self.MetaData())
@@ -784,7 +775,7 @@ class ISLA(Module):
         self.global_schema = _declare(
             "global_schema", global_schema, max_rank=1, allow_odd=False
         )
-        self._init_scales(out_extras, b_extras, g_extras, reynolds, output_stats)
+        self._init_scales(out_extras, b_extras, g_extras, output_stats)
         ### The task structure: a surface task predicts at the cells of the boundaries
         ### forward names and has no prediction-point parameters; an interior task
         ### predicts at prediction points that enter the encoder as tokens, passive
@@ -814,7 +805,6 @@ class ISLA(Module):
         self._args["__args__"]["boundary_schemas"] = {
             name: merged(schema, b_extras[name]) for name, schema in self.boundary_schemas.items()
         }
-        self._args["__args__"]["reynolds"] = self.reynolds
         self._args["__args__"]["output_stats"] = self.output_stats
         ### The problem's global data are zero or more global DIRECTIONS (each
         ### enters as a unit direction: one seed term n.g_k per token, one
@@ -822,8 +812,7 @@ class ISLA(Module):
         ### gains g_k with the spherical complements of (u, g_k)) and zero or more
         ### global SCALARS (PDE parameters; appended to every token's seed). With
         ### boundary velocity sources the derived direction g is the last direction;
-        ### the density and viscosity roles are consumed, not appended, and the
-        ### standardized log Reynolds number z is the last scalar.
+        ### the density role is consumed, not appended.
         self.global_vector_names = [
             n for n, s in self.global_schema.items() if s.rank == 1
         ]
@@ -831,7 +820,7 @@ class ISLA(Module):
             n for n, s in self.global_schema.items() if s.rank == 0 and n not in self._roles.values()
         ]
         self.n_global_vectors = K = len(self.global_vector_names) + bool(self._boundary_sources)
-        self.n_global_scalars = len(self.global_scalar_names) + (self.reynolds is not None)
+        self.n_global_scalars = len(self.global_scalar_names)
         ### Each kind's columns in schema order (cached layouts, see _global_fields).
         self._global_vector_layout = _schema_layout({k: (self.n_spatial_dims,) for k in self.global_vector_names})
         self._global_scalar_layout = _schema_layout({k: () for k in self.global_scalar_names})
@@ -1004,7 +993,7 @@ class ISLA(Module):
             )
         )
 
-    def _init_scales(self, out_extras, b_extras, g_extras, reynolds, output_stats) -> None:
+    def _init_scales(self, out_extras, b_extras, g_extras, output_stats) -> None:
         """The opt-in scales (module docstring, *Scales*) from the declarations'
         ISLA-local keys (:func:`~physicsnemo.experimental.models.isla.scales.split_scale_keys`),
         checked against the parsed schemas."""
@@ -1071,23 +1060,6 @@ class ISLA(Module):
             raise ValueError("units name U, but no field is a velocity_scale source")
         if "rho" in used and "density" not in self._roles:
             raise ValueError("units name rho, but no global has the role 'density'")
-        if ("viscosity" in self._roles) != (reynolds is not None):
-            raise ValueError(
-                "the Reynolds number needs a global with the role 'viscosity' and its standardization "
-                f"reynolds={{mean, std}}, both or neither; got reynolds={reynolds!r}"
-            )
-        if reynolds is not None:
-            if not has_source:
-                raise ValueError("reynolds needs a velocity_scale source (Re = U L / nu)")
-            if (
-                not isinstance(reynolds, Mapping)
-                or set(reynolds) != {"mean", "std"}
-                or not all(isinstance(v, Real) and not isinstance(v, bool) and math.isfinite(v) for v in reynolds.values())
-                or not reynolds["std"] > 0
-            ):
-                raise ValueError(f"reynolds is {{mean, std}}, finite numbers with std > 0; got {reynolds!r}")
-            reynolds = {"mean": float(reynolds["mean"]), "std": float(reynolds["std"])}
-        self.reynolds = reynolds
         self.output_stats = check_output_stats(output_stats, self.output_schema)
         ### The scales are declared when any field has units, an input scale or is a
         ### source, or a role is.
@@ -1420,8 +1392,7 @@ class ISLA(Module):
         (``None`` when none are declared) from the global fields over the batch
         (:meth:`_global_rows`), each kind's columns in schema order; with
         ``scales`` (:meth:`_case_scales`) the rank-0 globals divided by their
-        units' scale, the derived direction ``g`` appended to the directions and
-        the standardized log Reynolds number ``z`` to the scalars."""
+        units' scale and the derived direction ``g`` appended to the directions."""
         if self.global_vector_names:
             gv = _pack(global_rows, self._global_vector_layout).unflatten(-1, (-1, self.n_spatial_dims))
             ### Each direction is normalized; the magnitude, if it means anything,
@@ -1441,9 +1412,6 @@ class ISLA(Module):
             )
         if scales["g"] is not None:
             g_unit = torch.cat([g_unit, scales["g"].to(g_unit.dtype).expand(g_unit.shape[0], 1, -1)], 1)
-        if scales["z"] is not None:
-            z = scales["z"].to(like.dtype).expand(g_unit.shape[0], 1)
-            g_scalars = z if g_scalars is None else torch.cat([g_scalars, z], -1)
         return g_unit, g_scalars
 
     @staticmethod
@@ -1463,13 +1431,12 @@ class ISLA(Module):
         globals, before the token draw: ``L`` (the gauge), ``U`` (the
         measure-weighted RMS speed pooled over the boundary sources, or the global
         source's magnitude), ``rho`` (the density role), the derived direction
-        ``g`` ``(1, 1, d)`` (``None`` unless the sources are boundary fields) and
-        ``z`` ``(1, 1)`` (``None`` without ``reynolds``). An absent or zero source,
-        or a non-positive density or viscosity, is refused in eager mode; under
+        ``g`` ``(1, 1, d)`` (``None`` unless the sources are boundary fields). An
+        absent or zero source, or a non-positive density, is refused in eager mode; under
         torch.compile these data-dependent checks are skipped (as every input check
         of ``forward`` is), so a compiled model reads such a case as NaN or inf."""
         check = not torch.compiler.is_compiling()
-        scales = {"L": gauge.reshape(()).double(), "g": None, "z": None}
+        scales = {"L": gauge.reshape(()).double(), "g": None}
         if self._boundary_sources:
             present = dict(zip(names, zip(meshes, measures)))
             s0, s2, s1 = velocity_moments(
@@ -1495,14 +1462,10 @@ class ISLA(Module):
             scales["U"] = v.norm()
             if check and not bool(scales["U"] > 0):
                 raise ValueError(f"the velocity_scale source {self._global_sources[0]!r} is zero: U is undefined")
-        for role, key in (("density", "rho"), ("viscosity", "nu")):
-            if role in self._roles:
-                scales[key] = global_rows.get(FieldSchema.key(self._roles[role]))[0].double().reshape(())
-                if check and not bool(scales[key] > 0):
-                    raise ValueError(f"the {role} {self._roles[role]!r} must be positive; got {scales[key].item()}")
-        if self.reynolds is not None:
-            log_re = torch.log10(scales["U"] * scales["L"] / scales.pop("nu"))
-            scales["z"] = ((log_re - self.reynolds["mean"]) / self.reynolds["std"])[None, None]
+        if "density" in self._roles:
+            scales["rho"] = global_rows.get(FieldSchema.key(self._roles["density"]))[0].double().reshape(())
+            if check and not bool(scales["rho"] > 0):
+                raise ValueError(f"the density {self._roles['density']!r} must be positive; got {scales['rho'].item()}")
         return scales
 
     @staticmethod

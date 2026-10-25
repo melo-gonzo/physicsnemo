@@ -21,8 +21,7 @@ A field of a boundary condition's schema, of ``global_schema`` or of
 ``units`` (exponents of the base scales :data:`BASE_SCALES`: the length ``L``, the
 velocity ``U`` and the density ``rho``), ``velocity_scale: true`` (a rank-1 field
 that is a source of ``U`` and of the direction ``g``) and, for a rank-0 global,
-``role`` (``density`` or ``viscosity``, consumed for the units and the Reynolds
-number) and, for an output, a boundary field or a rank-0 global input, ``scale`` (a
+``role`` (``density``, consumed for the units) and, for an output, a boundary field or a rank-0 global input, ``scale`` (a
 positive constant ``c``, the typical size of the field made dimensionless by its units:
 an input enters as ``x / (c prod scale^exp)``, and the head predicts ``y / (c prod
 scale^exp)``, both of order one). :func:`split_scale_keys` pops them before
@@ -41,7 +40,7 @@ from physicsnemo.mesh.fields import RankSpec
 #: The base scales a field's ``units`` may name.
 BASE_SCALES = ("L", "U", "rho")
 #: The roles of rank-0 globals, each with the units it implies.
-ROLES = {"density": {"rho": 1}, "viscosity": {"U": 1, "L": 1}}
+ROLES = {"density": {"rho": 1}}
 #: The ISLA-local keys of a field declaration.
 SCALE_KEYS = ("units", "velocity_scale", "role", "scale")
 

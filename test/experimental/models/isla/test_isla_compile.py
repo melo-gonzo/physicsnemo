@@ -85,15 +85,14 @@ def _model(task: str) -> ISLA:
             boundary_schemas={"wall": {}},
             global_schema={
                 "g": {"rank": 1, "units": {"U": 1}, "velocity_scale": True},
-                "nu": {"rank": 0, "units": {"U": 1, "L": 1}, "role": "viscosity"},
+                "re_z": {"rank": 0},
             },
-            reynolds={"mean": 6.0, "std": 0.2},
             output_stats={"nut": {"mean": 1e-3, "std": 2e-3}},
             hidden=32,
             n_layers=2,
             n_slices=8,
         )
-    else:  # scales: ISLA's own, with the derived direction, Re and output_stats
+    else:  # scales: ISLA's own, with the derived direction, a global scalar and output_stats
         return ISLA(
             output_schema={
                 "p": {"rank": 0, "units": {"U": 2, "rho": 1}},
@@ -102,9 +101,8 @@ def _model(task: str) -> ISLA:
             boundary_schemas=SCHEMAS["scales"],
             global_schema={
                 "rho": {"rank": 0, "role": "density"},
-                "nu": {"rank": 0, "units": {"U": 1, "L": 1}, "role": "viscosity"},
+                "re_z": {"rank": 0},
             },
-            reynolds={"mean": 5.0, "std": 1.0},
             output_stats={
                 "p": {"mean": 1.0, "std": 30.0},
                 "v": {"mean": 0.0, "std": 4.0},
@@ -134,7 +132,7 @@ def _case(task: str, sizes: dict, device, seed: int, nq: int = 0) -> dict:
 
     if task in ("scales", "global_source"):
         case["global_data"]["rho"] = torch.tensor(1.2, device=device)
-        case["global_data"]["nu"] = torch.tensor(1.5e-5, device=device)
+        case["global_data"]["re_z"] = torch.tensor(0.3, device=device)
     if task == "interior":
         case["global_data"]["re"] = torch.tensor(0.3, device=device)
         case["prediction_points"] = (2 * torch.randn(nq, 3, generator=g)).to(device)

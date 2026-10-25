@@ -17,9 +17,9 @@
 r"""ISLA brings its own scales (module docstring, *Scales*), in float64.
 
 The length L (the full-resolution boundary's RMS pairwise distance), the velocity U
-and direction g of the ``velocity_scale`` sources, the density and viscosity roles
-and the standardized log Reynolds number z: a similarity of the problem leaves every
-internal state unchanged and scales the outputs by their units; the condition that
+and direction g of the ``velocity_scale`` sources and the density role: a similarity
+of the problem (with its dimensionless global inputs unchanged) leaves every internal
+state unchanged and scales the outputs by their units; the condition that
 carries the source can have any name; U, g and L are the same for every draw and
 under refinement; a model that declares nothing is the release model; the scales
 take their hand values and an absent or zero source is refused; ``output_stats`` is
@@ -66,11 +66,7 @@ SCHEMAS = {
 }
 GLOBALS = {
     "physics.density": {"rank": 0, "role": "density"},
-    "physics.kinematic_viscosity": {
-        "rank": 0,
-        "units": {"U": 1, "L": 1},
-        "role": "viscosity",
-    },
+    "re_z": {"rank": 0},  # a dimensionless global, the recipe's standardized log10 Re
 }
 OUTPUTS = {
     "velocity": {"rank": 1, "units": {"U": 1}},
@@ -78,14 +74,13 @@ OUTPUTS = {
     "nut": {"rank": 0, "units": {"U": 1, "L": 1}},
     "omega": {"rank": 0, "units": {"U": 1, "L": -1}},
 }
-REYNOLDS = {"mean": 5.0, "std": 1.5}
 SIZES = {"inlet": 40, "outlet": 30, "wall": 120}
 OFFSETS = {
     "inlet": (-6.0, 0.0, 0.0),
     "outlet": (6.0, 0.0, 0.0),
     "wall": (0.0, 0.0, 0.0),
 }
-RHO, NU = 1.2, 1.5e-5
+RHO, RE_Z = 1.2, 0.3
 
 
 def _units(declared: dict) -> dict:
@@ -106,7 +101,6 @@ def _model(
     **kw,
 ):
     torch.manual_seed(0)
-    kw.setdefault("reynolds", REYNOLDS)
     m = ISLA(
         output_schema=outputs_,
         boundary_schemas=schemas,
@@ -145,7 +139,7 @@ def _case(schemas=SCHEMAS, sizes=SIZES, seed=0):
         )
     gd = {
         "physics.density": torch.tensor(RHO, dtype=D),
-        "physics.kinematic_viscosity": torch.tensor(NU, dtype=D),
+        "re_z": torch.tensor(RE_Z, dtype=D),
     }
     q = torch.randn(25, 3, dtype=D, generator=g) * 3
     return meshes, gd, q
@@ -153,7 +147,8 @@ def _case(schemas=SCHEMAS, sizes=SIZES, seed=0):
 
 def _similar(m, meshes, gd, q, schemas, s, c, r, R=None):
     """The case under the similarity x -> s R x, every field times its units' factor
-    (a vector rotated with the geometry), nu -> s c nu and rho -> r rho."""
+    (a vector rotated with the geometry), rho -> r rho and the dimensionless re_z
+    unchanged."""
     out = {}
     for name, mesh in meshes.items():
         moved = transform(mesh, R=R, scale=s, specs=m.boundary_schemas[name])
@@ -163,7 +158,7 @@ def _similar(m, meshes, gd, q, schemas, s, c, r, R=None):
         out[name] = moved.with_data(cell_data=data)
     gd = {
         "physics.density": gd["physics.density"] * r,
-        "physics.kinematic_viscosity": gd["physics.kinematic_viscosity"] * s * c,
+        "re_z": gd["re_z"],
     }
     R = torch.eye(3, dtype=D) if R is None else R
     return out, gd, s * q @ R.T
@@ -204,8 +199,8 @@ def _run(m, meshes, gd, q=None):
 
 @pytest.mark.parametrize("s, c, r", [(3.7, 0.29, 1.0), (0.05, 12.0, 830.0)])
 def test_similarity_leaves_the_internals_and_scales_the_outputs(s, c, r):
-    """(x, v, nu, rho, k, omega, p) -> (s x, c v, s c nu, r rho, c^2 k, (c/s) omega, r c^2 p),
-    with a rotation: L -> s L, U -> c U, g rotates, z and every internal state are
+    """(x, v, rho, k, omega, p) -> (s x, c v, r rho, c^2 k, (c/s) omega, r c^2 p), with
+    a rotation and re_z unchanged: L -> s L, U -> c U, g rotates, every internal state is
     unchanged, and every output is scaled by its units (and rotated by its rank)."""
     m = _model()
     seen = _spy(m)
@@ -218,7 +213,6 @@ def test_similarity_leaves_the_internals_and_scales_the_outputs(s, c, r):
     torch.testing.assert_close(b["U"], c * a["U"], atol=0, rtol=1e-12)
     torch.testing.assert_close(b["rho"], r * a["rho"], atol=0, rtol=1e-12)
     torch.testing.assert_close(b["g"], a["g"] @ R.T, atol=1e-12, rtol=0)
-    torch.testing.assert_close(b["z"], a["z"], atol=1e-12, rtol=0)
     torch.testing.assert_close(seen["h"][1], seen["h"][0], atol=1e-9, rtol=1e-9)
     for name, spec in m.output_schema.items():
         expected = law(base[name], R, spec.rank) * _factor(
@@ -261,7 +255,7 @@ def _full_length(meshes) -> torch.Tensor:
 
 
 def test_scales_are_independent_of_the_draw_and_of_refinement():
-    """U, g, z and L are computed on the full-resolution boundary before the token
+    """U, g and L are computed on the full-resolution boundary before the token
     draw: two training draws (different starts) of 60 of the 190 cells, and a
     subdivision of the source condition's cells (each triangle into four, its data
     carried), give the same scales; L is the full mesh's exact one."""
@@ -278,7 +272,7 @@ def test_scales_are_independent_of_the_draw_and_of_refinement():
         q,
     )
     for later in seen["scales"][1:]:
-        for key in ("L", "U", "g", "z"):
+        for key in ("L", "U", "g"):
             torch.testing.assert_close(
                 later[key], seen["scales"][0][key], atol=1e-13, rtol=1e-13
             )
@@ -372,7 +366,7 @@ def test_declaring_nothing_is_the_release_model(config):
 
 def test_the_scales_take_their_hand_values():
     """U = sqrt(sum a |v|^2 / sum a) pooled over two sources, g = sum a v / |sum a v|,
-    z = (log10(U L / nu) - m) / s, rho the density's; g is the last global direction."""
+    rho the density's; g is the last global direction."""
     schemas = {
         "a": {"v": {"rank": 1, "units": {"U": 1}, "velocity_scale": True}},
         "b": {"w": {"rank": 1, "units": {"U": 1}, "velocity_scale": True}},
@@ -382,7 +376,7 @@ def test_the_scales_take_their_hand_values():
     )
     assert (
         m.n_global_vectors == 1 and m.n_global_scalars == 1
-    )  # g, and z (the roles are consumed)
+    )  # g, and re_z (the density role is consumed)
     seen = _spy(m)
     meshes, gd, q = _case(schemas=schemas, sizes={"a": 7, "b": 5})
     _run(m, meshes, gd, q)
@@ -406,10 +400,6 @@ def test_the_scales_take_their_hand_values():
     torch.testing.assert_close(sc["U"], U, atol=0, rtol=1e-13)
     torch.testing.assert_close(sc["g"][0, 0], m1 / m1.norm(), atol=1e-14, rtol=0)
     torch.testing.assert_close(sc["rho"], torch.tensor(RHO, dtype=D), atol=0, rtol=0)
-    z = (math.log10(float(U * L) / NU) - REYNOLDS["mean"]) / REYNOLDS["std"]
-    torch.testing.assert_close(
-        sc["z"][0, 0], torch.tensor(z, dtype=D), atol=1e-13, rtol=0
-    )
 
 
 def test_an_absent_or_zero_source_and_bad_declarations_are_refused():
@@ -461,17 +451,7 @@ def test_an_absent_or_zero_source_and_bad_declarations_are_refused():
             ),
             "no field is a velocity_scale",
         ),
-        (
-            dict(
-                globals_={
-                    "physics.kinematic_viscosity": GLOBALS[
-                        "physics.kinematic_viscosity"
-                    ]
-                }
-            ),
-            "role 'density'",
-        ),
-        (dict(reynolds=None), "both or neither"),
+        (dict(globals_={"re_z": GLOBALS["re_z"]}), "role 'density'"),
         (dict(outputs_={"p": {"rank": 0, "units": {"T": 1}}}), "base scales"),
         (dict(outputs_={"p": {"rank": 0, "velocity_scale": True}}), "an output cannot"),
         (
@@ -485,12 +465,7 @@ def test_an_absent_or_zero_source_and_bad_declarations_are_refused():
             "rank-0 global",
         ),
         (
-            dict(
-                globals_={
-                    **GLOBALS,
-                    "physics.density": {"rank": 0, "role": "viscosity"},
-                }
-            ),
+            dict(globals_={**GLOBALS, "rho2": {"rank": 0, "role": "density"}}),
             "two fields",
         ),
         (
@@ -528,8 +503,6 @@ def test_an_absent_or_zero_source_and_bad_declarations_are_refused():
             dict(globals_={**GLOBALS, "d": {"rank": 1, "units": {"L": 1}}}),
             "direction only",
         ),
-        (dict(reynolds={"mean": float("nan"), "std": 1.0}), "finite numbers"),
-        (dict(reynolds={"mean": 5.0, "std": float("inf")}), "finite numbers"),
     ]
     for kw, match in bad:
         with pytest.raises((ValueError, TypeError), match=match):
@@ -581,11 +554,11 @@ def test_output_stats_are_the_dataset_s_normalize_mesh_fields():
 
 def test_a_global_source_adds_no_direction():
     """AirfRANS: the global U_inf is the source, so U = |U_inf| and g is U_inf's own
-    direction (K unchanged); x -> s x, U_inf -> c U_inf, nu -> s c nu leaves the
+    direction (K unchanged); x -> s x, U_inf -> c U_inf with re_z unchanged leaves the
     dimensionless outputs (v / U, Cp) unchanged and scales nut by s c."""
     globals_ = {
         "U_inf": {"rank": 1, "units": {"U": 1}, "velocity_scale": True},
-        "nu": {"rank": 0, "units": {"U": 1, "L": 1}, "role": "viscosity"},
+        "re_z": {"rank": 0},
     }
     outs = {
         "velocity": {"rank": 1},
@@ -600,7 +573,6 @@ def test_a_global_source_adds_no_direction():
             global_schema=globals_,
             interior=True,
             n_spatial_dims=2,
-            reynolds={"mean": 6.15, "std": 0.14},
             hidden=32,
             n_layers=2,
             n_slices=8,
@@ -614,7 +586,7 @@ def test_a_global_source_adds_no_direction():
     mesh = soup(pts, nrm, w)
     q = torch.randn(20, 2, dtype=D, generator=torch.Generator().manual_seed(1)) * 2
     u_inf = torch.tensor([40.0, 3.0], dtype=D)
-    gd = {"U_inf": u_inf, "nu": torch.tensor(1.56e-5, dtype=D)}
+    gd = {"U_inf": u_inf, "re_z": torch.tensor(RE_Z, dtype=D)}
     base = _run(m, {"airfoil": mesh}, gd, q)
     torch.testing.assert_close(seen["scales"][0]["U"], u_inf.norm(), atol=0, rtol=1e-15)
     assert seen["scales"][0]["g"] is None
@@ -622,11 +594,8 @@ def test_a_global_source_adds_no_direction():
     moved = _run(
         m,
         {"airfoil": transform(mesh, scale=s)},
-        {"U_inf": c * u_inf, "nu": gd["nu"] * s * c},
+        {"U_inf": c * u_inf, "re_z": gd["re_z"]},
         s * q,
-    )
-    torch.testing.assert_close(
-        seen["scales"][1]["z"], seen["scales"][0]["z"], atol=1e-12, rtol=0
     )
     torch.testing.assert_close(
         moved["velocity"], base["velocity"], atol=1e-10, rtol=1e-9

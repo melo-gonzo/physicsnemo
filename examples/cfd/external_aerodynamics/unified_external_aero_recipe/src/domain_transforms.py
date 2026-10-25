@@ -1560,7 +1560,8 @@ class ComputeLogReynolds(MeshTransform):
     dataset whose cases span decades of Reynolds number carries the information this way, as a scalar
     invariant next to the unit freestream direction of :class:`ComputeFreestreamDirection`, so nothing
     dimensional reaches the model. Domain-aware like that transform: on a ``DomainMesh`` the leaves are read
-    from and written to the domain-level ``global_data``.
+    from and written to the domain-level ``global_data``. Computed in float64, the viscosity first rounded to
+    the meshes' dtype; ISLA's configs feed it the U and L of :class:`ComputeBoundaryScales` (2026-10-24).
     """
 
     def __init__(
@@ -1584,11 +1585,15 @@ class ComputeLogReynolds(MeshTransform):
         self.output_field = str(output_field)
         self.standardized_field = str(standardized_field)
 
-    def _write(self, global_data: TensorDict) -> TensorDict:
+    def _write(self, global_data: TensorDict, like: torch.Tensor) -> TensorDict:
+        ### float64, the viscosity rounded to the meshes' dtype first (a model reads its
+        ### globals in that dtype), so that U and L of ComputeBoundaryScales give
+        ### bitwise the number ISLA's own scales would.
         who = "ComputeLogReynolds"
-        speed = _global_leaf(global_data, self.speed_field, who).float()
-        length = _global_leaf(global_data, self.length_field, who).float()
-        nu = _global_leaf(global_data, self.viscosity_field, who).float()
+        speed = _global_leaf(global_data, self.speed_field, who).double()
+        length = _global_leaf(global_data, self.length_field, who).double()
+        nu = _global_leaf(global_data, self.viscosity_field, who)
+        nu = nu.to(device=speed.device, dtype=like.dtype).double()
         reynolds = speed * length / nu
         if reynolds.numel() != 1 or not torch.isfinite(reynolds).all() or reynolds <= 0:
             raise ValueError(
@@ -1601,14 +1606,14 @@ class ComputeLogReynolds(MeshTransform):
         return new_gd
 
     def __call__(self, mesh: Mesh) -> Mesh:
-        return mesh.with_data(global_data=self._write(mesh.global_data))
+        return mesh.with_data(global_data=self._write(mesh.global_data, mesh.points))
 
     def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
         """Derive the Reynolds number from the domain-level ``global_data``."""
         return DomainMesh(
             interior=domain.interior,
             boundaries=domain.boundaries,
-            global_data=self._write(domain.global_data),
+            global_data=self._write(domain.global_data, domain.interior.points),
         )
 
     def extra_repr(self) -> str:
@@ -1617,6 +1622,136 @@ class ComputeLogReynolds(MeshTransform):
             f"{self.viscosity_field}), {self.standardized_field} = ({self.output_field} - "
             f"{self.mean}) / {self.std}"
         )
+
+
+@register()
+class ComputeBoundaryScales(MeshTransform):
+    r"""Write a case's length and speed scales, ISLA's, into ``global_data`` (2026-10-24).
+
+    ``global_data[length_field]`` is the measure-weighted RMS pairwise distance of the named boundaries'
+    cells, each cell with its own second moment (ISLA's length unit, ``rms_pairwise_distance``), and
+    ``global_data[speed_field]`` the measure-weighted RMS magnitude of the rank-1 cell fields ``sources``
+    (``[[boundary, field], ...]``) pooled over their cells, or the norm of the global vector
+    ``global_source``. Both are float64 scalars computed with ISLA's own helpers in its order and
+    precision (the boundaries in sorted order, the length in the meshes' dtype, a global rounded to the
+    meshes' dtype first), so they are bitwise the L and U an ISLA that declares the same boundaries and
+    source computes on the same meshes, and a quantity built on them (:class:`ComputeLogReynolds`) is
+    bitwise the one built in the model. It reads only the posed problem (the meshes and the named fields),
+    never a label. Run it last, on the boundary meshes the model receives. ``DomainMesh`` only.
+    """
+
+    def __init__(
+        self,
+        boundaries: Sequence[str],
+        length_field: str,
+        speed_field: str,
+        sources: Sequence[Sequence[str]] | None = None,
+        global_source: str | None = None,
+    ) -> None:
+        super().__init__()
+        self.boundaries = sorted(str(b) for b in boundaries)
+        if not self.boundaries:
+            raise ValueError(
+                "ComputeBoundaryScales: boundaries must name at least one boundary"
+            )
+        self.length_field = str(length_field)
+        self.speed_field = str(speed_field)
+        if (sources is None) == (global_source is None):
+            raise ValueError(
+                "ComputeBoundaryScales: the speed comes from boundary sources or one global_source, "
+                f"exactly one of them; got sources={sources!r}, global_source={global_source!r}"
+            )
+        ### Pooled in ISLA's order: the boundaries sorted, each one's fields as listed.
+        self.sources = (
+            sorted(((str(b), str(f)) for b, f in sources), key=lambda s: s[0])
+            if sources is not None
+            else None
+        )
+        if self.sources is not None and (
+            not self.sources or {b for b, _ in self.sources} - set(self.boundaries)
+        ):
+            raise ValueError(
+                f"ComputeBoundaryScales: sources {self.sources!r} must be fields of the named "
+                f"boundaries {self.boundaries!r}"
+            )
+        self.global_source = None if global_source is None else str(global_source)
+
+    def _scales(self, domain: DomainMesh) -> tuple[torch.Tensor, torch.Tensor]:
+        ### ISLA's helpers, imported here so that the recipe's other models do not import ISLA.
+        from physicsnemo.experimental.models.isla.geometry import (
+            cell_second_moments,
+            rms_pairwise_distance,
+        )
+        from physicsnemo.experimental.models.isla.model import EPS
+        from physicsnemo.experimental.models.isla.scales import velocity_moments
+
+        who = "ComputeBoundaryScales"
+        missing = [b for b in self.boundaries if b not in domain.boundary_names]
+        if missing:
+            raise KeyError(
+                f"{who}: boundaries {missing!r} not found; available: {domain.boundary_names!r}"
+            )
+        meshes = [domain.boundaries[b] for b in self.boundaries]
+        measures = [cell_measures(m) for m in meshes]
+        like = meshes[0].points
+        length = (
+            rms_pairwise_distance(
+                torch.cat([m.cell_centroids for m in meshes])[None],
+                torch.cat(measures)[None],
+                EPS,
+                torch.cat([cell_second_moments(m) for m in meshes])[None],
+            )
+            .reshape(())
+            .double()
+        )
+        if self.sources is not None:
+            present = dict(zip(self.boundaries, zip(meshes, measures)))
+            s0, s2, _ = velocity_moments(
+                (present[b][0].cell_data[as_nested_key(f)], present[b][1])
+                for b, f in self.sources
+            )
+            if not (bool(s0 > 0) and bool(s2 > 0)):
+                raise ValueError(
+                    f"{who}: the sources {self.sources!r} have no cells or are zero everywhere: "
+                    "the speed is undefined"
+                )
+            speed = (s2 / s0).sqrt()
+        else:
+            v = _global_leaf(domain.global_data, self.global_source, who)
+            speed = v.to(like.device).reshape(-1).to(like.dtype).double().norm()
+            if not bool(speed > 0):
+                raise ValueError(
+                    f"{who}: {self.global_source!r} is zero: the speed is undefined"
+                )
+        return length, speed
+
+    def __call__(self, mesh: Mesh) -> Mesh:
+        raise TypeError(
+            "ComputeBoundaryScales reads a DomainMesh's boundaries; got a Mesh"
+        )
+
+    def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
+        """Write the scales into the domain-level ``global_data``."""
+        _refuse_existing_globals(
+            domain.global_data,
+            [self.length_field, self.speed_field],
+            "ComputeBoundaryScales",
+        )
+        length, speed = self._scales(domain)
+        gd = domain.global_data.clone()
+        gd[self.length_field] = length
+        gd[self.speed_field] = speed
+        return DomainMesh(
+            interior=domain.interior, boundaries=domain.boundaries, global_data=gd
+        )
+
+    def extra_repr(self) -> str:
+        source = (
+            f"sources={self.sources}"
+            if self.sources is not None
+            else f"global_source={self.global_source!r}"
+        )
+        return f"boundaries={self.boundaries}, {self.length_field}, {self.speed_field}, {source}"
 
 
 @register()

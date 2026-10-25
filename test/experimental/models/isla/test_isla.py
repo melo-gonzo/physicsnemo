@@ -387,9 +387,8 @@ def test_live_makes_the_boundary_read_contribute():
 def test_geometric_scale_equivariance(interior):
     """For a model without scales: a similarity of the geometry (points x k + shift,
     areas x k^2) leaves the output exactly unchanged, for the boundary alone and with
-    prediction points that are moved along. (With declared scales a geometry scale
-    at a fixed viscosity changes the Reynolds number, as it should: the similarity
-    with every scale is test_isla_scales.py's.)"""
+    prediction points that are moved along. (The similarity with declared scales is
+    test_isla_scales.py's.)"""
     torch.manual_seed(0)
     pts, nrm, w, drv = cloud(400)
     mesh = soup(pts, nrm, w)
