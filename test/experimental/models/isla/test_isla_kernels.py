@@ -373,6 +373,7 @@ def _record_block_tokens(model):
     return seen
 
 
+@pytest.mark.slow  # 24 s on LHR CPU as the session's first Inductor compile, 3 s after one
 @pytest.mark.parametrize(
     "device", ["cpu", pytest.param("cuda", marks=[pytest.mark.cuda, requires_cuda])]
 )

@@ -193,7 +193,8 @@ def _report(dim, out):
     print(f"  on-surface feature range {out['on_surface_feature_range']}")
 
 
-@pytest.mark.parametrize("dim", [2, 3])
+### dim 3: 3-8 s on LHR CPU (an icosphere of 1280 cells under motions and scalings)
+@pytest.mark.parametrize("dim", [2, pytest.param(3, marks=pytest.mark.slow)])
 def test_query_encoding_is_continuous_at_the_surface(dim):
     """On-surface points (vertices, and cell centroids whose distance is a rounding
     error of either sign) and points 1e-6 L off the surface keep their features and

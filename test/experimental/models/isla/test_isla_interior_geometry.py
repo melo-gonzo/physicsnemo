@@ -819,7 +819,16 @@ def test_an_open_surface_signs_its_far_field_consistently():
     assert (d > 0).all()
 
 
-@pytest.mark.parametrize("shape", ["naca", "sphere", "torus"])
+@pytest.mark.parametrize(
+    "shape",
+    [
+        "naca",
+        ### 2-11 s (sphere) and 4-40 s (torus) on LHR CPU: the exact winding number
+        ### over every (query, cell) pair, memory-bound
+        pytest.param("sphere", marks=pytest.mark.slow),
+        pytest.param("torus", marks=pytest.mark.slow),
+    ],
+)
 def test_closed_surfaces_take_the_sign_of_the_exact_winding_number(shape):
     """On watertight surfaces (a NACA 0012, a sphere, a torus), natively, in a
     generic pose, with every cell split and with every cell doubled, d takes
