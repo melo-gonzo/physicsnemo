@@ -75,7 +75,7 @@ def _model(dim: int) -> ISLA:
     return ISLA(
         output_schema={"p": {"rank": 0}},
         boundary_schemas={"wall": {}},
-        dim=dim,
+        n_spatial_dims=dim,
         hidden=16,
         n_layers=1,
         n_slices=4,

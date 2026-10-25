@@ -638,7 +638,7 @@ def test_mesh_validation_errors():
         )
     pts2, nrm2, w2, _ = cloud(20, d=2, dtype=torch.float32)
     with pytest.raises(
-        ValueError, match="has 2 spatial dimensions; this model has dim=3"
+        ValueError, match="has 2 spatial dimensions; this model has n_spatial_dims=3"
     ):
         m(
             prediction_boundaries=["wall"],

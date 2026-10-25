@@ -57,7 +57,7 @@ def _model(d: int, outputs, **kw):
         hidden=32,
         n_layers=2,
         n_slices=8,
-        dim=d,
+        n_spatial_dims=d,
         **kw,
     )
 
@@ -223,14 +223,18 @@ def test_four_dimensional_even_parity_smoke_and_odd_refused():
     with pytest.raises(NotImplementedError):
         _model(d, {"w": {"rank": 1, "parity": "odd"}})
     with pytest.raises(ValueError):
-        ISLA(output_schema={"p": {"rank": 0}}, boundary_schemas={"wall": {}}, dim=1)
+        ISLA(
+            output_schema={"p": {"rank": 0}},
+            boundary_schemas={"wall": {}},
+            n_spatial_dims=1,
+        )
 
 
 def test_dimension_mismatch_is_refused_and_two_d_is_not_embedded_three_d():
     mesh3, drv3 = _problem(3)
     m2 = _model(2, {"p": {"rank": 0}})
     with pytest.raises(
-        ValueError, match="has 3 spatial dimensions; this model has dim=2"
+        ValueError, match="has 3 spatial dimensions; this model has n_spatial_dims=2"
     ):
         m2(
             prediction_boundaries=["wall"],

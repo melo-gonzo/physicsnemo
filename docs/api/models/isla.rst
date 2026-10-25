@@ -68,11 +68,11 @@ Mesh API
 ``forward`` follows the mesh-native contract of the mesh models (GLOBE's): one
 case per call, no batch axis. The boundary is a mapping of
 :class:`~physicsnemo.mesh.Mesh` objects keyed by declared boundary-condition
-name (each a ``Mesh[dim - 1, dim]`` whose cells have normals); the per-case data is
+name (each a ``Mesh[n_spatial_dims - 1, n_spatial_dims]`` whose cells have normals); the per-case data is
 a ``TensorDict`` or mapping. Both tasks read every boundary they are given;
 where the outputs are is the second argument: for an interior task
 (``interior=True``) the prediction points, a point-cloud ``Mesh``, of which only
-the points are read, or a bare ``(N, dim)`` tensor; for a surface task the names
+the points are read, or a bare ``(N, n_spatial_dims)`` tensor; for a surface task the names
 of the boundaries at whose cells the outputs are predicted
 (``prediction_boundaries``), the other boundaries being read as conditions only.
 The result is a point-cloud ``Mesh`` whose ``point_data`` holds the declared

@@ -89,7 +89,7 @@ def _model(dim=3, theta=TREE_READ_THETA, randomize=True, seed=0, **kw):
         output_schema=PV,
         global_schema=G,
         interior=True,
-        dim=dim,
+        n_spatial_dims=dim,
         **kw,
     )
     m._tree_read_theta = theta

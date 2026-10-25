@@ -182,7 +182,7 @@ def test_saved_posed_airfrans_case_runs():
             },
             boundary_schemas={"airfoil": {}},
             global_schema={"U_inf_dir": {"rank": 1}, "U_inf_mag": {"rank": 0}},
-            dim=2,
+            n_spatial_dims=2,
             interior=True,
             hidden=32,
             n_layers=2,
@@ -589,7 +589,7 @@ def _interior(dim: int, **kw) -> ISLA:
             n_layers=2,
             n_slices=8,
             interior=True,
-            dim=dim,
+            n_spatial_dims=dim,
             **kw,
         )
         .double()
@@ -796,7 +796,7 @@ def test_boundary_tokens_is_validated():
             output_schema=PV,
             boundary_schemas=WALL,
             interior=True,
-            dim=4,
+            n_spatial_dims=4,
         )
 
 

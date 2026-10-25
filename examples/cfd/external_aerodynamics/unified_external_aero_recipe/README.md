@@ -515,7 +515,7 @@ target (`{type: symmetric_tensor, components: {...}}` in the dataset's
 `(N, 3, 3)` leaf. Planar datasets that store a boundary vector component by
 component stack it with `StackScalarFields` (`src/domain_transforms.py`);
 `RestrictToPlane` drops the constant axis so a planar problem runs with
-`dim: 2`; `SqueezeScalarFields` turns a stored `(N, 1)` scalar column into
+`n_spatial_dims: 2`; `SqueezeScalarFields` turns a stored `(N, 1)` scalar column into
 the `(N,)` field a rank-0 schema reads; `SplitGlobalVector` standardizes a
 per-case parameter vector and splits it into named rank-0 global fields
 (one per `global_schema` entry), keeping the standardized vector for the

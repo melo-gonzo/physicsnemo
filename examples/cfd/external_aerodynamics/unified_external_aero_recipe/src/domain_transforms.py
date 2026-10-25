@@ -1283,7 +1283,7 @@ class RestrictToPlane(MeshTransform):
     third coordinate that is constant (usually zero) on every point. This transform drops that axis from the
     points of the interior and of every boundary and from the named vector fields (normals, SDF normals,
     prescribed vectors), so the model sees ``d = 2`` components and runs its native two-dimensional path
-    (``ISLA(dim=2)``) instead of a three-dimensional model on a plane. It refuses a mesh whose dropped coordinate
+    (``ISLA(n_spatial_dims=2)``) instead of a three-dimensional model on a plane. It refuses a mesh whose dropped coordinate
     is not constant within ``atol`` (the problem is then not planar). Cell centroids follow the points; scalar
     fields and cell connectivity are untouched. Place first in the pipeline so every later transform (normalization,
     field stacking) already works in the plane.

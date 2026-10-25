@@ -94,7 +94,7 @@ model:
   # z = (log10(U L / nu) - mean) / std over the train cases: the dataset file's isla_constants.reynolds (train.py).
   reynolds: null
   output_stats: null             # injected by train.py: the dataset's NormalizeMeshFields stats (nut)
-  dim: 2                         # the problem is planar: pair with datasets/airfrans_uvolume_2d.yaml (RestrictToPlane first after the uniform draw)
+  n_spatial_dims: 2                       # the problem is planar: pair with datasets/airfrans_uvolume_2d.yaml (RestrictToPlane first after the uniform draw)
   interior: true                 # predict at prediction_points: passive tokens that read the boundary (ISLA-DTT)
   boundary_tokens: 200000        # boundary tokens drawn per case inside the model (equal to the class default; the airfoil is kept whole)
   hidden: 512                  # the reference configuration (REF-80 verdict, 2026-10-04): most accurate under 80 GiB per GPU on DrivAerML Surface and the 210-wing rung; equal to the class defaults
