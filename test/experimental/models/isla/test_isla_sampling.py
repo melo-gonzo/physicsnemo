@@ -107,14 +107,17 @@ def test_the_count_is_exact(budget):
         assert torch.equal(kept, kept.unique())
 
 
-def test_horvitz_thompson_measure_sums_are_unbiased():
+### 2,000 draws: 5 s on LHR CPU; 300 draws keep the property in the fast tier (the
+### bounds are in standard errors and deviations, so they hold at any count)
+@pytest.mark.parametrize("draws", [300, pytest.param(2_000, marks=pytest.mark.slow)])
+def test_horvitz_thompson_measure_sums_are_unbiased(draws):
     """Over random starts each condition's sum of token weights is unbiased for its
-    total measure (within four standard errors over 2,000 draws), the condition kept
+    total measure (within four standard errors over the draws), the condition kept
     whole (40 cells under a share of 100) exactly; every cell's inclusion frequency
     matches its probability."""
     sizes = [500, 40, 3000]
     measures, centroids = _conditions(sizes)
-    budget, draws = 300, 2_000
+    budget = 300
     shares = water_fill(torch.tensor(sizes, dtype=D), budget)
     pi = torch.cat(
         [pps_inclusion_probabilities(a, s) for a, s in zip(measures, shares)]
@@ -163,6 +166,7 @@ def test_an_empty_condition_takes_no_tokens():
     assert counts.tolist() == [0, 30, 30]
 
 
+@pytest.mark.slow  # 5 s on LHR CPU: a compile over every cell count
 def test_one_compiled_graph_for_every_cell_count():
     """Under torch.compile(fullgraph=True, dynamic=True) the draw is one graph whether
     the cells exceed the budget or not, and matches eager."""
@@ -191,6 +195,34 @@ def test_one_compiled_graph_for_every_cell_count():
         ref, ref_kept = draw(*args)
         assert torch.equal(kept, ref_kept)
         torch.testing.assert_close(out, ref, atol=1e-4, rtol=1e-4)
+
+
+def test_the_compiled_draw_runs_its_sums_as_the_opaque_scan():
+    """The draw traced with one graph (the graph Dynamo hands the backend, before
+    Inductor) runs its sums as the custom op ``physicsnemo::isla_cumsum`` and has no
+    cumsum of its own: the op keeps Inductor's split scan, whose kernel failed on
+    GB300 at full resolution under the recipe's max-autotune compile, out of the
+    compiled draw. This guards that fix on any device; test_isla_compile's
+    max-autotune test runs the full resolution on CUDA.
+
+    DRAW-EXACT: the 0.14.0 draw keeps the op (a fixed-order scan for floats, ATen's
+    for its int64 line), so this guard stays as it is."""
+    graphs = []
+
+    def capture(gm, example_inputs):
+        graphs.append(gm)
+        return gm.forward
+
+    torch._dynamo.reset()
+    compiled = torch.compile(
+        sample_boundary_cells, fullgraph=True, dynamic=True, backend=capture
+    )
+    measures, centroids = _conditions([40, 71])
+    kept, _ = compiled(measures, centroids, 60, torch.tensor(0.3, dtype=D))
+    assert kept.shape == (60,) and len(graphs) == 1
+    nodes = graphs[0].graph.nodes
+    scans = [n.target for n in nodes if "cumsum" in str(n.target)]
+    assert scans and set(scans) == {torch.ops.physicsnemo.isla_cumsum.default}, scans
 
 
 def test_the_length_unit_is_the_full_boundary_s_for_every_draw():

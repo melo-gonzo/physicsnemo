@@ -42,7 +42,9 @@ import types
 import pytest
 import torch
 
+import physicsnemo.experimental.models.isla.tree_build as tree_build
 import physicsnemo.experimental.models.isla.tree_read as tree_read
+import physicsnemo.experimental.models.isla.tree_walk as tree_walk
 from physicsnemo.experimental.models import ISLA
 from physicsnemo.experimental.models.isla.tree_read import (
     KERNEL_READ_HEADS,
@@ -59,6 +61,10 @@ from physicsnemo.experimental.models.isla.tree_read import (
 )
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
+from physicsnemo.mesh.spatial.cluster_tree import ClusterTree
+from test.experimental.models.isla._forced import ran
+from test.experimental.models.isla._kernel_cases import _basis_case, _basis_step, _to
+from test.experimental.models.isla._marks import requires_cuda
 from test.experimental.models.isla._meshes import (
     cloud,
     orthogonal,
@@ -73,7 +79,6 @@ from test.experimental.models.isla._meshes import (
 PV = {"p": {"rank": 0}, "v": {"rank": 1}}
 G = {"g": {"rank": 1}}
 D = torch.float64
-cuda_only = pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA")
 
 
 def _model(dim=3, theta=TREE_READ_THETA, randomize=True, seed=0, **kw):
@@ -488,7 +493,9 @@ def test_fast_walk_gives_the_reference_lists_in_the_reference_order(dim, dtype, 
     assert torch.equal(torch.sort(si[qi == 5]).values, torch.arange(f.n_cells))
 
 
-@pytest.mark.parametrize("device", ["cpu", pytest.param("cuda", marks=cuda_only)])
+@pytest.mark.parametrize(
+    "device", ["cpu", pytest.param("cuda", marks=[pytest.mark.cuda, requires_cuda])]
+)
 @pytest.mark.parametrize(
     "boxes,diagonals,autocast",
     [
@@ -574,7 +581,10 @@ def test_tree_walk_resolution_and_the_models_walks_agree(monkeypatch):
     runs = {}
     for walk in ("reference", "fast"):
         monkeypatch.setattr(tree_read, "resolve_walk", lambda *a, w=walk: w)
-        runs[walk] = outputs(_run(tree, mesh, drv, q))
+        with ran(tree_walk.walk_pairs) as r:
+            runs[walk] = outputs(_run(tree, mesh, drv, q))
+        assert (r.count(tree_walk.walk_pairs) > 0) == (walk == "fast")
+        assert None not in r.returns(tree_walk.walk_pairs)  # no silent fallback
     assert all(
         torch.equal(runs["fast"][k], runs["reference"][k]) for k in runs["reference"]
     )
@@ -584,8 +594,6 @@ def test_fast_walk_falls_back_to_the_reference_past_its_limits(monkeypatch):
     """A forest too deep for the count pass's stack is walked by the reference under
     ``auto`` and refused under a forced ``"fast"``; so are lists past Warp's array
     limit, found after the count pass."""
-    import physicsnemo.experimental.models.isla.tree_walk as tree_walk
-
     pts, nrm, w, _ = cloud(300, d=3, seed=1)
     q, _, _, _ = cloud(40, d=3, seed=2, scale=(3.0,) * 3)
     f = BoundaryForest.build(pts, w, nrm, None, theta=1.0)
@@ -594,6 +602,7 @@ def test_fast_walk_falls_back_to_the_reference_past_its_limits(monkeypatch):
     assert tree_read.resolve_walk("auto", on_cuda, 1.0, f) == "fast"
     with monkeypatch.context() as m:
         m.setattr(tree_walk, "WALK_STACK", len(f.levels) + 1)
+        assert not tree_walk.walk_fits(f)
         assert tree_read.resolve_walk("auto", on_cuda, 1.0, f) == "reference"
         with pytest.raises(ValueError, match="does not take this forest"):
             tree_read.resolve_walk("fast", q, 1.0, f)
@@ -601,7 +610,10 @@ def test_fast_walk_falls_back_to_the_reference_past_its_limits(monkeypatch):
     with pytest.raises(ValueError, match="Warp's 2\\*\\*31"):
         f.point_pairs(q, walk="fast")
     monkeypatch.setattr(tree_read, "resolve_walk", lambda *a: "fast")
-    qi_a, si_a, n_node_a = f.point_pairs(q)
+    with ran(tree_walk.walk_pairs, ClusterTree.find_point_interaction_pairs) as r:
+        qi_a, si_a, n_node_a = f.point_pairs(q)
+    assert r.returns(tree_walk.walk_pairs) == [None]
+    assert r.count(ClusterTree.find_point_interaction_pairs) > 0
     assert torch.equal(qi_a, qi) and torch.equal(si_a, si) and n_node_a == n_node
 
 
@@ -820,7 +832,8 @@ def test_tree_read_rank2_inputs_are_refused():
         _model(boundary_schemas={"wall": {"S": {"rank": 2}}}, randomize=False)
 
 
-@cuda_only
+@pytest.mark.cuda
+@requires_cuda
 def test_tree_read_cuda_fused_and_compiled_training_path():
     """The protocol's training path on CUDA: fused geometry kernel, compiled blocks,
     bf16 autocast. One training step is finite with every parameter's gradient
@@ -873,7 +886,7 @@ def test_tree_read_cuda_fused_and_compiled_training_path():
 
 @pytest.mark.parametrize(
     "device",
-    ["cpu", pytest.param("cuda", marks=cuda_only)],
+    ["cpu", pytest.param("cuda", marks=[pytest.mark.cuda, requires_cuda])],
 )
 def test_pair_plan_is_the_histogram_plan_and_builds_without_a_host_sync(device):
     """The plan's offsets and stable permutation equal a histogram of each index and a
@@ -913,63 +926,8 @@ def test_pair_plan_is_the_histogram_plan_and_builds_without_a_host_sync(device):
             assert a.dtype == b.dtype and torch.equal(a, b), (name, qi.dtype)
 
 
-@cuda_only
-@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16], ids=["fp32", "bf16"])
-def test_fused_segment_softmax_read_matches_eager(dtype):
-    """The Triton read (values and every gradient) against the eager float64 form on a
-    random pair list with ragged segments, including empty sources."""
-    from physicsnemo.experimental.models.isla.segment_softmax import (
-        PairPlan,
-        _eager_segment_softmax_read,
-        segment_softmax_read,
-    )
-
-    dev = torch.device("cuda")
-    g = torch.Generator().manual_seed(3)
-    n_q, n_b, h, kc, c = 37, 50, 8, 4, 8
-    counts = torch.randint(
-        0, 5000, (n_q,), generator=g
-    )  # segments longer than a source chunk too
-    qi = torch.repeat_interleave(torch.arange(n_q), counts)
-    bj = torch.randint(
-        0, n_b - 5, (int(counts.sum()),), generator=g
-    )  # sources 45..49 get no pairs
-    bj[: int(counts.sum()) // 2] = (
-        0  # one source read by half of all pairs (many chunks)
-    )
-    plan = PairPlan.build(qi.to(dev), bj.to(dev), n_q, n_b)
-    ker = torch.randn(int(counts.sum()), h, generator=g, dtype=D)
-    logm = -torch.rand(int(counts.sum()), generator=g, dtype=D) * 8
-    q = torch.randn(n_q, h, kc, generator=g, dtype=D)
-    k = torch.randn(n_b, h, kc, generator=g, dtype=D)
-    v = torch.randn(n_b, h, c, generator=g, dtype=D)
-    plan_cpu = PairPlan.build(qi, bj, n_q, n_b)
-    ref_in = [t.clone().requires_grad_(True) for t in (ker, q, k, v)]
-    ref = _eager_segment_softmax_read(
-        ref_in[0], logm, ref_in[1], ref_in[2], ref_in[3], plan_cpu, 0.5
-    )
-    seed = torch.randn_like(ref)
-    (ref * seed).sum().backward()
-    dev_in = [t.to(dev, dtype).requires_grad_(True) for t in (ker, q, k, v)]
-    out = segment_softmax_read(
-        dev_in[0],
-        logm.to(dev, torch.float32),
-        dev_in[1],
-        dev_in[2],
-        dev_in[3],
-        plan,
-        0.5,
-    )
-    (out * seed.to(dev, out.dtype)).sum().backward()
-    tol = 1e-4 if dtype == torch.float32 else 5e-2
-    rows = counts > 0
-    assert torch.allclose(out.cpu().double()[rows], ref[rows], atol=tol, rtol=tol)
-    for a, b, name in zip(dev_in, ref_in, ("ker", "q", "k", "v")):
-        ga, gb_ = a.grad.cpu().double(), b.grad
-        assert torch.allclose(ga, gb_, atol=tol * gb_.abs().max(), rtol=tol), name
-
-
-@cuda_only
+@pytest.mark.cuda
+@requires_cuda
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 @pytest.mark.parametrize("dim", [2, 3])
 def test_fast_walk_on_cuda_gives_the_reference_lists_in_the_reference_order(dim, dtype):
@@ -987,7 +945,8 @@ def test_fast_walk_on_cuda_gives_the_reference_lists_in_the_reference_order(dim,
     assert n_node_f == n_node > 0
 
 
-@cuda_only
+@pytest.mark.cuda
+@requires_cuda
 def test_tree_read_cuda_float32_matches_cpu_float64():
     """The whole tree read on CUDA in float32 (the fused kernel) against the CPU float64
     eager form, at a finite theta."""
@@ -1001,7 +960,8 @@ def test_tree_read_cuda_float32_matches_cpu_float64():
     assert _rel({k: v.cpu().double() for k, v in gpu.items()}, cpu) < 1e-3
 
 
-@cuda_only
+@pytest.mark.cuda
+@requires_cuda
 @pytest.mark.parametrize("theta", [0.0, 0.5])
 def test_tree_read_cuda_matches_cpu_float64(theta, monkeypatch):
     """The float64 model on CUDA against CPU: both walk the forest to the same pair
@@ -1169,7 +1129,10 @@ def test_tree_build_auto_resolves_to_the_reference_off_cuda(monkeypatch):
     mesh, drv, q = _case(n=400, nq=60)
     ref = outputs(_run(m, mesh, drv, q))
     monkeypatch.setattr(tree_read, "resolve_tree_build", lambda *a: "fast")
-    fast = outputs(_run(m, mesh, drv, q))
+    with ran(tree_build.forest_tables, ClusterTree.from_points) as r:
+        fast = outputs(_run(m, mesh, drv, q))
+    tables = r.returns(tree_build.forest_tables)
+    assert tables and None not in tables and r.count(ClusterTree.from_points) == 0
     assert all(torch.equal(v, fast[k]) for k, v in ref.items())
 
 
@@ -1229,7 +1192,8 @@ def test_fast_forest_build_refuses_what_it_cannot_build(monkeypatch):
     assert tables[0] is not None and tables[1] is None
 
 
-@cuda_only
+@pytest.mark.cuda
+@requires_cuda
 @_PRECISIONS
 @pytest.mark.parametrize("dim", [3, 2])
 def test_fast_forest_build_is_the_reference_forest_on_cuda(dim, dtype, autocast):
@@ -1277,14 +1241,18 @@ def test_tree_read_kernel_resolves_to_the_reference_on_cpu_and_its_basis_flow_is
     try:
         ref = _step_grads(m, mesh, drv, q)
         monkeypatch.setattr(ISLA, "resolve_tree_read_kernel", lambda self, p: "fused")
-        fused = _step_grads(m, mesh, drv, q)
+        with ran(tree_read._chunked_basis_from_plan) as r:
+            fused = _step_grads(m, mesh, drv, q)
     finally:
         torch.set_num_threads(threads)
+    ### The fused path's basis flow ran (else the reference is compared with itself).
+    assert r.count(tree_read._chunked_basis_from_plan) > 0
     for a, b in zip(ref, fused):
         assert a.keys() == b.keys() and all(torch.equal(a[k], b[k]) for k in a)
 
 
-@cuda_only
+@pytest.mark.cuda
+@requires_cuda
 @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16], ids=["fp32", "bf16"])
 def test_fused_kernel_read_matches_the_reference_read(dtype):
     """The fused read (kernel term inside the kernels) against the reference read fed
@@ -1356,7 +1324,8 @@ def test_fused_kernel_read_matches_the_reference_read(dtype):
         assert d_fused <= 2 * d_ref + floor, name
 
 
-@cuda_only
+@pytest.mark.cuda
+@requires_cuda
 @pytest.mark.parametrize("autocast", [False, True], ids=["fp32", "bf16_autocast"])
 def test_tree_read_fused_matches_the_reference_on_cuda(autocast):
     """The model on CUDA reads through the fused read by default; one training step's
@@ -1385,7 +1354,8 @@ def test_tree_read_fused_matches_the_reference_on_cuda(autocast):
             assert d_fused <= 2 * d_ref + floor, grp
 
 
-@cuda_only
+@pytest.mark.cuda
+@requires_cuda
 def test_fused_reads_sum_their_basis_gradients_as_autograd_does():
     """Fused reads of one basis that share its sink sum their basis gradients in place
     bitwise as autograd sums them when each read passes its own (bfloat16, the
@@ -1431,7 +1401,8 @@ def test_fused_reads_sum_their_basis_gradients_as_autograd_does():
     assert torch.cuda.memory_allocated() == base
 
 
-@cuda_only
+@pytest.mark.cuda
+@requires_cuda
 @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16], ids=["fp32", "bf16"])
 def test_fused_kernel_read_backward_is_deterministic(dtype):
     """The fused read's backward runs no atomics: two backward passes of one read give
@@ -1608,7 +1579,8 @@ def test_fused_read_sink_ignores_backward_passes_that_skip_the_basis():
     assert all(s[1].acc is None for s in sinks[2:])
 
 
-@cuda_only
+@pytest.mark.cuda
+@requires_cuda
 def test_fused_read_partial_backward_matches_the_reference_read():
     """The same partial-backward sequences through the fused reads (float32) against the
     reference read fed ``basis @ W.T``."""
@@ -1665,7 +1637,8 @@ def test_fused_read_partial_backward_matches_the_reference_read():
         )
 
 
-@cuda_only
+@pytest.mark.cuda
+@requires_cuda
 @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16], ids=["fp32", "bf16"])
 def test_fused_node_means_match_the_reference(dtype):
     """The fused node means against ``node_means`` on a forest of a sphere: the
@@ -1781,7 +1754,10 @@ def test_query_chunks_equal_the_forward_pass_and_its_gradients(theta, vectors, c
     m.zero_grad(set_to_none=True)
     torch.manual_seed(3)
     chunked = _chunked_step(m, kw, loss_of, 37)
-    assert same(chunked, {k: v.detach() for k, v in full.items()}, atol=1e-12)
+    ### absolute (rtol 0): the chunks sum in another order, and far_sphere's tie and
+    ### on-wall points amplify that roundoff (measured 2e-12 to 1.03e-11 at 1-4 threads
+    ### on x86, with the BLAS reduction order; 5e-14 on LHR; cloud 1.6e-15)
+    assert same(chunked, {k: v.detach() for k, v in full.items()}, atol=1e-10)
     ### gradients that vanish analytically (a bias every slice logit shares) are roundoff on both sides
     scale = max(float(g.abs().max()) for g in ref.values())
     for name, p in m.named_parameters():
@@ -1834,8 +1810,8 @@ def test_query_chunks_need_an_interior_model():
     [
         ("cpu", "reference", False),
         ("cpu", "fast", False),
-        pytest.param("cuda", "auto", False, marks=cuda_only),
-        pytest.param("cuda", "auto", True, marks=cuda_only),
+        pytest.param("cuda", "auto", False, marks=[pytest.mark.cuda, requires_cuda]),
+        pytest.param("cuda", "auto", True, marks=[pytest.mark.cuda, requires_cuda]),
     ],
     ids=["cpu-reference", "cpu-fast", "cuda", "cuda-bf16_autocast"],
 )
@@ -1885,59 +1861,6 @@ def test_walk_of_a_range_of_points_is_those_rows_of_the_walk_of_every_point(
             assert torch.equal(part.geometry[0][k], full.geometry[0][k][start:stop])
 
 
-def _basis_case(dim, n_vecs, n_pairs=20000, seed=0):
-    """One case's geometry for the kernel basis (float64, CPU; two global directions,
-    ``n_vecs`` rank-1 inputs per source), a random plan of ``n_pairs`` pairs and a
-    basis MLP."""
-    g = torch.Generator().manual_seed(seed)
-    nq, ns = 300, 500
-
-    def unit(*s):
-        return torch.nn.functional.normalize(
-            torch.randn(*s, generator=g, dtype=D), dim=-1
-        )
-
-    geometry = dict(
-        query_r=torch.randn(nq, dim, generator=g, dtype=D),
-        query_n=unit(nq, dim),
-        query_wall=torch.rand(nq, generator=g, dtype=D) + 0.01,
-        src_r=torch.randn(ns, dim, generator=g, dtype=D),
-        src_n=unit(ns, dim),
-        src_vecs=torch.randn(ns, n_vecs, dim, generator=g, dtype=D) if n_vecs else None,
-        g_unit=unit(2, dim),
-        eps=1e-12,
-    )
-    plan = types.SimpleNamespace(
-        qi=torch.randint(0, nq, (n_pairs,), generator=g).int(),
-        bj=torch.randint(0, ns, (n_pairs,), generator=g).int(),
-    )
-    return geometry, plan, _KernelBasis(kernel_geo_width(2, n_vecs)).double()
-
-
-def _to(x, device, dtype):
-    if torch.is_tensor(x):
-        return x.to(device, dtype) if x.is_floating_point() else x.to(device)
-    if isinstance(x, dict):
-        return {k: _to(v, device, dtype) for k, v in x.items()}
-    if isinstance(x, types.SimpleNamespace):
-        return types.SimpleNamespace(**_to(vars(x), device, dtype))
-    return x
-
-
-def _basis_step(basis, plan, geometry, seed, autocast=False, weights=False):
-    """The chunked basis of every pair from the plan, and its MLP's gradients for the
-    basis gradient ``seed``."""
-    basis.zero_grad(set_to_none=True)
-    dev = geometry["query_r"].device.type
-    with torch.autocast(dev, dtype=torch.bfloat16, enabled=autocast):
-        w = tree_read.fused_basis.mlp_weights(basis) if weights else None
-        out = tree_read._chunked_basis_from_plan(
-            basis, plan, 0, int(plan.qi.shape[0]), 0, 0, geometry, w
-        )
-    out.backward(seed.to(out.dtype))
-    return [out.detach()] + [p.grad.clone() for p in basis.parameters()]
-
-
 class _MlpProbe(torch.autograd.Function):
     """The basis MLP of one chunk's invariants with given weights, its backward the
     reference's ops (a CPU stand-in for the fused basis kernels)."""
@@ -1969,7 +1892,10 @@ def test_fused_basis_chunks_sum_their_weight_gradients_as_the_reference(monkeypa
     (``mlp_weights``), as the fused basis is, gives the reference's basis and
     gradients bitwise (a stand-in node, CPU)."""
 
+    calls = []
+
     def stand_in(weights, qi, si, q_off, s_off, geometry):
+        calls.append(1)
         with torch.no_grad():
             inv = tree_pair_invariants(qi.long() - q_off, si.long() - s_off, **geometry)
         return _MlpProbe.apply(inv, *weights)
@@ -1986,11 +1912,14 @@ def test_fused_basis_chunks_sum_their_weight_gradients_as_the_reference(monkeypa
         fused = _basis_step(basis, plan, geometry, seed, autocast=True, weights=True)
     finally:
         torch.set_num_threads(threads)
+    ### 10000 pairs in chunks of 3000 (else both steps run the reference basis).
+    assert len(calls) == math.ceil(10000 / tree_read.TREE_READ_PAIR_CHUNK)
     assert ref[0].dtype == torch.bfloat16
     assert all(torch.equal(a, b) for a, b in zip(fused, ref))
 
 
-@cuda_only
+@pytest.mark.cuda
+@requires_cuda
 @pytest.mark.parametrize(
     "gelu_tables", [False, True], ids=["gelu_computed", "gelu_tables"]
 )
@@ -2048,7 +1977,8 @@ def test_fused_kernel_basis_matches_the_reference_basis(
         assert max(ulps) <= 4, dict(zip(names[1:], ulps))
 
 
-@cuda_only
+@pytest.mark.cuda
+@requires_cuda
 def test_fused_basis_leaves_the_geometrys_graph_alone():
     """The fused basis gives its geometry no gradient and keeps no edge into the
     geometry's graph: rank-1 inputs from a learned map (as ISLA's are) survive one
@@ -2071,7 +2001,8 @@ def test_fused_basis_leaves_the_geometrys_graph_alone():
     assert all(p.grad is not None for p in basis.parameters())
 
 
-@cuda_only
+@pytest.mark.cuda
+@requires_cuda
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16], ids=["bf16", "fp16"])
 def test_fused_basis_gelu_tables_are_pytorchs_gelu_on_every_input(dtype):
     """The fused basis's GELU tables give PyTorch's 16-bit GELU and its backward
@@ -2093,7 +2024,8 @@ def test_fused_basis_gelu_tables_are_pytorchs_gelu_on_every_input(dtype):
         assert torch.equal((dy.float() * g).to(dtype)[ok], ref[ok])
 
 
-@cuda_only
+@pytest.mark.cuda
+@requires_cuda
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16], ids=["bf16", "fp16"])
 def test_fused_basis_backward_computes_pytorchs_gelu_on_every_input(dtype):
     """The fused basis backward's computed GELU (CUDA 13's erff, ported) is PyTorch's
@@ -2119,7 +2051,8 @@ def test_fused_basis_backward_computes_pytorchs_gelu_on_every_input(dtype):
         assert same and computed
 
 
-@cuda_only
+@pytest.mark.cuda
+@requires_cuda
 def test_tree_read_pairs_fused_on_cuda_builds_the_basis_in_the_fused_kernel(
     monkeypatch,
 ):

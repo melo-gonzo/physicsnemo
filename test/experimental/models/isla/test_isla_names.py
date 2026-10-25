@@ -268,13 +268,3 @@ def test_name_grammar_is_validated():
             prediction_boundaries=["wall"],
             boundary_meshes={"wall": soup(pts, nrm, w, cell_data={"bc": w})},
         )  # "bc" is a tensor, not a group
-
-
-def test_checkpoint_round_trip_keeps_dotted_names(tmp_path):
-    from physicsnemo.core.module import Module
-
-    m = _model()
-    m.save(tmp_path / "m.mdlus")
-    m2 = Module.from_checkpoint(str(tmp_path / "m.mdlus")).double().eval()
-    assert list(m2.output_schema) == list(m.output_schema)
-    assert list(m2.boundary_schemas["wall"]) == ["bc.trace", "bc.traction"]

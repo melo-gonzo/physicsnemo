@@ -178,9 +178,9 @@ def test_every_condition_s_fields_are_covariant(interior, improper, scaled):
         None if q is None else q @ R.T + t,
     )
     for name, spec in m.output_schema.items():
-        assert torch.allclose(out[name], law(base[name], R, spec.rank), atol=1e-10), (
-            name
-        )
+        assert torch.allclose(
+            out[name], law(base[name], R, spec.rank), atol=1e-10, rtol=0.0
+        ), name
 
 
 def test_a_condition_s_cells_permute_with_its_outputs():
@@ -198,8 +198,8 @@ def test_a_condition_s_cells_permute_with_its_outputs():
     ### The tokens are the conditions in canonical order: inlet, no_slip, outlet, slip.
     n = inlet.n_cells
     for k in base:
-        assert torch.allclose(out[k][:n], base[k][perm], atol=1e-10)
-        assert torch.allclose(out[k][n:], base[k][n:], atol=1e-10)
+        assert torch.allclose(out[k][:n], base[k][perm], atol=1e-10, rtol=0.0)
+        assert torch.allclose(out[k][n:], base[k][n:], atol=1e-10, rtol=0.0)
 
 
 def _split(mesh: Mesh) -> Mesh:
@@ -230,7 +230,7 @@ def test_remeshing_one_condition_changes_no_interior_prediction(name):
     base = _run(m, meshes, q=Q)
     out = _run(m, {**meshes, name: _split(meshes[name])}, q=Q)
     for k in base:
-        assert torch.allclose(out[k], base[k], atol=1e-10), k
+        assert torch.allclose(out[k], base[k], atol=1e-10, rtol=0.0), k
 
 
 @pytest.mark.parametrize("interior", [False, True], ids=["surface", "interior"])
@@ -433,6 +433,7 @@ def test_every_condition_s_parameters_train_even_when_it_is_absent():
     assert all(torch.isfinite(v).all() for v in out.values())
 
 
+@pytest.mark.slow  # 12 s on LHR CPU: one compile per subset
 def test_a_change_of_condition_subset_compiles_once_per_subset():
     """Under the whole-model compile (the surface task's), cases of one subset with
     other cell counts reuse a graph; another subset is another graph, compiled once,

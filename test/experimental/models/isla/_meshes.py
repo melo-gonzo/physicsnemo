@@ -180,8 +180,10 @@ def outputs(mesh: Mesh) -> dict[str, torch.Tensor]:
     }
 
 
-def same(a, b, atol, rtol=1e-5) -> bool:
-    """Two output Meshes (or flat output dicts) agree field by field."""
+def same(a, b, atol, rtol=0.0) -> bool:
+    """Two output Meshes (or flat output dicts) agree field by field, to ``atol``
+    absolute (the contracts' stated bounds are absolute: no relative term unless the
+    caller asks for one)."""
     a = outputs(a) if isinstance(a, Mesh) else a
     b = outputs(b) if isinstance(b, Mesh) else b
     assert a.keys() == b.keys()

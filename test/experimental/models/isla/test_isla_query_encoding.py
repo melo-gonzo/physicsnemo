@@ -44,14 +44,14 @@ F = torch.float32
 D = torch.float64
 
 
-def _surface(dim: int) -> Mesh:
+def _surface(dim: int, subdivisions: int = 3) -> Mesh:
     """A closed, curved surface off the origin, in float32: a 96-gon in two
-    dimensions, an icosphere (642 vertices) in three."""
+    dimensions, an icosphere in three (642 vertices at 3 subdivisions, 42 at 1)."""
     if dim == 2:
         m = circle_2d.load(radius=1.3, n_points=96)
         shift = torch.tensor([0.4, -0.25])
     else:
-        m = sphere_icosahedral.load(radius=1.3, subdivisions=3)
+        m = sphere_icosahedral.load(radius=1.3, subdivisions=subdivisions)
         shift = torch.tensor([0.4, -0.25, 0.15])
     return Mesh(points=(m.points.double() + shift.double()).to(F), cells=m.cells)
 
@@ -115,14 +115,14 @@ def _move(x64: torch.Tensor, R, t, k: float) -> torch.Tensor:
     return (k * x64.to(F) @ R.to(F).T + t.to(F)).to(F)
 
 
-def feature_jumps(dim: int, n_motions: int = 4):
+def feature_jumps(dim: int, n_motions: int = 4, subdivisions: int = 3):
     """The largest change of the ingested features and of the direction (after
     undoing the motion) per query group: under ``n_motions`` random rigid motions
     (a rotation, proper or improper, and a translation of twice the size), under the
     uniform scalings 1e-3 and 1e3, and across the boundary (``+delta`` against
     ``-delta`` in the native frame)."""
     model = _model(dim)
-    mesh = _surface(dim)
+    mesh = _surface(dim, subdivisions)
     groups = _queries(mesh)
     names = list(groups)
     q64 = torch.cat([groups[n] for n in names])
@@ -193,14 +193,23 @@ def _report(dim, out):
     print(f"  on-surface feature range {out['on_surface_feature_range']}")
 
 
-@pytest.mark.parametrize("dim", [2, 3])
-def test_query_encoding_is_continuous_at_the_surface(dim):
+@pytest.mark.parametrize(
+    "dim, subdivisions",
+    [
+        pytest.param(2, 3, id="2"),
+        ### an icosphere of 80 cells: the three-dimensional case in the fast tier
+        pytest.param(3, 1, id="3-small"),
+        ### 3-8 s on LHR CPU (an icosphere of 1280 cells under motions and scalings)
+        pytest.param(3, 3, id="3", marks=pytest.mark.slow),
+    ],
+)
+def test_query_encoding_is_continuous_at_the_surface(dim, subdivisions):
     """On-surface points (vertices, and cell centroids whose distance is a rounding
     error of either sign) and points 1e-6 L off the surface keep their features and
     their direction under rigid motions (proper and improper) and uniform scalings;
     across the surface the features change by at most their slope times the step
     and the direction not at all. The measured numbers print with ``pytest -s``."""
-    out = feature_jumps(dim)
+    out = feature_jumps(dim, subdivisions=subdivisions)
     _report(dim, out)
     for kind in ("pose", "scale"):
         for n in ("vertex", "centroid", "+1e-06", "-1e-06"):

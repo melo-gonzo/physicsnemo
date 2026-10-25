@@ -1,0 +1,45 @@
+{
+ "format": 1,
+ "commit": "ea94fc67532f48595ae2690840a9c8e5229a5f67",
+ "code_modified": false,
+ "harness": {
+  "__init__.py": "0a7ef7faa425a61c89987fff234f7169",
+  "cases.py": "4e7e9f8481b8174cd7ff3aee0ab34ed7",
+  "compare.py": "7a3507ec13ed802e56dd08597468ae58",
+  "record.py": "7bfd6fc3675d047722388b25fa5b87c4"
+ },
+ "date": "2026-10-25T05:06:39-04:00",
+ "platform": {
+  "python": "3.13.8",
+  "torch": "2.13.0+cu130",
+  "machine": "x86_64",
+  "cpu": "13th Gen Intel(R) Core(TM) i9-13950HX",
+  "blas": "mkl",
+  "lapack": "mkl",
+  "threads": 1,
+  "device": "cpu",
+  "warp": "1.17.0",
+  "triton": "3.7.1",
+  "numpy": "2.4.6"
+ },
+ "versions": {
+  "physicsnemo.experimental.models.isla": "178546cdd26fc5a010e26ac102086b66",
+  "physicsnemo.experimental.models.isla.blocks": "89d53b4b63e6f7c5d635af148593f16b",
+  "physicsnemo.experimental.models.isla.fused_basis": "189eb1e6096e0bb4a7c67bd5c12f8bc3",
+  "physicsnemo.experimental.models.isla.fused_read": "77524e55db566b17afbea2d28893c09a",
+  "physicsnemo.experimental.models.isla.geometry": "e02fea5affa758475a9c6690b394d34f",
+  "physicsnemo.experimental.models.isla.geometry_fast": "8516d69bf3dd3f4696c2472dd76513f9",
+  "physicsnemo.experimental.models.isla.heads": "9373a25d4e58168fce8d0acad8931725",
+  "physicsnemo.experimental.models.isla.inputs": "3ce86bc1d666200a38be17c08939bb61",
+  "physicsnemo.experimental.models.isla.model": "4b3efc6a209eff23be0286f43f9561ef",
+  "physicsnemo.experimental.models.isla.sampling": "deb9f915adb9ec265e5a8411ea4a776e",
+  "physicsnemo.experimental.models.isla.scales": "c6ae7036d8b0bfbfcc06530fcc6bab7d",
+  "physicsnemo.experimental.models.isla.segment_softmax": "c86190380b4be07e1787dfaa33788e61",
+  "physicsnemo.experimental.models.isla.tree_build": "c818f50e3b1cb8b920fdeb57161b46d1",
+  "physicsnemo.experimental.models.isla.tree_read": "c85e555fee0480a05f0c80334b03a525",
+  "physicsnemo.experimental.models.isla.tree_walk": "b52839a5d9becc4a0b9513637f08dbcc"
+ },
+ "samples": 16,
+ "cases": 90,
+ "tensors": 3260
+}

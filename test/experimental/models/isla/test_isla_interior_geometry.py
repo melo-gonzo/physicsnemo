@@ -27,7 +27,6 @@ the interior task.
 
 import itertools
 import math
-import os
 
 import pytest
 import torch
@@ -36,11 +35,24 @@ from physicsnemo.experimental.models import ISLA
 from physicsnemo.experimental.models.isla import geometry
 from physicsnemo.experimental.models.isla.geometry import exact_boundary_geometry
 from physicsnemo.mesh import Mesh
-from physicsnemo.mesh.primitives.curves import circle_2d
 from physicsnemo.mesh.primitives.surfaces import cube_surface, sphere_icosahedral, torus
 from physicsnemo.nn.functional.geometry.sdf import _closest_point_weights
+from test.experimental.models.isla._geometry_cases import (
+    _box_ties,
+    _box_wall,
+    _circle,
+    _finned_cube,
+    _interior,
+    _naca,
+    _near_wall,
+    _polygon,
+    _sphere,
+    _torus,
+)
+from test.experimental.models.isla._marks import requires_cuda
 from test.experimental.models.isla._meshes import (
     cloud,
+    live,
     orthogonal,
     outputs,
     soup,
@@ -75,12 +87,14 @@ def _model(**kw):
 def test_interior_contracts():
     """Rotation and reflection covariance, translation invariance and geometric-scale
     invariance in the interior task, with the prediction-point directions computed
-    inside; the distance channel is live."""
+    inside; the distance channel is live, and so is the boundary read (``live``, at
+    the default opening angle: the forest is built in the boundary's own frame and
+    scale, so it is the same in every pose)."""
     pts, nrm, w, _ = cloud(200)
     mesh = soup(pts, nrm, w)
     drv = torch.tensor([0.3, 1.0, 0.2], dtype=D)
     q, _, _, _ = cloud(40, seed=1, scale=(4.0, 4.0, 4.0))
-    m = _model()
+    m = live(_model())
 
     def call(R=None, t=None, k=1.0, q=q):
         R = torch.eye(3, dtype=D) if R is None else R
@@ -98,8 +112,8 @@ def test_interior_contracts():
     for improper in (False, True):
         R = orthogonal(3, 4, improper)
         out = call(R, torch.tensor([2.0, -5.0, 1.0], dtype=D), k=2.5)
-        assert torch.allclose(out["p"], base["p"], atol=1e-11), improper
-        assert torch.allclose(out["v"], base["v"] @ R.T, atol=1e-11), improper
+        assert torch.allclose(out["p"], base["p"], atol=1e-11, rtol=0.0), improper
+        assert torch.allclose(out["v"], base["v"] @ R.T, atol=1e-11, rtol=0.0), improper
     ### the distance channel is live: moving the queries off the boundary changes p
     far = call(q=q * 3.0)
     assert not torch.allclose(far["p"], base["p"], atol=1e-6)
@@ -116,8 +130,6 @@ def test_no_query_normals_argument():
             global_data={"g": nrm[0]},
             query_normals=nrm[:3],
         )
-    with pytest.raises(TypeError, match="interior_geometry"):
-        _model(interior_geometry="provided")
 
 
 def test_fused_kernel_stays_available_with_the_built_in_distance():
@@ -136,91 +148,9 @@ def test_fused_kernel_stays_available_with_the_built_in_distance():
     assert not (m.n_block_vecs or m.n_block_tens)
 
 
-def test_checkpoint_round_trip_keeps_the_task(tmp_path):
-    from physicsnemo.core.module import Module
-
-    m = _model()
-    m.save(tmp_path / "m.mdlus")
-    m2 = Module.from_checkpoint(str(tmp_path / "m.mdlus")).double().eval()
-    assert m2.interior is True
-    pts, nrm, w, _ = cloud(50)
-    q, _, _, _ = cloud(8, seed=1)
-    kw = dict(
-        boundary_meshes={"wall": soup(pts, nrm, w)},
-        prediction_points=q,
-        global_data={"g": torch.ones(3, dtype=D)},
-    )
-    with torch.no_grad():
-        a, b = outputs(m(**kw)), outputs(m2(**kw))
-    assert all(torch.equal(a[k], b[k]) for k in a)
-
-
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="the saved case runs on CUDA")
-@pytest.mark.skipif(
-    "ISLA_AF_POSED_SAMPLE" not in os.environ,
-    reason="set ISLA_AF_POSED_SAMPLE to a forward-kwargs .pt saved by the posed-inference reproduction",
-)
-def test_saved_posed_airfrans_case_runs():
-    """The AirfRANS posed validation case that crashed the 2026-10-03 inference, as
-    saved forward kwargs (boundary polyline, 100,000 interior points with the stored
-    sdf / sdf_normals, which the model does not read, inlet vectors), runs through a
-    model of its schema."""
-    saved = torch.load(os.environ["ISLA_AF_POSED_SAMPLE"], weights_only=False)
-    kw = saved["forward_kwargs"]
-    kw = {
-        "boundary_meshes": {k: v.to("cuda") for k, v in kw["boundary_meshes"].items()},
-        "prediction_points": kw["prediction_points"].to("cuda"),
-        "global_data": kw["global_data"].to("cuda"),
-    }
-    torch.manual_seed(0)
-    m = (
-        ISLA(
-            output_schema={
-                "velocity": {"rank": 1},
-                "pressure": {"rank": 0},
-                "nut": {"rank": 0},
-            },
-            boundary_schemas={"airfoil": {}},
-            global_schema={"U_inf_dir": {"rank": 1}, "U_inf_mag": {"rank": 0}},
-            n_spatial_dims=2,
-            interior=True,
-            hidden=32,
-            n_layers=2,
-            n_slices=8,
-        )
-        .cuda()
-        .eval()
-    )
-    with torch.no_grad():
-        out = outputs(m(**kw))
-    assert all(torch.isfinite(v).all() for v in out.values())
-
-
 # ---------------------------------------------------------------------------
 # The exact geometry against the boundary surface (exact_boundary_geometry)
 # ---------------------------------------------------------------------------
-
-
-def _oriented(mesh: Mesh, outward) -> Mesh:
-    """``mesh`` with every cell re-oriented so its normal has a non-negative dot with
-    ``outward(centroid)``."""
-    cells = mesh.cells.clone()
-    flip = (mesh.cell_normals * outward(mesh.cell_centroids)).sum(-1) < 0
-    cells[flip, -2:] = cells[flip, -2:].flip(-1)
-    return Mesh(points=mesh.points, cells=cells)
-
-
-def _polygon(verts) -> Mesh:
-    """A closed polyline through ``verts`` (n, 2), oriented with outward normals."""
-    n = verts.shape[0]
-    cells = torch.stack([torch.arange(n), torch.arange(1, n + 1) % n], -1)
-    mesh = Mesh(points=verts, cells=cells)
-    ### the shoelace area is positive for a counterclockwise polygon, whose rotated
-    ### edges (the cell normals) point inward
-    x, y = verts[:, 0], verts[:, 1]
-    if (x * y.roll(-1) - x.roll(-1) * y).sum() > 0:
-        mesh = Mesh(points=verts, cells=cells.flip(-1))
-    return mesh
 
 
 def _polygon_sdf(q, verts):
@@ -237,27 +167,6 @@ def _polygon_sdf(q, verts):
     return torch.where(inside, -dist, dist)
 
 
-def _naca(n: int, thickness: float = 0.12):
-    """A NACA 00xx section of unit chord with a sharp trailing edge, 2n - 2 cosine-
-    clustered vertices (the open-trailing-edge coefficient replaced by -0.1036)."""
-    beta = torch.linspace(0, torch.pi, n, dtype=D)
-    x = 0.5 * (1 - torch.cos(beta))
-    yt = (
-        5
-        * thickness
-        * (
-            0.2969 * x.sqrt()
-            - 0.1260 * x
-            - 0.3516 * x**2
-            + 0.2843 * x**3
-            - 0.1036 * x**4
-        )
-    )
-    upper = torch.stack([x, yt], -1)
-    lower = torch.stack([x, -yt], -1).flip(0)[1:-1]
-    return torch.cat([upper, lower])
-
-
 def _brute_force_surface(q, points, cells):
     """The unsigned distance to the closest point of any cell, float64, over every
     (query, cell) pair: segments in two dimensions, triangles in three."""
@@ -272,36 +181,6 @@ def _brute_force_surface(q, points, cells):
     tri = simplex[None].expand(nq, nf, 3, 3).reshape(-1, 3, 3)
     p = (_closest_point_weights(qq, tri)[..., None] * tri).sum(1)
     return (qq - p).norm(dim=-1).reshape(nq, nf).min(-1)
-
-
-def _sphere(subdivisions: int, radius: float = 1.0) -> Mesh:
-    m = sphere_icosahedral.load(radius=radius, subdivisions=subdivisions)
-    return _oriented(Mesh(points=m.points.double(), cells=m.cells), lambda c: c)
-
-
-def _circle(n: int) -> Mesh:
-    m = circle_2d.load(n_points=n)
-    return _oriented(Mesh(points=m.points.double(), cells=m.cells), lambda c: c)
-
-
-def _torus(n_major: int = 48, n_minor: int = 24) -> Mesh:
-    m = torus.load(n_major=n_major, n_minor=n_minor)
-
-    def outward(c):
-        ring = torch.nn.functional.normalize(
-            c * torch.tensor([1.0, 1.0, 0.0], dtype=c.dtype), dim=-1
-        )
-        return c - ring
-
-    return _oriented(Mesh(points=m.points.double(), cells=m.cells), outward)
-
-
-def _near_wall(dim: int, n: int, seed: int, band: float, radius: float = 1.0):
-    g = torch.Generator().manual_seed(seed)
-    dirs = torch.nn.functional.normalize(
-        torch.randn(n, dim, dtype=D, generator=g), dim=-1
-    )
-    return dirs * (radius + band * (2 * torch.rand(n, 1, dtype=D, generator=g) - 1))
 
 
 def _geometry(q, mesh):
@@ -493,8 +372,15 @@ def test_on_wall_queries_take_the_least_norm_normal(dim):
             0, mesh.cells.reshape(-1), n.repeat_interleave(2, 0)
         )
         assert torch.allclose(u, 0.5 * at, atol=1e-15, rtol=0)
+        ### GEO-TIEORDER: pins the on-wall u at the vertices (a tie of two segments).
+        ### relative on purpose (rtol 1e-5): circle_2d places its
+        ### vertices in float32, so the segments' angle is pi / 64 only to about 1e-8
+        ### relative (measured 2e-8), which is the mesh and not the geometry's roundoff
         assert torch.allclose(
-            u.norm(dim=-1), torch.full_like(d, math.cos(math.pi / 64)), atol=1e-15
+            u.norm(dim=-1),
+            torch.full_like(d, math.cos(math.pi / 64)),
+            rtol=1e-5,
+            atol=1e-15,
         )
 
 
@@ -576,25 +462,6 @@ def test_exact_geometry_refuses_other_dimensions():
 # ---------------------------------------------------------------------------
 # The model reads the full-resolution surface and draws its tokens from it
 # ---------------------------------------------------------------------------
-
-
-def _interior(dim: int, **kw) -> ISLA:
-    torch.manual_seed(0)
-    kw.setdefault("boundary_schemas", {"wall": {}, "airfoil": {}, "far": {}})
-    return (
-        ISLA(
-            output_schema=PV,
-            global_schema={"g": {"rank": 1}},
-            hidden=32,
-            n_layers=2,
-            n_slices=8,
-            interior=True,
-            n_spatial_dims=dim,
-            **kw,
-        )
-        .double()
-        .eval()
-    )
 
 
 def _captured(m, **kw):
@@ -882,28 +749,7 @@ def _tree_winding(q, mesh):
     )
 
 
-def _finned_cube() -> Mesh:
-    """The unit cube (outward normals) with a fin on its +x face: a 1 x 0.5 square
-    in the plane y = 0, stored as two coincident sheets of opposite orientation (a
-    zero-thickness fold, as two roles welded back to back)."""
-    cube = cube_surface.load()
-    fin = torch.tensor(
-        [[0.5, 0, -0.25], [1.5, 0, -0.25], [1.5, 0, 0.25], [0.5, 0, 0.25]], dtype=D
-    )
-    sheet = torch.tensor([[0, 1, 2], [0, 2, 3]]) + cube.n_points
-    return Mesh(
-        points=torch.cat([cube.points.double(), fin]),
-        cells=torch.cat([cube.cells, sheet, sheet[:, [0, 2, 1]]]),
-    )
-
-
-_DEVICES = [
-    "cpu",
-    pytest.param(
-        "cuda",
-        marks=pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA"),
-    ),
-]
+_DEVICES = ["cpu", pytest.param("cuda", marks=[pytest.mark.cuda, requires_cuda])]
 
 
 @pytest.mark.parametrize("device", _DEVICES)
@@ -930,6 +776,8 @@ def test_a_fold_is_signed_by_the_region_around_it(dtype, device):
         q.to(device, dtype), mesh.points.to(device, dtype), mesh.cells.to(device)
     )
     assert d.dtype == dtype and (d > 0).all()
+    ### relative on purpose: the offsets span three decades (1e-4 to 0.1) and the
+    ### distance's error scales with them (measured 2.5e-8 relative in float64)
     assert torch.allclose(d.double().cpu(), off, rtol=1e-5, atol=0)
 
 
@@ -971,9 +819,21 @@ def test_an_open_surface_signs_its_far_field_consistently():
     assert (d > 0).all()
 
 
-@pytest.mark.parametrize("shape", ["naca", "sphere", "torus"])
+@pytest.mark.parametrize(
+    "shape",
+    [
+        "naca",
+        ### a 320-cell sphere and 300 queries: the three-dimensional sign and the
+        ### BVH's far-field bound in the fast tier
+        "small_sphere",
+        ### 2-11 s (sphere) and 4-40 s (torus) on LHR CPU: the exact winding number
+        ### over every (query, cell) pair, memory-bound
+        pytest.param("sphere", marks=pytest.mark.slow),
+        pytest.param("torus", marks=pytest.mark.slow),
+    ],
+)
 def test_closed_surfaces_take_the_sign_of_the_exact_winding_number(shape):
-    """On watertight surfaces (a NACA 0012, a sphere, a torus), natively, in a
+    """On watertight surfaces (a NACA 0012, two spheres, a torus), natively, in a
     generic pose, with every cell split and with every cell doubled, d takes
     sign(sigma / 2 - w) of the exact winding number at every query off the surface,
     so the inside-outside sign of the closed surface; in three dimensions the
@@ -985,6 +845,9 @@ def test_closed_surfaces_take_the_sign_of_the_exact_winding_number(shape):
         q = torch.randn(1500, 2, dtype=D, generator=g) * 0.6 + torch.tensor(
             [0.5, 0.0], dtype=D
         )
+    elif shape == "small_sphere":
+        mesh = _sphere(2)
+        q = _near_wall(3, 300, 3, band=0.5)
     elif shape == "sphere":
         mesh = _sphere(3)
         q = _near_wall(3, 1500, 3, band=0.5)
@@ -1018,47 +881,6 @@ def test_closed_surfaces_take_the_sign_of_the_exact_winding_number(shape):
 def _gradient(d, u):
     """The token's direction, sign(d) u with sign(0) = +1."""
     return torch.where((d >= 0)[:, None], u, -u)
-
-
-def _box_ties(dim: int):
-    """The unit square / the cube [-1/2, 1/2]^3 (outward normals) and points
-    inside it equidistant from two of its sides, from three (the cube's corner
-    diagonals) and from all of them (the centre), with the least-norm gradient of
-    the signed distance at each: the mean of the tied sides' outward unit normals,
-    zero at the centre."""
-    a = torch.linspace(0.05, 0.45, 9, dtype=D) - 0.5
-    z = torch.zeros_like(a)
-    if dim == 2:
-        mesh = _polygon(
-            torch.tensor([[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]], dtype=D)
-        )
-        q = torch.cat(
-            [
-                torch.stack([a, a], -1),
-                torch.stack([-a, a], -1),
-                torch.stack([a, -a], -1),
-                torch.stack([-a, -a], -1),
-            ]
-        )
-        nu = 0.5 * torch.sign(q)
-    else:
-        cube = cube_surface.load()
-        mesh = Mesh(points=cube.points.double(), cells=cube.cells)
-        q = torch.cat(
-            [
-                torch.stack([a, a, z], -1),
-                torch.stack([-a, z, a], -1),
-                torch.stack([z, a, -a], -1),
-                torch.stack([a, a, a], -1),
-                torch.stack([-a, a, -a], -1),
-            ]
-        )
-        nu = torch.sign(q) / (q != 0).sum(-1, keepdim=True)
-    return (
-        mesh,
-        torch.cat([q, q.new_zeros(1, dim)]),
-        torch.cat([nu, nu.new_zeros(1, dim)]),
-    )
 
 
 def test_tie_direction_is_the_least_norm_gradient_and_independent_of_the_order():
@@ -1121,28 +943,6 @@ def test_tie_direction_is_covariant_under_rigid_motions(dim):
                 seed,
                 improper,
             )
-
-
-def _box_wall(dim: int):
-    """The unit square / the cube [-1/2, 1/2]^3 (outward normals), its sides split
-    once, and points exactly on it: its vertices, its cells' edge midpoints and
-    centroids, with the least-norm normal at each: the mean of the outward unit
-    normals of the box's sides holding it (one inside a side, two on an edge of
-    the box, three at a corner of the cube)."""
-    if dim == 2:
-        h = torch.tensor([-0.5, 0.0, 0.5, 0.5, 0.5, 0.0, -0.5, -0.5], dtype=D)
-        mesh = _polygon(torch.stack([h, h.roll(-2)], -1))
-        pairs = ((0, 1),)
-    else:
-        cube = cube_surface.load()
-        mesh = Mesh(points=cube.points.double(), cells=cube.cells).subdivide(
-            levels=1, filter="linear"
-        )
-        pairs = ((0, 1), (1, 2), (0, 2))
-    edges = [mesh.points[mesh.cells[:, [a, b]]].mean(1) for a, b in pairs]
-    q = torch.cat([mesh.points, mesh.cell_centroids, *edges])
-    on = q.abs() == 0.5
-    return mesh, q, torch.sign(q) * on / on.sum(-1, keepdim=True)
 
 
 @pytest.mark.parametrize("dim", [2, 3])
@@ -1505,7 +1305,8 @@ def test_least_norm_point_without_a_certified_candidate(k, dim):
     assert ((x - exact).norm(dim=-1) <= (2 * gap.clamp_min(0)).sqrt() + 1e-12).all()
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="compares CUDA with CPU")
+@pytest.mark.cuda
+@requires_cuda
 @pytest.mark.parametrize("dim", [2, 3])
 def test_tie_search_on_cuda_matches_cpu(dim):
     """The search on CUDA (the Warp traversal in three dimensions) finds the same

@@ -36,14 +36,10 @@ from tensordict import TensorDict
 from torch._inductor.utils import fresh_cache
 
 from physicsnemo.experimental.models import ISLA
+from test.experimental.models.isla._marks import requires_cuda
 from test.experimental.models.isla._meshes import cloud, outputs, soup
 
-DEVICES = [
-    "cpu",
-    pytest.param(
-        "cuda", marks=pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA")
-    ),
-]
+DEVICES = ["cpu", pytest.param("cuda", marks=[pytest.mark.cuda, requires_cuda])]
 PV = {"p": {"rank": 0}, "v": {"rank": 1}}
 
 #: Per-case token counts, all distinct (and distinct from every other input
@@ -159,6 +155,7 @@ def _assert_close(a, b, device, rel=3e-2):
         assert (a - b).norm() <= rel * b.norm() + 1e-6
 
 
+@pytest.mark.slow  # 32-55 s per case on LHR CPU: Inductor compiles the whole model
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("task", ["surface", "inputs", "scales", "global_source"])
 def test_whole_model_compiles_fullgraph_with_dynamic_shapes_and_matches_eager(
@@ -260,6 +257,7 @@ def _drawn(fn, case) -> dict:
     return leaves
 
 
+@pytest.mark.slow  # 32 s on LHR CPU: the case inputs compiled in evaluation and training
 def test_the_in_model_boundary_draw_compiles_once_across_the_budget():
     """The interior model's case inputs (the in-model draw, then the prediction
     points' geometry) compiled with one graph, in evaluation (the fixed start), give
@@ -288,6 +286,7 @@ def test_the_in_model_boundary_draw_compiles_once_across_the_budget():
         assert all(torch.isfinite(v).all() for v in out.values())
 
 
+@pytest.mark.slow  # 30 s on LHR CPU: a cold and a warm compile
 def test_a_warm_compile_cache_reuses_the_graph_across_the_budget():
     """A second run on the first run's Inductor cache (a cache hit on its first
     case) compiles no second graph for the cases on the other side of the budget.
@@ -310,7 +309,37 @@ def test_a_warm_compile_cache_reuses_the_graph_across_the_budget():
                     _drawn(compiled, case)
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA")
+def test_the_compiled_case_inputs_run_every_sum_as_the_opaque_scan():
+    """The interior model's case inputs (the graph the recipe compiles) traced with
+    one graph, before Inductor, run every sum as the custom op
+    ``physicsnemo::isla_cumsum`` and have no cumsum of their own: a cumsum added
+    anywhere in them, not only in the draw (test_isla_sampling's guard), would
+    bring back Inductor's split scan, whose kernel failed on GB300 at full
+    resolution under max-autotune (the slow test below runs that on CUDA)."""
+    graphs = []
+
+    def capture(gm, example_inputs):
+        graphs.append(gm)
+        return gm.forward
+
+    torch._dynamo.reset()
+    model = _budget_model()
+    compiled = torch.compile(
+        model._case_inputs, fullgraph=True, dynamic=True, backend=capture
+    )
+    s, nq = BUDGET_SIZES[1]  # sampled down to the budget: the draw's sums run
+    with torch.no_grad():
+        _drawn(compiled, _case("interior", s, "cpu", seed=0, nq=nq))
+    assert len(graphs) == 1
+    scans = [n.target for n in graphs[0].graph.nodes if "cumsum" in str(n.target)]
+    assert scans and set(scans) == {torch.ops.physicsnemo.isla_cumsum.default}, scans
+
+
+### DRAW-EXACT: the 0.14.0 draw replaces isla_cumsum's body (a fixed-order float scan
+### in place of ATen's) and edits this docstring; the test stays.
+@pytest.mark.slow
+@pytest.mark.cuda
+@requires_cuda
 def test_the_in_model_draw_compiles_under_max_autotune_at_full_resolution():
     """The recipe's compile options (``max-autotune-no-cudagraphs``) on an interior
     model's case inputs at 1.4 million boundary cells: the draw's float64 sums over

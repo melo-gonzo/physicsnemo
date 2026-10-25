@@ -23,7 +23,7 @@ from torch.utils._python_dispatch import TorchDispatchMode
 
 import physicsnemo.experimental.models.isla.model as isla_model
 from physicsnemo.experimental.models import ISLA
-from test.experimental.models.isla._meshes import cloud, outputs, same, soup
+from test.experimental.models.isla._meshes import cloud, live, outputs, same, soup
 
 PV = {"p": {"rank": 0}, "v": {"rank": 1}}
 G = {"g": {"rank": 1}}
@@ -49,6 +49,7 @@ def test_token_padding_leaves_outputs_and_gradients_unchanged(task, monkeypatch)
         n_slices=8,
         **kw,
     ).double()
+    live(m)  # the interior task's boundary read contributes (a surface model has none)
     assert (203 + (0 if q is None else 30)) % isla_model.TOKEN_ALIGNMENT
 
     def run(alignment):
@@ -74,7 +75,7 @@ def test_token_padding_leaves_outputs_and_gradients_unchanged(task, monkeypatch)
     out1, grad1 = run(1)
     out8, grad8 = run(8)
     assert out8["p"].shape == (203 if q is None else 30,)
-    assert same(out8, out1, atol=1e-12, rtol=1e-10)
+    assert same(out8, out1, atol=1e-12)
     assert grad8.keys() == grad1.keys()
     for k in grad1:
         assert torch.allclose(grad8[k], grad1[k], atol=1e-11, rtol=1e-10), k

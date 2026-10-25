@@ -91,8 +91,12 @@ def _assert_se3(m, mesh, gd, q=None, atol=1e-10):
         _rotate_globals(m, gd, R),
         None if q is None else q @ R.T + t,
     )
-    assert torch.allclose(moved.point_data["p"], base.point_data["p"], atol=atol)
-    assert torch.allclose(moved.point_data["v"], base.point_data["v"] @ R.T, atol=atol)
+    assert torch.allclose(
+        moved.point_data["p"], base.point_data["p"], atol=atol, rtol=0.0
+    )
+    assert torch.allclose(
+        moved.point_data["v"], base.point_data["v"] @ R.T, atol=atol, rtol=0.0
+    )
     ### Measure-scale invariance: the RMS-distance unit uses normalized weights and
     ### the routing bias is a log-weight, so a uniform rescale changes nothing.
     rescaled = _run(m, rescale_measures(mesh, 137.0), gd, q)
@@ -178,8 +182,12 @@ def test_a_derived_direction_counts_among_the_global_vectors(declared):
         transform(mesh, R, t, specs=m.boundary_schemas["wall"]),
         _rotate_globals(m, gd, R),
     )
-    assert torch.allclose(moved.point_data["p"], base.point_data["p"], atol=1e-10)
-    assert torch.allclose(moved.point_data["v"], base.point_data["v"] @ R.T, atol=1e-10)
+    assert torch.allclose(
+        moved.point_data["p"], base.point_data["p"], atol=1e-10, rtol=0.0
+    )
+    assert torch.allclose(
+        moved.point_data["v"], base.point_data["v"] @ R.T, atol=1e-10, rtol=0.0
+    )
 
 
 def test_two_vectors_interior_path():

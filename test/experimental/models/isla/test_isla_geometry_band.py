@@ -33,18 +33,14 @@ from physicsnemo.experimental.models.isla import geometry
 from physicsnemo.experimental.models.isla.geometry import exact_boundary_geometry
 from physicsnemo.mesh.geometry._cell_normals import compute_cell_normals
 from physicsnemo.mesh.primitives.surfaces import sphere_icosahedral
+from test.experimental.models.isla._geometry_cases import _exact_d2
+from test.experimental.models.isla._marks import requires_cuda
 from test.experimental.models.isla._meshes import orthogonal
-from test.experimental.models.isla.test_isla_geometry_thin import _exact_d2
 
 D = torch.float64
 U32, U64 = 2.0**-24, 2.0**-53
 
-_DEVICES = [
-    "cpu",
-    pytest.param(
-        "cuda", marks=pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA")
-    ),
-]
+_DEVICES = ["cpu", pytest.param("cuda", marks=[pytest.mark.cuda, requires_cuda])]
 
 
 def _search(q, p, c):
