@@ -474,7 +474,7 @@ def _forest_outputs(f) -> dict:
 def _forest_build(d, dtype, kind):
     def build():
         pts, nrm, w, _ = _cloud(1500, d=d, seed=21, dtype=dtype)
-        vecs = torch.randn(1500, 2, d, generator=_gen(22), dtype=dtype)
+        vecs = torch.randn(1500, 2, d, generator=_gen(22), dtype=D).to(dtype)
         if kind == "dup":
             pts = pts.clone()
             pts[:700] = pts[0]  # equal Morton codes: the midpoint splits
