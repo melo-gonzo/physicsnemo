@@ -522,6 +522,18 @@ dtt_nosc_cont = dtt_nosc["pressure_l2"] / AT["af/dtt"]["pressure_l2"]["arms"]["D
 # embedding (DTT-QEMB); exp(Δ) against ISLA-DTT, and whether either moves a field by the study's test (RESULTS.md section 3c)
 mirror = {a: {f: AT["af/dtt"][f]["arms"][a]["ratio"] for f in FK} for a in ("DTT-SDF", "DTT-QEMB")}
 assert not any(AT["af/dtt"][f]["arms"][a]["moves"] for a in mirror for f in FK)
+# ISLA-DTT without the scales, reading the inlet speed standardized (DTT-NOSC-STD), against ISLA-DTT (B), DTT-KNOBS R5:
+# arithmetic seed means as registered, with the review's corrections applied in the record
+R5T = {r_["field"]: r_ for r_ in R.md_table("dtt_knobs_r5", "RESULTS.md", "R5", 0)}
+R5X = " ".join(R.load("dtt_knobs_r5", "RESULTS.md").split())
+R5K = {"pressure_l2": "pressure", "velocity_l2": "in-plane velocity", "nut_l2": "nut"}
+r5 = {f: R.num(R5T[R5K[f]]["÷ B, arithmetic (registered)"]) for f in FK}
+r5_n = {f: R.num(R5T[R5K[f]]["÷ DTT-NOSC"]) for f in FK}
+assert {R5T[k]["registered reading"] for k in R5T} == {"standardization leaves it (the scales carry it)"}
+assert "flagged" in R5T["in-plane velocity"]["geometric form (beside)"]
+r5_v = re.search(r"velocity ([\d.]+) / ([\d.]+), nut", R5X).groups()
+r5_d = re.search(r"resolves it on pressure only \(([\d.]+) against 2 SE ([\d.]+)\)", R5X).groups()
+r5_isla = re.search(r"read ([\d.]+) / ([\d.]+) / ([\d.]+): no measurable effect", R5X).groups()
 # The ANCHOR arms (results/campaigns_2026-10-18/anchor/PREREG.md), ISLA of the nearest-token form at the reference configuration: A interacting
 # ISLA, C read-only points with 50,000 boundary-drawn interior writers. Scores: readout/scores.json and verdict.json.
 ANC = RES / "campaigns_2026-10-18" / "anchor" / "readout"
@@ -547,17 +559,26 @@ print(f"**At the reference configuration interacting ISLA leads ISLA-DTT on Airf
       + " / ".join(l for _, l in FIELDS) + " (ratios of arithmetic seed means).** The reduced form is defined with the attribution study (@sec-airfrans-attribution). "
       "Both forms gain from ISLA's components, interacting ISLA more: its error falls to " + " / ".join(f"{bundle['isla'][f]:.2f}" for f in FK)
       + " of the reduced form's, ISLA-DTT's to " + " / ".join(f"{bundle['dtt'][f]:.2f}" for f in FK)
-      + ". In ISLA's components other than the declared scales, ISLA-DTT pays a cost on pressure that interacting ISLA does not: without "
-      "the scales and with the raw inlet speed, its error is " + " / ".join(f"{dtt_nosc[f]:.3f}" for f in FK) + " times ISLA-DTT's, and on pressure "
+      + ". Without the declared scales, ISLA-DTT pays a cost that interacting ISLA does not. With the raw inlet speed in their place, "
+      "its error is " + " / ".join(f"{dtt_nosc[f]:.3f}" for f in FK) + " times ISLA-DTT's, and on pressure "
       f"{dtt_nosc_cont:.2f} times its reduced form's, which also reads the raw inlet speed (each exp(Δ), a ratio of geometric seed means). "
       "Neither of the two pieces that might carry that cost does so measurably: with the stored signed distance put back, ISLA-DTT's "
       "error is " + " / ".join(f"{mirror['DTT-SDF'][f]:.3f}" for f in FK) + " times ISLA-DTT's, and with the reduced form's "
       "prediction-point embedding " + " / ".join(f"{mirror['DTT-QEMB'][f]:.3f}" for f in FK) + " (exp(Δ)); no effect passes the "
       "study's test (|Δ| at least 2 SE and at least 5 percent), and on pressure the stored signed distance is ruled out as carrying even "
-      "half of the cost. Where the cost lies is not located. "
+      "half of the cost. With the inlet speed standardized and still no scales, ISLA-DTT's error is "
+      + " / ".join(f"{r5[f]:.3f}" for f in FK) + " times ISLA-DTT's (arithmetic seed means), not measurably below the raw-speed "
+      "arm's (" + " / ".join(f"{r5_n[f]:.3f}" for f in FK) + " of it), which the rule registered for it reads as the scales carrying "
+      "the cost, as far as two seeds can show; there is no sign that it comes from the raw speed. The velocity reading is flagged: it "
+      f"rests on one seed ({r5_v[0]} and {r5_v[1]}), and its geometric form does not resolve. Interacting ISLA's mirror arm, without "
+      f"the scales and with the inlet speed standardized, reads {' / '.join(r5_isla)} (geometric seed means), no measurable effect "
+      "(@sec-airfrans-attribution). So on AirfRANS ISLA-DTT uses the scales where interacting ISLA does not; the difference between "
+      f"the two forms is resolved on pressure ({r5_d[0]} against two standard errors of {r5_d[1]}), and on velocity and eddy "
+      "viscosity it is within two seeds' noise. A reading of why, not a test: ISLA-DTT's prediction points never share state, and "
+      "the scales may give them a frame that interacting ISLA rebuilds from its interacting points. "
       "Every model in this comparison trained on the compiled training path after its "
       f"fault was fixed and is scored eager. Data: {R.source('attrib090', 'results2_native.json')}, "
-      f"{R.source('attrib090', 'RESULTS.md')} (sections 3, 3b and 3c).")
+      f"{R.source('attrib090', 'RESULTS.md')} (sections 3, 3b and 3c); {R.source('dtt_knobs_r5', 'RESULTS.md')} (R5).")
 print()
 print("**Interior writers drawn from the boundary, tested on ISLA of the nearest-token form, do not replace interacting ISLA.** A read-only arm "
       "adds 50,000 interior tokens that write into the slices, placed from the boundary alone, so that the prediction stays a function of the "
@@ -831,8 +852,9 @@ print("**On AirfRANS, ISLA's error is " + " / ".join(f"{1 / AI[f]['CONT']['ratio
       "global scalar does not matter here, only its standardization. Keeping the scales and putting the raw speed back puts back the whole step "
       f"({r3a('RAWU')}); taking eddy viscosity's units away changes nothing measurable ({r3a('NUT0')}). On AirfRANS the viscosity is "
       "constant and $L$ nearly so, so the log Reynolds number is close to a monotone reparametrization of the inlet speed; whether the "
-      "declared scales add accuracy where the Reynolds number varies widely, as on AeroZoo, is untested (@sec-oq-scales). Every arm "
-      "trained on the compiled training path after its fault was fixed and is scored eager.")
+      "declared scales add accuracy where the Reynolds number varies widely, as on AeroZoo, is untested (@sec-oq-scales). ISLA-DTT "
+      "reads differently: without its scales, with the inlet speed standardized, it loses accuracy on every field "
+      "(@sec-airfrans-dtt-reference). Every arm trained on the compiled training path after its fault was fixed and is scored eager.")
 ```
 
 ```{python}
@@ -967,9 +989,10 @@ print("- **Reynolds extrapolation is measured on this dataset only.** ISLA's err
       + " and ".join(f"{fx['a']['r'][sd]:.2f}" for sd in ("42", "43")) + " of its value with the fitted scale (per seed); the same scale "
       f"costs velocity on AeroZoo's `reynolds` split ({_LZ['rule']['velocity_l2']['mean']['ratio']:.2f} times), so it stays a result "
       "about AirfRANS (@sec-oq-reynolds).")
-print("- **Whether ISLA's declared scales add accuracy where the Reynolds number varies widely is untested here.** On AirfRANS, ISLA "
-      "without them but with the inlet speed standardized is as accurate as ISLA, so standardizing the global input carries ISLA's gain "
-      "on this dataset (@sec-airfrans-attribution); AeroZoo, whose Reynolds number varies widely, has no such arm.")
+print("- **Whether ISLA's declared scales add accuracy where the Reynolds number varies widely is untested here.** On AirfRANS, "
+      "interacting ISLA without them but with the inlet speed standardized is as accurate as interacting ISLA, so standardizing the "
+      "global input carries its gain on this dataset (@sec-airfrans-attribution), while ISLA-DTT without them loses accuracy on every "
+      "field (@sec-airfrans-dtt-reference); AeroZoo, whose Reynolds number varies widely, has no such arm.")
 print("- **Interacting ISLA depends on its request.** The query-population dependence has no knob that removes it, so it is a limit of the "
       "interacting form (@sec-airfrans-query-population, @sec-limits-query-independence).")
 ```

@@ -426,12 +426,13 @@ plt.show()
 
 Each kept cell's measure is its Horvitz–Thompson weight $a_i / \pi_i$, so
 every measure-weighted sum over the tokens is an unbiased quadrature of the
-whole surface, exact on a condition kept whole, and the systematic draw
+whole surface, exact on a condition kept whole up to rounding, and the systematic draw
 spreads the sample along the curve instead of clumping it. The number of
 tokens is exactly the smaller of the budget and the number of cells. In
 training the start $u$ is drawn afresh on every step, so the model sees a new
 quadrature of the same surface each time; in evaluation $u = 1/2$, so
-inference is deterministic. A surface task reads every cell it is given,
+inference is deterministic, on a GPU up to exact ties of the draw
+(@sec-limits-draw-ties). A surface task reads every cell it is given,
 draws nothing, and predicts at the cells of the boundaries it names. @sec-arch-boundary-draw has the code.
 
 ## Idea 2: position without a frame {#sec-isla-frame}

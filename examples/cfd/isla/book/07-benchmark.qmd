@@ -738,7 +738,7 @@ task, which computes no wall geometry and draws no tokens, the four steps do not
 
 | step | the standings' checkpoints (ISLA 0.9.0) | the class (@sec-arch-interior-geometry, @sec-arch-boundary-draw) |
 |---|---|---|
-| the direction at a closest-feature tie | the first tied feature the float32 search meets | the least-norm point of the hull of the tied features' directions, a function of the tie set alone |
+| the direction at a closest-feature tie | the first tied feature the float32 search meets | the least-norm point of the hull of the tied features' directions, a function of the tie set alone where they are certified distinct (@sec-limits-tie-order) |
 | the sign of the wall distance | the closest feature's pseudo-normal, which cancels at a fold of the surface | the generalized winding number of the oriented cells |
 | the token draw | a Morton order along the dataset's axes, on centroids in the mesh's precision | a Morton order in the boundary's canonical frame, on float64 centroids and measures |
 | a point on the wall | a fixed cutoff of its distance, with float32 normals | its float64 distance within its own rounding bound, with float64 normals |

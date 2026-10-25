@@ -185,13 +185,17 @@ for title, keys in GROUPS:
 #| label: para-standing-families-lede
 #| output: asis
 AZ = S.aerozoo()
-HO = AZ["held_out"]
-AZP = {m: sum(AZ["arms"][AZ["isla_arm"]]["splits"][sp]["pressure_l2"][m] for sp in HO) / len(HO) for m in ("mean", "median")}
-assert min(AZP.values()) >= AZ["zero_predictor"], AZP
+AZE = S.aerozoo_spec()
+HO = AZE["held_out"]
+ec = lambda a, sp, f: (AZE["references"][a][sp] if a in AZE["references"] else AZE["arms"][a]["splits"][sp])[f]["all"]
+p_below = [sp for sp in HO if ec("ISLA", sp, "eps_p")["mean"] < ec("zero", sp, "eps_p")["mean"]]
+v_below = [sp for sp in HO if ec("ISLA", sp, "eps_U")["mean"] < ec("freestream", sp, "eps_U")["mean"]]
+assert p_below == v_below
 print("**Scored on families they never saw, the three architectures degrade alike on SHIFT-SUV pressure, ISLA transfers "
-      "better than both baselines on SHIFT-SUV wall shear, estates to fastbacks, and on AeroZoo pressure both baselines are about a zero predictor and ISLA's held-out "
-      f"error, {AZP['mean']:.3f} (median {AZP['median']:.3f}) over the six splits, is at or above the zero predictor's "
-      f"{AZ['zero_predictor']:.1f}.** Two datasets score models outside the family they trained on. SHIFT-SUV's standing "
+      "better than both baselines on SHIFT-SUV wall shear, estates to fastbacks, and on AeroZoo, scored with its own metrics, both "
+      "baselines are about a zero predictor on pressure and no better than AeroZoo's free stream on velocity, while ISLA beats both "
+      f"references on {len(p_below)} of the {len(HO)} held-out splits and is worse than both on the other "
+      f"{len(HO) - len(p_below)}.** Two datasets score models outside the family they trained on. SHIFT-SUV's standing "
       "models, trained on estates, are scored zero-shot on the fastback test cases; the *penalty* of a model is its fastback "
       "error over its own estate error. AeroZoo trains each model on six splits that each hold one family of bodies or "
       "enclosures out, and scores it on that family. Both are read in their chapters (@sec-shift-suv, @sec-aerozoo); this "
@@ -225,36 +229,38 @@ print(f"On SHIFT-SUV, the fastback pressure error is {' to '.join(pp[::len(pp) -
 #| label: tbl-standing-aerozoo
 #| output: asis
 ARM = {n.split()[0]: n for n in AZ["arms"] if AZ["arms"][n]["splits"]}
-AF = ("velocity_l2", "pressure_l2")
-cell = lambda a, sp, f: AZ["arms"][ARM[a]]["splits"][sp][f]
-out = ["| | " + " | ".join(f"{AZ['fields'][f]}: mean / median" for f in AF) + " |", "|---|" + "---:|" * len(AF)]
-for a in ("ISLA", "GeoTransolver"):
-    out.append(f"| {S.CONFIG[a]}{' (interacting ISLA 0.9.0)' if a == 'ISLA' else ''}, six-split mean | " + " | ".join(
-        f"{sum(cell(a, sp, f)['mean'] for sp in HO) / len(HO):.3f} / {sum(cell(a, sp, f)['median'] for sp in HO) / len(HO):.3f}"
-        for f in AF) + " |")
-out.append("| the zero predictor | " + " | ".join(f"{AZ['zero_predictor']:.1f}" for f in AF) + " |")
-rat = {f: [cell("GeoTransolver", sp, f)["mean"] / cell("ISLA", sp, f)["mean"] for sp in HO] for f in AF}
+AF = ("eps_U", "eps_p")
+AFL = {"eps_U": "velocity error $\\varepsilon_U$", "eps_p": "pressure error $\\varepsilon_p$"}
+six = lambda a, f, m: sum(ec(a, sp, f)[m] for sp in HO) / len(HO)
+out = ["| | " + " | ".join(f"{AFL[f]}: mean / median" for f in AF) + " |", "|---|" + "---:|" * len(AF)]
+for a, lab in (("ISLA", f"{S.CONFIG['ISLA']} (interacting ISLA 0.9.0)"), ("GeoTransolver", S.CONFIG["GeoTransolver"]),
+               ("zero", "predicting zero"), ("freestream", "AeroZoo's free stream")):
+    out.append(f"| {lab}, six-split mean | " + " | ".join(f"{six(a, f, 'mean'):.3f} / {six(a, f, 'median'):.3f}" for f in AF) + " |")
+rat = {f: [ec("GeoTransolver", sp, f)["mean"] / ec("ISLA", sp, f)["mean"] for sp in HO] for f in AF}
 out.append("| GeoTransolver ÷ ISLA: six-split mean (splits above one) | " + " | ".join(
     f"{S.fmt_ratio(sum(r) / len(r))} ({sum(x > 1 for x in r)} of {len(r)})" for r in rat.values()) + " |")
+out.append(f"| splits on which ISLA beats the reference (the free stream on velocity, predicting zero on pressure) | "
+           f"{len(v_below)} of {len(HO)} | {len(p_below)} of {len(HO)} |")
 print("\n".join(out) + "\n")
-print(f": AeroZoo, the {({**S._COUNT, 6: 'six', 7: 'seven'})[len(HO)]} held-out splits, each model trained without the family it is scored on: the relative L2 error "
-      "per field and case in physical units, seed means over two seeds averaged over the splits (*mean*: the case mean; *median*: "
-      "the median over cases), and the registered readout GeoTransolver ÷ ISLA, its six-split mean and the count of splits on "
-      f"which it exceeds one. GeoTransolver is {AZ['arms'][ARM['GeoTransolver']]['note']}; its velocity error is still falling at "
-      f"the last epoch, so its velocity is not converged. Transolver, at AeroZoo's own configuration ({ARM['Transolver']}), "
-      "which receives no inlet value, is scored on the "
-      f"`full` split only and is {AZ['arms'][ARM['Transolver']]['note']}. How to read this: on pressure the comparison is with "
-      "predicting zero, whose error is 1.0; the per-split numbers, ISLA's failures on two held-out families and the reasons are "
-      "in @sec-aerozoo. Data: results/char/aerozoo_090_final.json.")
+print(f": AeroZoo, the {({**S._COUNT, 6: 'six', 7: 'seven'})[len(HO)]} held-out splits, each model trained without the family it is scored on, "
+      "on AeroZoo's own interior metrics: the volume-weighted RMS velocity and pressure errors over every interior cell, in units of "
+      "the case's reference speed and dynamic pressure, seed means over two seeds averaged over the splits (*mean*: the case mean; "
+      "*median*: AeroZoo's, the seed mean of each seed's median over cases), the two references AeroZoo calibrates them with, and the "
+      "ratio GeoTransolver ÷ ISLA, its six-split mean and the count of splits on which it exceeds one; the registered readout of "
+      f"the same ratio on the relative L2 is in @sec-interior-aerozoo. GeoTransolver is {AZ['arms'][ARM['GeoTransolver']]['note']}; "
+      "its velocity error is still falling at the last epoch, so its velocity is not converged. Transolver, at AeroZoo's own "
+      f"configuration ({ARM['Transolver']}), which receives no inlet value, is scored on the `full` split only and is "
+      f"{AZ['arms'][ARM['Transolver']]['note']}. How to read this: a split's references set its scale, so a six-split mean mixes "
+      "splits whose references differ several-fold, and the last row is the reading; the per-split numbers, ISLA's failures on two "
+      "held-out families and the reasons are in @sec-aerozoo. Data: results/char/aerozoo_090_specmetric.json.")
 ```
 
 ```{python}
 #| label: para-standing-aerozoo-in-flight
 #| output: asis
-_dA = {n.split()[0]: a for n, a in AZ["arms"].items()}
 print(S.form_callout("on these six splits its error averages " + " and ".join(
-    f"{sum(_dA['ISLA-DTT']['splits'][sp][f]['mean'] / _dA['ISLA']['splits'][sp][f]['mean'] for sp in HO) / len(HO):.3f} times "
-    f"interacting ISLA's on {AZ['fields'][f]}" for f in AF) + " (@sec-aerozoo-form)",
+    f"{sum(ec('ISLA-DTT', sp, f)['mean'] / ec('ISLA', sp, f)['mean'] for sp in HO) / len(HO):.3f} times "
+    f"interacting ISLA's on {AFL[f]}" for f in AF) + " (@sec-aerozoo-form)",
     what="interacting ISLA 0.9.0, GeoTransolver and Transolver"))
 ```
 

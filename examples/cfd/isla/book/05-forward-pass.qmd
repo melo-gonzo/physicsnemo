@@ -436,7 +436,8 @@ $$
 \mathbb{E}_u \Big[ \sum_{i \text{ kept}} w_i\, f_i \Big] = \sum_{\text{all cells}} \lvert C_i \rvert\, f_i ,
 $$
 
-and the sum is exact on a condition kept whole. Every measure-weighted
+and the sum is exact on a condition kept whole, to the rounding of its keep
+probabilities (@sec-limits-draw-ties). Every measure-weighted
 sum over the tokens (the slice states, the anchors) is therefore a quadrature of the full surface; the length unit
 and the declared scales are computed from the full surface itself, before
 the draw. The kept cells are spaced evenly in cumulative probability along
@@ -445,11 +446,13 @@ than clumped. In training $u$ is drawn uniform on $[0, 1)$ from the global
 torch random-number generator at every step (`torch.manual_seed` reproduces
 a run), so the model sees a new quadrature of the same surface each time;
 in evaluation (`model.eval()`) $u = 1/2$ (`EVAL_START`), so inference is
-deterministic. The selection runs without gradient, in float64 and outside
+deterministic on the CPU; on a GPU, where a share is a half integer, hits land
+exactly on cell boundaries and the rounding of the prefix sum decides them
+(@sec-limits-draw-ties). The selection runs without gradient, in float64 and outside
 autocast, and the kept cells' measures keep their gradient. It selects rows
 of the token set whose seeds stage 2 has already computed for every cell,
 and returns them in the cells' own order, so a condition kept whole is its
-mesh as given.
+mesh as given, except at those exact ties on a GPU.
 
 ::: {.column-margin}
 Why proportional to measure: an uncapped kept cell then stands for
@@ -1570,8 +1573,9 @@ bitwise unchanged at all of them (results/campaigns_2026-10-23/geo_degen/RESULTS
 check b; results/campaigns_2026-10-23/geo_thin_final/RESULTS.md, A1 to A3 and T-junctions).
 The other two are limits of the tie rule, below.
 
-**No step of this geometry is left to the order of a search or to the sign
-of a cancelling sum.** The direction at a tie is a function of the tie set
+**Where the tied directions are certified distinct, no step of this
+geometry is left to the order of a search or to the sign of a cancelling
+sum.** The direction at such a tie is a function of the tie set
 alone, not of the order of the vertices, the cells or the search, and a flip
 of the boundary's winding negates $\delta_q$ and $\operatorname{sign}(\delta_q)\,
 u_q$ bitwise. A point is tied only when two of its tied features' directions
@@ -1579,7 +1583,11 @@ are certified distinct: farther apart than the sum of bounds on their
 rounding, each $\sqrt 2$ times a bound on the sine of the computed
 direction's error (2 where that bound reaches 1). Directions that agree to
 within their rounding, such as the normals of a planar star of cells, do not
-make a tie. What rounding still decides is which features join a tie set,
+make a tie; on the wall the direction is then the normal of the cell of least
+index among those at the least distance, so it follows the cells' order, and
+since the certification's bound scales with the queries' precision, a float32
+point and its float64 copy can differ there (@sec-limits-tie-order). What
+rounding still decides is which features join a tie set,
 since a feature joins when its distance lies within the rounding bound of the
 least; and where the normals of a tie nearly coincide, as on a structured
 mesh's split faces, their least-norm point is ill-conditioned, so its float32

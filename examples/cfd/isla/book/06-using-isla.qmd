@@ -567,11 +567,14 @@ forward pass (`sampling.sample_boundary_cells`):
   the surface rather than clumped.
 - **Weights.** Each kept cell carries its Horvitz–Thompson measure $a_i /
   \pi_i$, so every measure-weighted sum over the tokens is an unbiased
-  quadrature of the full surface, exact on a condition kept whole.
+  quadrature of the full surface, exact on a condition kept whole up to
+  rounding.
 - **Start.** In training $u$ is uniform from the global torch RNG, a new
   quadrature of the same surface at every step (`torch.manual_seed`
   reproduces a run); in evaluation (`model.eval()`) $u = 0.5$
-  (`EVAL_START` in `model.py`), so inference is deterministic.
+  (`EVAL_START` in `model.py`), so inference is deterministic on the CPU;
+  on a GPU a half-integer share puts hits exactly on cell boundaries, and the
+  rounding of the prefix sum decides them (@sec-limits-draw-ties).
 
 A surface model reads every cell it is given and samples none: it predicts
 at the cells of its prediction boundaries, and its constructor raises a

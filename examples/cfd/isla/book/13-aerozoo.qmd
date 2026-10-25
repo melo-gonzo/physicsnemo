@@ -10,6 +10,7 @@ from pathlib import Path
 import sys; sys.path.insert(0, ".")
 from palette import *
 import standing as S
+import records as R
 from matplotlib.colors import TwoSlopeNorm
 from matplotlib.lines import Line2D
 RES = Path("..") / "results"
@@ -52,15 +53,18 @@ def cut(q, size, k=0.75):
 #| label: para-aerozoo-lede
 #| output: asis
 n = LAB_META["n_cases"]; banks = [k for k in LAB_META["counts"]["bank"] if k != "None"]
+_E = S.aerozoo_spec(); _EA = _E["arms"]
+_gt_above = sum(_EA["GeoTransolver"]["splits"][s_]["eps_U"]["all"]["mean"] > _EA["ISLA"]["splits"][s_]["eps_U"]["all"]["mean"] for s_ in _E["splits"])
 print(f"**AeroZoo is the book's generalization benchmark: {n:,} RANS solutions around bodies from {len(banks)} geometry banks in four enclosure "
       "families across five decades of Reynolds number, each posed to the model as the boundary-value problem that produced it, with splits "
       "that hold a whole family out of training.** It is the one dataset of the book on which the body, the enclosure, the boundary conditions, "
       "the scale and the Reynolds number all vary at once, and the one whose held-out splits test generalization to a family no training case "
       "belongs to. The chapter first says why generalization is the test this book takes as decisive, then shows the problem and its "
       "diversity, the benchmark protocol and what each model reads under it, why each held-out split asks a different question, the "
-      "standing, and what the dataset does not say. Under the protocol both baselines end as about a zero predictor on pressure, "
-      "GeoTransolver's velocity error is above ISLA's on most splits, and ISLA's own failures are two held-out families "
-      "(@sec-interior-aerozoo).")
+      "standing, and what the dataset does not say. The task is the interior task on five of the release's seven fields, scored "
+      "with AeroZoo's own metrics. Under the protocol both baselines end at the zero predictor on pressure and no better than "
+      f"AeroZoo's free stream on velocity, GeoTransolver's velocity error is above ISLA's on {_gt_above} of the "
+      f"{len(_E['splits'])} splits, and ISLA's own failures are two held-out families (@sec-interior-aerozoo).")
 ```
 
 ## Why generalization is the test {#sec-aerozoo-why}
@@ -152,7 +156,7 @@ print("**This is the aim of the design and the reason for the choice of benchmar
 
 ## The problem: bodies from seven banks in four enclosures across five Reynolds decades {#sec-dataset-aerozoo}
 
-**Every AeroZoo case is a body in its own enclosure at its own size and Reynolds number, and the model sees only the boundaries and the values prescribed on them.** The release holds time-averaged solutions of the incompressible Reynolds-averaged Navier–Stokes equations with the transition SST closure. The body comes from one of seven geometry banks: procedural blobs, cars, streamlined bodies, airframes, two Blender banks of bluff and streamlined shapes, and a CAD bank. The enclosure is an external box under one of five boundary-condition layouts, a spherical cap standing on a symmetry plane, a sphere split into an inlet half and an outlet half, or an internal duct. The Reynolds number is drawn across five decades, from $10^3$ to $10^8$, and a body's surface is all no-slip or carries slip bands. The problem is posed by four boundary meshes, keyed by the kind of condition on each, with the prescribed values on every face, and by the fluid's viscosity; each model reads of these what its architecture can take (@sec-aerozoo-allowed, @tbl-aerozoo-inputs). The interior is a cloud of `{python} f"{min(CELLS) / 1e6:.1f} to {max(CELLS) / 1e6:.0f}"` million cell centroids (median `{python} f"{statistics.median(CELLS) / 1e6:.0f}"` million) carrying velocity, gauge pressure, eddy viscosity, turbulent kinetic energy and the specific dissipation rate; the model predicts all five. @fig-aerozoo-problem shows one validation case.
+**Every AeroZoo case is a body in its own enclosure at its own size and Reynolds number, and the model sees only the boundaries and the values prescribed on them.** The release holds time-averaged solutions of the incompressible Reynolds-averaged Navier–Stokes equations with the transition SST closure. The body comes from one of seven geometry banks: procedural blobs, cars, streamlined bodies, airframes, two Blender banks of bluff and streamlined shapes, and a CAD bank. The enclosure is an external box under one of five boundary-condition layouts, a spherical cap standing on a symmetry plane, a sphere split into an inlet half and an outlet half, or an internal duct. The Reynolds number is drawn across five decades, from $10^3$ to $10^8$, and a body's surface is all no-slip or carries slip bands. The problem is posed by four boundary meshes, keyed by the kind of condition on each, with the prescribed values on every face, and by the fluid's viscosity; each model reads of these what its architecture can take (@sec-aerozoo-allowed, @tbl-aerozoo-inputs). The interior is a cloud of `{python} f"{min(CELLS) / 1e6:.1f} to {max(CELLS) / 1e6:.0f}"` million cell centroids (median `{python} f"{statistics.median(CELLS) / 1e6:.0f}"` million) carrying seven time-averaged fields. The protocol predicts five of them, velocity, gauge pressure, eddy viscosity, turbulent kinetic energy $k$ and the specific dissipation rate $\omega$, and leaves out the intermittency $\gamma$ and the transition Reynolds number $Re_\theta$, so this is the interior task on five of its seven fields. AeroZoo's interior metrics read only velocity and pressure, so they do not depend on the two left out. @fig-aerozoo-problem shows one validation case.
 
 ```{python}
 #| label: fig-aerozoo-problem
@@ -382,15 +386,16 @@ print(f"**Two facts about the release that @fig-aerozoo-families does not show.*
 
 ### Files, sampling and normalization {#sec-data-aerozoo}
 
-**The release is read natively, as PhysicsNeMo `DomainMesh` files in dimensional SI units; the recipe draws the interior points and the boundary faces uniformly at random and keeps every field in SI units, and every model is trained and scored on the per-case relative L2 of those physical fields.**
+**The release is read natively, as PhysicsNeMo `DomainMesh` files in dimensional SI units; the recipe draws the interior points and the boundary faces uniformly at random and keeps every field in SI units; every model is trained on the per-case relative L2 of those physical fields and scored with AeroZoo's own interior metrics over every interior cell, the relative L2 beside them.**
 
+- **Release.** `{python} f"AeroZoo {S.aerozoo_spec()['release']['version']} (index.json sha256 {S.aerozoo_spec()['release']['index_sha256']})"`, read from a copy whose interior rows are permuted. The split lists are the release's `splits.json` intersected with its complete cases; every list the protocol uses matches it case for case, and every test side is scored whole (@tbl-aerozoo-standing gives the counts).
 - **Layout.** `shard-NNN/<case_id>/domain.pdmsh`. The interior is a point cloud of cell centroids with the solution fields and the cell volumes; the four boundaries are triangle meshes with all data on the cells: the solution on every boundary, the prescribed values under `prescribed.dirichlet.*` and the outlet's reverse-flow values under `prescribed.reverse_flow.*`. The global data hold the fluid (density, kinematic viscosity), the reference velocity, speed, length and dynamic pressure, and identity and diagnostic blocks that are never inputs.
 - **Interior draw.** The release stores the interior in the solver's cell order, which runs through space, so the recipe reads a copy whose interior rows are randomly permuted once per case; a contiguous block of that copy is a uniform sample. Each step draws 200,000 interior points.
 - **Boundary draw.** Each boundary is read whole, and the first transform keeps a uniform random 50,000 of its faces when it has more (`SubsampleMesh`), multiplying each kept face's area by the boundary's face count over 50,000, so every boundary integral stays unbiased. The inlet and outlet usually fall under the cap and are kept whole. The baselines' distance to the `no_slip` faces is computed from the same draw. ISLA's configuration removes this transform: ISLA reads each boundary whole and draws its own 200,000 faces per case inside the model, water-filled over the four roles (@sec-exact-geometry-draw).
 - **Dataset files.** `datasets/aerozoo_uvolume.yaml` defines the `full` split, and `_nonbox`, `_reynolds`, `_blobs`, `_bank_zero_to_cad`, `_profile_crossflow` and `_profile_dual_inlet` beside it define the six held-out splits of @tbl-aerozoo-splits; each holds physical PDE inputs only. The release's other 15 frozen splits have no file of the protocol.
 - **Normalization.** Coordinates stay in meters, uncentered, and the prescribed values on the boundaries stay in SI units. Each of the five targets, in SI units, is divided by one constant per field for the dataset, the same for every model, and keeps its zero: the standardization scales and does not shift. Nothing is derived per case.
-- **Loss.** Every model trains on the per-case relative L2 of each target field, with velocity weighted 3, so a slow, small case weighs in the loss as much as a fast, large one.
-- **Scoring.** The score of a field on a case is its plain relative L2. A scale-only standardization cancels in that ratio, so the score is the relative L2 of the physical field. Source of the files, the loss and the score: results/campaigns_2026-10-19/aerozoo_protocol/README.md.
+- **Loss.** Every model trains on the per-case relative L2 of each target field, with velocity weighted 3, so a slow, small case weighs in the loss as much as a fast, large one. The loss is not volume-weighted: AeroZoo names the cell volume as the weight for the loss and the metrics, and using it in the loss is a modelling choice. Source of the files and the loss: results/campaigns_2026-10-19/aerozoo_protocol/README.md.
+- **Scoring.** AeroZoo's interior metrics, $\varepsilon_U$ and $\varepsilon_p$, are the root-mean-square velocity and pressure errors over every interior cell, each cell weighted by its volume (`_target_quadrature_measure`), in units of the case's `reference/speed` and `reference/dynamic_pressure`; $\varepsilon^N_U$ and $\varepsilon^N_p$ are the same over the cells within `reference/length` of a body face. They are computed with the release's own reference functions, in float64, and reported as the mean and the median over all test cases and over the `mean_stable` ones. These labels are read only to score, never as inputs. Beside them, the per-case relative L2 of each physical field: a scale-only standardization cancels in that ratio, so it is the relative L2 of the physical field. Source: `{python} R.source("az_rescore", "RESULTS.md")`.
 
 ```{python}
 #| label: para-aerozoo-omega
@@ -413,10 +418,12 @@ print(f"**The specific dissipation rate has a heavy tail that the other fields l
 ```{python}
 #| label: para-aerozoo-measured
 #| output: asis
-print(f"**The interior task on the `full` split: {FULL['train']:,} training cases, {FULL['val']} validation cases, {FULL['test']} test cases; "
-      "200,000 interior points and up to 50,000 faces per boundary per case; 250 epochs; two seeds; float32 scoring on the test side, "
-      "from the final checkpoint.** The test side of every split is scored once. The metric is the "
-      "per-case relative L2 per field on the scored fields of @sec-data-aerozoo, averaged over the cases (@sec-metrics). No model trains "
+print(f"**The interior task, five of the seven fields, on the `full` split: {FULL['train']:,} training cases, {FULL['val']} validation "
+      f"cases, {FULL['test']} test cases; 200,000 interior points and up to 50,000 faces per boundary per case in training; 250 epochs; "
+      "two seeds; every interior cell of every test case scored from the final checkpoint.** The test side of every split is scored "
+      "once. The metrics are AeroZoo's: $\\varepsilon_U$ and $\\varepsilon_p$, the volume-weighted root-mean-square velocity and "
+      "pressure errors in units of the case's reference speed and dynamic pressure, and $\\varepsilon^N_U$ and $\\varepsilon^N_p$ "
+      "near the body (@sec-data-aerozoo); the per-case relative L2 per field (@sec-metrics) is reported beside them. No model trains "
       "with rotation or translation augmentation, and none needs to see a canonical pose: the stored coordinates of every case are already "
       "a random rotation. The protocol fixes the inputs of four models at their reference configurations:")
 print()
@@ -451,15 +458,26 @@ print("**The architectures read the same problem through different inputs** (@tb
 | ISLA | the four boundary meshes as four named conditions, at full resolution, from which the model draws 200,000 faces per case, 50,000 per role where every role has more: position, normal, area, the role's prescribed values in SI units | the density; computed inside the model from the boundary: the length unit $L$, a velocity scale $U$ and the inlet direction $\hat g_1$; the standardized log Reynolds number `re_z`, computed from $L$, $U$ and the kinematic viscosity by the recipe in ISLA's configuration | position, entering only through relational invariants; the exact distance and direction to the union of the four meshes, computed inside the model |
 | ISLA-DTT | as ISLA, and every boundary token read at every layer | as ISLA | as ISLA; the prediction points read the slices and never write into them |
 | GeoTransolver | every boundary face as one geometry token: centroid in meters, one-hot condition type, prescribed values, each column standardized by one constant per dataset | the kinematic viscosity, as its logarithm standardized by dataset constants | coordinates in meters; the signed distance and normal to the `no_slip` faces |
-| Transolver | none | the same viscosity input, concatenated to every point's features | coordinates in meters; the signed distance and normal to the `no_slip` faces |
+| Transolver (a floor without the boundary conditions) | none | the same viscosity input, concatenated to every point's features | coordinates in meters; the signed distance and normal to the `no_slip` faces |
 
-: What each architecture receives on the AeroZoo interior task under the benchmark protocol. How to read this: ISLA, ISLA-DTT and GeoTransolver receive the same per-face data, ISLA's tokens with their area and GeoTransolver's without; Transolver receives no boundary value, so it cannot tell the inlet from the outlet; a role mixes body and enclosure (@tbl-aerozoo-roles), so the distance to the `no_slip` faces is not "the distance to the body"; no column reads `global_data/reference`. Data: results/campaigns_2026-10-19/aerozoo_protocol/protocol_design.md, section 2. {#tbl-aerozoo-inputs}
+: What each architecture receives on the AeroZoo interior task under the benchmark protocol. How to read this: ISLA, ISLA-DTT and GeoTransolver receive the same per-face data, ISLA's tokens with their area and GeoTransolver's without; Transolver receives no boundary value, so it cannot tell the inlet from the outlet; a role mixes body and enclosure (@tbl-aerozoo-roles), so the distance to the `no_slip` faces is not "the distance to the body"; no column reads `global_data/reference`. Transolver receives neither the prescribed values nor the condition types, so it does not take the posed problem; AeroZoo's rule counts such a result as answering a different question, and it is reported as a floor. Data: results/campaigns_2026-10-19/aerozoo_protocol/protocol_design.md, section 2. {#tbl-aerozoo-inputs}
+
+```{python}
+#| label: para-aerozoo-inputs-draw
+#| output: asis
+_RS = " ".join(R.load("az_rescore", "RESULTS.md").split())
+_gt_draw = _re.search(r"GeoTransolver ≤ ([\d.e-]+), Transolver ≤ ([\d.e-]+)\.", _RS).group(1)
+print("GeoTransolver reads a uniform 50,000-face draw of each boundary, and both baselines' distance to the `no_slip` faces is "
+      "computed from that draw; ISLA reads every face and draws its 200,000 tokens inside the model. The baselines thus read less "
+      "of the input than ISLA, which AeroZoo's rule allows. In the scoring the draw is seeded per case, and another draw moves "
+      f"GeoTransolver's per-case $\\varepsilon$ by at most {_gt_draw} relative ({R.source('az_rescore', 'RESULTS.md')}, section 4).")
+```
 
 ### What the benchmark allows a model to read {#sec-aerozoo-allowed}
 
 **AeroZoo's rule admits as inputs only the data of the partial differential equation, and the benchmark protocol gives every model those data alone, in physical units: a model that needs a scale brings it itself.** The rule, in the dataset's own documentation, lets a model use anything computed from a sample's inputs and from the training part of its split, and nothing computed from a test sample's solution. The inputs are the data that pose the problem: the four boundary meshes, each naming the type of condition its faces carry; the values `cell_data/prescribed/*` holds on them; and the kinematic viscosity, `global_data/physics/kinematic_viscosity`. Two more physical keys may be read: the density, which only converts the solver's kinematic pressure and shear to pascals, and the body acceleration, which is zero in every case. Every other key of `global_data` is a label. Among them is `global_data/reference`: the primary body's largest extent $L_\mathrm{ref}$, the primary inlet's velocity and speed $U_\mathrm{ref}$, the dynamic pressure and the fastest inlet's direction; a Reynolds number built on them is a label as well. The equations contain no reference length, so naming a different length the reference changes the label and leaves the solution unchanged. A model that wants a freestream computes it from the inlet faces.
 
-The protocol reads no label and derives nothing per case. The recipe hands every model the same data, the boundary meshes with their condition types and their prescribed values in SI units, the kinematic viscosity and coordinates in meters; each model takes of them what its architecture can read (@tbl-aerozoo-inputs), and every model is trained on the same standardized targets (@sec-data-aerozoo). ISLA brings its own scales (@sec-using-scales). Its configuration declares the units of every value prescribed on the inlet and the outlet and of every target; the inlet velocity defines the velocity scale `U`, and the density defines `rho`. From the full-resolution boundary of each case, before the token draw, the model computes its length unit $L$, the area-weighted RMS pairwise distance of the boundary cells (@sec-isla-frame); a velocity scale $U$, the area-weighted RMS speed prescribed on the inlet faces; and the inlet direction $\hat g_1$, the direction of the inlet velocities' area-weighted mean. ISLA's own preprocessing, in its model configuration alone, computes the same $L$ and $U$ from the same boundary, and from them and the kinematic viscosity the Reynolds number $U L / \nu$, whose logarithm, standardized by dataset constants, is the global scalar `re_z`, an ordinary input of the model (`ComputeBoundaryScales`, `ComputeLogReynolds`). The model divides every prescribed value by the scales its units declare, velocity by $U$, $k$ by $U^2$, $\omega$ by $U / L$ and pressure by $\rho U^2$, which is the one use of the density, and then by a constant of the dataset, the median over the training cases of that value's per-case RMS (the inlet velocity, whose RMS over the inlet is $U$, and the outlet's gauge pressure, which is zero, take none). It multiplies each output back into SI units, by its own such constant and its units' scales, and standardizes it as every model's targets are. GeoTransolver and Transolver bring no scales and read the inputs as they are, the kinematic viscosity as its logarithm standardized by dataset constants. GeoTransolver takes the boundary faces through its geometry input, which accepts columns other than coordinates only with its ball-query local features off, so it runs without them. Transolver has only channels at each prediction point and receives no inlet or outlet value. No label enters training or scoring (@sec-data-aerozoo). Data: results/campaigns_2026-10-19/aerozoo_protocol/protocol_design.md and the README beside it.
+The protocol reads no label and derives nothing per case. The recipe hands every model the same data, the boundary meshes with their condition types and their prescribed values in SI units, the kinematic viscosity and coordinates in meters; each model takes of them what its architecture can read (@tbl-aerozoo-inputs), and every model is trained on the same standardized targets (@sec-data-aerozoo). ISLA brings its own scales (@sec-using-scales). Its configuration declares the units of every value prescribed on the inlet and the outlet and of every target; the inlet velocity defines the velocity scale `U`, and the density defines `rho`. From the full-resolution boundary of each case, before the token draw, the model computes its length unit $L$, the area-weighted RMS pairwise distance of the boundary cells (@sec-isla-frame); a velocity scale $U$, the area-weighted RMS speed prescribed on the inlet faces; and the inlet direction $\hat g_1$, the direction of the inlet velocities' area-weighted mean. ISLA's own preprocessing, in its model configuration alone, computes the same $L$ and $U$ from the same boundary, and from them and the kinematic viscosity the Reynolds number $U L / \nu$, whose logarithm, standardized by dataset constants, is the global scalar `re_z`, an ordinary input of the model (`ComputeBoundaryScales`, `ComputeLogReynolds`). The model divides every prescribed value by the scales its units declare, velocity by $U$, $k$ by $U^2$, $\omega$ by $U / L$ and pressure by $\rho U^2$, which is the one use of the density, and then by a constant of the dataset, the median over the training cases of that value's per-case RMS (the inlet velocity, whose RMS over the inlet is $U$, and the outlet's gauge pressure, which is zero, take none). It multiplies each output back into SI units, by its own such constant and its units' scales, and standardizes it as every model's targets are. GeoTransolver and Transolver bring no scales and read the inputs as they are, the kinematic viscosity as its logarithm standardized by dataset constants. GeoTransolver takes the boundary faces through its geometry input, which accepts columns other than coordinates only with its ball-query local features off, so it runs without them. Transolver has only channels at each prediction point and receives no inlet or outlet value. No label enters training; the reference scales, the cell volumes and the body annotation enter only the score (@sec-data-aerozoo). Data: results/campaigns_2026-10-19/aerozoo_protocol/protocol_design.md and the README beside it.
 
 ### The splits, and what each one asks {#sec-aerozoo-splits}
 
@@ -575,65 +593,140 @@ fp = lambda xs, d=2: " and ".join(", ".join(f"`{SPLIT_NAME[x]}`" for x in xs).rs
 DIAG = AZS["diagnostics"]
 PD = R.load("az_diag", "pdiag/pdiag.tsv")
 pdm = lambda sp, seed, col: statistics.median(float(r[col]) for r in PD if r["split"] == sp and r["seed"] == seed)
+# AeroZoo's own interior metrics (results/char/aerozoo_090_specmetric.json): eps_U, eps_p, eps_U_near, eps_p_near; "all" test
+# cases or AeroZoo's "stable" (mean_stable) ones; mean and median as AeroZoo takes them (per seed, then the seed mean)
+AZE = S.aerozoo_spec(); AZEA = AZE["arms"]; AZREF = AZE["references"]
+AZESRC = "results/char/aerozoo_090_specmetric.json"
+def ec(a, s, f, cs="all"):
+    """AeroZoo's metric ``f`` of an arm or a reference (``zero``, ``freestream``) on split ``s`` over case set ``cs``."""
+    return (AZREF[a][s] if a in AZREF else AZEA[a]["splits"][s])[f][cs]
+g3 = lambda x: f"{x:#.3g}".rstrip(".")
+em = lambda a, s, f, cs="all": f"{g3(ec(a, s, f, cs)['mean'])} [{g3(ec(a, s, f, cs)['median'])}]"
+eps_r = lambda a, s, f: ec(a, s, f)["mean"] / ec("ISLA", s, f)["mean"]   # baseline ÷ ISLA on AeroZoo's metric, seed means
+fs_r = lambda a, s: ec(a, s, "eps_U")["mean"] / ec("freestream", s, "eps_U")["mean"]   # velocity error ÷ the free stream's
+z_r = lambda a, s: ec(a, s, "eps_p")["mean"] / ec("zero", s, "eps_p")["mean"]   # pressure error ÷ the zero predictor's
+EPS = {"eps_U": "$\\varepsilon_U$", "eps_p": "$\\varepsilon_p$", "eps_U_near": "$\\varepsilon^N_U$", "eps_p_near": "$\\varepsilon^N_p$"}
+NAME = {"ISLA": "ISLA", "ISLA-DTT": "ISLA-DTT", "GeoTransolver": "GeoTransolver", "Transolver": "Transolver (a floor)",
+        "zero": "predicting zero", "freestream": "the free stream"}
 ```
 
 ```{python}
 #| label: para-aerozoo-standing-lede
 #| output: asis
-v_above = sum(azr("GeoTransolver", s, "velocity_l2") > 1 for s in HELD)
-over1 = [s for s in HELD if azc("ISLA", s, "pressure_l2")["mean"] > ZERO]
-assert all(azc("ISLA-DTT", s, "pressure_l2")["mean"] > ZERO for s in over1)
-v_dtt = sum(azr("ISLA-DTT", s, "velocity_l2") < 1 for s in HELD)
-gt_v_lead = [s for s in HELD if azc("GeoTransolver", s, "velocity_l2")["mean"] < azc("ISLA", s, "velocity_l2")["mean"]]
-gt_vm_lead = [s for s in HELD if s not in gt_v_lead
-              and azc("GeoTransolver", s, "velocity_l2")["median"] < azc("ISLA", s, "velocity_l2")["median"]]
-print("**On AeroZoo both baselines end as about a zero predictor on pressure, so ISLA's pressure lead there is a lead over predicting "
-      f"zero; on velocity, where GeoTransolver learns in part, GeoTransolver ÷ ISLA is {S.fmt_ratio(azr('GeoTransolver', 'full', 'velocity_l2'))} "
-      f"on `full` and above one on {v_above} of the six held-out splits; ISLA-DTT's velocity error is below interacting ISLA's on "
-      f"{'all six' if v_dtt == len(HELD) else f'{v_dtt} of the six'}; and on two held-out families, {' and '.join(sn(s) for s in over1)}, the pressure error of both forms of "
-      "ISLA is above the zero predictor's.** "
-      "Every model is scored on the test side of each split, from its final checkpoint (epoch 250), in float32, at 200,000 interior "
-      "points, two seeds. The relative L2 is the physical one per field and case, so predicting zero scores exactly "
-      f"{ZERO:.1f} on every field and case. ISLA, ISLA-DTT and GeoTransolver are trained on all seven splits and Transolver on `full`. "
-      "Transolver is at its documented floor: it receives no inlet or outlet value, so it cannot see the inlet, and on `full` its "
-      f"velocity error is {S.fmt_ratio(azr('Transolver', 'full', 'velocity_l2'))} times ISLA's. GeoTransolver leads ISLA on the velocity "
-      f"of {fp(gt_v_lead)} ({mm('GeoTransolver', gt_v_lead[0], 'velocity_l2', 2)} against {mm('ISLA', gt_v_lead[0], 'velocity_l2', 2)}"
-      f"), and its median velocity error is below ISLA's on {fp(gt_vm_lead)} "
-      f"({azc('GeoTransolver', gt_vm_lead[0], 'velocity_l2')['median']:.2f} against {azc('ISLA', gt_vm_lead[0], 'velocity_l2')['median']:.2f}), "
-      f"although its mean is above it ({azc('GeoTransolver', gt_vm_lead[0], 'velocity_l2')['mean']:.2f} against "
-      f"{azc('ISLA', gt_vm_lead[0], 'velocity_l2')['mean']:.2f}). Where ISLA's pressure error is above one, GeoTransolver's error of "
-      "about one leads it only because predicting zero beats a prediction that is off by more than the field itself: on `profile_crossflow` ISLA drives the flow about twice "
+SPL = AZE["splits"]
+gt_v_above = sum(eps_r("GeoTransolver", s, "eps_U") > 1 for s in HELD)
+over_z = [s for s in HELD if ec("ISLA", s, "eps_p")["mean"] > ec("zero", s, "eps_p")["mean"]]
+assert all(ec("ISLA-DTT", s, "eps_p")["mean"] > ec("zero", s, "eps_p")["mean"] for s in over_z)
+assert all(fs_r(a, s) > 1 for a in ("ISLA", "ISLA-DTT") for s in over_z)
+assert all(abs(ec("freestream", s, "eps_p")["mean"] / ec("zero", s, "eps_p")["mean"] - 1) < 1e-12 for s in SPL)
+gt_fs = [fs_r("GeoTransolver", s) for s in SPL]; gt_z = [z_r("GeoTransolver", s) for s in SPL]
+FORMS = ("ISLA", "ISLA-DTT")
+grp = {"good": [s for s in SPL if max(fs_r(a, s) for a in FORMS) < 0.5],
+       "mid": [s for s in SPL if 0.5 <= min(fs_r(a, s) for a in FORMS) and max(fs_r(a, s) for a in FORMS) < 1],
+       "bad": [s for s in SPL if min(fs_r(a, s) for a in FORMS) >= 1]}
+assert sum(map(len, grp.values())) == len(SPL) and set(grp["bad"]) == set(over_z)
+fsr = lambda xs: f"{min(fs_r(a, s) for a in FORMS for s in xs):.2f} to {max(fs_r(a, s) for a in FORMS for s in xs):.2f}"
+gt_v_lead = [s for s in HELD if ec("GeoTransolver", s, "eps_U")["mean"] < ec("ISLA", s, "eps_U")["mean"]]
+v_dtt = sum(eps_r("ISLA-DTT", s, "eps_U") < 1 for s in HELD)
+# the orders of the architectures on the case means over all test cases, the registered relative L2 against AeroZoo's metric
+PAIRS = [("ISLA", "ISLA-DTT"), ("ISLA", "GeoTransolver"), ("ISLA-DTT", "GeoTransolver"), ("GeoTransolver", "Transolver"),
+         ("ISLA", "Transolver"), ("ISLA-DTT", "Transolver")]
+flips = sorted((s, fe, a, b) for s in SPL for fr, fe in (("reg_rel_velocity", "eps_U"), ("reg_rel_pressure", "eps_p"))
+               for a, b in PAIRS if s in AZEA[b]["splits"]
+               if (ec(a, s, fr)["mean"] < ec(b, s, fr)["mean"]) != (ec(a, s, fe)["mean"] < ec(b, s, fe)["mean"]))
+assert flips == [("nonbox", "eps_U", "ISLA", "GeoTransolver"), ("nonbox", "eps_U", "ISLA-DTT", "GeoTransolver"),
+                 ("nonbox", "eps_p", "ISLA", "ISLA-DTT"), ("reynolds", "eps_p", "ISLA", "ISLA-DTT")], flips
+assert ec("GeoTransolver", "nonbox", "eps_U")["mean"] < min(ec(a, "nonbox", "eps_U")["mean"] for a in FORMS)
+assert ec("ISLA-DTT", "nonbox", "eps_p")["mean"] < ec("ISLA", "nonbox", "eps_p")["mean"]
+assert ec("ISLA", "reynolds", "eps_p")["mean"] < ec("ISLA-DTT", "reynolds", "eps_p")["mean"]
+print("**Scored with AeroZoo's own metrics, both baselines end at the zero predictor on pressure and no better than AeroZoo's free "
+      "stream on velocity, so ISLA's leads on AeroZoo are leads over those two references; GeoTransolver ÷ ISLA on the velocity error "
+      f"$\\varepsilon_U$ is {S.fmt_ratio(eps_r('GeoTransolver', 'full', 'eps_U'))} on `full` and above one on {gt_v_above} of the "
+      f"six held-out splits; and on two held-out families, {' and '.join(sn(s) for s in over_z)}, both forms of ISLA are worse than "
+      "the free stream on velocity and worse than predicting zero on pressure.** "
+      f"Every model is scored on every interior cell of every test case ({min(CELLS) / 1e6:.1f} to {max(CELLS) / 1e6:.0f} million "
+      "cells), from its final checkpoint (epoch 250), with AeroZoo's reference functions in float64; inference runs in chunks of "
+      "200,000 points in float32 (@sec-aerozoo-request). Two references calibrate the metric (@tbl-aerozoo-standing). Predicting "
+      "zero gives an $\\varepsilon_U$ near one and an $\\varepsilon_p$ equal to the case's own pressure in units of its dynamic "
+      "pressure, so it differs from split to split. AeroZoo's free stream predicts the area-weighted mean prescribed inlet velocity "
+      "everywhere and zero pressure, so its $\\varepsilon_p$ is the zero predictor's. GeoTransolver's $\\varepsilon_U$ is "
+      f"{min(gt_fs):.2f} to {max(gt_fs):.2f} times the free stream's and its $\\varepsilon_p$ {min(gt_z):.2f} to {max(gt_z):.2f} "
+      "times the zero predictor's, so neither baseline has skill beyond the free stream on any split. The $\\varepsilon_U$ of the two "
+      f"forms of ISLA is {fsr(grp['good'])} of the free stream's on {fp(grp['good'])}, {fsr(grp['mid'])} on {fp(grp['mid'])} and "
+      f"{fsr(grp['bad'])} on {fp(grp['bad'])}. GeoTransolver leads ISLA on the velocity of {fp(gt_v_lead)} ("
+      + "; ".join(f"{em('GeoTransolver', s, 'eps_U')} against {em('ISLA', s, 'eps_U')}" for s in gt_v_lead)
+      + f"), and ISLA-DTT's velocity error is below interacting ISLA's on {'all six' if v_dtt == len(HELD) else f'{v_dtt} of the six'}. "
+      "Transolver is a floor: it receives no inlet or outlet value, so it cannot see the inlet, and on `full` its $\\varepsilon_U$ is "
+      f"{em('Transolver', 'full', 'eps_U')} against the zero predictor's {em('zero', 'full', 'eps_U')}. "
+      "Against the per-case relative L2, three orders of the architectures change on the case means over all test cases: on "
+      "`family_non_box` velocity GeoTransolver moves ahead of both forms of ISLA, and on pressure ISLA-DTT moves ahead of "
+      "interacting ISLA on `family_non_box` and interacting ISLA moves ahead of ISLA-DTT on `reynolds`. Every other order of the "
+      "case means holds; on medians and on the `mean_stable` cases a few more pairs swap, most of them the two forms of ISLA "
+      f"({R.source('az_rescore', 'ORDERS.md')}). "
+      "Where ISLA's pressure error is above the zero predictor's, GeoTransolver's, which equals it, leads only because predicting "
+      "zero beats a prediction that is off by more than the field itself: on `profile_crossflow` ISLA drives the flow about twice "
       "too fast and its pressure follows the speed, and on `family_non_box` it gets the shape of the pressure wrong "
       "(@sec-aerozoo-failures). "
-      "The readout registered before any score, for each split and field, is the seed-mean ratio of each baseline's error to ISLA's, "
-      "with two summaries: its mean over the six held-out splits and the count of those splits on which it is above one. A held-out "
-      "split's *penalty*, an architecture's error there divided by its own `full` error, is read beside it as a description. Because a "
-      "few cases can dominate a mean of per-case relative errors, every table gives the median over cases beside the mean.")
+      "The readout registered before any score, for each split and field, is the seed-mean ratio of each baseline's relative L2 to "
+      "ISLA's, with two summaries: its mean over the six held-out splits and the count of those splits on which it is above one "
+      "(@tbl-aerozoo-r1); the same ratios on AeroZoo's metric stand beside it (@tbl-aerozoo-r1-eps). A held-out split's *penalty*, an "
+      "architecture's error there divided by its own `full` error, is read beside it as a description. A mean over cases is the "
+      "mean over the two seeds of each seed's mean, and a median, as AeroZoo takes it, the mean over the two seeds of each seed's "
+      "median over cases.")
 ```
 
 ```{python}
 #| label: make-tbl-aerozoo-standing
 #| output: asis
-print("| split | cases | " + " | ".join(f"{a}: velocity | {a}: pressure" for a in ARCH_T) + " |")
-print("|---|--:|" + "---|" * (2 * len(ARCH_T)))
-for s in AZS["splits"]:
-    cells = [mm(a, s, f) if s in AZA[a]["splits"] else "not trained" for a in ARCH_T for f in ("velocity_l2", "pressure_l2")]
-    print(f"| {sn(s)} | {AZS['n_cases'][s]:,} | " + " | ".join(cells) + " |")
-print("| predicting zero | | " + " | ".join(f"{ZERO:.3f}" for _ in range(2 * len(ARCH_T))) + " |")
+EF = ("eps_U", "eps_p", "eps_U_near", "eps_p_near")
+ROWS = ARCH_T + ("zero", "freestream")
+def standing_table(cs, rel):
+    out = ["| split | cases | model | " + " | ".join(EPS[f] for f in EF)
+           + (" | relative L2, velocity | relative L2, pressure |" if rel else " |"),
+           "|---|--:|---|" + "---|" * (len(EF) + 2 * rel)]
+    for s in SPL:
+        first = True
+        for a in ROWS:
+            if a in AZEA and s not in AZEA[a]["splits"]:
+                continue
+            ncell = f"{AZE['n_cases'][s][cs]:,}" if first else ""
+            row = f"| {sn(s) if first else ''} | {ncell} | {NAME[a]} | " + " | ".join(em(a, s, f, cs) for f in EF)
+            if rel:
+                row += " | " + (" | ".join(em(a, s, f) for f in ("reg_rel_velocity", "reg_rel_pressure")) if a in AZEA
+                                else "1 [1] | 1 [1]" if a == "zero" else "– | –")
+            out.append(row + " |"); first = False
+    return "\n".join(out)
+near_n = lambda cs: [(s, AZREF["zero"][s]["eps_U_near"][cs]["n_cases"], AZE["n_cases"][s][cs]) for s in SPL]
+near_txt = lambda cs: ", ".join(f"{sn(s)} {n:,} of {N:,}" for s, n, N in near_n(cs) if n < N)
+print(standing_table("all", True))
 print()
-BASE_PMED = [azc(a, s, "pressure_l2")["median"] for a in S.BASELINES for s in AZA[a]["splits"]]
-print(": The AeroZoo standing on velocity and pressure: ISLA, ISLA-DTT and GeoTransolver at their reference configurations and "
-      "Transolver at this dataset's configuration, width 256, 12 layers (@sec-aerozoo-measured), relative L2 of the physical "
-      "field, seed mean of the mean over the test cases, then [the median over cases of the per-case seed mean]; two seeds, final "
-      "checkpoint, float32, 200,000 interior points; `full` is in distribution, the other six splits hold a family out of training "
-      "(@tbl-aerozoo-splits). The ISLA columns are interacting ISLA; the ISLA-DTT columns are the same configuration with read-only "
-      "prediction points. Predicting zero scores "
-      f"{ZERO:.1f}, and the baselines' pressure medians over cases are {min(BASE_PMED):.3f} to {max(BASE_PMED):.3f}. "
-      f"GeoTransolver: {AZA['GeoTransolver']['note']}. Transolver: {AZA['Transolver']['note']}. GeoTransolver's "
-      "velocity is not converged at the last epoch (@sec-aerozoo-baselines). How to read this: lower is better and the last row is the "
-      "zero predictor; a mean far above its median is a few cases with errors far above one; the per-seed values are in "
-      f"{R.source('az_decide_final', 'tables_final.md')}, with the eddy viscosity, $k$ and $\\omega$. "
-      f"Data: {AZSRC}. {{#tbl-aerozoo-standing}}")
+print(": The AeroZoo standing on AeroZoo's interior metrics, all test cases: the volume-weighted RMS velocity and pressure errors "
+      "$\\varepsilon_U$ and $\\varepsilon_p$ over every interior cell, in units of the case's reference speed and dynamic pressure, "
+      "and $\\varepsilon^N_U$ and $\\varepsilon^N_p$ over the cells within one reference length of a body face; each cell is the mean "
+      "over the test cases [the median], per seed, then averaged over the two seeds; final checkpoint, float64 metrics on every "
+      "interior cell. The relative L2 columns are the registered readout's metric, the per-case relative L2 of the physical field "
+      "on 200,000 cells in float32, with the same statistics; predicting zero scores exactly 1 on it. ISLA, ISLA-DTT and "
+      "GeoTransolver are at their reference configurations and Transolver at this dataset's configuration (@sec-aerozoo-measured); "
+      "the ISLA rows are interacting ISLA, the ISLA-DTT rows the same configuration with read-only prediction points. "
+      f"GeoTransolver: {AZA['GeoTransolver']['note']}. Transolver receives no boundary condition and is a floor: "
+      f"{AZA['Transolver']['note']}. The free stream is AeroZoo's own calibration, the area-weighted mean prescribed inlet "
+      "velocity everywhere and zero pressure. $\\varepsilon^N$ is averaged over the cases that have cells within one reference "
+      f"length of a body face ({near_txt('all')}; every case elsewhere). How to read this: lower is better; a model above the free "
+      "stream on $\\varepsilon_U$, or above predicting zero on $\\varepsilon_p$, has no skill there; a mean far above its median is "
+      "a few cases with large errors; the per-seed values, the turbulence fields and the orders under every statistic are in "
+      f"{R.source('az_rescore', 'TABLES_FULL.md')}. Data: {AZESRC}. {{#tbl-aerozoo-standing}}")
+```
+
+```{python}
+#| label: make-tbl-aerozoo-stable
+#| output: asis
+print(standing_table("stable", False))
+print()
+print(": The same standing over AeroZoo's `mean_stable` test cases, those whose time average the solver's census marks as "
+      "settled; statistics as in @tbl-aerozoo-standing, $\\varepsilon^N$ over the cases with cells near a body face "
+      f"({near_txt('stable')}; every case elsewhere). How to read this: as @tbl-aerozoo-standing, on the cases whose labels "
+      f"are settled, so a model's row here against its row there shows what the drifting labels add. Data: {AZESRC}. "
+      "{#tbl-aerozoo-stable}")
 ```
 
 ```{python}
@@ -648,14 +741,34 @@ for f, lab in AZF.items():
 for f, lab in AZF.items():
     print(f"| Transolver ÷ ISLA, {lab} | {S.fmt_ratio(azr('Transolver', 'full', f))} | " + " | ".join("–" for _ in HELD) + " | – | – |")
 print()
-print(": The registered readout of the AeroZoo standing: the seed-mean ratio of each baseline's error to ISLA's per split and field, "
-      "with its mean over the six held-out splits and the count of those splits on which it is above one; Transolver is trained on "
-      "`full` only. How to read this: a ratio above one favors ISLA; on pressure, eddy viscosity, turbulent kinetic energy and specific "
-      "dissipation both baselines are about a zero predictor (@tbl-aerozoo-standing), so a ratio above one there says ISLA beats "
-      "predicting zero, and on velocity GeoTransolver is not converged; ISLA is interacting ISLA, and ISLA-DTT against it is "
-      f"@tbl-aerozoo-form. Data: {AZSRC}. {{#tbl-aerozoo-r1}}")
+print(": The registered readout of the AeroZoo standing, on the per-case relative L2 of the physical field (200,000 cells, float32): "
+      "the seed-mean ratio of each baseline's error to ISLA's per split and field, with its mean over the six held-out splits and "
+      "the count of those splits on which it is above one; Transolver is trained on `full` only. How to read this: a ratio above "
+      "one favors ISLA; on pressure, eddy viscosity, turbulent kinetic energy and specific dissipation both baselines are about a "
+      "zero predictor, so a ratio above one there says ISLA beats predicting zero, and on velocity GeoTransolver is not converged; "
+      "ISLA is interacting ISLA, and ISLA-DTT against it is @tbl-aerozoo-form; the same ratios on AeroZoo's metric are "
+      f"@tbl-aerozoo-r1-eps. Data: {AZSRC}. {{#tbl-aerozoo-r1}}")
+```
+
+```{python}
+#| label: make-tbl-aerozoo-r1-eps
+#| output: asis
+print("| ratio | " + " | ".join(sn(s) for s in SPL) + " | six-split mean | splits above 1 |")
+print("|---|" + "--:|" * (len(SPL) + 2))
+for f in ("eps_U", "eps_p"):
+    r = {s: eps_r("GeoTransolver", s, f) for s in SPL}
+    print(f"| GeoTransolver ÷ ISLA, {EPS[f]} | " + " | ".join(S.fmt_ratio(r[s]) for s in SPL)
+          + f" | {S.fmt_ratio(mean(r[s] for s in HELD))} | {sum(r[s] > 1 for s in HELD)} of {len(HELD)} |")
+for f in ("eps_U", "eps_p"):
+    print(f"| Transolver ÷ ISLA, {EPS[f]} | {S.fmt_ratio(eps_r('Transolver', 'full', f))} | " + " | ".join("–" for _ in HELD) + " | – | – |")
 print()
-print(S.form_callout("its columns in @tbl-aerozoo-standing are ISLA-DTT 0.9.0, read against interacting ISLA in "
+print(": The registered readout's ratios on AeroZoo's metric, beside the registered ones of @tbl-aerozoo-r1 and not a registered "
+      "reading: the seed-mean ratio of each baseline's $\\varepsilon_U$ and $\\varepsilon_p$ to interacting ISLA's, per split, "
+      "with the six-split mean and the count of held-out splits on which it is above one. How to read this: a ratio above one "
+      "favors ISLA; where ISLA is worse than the free stream or the zero predictor (@tbl-aerozoo-standing), a ratio below one says "
+      f"the baseline sits at that reference, not that it learned the field. Data: {AZESRC}. {{#tbl-aerozoo-r1-eps}}")
+print()
+print(S.form_callout("its rows in @tbl-aerozoo-standing are ISLA-DTT 0.9.0, read against interacting ISLA in "
                      "@sec-aerozoo-form", what="ISLA 0.9.0 in both its interior forms, GeoTransolver and Transolver",
                      also="faster ISLA-DTT code and ISLA-DTT retrained with the forest whose octant test is antipodal "
                           "(@sec-arch-tree-read)"))
@@ -664,10 +777,10 @@ print(S.form_callout("its columns in @tbl-aerozoo-standing are ISLA-DTT 0.9.0, r
 ```{python}
 #| label: para-aerozoo-penalty
 #| output: asis
-pen = {s: azc("ISLA", s, "velocity_l2")["mean"] / azc("ISLA", "full", "velocity_l2")["mean"] for s in HELD}
+pen = {s: ec("ISLA", s, "eps_U")["mean"] / ec("ISLA", "full", "eps_U")["mean"] for s in HELD}
 order = sorted(pen, key=pen.get); lo, hi = order[0], order[-1]
 print(f"Described as penalties, "
-      f"ISLA's velocity error on a held-out family is {pen[lo]:.1f} times its `full` error on {sn(lo)} and {pen[hi]:.0f} times on {sn(hi)}; "
+      f"ISLA's velocity error $\\varepsilon_U$ on a held-out family is {pen[lo]:.1f} times its `full` error on {sn(lo)} and {pen[hi]:.0f} times on {sn(hi)}; "
       f"it pays least on {', '.join(sn(s) for s in order[:3])} and most on {' and '.join(sn(s) for s in order[-2:])}. No AeroZoo run is "
       "exposed to the compiled-path fault of the other interior chapters: the geometry runs in the fused kernel, which keeps the fault "
       "from firing, and on "
@@ -685,6 +798,8 @@ LZT = " ".join(R.load("lre_az", "RESULTS.md").split())
 in_band = _re.search(r"on the (\d+) test cases inside ISLA's training band, B ÷ A is ([\d.]+) for pressure and ([\d.]+) for velocity", LZT).groups()
 fit_c = _re.search(r"A shows \{([\d.]+), ([\d.]+)\}", LZT).groups()
 far = LZ["profile"][-1]
+LE = AZE["readings"]["lre_az"]
+assert LE["eps_U"]["label"] == "harms" and LE["eps_p"]["label"] == "no change"
 print("**The scale of ISLA's Reynolds input.** ISLA reads $\\log_{10}(U L / \\nu)$, standardized by the training cases' mean and "
       f"spread. On `reynolds` those are {fit_c[0]} and {fit_c[1]} decades. Trained instead "
       "on a fixed scale, $\\log_{10}(\\mathrm{Re} / 10^6)$, two seeds, ISLA matches the standing inside its training band (velocity "
@@ -692,9 +807,13 @@ print("**The scale of ISLA's Reynolds input.** ISLA reads $\\log_{10}(U L / \\nu
       f"there). Beyond the band its velocity error grows faster: {lz('velocity_l2')['ratio']:.2f} times on the test set, which the "
       f"registered rule reads as *{lz('velocity_l2')['verdict']}*, and {far['ratio']['velocity_l2']:.2f} times at "
       f"{far['bin'][0]:g} to {round(far['bin'][1]):g} decades above it. Pressure reads *{lz('pressure_l2')['verdict']}* by the registered "
-      f"rule ({lz('pressure_l2')['ratio']:.3f} times), and the eddy viscosity improves ({lz('nut_l2')['ratio']:.2f} times). So the "
-      f"standing keeps the fitted constants (@sec-oq-reynolds). Data: {R.source('lre_az', 'lreaz.json')}; "
-      f"{R.source('lre_az', 'RESULTS.md')} (section 3).")
+      f"rule ({lz('pressure_l2')['ratio']:.3f} times), and the eddy viscosity improves ({lz('nut_l2')['ratio']:.2f} times). "
+      f"Read on AeroZoo's metric by the same rule, beside it, the fixed scale harms velocity too ($\\varepsilon_U$ "
+      f"{LE['eps_U']['ratio']:.3f} times, seeds {' and '.join(f'{v:.3f}' for v in LE['eps_U']['per_seed'].values())}, "
+      f"*{LE['eps_U']['label']}*; $\\varepsilon^N_U$ {LE['eps_U_near']['ratio']:.3f} times, *{LE['eps_U_near']['label']}*), and "
+      f"pressure reads *{LE['eps_p']['label']}* ($\\varepsilon_p$ {LE['eps_p']['ratio']:.3f} times, with a two-seed spread too "
+      "large for the bar). So the standing keeps the fitted constants (@sec-oq-reynolds). Data: "
+      f"{R.source('lre_az', 'lreaz.json')}; {R.source('lre_az', 'RESULTS.md')} (section 3); {AZESRC} (`readings`).")
 ```
 
 ### ISLA against ISLA-DTT, and ISLA's interior form {#sec-aerozoo-form}
@@ -733,6 +852,29 @@ print(f"**On AeroZoo's six held-out splits ISLA-DTT's error is below interacting
       + f"; on {fp(both_ov)} they overlap on both fields" + (f", and on {fp(p_ov)} on pressure only" if p_ov else "") + ". "
       f"The one ratio against ISLA-DTT, {sn(sd)} {AZF[fd]}, is on a field where both forms do worse than predicting "
       f"zero ({azc('ISLA', sd, fd)['mean']:.2f} and {azc('ISLA-DTT', sd, fd)['mean']:.2f}).")
+print()
+EPF = ("eps_U", "eps_p")
+Re_ = {f: {s: eps_r("ISLA-DTT", s, f) for s in HELD + ["full"]} for f in EPF}
+Rme = {f: mean(Re_[f][s] for s in HELD) for f in EPF}
+over_e = [(s, f) for s in HELD for f in EPF if Re_[f][s] > DTT_CLEAR]
+assert over_e and max(Rme.values()) < ISLA_CLEAR   # the bands read a close call on AeroZoo's metric too
+isla_ahead = [(s, f) for s in HELD for f in EPF if Re_[f][s] > 1]
+eseeds = lambda a, s, f: [ec(a, s, f)["per_seed"][k] for k in ("42", "43")]
+esm = lambda s, f: " and ".join(f"{d / i:.3f}" for d, i in zip(eseeds("ISLA-DTT", s, f), eseeds("ISLA", s, f)))
+print("This read uses the test sides, where AeroZoo reserves the validation part for choosing models and settings. It is reported "
+      "as registered, and it does not choose the form: the ruling below was made before any ISLA-DTT test score, and by Peter's "
+      "direction an interior model is ISLA-DTT, so no read of the two forms' test scores decides it. Read on AeroZoo's metric on "
+      "the same test sides, beside the registered read, the bands give the same close call (@tbl-aerozoo-form-eps): $R$ is "
+      f"{min(Re_['eps_U'][s] for s in HELD):.3f} to {max(Re_['eps_U'][s] for s in HELD):.3f} on $\\varepsilon_U$ (six-split mean "
+      f"{Rme['eps_U']:.3f}) and {min(Re_['eps_p'][s] for s in HELD):.3f} to {max(Re_['eps_p'][s] for s in HELD):.3f} on "
+      f"$\\varepsilon_p$ (mean {Rme['eps_p']:.3f}), above {DTT_CLEAR:g} on "
+      + " and ".join(f"{sn(s_)} {'pressure' if f_ == 'eps_p' else 'velocity'}" for s_, f_ in over_e)
+      + f" only; on `full`, {Re_['eps_U']['full']:.3f} and {Re_['eps_p']['full']:.3f}. On this metric interacting ISLA is ahead of "
+      "ISLA-DTT on "
+      + " and ".join(f"{sn(s_)} {'pressure' if f_ == 'eps_p' else 'velocity'} ({g3(ec('ISLA', s_, f_)['mean'])} against "
+                     f"{g3(ec('ISLA-DTT', s_, f_)['mean'])}, seed-matched ratios {esm(s_, f_)})" for s_, f_ in isla_ahead)
+      + "; each straddles one across the seeds, so the difference is within the seed spread.")
+assert all(min(eseeds("ISLA-DTT", s_, f_)[k] / eseeds("ISLA", s_, f_)[k] for k in (0, 1)) < 1 < max(eseeds("ISLA-DTT", s_, f_)[k] / eseeds("ISLA", s_, f_)[k] for k in (0, 1)) for s_, f_ in isla_ahead)
 print()
 AFS_ = S.Standing("airfrans")
 af_v = {f: AFS_.verdict("ISLA-DTT", f) for f in AFS_.ds.headline}
@@ -796,6 +938,25 @@ print(": ISLA against ISLA-DTT on AeroZoo, the readout registered before any ISL
       f"spread. Data: {AZSRC}; the rule, {R.source('az_compliant', 'PREREG_v2.md')}, section 12(f). {{#tbl-aerozoo-form}}")
 ```
 
+```{python}
+#| label: make-tbl-aerozoo-form-eps
+#| output: asis
+eov = lambda s, f: max(min(eseeds(a, s, f)) for a in ("ISLA", "ISLA-DTT")) <= min(max(eseeds(a, s, f)) for a in ("ISLA", "ISLA-DTT"))
+print("| split | $R$, $\\varepsilon_U$ (seed 42, 43) | $R$, $\\varepsilon_p$ (seed 42, 43) | seed ranges overlap: velocity / pressure |")
+print("|---|--:|--:|---|")
+for s_ in HELD + ["full"]:
+    lab = sn(s_) + (" (in distribution, not in the rule)" if s_ == "full" else "")
+    print(f"| {lab} | " + " | ".join(f"{Re_[f][s_]:.3f} ({esm(s_, f).replace(' and ', ', ')})" for f in EPF)
+          + f" | {yn(eov(s_, 'eps_U'))} / {yn(eov(s_, 'eps_p'))} |")
+print(f"| six-split arithmetic mean | {Rme['eps_U']:.3f} | {Rme['eps_p']:.3f} | |")
+print()
+print(": ISLA against ISLA-DTT on AeroZoo's metric, beside the registered readout of @tbl-aerozoo-form and not a registered reading: "
+      "$R$ = ISLA-DTT ÷ interacting ISLA, the ratio of seed means of the case-mean $\\varepsilon_U$ and $\\varepsilon_p$, with the "
+      "seed-matched ratios and whether the two forms' two-seed ranges overlap. How to read this: the registered bands read on these "
+      f"numbers give the same close call; a ratio below one favors ISLA-DTT. Data: {AZESRC}; "
+      f"{R.source('az_rescore', 'READINGS.md')}. {{#tbl-aerozoo-form-eps}}")
+```
+
 ### Why the baselines sit at the zero predictor {#sec-aerozoo-baselines}
 
 ```{python}
@@ -826,6 +987,18 @@ print("**Both baselines end near predicting zero on pressure; no pipeline fault 
       f"registered test asked for a fall below {bar}. ISLA reads each case in its own physical scales (@sec-aerozoo-allowed), which "
       "the baselines do not; whether that is what gives it its pressure lead is not isolated.")
 print()
+_gz = [ec("GeoTransolver", s_, "eps_U")["mean"] / ec("zero", s_, "eps_U")["mean"] for s_ in AZE["splits"]]
+_gf = {s_: fs_r("GeoTransolver", s_) for s_ in AZE["splits"]}
+_best = min(_gf, key=_gf.get)
+assert max(_gz) < 1
+print("**Under AeroZoo's metric the baselines are read against the free stream as well as against zero.** GeoTransolver's velocity "
+      f"error is below the zero predictor's on every split ({min(_gz):.2f} to {max(_gz):.2f} of it), but never more than "
+      f"{(1 - min(_gf.values())) * 100:.0f}% below the free stream's: {min(_gf.values()):.2f} to {max(_gf.values()):.2f} of it, the "
+      f"lowest on {sn(_best)}. Its pressure error is {min(z_r('GeoTransolver', s_) for s_ in AZE['splits']):.2f} to "
+      f"{max(z_r('GeoTransolver', s_) for s_ in AZE['splits']):.2f} times the zero predictor's. Transolver's velocity error is the "
+      f"zero predictor's ({g3(ec('Transolver', 'full', 'eps_U')['mean'])} against {g3(ec('zero', 'full', 'eps_U')['mean'])} on "
+      f"`full`). Data: {AZESRC}.")
+print()
 print(f"**GeoTransolver's velocity is not converged.** On `full` its training velocity loss falls from {gv[42][str(ep[0])]:.2f} at "
       f"epoch {ep[0]} to {gv[42][str(ep[-1])]:.2f} at epoch {ep[-1]} (seed 42; seed 43 {gv[43][str(ep[0])]:.2f} to {gv[43][str(ep[-1])]:.2f}), "
       f"still falling when training stops, and its two seeds differ by up to {spread:.1f} times on a split. The budget of 250 epochs "
@@ -834,7 +1007,7 @@ print(f"**GeoTransolver's velocity is not converged.** On `full` its training ve
       f"{R.source('az_diag', 'gtopt/raw/summary.json')}; {AZSRC} (`diagnostics`).")
 ```
 
-### Where ISLA's error exceeds one {#sec-aerozoo-failures}
+### Where ISLA does worse than AeroZoo's references {#sec-aerozoo-failures}
 
 ```{python}
 #| label: para-aerozoo-failures
@@ -853,11 +1026,14 @@ assert len(n_pd) == 1; n_pd = n_pd.pop()
 f2 = lambda xs, d=2: " / ".join(f"{x:.{d}f}" for x in xs)
 print(f"**On {sn('profile_crossflow')} ISLA keeps the inlet direction where the flow should turn toward the outlet beside it, and drives "
       f"the flow about twice too fast; on {sn('nonbox')} it gets the shape of the pressure wrong.** No training case has either the "
-      f"layout or the enclosures. On crossflow ISLA's velocity error is {mm('ISLA', 'profile_crossflow', 'velocity_l2', 2)} and its pressure error "
-      f"{mm('ISLA', 'profile_crossflow', 'pressure_l2', 2)}. On the diagnosed cases (the {n_worst} worst and {n_rand} random per seed, medians; seed 42 / "
+      f"layout or the enclosures. On crossflow ISLA's velocity error $\\varepsilon_U$ is {em('ISLA', 'profile_crossflow', 'eps_U')}, above "
+      f"the zero predictor's {g3(ec('zero', 'profile_crossflow', 'eps_U')['mean'])} and the free stream's "
+      f"{g3(ec('freestream', 'profile_crossflow', 'eps_U')['mean'])}, and its pressure error $\\varepsilon_p$ is "
+      f"{em('ISLA', 'profile_crossflow', 'eps_p')} against the zero predictor's {em('zero', 'profile_crossflow', 'eps_p')}; ISLA-DTT's "
+      f"are {em('ISLA-DTT', 'profile_crossflow', 'eps_U')} and {em('ISLA-DTT', 'profile_crossflow', 'eps_p')}. On the diagnosed cases (the {n_worst} worst and {n_rand} random per seed, medians; seed 42 / "
       f"seed 43) its mean velocity points {f2(vd('profile_crossflow', 'angle_true_pred_means'), 0)} degrees from the true mean, and its "
       f"RMS speed is {f2(vd('profile_crossflow', 'speed_ratio_rms'))} times the true one. The pressure follows the speed: on {n_pd} random "
-      "cases per seed, dividing each case's predicted pressure by the square of its own speed ratio takes the median pressure error "
+      "cases per seed, dividing each case's predicted pressure by the square of its own speed ratio takes the median relative L2 of the pressure "
       f"from {f2([pdm('profile_crossflow', s, 'pressure_l2') for s in ('42', '43')])} to "
       f"{f2([pdm('profile_crossflow', s, 'l2_rescaled_sr2') for s in ('42', '43')])}. That reading is post hoc: by the reading table "
       "registered for this diagnostic the pattern matches no row, because most of the error sits in the pressure's mean level (offset "
@@ -868,24 +1044,52 @@ print(f"**On {sn('profile_crossflow')} ISLA keeps the inlet direction where the 
          "generalization to a new layout. " if cross_in else "")
       + f"The mirror layout, {sn('profile_dual_inlet')}, goes the other way: ISLA drives the flow at "
       f"{pdm('profile_dual_inlet', '42', 'speed_ratio_rms'):.2f} of the true speed (seed 42) and undershoots the pressure, whose error "
-      f"stays below one ({mm('ISLA', 'profile_dual_inlet', 'pressure_l2', 2)}).")
+      f"stays below the zero predictor's ($\\varepsilon_p$ {em('ISLA', 'profile_dual_inlet', 'eps_p')} against "
+      f"{em('zero', 'profile_dual_inlet', 'eps_p')}).")
 print()
-nb = azc("ISLA", "nonbox", "pressure_l2")
-print(f"On {sn('nonbox')} the pressure error is {nb['mean']:.2f} in the mean, {nb['median']:.2f} in the median, and "
-      f"{f2(nb['per_seed'].values())} on the two seeds. Its speed is closer to right, and the error is in the shape: the correlation of "
+nb = ec("ISLA", "nonbox", "eps_p")
+print(f"On {sn('nonbox')} the pressure error $\\varepsilon_p$ is {g3(nb['mean'])} in the mean, {g3(nb['median'])} in the median, and "
+      f"{' / '.join(g3(v) for v in nb['per_seed'].values())} on the two seeds, against the zero predictor's "
+      f"{em('zero', 'nonbox', 'eps_p')}; ISLA-DTT's is {em('ISLA-DTT', 'nonbox', 'eps_p')}. Its velocity error, "
+      f"{em('ISLA', 'nonbox', 'eps_U')}, is above the free stream's {g3(ec('freestream', 'nonbox', 'eps_U')['mean'])}. Its speed is "
+      "closer to right than on crossflow, and the pressure error is in the shape: the correlation of "
       f"predicted and true pressure is {f2([pdm('nonbox', s, 'corr') for s in ('42', '43')])} (median over 30 random cases per seed), "
       "spheres and spherical caps overpredict the pressure and ducts underpredict it. Part of it is scale extrapolation: "
       f"{duct_low * 100:.0f}% of the duct test cases have an interior velocity, in ISLA's own velocity unit, below every training case "
-      f"of the split. Data: {AZSRC}; {R.source('az_diag', 'pdiag/pdiag.tsv')}; {R.source('az_diag', 'scales/scales_test_all.tsv')}; "
+      f"of the split. Data: {AZESRC}; {R.source('az_diag', 'pdiag/pdiag.tsv')}; {R.source('az_diag', 'scales/scales_test_all.tsv')}; "
       f"{R.source('az_diag', 'pdiag/README.md')} (by family).")
 ```
 
-::: {.callout-note title="In flight"}
-The crossflow numbers above come from ISLA as it is, whose pressure level at the outlet is learned freely. ISLA trained
-with the outlet's prescribed gauge pressure held by construction, its pressure shifted by the one constant that gives the
-outlet's drawn cells, weighted by their measure, the prescribed mean, is being measured on `profile_crossflow` and `full`,
-and the ledger (@sec-ledger) tracks it.
-:::
+```{python}
+#| label: para-aerozoo-outlet
+#| output: asis
+OX = " ".join(R.load("outlet_exp", "RESULTS.md").split())
+OT = R.md_table("outlet_exp", "RESULTS.md", "R1 (median", 0)
+OD = {(r_["split"], r_["field"]): r_ for r_ in R.md_table("outlet_exp", "RESULTS.md", "R1 (median", 1)}
+ot = lambda sp, arm, col: [R.num(r_[col], k) for r_ in OT if r_["split"] == sp and r_["arm"].startswith(arm) for k in (0, 1)]
+n_mech = int(_re.search(r"All ([\d,]+) scored B cases", OX).group(1).replace(",", ""))
+res_mech = _re.search(r"largest \|residual\| / scale ([\d.e-]+) \(tolerance ([\d.e-]+)\)", OX).groups()
+assert "R1: no change on profile_crossflow, no change on full" in OX
+band = [float(x) for x in _re.search(r"crossflow A [\d.]+ / [\d.]+, B ([\d.]+) / ([\d.]+), truth ([\d.]+)", OX).groups()]
+cost = [R.num(r_["B / A"], k) for r_ in R.md_table("outlet_exp", "RESULTS.md", "Cost", 0) if r_["B / A"] != "–" for k in (0, 1)]
+cp, cv = ot("profile_crossflow", "B", "median p_L2 s42 / s43"), ot("profile_crossflow", "B", "median v_L2 s42 / s43")
+ap, av = ot("profile_crossflow", "A", "median p_L2 s42 / s43"), ot("profile_crossflow", "A", "median v_L2 s42 / s43")
+fpB, fpA = ot("full", "B", "median p_L2 s42 / s43"), ot("full", "A", "median p_L2 s42 / s43")
+dx = OD[("profile_crossflow", "pressure")]
+f2_ = lambda xs: " and ".join(f"{x:.2f}" for x in xs)
+f3_ = lambda xs: " and ".join(f"{x:.3f}" for x in xs)
+print("**Holding the outlet at its prescribed gauge pressure by construction does not remove the crossflow failure.** ISLA trained "
+      "with its pressure shifted by the one constant that gives the outlet's drawn cells, weighted by their measure, the prescribed "
+      f"mean holds that mean on every one of the {n_mech:,} scored test cases, to at most {res_mech[0]} of the scale (the tolerance "
+      f"is {res_mech[1]}). On `profile_crossflow` its median relative L2 of the pressure is {f2_(cp)} (seeds 42 and 43) against "
+      f"{f2_(ap)} for ISLA, and of the velocity {f2_(cv)} against {f2_(av)}; on `full` its pressure error is unchanged ({f3_(fpB)} "
+      f"against {f3_(fpA)}). By the rule registered for it, both splits read *no change*: on crossflow the seed-mean pressure ratio "
+      f"is {R.num(dx['exp(D)']):.2f}, but its own two seeds differ by {max(cp) / min(cp):.1f} times, so the gain is not separated "
+      f"from seed noise (|D| = {abs(R.num(dx['D = ln(B/A)'])):.3f} against two standard errors of {R.num(dx['2 SE']):.3f}). Next to "
+      f"the outlet its pressure is still {f2_(band[:2])} times the case's RMS pressure, where the truth is {band[2]:.3f}, so the "
+      f"gauge is not the main crossflow error. As implemented it costs {min(cost):.2f} to {max(cost):.2f} times ISLA's training "
+      f"step. It is not part of ISLA. Data: {R.source('outlet_exp', 'RESULTS.md')}; {R.source('outlet_exp', 'tables.md')}.")
+```
 
 ### Dependence on the request {#sec-aerozoo-request}
 
@@ -903,6 +1107,17 @@ print("**On AeroZoo `full`, interacting ISLA's error barely moves when the reque
       f"far-field companions, and querying single points raises it {min(sub1):.1f} to {max(sub1):.1f} times over the five fields "
       "(means of the two seeds' ratios). ISLA's native errors here are large, which compresses the ratios. Data: "
       f"{R.source('probes090', 'results/qpop_az/reduced.json')}.")
+print()
+PT = R.md_table("az_rescore", "PARTITION.md", None, 0)
+_cols = ("eps_U", "eps_p", "eps_U_near", "eps_p_near", "rel_velocity", "rel_pressure")
+pmax = lambda tag, probe="pseed 1": max(abs(float(r_[c])) for r_ in PT if f"_{tag}_" in r_["lane"] and r_["probe"].startswith(probe) for c in _cols)
+dtt_max = max(abs(float(r_[c])) for r_ in PT if "_dtt_" in r_["lane"] for c in _cols)
+print("The standing's scoring inherits that dependence in a milder form: the full mesh is run through the model in chunks of 200,000 "
+      f"points. Partitioned again with another seed, on two `full` test cases, interacting ISLA's per-case metrics move by at most "
+      f"{pmax('isla'):.1e} relative, GeoTransolver's by {pmax('gt'):.1e} and Transolver's by {pmax('t'):.0e}. ISLA-DTT moves by up "
+      f"to {dtt_max:.1e} between chunks of 200,000, 1,000,000 and 2,000,000 points, which is float32 roundoff, since its prediction "
+      "does not depend on the chunk. Every gap the standing reads is two orders of magnitude or more above these. Data: "
+      f"{R.source('az_rescore', 'PARTITION.md')}.")
 ```
 
 ## What this dataset does not say {#sec-aerozoo-limits}
@@ -913,9 +1128,9 @@ print("**On AeroZoo `full`, interacting ISLA's error barely moves when the reque
 print("**AeroZoo tests generalization across families within one PDE, steady incompressible RANS with one closure, and only on the "
       "interior task.**")
 print()
-print("- **The pressure comparison is a comparison with predicting zero.** Both baselines end near the zero predictor on pressure "
-      "(@sec-aerozoo-baselines), so the standing says ISLA has skill on pressure where they have none, not by how much it beats a "
-      "working baseline; and GeoTransolver's velocity is not converged at the last epoch.")
+print("- **The comparison is a comparison with AeroZoo's references.** Both baselines end at the zero predictor on pressure and "
+      "no better than the free stream on velocity (@sec-aerozoo-baselines), so the standing says ISLA has skill where they have "
+      "none, not by how much it beats a working baseline; and GeoTransolver's velocity is not converged at the last epoch.")
 print("- **Not resource-matched.** The four configurations differ in parameters and memory and do not receive the same inputs "
       "(@tbl-aerozoo-inputs); the protocol compares the configurations as each is scored on every dataset.")
 print("- **Not every model can see the flow.** Transolver receives no inlet or outlet value, so the speed and direction of the flow do "
@@ -923,11 +1138,20 @@ print("- **Not every model can see the flow.** Transolver receives no inlet or o
       "penalty of either measures the architecture under those inputs.")
 print("- **Penalties mix generalization with data size.** Every held-out split trains on fewer cases than `full`; the registered "
       "readout is the ratio across architectures on each split, and the penalties are descriptive.")
-print("- **Per-case relative errors.** Every error is the relative L2 of a physical field on one case, averaged over the cases, so a "
-      "slow, small case counts as much as a fast, large one; the specific dissipation column is partly a count of cases whose $\\omega$ "
-      "one point dominates (@sec-data-aerozoo).")
-print("- **Label noise.** A quarter of the labels are time averages the solver marked as still drifting; nothing here says how large that "
-      "noise is in physical units.")
+print("- **AeroZoo's metric weights the far field.** $\\varepsilon_U$ and $\\varepsilon_p$ weight each cell by its volume, so the "
+      "large free-stream cells of an enclosure dominate them; $\\varepsilon^N$ restricts them to within one reference length of the "
+      "body, and the per-case relative L2 beside them counts each sampled cell equally. Every metric is a per-case error averaged over "
+      "the cases, so a slow, small case counts as much as a fast, large one (@sec-data-aerozoo).")
+print("- **Five of the seven fields.** The intermittency and $Re_\\theta$ are not predicted (@sec-dataset-aerozoo).")
+print("- **The interior form was read on test sides.** The registered read of ISLA against ISLA-DTT used the test sides; the "
+      "form rests on Peter's rulings, not on that read (@sec-aerozoo-form).")
+print("- **A design-time look at test cases.** The per-case relative loss of every model was chosen from a magnitude check on 22 "
+      "cases, one from each split's test side, which AeroZoo's rule does not allow for a setting. The same loss went to every "
+      "model, and the fact it rests on, targets spanning decades across cases, holds on `full`'s training side as well, so no model "
+      f"gains ({R.source('az_spec_audit', 'AUDIT.md')}, S1b).")
+print("- **The loss is not volume-weighted** (@sec-data-aerozoo).")
+print("- **Label noise.** A quarter of the labels are time averages the solver marked as still drifting; @tbl-aerozoo-stable reads "
+      "the standing without them, and nothing here says how large that noise is in physical units.")
 F32 = R.md_table("az_diag", "f32floor/README.md", "3. Results")
 flips = [int(R.num(r["sign flips (CPU)"])) for r in F32 if r["run"] != "controls" and R.num(r["sign flips (CPU)"]) > 0]
 cells = [abs(R.num(r["cells D32≠D64"], k)) for r in F32 if r["run"] != "controls" for k in range(len(_re.findall(r"\d+", r["cells D32≠D64"])))]
