@@ -306,7 +306,7 @@ def test_boundary_scales_and_log_reynolds_are_isla_s_bitwise():
         },
         global_schema={"re_z": {"rank": 0}},
         interior=True,
-        boundary_tokens=16,
+        n_boundary_tokens=16,
         hidden=16,
         n_layers=1,
         n_slices=4,
