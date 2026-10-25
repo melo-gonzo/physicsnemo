@@ -143,16 +143,40 @@ def _apply_dataset_transform_appends(
     after the dataset's own chain, so the steps one model needs and the others do
     not leave the dataset files and the other models' inputs as they are. ISLA's
     configs split a boundary that holds several boundary conditions into one
-    boundary per condition (``SplitBoundaryByLabels``).
+    boundary per condition (``SplitBoundaryByLabels``) and compute their Reynolds
+    number (``ComputeLogReynolds``), whose ``mean: null`` and ``std: null`` are the
+    dataset file's ``isla_constants.reynolds``, fitted on its split's training side;
+    a dataset file without them is refused.
     """
     extra = OmegaConf.select(recipe_cfg, "dataset_append_transforms", default=None)
     if not extra:
         return dataset_cfg
     _check_split_boundary_meshes(extra, recipe_cfg)
+    extra = [_fill_reynolds_constants(t, dataset_cfg) for t in extra]
     transforms = OmegaConf.select(dataset_cfg, "pipeline.transforms", default=None)
     dataset_cfg = dataset_cfg.copy()
     dataset_cfg.pipeline.transforms = [*(transforms or []), *extra]
     return dataset_cfg
+
+
+def _fill_reynolds_constants(t_cfg: DictConfig, dataset_cfg: DictConfig) -> DictConfig:
+    """A ``ComputeLogReynolds`` entry with its null ``mean`` and ``std`` taken from the
+    dataset file's ``isla_constants.reynolds``; any other entry as it is."""
+    if not str(t_cfg.get("_target_", "")).endswith("ComputeLogReynolds"):
+        return t_cfg
+    nulls = [k for k in ("mean", "std") if k in t_cfg and t_cfg[k] is None]
+    if not nulls:
+        return t_cfg
+    given = OmegaConf.select(dataset_cfg, "isla_constants.reynolds", default=None)
+    if given is None or any(given.get(k) is None for k in nulls):
+        raise ValueError(
+            f"the model config leaves ComputeLogReynolds's {nulls!r} to the dataset, whose file "
+            "has no isla_constants.reynolds entry"
+        )
+    t_cfg = t_cfg.copy()
+    for k in nulls:
+        t_cfg[k] = given[k]
+    return t_cfg
 
 
 def _check_split_boundary_meshes(transforms, recipe_cfg: DictConfig) -> None:

@@ -21,9 +21,9 @@
 #
 # ISLA brings its own scales (the model's docstring, *Scales*): the length L is the RMS pairwise distance of
 # the whole boundary, which the far field sets (305.3 chords; the airfoil's alone is 0.41-0.44), the velocity U = |U_inf| (the farfield Dirichlet value, the global
-# velocity_scale source, whose direction is the one global direction, K = 1) and nu the air's kinematic
-# viscosity, the constant 1.56e-5 m^2/s (SetGlobalField below; AirfRANS varies Re through U_inf alone), so the
-# standardized log10(U L / nu) is a global scalar in place of the raw speed in m/s. The velocity and pressure
+# field that `defines: U`, whose direction is the one global direction, K = 1); with nu the air's kinematic
+# viscosity, the constant 1.56e-5 m^2/s (SetGlobalField below; AirfRANS varies Re through U_inf alone), the
+# standardized log10(U L / nu), computed by the recipe (below), is a global scalar in place of the raw speed in m/s. The velocity and pressure
 # outputs are dimensionless because the dataset's NonDimensionalizeByMetadata divides the targets by the same
 # |U_inf| that ISLA takes as its U (v / |U_inf| and Cp = p / (0.5 |U_inf|^2)); nut (m^2/s) has the units U L
 # and is standardized by the dataset's NormalizeMeshFields stats (output_stats, injected by train.py). The
@@ -40,11 +40,27 @@ input_type: mesh
 output_type: mesh
 
 # The kinematic viscosity of air, a physical constant (the files carry none), as the global leaf nu; run after
-# the dataset's own chain.
+# the dataset's own chain. Then ISLA's Reynolds number, computed here rather than in the model (2026-10-24): on the
+# meshes the model receives, L (the whole boundary's RMS pairwise distance) and U = |U_inf| exactly as ISLA computes
+# its scales, then re_z = (log10(U L / nu) - mean) / std in float64. mean and std are null here: src/datasets.py
+# fills them from the dataset file's isla_constants.reynolds, fitted on the split's train cases.
 dataset_append_transforms:
   - _target_: ${dp:SetGlobalField}
     fields:
       nu: 1.56e-5
+  - _target_: ${dp:ComputeBoundaryScales}
+    boundaries: [airfoil, freestream]    # forward_kwargs.boundary_meshes
+    length_field: L
+    speed_field: U
+    global_source: U_inf
+  - _target_: ${dp:ComputeLogReynolds}
+    speed_field: U
+    length_field: L
+    viscosity_field: nu
+    mean: null
+    std: null
+    output_field: log_re
+    standardized_field: re_z
 
 # Learning rate pinned at the reference configuration's rate, 3.75e-4 (REF-80
 # verdict, 2026-10-04; the width rule 1e-3 x 192 / hidden at 512): the recipe
@@ -55,10 +71,9 @@ training:
     lr: 3.75e-4
 
 # Per-block torch.compile (model.compile_blocks below): ISLA-DTT's boundary read breaks the whole-model
-# fullgraph trace. compile=true model.query_independent=false model.compile_blocks=false gives interacting
-# ISLA's whole-model compile: one graph, compiled once for every token count (see isla_volume.yaml), with the
-# compile_options below. They are those of mode max-autotune-no-cudagraphs (max_autotune and
-# coordinate_descent_tuning) with Inductor's mix-order reduction off: on that graph it fuses a per-point sum with a sum over the
+# fullgraph trace. The compile_options below are the whole-model compile's (see isla_volume.yaml): those
+# of mode max-autotune-no-cudagraphs (max_autotune and
+# coordinate_descent_tuning) with Inductor's mix-order reduction off: on the whole-model graph it fuses a per-point sum with a sum over the
 # points into one kernel, and torch 2.12 returns the second sum, a (1, n_slices, 1) softmax denominator
 # saved for backward, as (1, n_slices), so the compiled backward fails its first step ("wrong number
 # of dimensions"). torch 2.13 returns it at its shape, but its mix-order column sums still add the padded
@@ -90,15 +105,12 @@ model:
     airfoil: {}                  # the airfoil, a no-slip wall: no per-cell fields
     freestream: {}               # the far field, OpenFOAM's freestream condition from U_inf (the global input): no per-cell fields
   global_schema:
-    U_inf: {rank: 1, units: {U: 1}, velocity_scale: true}   # the farfield velocity (m/s): U = |U_inf|, g its direction
-    nu: {rank: 0, units: {U: 1, L: 1}, role: viscosity}       # m^2/s, set above; consumed for Re
-  # z = (log10(U L / nu) - mean) / std over the train cases: the dataset file's isla_constants.reynolds (train.py).
-  reynolds: null
+    U_inf: {rank: 1, units: {U: 1}, defines: U}             # the farfield velocity (m/s): U = |U_inf|, g its direction
+    re_z: {rank: 0}              # (log10(U L / nu) - mean) / std, dataset_append_transforms above
   output_stats: null             # injected by train.py: the dataset's NormalizeMeshFields stats (nut)
-  dim: 2                         # the problem is planar: pair with datasets/airfrans_uvolume_2d.yaml (RestrictToPlane first after the uniform draw)
+  n_spatial_dims: 2                       # the problem is planar: pair with datasets/airfrans_uvolume_2d.yaml (RestrictToPlane first after the uniform draw)
   interior: true                 # predict at prediction_points: passive tokens that read the boundary (ISLA-DTT)
-  query_independent: true        # ISLA-DTT, the interior task's reference form (the class default for interior: true, stated here)
-  boundary_tokens: 200000        # boundary tokens drawn per case inside the model (equal to the class default; the airfoil is kept whole)
+  n_boundary_tokens: 200000        # boundary tokens drawn per case inside the model (equal to the class default; the airfoil is kept whole)
   hidden: 512                  # the reference configuration (REF-80 verdict, 2026-10-04): most accurate under 80 GiB per GPU on DrivAerML Surface and the 210-wing rung; equal to the class defaults
   n_layers: 12
   n_slices: 512

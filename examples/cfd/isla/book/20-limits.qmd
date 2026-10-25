@@ -316,7 +316,7 @@ print(f"**On the interior standings that compare the architectures, the reading 
         "and direction from the exact closest point of the full-resolution boundary it is given (@sec-exact-geometry-draw), and so needs "
         "that boundary at the precision of the mesh the interior was built on (@sec-limits-boundary-law). The interacting configuration's "
         "prediction at a point depends on the other points in the request (@sec-limits-query-independence). And each configuration has "
-        "two seeds. ISLA's default interior form is ISLA-DTT, and these standings are interacting ISLA's (@sec-aerozoo-form).")
+        "two seeds. ISLA's interior form is ISLA-DTT, and these standings are interacting ISLA's (@sec-aerozoo-form).")
 print()
 for k in INT:
     print(S.in_flight_callout(k))
@@ -403,18 +403,18 @@ print('::: {.callout-note title="In flight"}\nThe lug standing\'s posed ÷ nativ
 
 ### The prediction depends on the query set {#sec-limits-query-independence}
 
-**ISLA's prediction at an interior point depends on which other points are in the request,
-because its prediction points are interacting tokens that write into the slices.** The total
-routing mass of the prediction points is a learned fraction of the boundary measure, split
-equally over them, so the count of points does not scale their weight; the dependence through
-the shared slices remains. The interacting configuration is therefore deployed at its training
-request count, and every interior number in the book is scored at that count. ISLA-DTT
-(`query_independent=True`) removes the dependence by construction: its prediction points carry no
+**Interacting ISLA's prediction at an interior point depends on which other points are in the
+request, because its prediction points are interacting tokens that write into the slices; the
+interior standings are interacting ISLA's.** The total routing mass of the prediction points is a
+learned fraction of the boundary measure, split equally over them, so the count of points does not
+scale their weight; the dependence through the shared slices remains. Every interior number of
+interacting ISLA in the book is therefore scored at its training request count. ISLA-DTT, ISLA's
+interior form, removes the dependence by construction: its prediction points carry no
 routing mass, read the slices and every boundary cell, and never write, so its prediction at a
 point is a function of that point and the boundary alone, and a request can be split into chunks
-with the same result (@sec-arch-modes). ISLA-DTT is ISLA's default interior form: on AeroZoo's
-held-out splits the two forms read a close call, and Peter's ruling for that case is "ISLA-DTT, on
-principle"; ISLA-DTT's prediction does not depend on the request (@sec-aerozoo-form).
+with the same result (@sec-arch-modes). On AeroZoo's held-out splits the two forms read a close
+call, and Peter's ruling for that case is "ISLA-DTT, on principle"; ISLA-DTT's prediction does not
+depend on the request (@sec-aerozoo-form).
 
 ```{python}
 #| label: para-limits-query-independence
@@ -439,6 +439,38 @@ print("**Measured on three datasets, the dependence is large where the request d
       f"{QP['dtt_max_abs_dev']:.0e} in every mode on AirfRANS, float32 roundoff. On the interior task, a dependence with no knob that "
       "converges is a limit of the interacting form, not an approximation (@sec-airfrans-query-population, @sec-interior-query-tokens, "
       f"@sec-aerozoo-request). Data: {LIM_SRC}, from {R.source('probes090', 'results')}.")
+```
+
+### Rank-2 boundary inputs on the interior task {#sec-limits-rank2}
+
+```{python}
+#| label: para-limits-rank2
+#| output: asis
+import yaml as _yaml
+import physicsnemo
+from physicsnemo.experimental.models import ISLA
+_conf = Path(physicsnemo.__file__).parent.parent / "examples" / "cfd" / "external_aerodynamics" / "unified_external_aero_recipe" / "conf" / "model"
+_ranks = {}
+for _p in sorted(_conf.glob("isla_*.yaml")):
+    _m = _yaml.safe_load(_p.read_text()).get("model", {})
+    if _m.get("interior") and _m.get("boundary_schemas"):
+        _ranks[_p.stem] = max([f["rank"] for c in _m["boundary_schemas"].values() for f in (c or {}).values()], default=None)
+assert _ranks and all(r is None or r < 2 for r in _ranks.values())
+try:
+    ISLA(output_schema={"p": {"rank": 0}}, boundary_schemas={"wall": {"T": {"rank": 2}}}, interior=True, hidden=8, n_layers=1, n_slices=2)
+    _refusal = None
+except NotImplementedError as err:
+    _refusal = f"{type(err).__name__}: {err}"
+assert _refusal is not None
+print("**ISLA's interior task refuses a boundary condition with a rank-2 field, because ISLA-DTT's boundary read has no "
+      "contraction for a tensor.** The surface task reads a rank-2 boundary field through its invariants in the seed and its own "
+      "tensor channels in the slice layers (@sec-arch-seed). The read after every layer weighs each source cell by a kernel of "
+      "the pair's relative geometry, which contracts the cells' vector channels with the pair's directions and has no such "
+      "contraction for a tensor channel, so the constructor refuses the combination rather than drop the tensor from the read: "
+      f"\"{_refusal}\". None of the recipe's {S._COUNT.get(len(_ranks), len(_ranks))} interior configurations declares a rank-2 boundary field (read from "
+      "`conf/model/isla_*.yaml` as the page renders), so no standing meets the limit. An interior problem whose boundary data is "
+      "a tensor, a prescribed stress, say, needs the pair contractions of a tensor channel in the read, or its tensor declared "
+      "through scalar components, which gives up the field's covariance.")
 ```
 
 ```{python}
@@ -673,7 +705,7 @@ print("**On AirfRANS, standardizing ISLA's global input carries its gain over an
       "eddy viscosity). An arm without the scales that reads the inlet speed standardized, as the baselines read it, has "
       f"{f3(std, 3)} times ISLA's error, a share {f3(phi)} of that step and no measurable effect on any field (each ratio exp(Δ), of "
       "geometric seed means), so by the rule registered for it standardizing the global input carries the step "
-      "(@sec-airfrans-attribution). On AirfRANS the viscosity is constant and $L$ nearly so, so the log Reynolds number the scales form "
+      "(@sec-airfrans-attribution). On AirfRANS the viscosity is constant and $L$ nearly so, so the log Reynolds number formed from the scales "
       "is close to a monotone reparametrization of the inlet speed, and the scales can add little there beyond a standardized input. "
       "What would settle it: ISLA with and without its scales, the latter reading a standardized global input, on a dataset whose "
       "Reynolds number varies widely, such as AeroZoo, two seeds each. Every arm of the ablation, the base included, trained on the "
@@ -1385,7 +1417,7 @@ print("| Cost on small meshes | from 100,000 tokens up a training step's memory 
 print("| Inference on a small budget | the stratified sampler removes most of the quadrature variance at 10,000 cells "
       "(@sec-deficit-anatomy, @sec-using-sampler) | a default that picks the sampler from the requested count |")
 print("| Query-count consistency of the interacting form | the prediction points' routing mass is a learned fraction of the boundary "
-      "measure, independent of their count (@sec-isla-contracts); ISLA-DTT, the default interior form, is independent of the "
+      "measure, independent of their count (@sec-isla-contracts); ISLA-DTT, ISLA's interior form, is independent of the "
       "request by construction (@sec-aerozoo-form) | ISLA-DTT at the interacting form's accuracy where that form leads it: "
       "AirfRANS velocity and eddy viscosity, and the lug (@sec-aerozoo-form) |")
 print()
@@ -1409,7 +1441,7 @@ print("**ISLA is the choice where the deployment mesh or sampling law may differ
       "closest-feature ties of the geometry its checkpoints trained with, most of whose effect the class's tie rule removes in "
       "retraining (@sec-limits-ties). GeoTransolver and Transolver are released, in "
       "use and not modified; measure weighting and origin-free positions reach users through ISLA (@sec-principled-ledger). "
-      "On the interior task the recommendation is ISLA-DTT, ISLA's default interior form, whose prediction at a point depends on "
+      "On the interior task the recommendation is ISLA-DTT, ISLA's interior form, whose prediction at a point depends on "
       "that point and the boundary alone (@sec-aerozoo-form). One outcome would change the recommendation.")
 print()
 print("- **ISLA gains a generalization claim on velocity** if its held-out penalty on AeroZoo velocity stays below a converged "

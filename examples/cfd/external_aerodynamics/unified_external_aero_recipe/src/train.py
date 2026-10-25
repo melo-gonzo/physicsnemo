@@ -318,15 +318,21 @@ _LOGGER = logging.getLogger("training.step")
 _chunks_logged: tuple[int, bool] | None = None
 
 
-def _chunked_step(model: torch.nn.Module, batch: dict[str, Any]) -> bool:
-    """Whether this batch takes :func:`chunked_forward_backward`: the model is
-    ISLA-DTT (``query_chunks``) and the batch has prediction points."""
+def _isla_dtt(model: torch.nn.Module) -> bool:
+    """Whether the model (or the module DDP wraps) is ISLA-DTT: it has
+    ``query_chunks`` and predicts on the interior (``interior``)."""
     core = (
         model.module
         if isinstance(model, torch.nn.parallel.DistributedDataParallel)
         else model
     )
-    if not getattr(core, "query_independent", False):
+    return hasattr(core, "query_chunks") and getattr(core, "interior", False) is True
+
+
+def _chunked_step(model: torch.nn.Module, batch: dict[str, Any]) -> bool:
+    """Whether this batch takes :func:`chunked_forward_backward`: the model is
+    ISLA-DTT (:func:`_isla_dtt`) and the batch has prediction points."""
+    if not _isla_dtt(model):
         return False
     return batch["forward_kwargs"].get("prediction_points") is not None
 
@@ -1242,7 +1248,7 @@ def main(cfg: DictConfig) -> None:
     output_type = require_output_type(cfg)
     logger.info(f"Loss: {loss_calculator}")
     logger.info(f"Metrics: {metric_calculator}")
-    if getattr(getattr(model, "module", model), "query_independent", False):
+    if _isla_dtt(model):
         logger.info(
             "ISLA-DTT training step: the fewest chunks of prediction points whose"
             " predicted peak memory fits the device on every rank"

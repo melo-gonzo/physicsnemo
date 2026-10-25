@@ -116,6 +116,6 @@ model:
   n_layers: 12
   n_slices: 512
   # Per-block torch.compile (PERF-3, 2026-10-01): off, since the recipe compiles
-  # the whole model (compile_options above). The way to compile ISLA-DTT
-  # (model.query_independent=true), whose boundary read breaks the whole-model graph.
+  # the whole model (compile_options above). The way to compile ISLA-DTT (the
+  # interior task), whose boundary read breaks the whole-model graph.
   compile_blocks: false

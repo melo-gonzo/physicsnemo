@@ -249,7 +249,7 @@ def test_field_validation_errors():
             global_data=gd,
         )
     ### the prediction points must match the model's dimension
-    mq = _model(interior=True, query_independent=False)
+    mq = _model(interior=True)
     q = pts[:7] * 2
     with pytest.raises(ValueError, match="prediction_points has 2 spatial dimensions"):
         mq(
@@ -261,7 +261,8 @@ def test_field_validation_errors():
 
 def test_fused_kernel_auto_falls_back_with_tensor_inputs():
     """The fused kernel does not take rank-2 inputs: auto falls back to eager (off CUDA
-    it does anyway)."""
+    it does anyway). The surface task takes them; the interior task (ISLA-DTT, whose
+    boundary read has no pair contractions for them) refuses them."""
     base = dict(
         output_schema=OUT,
         global_schema={"g": {"rank": 1}},
@@ -269,14 +270,11 @@ def test_fused_kernel_auto_falls_back_with_tensor_inputs():
         n_layers=1,
         n_slices=8,
     )
-    m = ISLA(
-        interior=True,
-        query_independent=False,
-        boundary_schemas={"wall": {"S": {"rank": 2}}},
-        **base,
-    )
+    m = ISLA(boundary_schemas={"wall": {"S": {"rank": 2}}}, **base)
     assert m.geo_kernel == "auto"
     assert m.resolve_geo_kernel(torch.zeros(1, 4, 3)) == "eager"
+    with pytest.raises(NotImplementedError, match="rank-2"):
+        ISLA(interior=True, boundary_schemas={"wall": {"S": {"rank": 2}}}, **base)
 
 
 def test_fields_keep_their_declaration_order_as_columns():

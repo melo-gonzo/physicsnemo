@@ -28,6 +28,7 @@ from physicsnemo.experimental.models.isla.heads import _levi_civita, _pseudovect
 from test.experimental.models.isla._meshes import (
     cloud,
     law,
+    live,
     orthogonal,
     outputs,
     soup,
@@ -51,14 +52,16 @@ def _problem(d: int, n: int = 160, seed: int = 0):
 def _model(d: int, outputs, **kw):
     torch.manual_seed(1)
     kw.setdefault("boundary_schemas", {"wall": {}})
-    return ISLA(
-        output_schema=outputs,
-        global_schema={"g": {"rank": 1}},
-        hidden=32,
-        n_layers=2,
-        n_slices=8,
-        dim=d,
-        **kw,
+    return live(
+        ISLA(
+            output_schema=outputs,
+            global_schema={"g": {"rank": 1}},
+            hidden=32,
+            n_layers=2,
+            n_slices=8,
+            n_spatial_dims=d,
+            **kw,
+        )
     )
 
 
@@ -158,9 +161,7 @@ def test_two_dimensional_gradients_and_interior_task():
     d = 2
     mesh, drv = _problem(d)
     ### prediction-point tokens with the internal nearest-boundary geometry in 2-D
-    mq = _model(
-        d, {"p": {"rank": 0}, "v": {"rank": 1}}, interior=True, query_independent=False
-    )
+    mq = _model(d, {"p": {"rank": 0}, "v": {"rank": 1}}, interior=True)
     q = torch.randn(50, d) * 0.5
     out = outputs(
         mq(boundary_meshes={"wall": mesh}, prediction_points=q, global_data={"g": drv})
@@ -225,14 +226,18 @@ def test_four_dimensional_even_parity_smoke_and_odd_refused():
     with pytest.raises(NotImplementedError):
         _model(d, {"w": {"rank": 1, "parity": "odd"}})
     with pytest.raises(ValueError):
-        ISLA(output_schema={"p": {"rank": 0}}, boundary_schemas={"wall": {}}, dim=1)
+        ISLA(
+            output_schema={"p": {"rank": 0}},
+            boundary_schemas={"wall": {}},
+            n_spatial_dims=1,
+        )
 
 
 def test_dimension_mismatch_is_refused_and_two_d_is_not_embedded_three_d():
     mesh3, drv3 = _problem(3)
     m2 = _model(2, {"p": {"rank": 0}})
     with pytest.raises(
-        ValueError, match="has 3 spatial dimensions; this model has dim=2"
+        ValueError, match="has 3 spatial dimensions; this model has n_spatial_dims=2"
     ):
         m2(
             prediction_boundaries=["wall"],
@@ -245,9 +250,13 @@ def test_dimension_mismatch_is_refused_and_two_d_is_not_embedded_three_d():
     ### 41364 backbone-and-head parameters (the wall's input layer 2 x 32 over the
     ### constant and n.g, the shared embedding layer 32 x 32 + 32, ...) plus 2 x 32^2
     ### + 1 = 2049 for each of its three prototype synthesizers (two blocks and the
-    ### head frame: the key and value maps and the gain); the interior model adds 129
-    ### for the prediction-point side (qt.logw 1, qt.seed 3 x 32 + 32 over n.g and
-    ### the built-in distance pair).
+    ### head frame: the key and value maps and the gain); the interior model (ISLA-DTT)
+    ### adds 128 for the prediction-point side (qt.seed 3 x 32 + 32 over n.g and the
+    ### built-in distance pair) and 18704 for the boundary read: the kernel basis
+    ### 8 x 64 + 64, 64 x 64 + 64, 64 x 16 + 16 = 5776 over the 6 + 2K = 8 pair
+    ### invariants, and per block 6464 (two LayerNorms 2 x 64, the value map 32 x 64
+    ### + 64, the key and query maps 2 x 32 x 32, the kernel 16 x 8, the output map
+    ### 64 x 32).
     n_surface = 41364 + 3 * (2 * 32**2 + 1)
     m3 = _model(3, {"p": {"rank": 0}, "v": {"rank": 1}})
     assert sum(p.numel() for p in m3.parameters()) == n_surface
@@ -265,8 +274,7 @@ def test_dimension_mismatch_is_refused_and_two_d_is_not_embedded_three_d():
                 3,
                 {"p": {"rank": 0}, "v": {"rank": 1}},
                 interior=True,
-                query_independent=False,
             ).parameters()
         )
-        == n_surface + 129
+        == n_surface + 128 + 5776 + 2 * 6464
     )
