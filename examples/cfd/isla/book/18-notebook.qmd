@@ -42377,6 +42377,92 @@ cost/); LHR job 375068, 1.09 GPU-h.
 *Applied for the supervisor by the book lane BOOK-SYM and second-read by a lane reviewer on 2026-10-24, its findings applied
 (scratch/isla-book-sym-2026-10-24/SECOND_READ_SYM.md, SECOND_READ_DISPOSITION.md).*
 
+## 2026-10-24 to 2026-10-25 — ISLA 0.13.0: the interior task is ISLA-DTT with no switch, the constructor names no application quantity (the Reynolds number becomes ISLA's own recipe preprocessing, an exact relocation: z bitwise on 160 of 160 cases), and the signatures take Mesh's names (`n_spatial_dims`, `n_boundary_tokens`); the surface task and ISLA-DTT compute what they computed; merged with this batch {#sec-nb-version-0130}
+
+**Peter's directions (2026-10-24, about 21:43 EDT).** Peter wrote, among four directions:
+
+> a) based on early numbers it's looking like in the interior=True case, query_independent=True is kind of a
+> no-brainer. So basically, interior means "use DTT".
+> b) I don't love that you have `reynolds` as a constructor argument for ISLA. While we are designing ISLA with fluid
+> dynamics in mind, fundamentally it is not a fluids-only model architecture. If you want to put in reynolds number
+> (and I'm not even sure how you should or if you should), then it doesnt belong in the (application-agnostic) ISLA
+> constructor in its model.py.
+
+and right after (about 21:44 EDT), in the message the supervisor files as (e):
+
+> Can you also amke the notation of the signatures match Mesh's conventions where possible? For example I think
+> that `dim ` should be n_spatial_dims, right?
+
+His (c), the library moves, and (d), merging main periodically, are other lanes' work.
+
+**The supervisor's decisions.**
+- (a): the interior task always takes the query-independent read; the `query_independent` switch goes, and the
+  interacting form stays for the surface task alone (option A, `prediction_boundaries`). Lane ISLA-API built it.
+- (b), on REYNOLDS-OUT's design (DESIGN.md, md5 44f40d13) and ISLA-API's, about 23:24 EDT: the Reynolds feature stays
+  as ISLA's own recipe preprocessing, in ISLA's model configurations only, never in a dataset chain the baselines share.
+  `ComputeBoundaryScales` writes the case's $L$ and $U$, computed as the model computes them, and `ComputeLogReynolds`,
+  now in float64, writes `re_z`, an ordinary rank-0 global; model.py loses `reynolds`, the viscosity role and z.
+- A generic vocabulary for the scales: the schema key `defines: <name>` replaces `velocity_scale` and the density and
+  viscosity roles, `units` names $L$ and any defined scale, and model.py names no fluid quantity. The key's name is
+  provisional, and Peter has been told.
+- (e): `dim` becomes `n_spatial_dims`; `boundary_tokens` becomes `n_boundary_tokens`, after Mesh's `n_` counts;
+  `boundary_meshes` and `prediction_boundaries` stay, GLOBE's names. Each rename is its own commit, and Peter may reverse
+  any of the three picks.
+- One version, ISLA 0.13.0, covers (a), (b) and (e).
+- For the book (this batch): the standings stay interacting ISLA 0.9.0's until the final reference rerun, with their
+  callouts; interacting ISLA's parameter count is no longer computed from the class, so 05 names its one routing-mass
+  scalar and 09 counts the boundary read from ISLA-DTT; the rank-2 refusal is a limit in 20.
+
+**Why the Reynolds feature is kept, and moved exactly.** REYNOLDS-OUT surveyed the class: its only application-specific
+pieces were the `reynolds` argument, the viscosity role and z $\equiv (\log_{10}(U L / \nu) - m) / s$, which
+`_case_scales` appended to the global scalars; only the AirfRANS and AeroZoo configurations used them. On AirfRANS
+ISLA-DTT without its scales is 1.208 / 1.203 / 1.177 times worse on pressure / velocity / eddy viscosity (DTT-KNOBS R5),
+so the scales stay, and with them z is ISLA's only channel for the Reynolds number; removing it would need a no-harm
+check the lane priced at about 950 to 1,300 GPU-hours. The relocation computes the same z in the recipe from the same
+$L$ and $U$. REYNOLDS-OUT measured it on GB300 (LHR 376561 and 376855, 0.41 GPU-h), with three 0.9.0 checkpoints
+(AirfRANS ISLA, AirfRANS ISLA-DTT, AeroZoo ISLA on `reynolds`):
+- z: bitwise on 160 of 160 cases (64, 64 and 32), in float64 and in float32, and the network's z input bitwise in
+  every forward;
+- outputs: bitwise wherever the GPU forward repeats itself (AirfRANS ISLA, 6 of 6 cases over both jobs; AeroZoo
+  case 1; every run on CPU). On AirfRANS ISLA-DTT the old and new forms differ by 1.76e-6 to 2.59e-6, inside the old
+  model's own run-to-run spread of 1.89e-6 to 2.37e-6, which starts at the first tree read. On AeroZoo case 0 one
+  new-form forward of three matched the old model at all 24 block tensors, and the other two differed from it and from
+  each other by up to 8.8e-6, from a variation that enters before block 0, not from z.
+
+So no retrain check is needed. ISLA-API's GB300 job 377645 checked the datapipe end to end: `re_z` from the recipe is
+bitwise the base's in-model z on 8 of 8 cases (AeroZoo 4, AirfRANS 4), over two dumps against four runs of the old side.
+
+**What changed in the code** (psharpe/isla-api-013, fc6ed19d0..7c88b2e1f, 58 files):
+- the `query_independent` argument, attribute and stored argument; `_QueryTokens`'s routing mass `qt.logw`; the
+  interacting branch of `_query_tokens`; and `_log_count` are deleted. `query_chunks` refuses a surface model.
+- An interior model with a rank-2 boundary field is refused at construction, since ISLA-DTT's boundary read has no pair
+  contraction for a tensor; no recipe configuration declares one.
+- `reynolds`, the viscosity role and z are deleted; the AirfRANS and AeroZoo configurations append the two transforms
+  and declare `re_z: {rank: 0}`.
+- The renames, in the class, its attribute and the recipe's keys; `velocity_moments` becomes `rms_moments`.
+- The version commit 25bea52cb: `_version` 13, every state dict of 0.7.0 to 0.12.0 refused, the .mdlus golden
+  regenerated with its 59 tensors bitwise the 0.12.0 file's; only its file version, state-dict version and stored
+  arguments differ. The surface and ISLA-DTT forward goldens are unchanged. One test-only commit follows (7c88b2e1f).
+- The tests of the interacting interior form are deleted, each with its reason (DELETED_TESTS.md, DELETED_TESTS_RE.md);
+  the tests that used it only as a vehicle for another contract run on ISLA-DTT, with a live boundary read. The
+  assertion audit found no tolerance loosened; two refinement checks run with the exact read ($\theta = 0$), and one
+  padding check is weaker, with its reason recorded.
+
+**Tests.** The ISLA test directory: 453 passed, 240 skipped and 2 xfailed on CPU (377644), and 698 passed, 1 skipped and
+2 xfailed with every CUDA test on a GB300 (377645). The recipe tests: 613 passed and 2 failed (378081), the two
+`test_campaign_c_hooks` tests that fail identically on the base under Slurm. Six training smokes OK, the five interior
+configurations and the surface one (377645, 378080), each asserting that its resolved configuration names no
+`query_independent`, `dim`, `boundary_tokens` or `reynolds` before three training steps. 1.25 of 3 GPU-h.
+
+**For the book.** 30 cells in 05, 06, 09 and 19 broke on the new API (17 root causes, 13 cascades); each now reads its
+names from the code (the signature, `scales.DEFINES`) and runs. The prose of 03 to 07, 09, 12, 13, 15, 16 and 20 to 22
+and the index states the class as it is: the interior task is ISLA-DTT, the surface task interacting, the constructor's
+arguments `n_spatial_dims` and `n_boundary_tokens`, a field `defines` its scale, and `re_z` the recipe's ordinary
+global input. 20 gains the rank-2 limit (@sec-limits-rank2). The standings and their In-flight callouts are unchanged.
+Records: results/campaigns_2026-10-23/isla_api_013/ and results/campaigns_2026-10-23/reynolds_out/.
+
+*Applied for the supervisor by the book lane BOOK-API.*
+
 ## 2026-10-22 — MECH-090: on Tensile2d the fixed compiled path's float32 gradients sit at a one-ulp eager floor, and pytorch/pytorch#195845 added a unit-dependent sink to ISLA's slice-state softmax (registered emulations not confirmed; a post-smoke emulation matches) {#sec-nb-mech090}
 
 **Question.** REF-090's Tensile2d control (@sec-nb-ref090-t2d-control) read (b) by its registered weighing, in which A2
