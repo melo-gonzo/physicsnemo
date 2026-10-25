@@ -482,6 +482,80 @@ def test_frame_contracts():
     _assert_rotated(_run(m, transform(mesh, q), drv @ q.T), base, q)
 
 
+def _float32_case(device, interior):
+    """A float32 model (its boundary read live for the interior task) on ``device``
+    and a case of 500 cells, with 150 prediction points about four units out."""
+    torch.manual_seed(0)
+    m = live(_isla(hidden=64, n_layers=3, n_slices=32, interior=interior))
+    pts, nrm, w, drv = cloud(500, dtype=torch.float32)
+    q = cloud(150, seed=1, scale=(4.0, 4.0, 4.0), dtype=torch.float32)[0]
+    return m.to(device).eval(), soup(pts, nrm, w), drv, q if interior else None
+
+
+def _run_on(device, m, mesh, drv, q):
+    return outputs(
+        _run(m, mesh.to(device), drv.to(device), None if q is None else q.to(device))
+    )
+
+
+#: The float32 contracts' bound, relative to the largest output: float32 roundoff
+#: (eps 1.2e-7) of the moved inputs, amplified through the network and its kernels
+#: (measured below 1e-5 on CPU and CUDA).
+F32_BOUND = 1e-4
+
+
+@pytest.mark.parametrize("interior", [False, True], ids=["surface", "interior"])
+def test_float32_rotation_equivariance_on_every_device(device, interior):
+    """In float32, on CPU and on CUDA (every kernel at ``auto``): a rotation of the
+    boundary, the global direction and the prediction points keeps p and rotates v,
+    to F32_BOUND of the largest output."""
+    m, mesh, drv, q = _float32_case(device, interior)
+    base = _run_on(device, m, mesh, drv, q)
+    R = _rotation().float()
+    rot = _run_on(
+        device, m, transform(mesh, R), drv @ R.T, None if q is None else q @ R.T
+    )
+    tol = F32_BOUND * max(float(v.abs().max()) for v in base.values())
+    assert torch.allclose(rot["p"], base["p"], atol=tol, rtol=0.0)
+    assert torch.allclose(rot["v"], base["v"] @ R.T.to(device), atol=tol, rtol=0.0)
+
+
+@pytest.mark.parametrize("interior", [False, True], ids=["surface", "interior"])
+def test_float32_translation_invariance_on_every_device(device, interior):
+    """In float32, on CPU and on CUDA (every kernel at ``auto``): a translation of
+    the boundary and the prediction points changes no output, to F32_BOUND of the
+    largest output."""
+    m, mesh, drv, q = _float32_case(device, interior)
+    base = _run_on(device, m, mesh, drv, q)
+    t = torch.tensor([3.0, -7.0, 11.0])
+    moved = _run_on(
+        device, m, transform(mesh, shift=t), drv, None if q is None else q + t
+    )
+    tol = F32_BOUND * max(float(v.abs().max()) for v in base.values())
+    assert same(moved, base, atol=tol)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("interior", [False, True], ids=["surface", "interior"])
+def test_the_default_configuration_keeps_the_contracts(interior):
+    """At the default width, slices and layers (the release configuration), on 2000
+    cells in float64, the interior task with its read live: a reflection with a
+    translation keeps p and maps v, to 1e-10 absolute (float64 roundoff through every
+    layer). Slow: the default network on CPU."""
+    torch.manual_seed(0)
+    m = live(_isla(interior=interior)).double().eval()
+    pts, nrm, w, drv = cloud(2000)
+    mesh = soup(pts, nrm, w)
+    q = cloud(200, seed=1, scale=(4.0, 4.0, 4.0))[0] if interior else None
+    base = _run(m, mesh, drv, q)
+    R = orthogonal(3, 0, improper=True)
+    t = torch.tensor([3.0, -7.0, 11.0], dtype=D)
+    moved = _run(
+        m, transform(mesh, R, t), drv @ R.T, None if q is None else q @ R.T + t
+    )
+    _assert_rotated(moved, base, R)
+
+
 def test_frame_is_sampling_consistent():
     """The discriminating contract of the origin-free frame. Under a 10:1 biased
     Poisson subsample with exact HT weights, a model whose frame carries no
