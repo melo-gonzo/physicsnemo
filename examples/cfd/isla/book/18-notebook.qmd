@@ -42413,8 +42413,8 @@ His (c), the library moves, and (d), merging main periodically, are other lanes'
   callouts; interacting ISLA's parameter count is no longer computed from the class, so 05 names its one routing-mass
   scalar and 09 counts the boundary read from ISLA-DTT; the rank-2 refusal is a limit in 20.
 
-**Why the Reynolds feature is kept, and moved exactly.** REYNOLDS-OUT surveyed the class: its only application-specific
-pieces were the `reynolds` argument, the viscosity role and z $\equiv (\log_{10}(U L / \nu) - m) / s$, which
+**Why the Reynolds feature is kept, and moved exactly.** REYNOLDS-OUT surveyed the class: its application-specific
+pieces were the `reynolds` argument, the viscosity role, the fluid names of the scales' vocabulary and z $\equiv (\log_{10}(U L / \nu) - m) / s$, which
 `_case_scales` appended to the global scalars; only the AirfRANS and AeroZoo configurations used them. On AirfRANS
 ISLA-DTT without its scales is 1.208 / 1.203 / 1.177 times worse on pressure / velocity / eddy viscosity (DTT-KNOBS R5),
 so the scales stay, and with them z is ISLA's only channel for the Reynolds number; removing it would need a no-harm
@@ -42424,8 +42424,9 @@ $L$ and $U$. REYNOLDS-OUT measured it on GB300 (LHR 376561 and 376855, 0.41 GPU-
 - z: bitwise on 160 of 160 cases (64, 64 and 32), in float64 and in float32, and the network's z input bitwise in
   every forward;
 - outputs: bitwise wherever the GPU forward repeats itself (AirfRANS ISLA, 6 of 6 cases over both jobs; AeroZoo
-  case 1; every run on CPU). On AirfRANS ISLA-DTT the old and new forms differ by 1.76e-6 to 2.59e-6, inside the old
-  model's own run-to-run spread of 1.89e-6 to 2.37e-6, which starts at the first tree read. On AeroZoo case 0 one
+  case 1; every run on CPU). On AirfRANS ISLA-DTT the old and new forms differ by 1.76e-6 to 2.59e-6, the size of
+  either form's own run-to-run spread (1.89e-6 to 2.37e-6 over repeats of the old form and of the new), which starts at
+  the first tree read. On AeroZoo case 0 one
   new-form forward of three matched the old model at all 24 block tensors, and the other two differed from it and from
   each other by up to 8.8e-6, from a variation that enters before block 0, not from z.
 
@@ -42461,7 +42462,8 @@ arguments `n_spatial_dims` and `n_boundary_tokens`, a field `defines` its scale,
 global input. 20 gains the rank-2 limit (@sec-limits-rank2). The standings and their In-flight callouts are unchanged.
 Records: results/campaigns_2026-10-23/isla_api_013/ and results/campaigns_2026-10-23/reynolds_out/.
 
-*Applied for the supervisor by the book lane BOOK-API.*
+*Applied for the supervisor by the book lane BOOK-API and second-read by a lane reviewer on 2026-10-25, its findings
+applied (scratch/isla-book-api-2026-10-25/SECOND_READ_API.md, SECOND_READ_DISPOSITION.md).*
 
 ## 2026-10-22 — MECH-090: on Tensile2d the fixed compiled path's float32 gradients sit at a one-ulp eager floor, and pytorch/pytorch#195845 added a unit-dependent sink to ISLA's slice-state softmax (registered emulations not confirmed; a post-smoke emulation matches) {#sec-nb-mech090}
 

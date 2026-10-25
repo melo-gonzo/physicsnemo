@@ -151,7 +151,7 @@ so none of them moves with it.
   matters (a speed, a Reynolds number) enters as a global scalar.
 - **Independence from the other prediction points, for interacting ISLA.** In interacting ISLA, the form the interior
   standings score, every prediction point is a token that writes into the slices, so a prediction depends on which other
-  points are in the request (@sec-query-population measures it). ISLA's interior task, ISLA-DTT, makes its prediction points
+  points are in the request (@sec-query-population measures it). ISLA's interior form, ISLA-DTT, makes its prediction points
   read-only, and its independence is a contract (`test_interior_task_contracts`; @sec-arch-modes).
 - **Completeness of the representation.** The anchors are first moments, so two arrangements with the same first moments
   per slice are indistinguishable to a layer (`results/isla_first_moment_collision_2026-09-08.json`).

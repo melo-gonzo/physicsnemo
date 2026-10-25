@@ -1071,7 +1071,7 @@ print(f"**A checkpoint of any version other than {ISLA.__model_checkpoint_versio
       "@sec-standing-geometry; 0.10.0 names a head-frame variant the class does not have; 0.11.0 has tie and on-wall "
       "bands with a first-order arithmetic share and the search's arithmetic in the raw coordinates "
       "(@sec-arch-interior-geometry); and 0.12.0 computes the surface task and ISLA-DTT as the class does but stores other "
-      "constructor arguments and builds interacting ISLA on the interior task. The cell above marks "
+      "constructor arguments, and can also build interacting ISLA on the interior task. The cell above marks "
       "the example's file as written by 0.8.0 and its state dict with 0.8.0's version mark; both are refused:")
 print()
 for label, msg in refusals.items():

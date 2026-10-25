@@ -141,10 +141,9 @@ MI = [
      "`side_walls` and `roof`, built at load, named by role with no condition type, predicting at the vehicle's cells alone, and "
      "the standing's checkpoints were trained with the vehicle alone (@sec-standing-geometry)", f"{GP}; `U_inf_dir`, constant",
      "the same, with `U_inf_dir` concatenated", "the same"),
-    ("airfrans", f"{BC}; {NT}; the inlet velocity `U_inf`, which defines the velocity scale `U` of its declared scales, as its direction; "
-     "and as the one scalar `re_z`, the Reynolds number from its magnitude, the length unit of the given boundary and the "
-     "configuration's constant kinematic viscosity, log-standardized by dataset constants, which the recipe computes in "
-     "ISLA's configuration; ISLA's configuration also reads the far "
+    ("airfrans", f"{BC}; {NT}; the inlet velocity `U_inf`, which defines the velocity scale `U`: its direction, and, through "
+     "the recipe in ISLA's configuration, the one scalar `re_z`, the Reynolds number from its magnitude, the length unit of the "
+     "given boundary and the configuration's constant kinematic viscosity, log-standardized by dataset constants; ISLA's configuration also reads the far "
      "field from the release's `_freestream.vtp` (the condition `freestream`, without fields), and the standing's "
      "checkpoints were trained with the airfoil alone (@sec-standing-geometry)",
      f"{GV}; `U_inf_dir` and the inlet speed standardized over the training airfoils, read by the context projector",

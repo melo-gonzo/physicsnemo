@@ -437,8 +437,7 @@ $$
 $$
 
 and the sum is exact on a condition kept whole. Every measure-weighted
-sum over the tokens (the slice states, the anchors, the prediction points'
-routing mass) is therefore a quadrature of the full surface; the length unit
+sum over the tokens (the slice states, the anchors) is therefore a quadrature of the full surface; the length unit
 and the declared scales are computed from the full surface itself, before
 the draw. The kept cells are spaced evenly in cumulative probability along
 the space-filling curve, so the sample is spread over the surface rather
@@ -2594,7 +2593,7 @@ change in cell count does not recompile). The fused geometry kernel is a
 registered custom operator and stays a leaf of the graph. Some of the
 class's code exists only to keep that graph single: a guard tells the compiler
 that a flattened token axis divides by the token count (`_hint_token_axis`).
-ISLA-DTT, the interior task, is the exception. Its forest and each point's list of sources are
+ISLA-DTT, the interior form, is the exception. Its forest and each point's list of sources are
 sized by the data, which breaks a fullgraph trace, so every interior configuration of the recipe compiles each
 slice block separately instead (`compile: false`, `compile_blocks: true`, @sec-arch-switches).
 

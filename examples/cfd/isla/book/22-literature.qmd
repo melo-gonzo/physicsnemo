@@ -411,7 +411,7 @@ routing that is too soft or too concentrated for the task.
 
 ### Read-only prediction points with a tree-evaluated boundary read {#sec-vs-novel-tree}
 
-*What ISLA does.* ISLA-DTT, ISLA's interior task, makes interior
+*What ISLA does.* ISLA-DTT, ISLA's interior form, makes interior
 prediction points passive readers: they carry no routing mass, so they
 never write into the slices, and after every block each one also reads
 the whole boundary through a learned kernel of relative geometry and an

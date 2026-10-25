@@ -46,7 +46,7 @@ NAMES = [
      "@sec-using-config, @sec-protocol"),
     ("**the normalized slice reads**", "the slice sublayer's routing, pooling and broadcast read the layer-normalized token state `norm_assign(h)`; the raw state enters only the residual identity and the MLP's LayerNorm; part of ISLA, not an option", "@sec-isla-layer"),
     ("**the raw-read variant** (ablation)", "ISLA with the pooling and broadcast reading the raw state; appears only as an ablation and in the one-sentence note on a standing whose ISLA checkpoints are of this variant (`standing.DATASETS[...].reference` is False)", "@sec-isla-layer"),
-    ("**ISLA-DTT**", "ISLA's interior task (`interior=True`): prediction points are read-only and read every boundary cell through a Barnes–Hut forest; interior tasks only", "@sec-arch-modes"),
+    ("**ISLA-DTT**", "ISLA's interior form (`interior=True`): prediction points are read-only and read every boundary cell through a Barnes–Hut forest; interior tasks only", "@sec-arch-modes"),
     ("**interacting / read-only prediction points**", "interacting ISLA's interior tokens carry routing mass and write into the slices / ISLA-DTT's carry none", "@sec-arch-modes"),
     ("**GeoTransolver**, **Transolver**, **GeoTransolver-volume**", "the public models, never modified", "@sec-baselines"),
     ("**GeoTransolver + ISLA's *feature*** (ablation)", "a baseline with one of ISLA's features added to isolate an effect; not a variant anyone ships", "@sec-baselines"),
