@@ -22,7 +22,7 @@
   tile size.
 - The segment-softmax read: the 2x-error rule in float32, bfloat16 and float16, two
   shapes; a width that is not a power of two (the eager fallback on CUDA); the log
-  measure's gradient, which only the eager path gives.
+  measure's gradient on both paths.
 - The fused read and the fused basis under float16 (``_narrow`` and
   ``unsupported_reason`` accept it).
 - The boundary-token draw on CUDA against CPU.
@@ -331,36 +331,48 @@ def test_segment_softmax_read_of_a_width_not_a_power_of_two_is_the_eager_read(h,
 
 @pytest.mark.cuda
 @requires_cuda_triton
-def test_only_the_eager_segment_softmax_read_differentiates_the_log_measure():
-    """``segment_softmax_read`` is documented differentiable in ker, q, k and v. The
-    eager read also differentiates ``logm`` (its CPU, float64 and odd-width paths);
-    the Triton read returns no gradient for it, silently, even when ``logm`` requires
-    one (BUGS_W3.md B2). This pins today's behaviour: if the Triton read gains the
-    gradient or refuses the input, update this test with it. The model's ``logm`` (the
-    sources' log measure fractions) takes no gradient, so it reads neither."""
+def test_both_segment_softmax_reads_differentiate_the_log_measure_alike():
+    """``segment_softmax_read`` is differentiable in ``logm`` on both paths: the
+    Triton read's gradient of ``logm`` (the kernel term's summed over the heads, in
+    float32) obeys the 2x-error rule against the eager read's in float32, beside the
+    float64 eager read on CPU, and asking for it leaves the kernel term's and the
+    query gradients bitwise (one by-point program per point, no atomics). The model's
+    ``logm`` (the sources' log measure fractions) takes no gradient in training."""
     plan_args, leaves, logm, seed, _ = _ssr_case(8, 4, 8, n_q=20)
-    triton = _ssr_run(
-        segment_softmax.segment_softmax_read,
-        plan_args,
-        leaves,
-        logm,
-        seed,
-        "cuda",
-        torch.float32,
-        True,
-    )
+    args = (plan_args, leaves, logm, seed)
+    read = segment_softmax.segment_softmax_read
+    with ran(segment_softmax._SegmentSoftmaxRead) as r:
+        triton = _ssr_run(read, *args, "cuda", torch.float32, True)
+        plain = _ssr_run(read, *args, "cuda", torch.float32)
+    assert r.count(segment_softmax._SegmentSoftmaxRead) == 2
     eager = _ssr_run(
-        segment_softmax._eager_segment_softmax_read,
-        plan_args,
-        leaves,
-        logm,
-        seed,
-        "cuda",
-        torch.float32,
-        True,
+        segment_softmax._eager_segment_softmax_read, *args, "cuda", torch.float32, True
     )
-    assert triton[-1] is None
-    assert eager[-1] is not None and eager[-1].abs().sum() > 0
+    exact = _ssr_run(segment_softmax._eager_segment_softmax_read, *args, "cpu", D, True)
+    assert triton[-1] is not None and triton[-1].dtype == torch.float32
+    _two_x("logm", triton[-1], eager[-1], exact[-1], _LOW[torch.float32])
+    for i, name in ((1, "ker"), (2, "q")):
+        assert torch.equal(triton[i], plain[i]), name
+
+
+def test_the_fused_read_refuses_a_log_measure_that_requires_a_gradient(monkeypatch):
+    """``fused_kernel_read`` is not differentiable in ``logm``: a ``logm`` that
+    requires a gradient is refused, naming it, before any kernel runs (so on any
+    device), and is passed on to the read where no gradient is recorded."""
+    n_q, n_b, h, kc, c, f = 3, 4, 2, 4, 2, 8
+    plan = PairPlan.build(torch.tensor([0, 0, 2]), torch.tensor([1, 3, 0]), n_q, n_b)
+    basis, w = torch.ones(3, f), torch.ones(h, f)
+    q, k, v = torch.ones(n_q, h, kc), torch.ones(n_b, h, kc), torch.ones(n_b, h, c)
+    logm = torch.zeros(n_b, requires_grad=True)
+    with pytest.raises(ValueError, match="logm"):
+        fused_read.fused_kernel_read(basis, w, logm, q, k, v, plan, 0.5)
+    monkeypatch.setattr(
+        fused_read, "_FusedKernelRead", types.SimpleNamespace(apply=lambda *a: "read")
+    )
+    with torch.no_grad():
+        assert (
+            fused_read.fused_kernel_read(basis, w, logm, q, k, v, plan, 0.5) == "read"
+        )
 
 
 # --------------------------------------------------------------------------- float16 narrow paths

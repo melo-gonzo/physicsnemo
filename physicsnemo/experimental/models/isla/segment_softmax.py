@@ -160,9 +160,12 @@ if HAS_TRITON:
     @triton.jit
     def _ssr_bwd_point_kernel(
         off_ptr, bj_ptr, ker_ptr, logm_ptr, q_ptr, k_ptr, v_ptr, lse_ptr, dsum_ptr, dout_ptr, dq_ptr, dker_ptr,
-        scale, H: tl.constexpr, C: tl.constexpr, KC: tl.constexpr, BLOCK: tl.constexpr,
+        dlogm_ptr, scale, H: tl.constexpr, C: tl.constexpr, KC: tl.constexpr, BLOCK: tl.constexpr,
+        LOGM_GRAD: tl.constexpr,
     ):  # fmt: skip
-        """One point: dq[s] and the kernel-term gradient of its pairs."""
+        """One point: dq[s] and the kernel-term gradient of its pairs (with
+        ``LOGM_GRAD``, also the log measure's, the kernel-term gradient summed over
+        the heads, in float32)."""
         s = tl.program_id(0).to(tl.int64)
         start = tl.load(off_ptr + s)
         end = tl.load(off_ptr + s + 1)
@@ -202,6 +205,8 @@ if HAS_TRITON:
             tl.store(
                 dker_ptr + p[:, None] * H + hh[None, :], dz.to(dker_ptr.dtype.element_ty), mask=msk[:, None]
             )
+            if LOGM_GRAD:
+                tl.store(dlogm_ptr + p, tl.sum(dz, axis=1), mask=msk)
         tl.store(dq_ptr + s * (H * KC) + tl.arange(0, H * KC), tl.reshape(dq, [H * KC]))
 
     @triton.jit
@@ -295,10 +300,15 @@ class _SegmentSoftmaxRead(torch.autograd.Function):
         dker = torch.empty_like(ker)
         dk = torch.zeros(plan.n_b, h, kc, device=q.device, dtype=torch.float32)
         dv = torch.zeros(plan.n_b, h, c, device=q.device, dtype=torch.float32)
+        ### d logit[p, h] / d logm[p] = 1: the log measure's gradient is the kernel term's
+        ### summed over the heads, computed only when asked for.
+        logm_grad = ctx.needs_input_grad[1]
+        dlogm = torch.empty(logm.shape, device=q.device, dtype=torch.float32) if logm_grad else None
         if n_q:
             _ssr_bwd_point_kernel[(n_q,)](
-                plan.q_offsets, plan.bj, ker, logm, q, k, v, lse, dsum, dout, dq, dker, scale,
-                H=h, C=c, KC=kc, BLOCK=BLOCK_PAIRS, num_warps=NUM_WARPS,
+                plan.q_offsets, plan.bj, ker, logm, q, k, v, lse, dsum, dout, dq, dker,
+                dlogm if logm_grad else dq, scale,
+                H=h, C=c, KC=kc, BLOCK=BLOCK_PAIRS, LOGM_GRAD=logm_grad, num_warps=NUM_WARPS,
             )  # fmt: skip
         if plan.n_b:
             src, chunk_idx = _source_items(plan, SOURCE_CHUNK)
@@ -308,7 +318,8 @@ class _SegmentSoftmaxRead(torch.autograd.Function):
                     dk, dv, scale, SOURCE_CHUNK,
                     H=h, C=c, KC=kc, BLOCK=BLOCK_PAIRS, num_warps=NUM_WARPS,
                 )  # fmt: skip
-        return dker, None, dq.to(q.dtype), dk.to(k.dtype), dv.to(v.dtype), None, None
+        dlogm = dlogm.to(logm.dtype) if logm_grad else None
+        return dker, dlogm, dq.to(q.dtype), dk.to(k.dtype), dv.to(v.dtype), None, None
 
 
 def _eager_segment_softmax_read(ker, logm, q, k, v, plan: PairPlan, scale: float):
@@ -337,8 +348,8 @@ def segment_softmax_read(
     """Each point's softmax-weighted read of its pairs' values, ``(n_q, H, C)`` in float32
     (float64 if the inputs are): ``ker`` ``(P, H)`` the pairs' kernel terms, ``logm``
     ``(P,)``, ``q`` ``(n_q, H, KC)``, ``k`` ``(n_b, H, KC)``, ``v`` ``(n_b, H, C)``;
-    ``scale`` defaults to ``1 / sqrt(KC)``. Differentiable in ``ker``, ``q``, ``k`` and
-    ``v``."""
+    ``scale`` defaults to ``1 / sqrt(KC)``. Differentiable in ``ker``, ``logm``, ``q``,
+    ``k`` and ``v``."""
     if scale is None:
         scale = 1.0 / math.sqrt(q.shape[2])
     h, kc, c = q.shape[1], q.shape[2], v.shape[2]
