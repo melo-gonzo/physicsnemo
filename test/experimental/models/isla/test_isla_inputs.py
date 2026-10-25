@@ -100,7 +100,9 @@ def _assert_covariant(m, call, improper):
     R = orthogonal(3, 4, improper)
     out = call(R, torch.tensor([2.0, -5.0, 1.0], dtype=D))
     for name, spec in m.output_schema.items():
-        assert torch.allclose(out[name], law(base[name], R, spec.rank), atol=1e-11), (
+        assert torch.allclose(
+            out[name], law(base[name], R, spec.rank), atol=1e-11, rtol=0.0
+        ), (
             name,
             improper,
         )

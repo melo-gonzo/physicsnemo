@@ -67,8 +67,8 @@ def _rows(out, sl):
 
 def _assert_rotated(rot, base, q, atol=1e-10):
     rot, base = outputs(rot), outputs(base)
-    assert torch.allclose(rot["p"], base["p"], atol=atol)
-    assert torch.allclose(rot["v"], base["v"] @ q.T, atol=atol)
+    assert torch.allclose(rot["p"], base["p"], atol=atol, rtol=0.0)
+    assert torch.allclose(rot["v"], base["v"] @ q.T, atol=atol, rtol=0.0)
 
 
 def _rotation(seed=0):
@@ -274,8 +274,8 @@ def test_geo_pool_then_project_is_exact():
 
 
 def test_interior_task_contracts():
-    """The interior task, ISLA-DTT (here with its boundary read at its zero
-    initialization; test_isla_tree_read.py exercises the read): the prediction points
+    """The interior task, ISLA-DTT (its boundary read live, at the default opening
+    angle but for the refinement check): the prediction points
     read every block's slices and never write into them, so a prediction is exactly
     independent of the other points of the request (alone, a prefix, any order, any
     chunking), while

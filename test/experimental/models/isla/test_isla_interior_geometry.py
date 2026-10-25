@@ -41,6 +41,7 @@ from physicsnemo.mesh.primitives.surfaces import cube_surface, sphere_icosahedra
 from physicsnemo.nn.functional.geometry.sdf import _closest_point_weights
 from test.experimental.models.isla._meshes import (
     cloud,
+    live,
     orthogonal,
     outputs,
     soup,
@@ -75,12 +76,14 @@ def _model(**kw):
 def test_interior_contracts():
     """Rotation and reflection covariance, translation invariance and geometric-scale
     invariance in the interior task, with the prediction-point directions computed
-    inside; the distance channel is live."""
+    inside; the distance channel is live, and so is the boundary read (``live``, at
+    the default opening angle: the forest is built in the boundary's own frame and
+    scale, so it is the same in every pose)."""
     pts, nrm, w, _ = cloud(200)
     mesh = soup(pts, nrm, w)
     drv = torch.tensor([0.3, 1.0, 0.2], dtype=D)
     q, _, _, _ = cloud(40, seed=1, scale=(4.0, 4.0, 4.0))
-    m = _model()
+    m = live(_model())
 
     def call(R=None, t=None, k=1.0, q=q):
         R = torch.eye(3, dtype=D) if R is None else R
@@ -98,8 +101,8 @@ def test_interior_contracts():
     for improper in (False, True):
         R = orthogonal(3, 4, improper)
         out = call(R, torch.tensor([2.0, -5.0, 1.0], dtype=D), k=2.5)
-        assert torch.allclose(out["p"], base["p"], atol=1e-11), improper
-        assert torch.allclose(out["v"], base["v"] @ R.T, atol=1e-11), improper
+        assert torch.allclose(out["p"], base["p"], atol=1e-11, rtol=0.0), improper
+        assert torch.allclose(out["v"], base["v"] @ R.T, atol=1e-11, rtol=0.0), improper
     ### the distance channel is live: moving the queries off the boundary changes p
     far = call(q=q * 3.0)
     assert not torch.allclose(far["p"], base["p"], atol=1e-6)
@@ -493,6 +496,9 @@ def test_on_wall_queries_take_the_least_norm_normal(dim):
             0, mesh.cells.reshape(-1), n.repeat_interleave(2, 0)
         )
         assert torch.allclose(u, 0.5 * at, atol=1e-15, rtol=0)
+        ### relative on purpose (the default rtol 1e-5): circle_2d places its
+        ### vertices in float32, so the segments' angle is pi / 64 only to about 1e-8
+        ### relative (measured 2e-8), which is the mesh and not the geometry's roundoff
         assert torch.allclose(
             u.norm(dim=-1), torch.full_like(d, math.cos(math.pi / 64)), atol=1e-15
         )
@@ -930,6 +936,8 @@ def test_a_fold_is_signed_by_the_region_around_it(dtype, device):
         q.to(device, dtype), mesh.points.to(device, dtype), mesh.cells.to(device)
     )
     assert d.dtype == dtype and (d > 0).all()
+    ### relative on purpose: the offsets span three decades (1e-4 to 0.1) and the
+    ### distance's error scales with them (measured 2.5e-8 relative in float64)
     assert torch.allclose(d.double().cpu(), off, rtol=1e-5, atol=0)
 
 

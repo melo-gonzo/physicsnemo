@@ -1781,7 +1781,8 @@ def test_query_chunks_equal_the_forward_pass_and_its_gradients(theta, vectors, c
     m.zero_grad(set_to_none=True)
     torch.manual_seed(3)
     chunked = _chunked_step(m, kw, loss_of, 37)
-    assert same(chunked, {k: v.detach() for k, v in full.items()}, atol=1e-12)
+    ### absolute (rtol 0): the chunks sum in another order (measured 7e-12 on far_sphere)
+    assert same(chunked, {k: v.detach() for k, v in full.items()}, atol=1e-11)
     ### gradients that vanish analytically (a bias every slice logit shares) are roundoff on both sides
     scale = max(float(g.abs().max()) for g in ref.values())
     for name, p in m.named_parameters():
