@@ -13,6 +13,12 @@ import records as R
 # HiLiftAeroML files that store more of the domain's boundary than the wing (BOUNDARY-AUDIT section 1)
 _hl = [int(x.replace(",", "")) for x in re.search(r"only the wing on ([\d,]+) of ([\d,]+) files", " ".join(R.load("boundary_audit", "REPORT.md").split())).groups()]
 HL_BUT = {1: "one", 2: "two", 3: "three"}.get(_hl[1] - _hl[0], f"{_hl[1] - _hl[0]:,}")
+# the symmetry plane's per-case check: its tolerance and the census of the canonical cases (HL-SYMPLANE)
+_hsp = " ".join(R.load("hl_symplane", "RESULTS.md").split())
+HL_TAU = f'{float(re.search(r"\*\*tau\*\* = max h \+ eps = \*\*([\d.]+) in\*\*", _hsp).group(1)):.4f}'
+HL_NCASE, HL_PASS, HL_WV = re.search(r"\| -medium, every folder with a wing \| (\d+) \| (\d+) \| ([\d.]+) in", _hsp).groups()
+HL_WV = f"{float(HL_WV):.3f}"
+assert HL_PASS == HL_NCASE
 from matplotlib.colors import TwoSlopeNorm
 RES = Path("..") / "results"
 J = lambda p: json.load(open(RES / p))
@@ -292,13 +298,7 @@ plt.show()
 
 ### Files, conversion and normalization {#sec-data-hilift}
 
-**1,800 cases on a full grid of 180 geometries by ten angles, in imperial units, with curated manifests for every split.** Each case is a `geo_LHC<nnn>_AoA_<a>` directory; the recipe reads the boundary tensordict (`geo_LHC*/*.pdmsh/_tensordict/boundaries/vehicle`) and merges the parent's `global_data` (`U_inf`, `p_inf`, `rho_inf`, `T_inf`, `L_ref`). Units are slug, inch, second and Rankine; the figures convert positions to meters for display only. The targets are the projected averages `PROJ(AVG(P))`, `PROJ(AVG(T))`, `PROJ(AVG(RHO))`, `PROJ(AVG(U))` and `AVG(TAU_WALL)` on the surface cells, nondimensionalized from the case's `global_data`, renamed `pressure`, `temperature`, `density`, `velocity` and `tau_wall`, and standardized with fixed constants in the dataset yaml (pressure mean −0.5 and standard deviation 1; temperature 1.00 / 0.002; density 1.0 / 0.02; velocity 0.20; wall shear 0.003). A case has about 290 million surface cells, the largest surface in the book, so a 200,000-cell draw is a $10^{-3}$ sample of it. All but `{python} HL_BUT` files store the wing alone, without the far field or the symmetry plane of the CFD domain. The recipe builds the far field's inlet and outlet as the dataset file's first transform (`AddHemisphereBoundaries`), equal to the stored far field bit for bit where one exists, and canonical ISLA's configuration reads them beside the deduplicated wing. The symmetry plane is not read. It is the far field's $y = 0$ disk with the closed root cap that the dataset's own source STL files hold cut out, applied to a case only after a check that the case's own root points lie on that cap, so that a case failing the check gets no plane (@sec-oq-whole-boundary). GeoTransolver's and Transolver's inputs are unchanged, bitwise. The numbers here come from checkpoints trained reading the wing alone, and the final reference run (@sec-ledger) retrains ISLA with the inlet and outlet (@sec-oq-whole-boundary). Every split is a curated manifest of one pinned revision of the dataset.
-
-::: {.callout-note title="In flight"}
-HiLiftAeroML's boundary here lacks its symmetry plane. The plane built at load from the far field's $y = 0$ disk
-with the source STL's root cap cut out, checked case by case against each case's own root points, is being built, and
-the ledger (@sec-ledger) tracks it.
-:::
+**1,800 cases on a full grid of 180 geometries by ten angles, in imperial units, with curated manifests for every split.** Each case is a `geo_LHC<nnn>_AoA_<a>` directory; the recipe reads the boundary tensordict (`geo_LHC*/*.pdmsh/_tensordict/boundaries/vehicle`) and merges the parent's `global_data` (`U_inf`, `p_inf`, `rho_inf`, `T_inf`, `L_ref`). Units are slug, inch, second and Rankine; the figures convert positions to meters for display only. The targets are the projected averages `PROJ(AVG(P))`, `PROJ(AVG(T))`, `PROJ(AVG(RHO))`, `PROJ(AVG(U))` and `AVG(TAU_WALL)` on the surface cells, nondimensionalized from the case's `global_data`, renamed `pressure`, `temperature`, `density`, `velocity` and `tau_wall`, and standardized with fixed constants in the dataset yaml (pressure mean −0.5 and standard deviation 1; temperature 1.00 / 0.002; density 1.0 / 0.02; velocity 0.20; wall shear 0.003). A case has about 290 million surface cells, the largest surface in the book, so a 200,000-cell draw is a $10^{-3}$ sample of it. All but `{python} HL_BUT` files store the wing alone, without the far field or the symmetry plane of the CFD domain. The recipe builds the far field's inlet and outlet as the dataset file's first transform (`AddHemisphereBoundaries`), equal to the stored far field bit for bit where one exists. The dataset's reader builds the symmetry plane (`AddSymmetryPlane`): the far field's $y = 0$ disk with the closed root cap of the dataset's own source STL files cut out. A case gets the plane only after a check that its own stored root vertices and open root edges lie on the cap's outline, to within {python} HL_TAU in, a tolerance derived from the cap's chords and float32 storage; {python} HL_PASS of the {python} HL_NCASE cases pass, the worst vertex lying {python} HL_WV in from the outline (@sec-oq-whole-boundary). Canonical ISLA's configuration reads the three pieces beside the deduplicated wing, the plane with the no-stress condition the dataset's paper gives it. GeoTransolver's and Transolver's inputs are unchanged, bitwise. The numbers here come from checkpoints trained reading the wing alone, and the final reference run (@sec-ledger) retrains ISLA with the inlet, the outlet and the symmetry plane (@sec-oq-whole-boundary). Every split is a curated manifest of one pinned revision of the dataset.
 
 ```{python}
 #| label: para-data-hilift-duplicates
@@ -347,8 +347,8 @@ print(f"**The Surface task of @sec-surface on the 510-case rung of the deduplica
       f"({S.CONFIG['ISLA']} at 3.75e-4 and 200,000 cells; {S.CONFIG['GeoTransolver']} at 1e-3 and 200,000 cells; "
       f"{S.CONFIG['Transolver']} at 1e-3 and 100,000 cells; sizes in @tbl-drivaerml-configs), with no rotation or translation "
       "augmentation. This rung is one of the two datasets on which the reference configurations were chosen (@sec-selection), on the "
-      "wing as stored. Each checkpoint is scored two ways, as on DrivAerML (@sec-drivaerml-scorings): on the native mesh, and rotated "
-      "and translated with $\\hat g_1$ rotated alike. The uniform point cloud was not scored on the deduplicated wing.")
+      "wing as stored. Each checkpoint is scored three ways, as on DrivAerML (@sec-drivaerml-scorings): on the native mesh, on the "
+      "uniform point cloud, and rotated and translated with $\\hat g_1$ rotated alike.")
 ```
 
 ### Splits {#sec-data-hilift-splits}
@@ -424,10 +424,10 @@ The dataset's volume files carry interior coordinates for 31 of the 1,800 cases 
 span = lambda p: (S.fmt_ratio(min(HL.ratio(b, f, p) for b in S.BASELINES for f in HL_F)),
                   S.fmt_ratio(max(HL.ratio(b, f, p) for b in S.BASELINES for f in HL_F)))
 gain = lambda f: " to ".join(S.fmt_pct(r) for r in sorted((HL.ratio(b, f) for b in S.BASELINES), key=lambda r: abs(r - 1)))
-print(f"**At the 510-case rung of the deduplicated wing, on the native mesh, {both(HL, HL_F)}; rotated and translated, ISLA "
-      "leads both by a wide margin.** Every model reads the unit far-field direction. On the native mesh the baselines' errors are "
-      f"{gain('pressure_l2')} lower than ISLA's on pressure and {gain('tau_wall_l2')} lower on wall shear. Rotated and translated, "
-      f"baseline ÷ ISLA is {span('posed')[0]} to {span('posed')[1]} on the two fields. "
+print(f"**At the 510-case rung of the deduplicated wing, on the native mesh, {both(HL, HL_F)}; on the uniform point cloud and "
+      "rotated and translated, ISLA leads both by a wide margin.** Every model reads the unit far-field direction. On the native mesh the baselines' errors are "
+      f"{gain('pressure_l2')} lower than ISLA's on pressure and {gain('tau_wall_l2')} lower on wall shear. On the uniform point cloud, "
+      f"baseline ÷ ISLA is {span('area')[0]} to {span('area')[1]} on the two fields; rotated and translated, it is {span('posed')[0]} to {span('posed')[1]} on the two fields. "
       "@tbl-hilift-protocols is the standing and @fig-hilift-shifts draws it.")
 ```
 
@@ -435,7 +435,8 @@ print(f"**At the 510-case rung of the deduplicated wing, on the native mesh, {bo
 #| label: make-tbl-hilift-protocols
 #| output: asis
 print(HL.table("tbl-hilift-protocols", "HiLiftAeroML at the 510-case rung of the deduplicated wing, 180 validation cases, the distinct "
-               "cells of 200,000 drawn per case"))
+               "cells of 200,000 drawn per case (on the uniform point cloud, about 200,000 drawn by area from the distinct cells of "
+               "a 1,000,000-cell draw)"))
 ```
 
 ```{python}
@@ -452,16 +453,16 @@ print(f"These numbers are not comparable with a standing scored on the wing as s
 ```{python}
 #| label: fig-hilift-shifts
 #| fig-cap: >
-#|   HiLiftAeroML at the 510-case rung of the deduplicated wing under the two
+#|   HiLiftAeroML at the 510-case rung of the deduplicated wing under the three
 #|   scorings of one checkpoint: the error of each architecture on surface pressure (top) and
 #|   wall shear (bottom), seed mean (marker, printed) and the two seeds (black
 #|   dots), logarithmic axis; ISLA blue squares, GeoTransolver red circles,
 #|   Transolver amber triangles; the dashed line at one is the error of
 #|   predicting zero everywhere; every model reads the unit far-field direction.
 #|   How to read this: on the native row the baselines sit left of ISLA;
-#|   on the rotated row ISLA's marker stays put and the baselines' move right,
+#|   on the point-cloud and rotated rows ISLA's marker stays put and the baselines' move right,
 #|   so the order reverses; the figure does not show where on the aircraft the
-#|   error sits (@sec-de-strata). Data: results/char/hilift_surface_090_dedup.json.
+#|   error sits (@sec-de-strata). Data: results/char/hilift_surface_090_dedup_v2.json.
 protocol_dots(HL, HL_F); plt.show()
 ```
 
@@ -470,9 +471,12 @@ protocol_dots(HL, HL_F); plt.show()
 #| output: asis
 posed_floor = min(HL.err(a, f, "posed") for a in S.BASELINES for f in HL_F)
 dev = [p / n - 1 for f in HL_F for p, n in zip(HL.seeds("ISLA", f, "posed"), HL.seeds("ISLA", f))]
+adev = [p / n - 1 for f in HL_F for p, n in zip(HL.seeds("ISLA", f, "area"), HL.seeds("ISLA", f))]
+bsh = [HL.shift(b, f, "area") for b in S.BASELINES for f in HL_F]
+assert max(adev) < 0, adev
 spread = lambda a, f="pressure_l2": max(HL.seeds(a, f)) / min(HL.seeds(a, f)) - 1
 lvl = [f"{b} on {HL.fields[f]}" for b in S.BASELINES for f in HL_F if HL.verdict(b, f) == "is level with"]
-print(f"Two readings. **First, the seeds of ISLA and Transolver are {100 * spread('ISLA'):.1f}% and {100 * spread('Transolver'):.1f}% apart "
+print(f"Three readings. **First, the seeds of ISLA and Transolver are {100 * spread('ISLA'):.1f}% and {100 * spread('Transolver'):.1f}% apart "
       f"on pressure, GeoTransolver's {100 * spread('GeoTransolver'):.1f}%, so the native ratios carry a few percent of seed noise.** ISLA's "
       f"pressure seeds are {seeds_txt('ISLA', 'pressure_l2')}, GeoTransolver's {seeds_txt('GeoTransolver', 'pressure_l2')} and "
       f"Transolver's {seeds_txt('Transolver', 'pressure_l2')}"
@@ -483,7 +487,10 @@ print(f"Two readings. **First, the seeds of ISLA and Transolver are {100 * sprea
       f"{100 * max(abs(S.Standing(k).shift('ISLA', f, 'posed') - 1) for k in ('drivaerml_surface', 'shift_suv') for f in S.DATASETS[k].headline):.3f}% "
       "of its native error. A check registered on the checkpoints of the nearest-token form required ISLA's posed error to be within 0.2% of "
       "its native error on this dataset (the registered threshold) and failed by the same offset, which persists at the reference "
-      "configuration on both seeds. What produces it on this dataset is not located (@sec-de-limits).")
+      "configuration on both seeds. What produces it on this dataset is not located (@sec-de-limits). "
+      f"**Third, on the uniform point cloud ISLA's error is {-100 * max(adev):.1f}% to {-100 * min(adev):.1f}% below its native "
+      f"error, while each baseline's is {min(bsh):.1f} to {max(bsh):.1f} times its own**, as on the DrivAerML Surface task and "
+      "SHIFT-SUV: the baselines read the mesher's cell density, and ISLA does not.")
 ```
 
 ```{python}
@@ -499,7 +506,7 @@ print(f"Two readings. **First, the seeds of ISLA and Transolver are {100 * sprea
 #|   GeoTransolver's at every angle; from 14° up the errors of all three rise,
 #|   and GeoTransolver's is the lowest at 16°, 18° and 22°; a mean per angle
 #|   does not show the spread of the cases within it. Data:
-#|   results/char/hilift_surface_090_dedup.json (`case_level`).
+#|   results/char/hilift_surface_090_dedup_v2.json (`case_level`).
 BA = CL["by_aoa"]; aoas_ = sorted(int(a) for a in BA)
 fig, ax = plt.subplots(figsize=(7.6, 3.8))
 for a, k in (("ISLA", "isla_ref"), ("GeoTransolver", "gt"), ("Transolver", "t")):
