@@ -1982,7 +1982,10 @@ class FlipBoundaryOrientation(MeshTransform):
 
     def _flip(self, mesh: Mesh) -> Mesh:
         d = mesh.cells.shape[-1]
-        cells = mesh.cells[:, [*range(d - 2), d - 1, d - 2]]
+        ### Slices, not a list index: a list index is copied host-to-device, a sync.
+        cells = torch.cat(
+            (mesh.cells[:, : d - 2], mesh.cells[:, d - 2 :].flip(1)), dim=1
+        )
         cell_data = mesh.cell_data.clone()
         for field in self.normal_fields:
             key = as_nested_key(field)
