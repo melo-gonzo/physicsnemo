@@ -55,10 +55,9 @@ training:
     lr: 3.75e-4
 
 # Per-block torch.compile (model.compile_blocks below): ISLA-DTT's boundary read breaks the whole-model
-# fullgraph trace. compile=true model.query_independent=false model.compile_blocks=false gives interacting
-# ISLA's whole-model compile: one graph, compiled once for every token count (see isla_volume.yaml), with the
-# compile_options below. They are those of mode max-autotune-no-cudagraphs (max_autotune and
-# coordinate_descent_tuning) with Inductor's mix-order reduction off: on that graph it fuses a per-point sum with a sum over the
+# fullgraph trace. The compile_options below are the whole-model compile's (see isla_volume.yaml): those
+# of mode max-autotune-no-cudagraphs (max_autotune and
+# coordinate_descent_tuning) with Inductor's mix-order reduction off: on the whole-model graph it fuses a per-point sum with a sum over the
 # points into one kernel, and torch 2.12 returns the second sum, a (1, n_slices, 1) softmax denominator
 # saved for backward, as (1, n_slices), so the compiled backward fails its first step ("wrong number
 # of dimensions"). torch 2.13 returns it at its shape, but its mix-order column sums still add the padded
@@ -97,7 +96,6 @@ model:
   output_stats: null             # injected by train.py: the dataset's NormalizeMeshFields stats (nut)
   dim: 2                         # the problem is planar: pair with datasets/airfrans_uvolume_2d.yaml (RestrictToPlane first after the uniform draw)
   interior: true                 # predict at prediction_points: passive tokens that read the boundary (ISLA-DTT)
-  query_independent: true        # ISLA-DTT, the interior task's reference form (the class default for interior: true, stated here)
   boundary_tokens: 200000        # boundary tokens drawn per case inside the model (equal to the class default; the airfoil is kept whole)
   hidden: 512                  # the reference configuration (REF-80 verdict, 2026-10-04): most accurate under 80 GiB per GPU on DrivAerML Surface and the 210-wing rung; equal to the class defaults
   n_layers: 12

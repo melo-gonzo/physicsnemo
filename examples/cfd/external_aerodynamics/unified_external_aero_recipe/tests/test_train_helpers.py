@@ -289,7 +289,6 @@ def _isla_dtt_case(n: int, measured: bool = True, seed: int = 0):
         boundary_schemas={"vehicle": {}},
         global_schema={"U_inf_dir": {"rank": 1}},
         interior=True,
-        query_independent=True,
         boundary_tokens=40,
         hidden=16,
         n_layers=2,
@@ -451,16 +450,15 @@ def test_chunked_forward_backward_agrees_across_ranks(tmp_path, loss_type):
 
 
 def test_chunked_step_chunks_isla_dtt():
-    """ISLA-DTT takes the chunked step, also as the interior default
-    (``query_independent=None``); an interacting ISLA never chunks."""
+    """ISLA-DTT, the interior task (``interior=True``), takes the chunked step when
+    the batch has prediction points; a surface ISLA never chunks."""
     from physicsnemo.experimental.models.isla import ISLA
 
-    def isla(query_independent):
+    def isla(interior):
         return ISLA(
             output_schema={"pressure": {"rank": 0}},
             boundary_schemas={"vehicle": {}},
-            interior=True,
-            query_independent=query_independent,
+            interior=interior,
             hidden=16,
             n_layers=1,
             n_slices=4,
@@ -470,7 +468,9 @@ def test_chunked_step_chunks_isla_dtt():
         return {"forward_kwargs": {"prediction_points": Mesh(points=torch.zeros(n, 3))}}
 
     assert train._chunked_step(isla(True), batch(50))
-    assert train._chunked_step(isla(None), batch(50))
+    assert not train._chunked_step(
+        isla(True), {"forward_kwargs": {"prediction_boundaries": ["vehicle"]}}
+    )
     assert not train._chunked_step(isla(False), batch(50))
 
 

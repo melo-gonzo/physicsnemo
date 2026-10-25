@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Contract tests for ISLA-DTT's boundary read (``query_independent=True``).
+"""Contract tests for ISLA-DTT's boundary read (the interior task, ``interior=True``).
 
 Passive prediction points read every boundary cell after every block: a softmax over
 the cells with the log measure fraction as bias, a learned kernel of the pair
@@ -89,7 +89,6 @@ def _model(dim=3, theta=TREE_READ_THETA, randomize=True, seed=0, **kw):
         output_schema=PV,
         global_schema=G,
         interior=True,
-        query_independent=True,
         dim=dim,
         **kw,
     )
@@ -1814,18 +1813,17 @@ def test_query_chunks_pad_the_boundary_side_to_the_token_alignment():
     assert seen == [mesh.n_cells + (-mesh.n_cells) % align]
 
 
-def test_query_chunks_need_query_independent_points():
+def test_query_chunks_need_an_interior_model():
+    """A surface model has no prediction points to chunk."""
     m = ISLA(
         output_schema=PV,
         global_schema=G,
         boundary_schemas={"wall": {}},
-        interior=True,
-        query_independent=False,
         hidden=16,
         n_layers=1,
     )
     mesh, drv, q = _case(n=50, nq=20)
-    with pytest.raises(ValueError, match="query_independent"):
+    with pytest.raises(ValueError, match="interior=True"):
         m.query_chunks(
             boundary_meshes={"wall": mesh}, prediction_points=q, global_data={"g": drv}
         )

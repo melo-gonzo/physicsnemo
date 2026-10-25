@@ -80,7 +80,6 @@ def _model(dim: int) -> ISLA:
         n_layers=1,
         n_slices=4,
         interior=True,
-        query_independent=False,
     ).eval()
 
 

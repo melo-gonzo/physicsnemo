@@ -99,7 +99,6 @@ def _factor(units: dict, s: float, c: float, r: float) -> float:
 
 def _model(
     interior=True,
-    query_independent=False,
     schemas=SCHEMAS,
     globals_=GLOBALS,
     outputs_=OUTPUTS,
@@ -112,7 +111,6 @@ def _model(
         boundary_schemas=schemas,
         global_schema=globals_,
         interior=interior,
-        query_independent=query_independent,
         hidden=32,
         n_layers=2,
         n_slices=8,
@@ -203,13 +201,12 @@ def _run(m, meshes, gd, q=None):
         )
 
 
-@pytest.mark.parametrize("dtt", [False, True], ids=["isla", "isla_dtt"])
 @pytest.mark.parametrize("s, c, r", [(3.7, 0.29, 1.0), (0.05, 12.0, 830.0)])
-def test_similarity_leaves_the_internals_and_scales_the_outputs(dtt, s, c, r):
+def test_similarity_leaves_the_internals_and_scales_the_outputs(s, c, r):
     """(x, v, nu, rho, k, omega, p) -> (s x, c v, s c nu, r rho, c^2 k, (c/s) omega, r c^2 p),
     with a rotation: L -> s L, U -> c U, g rotates, z and every internal state are
     unchanged, and every output is scaled by its units (and rotated by its rank)."""
-    m = _model(query_independent=dtt)
+    m = _model()
     seen = _spy(m)
     meshes, gd, q = _case()
     R = orthogonal(3, 4)
@@ -317,7 +314,6 @@ def test_the_length_unit_is_exact_under_subdivision(dim):
             output_schema={"p": {"rank": 0}},
             boundary_schemas={"wall": {}},
             interior=True,
-            query_independent=False,
             dim=dim,
             hidden=16,
             n_layers=1,
@@ -346,7 +342,7 @@ def test_the_length_unit_is_exact_under_subdivision(dim):
     assert abs(float(centroid_only[0] / lengths[0]) - 1) > 1e-3
 
 
-@pytest.mark.parametrize("config", ["default", "interior", "dtt"])
+@pytest.mark.parametrize("config", ["default", "dtt"])
 def test_declaring_nothing_is_the_release_model(config):
     """Keys that declare nothing (``units: {}``, ``velocity_scale: false``) leave the
     model the unscaled one: bitwise equal to the release configuration with the same
@@ -602,7 +598,6 @@ def test_a_global_source_adds_no_direction():
             boundary_schemas={"airfoil": {}},
             global_schema=globals_,
             interior=True,
-            query_independent=False,
             dim=2,
             reynolds={"mean": 6.15, "std": 0.14},
             hidden=32,

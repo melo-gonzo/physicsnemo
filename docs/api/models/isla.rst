@@ -117,16 +117,15 @@ named boundaries by water filling (a boundary with fewer cells than its share
 is kept whole); within a boundary each cell is drawn with probability
 proportional to its measure (capped at one) by systematic sampling along the
 Morton order of the cell centroids, and carries its Horvitz-Thompson measure,
-so the token count is exactly ``min(cells, boundary_tokens)`` (static shapes,
-one compiled graph) and every measure-weighted read is an unbiased quadrature
+so the token count is exactly ``min(cells, boundary_tokens)`` (static shapes)
+and every measure-weighted read is an unbiased quadrature
 of the full surface. In training the draw's start comes from the global torch
 RNG (``torch.manual_seed`` reproduces it); in evaluation (``model.eval()``) it
 is fixed, so inference is deterministic. A surface task reads every cell it is
-given and samples none. With
-``query_independent=True`` (ISLA-DTT) the prediction points are passive
-readers of the slices and of the boundary cells, so each prediction depends
-on its own point and the boundary alone and any request can be answered in
-chunks.
+given and samples none. The interior task is ISLA-DTT: the prediction points
+are passive readers of the slices and of the boundary cells, so each prediction
+depends on its own point and the boundary alone and any request can be answered
+in chunks.
 
 The unified external-aerodynamics recipe
 (``examples/cfd/external_aerodynamics/unified_external_aero_recipe``) documents

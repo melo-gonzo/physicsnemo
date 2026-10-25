@@ -87,17 +87,22 @@ SCALED_OUT = {
 }
 
 
-def _model(
-    interior=False, schemas=SCHEMAS, output_schema=OUT, query_independent=False, **kw
-):
+def _interior(schemas):
+    """The conditions without their rank-2 fields: the interior task (ISLA-DTT) takes
+    no rank-2 boundary inputs (refused at construction), the surface task does."""
+    return {
+        k: {f: s for f, s in v.items() if s["rank"] < 2} for k, v in schemas.items()
+    }
+
+
+def _model(interior=False, schemas=SCHEMAS, output_schema=OUT, **kw):
     torch.manual_seed(0)
     return (
         ISLA(
             output_schema=output_schema,
-            boundary_schemas=schemas,
+            boundary_schemas=_interior(schemas) if interior else schemas,
             global_schema={"g": {"rank": 1}, "re": {"rank": 0}},
             interior=interior,
-            query_independent=query_independent,
             hidden=32,
             n_layers=2,
             n_slices=8,
@@ -159,7 +164,7 @@ def test_every_condition_s_fields_are_covariant(interior, improper, scaled):
         interior, **(dict(schemas=SCALED, output_schema=SCALED_OUT) if scaled else {})
     )
     assert m.n_global_vectors == 1 + scaled
-    meshes = _meshes()
+    meshes = _meshes(_interior(SCHEMAS) if interior else SCHEMAS)
     q = Q if interior else None
     base = _run(m, meshes, q=q)
     R = orthogonal(3, 3, improper)
@@ -375,23 +380,34 @@ def test_a_condition_s_fields_and_maps_change_the_outputs():
     assert not torch.allclose(_run(m, meshes, q=Q)["p"], base["p"], atol=1e-6)
 
 
-@pytest.mark.parametrize("query_independent", [False, True], ids=["isla", "isla_dtt"])
-def test_every_condition_s_parameters_train_even_when_it_is_absent(query_independent):
+def test_the_interior_task_refuses_rank_2_boundary_inputs():
+    """The interior task's boundary read has no pair contractions for rank-2 inputs,
+    so an interior model with the outlet's rank-2 field is refused; the surface task
+    takes it."""
+    with pytest.raises(NotImplementedError, match="rank-2"):
+        ISLA(
+            output_schema=OUT,
+            boundary_schemas=SCHEMAS,
+            global_schema={"g": {"rank": 1}},
+            interior=True,
+            hidden=32,
+            n_layers=1,
+            n_slices=8,
+        )
+    assert _model().n_boundary_tens == 1
+
+
+def test_every_condition_s_parameters_train_even_when_it_is_absent():
     """DDP needs every parameter in every pass: with the slip condition absent and the
     outlet given without cells, every parameter still receives a gradient. ISLA-DTT
     takes no rank-2 inputs, so its outlet declares none."""
-    schemas = (
-        {**SCHEMAS, "outlet": {"p": {"rank": 0}, "u_rev": {"rank": 1}}}
-        if query_independent
-        else SCHEMAS
-    )
+    schemas = _interior(SCHEMAS)
     torch.manual_seed(0)
     m = ISLA(
         output_schema=OUT,
         boundary_schemas=schemas,
         global_schema={"g": {"rank": 1}, "re": {"rank": 0}},
         interior=True,
-        query_independent=query_independent,
         hidden=32,
         n_layers=2,
         n_slices=8,
@@ -413,34 +429,28 @@ def test_every_condition_s_parameters_train_even_when_it_is_absent(query_indepen
 
 
 def test_a_change_of_condition_subset_compiles_once_per_subset():
-    """Under the whole-model compile, cases of one subset with other cell counts
-    reuse a graph; another subset is another graph, compiled once, and the first
-    subset's graph is reused when its cases come back."""
+    """Under the whole-model compile (the surface task's), cases of one subset with
+    other cell counts reuse a graph; another subset is another graph, compiled once,
+    and the first subset's graph is reused when its cases come back."""
     torch._dynamo.reset()
-    m = _model(interior=True).float()
+    m = _model().float()
     compiled = torch.compile(m, backend="eager", fullgraph=True, dynamic=True)
     gd = {k: v.float() for k, v in GD.items()}
-    q = Q.float()
 
     def case(names, extra):
         sizes = {k: SIZES[k] + extra + 7 * i for i, k in enumerate(names)}
-        return {
+        meshes = {
             k: v.to(torch.float32) for k, v in _meshes(sizes=sizes, seed=extra).items()
+        }
+        return {
+            "boundary_meshes": meshes,
+            "prediction_boundaries": list(meshes),
+            "global_data": gd,
         }
 
     with torch.no_grad():
-        compiled(boundary_meshes=case(SCHEMAS, 0), prediction_points=q, global_data=gd)
-        compiled(
-            boundary_meshes=case(["inlet", "outlet", "no_slip"], 0),
-            prediction_points=q,
-            global_data=gd,
-        )
+        compiled(**case(SCHEMAS, 0))
+        compiled(**case(["inlet", "outlet", "no_slip"], 0))
         with torch._dynamo.config.patch(error_on_recompile=True):
-            compiled(
-                boundary_meshes=case(SCHEMAS, 3), prediction_points=q, global_data=gd
-            )
-            compiled(
-                boundary_meshes=case(["inlet", "outlet", "no_slip"], 5),
-                prediction_points=q,
-                global_data=gd,
-            )
+            compiled(**case(SCHEMAS, 3))
+            compiled(**case(["inlet", "outlet", "no_slip"], 5))

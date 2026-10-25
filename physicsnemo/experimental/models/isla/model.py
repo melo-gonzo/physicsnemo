@@ -170,10 +170,9 @@ enter the encoder as tokens next to the boundary cells and the
 outputs are returned for them only. Their only inputs are their positions and
 the geometry the model computes for them; per-cell boundary inputs (declared per
 condition in ``boundary_schemas``) are carried by the boundary cells of that
-condition. The interior task's reference form is the query-independent one
-(``query_independent=True``, ISLA-DTT; the default ``None`` resolves to it for
-``interior=True``): the prediction-point tokens are passive, they carry no
-routing weight, so at every depth they
+condition. The interior task is ISLA-DTT, the query-independent form: the
+prediction-point tokens are passive, they carry no routing weight, so at every
+depth they
 read the slices, anchors and prototypes the boundary formed and never write into
 them, and after every block each one also reads every boundary cell
 (:mod:`~physicsnemo.experimental.models.isla.tree_read`: a learned kernel of the
@@ -181,17 +180,10 @@ pair's relative geometry and an attention over the cells' states at that depth,
 weighted by each cell's share of the boundary measure and evaluated through a
 Barnes-Hut forest over the cells). The prediction at a point is then a function of
 that point and the boundary alone (any request can be split into chunks with the
-same result). With ``query_independent=False`` (interacting ISLA) the
-prediction points join the encoder as interacting tokens instead: their total
-routing weight is a learned fraction of the total boundary measure, split
-equally over them, so it is invariant to re-representing the same measure
-(splitting a boundary cell in two changes nothing) and scales like an area; a
-prediction then depends on the other points of the request, and the whole model
-compiles in one fullgraph graph. The two tasks own different parameter sets (the
-interior task adds the prediction-point input layer, and the boundary read or the
-routing mass), which is
-why the choice is a constructor argument: a parameter that takes no part in
-a forward pass stops DDP.
+same result). The two tasks own different parameter sets (the interior task adds
+the prediction-point input layer and the boundary read), which is why the choice
+is a constructor argument: a parameter that takes no part in a forward pass stops
+DDP.
 
 **Interior geometry.** A prediction-point token needs a direction (its
 "normal" in every invariant) and a distance to the wall. Both are computed
@@ -230,8 +222,7 @@ whole and its unused share goes to the others), each cell drawn with
 probability :math:`\pi_i` proportional to its measure (capped at one) by
 systematic sampling along the Morton order of the cell centroids. The count is
 exactly :math:`\min(\text{cells}, \text{boundary\_tokens})`, a function of the
-cell counts only, so the draw keeps static shapes and traces into the one
-whole-model graph; each kept cell's measure is its Horvitz-Thompson weight
+cell counts only, so the draw keeps static shapes; each kept cell's measure is its Horvitz-Thompson weight
 :math:`a_i / \pi_i`, so every measure-weighted read is an unbiased quadrature
 of the full surface, exact on a boundary kept whole; and the sample is spread
 along the space-filling curve, so every part of the surface is represented. In
@@ -287,13 +278,11 @@ prediction points are TensorDicts concatenated into one token state over
 padding tokens of no measure that nothing reads), the field inputs enter the invariants and the head's
 coefficients leave as the output fields through cached, schema-ordered
 :class:`~tensordict.PackLayout` objects, and the output ``Mesh`` is built from them.
-With ``query_independent=False`` (a surface task, or interacting ISLA on an interior
-task) the whole model, ``Mesh`` inputs and output
-included, compiles with ``torch.compile(fullgraph=True, dynamic=True)`` into one
-graph for every boundary and query count: surface and interior tasks, boundary
-inputs up to rank 2 (``test_isla_compile.py``). ISLA-DTT does not: its boundary
-read sizes its pairs from the data and breaks a fullgraph trace, so it compiles
-with ``compile_blocks``. The token axis itself stays dense where the arithmetic
+The surface task's whole model, ``Mesh`` inputs and output included, compiles with
+``torch.compile(fullgraph=True, dynamic=True)`` into one graph for every boundary
+count, boundary inputs up to rank 2 (``test_isla_compile.py``). The interior task
+(ISLA-DTT) does not: its boundary read sizes its pairs from the data and breaks a
+fullgraph trace, so it compiles with ``compile_blocks``. The token axis itself stays dense where the arithmetic
 needs it: every softmax over points spans all tokens at once (passive tokens
 excluded by ``log_w = -inf``), the slice anchors are einsums over that axis, the
 fused geometry kernel reads its ``(B, N, .)`` strides, and the boundary read
@@ -442,14 +431,6 @@ def _pad_tokens(tokens: TensorDict, alignment: int) -> TensorDict:
     return padded
 
 
-def _log_count(n: int, like: torch.Tensor) -> float | torch.Tensor:
-    """``log(n)`` of a token count; under torch.compile a 0-d tensor of ``like``'s
-    dtype, since ``math.log`` of a shape would specialize the dynamic shapes on it."""
-    if not torch.compiler.is_compiling():
-        return math.log(n)
-    return torch.full((), n, dtype=torch.float64, device=like.device).log().to(like.dtype)
-
-
 def _refuse_earlier_state_dict(module, state_dict, prefix, local_metadata, *args) -> None:
     """A load_state_dict pre-hook: a state dict of an earlier ISLA is refused with the
     versions named, on every loading path (``Module.load``, ``load_checkpoint``,
@@ -594,8 +575,13 @@ class ISLA(Module):
             ``forward`` takes no ``prediction_points`` and the model has no
             prediction-point parameters. ``True``: an interior task, the
             outputs are predicted at ``prediction_points``, which enter the
-            encoder as tokens (passive or interacting, ``query_independent``);
-            ``forward`` requires them. The two
+            encoder as passive tokens (ISLA-DTT): they carry no routing weight,
+            pass through every block with the same weights and read its slices
+            at matched depth, and after every block they also read every
+            boundary cell (module docstring), so each prediction depends on its
+            own point and the boundary only. ``forward`` requires them. The
+            boundary read breaks the whole-model fullgraph compile (use
+            ``compile_blocks``), and rank-2 boundary inputs are refused. The two
             are different parameter sets (a parameter without a gradient stops
             DDP), so the choice is made at construction.
         boundary_tokens: Interior task only: the number of boundary tokens per
@@ -616,24 +602,6 @@ class ISLA(Module):
             it), in evaluation (``model.eval()``) it is fixed, so inference is
             deterministic. A surface task reads every cell it is given and
             samples none: it takes only the default.
-        query_independent: The interior task's choice between ISLA-DTT and
-            interacting ISLA. ``None`` (default): ``interior``, so the interior
-            task takes its reference form, ISLA-DTT, and a surface task (no
-            prediction points) the interacting one. ``True`` (ISLA-DTT, interior
-            task only): passive prediction points (zero routing weight, no
-            routing-mass parameter); they pass through every block with the
-            same weights and read its slices at matched depth, and after every
-            block they also read every boundary cell (module docstring), so
-            each prediction depends on its own point and the boundary only. The
-            boundary read costs about two to four times the training step of
-            interacting ISLA and breaks the whole-model fullgraph compile (use
-            ``compile_blocks``); rank-2 boundary inputs are not supported with
-            it. ``False`` (interacting ISLA): the prediction points join the
-            encoder as interacting tokens, their total routing weight a learned
-            routing mass (a fraction of the boundary measure), a prediction
-            depends on the other points of the request, and the whole model
-            compiles in one fullgraph graph. The resolved value is stored in
-            the checkpoint's arguments, so a checkpoint names its form.
         hidden: Token width of the slice blocks. The defaults ``hidden=512``,
             ``n_layers=12`` and ``n_slices=512`` are the reference
             configuration (the most accurate under 80 GiB per GPU on DrivAerML
@@ -733,7 +701,6 @@ class ISLA(Module):
         boundary_schemas: Mapping[str, FieldSchemaLike],
         global_schema: FieldSchemaLike | None = None,
         interior: bool = False,
-        query_independent: bool | None = None,
         boundary_tokens: int = BOUNDARY_TOKENS,
         hidden: int = 512,
         n_layers: int = 12,
@@ -819,18 +786,12 @@ class ISLA(Module):
         ### The task structure: a surface task predicts at the cells of the boundaries
         ### forward names and has no prediction-point parameters; an interior task
         ### predicts at prediction points that enter the encoder as tokens, passive
-        ### readers of the boundary (ISLA-DTT, its default) or interacting tokens.
+        ### readers of the boundary (ISLA-DTT).
         self.interior = bool(interior)
         if self.interior and self.dim not in (2, 3):
             raise NotImplementedError(
                 "the interior task's built-in geometry (the exact distance to the boundary "
                 f"surface) is implemented in two and three dimensions; got dim={self.dim}"
-            )
-        self.query_independent = self.interior if query_independent is None else bool(query_independent)
-        if self.query_independent and not self.interior:
-            raise ValueError(
-                "query_independent=True concerns the prediction points of the interior "
-                "task; build with interior=True (a surface task predicts at boundary cells)"
             )
         if isinstance(boundary_tokens, bool) or int(boundary_tokens) != boundary_tokens or boundary_tokens < 1:
             raise ValueError(f"boundary_tokens must be a positive integer; got {boundary_tokens!r}")
@@ -853,8 +814,6 @@ class ISLA(Module):
         }
         self._args["__args__"]["reynolds"] = self.reynolds
         self._args["__args__"]["output_stats"] = self.output_stats
-        ### The resolved form, so a checkpoint never depends on the default.
-        self._args["__args__"]["query_independent"] = self.query_independent
         ### The problem's global data are zero or more global DIRECTIONS (each
         ### enters as a unit direction: one seed term n.g_k per token, one
         ### direction cosine rel.g_k per point-anchor pair, and the head basis
@@ -992,30 +951,19 @@ class ISLA(Module):
         self.head = nn.Linear(hidden, self.n_head_coeffs)
         ### Prediction-point tokens (interior=True): the prediction points enter the
         ### encoder as tokens, carrying the same {n_q, g_k} invariant seeds as the
-        ### boundary tokens plus the parameters of _QueryTokens. With
-        ### query_independent (ISLA-DTT, the interior default) they are passive, with
-        ### no routing mass; with query_independent=False they are INTERACTING
-        ### tokens, exactly SE(d)-covariant, not query-set independent. Outputs are
-        ### returned for these tokens only. The interacting tokens' total routing weight is a
-        ### learned fraction exp(qt.logw) of the TOTAL boundary measure, split
-        ### equally over them: invariant to any re-representation of the same
-        ### discrete measure (splitting a boundary cell in two changes nothing) and
-        ### scaling like an area, so the similarity-gauge contract holds.
-        ### Registered last, so the boundary-side parameter order is that of a
+        ### boundary tokens plus the parameters of _QueryTokens. They are passive
+        ### (ISLA-DTT), with no routing weight. Outputs are returned for these tokens
+        ### only. Registered last, so the boundary-side parameter order is that of a
         ### surface model; a surface model (interior=False) has none of them, so
         ### every parameter it owns takes part in every forward pass.
         self.n_query_features = 2  # the built-in distance channels
         self.qt = (
-            _QueryTokens(
-                hidden,
-                K + self.n_global_scalars + self.n_query_features,
-                routing_mass=not self.query_independent,
-            )
+            _QueryTokens(hidden, K + self.n_global_scalars + self.n_query_features)
             if self.interior
             else None
         )
-        ### ISLA-DTT's boundary read (tree_read.py): with query_independent the passive
-        ### prediction points also read every boundary cell after every block, through
+        ### ISLA-DTT's boundary read (tree_read.py): the passive prediction points of
+        ### the interior task also read every boundary cell after every block, through
         ### a Barnes-Hut forest at TREE_READ_THETA (the private _tree_read_theta, which
         ### tests set to 0 for the exact read). Registered after everything else, so
         ### every other model owns exactly the parameters it has without the read.
@@ -1030,11 +978,11 @@ class ISLA(Module):
         self.tree_read_kernel = "auto"
         self.kernel_basis = None
         self.kernel_reads = None
-        if self.query_independent:
+        if self.interior:
             if self.n_block_tens:
                 raise NotImplementedError(
-                    "query_independent=True with rank-2 boundary inputs (the "
-                    "boundary read's pair contractions are not implemented)"
+                    "the interior task (interior=True, ISLA-DTT) with rank-2 boundary inputs "
+                    "(the boundary read's pair contractions are not implemented)"
                 )
             n_geo = kernel_geo_width(K, self.n_boundary_vecs)
             self.kernel_basis = _KernelBasis(n_geo)
@@ -1621,8 +1569,7 @@ class ISLA(Module):
 
     def _validate_meshes(self, boundary_meshes, prediction_points, prediction_boundaries) -> None:
         """Mesh-level checks for :meth:`forward`: dimensions, declared fields
-        and the task structure (``interior``, ``query_independent``, where the
-        outputs are)."""
+        and the task structure (``interior``, where the outputs are)."""
         d = self.dim
         if not isinstance(boundary_meshes, Mapping) or not boundary_meshes:
             raise ValueError("boundary_meshes must be a non-empty mapping of name to Mesh")
@@ -1790,8 +1737,7 @@ class ISLA(Module):
                 (``interior=True``): a point-cloud ``Mesh`` whose ``points`` are
                 the prediction points (its ``point_data`` is not read), or a bare
                 ``(N, dim)`` tensor. The points enter the encoder as passive
-                readers of the boundary (ISLA-DTT, ``query_independent``, the
-                interior default) or as interacting tokens; each
+                readers of the boundary (ISLA-DTT); each
                 one's built-in geometry, its signed distance to the boundary
                 surface (the cells of ``boundary_meshes``) and the direction
                 from it, is computed inside the model from the exact closest
@@ -1865,13 +1811,12 @@ class ISLA(Module):
         ``chunks.backward()`` carries the leaves' gradients through the boundary side
         once, so the parameters' gradients are those of the unchunked step whose
         loss is the sum of the chunks' (``chunks.n_points`` points in all).
-        ``query_independent=True`` only: interacting points are not a function of
-        each point alone.
+        Interior task only: a surface model has no prediction points to chunk.
         """
-        if not self.query_independent:
+        if not self.interior:
             raise ValueError(
-                "query_chunks needs query_independent=True: with interacting prediction points "
-                "a prediction depends on every point of the request"
+                "query_chunks needs an interior model (interior=True): a surface model has "
+                "no prediction points to chunk"
             )
         return _QueryChunks(self, self._case_inputs(boundary_meshes, prediction_points, global_data))
 
@@ -2235,27 +2180,16 @@ class ISLA(Module):
         if g_scalars is not None:
             q_seed.append(g_scalars[:, None, :].expand(b, nq, -1).to(like.dtype))
         h_q = self.embed(self.qt.seed(torch.cat([*q_seed, builtin], -1)))
-        if self.query_independent:
-            ### Passive queries: log-weight -inf leaves them out of every softmax
-            ### over points (routing prototypes, anchors, slice states, head-frame
-            ### anchors), so they read every block's slices and never write.
-            q_logw = log_w.new_full((b, nq, 1), -math.inf)
-        else:
-            ### The query tokens' total routing weight is a learned fraction of the
-            ### total boundary measure, split equally (see __init__): rescaling the
-            ### geometry (areas x k^2) shifts every token's log-weight by the same
-            ### 2 log k, so the similarity-gauge contract holds exactly.
-            q_logw = (
-                self.qt.logw.to(log_w.dtype)
-                + torch.logsumexp(log_w, dim=1, keepdim=True)
-                - _log_count(nq, log_w)
-            )
+        ### Passive queries: log-weight -inf leaves them out of every softmax
+        ### over points (routing prototypes, anchors, slice states, head-frame
+        ### anchors), so they read every block's slices and never write.
+        q_logw = log_w.new_full((b, nq, 1), -math.inf)
         q_tokens = TensorDict(
             h=h_q,
             r=query_points / gauge,
             n_hat=q_nhat,
             g_hat=q_g,
-            log_w=q_logw.expand(b, nq, 1),
+            log_w=q_logw,
             **self._block_extras(None, None, b, nq, like),
             batch_size=[b, nq],
         )

@@ -20,8 +20,8 @@
 # ---------------------------------------------------------------------------
 # Boundary -> interior on DrivAerML volume data. Interior task
 # (`interior: true`): the outputs are predicted at `prediction_points`, the
-# dataset's interior point cloud passed as a Mesh. The model is ISLA-DTT
-# (`query_independent: true`): the prediction points are passive tokens, which
+# dataset's interior point cloud passed as a Mesh. The model is ISLA-DTT, the
+# interior task's one form: the prediction points are passive tokens, which
 # read the slices the boundary forms at every depth without writing into them
 # and after every block read every boundary cell, so each prediction depends on
 # its own point and the boundary alone. The same mesh contract as
@@ -73,14 +73,12 @@ training:
 
 # Per-block torch.compile (model.compile_blocks below), not the whole-model
 # compile: ISLA-DTT's boundary read sizes its pairs from the data and breaks the
-# whole-model fullgraph trace. The whole-model compile is interacting ISLA's
-# (compile=true model.query_independent=false model.compile_blocks=false), with
-# the compile_options kept below, the fastest way to run it: the forward, Mesh in
-# and out, traces to one graph with no breaks (fullgraph) and compiles once with
-# dynamic shapes for every token count, so the case-to-case change in boundary
-# and point counts does not recompile (the in-model boundary draw's token count,
-# min(cells, boundary_tokens), is a symbolic size of the same graph; one
-# exception: boundaries with equal cell counts in the first case are tied by
+# whole-model fullgraph trace. The compile_options kept below are the
+# whole-model compile's, the surface task's (the surface configs point here),
+# the fastest way to run it: the forward, Mesh in and out, traces to one graph
+# with no breaks (fullgraph) and compiles once with dynamic shapes for every
+# token count, so the case-to-case change in boundary counts does not recompile
+# (one exception: boundaries with equal cell counts in the first case are tied by
 # Dynamo's duck sizing, and the first case where they differ compiles once more;
 # validation, in evaluation mode, compiles its own graph). The options of max-autotune-no-cudagraphs on purpose
 # (mix-order reduction off, see isla_volume_airfrans.yaml): plain max-autotune also captures CUDA graphs, which are static-shape and would
@@ -123,7 +121,6 @@ model:
   global_schema:
     U_inf_dir: {rank: 1}         # the unit freestream direction, read from global_data.U_inf_dir
   interior: true                 # predict at prediction_points: passive tokens that read the boundary (ISLA-DTT)
-  query_independent: true        # ISLA-DTT, the interior task's reference form (the class default for interior: true, stated here)
   boundary_tokens: 200000        # boundary tokens drawn per case inside the model (equal to the class default)
   hidden: 512                  # the reference configuration (REF-80 verdict, 2026-10-04): most accurate under 80 GiB per GPU on DrivAerML Surface and the 210-wing rung; equal to the class defaults
   n_layers: 12
