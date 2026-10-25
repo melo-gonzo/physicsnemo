@@ -52,24 +52,33 @@ def _numpy(cells) -> np.ndarray:
     return cells.numpy() if isinstance(cells, torch.Tensor) else np.asarray(cells)
 
 
+def _strided_fingerprint(rows, dtype: str) -> str:
+    """``"<rows>x<cols>:<md5>"`` of ``FINGERPRINT_ROWS`` evenly strided rows of ``rows``
+    as ``dtype``."""
+    n, d = int(rows.shape[0]), int(rows.shape[1])
+    idx = (np.arange(FINGERPRINT_ROWS, dtype=np.int64) * max(n - 1, 0)) // (
+        FINGERPRINT_ROWS - 1
+    )
+    if isinstance(rows, torch.Tensor):
+        sample = rows[torch.from_numpy(idx)].numpy() if n else np.zeros((0, d), dtype)
+    else:
+        sample = np.asarray(rows[idx]) if n else np.zeros((0, d), dtype)
+    digest = hashlib.md5(
+        np.ascontiguousarray(sample, dtype=dtype).tobytes()
+    ).hexdigest()
+    return f"{n}x{d}:{digest}"
+
+
 def connectivity_fingerprint(cells) -> str:
     """``"<rows>x<cols>:<md5>"`` of ``FINGERPRINT_ROWS`` evenly strided rows of the
     connectivity (int64, little-endian): cheap enough for every load, and it changes
     with the cell count, the column count or any sampled row."""
-    n, d = int(cells.shape[0]), int(cells.shape[1])
-    idx = (np.arange(FINGERPRINT_ROWS, dtype=np.int64) * max(n - 1, 0)) // (
-        FINGERPRINT_ROWS - 1
-    )
-    if isinstance(cells, torch.Tensor):
-        sample = (
-            cells[torch.from_numpy(idx)].numpy() if n else np.zeros((0, d), np.int64)
-        )
-    else:
-        sample = np.asarray(cells[idx]) if n else np.zeros((0, d), np.int64)
-    digest = hashlib.md5(
-        np.ascontiguousarray(sample, dtype="<i8").tobytes()
-    ).hexdigest()
-    return f"{n}x{d}:{digest}"
+    return _strided_fingerprint(cells, "<i8")
+
+
+def points_fingerprint(points) -> str:
+    """The same for the points (float32, little-endian), sampled with the same striding."""
+    return _strided_fingerprint(points, "<f4")
 
 
 def _splitmix(x: np.ndarray) -> np.ndarray:

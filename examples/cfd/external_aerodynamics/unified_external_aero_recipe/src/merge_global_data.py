@@ -46,6 +46,7 @@ module before Hydra instantiation.
 
 from __future__ import annotations
 
+import inspect
 import logging
 import zlib
 from collections.abc import Sequence
@@ -118,15 +119,20 @@ class MeshReaderWithGlobalData(MeshReader):
         them through ``apply_to_domain`` while the surface's draw, centre and
         pose stay those of the bare surface.  Empty (default): a ``Mesh``.
     whole_surface_transforms : sequence of MeshTransform
-        Transforms that place the ``domain_boundaries`` from the surface at
+        Transforms that place or add domain boundaries from the surface at
         full resolution, before its subsample (DrivAerML's
         ``PlaceGroundUnderBody``: the ground through the whole vehicle's lowest
-        point, which a subsample can miss).  Each is applied, in the files' raw
+        point, which a subsample can miss; HiLift's ``AddSymmetryPlane``, which
+        checks every stored root vertex).  Each is applied, in the files' raw
         coordinates, to a :class:`~physicsnemo.mesh.DomainMesh` whose
         boundaries are the whole surface (under its directory's name, read from
-        its memory map) and the domain boundaries; it may move only the domain
-        boundaries (a transform that replaces the surface is refused).  Needs
-        ``domain_boundaries``.
+        its memory map) and the domain boundaries; a transform whose
+        ``apply_to_domain`` declares a ``case`` parameter also gets the case
+        name (the first path component below the reader root).  It may move
+        the domain boundaries and add boundaries under new names; one that
+        replaces the surface or drops a boundary is refused.  The boundaries it
+        adds join the sample's, so with them the sample is a
+        :class:`~physicsnemo.mesh.DomainMesh` even without ``domain_boundaries``.
     drop_duplicate_cells : bool, default False
         Drop every extra copy of a cell (a cell whose sorted vertex triple
         repeats a lower-indexed cell's; see :mod:`dedup`) before the model
@@ -169,10 +175,6 @@ class MeshReaderWithGlobalData(MeshReader):
                 f"domain_boundaries names a boundary twice: {self._domain_boundaries!r}"
             )
         self._whole_surface_transforms = list(whole_surface_transforms)
-        if self._whole_surface_transforms and not self._domain_boundaries:
-            raise ValueError(
-                "whole_surface_transforms place the domain_boundaries; none are named"
-            )
         self._drop_duplicates = bool(drop_duplicate_cells)
         self._duplicate_masks = duplicate_cell_masks
         self._duplicate_logged = 0
@@ -185,12 +187,15 @@ class MeshReaderWithGlobalData(MeshReader):
         ### fields are invariant under ``Mesh.transform``.
         self._store_case_key = bool(store_case_key)
 
-    def _case_key(self, index: int) -> torch.Tensor:
+    def _case_name(self, index: int) -> str:
         sample_path = self._paths[index]
         try:
-            name = sample_path.relative_to(self._root).parts[0]
+            return sample_path.relative_to(self._root).parts[0]
         except ValueError:
-            name = sample_path.name
+            return sample_path.name
+
+    def _case_key(self, index: int) -> torch.Tensor:
+        name = self._case_name(index)
         return torch.tensor(zlib.crc32(name.encode()) & 0x7FFFFFFF, dtype=torch.int64)
 
     def _load_sample(self, index: int) -> Mesh:
@@ -313,7 +318,7 @@ class MeshReaderWithGlobalData(MeshReader):
         self, index: int, boundaries: dict[str, Mesh]
     ) -> dict[str, Mesh]:
         """The domain boundaries after ``whole_surface_transforms``, which see the
-        surface at full resolution beside them."""
+        surface at full resolution beside them, with the boundaries they add."""
         path = self._paths[index]
         name = path.name
         if name in boundaries:
@@ -325,18 +330,31 @@ class MeshReaderWithGlobalData(MeshReader):
             interior=Mesh(points=whole.points[:0]),
             boundaries={name: whole, **boundaries},
         )
+        case = self._case_name(index)
         for t in self._whole_surface_transforms:
-            domain = t.apply_to_domain(domain)
-            if domain.boundaries[name] is not whole:
+            before = set(domain.boundary_names)
+            if "case" in inspect.signature(t.apply_to_domain).parameters:
+                domain = t.apply_to_domain(domain, case=case)
+            else:
+                domain = t.apply_to_domain(domain)
+            if (
+                name not in domain.boundary_names
+                or domain.boundaries[name] is not whole
+            ):
                 raise ValueError(
                     f"whole_surface_transforms: {t!r} changed the surface {name!r}; they may "
-                    "move only the domain boundaries"
+                    "move only the domain boundaries and add new ones"
                 )
-        return {n: domain.boundaries[n] for n in boundaries}
+            if not before <= set(domain.boundary_names):
+                raise ValueError(
+                    f"whole_surface_transforms: {t!r} dropped the boundaries "
+                    f"{sorted(before - set(domain.boundary_names))!r}"
+                )
+        return {n: domain.boundaries[n] for n in domain.boundary_names if n != name}
 
     def __getitem__(self, index: int) -> tuple[Mesh | DomainMesh, dict[str, Any]]:
         mesh, metadata = self._read_surface(index)
-        if not self._domain_boundaries:
+        if not self._domain_boundaries and not self._whole_surface_transforms:
             return mesh, metadata
         boundaries = {
             name: self._load_domain_boundary(index, name)

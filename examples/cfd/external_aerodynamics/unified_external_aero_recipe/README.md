@@ -812,8 +812,10 @@ python src/train.py model=geotransolver_surface dataset=highlift_surface \
     training.num_epochs=200 sampling_resolution=100000 \
     dataloader.prefetch_factor=4 dataloader.num_workers=4
 
-# HiLift surface (ISLA reference configuration), reading the wing and the hemisphere far
-# field the dataset builds (AddHemisphereBoundaries: inlet, outlet)
+# HiLift surface (ISLA reference configuration), reading the wing, the hemisphere far
+# field the dataset builds (AddHemisphereBoundaries: inlet, outlet) and the symmetry plane
+# its reader builds for each case whose root passes the check (AddSymmetryPlane: symmetry;
+# dataset_paths.highlift_aero_ml_symmetry_check names tools/build_symmetry_check.py's record)
 python src/train.py model=isla_surface_highlift dataset=highlift_surface \
     training.num_epochs=200 sampling_resolution=100000
 
