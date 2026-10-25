@@ -28,14 +28,18 @@ the training log names), the precision of the training config row, and a note wh
 trains ISLA.
 
 Inputs: results/campaigns_2026-10-22/cost_090/extract.jsonl, one line per run made on LHR by extract_cost.py beside it (README.md
-there names each source and its md5). Five standing baseline lanes have no training log left on LHR (cl_r_t2dz_gt, cl_r_t2dz_t,
+there names each source and its md5), and, for the HiLiftAeroML lanes on the deduplicated wing (hldupx_hl_*, the standing's own),
+results/campaigns_2026-10-23/hl_dup_stage2_area/cost/extract.jsonl, made on LHR by the same extract_cost.py (md5 9b87878e,
+unchanged; HL-AREA's COST_REPORT.md names the logs). Five standing baseline lanes have no training log left on LHR (cl_r_t2dz_gt, cl_r_t2dz_t,
 cl_r_jeb_gt, cl_r_jeb_t, cl_r_lug_t); each is priced from the one-epoch smoke lane of the same configuration
 (results/campaigns_2026-10-02/char/cs/cs_r_<task>_<arch>/metrics.jsonl, seed 42), its parameter count from the standing lane's
 scorer rows (results/campaigns_2026-10-02/char/protocols/<run>/native/metrics.jsonl). The lanes trained before the compile fix
 (r090_af_*, r090_lug_*, r090_t2dz_isla) are kept under compiled_before_fix.
 
-Writes results/char/cost_090.json: cost[key][arch] = {peak_gib, step_seconds, n_parameters, gpus, ranks, precision, source, note,
-seeds, per_seed, code, completed}.
+Writes results/char/cost_090_v2.json: cost[key][arch] = {peak_gib, step_seconds, n_parameters, gpus, ranks, precision, source, note,
+seeds, per_seed, code, completed}. The first version of this script priced HiLiftAeroML from the lanes trained on the wing as
+stored (h090_hl_isla, udrv_hl_gt, udrv_hl_t) and wrote results/char/cost_090.json, which is kept as it was; every other entry of
+the two files is equal.
 usage: python cost_090_2026-10-22.py
 """
 
@@ -48,7 +52,12 @@ RES = os.path.dirname(R)
 EXTRACT = "campaigns_2026-10-22/cost_090/extract.jsonl"
 CS = "campaigns_2026-10-02/char/cs"
 PROTOCOLS = "campaigns_2026-10-02/char/protocols"
-EX = {d["run"]: d for d in map(json.loads, open(f"{RES}/{EXTRACT}"))}
+EXTRACT_HL = "campaigns_2026-10-23/hl_dup_stage2_area/cost/extract.jsonl"
+EX = {
+    d["run"]: dict(d, extract=x)
+    for x in (EXTRACT, EXTRACT_HL)
+    for d in map(json.loads, open(f"{RES}/{x}"))
+}
 S2 = ("42", "43")
 FIXED = "code_cmpaf_fix"
 # The cs group's lanes ran on four GB300 ranks (char_lanes_cost_2026-10-04.py); their logs name no devices.
@@ -67,9 +76,9 @@ LANES = {
         "Transolver": "clud_vol_t",
     },
     "hilift": {
-        "ISLA": "h090_hl_isla",
-        "GeoTransolver": "udrv_hl_gt",
-        "Transolver": "udrv_hl_t",
+        "ISLA": "hldupx_hl_isla",
+        "GeoTransolver": "hldupx_hl_gt",
+        "Transolver": "hldupx_hl_t",
     },
     "shift_suv": {
         "ISLA": "r090_suv_isla",
@@ -176,7 +185,7 @@ def lane(key, arch, stem):
         "precision": one(
             (r["config_params"]["precision"] for r in rs.values()), "precision", stem
         ),
-        "source": f"{EXTRACT}: {stem}_seed{{{','.join(seeds)}}}",
+        "source": f"{one((r['extract'] for r in rs.values()), 'extract', stem)}: {stem}_seed{{{','.join(seeds)}}}",
         "note": "; ".join(notes) or None,
         "seeds": list(seeds),
         "per_seed": per,
@@ -250,7 +259,7 @@ for key, arches in BEFORE_FIX.items():
         c = out["cost"][key][a]
         fix = f"the compile fix moves the median step from {b['step_seconds']:.3f} s to {c['step_seconds']:.3f} s (compiled_before_fix)"
         c["note"] = "; ".join(filter(None, (c["note"], fix)))
-json.dump(out, open(f"{R}/cost_090.json", "w"), indent=1)
+json.dump(out, open(f"{R}/cost_090_v2.json", "w"), indent=1)
 for key, d in out["cost"].items():
     print(
         f"== {key}: "

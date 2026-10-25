@@ -91,6 +91,8 @@ FOLDER = {
     "dtt_fast_final_table_p5": "campaigns_2026-10-23",
     "hl_dup_stage2": "campaigns_2026-10-23",
     "hl_dup_stage2_scores": "campaigns_2026-10-23",
+    "hl_symplane": "campaigns_2026-10-23",
+    "hl_dup_stage2_area": "campaigns_2026-10-23",
 }
 
 
