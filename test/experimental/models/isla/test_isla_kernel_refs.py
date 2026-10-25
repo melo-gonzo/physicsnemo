@@ -337,7 +337,10 @@ def test_both_segment_softmax_reads_differentiate_the_log_measure_alike():
     float32) obeys the 2x-error rule against the eager read's in float32, beside the
     float64 eager read on CPU, and asking for it leaves the kernel term's and the
     query gradients bitwise (one by-point program per point, no atomics). The model's
-    ``logm`` (the sources' log measure fractions) takes no gradient in training."""
+    ``logm`` (the sources' log measure fractions) takes no gradient in training.
+    Measured on GB300 (job 383338), relative L2 distance of the ``logm`` gradient to
+    the float64 eager read's on CPU: Triton 2.95e-7, eager float32 on CUDA 1.12e-6,
+    so the 2x rule holds with a wide margin."""
     plan_args, leaves, logm, seed, _ = _ssr_case(8, 4, 8, n_q=20)
     args = (plan_args, leaves, logm, seed)
     read = segment_softmax.segment_softmax_read
@@ -360,10 +363,10 @@ def test_the_eager_segment_softmax_read_in_bfloat16_rounds_its_gradients_once(h,
     """The eager read with bfloat16 ker, q, k and v (the CPU path, and CUDA's where
     the Triton read does not apply) against the float64 read of the same inputs: its
     output and the gradients of ker, q, k and v within one bfloat16 ulp of each
-    float64 tensor's largest entry, 2**-7 (they are computed in float32 and rounded
-    once to bfloat16, at most 2**-8 of it; measured at most 3.0e-3). Casting after the
-    gathers instead added each source's pair gradients up in bfloat16 (BUGS_W1.md B1:
-    0.58 for dv here)."""
+    float64 tensor's largest entry, 2**-7 (the output stays float32, at most 2.7e-6;
+    the gradients are computed in float32 and rounded once to bfloat16, at most 2**-8
+    of it; measured at most 3.0e-3). Casting after the gathers instead added each
+    source's pair gradients up in bfloat16 (BUGS_W1.md B1: 0.58 for dv here)."""
     plan_args, leaves, logm, seed, _ = _ssr_case(h, kc, c, n_q=20)
     leaves = [t.bfloat16().double() for t in leaves]
     eager = segment_softmax._eager_segment_softmax_read

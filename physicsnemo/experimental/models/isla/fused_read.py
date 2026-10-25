@@ -624,7 +624,8 @@ def fused_kernel_read(
     if torch.is_grad_enabled() and logm.requires_grad:
         raise ValueError(
             "fused_kernel_read is not differentiable in logm, which requires a gradient here; "
-            "read through segment_softmax_read for a gradient of the log measures"
+            "for a gradient of the log measures, read through segment_softmax_read, or, in an ISLA "
+            'model whose measure weights require a gradient, set its tree_read_kernel to "reference"'
         )
     if sink is None:
         sink = basis_sink(basis)
