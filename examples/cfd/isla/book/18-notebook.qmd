@@ -42403,11 +42403,13 @@ His (c), the library moves, and (d), merging main periodically, are other lanes'
   `ComputeBoundaryScales` writes the case's $L$ and $U$, computed as the model computes them, and `ComputeLogReynolds`,
   now in float64, writes `re_z`, an ordinary rank-0 global; model.py loses `reynolds`, the viscosity role and z.
 - A generic vocabulary for the scales: the schema key `defines: <name>` replaces `velocity_scale` and the density and
-  viscosity roles, `units` names $L$ and any defined scale, and model.py names no fluid quantity. The key's name is
-  provisional, and Peter has been told.
+  viscosity roles, `units` names $L$ and any defined scale, and model.py names no fluid quantity. Peter approved the
+  key's name with the signature names (below).
 - (e): `dim` becomes `n_spatial_dims`; `boundary_tokens` becomes `n_boundary_tokens`, after Mesh's `n_` counts;
-  `boundary_meshes` and `prediction_boundaries` stay, GLOBE's names. Each rename is its own commit, and Peter may reverse
-  any of the three picks.
+  `boundary_meshes` and `prediction_boundaries` stay, GLOBE's names. Each rename is its own commit.
+- **Peter's approval** (received by 09:15 EDT 2026-10-25), verbatim: "I approve of the new ISLA signature names, by the
+  way. Thanks for not blocking on that". So `n_spatial_dims`, `n_boundary_tokens`, `boundary_meshes`,
+  `prediction_boundaries` and the schema key `defines` are final.
 - One version, ISLA 0.13.0, covers (a), (b) and (e).
 - For the book (this batch): the standings stay interacting ISLA 0.9.0's until the final reference rerun, with their
   callouts; interacting ISLA's parameter count is no longer computed from the class, so 05 names its one routing-mass
@@ -42624,8 +42626,14 @@ EDT 2026-10-25.
   ISLA's DrivAerML forest 6.0 against 8.7 ms; the Warp walk at 400k targets 23.7 against 110 ms for torch; the torch walk
   29 to 31 percent slower than main's for the order contract.
 - **Suites.** Merged with psharpe/isla: GB300 1,696 passed, CPU 1,110 passed, 0 failures. About 4.5 of 6 GPU-h.
-- **Open.** #2170's CI and review. ISLA does not call it yet; when it does, ISLA's
-  fast-against-reference tests must pass `implementation="torch"`.
+- **The pull request** (results/campaigns_2026-10-23/pr_2170/FINAL_REPORT.md, md5 f76f0cf3). CI passed at the opening
+  head 42de1669d. Greptile left one comment: `_resolve_walk` sends float16 trees to Warp on CUDA, and no test compared
+  that walk with torch's. The fix, 62c0f71c5, adds float16 to `test_warp_walk_is_the_torch_walk` and to the
+  opening-threshold test (6 lines, test file only). Every required check passed at 62c0f71c5 (Coverage, Testmon, Test
+  with uv). The pull request is ready for review and blocked only on a required review: it awaits Peter's choice of
+  reviewer. Nobody has been asked, and the one draft reply to Greptile's thread is Peter's to post.
+- **Open.** ISLA does not call the library yet; when it does, ISLA's fast-against-reference tests must pass
+  `implementation="torch"`.
 
 ## 2026-10-25 — GEO-TIEORDER: the on-wall direction follows the cells' order and the queries' precision at near-equal normals; a rule that breaks exact distance ties by position and takes the holding normals' least-norm point on the wall removes it; a candidate for ISLA 0.14.0, not merged {#sec-nb-geo-tieorder}
 
@@ -42781,6 +42789,178 @@ arm.
 
 *Applied by BOOK-NIGHT for the supervisor on 2026-10-25, with the other 2026-10-24 and 2026-10-25 entries above; second-read by a lane reviewer
 (scratch/isla-book-night-2026-10-25/SECOND_READ_NIGHT.md).*
+
+## 2026-10-25 — TEST-BUILD: ISLA's test suite, built to TEST-AUDIT's plan and merged; at its head the whole directory passes on CPU and on a GB300 with no failure, and it pinned six defects, which it recorded and did not fix {#sec-nb-test-build}
+
+**Why.** Peter's direction of about 22:05 EDT 2026-10-24, verbatim: "It's high time we start making sure that ISLA has a
+really good test suite". Lane TEST-BUILD built TEST-AUDIT's plan (@sec-nb-test-audit) on ISLA 0.13.0 (b86c7391d). Records:
+results/campaigns_2026-10-23/test_build/ (FINAL_REPORT.md md5 e6c77eb7, BUGS.md 42546087). Four branches, each changing
+only `test/experimental/models/isla/`; the supervisor merged psharpe/isla-tests-p4 9d8ff72f7, which holds the other three,
+into psharpe/isla as b841486a5.
+
+| part | what it adds | test ids | CPU / GB300 time |
+| --- | --- | --- | --- |
+| P0 | an A/B harness (`goldens/{cases,record,compare}.py`) and bitwise module goldens, 94 cases in 12 groups | 276 | 4.9 s / 48.5 s |
+| P1 | MOD-008a/b/c (`test_isla_release.py`): three configurations, every argument and attribute; float64, rich, 2-D, draw and `query_chunks` goldens; `isla_dtt_v1.mdlus`; version refusals | 79 | 2.5 s / 6.8 s |
+| P2 | properties (`test_isla_dtt_contracts.py` and edits in 12 files: rtol 0, live reads, chunks with the draw, parity, pose, raises) | +34 | 2.3 s |
+| P3 | gradcheck and opcheck | 47 | 5.0 s / 18 s |
+| P3 | kernels against their references, and the 2-D fast geometry | 34 | 0.1 s / 30 s |
+| P3 | determinism: the draw, the kernels, the reference read, the whole model (surface and ISLA-DTT, 3-D and 2-D, float32 and bf16) | 27 | 2.7 s / 31.5 s |
+| P3 | forced-path guards (`_forced.py`, `sys.monitoring`) | 21 | 1.2 s / 1.5 s |
+| P4 | tiers: slow marks, the CI tier `-m "not slow"`, 26 duplicate ids deleted, TF32 restored, the launcher `$T/kernel/isla_tests/submit.sh` | | |
+
+: TEST-BUILD's parts (results/campaigns_2026-10-23/test_build/FINAL_REPORT.md). {#tbl-nb-test-build}
+
+Golden data: 772,210 B against the 1 MB cap (240,239 B at the base). Suites, 0 failed in every run: at the base the CPU tier
+453 passed, 240 skipped, 2 xfailed (380457); at the p4 head the full CPU tier 704 passed, 472 skipped, 6 xfailed (381812),
+the fast tier 687 passed in 129 s (381881), and the GB300 tier 1,191 passed, 7 xfailed in 7:41 (381934). 10.01 of the
+11 GPU-h the supervisor allowed. Each branch was reviewed and its findings fixed; a verifier ran the final suites.
+
+**Defects pinned**, each by a test, none fixed by the lane (BUGS.md):
+- W3-B1: in 3-D edge regions the gradient of the on-wall direction `u` is wrong, since the closest-feature weights are
+  detached (du/dx is (I - uu^T)/r where it should be (I - uu^T - ee^T)/r); the distance is right everywhere; no
+  training run takes a gradient through the boundary or the points. Strict xfail.
+- W3-B2: the Triton segment-softmax read returned no gradient for the log measure, silently, while the eager read
+  differentiates it.
+- W1-B1: the eager read summed its bf16 gradients in bf16 (dv 29 percent off float64).
+- W2-1: float16 autocast on CUDA raised in the fused geometry region. W2-2: float16 autocast on CPU gave NaN when tokens
+  are padded.
+- The core `Module.load` ignores a checkpoint's metadata version. Strict xfail.
+
+KERNEL-BUGS fixed W3-B2, W1-B1, W2-1 and W2-2 (@sec-nb-kernel-bugs). The 0.14.0 assembly regenerates the DRAW-EXACT-tagged
+goldens with the documented `--regenerate`.
+
+## 2026-10-25 — KERNEL-BUGS: four of the pinned defects fixed with every float32 and bfloat16 forward bitwise; the Triton read differentiates the log measure, and the fused tree read refuses measure weights that require a gradient instead of dropping it {#sec-nb-kernel-bugs}
+
+Lane KERNEL-BUGS (results/campaigns_2026-10-23/kernel_bugs/FINAL_REPORT.md, md5 c4672341); psharpe/isla-kernel-bugs
+0d0ce638b on b841486a5, 10 files, +142/-87, merged into psharpe/isla by the supervisor as e44015436. One writer, a reviewer
+("approve with nits", nits fixed); 1.83 of 3 GPU-h.
+
+- **The log measure's gradient (W3-B2).** The Triton backward returns it, a sum over heads computed in float32, only
+  when it is asked for. On a GB300 its relative distance to float64 is 2.95e-7 against eager float32's 1.12e-6; asked
+  for, the backward on the DrivAerML body plan at 200k points takes 30.3 against 29.6 ms and 1.0 GiB more; not asked
+  for, it is bitwise the base's. The fused tree read does not differentiate the log measure: with measure weights that
+  require a gradient, an unsampled interior forward on CUDA now raises a `ValueError` naming
+  `tree_read_kernel="reference"`, where it dropped that gradient silently. The lane notes the alternative, one contract
+  on every path by detaching `log_frac` in `tree_read_walk`, as the maintainer's call.
+- **The eager read's bf16 gradients (W1-B1).** It casts before its gather; against float64, bf16 grad.v goes from 2.9e-1
+  to 1.8e-3, grad.q from 2.6e-2 to 2.0e-3, grad.k from 1.6e-2 to 3.2e-3.
+- **float16 autocast (W2-1, W2-2).** On CUDA `resolve_geo_kernel` picks the fused region only when autocast is off or
+  bf16, from the autocast state before the forward, the same on every rank; on CPU the routing logits normalize float16
+  rows in float32. Both strict xfails now pass.
+- **Bitwise.** The CPU A/B harness: 110 of 110 tensors bitwise for three fixes, and for W1-B1 exactly the six bf16
+  gradient entries it must change; the CUDA goldens 155 of 155; the whole model's float32 and bf16 outputs and every
+  parameter gradient bitwise on a GB300. Under CUDA float16 the gradients change by up to about 1e-3 of their largest
+  entry, toward float64. `goldens_v1.pt` regenerated for those six entries with the documented `--regenerate`.
+- **Suites.** The full CPU tier 708 passed, 472 skipped, 5 xfailed (383618); the GB300 tier 1,196 passed, 5 xfailed
+  (383532). The five strict xfails left: W3-B1 twice, GEO-TIEORDER's quad diagonals twice, and the core `Module.load` gap.
+
+**For the book** (TEST-BUILD and KERNEL-BUGS). 06 gains a section on the class's tests (@sec-using-tests: the tiers and their
+counts, what they hold the code to, the determinism they state, float16), and its kernel bullets state the float16 choice
+and the fused tree read's refusal; 20 gains the five strict expected failures as a limit (@sec-limits-xfail).
+
+## 2026-10-25 — AF-FIX: on AirfRANS with its far field the face forest moves no far-field cell under pose; the far field takes 99.75 percent of ISLA-DTT's slice mass and most of its tree read even next to the wall; four principled fixes proposed, none adopted {#sec-nb-af-fix}
+
+Lane AF-FIX, launched by the supervisor on AF-WHOLE's read (@sec-nb-af-whole-read). Records: results/campaigns_2026-10-23/af_fix/
+(FINAL_REPORT.md md5 7ba2a114, DESIGN.md, PRESSURE_PROBE.md, PREREG_DRAFT.md 553e4714). LHR 381565, 381714 and 381746,
+cpu-short 381569, 381862 and 13 jobs of its child TIE; 3.10 of 6 GPU-h; no commits. A lane-reviewer confirmed the numbers.
+
+- **The tie** (200 full_test cases, posed as the scorer poses them). DTT-POSE's cube-face forest moves 0 far-field cells
+  between trees in every case; the octants move 15.4 / 28.9 / 45.1 percent (min / median / max). On the airfoil the faces
+  move 1 cell in 3 cases. The faces still leave 4.1 / 15.8 / 26.5 percent of posed pairs with no native match, mostly in
+  the airfoil's trees, which sit 27.8 chords from the forest's origin. Rule 1, one set of face trees per declared
+  condition about that condition's own centroid, leaves a median 0.026 percent as a counterfactual and equals DTT-POSE
+  bitwise on one condition.
+- **The near-wall length.** 0.13.0 forms x - p in float64, so every candidate passes NEARWALL's precision gate (p99.9
+  below 2e-7). The viscous length (ii), `distance_softening: {nu: 1, U: -1}` in the `units` grammar, opt-in, with no fluid
+  name in model.py, puts AirfRANS's first node at t = 8.3 against 0.0069 today, with a pose change of 0.018 at p99.9; a
+  floor in the stored frame fails pose (8.4), one about the centroid stays linear (t 0.077), per-condition gauges flip
+  sign on open pieces.
+- **The pressure harm** (the eight AF-WHOLE runs, 16 test cases each). Measured: in W-DTT the slices' mass is 99.75
+  percent far field and their anchors lie about 60 chords from a mid-field point; the tree read gives the airfoil 12
+  percent of the attention 1e-6 to 1e-5 chord off the wall and 10 percent at 0.01 to 0.1 chord, against 100 percent in
+  B-DTT; in W-ISLA the airfoil holds 0.09 percent of the slices' mass. Inferred, not tested: that this causes the pressure
+  harm at 0.01 to 0.1 chord; the across-case test has no power (the airfoil's share is 0.141 to 0.146 percent on every
+  case) and reweighting at inference is off the trained distribution (pressure errors rise 2.3 to 18 times in W-ISLA and
+  23 to 55 times in W-DTT).
+- **Proposed.** Rule 1; ii; C, per-condition quadratures with learned shares (log w = log a - log A_k + beta_k, beta
+  starting at 0), which changes every dataset that declares more than one condition; and Omega, a solid-angle prior on
+  ISLA-DTT's read alone. What C does not fix: L still grows with the truncation radius.
+- **Decisions named.** For the supervisor: the campaign and its cap, rule 1 as a change to DTT-POSE's frozen forest,
+  NEARWALL's contingency, a fourth arm. For Peter: adopting ii, and whether AeroZoo declares it; adopting C; whether
+  rule 1 groups by declared conditions or by connected components.
+
+## 2026-10-25 — AF-CAMPAIGN registered: ISLA-DTT on AirfRANS with its far field, the fixes nested one per arm (F, FN, FNC, FNΩ), two seeds each, cap 920 GPU-h; reads about the morning of 2026-10-27 {#sec-nb-af-campaign-prereg}
+
+AF-FIX drafted the registration (PREREG_DRAFT.md md5 553e4714); lane AF-CAMPAIGN carries it out. The frozen file is
+results/campaigns_2026-10-23/af_campaign/PREREG.frozen_e0739632.md (md5 e0739632), with the amendment before submission
+A1 written at 08:57 EDT, before any job of the campaign.
+
+- **The supervisor's decisions (08:51 EDT):** the campaign approved with a fourth arm, FNΩ, and a cap of 920 GPU-h; rule 1
+  approved for arm F as a change to DTT-POSE's frozen forest (on AirfRANS declared conditions and connected components
+  coincide; the grouping for multi-condition datasets in canonical ISLA is Peter's decision); FN supersedes NEARWALL's
+  contingency, whose arm was interacting interior ISLA, removed in 0.13.0; the AeroZoo no-harm check not launched, gated
+  on these reads and on Peter's adoption decisions.
+- **Arms**, all W-DTT's configuration exactly on 0.9.0 ports, seeds 42 and 43: F, DTT-POSE's forest with rule 1, read
+  against W-DTT; FN, F plus the viscous near-wall length; FNC, FN plus per-condition quadratures, with the Triton read's
+  log-measure gradient fixed in its port (A1.5, TEST-BUILD's W3-B2), read against FN; FNΩ, FN plus the solid-angle read
+  prior, read against FN.
+- **Rules** (section 5): R1 per field, helps if D < ln 0.90 and |D| > 2 SE or both seeds' ratios below 1/1.10, harms if
+  D > ln 1.10 and |D| > 2 SE or both above 1.10; R2 by wall-distance band; R3 pose within 0.002 of one, or at B-DTT's
+  level; R4 cost. Predictions with probabilities in section 6 (F restores pose, p 0.80; FNC helps pressure, p 0.40).
+- **State at this entry.** Ports built from psharpe/isla-affix-ports; F's and FN's ISLA suites pass with only the
+  registered pre-existing error; the forest checks bitwise as registered (F's 24 far-field cases: 0 cells change tree under
+  pose); the near-wall precision gate passes; FNC's port reworked after an Inductor CPU compile test failed; the smoke and
+  the eight lanes follow.
+
+**For the book.** Adopting the viscous length, C or Omega, and the multi-condition grouping, is Peter's after the reads; the
+book presents no fix as adopted. 20's `sec-limits-af-whole` states the measured mechanisms; 20 gains the open question
+`sec-oq-af-encoding` with an In-flight callout and a row in its table; `sec-oq-nearwall` states that the compute rounding is
+gone on the class's geometry and points to the campaign; `sec-oq-dtt-frame` and 05's forest paragraph state the face
+forest's far-field count.
+
+## 2026-10-25 — PERF-SURVEY: where ISLA 0.13.0's training step goes on a GB300, and fifteen measured opportunities ranked by what Peter is likely to approve; a correctness fault past 2^31 elements in the fused geometry kernel {#sec-nb-perf-survey}
+
+**Why.** Peter asked, in a forked session, verbatim: "Please look at the current ISLA model architecture, and look for
+performance optimization opportunities that I am likely to approve of." Lane PERF-SURVEY, launched 08:00 EDT 2026-10-25,
+eight children; records results/campaigns_2026-10-23/perf_survey/ (FINAL_REPORT.md md5 a8d88b85, OPPORTUNITIES.md
+f85d83b7). 39 GB300 jobs, 9.24 of 12 GPU-h.
+
+**The profile** (382020; bf16, the recipe's configurations, one GB300, median of 10 steps): DrivAerML Volume with the
+whole boundary at 200k, 1,190 ms and 143 GiB (geometry 31 percent, blocks and point reads 26, fused read 18, basis 8; 92
+of its 101 host syncs in the geometry); AeroZoo 716 ms (blocks and point reads 46 percent); AirfRANS with its far field
+530 ms compiled and 895 eager (point reads 59 to 63 percent, since 2-D models run the eager geometry region); the lug 234
+ms compiled, host-bound (GPU busy 42 percent); the DrivAerML Surface task 246 ms (slice blocks 75 percent, memory-bound).
+Every case peaks in the chunk's backward. The optimizer launches 750 to 850 kernels a step and starves the GPU 25 to 70
+ms on the small cases.
+
+**Brought to Peter** (each measured; exactness B bitwise, C certified within rounding, N a numerics change):
+1. FUSED-PAD: 2-D models and models without a global direction take the fused geometry region with exact zero padding.
+   AirfRANS step 0.59x compiled and 0.42x eager; lug eager 0.78 to 0.82x, lug compiled neutral; C for eager blocks; the
+   compiled-regions certification on real AirfRANS, lug and Tensile2d checkpoints is left.
+2. 64-bit offsets in `geo_kernel`: a correctness bug, since ISLA's forward faults once tokens x slices reaches 2^31, at
+   2^31/512 + 64 points with 512 slices, as a full AeroZoo case (5.87M points) does at inference. B below the limit;
+   kernel time 0.995 to 1.012x. Whether the read kernels share it is not checked.
+3. Geometry G2 + G3 in physicsnemo.mesh.spatial: B; DrivAerML's geometry call 400 to 347 ms; geometry peak -29 percent,
+   so a boundary of HiLift's size fits at 202 GiB.
+4. A sync-free FlipBoundaryOrientation in the recipe: B; -24 ms per DrivAerML step.
+5. The interior forward through the read path: -8 percent DrivAerML and -12.5 percent AeroZoo per forward, memory flat
+   in points; C on DrivAerML, N on AeroZoo (float64 within 1e-5, the known octant-tie flips).
+
+Also measured and exact: the chunked step's flat-buffer all-reduce (lug 4-GPU -10.5 percent), Muon as one CUDA graph (lug
+-9 percent, +0.6 to 0.9 GiB reserved), the read kernel's launch tweaks and the per-pair log m skip (about 1 percent), and
+real step-time logging (the logged `Step:` is host time, up to 1.37x short on HiLift). Prototype branch
+psharpe/isla-perfsurvey-fusedpad 80a58e1e8, local, not pushed (CPU 453 passed; GB300 735 passed).
+
+**What followed.** The supervisor launched INT64-OFFSETS to build item 2. FUSED-PAD and the other items await Peter's
+decisions: whether FUSED-PAD and the int64 fix go in before the final rerun, Part P (open), item 5 given AeroZoo's float64
+bound, and Muon's extra reserved memory.
+
+**For the book.** 20 gains the limit `sec-limits-int32` with an In-flight callout, and its engineering table's row on small
+meshes states the profile and FUSED-PAD's measured steps; 06's kernel bullet points to the limit.
+
+*Applied for the supervisor by the book lane BOOK-MIDDAY on 2026-10-25, with the edits to the ISLA 0.13.0 and LIB-TREE
+entries above.*
 
 ## 2026-10-22 — MECH-090: on Tensile2d the fixed compiled path's float32 gradients sit at a one-ulp eager floor, and pytorch/pytorch#195845 added a unit-dependent sink to ISLA's slice-state softmax (registered emulations not confirmed; a post-smoke emulation matches) {#sec-nb-mech090}
 
