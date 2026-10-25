@@ -75,6 +75,12 @@ source. Do not edit by hand.
 | `lib_tree/` | LIB-TREE: the cluster tree's Warp build and walk and the grouped forest in physicsnemo.mesh.spatial, a library-only branch, with its bitwise proofs against ISLA and GLOBE and its timings | `scratch/lib-tree-2026-10-24/` |
 | `af_whole_read/` | AF-WHOLE, the read: ISLA and ISLA-DTT trained with AirfRANS's far field as a named boundary against the eager airfoil-only standings, by field, by wall-distance band and under pose, with the octant-tie analysis | `scratch/isla-af-whole-2026-10-23/` |
 | `test_audit/` | TEST-AUDIT: ISLA's test suite audited (coverage on CPU and GB300, MOD-008, determinism on the GPU) and the test plan | `scratch/isla-test-audit-2026-10-24/` |
+| `test_build/` | TEST-BUILD: ISLA's test suite built from TEST-AUDIT's plan (goldens, MOD-008, properties, gradcheck and opcheck, kernels against references, determinism, forced-path guards, tiers), its suite counts and the bugs it pinned | `scratch/isla-test-build-2026-10-25/` |
+| `kernel_bugs/` | KERNEL-BUGS: four of the bugs TEST-BUILD pinned, fixed (the Triton read's log-measure gradient, the eager read's bf16 gradient sums, float16 autocast on CUDA and on CPU), with its bitwise evidence and suite counts | `scratch/isla-kernel-bugs-2026-10-25/` |
+| `af_fix/` | AF-FIX: the mechanisms behind the AirfRANS far-field harm (the octant tie under faces, the near-wall length's candidates, where the slices' and the tree read's mass goes) and the drafted campaign | `scratch/isla-af-fix-2026-10-25/` |
+| `af_campaign/` | AF-CAMPAIGN: the frozen pre-registration of ISLA-DTT on AirfRANS with its far field, arms F, FN, FNC and FNOmega | `scratch/isla-af-campaign-2026-10-25/` |
+| `pr_2170/` | NVIDIA/physicsnemo#2170 (LIB-TREE's library branch): its CI, the one bot comment and its fix | `scratch/pr-2170-2026-10-25/` |
+| `perf_survey/` | PERF-SURVEY: a profile of ISLA 0.13.0's training step on GB300 and the ranked performance opportunities, measured | `scratch/isla-perf-survey-2026-10-25/` |
 
 | topic | file | source | md5 |
 | --- | --- | --- | --- |
@@ -425,3 +431,14 @@ source. Do not edit by hand.
 | test_audit | COVERAGE.md | scratch/isla-test-audit-2026-10-24/COVERAGE.md | 133446aa26804b917f2928a6f01d87d6 |
 | test_audit | DETERMINISM.md | scratch/isla-test-audit-2026-10-24/DETERMINISM.md | afbaf878ec109e1d3d44afc1a1737a2a |
 | test_audit | TEST_PLAN.md | scratch/isla-test-audit-2026-10-24/TEST_PLAN.md | f275c4931c3e5916d16bebbc452640ec |
+| test_build | FINAL_REPORT.md | scratch/isla-test-build-2026-10-25/FINAL_REPORT.md | e6c77eb7ca073ca2cbc9f5948397004e |
+| test_build | BUGS.md | scratch/isla-test-build-2026-10-25/BUGS.md | 42546087184e80695acec73c92573812 |
+| kernel_bugs | FINAL_REPORT.md | scratch/isla-kernel-bugs-2026-10-25/FINAL_REPORT.md | c467234146d965b4b591dc7c9f823934 |
+| af_fix | FINAL_REPORT.md | scratch/isla-af-fix-2026-10-25/FINAL_REPORT.md | 7ba2a1144193b970188c389698661632 |
+| af_fix | DESIGN.md | scratch/isla-af-fix-2026-10-25/DESIGN.md | 1ba6290fcdab306657055af5a03c533e |
+| af_fix | PRESSURE_PROBE.md | scratch/isla-af-fix-2026-10-25/PRESSURE_PROBE.md | 0377ab20d79fb73307fcc1ca57c76c98 |
+| af_fix | PREREG_DRAFT.md | scratch/isla-af-fix-2026-10-25/PREREG_DRAFT.md | 553e4714cb05b9ce45d11989553fc8b3 |
+| af_campaign | PREREG.frozen_e0739632.md | scratch/isla-af-campaign-2026-10-25/PREREG.frozen_e0739632.md | e073963259b13c1b8f9ad885e5f73236 |
+| pr_2170 | FINAL_REPORT.md | scratch/pr-2170-2026-10-25/FINAL_REPORT.md | f76f0cf34507bb97f060a663487fa050 |
+| perf_survey | FINAL_REPORT.md | scratch/isla-perf-survey-2026-10-25/FINAL_REPORT.md | a8d88b8509954a501514c926d0a5e119 |
+| perf_survey | OPPORTUNITIES.md | scratch/isla-perf-survey-2026-10-25/OPPORTUNITIES.md | f85d83b754f804ac2feb55c9117be624 |

@@ -644,6 +644,39 @@ RECORDS = {
             "TEST_PLAN.md",
         ],
     ),
+    "test_build": (
+        "isla-test-build-2026-10-25",
+        "TEST-BUILD: ISLA's test suite built from TEST-AUDIT's plan (goldens, MOD-008, properties, gradcheck and opcheck, kernels "
+        "against references, determinism, forced-path guards, tiers), its suite counts and the bugs it pinned",
+        ["FINAL_REPORT.md", "BUGS.md"],
+    ),
+    "kernel_bugs": (
+        "isla-kernel-bugs-2026-10-25",
+        "KERNEL-BUGS: four of the bugs TEST-BUILD pinned, fixed (the Triton read's log-measure gradient, the eager read's "
+        "bf16 gradient sums, float16 autocast on CUDA and on CPU), with its bitwise evidence and suite counts",
+        ["FINAL_REPORT.md"],
+    ),
+    "af_fix": (
+        "isla-af-fix-2026-10-25",
+        "AF-FIX: the mechanisms behind the AirfRANS far-field harm (the octant tie under faces, the near-wall length's "
+        "candidates, where the slices' and the tree read's mass goes) and the drafted campaign",
+        ["FINAL_REPORT.md", "DESIGN.md", "PRESSURE_PROBE.md", "PREREG_DRAFT.md"],
+    ),
+    "af_campaign": (
+        "isla-af-campaign-2026-10-25",
+        "AF-CAMPAIGN: the frozen pre-registration of ISLA-DTT on AirfRANS with its far field, arms F, FN, FNC and FNOmega",
+        ["PREREG.frozen_e0739632.md"],
+    ),
+    "pr_2170": (
+        "pr-2170-2026-10-25",
+        "NVIDIA/physicsnemo#2170 (LIB-TREE's library branch): its CI, the one bot comment and its fix",
+        ["FINAL_REPORT.md"],
+    ),
+    "perf_survey": (
+        "isla-perf-survey-2026-10-25",
+        "PERF-SURVEY: a profile of ISLA 0.13.0's training step on GB300 and the ranked performance opportunities, measured",
+        ["FINAL_REPORT.md", "OPPORTUNITIES.md"],
+    ),
 }
 
 
@@ -655,6 +688,7 @@ KEPT = {
     ("dtt_fast_final", "TABLE.md"): "a6f352dfc32a342dc1f95a90bba69c17",
     ("dtt_knobs", "PREREG.md"): "e601d4af9ff793a7570af7acd9929f43",
     ("hl_dup", "FINAL_REPORT.md"): "74bc30896f511fcd9513fb01eb935e9f",
+    ("dtt_knobs_r5", "RESULTS.md"): "3b462f0df18edf0463d90a5cd9495a5c",
 }
 
 
