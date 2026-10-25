@@ -104,6 +104,12 @@ FOLDER = {
     "lib_tree": "campaigns_2026-10-23",
     "test_audit": "campaigns_2026-10-23",
     "af_whole_read": "campaigns_2026-10-23",
+    "test_build": "campaigns_2026-10-23",
+    "kernel_bugs": "campaigns_2026-10-23",
+    "af_fix": "campaigns_2026-10-23",
+    "af_campaign": "campaigns_2026-10-23",
+    "pr_2170": "campaigns_2026-10-23",
+    "perf_survey": "campaigns_2026-10-23",
 }
 
 

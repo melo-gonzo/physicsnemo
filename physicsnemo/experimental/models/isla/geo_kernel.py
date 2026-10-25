@@ -156,8 +156,10 @@ if HAS_TRITON:
         BLOCK_N: tl.constexpr,
         BLOCK_S: tl.constexpr,
     ):
-        pid_n = tl.program_id(0)
-        pid_b = tl.program_id(1)
+        ### int64 program ids, so every offset below is int64: the (B, N, S) offsets pass
+        ### 2**31 at N x S >= 2**31 (4,194,304 points at 512 slices).
+        pid_n = tl.program_id(0).to(tl.int64)
+        pid_b = tl.program_id(1).to(tl.int64)
         offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
         offs_s = tl.arange(0, BLOCK_S)
         mask_n = offs_n < N
@@ -334,8 +336,8 @@ if HAS_TRITON:
         BLOCK_N: tl.constexpr,
         BLOCK_S: tl.constexpr,
     ):
-        pid_n = tl.program_id(0)
-        pid_b = tl.program_id(1)
+        pid_n = tl.program_id(0).to(tl.int64)  # int64 offsets, as in the forward
+        pid_b = tl.program_id(1).to(tl.int64)
         offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
         offs_s = tl.arange(0, BLOCK_S)
         mask_n = offs_n < N
@@ -814,6 +816,8 @@ def _geo_region_bwd(
     b, n, s = logits_pre.shape
     t, k = d_hat.shape[2], n_global
     nw = weight.numel()
+    ### The kernel reads r and n_hat with the strides it writes gr and gn with.
+    r, n_hat = r.contiguous(), n_hat.contiguous()
     grad_bias = grad_bias.contiguous()
     grad_mix = grad_mix.contiguous()
     grad_pooled = grad_pooled.contiguous()
@@ -855,8 +859,8 @@ def _geo_region_bwd(
         n_tiles,
         r.stride(0),
         r.stride(1),
-        gn.stride(0),
-        gn.stride(1),
+        n_hat.stride(0),
+        n_hat.stride(1),
         d_hat.stride(0),
         d_hat.stride(1),
         d_hat.stride(2),

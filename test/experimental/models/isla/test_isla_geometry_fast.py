@@ -249,6 +249,63 @@ def test_fast_search_equals_the_reference_bitwise(case, dtype, device, monkeypat
         ), name
 
 
+@pytest.mark.parametrize("kernel", ["reference", "fast"])
+def test_ball_search_in_blocks_of_rows_equals_one_launch(kernel, monkeypatch):
+    """The ball search launched over blocks of a few query rows, as it is from 2**25 =
+    33,554,432 queries on (Warp refuses 2**31 candidate slots), gives every output of
+    one launch bitwise, its second pass included: a fan of 96 cells, 50 queries above
+    its hub (96 candidates each, more than the 64 slots) and 400 elsewhere."""
+    n = 96
+    t = torch.arange(n, dtype=D) * (2 * torch.pi / n)
+    rim = torch.stack([torch.cos(t), torch.sin(t), 0 * t], -1)
+    points = torch.cat([rim.new_zeros(1, 3), rim])
+    i = torch.arange(1, n + 1)
+    cells = torch.stack([torch.zeros_like(i), i, i % n + 1], -1)
+    g = torch.Generator().manual_seed(0)
+    hub = torch.linspace(0.01, 0.5, 50, dtype=D)[:, None] * torch.tensor([0.0, 0, 1])
+    q = torch.cat([hub, torch.rand(400, 3, dtype=D, generator=g) * 3 - 1.5])
+    one = _run(kernel, q, points, cells, monkeypatch)
+    caps, launch = [], geometry.wp.launch
+
+    def spy(k, dim, *args, **kwargs):
+        if k in (geometry._ball_candidates_kernel, geometry._ball_winding_kernel):
+            caps.append((kwargs["inputs"][14], dim))  # (slots per row, rows)
+        return launch(k, dim, *args, **kwargs)
+
+    with pytest.MonkeyPatch.context() as mp:
+        ### Blocks of 64 rows in the first pass, of 42 in the second.
+        mp.setattr(geometry, "WARP_MAX_ELEMENTS", 2**12 + 1)
+        mp.setattr(geometry.wp, "launch", spy)
+        blocks = _run(kernel, q, points, cells, monkeypatch)
+    assert caps == [(64, 64)] * 7 + [(64, 2), (96, 42), (96, 8)]
+    for a, b in zip(one, blocks):
+        assert torch.equal(a, b)
+
+
+@pytest.mark.cuda
+@requires_cuda
+@pytest.mark.slow
+@pytest.mark.parametrize("kernel", ["reference", "fast"])
+def test_ball_search_past_2_31_slots(kernel):
+    """2**25 + 64 queries, whose 64 candidate slots each pass Warp's 2**31-entry
+    arrays: the last 64 queries' distances and directions equal those of the same
+    queries alone, bitwise (each query's search, closest point and winding number are
+    its own). Before, Warp refused the slot array. Needs about 60 GiB of device memory
+    (1.6-1.8 kB per query, measured on CPU at 2**20 queries): the 17.2 GB of slots,
+    their masks and the candidates' closest points."""
+    tail = 64
+    if torch.cuda.mem_get_info()[0] < 96 * 2**30:
+        pytest.skip("needs about 60 GiB of free device memory")
+    sphere = _sphere(2)
+    points, cells = sphere.points.cuda(), sphere.cells.cuda()
+    g = torch.Generator(device="cuda").manual_seed(0)
+    q = torch.rand(2**25 + tail, 3, generator=g, device="cuda", dtype=D) * 3 - 1.5
+    whole = [t[-tail:] for t in exact_boundary_geometry(q, points, cells, kernel)]
+    alone = exact_boundary_geometry(q[-tail:].clone(), points, cells, kernel)
+    for a, b in zip(whole, alone):
+        assert torch.equal(a, b)
+
+
 def test_geometry_kernel_auto_resolves_to_the_reference_off_cuda_and_honors_explicit_choices():
     """geometry_kernel "auto" picks the fast search on CUDA only; on CPU it resolves
     to the reference, caches it, and a model forced to the fast search gives the same
