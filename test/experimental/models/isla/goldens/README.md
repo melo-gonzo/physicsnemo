@@ -94,11 +94,14 @@ Regenerate it only when a change is meant to move the numbers, and say so in the
 commit:
 
 ```bash
-python -m test.experimental.models.isla.goldens.record --regenerate
+python -m test.experimental.models.isla.goldens.record --regenerate goldens_v1.pt
 ```
 
 It records on one CPU thread and writes the golden and its manifest (commit, whether
 the model code was modified, library versions, CPU, BLAS/LAPACK, module md5s, date).
+The same command writes every other file of `data/` (`--regenerate` alone: all of
+them; or name them): the goldens and reference checkpoints of `test_isla_release.py`
+(its `WRITERS`). Nothing else writes `data/`, and a missing file fails.
 Committed data stays within its budget (350 KB for these goldens): floats are kept
 as samples and summaries, integers and inputs as SHA-256.
 

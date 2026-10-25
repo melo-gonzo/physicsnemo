@@ -28,11 +28,13 @@ differs from it). CPU records run on one thread. On CUDA every case runs
 ``--repeats`` times in-process (5 by default), so that compare.py can judge the
 outputs known to vary run to run against their family.
 
-Regenerate the committed golden (CPU, one thread)::
+Regenerate the committed data (CPU, one thread)::
 
-    python -m test.experimental.models.isla.goldens.record --regenerate
+    python -m test.experimental.models.isla.goldens.record --regenerate [FILE ...]
 
-writes ``data/goldens_v1.pt`` and its manifest ``data/goldens_v1.json``.
+writes every file of ``data/`` (or the named ones): ``goldens_v1.pt`` and its manifest
+``goldens_v1.json``, and the goldens and reference checkpoints of
+``test_isla_release.py`` (its ``WRITERS``). Nothing else writes them.
 """
 
 import argparse
@@ -352,12 +354,25 @@ def main(argv=None) -> int:
     )
     p.add_argument(
         "--regenerate",
-        action="store_true",
-        help="write data/goldens_v1.pt and its manifest",
+        nargs="*",
+        metavar="FILE",
+        help="write the named files of data/ (default: every file; goldens_v1.pt with "
+        "its manifest, and the files of test_isla_release.py)",
     )
     args = p.parse_args(argv)
-    if args.regenerate:
-        regenerate()
+    if args.regenerate is not None:
+        from test.experimental.models.isla import test_isla_release as release
+
+        names = set(args.regenerate) or {GOLDEN.name, *release.WRITERS}
+        unknown = names - {GOLDEN.name, *release.WRITERS}
+        if unknown:
+            p.error(
+                f"unknown data files {sorted(unknown)}; the files are {[GOLDEN.name, *release.WRITERS]}"
+            )
+        torch.set_num_threads(1)
+        if GOLDEN.name in names:
+            regenerate()
+        release.regenerate(names)
         return 0
     if args.out is None:
         p.error("--out is required (or --regenerate)")

@@ -1833,8 +1833,6 @@ def _model_kernels(model, variant: str):
 
 def _model_setup(spec: _ModelSpec, inputs, device, variant):
     """The loaded model and the arguments of its forward pass."""
-    from physicsnemo.mesh import Mesh
-
     x = _to(inputs, device)
     dt = spec.dtype
     model = target("ISLA")(**spec.cfg).to(device, dt).eval()
@@ -1844,23 +1842,47 @@ def _model_setup(spec: _ModelSpec, inputs, device, variant):
             p.copy_(flat[i : i + p.numel()].view_as(p))
             i += p.numel()
     _model_kernels(model, variant)
+    return model, model_inputs(spec, x, device, model)
+
+
+def _nested(fields: dict) -> dict:
+    """``{"a.b": t}`` as ``{"a": {"b": t}}`` (the schemas' dotted names as groups)."""
+    out = {}
+    for name, t in fields.items():
+        *groups, leaf = name.split(".")
+        node = out
+        for g in groups:
+            node = node.setdefault(g, {})
+        node[leaf] = t
+    return out
+
+
+def model_inputs(spec: _ModelSpec, inputs: dict, device, model) -> dict:
+    """The keyword arguments of the forward pass of ``model`` (an ISLA of the case's
+    configuration) on a model case's inputs (``build()``), on ``device`` in the
+    case's dtype."""
+    from physicsnemo.mesh import Mesh
+
+    x, dt, schemas = _to(inputs, device), spec.dtype, model
     meshes = {}
     for name in spec.meshes:
-        data = {f: x[f"in.{name}.{f}"].to(dt) for f in model.boundary_schemas[name]}
+        data = {f: x[f"in.{name}.{f}"].to(dt) for f in schemas.boundary_schemas[name]}
         meshes[name] = Mesh(
             points=x[f"in.{name}.points"].to(dt),
             cells=x[f"in.{name}.cells"],
-            cell_data=data,
+            cell_data=_nested(data),
         )
     kw = dict(
         boundary_meshes=meshes,
-        global_data={f: x[f"in.global.{f}"].to(dt) for f in model.global_schema},
+        global_data=_nested(
+            {f: x[f"in.global.{f}"].to(dt) for f in schemas.global_schema}
+        ),
     )
     if spec.n_queries:
         kw["prediction_points"] = x["in.queries"].to(dt)
     else:
         kw["prediction_boundaries"] = list(spec.prediction_boundaries)
-    return model, kw
+    return kw
 
 
 def _flat_outputs(mesh) -> dict:
