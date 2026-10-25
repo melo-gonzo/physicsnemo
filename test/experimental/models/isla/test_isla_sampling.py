@@ -120,8 +120,9 @@ def test_a_share_of_the_count_caps_every_cell():
 
 def test_equal_measures_with_a_share_of_the_count_are_kept_whole():
     """Equal measures (a uniform mesh) with a share of at least the count give every
-    pi exactly 1, though the float tail sums of n equal values need not reach n times
-    the value (a = 0.1, n = 100: 91 cells a rounding below 1 from the tails alone)."""
+    pi exactly 1, though the float tail sums of equal values can exceed their count
+    times the value, which leaves a rank uncapped with a level below 1 / a (a = 0.1,
+    n = 100: rank 9, and 91 cells a rounding below 1 from the tails alone)."""
     for value in (0.1, 0.3, 0.7, 3.3):
         for n in (7, 100, 3000, 300_001):
             a = torch.full((n,), value, dtype=D)
@@ -311,6 +312,26 @@ def test_the_integer_search_is_the_search_for_the_hits():
                 p, k, torch.tensor(u, dtype=D), budget
             )
             assert torch.equal(position, direct)
+
+
+def test_the_float_scan_is_the_doubling_scan_bitwise():
+    """The draw's float scan is the doubling (Kogge-Stone) scan, bitwise, which the
+    sequential ``cumsum`` is not on 100 copies of 0.1; its integer scan is ``cumsum``."""
+
+    def doubling(x):
+        y, n, s = x.clone(), x.shape[0], 1
+        while s < n:
+            y = torch.cat([y[:s], y[s:] + y[: n - s]])
+            s *= 2
+        return y
+
+    tenths = torch.full((100,), 0.1, dtype=D)
+    assert not torch.equal(tenths.cumsum(0), doubling(tenths))
+    g = torch.Generator().manual_seed(0)
+    for x in (tenths, torch.rand(1000, generator=g, dtype=D) ** 3):
+        assert torch.equal(sampling._cumsum(x), doubling(x))
+    k = torch.randint(0, 2**40, (1000,), generator=g)
+    assert torch.equal(sampling._cumsum(k), k.cumsum(0))
 
 
 @pytest.mark.parametrize("device", DEVICES)
