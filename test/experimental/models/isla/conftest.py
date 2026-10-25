@@ -17,10 +17,11 @@
 """pytest configuration of the ISLA tests.
 
 ISLA's CPU CI runs ``-m "not slow"``; the slow tests run in the GPU tier on a GB300.
-The CUDA tests carry the ``cuda`` marker besides their skip. ``test/conftest.py``
-registers both markers for the whole repository; they are registered here too so that
-the ISLA directory stays self-contained (run from its own root, or copied with the
-model)."""
+The CUDA tests carry the ``cuda`` marker besides their skip (``_marks.py``'s
+``requires_cuda`` or ``requires_cuda_triton``): the marker alone skips nothing.
+``test/conftest.py`` registers both markers for the whole repository; they are
+registered here too so that the ISLA directory stays self-contained (run from its own
+root, or copied with the model)."""
 
 
 def pytest_configure(config):

@@ -31,16 +31,12 @@ import torch
 from physicsnemo.experimental.models.isla import geometry
 from physicsnemo.experimental.models.isla.geometry import exact_boundary_geometry
 from physicsnemo.mesh.geometry._cell_normals import compute_cell_normals
+from test.experimental.models.isla._marks import requires_cuda
 
 D = torch.float64
 U64 = 2.0**-53
 
-_DEVICES = [
-    "cpu",
-    pytest.param(
-        "cuda", marks=pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA")
-    ),
-]
+_DEVICES = ["cpu", pytest.param("cuda", marks=[pytest.mark.cuda, requires_cuda])]
 
 
 def _exact_d2(x, tri):

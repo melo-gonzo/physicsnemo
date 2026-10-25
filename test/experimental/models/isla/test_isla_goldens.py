@@ -58,6 +58,7 @@ import math
 import pytest
 import torch
 
+from test.experimental.models.isla._marks import requires_cuda
 from test.experimental.models.isla.goldens import cases as C
 from test.experimental.models.isla.goldens import compare as K
 from test.experimental.models.isla.goldens import record as R
@@ -73,10 +74,6 @@ from test.experimental.models.isla.goldens import record as R
 CPU_RTOL = {"float64": 1e-12, "float32": 1e-12 * 2**29, "bfloat16": 2**-6}
 #: The same for the CUDA variants (TF32 off).
 CUDA_RTOL = dict(CPU_RTOL)
-
-cuda_only = pytest.mark.skipif(
-    not torch.cuda.is_available(), reason="CUDA paths need a GPU"
-)
 
 
 @pytest.fixture(scope="module")
@@ -200,7 +197,7 @@ def _params(device):
     out = []
     for case in C.CASES:
         for variant in case.variants.get(device, ()):
-            marks = [cuda_only] if device == "cuda" else []
+            marks = [pytest.mark.cuda, requires_cuda] if device == "cuda" else []
             out.append(
                 pytest.param(case, variant, id=f"{case.id}:{variant}", marks=marks)
             )

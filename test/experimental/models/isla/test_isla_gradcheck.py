@@ -54,15 +54,12 @@ from physicsnemo.experimental.models.isla import (
 )
 from physicsnemo.experimental.models.isla.geometry import exact_boundary_geometry
 from physicsnemo.mesh.geometry._cell_normals import compute_cell_normals
+from test.experimental.models.isla._marks import requires_cuda, requires_cuda_triton
 from test.experimental.models.isla.test_isla_interior_geometry import _circle, _sphere
 from test.experimental.models.isla.test_isla_kernel_refs import _two_x
 
 D = torch.float64
 GRADCHECK = dict(eps=1e-6, atol=1e-7, rtol=1e-6, check_batched_grad=False)
-CUDA = pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA")
-CUDA_TRITON = pytest.mark.skipif(
-    not (torch.cuda.is_available() and geo_kernel.HAS_TRITON), reason="CUDA and Triton"
-)
 
 
 @pytest.fixture
@@ -217,7 +214,7 @@ def _search_args(dim, dtype, device):
     return q, p, cells, parity, n64
 
 
-_DEVICES = ["cpu", pytest.param("cuda", marks=[pytest.mark.cuda, CUDA])]
+_DEVICES = ["cpu", pytest.param("cuda", marks=[pytest.mark.cuda, requires_cuda])]
 
 
 @pytest.mark.parametrize("device", _DEVICES)
@@ -273,7 +270,7 @@ _KP = pytest.mark.parametrize(
 
 
 @pytest.mark.cuda
-@CUDA_TRITON
+@requires_cuda_triton
 @_KP
 def test_fused_geo_region_op_passes_gradcheck_in_float64(k, p):
     """``physicsnemo::isla_geo_region_fwd`` with its registered backward
@@ -288,7 +285,7 @@ def test_fused_geo_region_op_passes_gradcheck_in_float64(k, p):
 
 
 @pytest.mark.cuda
-@CUDA_TRITON
+@requires_cuda_triton
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 @_KP
 def test_fused_geo_region_ops_pass_opcheck(k, p, dtype):
@@ -352,7 +349,7 @@ def test_basis_sink_passes_gradcheck():
 
 # --------------------------------------------------------------------------- node means
 @pytest.mark.cuda
-@CUDA_TRITON
+@requires_cuda_triton
 @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16], ids=["fp32", "bf16"])
 def test_fused_node_means_obey_the_2x_error_rule(dtype):
     """``_NodeMeans`` (Triton, no float64) against float64 eager ``node_means`` on the

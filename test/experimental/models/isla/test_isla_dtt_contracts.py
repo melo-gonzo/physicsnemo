@@ -31,8 +31,6 @@ Owners of what these tests reach (one place, for the library moves): the draw is
 the walk are ``isla.tree_read``'s, reached through ``ISLA._tree_read_walk``.
 """
 
-import importlib.util
-
 import pytest
 import torch
 
@@ -40,6 +38,7 @@ import physicsnemo.experimental.models.isla.model as isla_model
 from physicsnemo.experimental.models import ISLA
 from physicsnemo.experimental.models.isla.tree_read import TREE_READ_THETA
 from physicsnemo.mesh import Mesh
+from test.experimental.models.isla._marks import requires_cuda, requires_cuda_triton
 from test.experimental.models.isla._meshes import (
     cloud,
     law,
@@ -292,9 +291,6 @@ def test_the_drawn_boundary_moves_with_the_case(improper, monkeypatch):
     assert torch.allclose(out["v"], base["v"] @ R.T, atol=1e-12, rtol=0.0)
 
 
-cuda_only = pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA")
-
-
 def _float32_interior_case(device):
     """A float32 ISLA-DTT model on ``device`` (its read live) and a case of 500 cells
     with 150 prediction points, as float32 tensors on ``device``."""
@@ -308,7 +304,8 @@ def _float32_interior_case(device):
     return m, mesh.to(device), drv.float().to(device), q.float().to(device)
 
 
-@cuda_only
+@pytest.mark.cuda
+@requires_cuda_triton
 def test_the_interior_model_repeats_bitwise_on_cuda_with_every_cell_kept():
     """One training step of the interior model on CUDA in float32, every kernel at
     ``auto`` (the fused geometry region and the fused tree read), from the same seed,
@@ -319,7 +316,6 @@ def test_the_interior_model_repeats_bitwise_on_cuda_with_every_cell_kept():
 
     DRAW-EXACT: this pins today's run-to-run behaviour on CUDA of the draw's line,
     which runs over the inclusion probabilities even when every cell is kept."""
-    pytest.importorskip("triton")
     m, mesh, drv, q = _float32_interior_case("cuda")
     m.train()
     assert m.resolve_geo_kernel(q) == "fused"
@@ -365,11 +361,9 @@ def test_the_interior_model_repeats_bitwise_on_cuda_with_every_cell_kept():
         pytest.param(
             "cuda",
             marks=[
-                cuda_only,
+                pytest.mark.cuda,
                 ### without triton, auto resolves to the eager region, finite in float16
-                pytest.mark.skipif(
-                    importlib.util.find_spec("triton") is None, reason="triton"
-                ),
+                requires_cuda_triton,
                 pytest.mark.xfail(
                     strict=True,
                     raises=RuntimeError,
@@ -397,7 +391,8 @@ def test_a_float16_autocast_forward_is_finite(device):
     assert all(torch.isfinite(o).all() for o in out.values())
 
 
-@cuda_only
+@pytest.mark.cuda
+@requires_cuda
 def test_mixed_devices_are_refused_and_global_data_follows_the_boundary():
     """Documented behaviour, as it is: inputs on another device than the model are
     refused, by torch's own device check deep in the forward pass (ISLA's validation

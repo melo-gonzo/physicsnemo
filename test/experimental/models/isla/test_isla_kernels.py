@@ -29,9 +29,8 @@ import torch
 
 from physicsnemo.experimental.models import ISLA
 from physicsnemo.experimental.models.isla.blocks import _geo_region
+from test.experimental.models.isla._marks import requires_cuda
 from test.experimental.models.isla._meshes import cloud, outputs, soup
-
-cuda_only = pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA kernels")
 
 REF = dict(
     output_schema={"p": {"rank": 0}, "v": {"rank": 1}},
@@ -106,7 +105,8 @@ def _assert_same(ref, opt, dtype, out_tol, grad_tol, n=700):
 
 
 # --------------------------------------------------------------------------- fused region
-@cuda_only
+@pytest.mark.cuda
+@requires_cuda
 @pytest.mark.parametrize("dtype", [torch.float64, torch.float32])
 @pytest.mark.parametrize(
     "K,P",
@@ -191,7 +191,8 @@ def test_fused_geo_region_matches_eager_region(dtype, K, P):
         assert _rel(a, bb) < (1e-11 if dtype == torch.float64 else 1e-5), _rel(a, bb)
 
 
-@cuda_only
+@pytest.mark.cuda
+@requires_cuda
 def test_fused_geo_region_bf16_autocast_forward_matches_eager():
     """Under bf16 autocast the fused forward makes the same dtype decisions as eager
     (bf16 Linear on bf16-rounded invariants, bf16 pre-logit sum, fp32 softmax), so the
@@ -221,13 +222,15 @@ def test_fused_geo_region_bf16_autocast_forward_matches_eager():
 
 
 # --------------------------------------------------------------------------- model level
-@cuda_only
+@pytest.mark.cuda
+@requires_cuda
 def test_fused_geo_kernel_model_exact_in_float64():
     ref, opt = _pair(torch.float64, geo_kernel="fused")
     _assert_same(ref, opt, torch.float64, 1e-11, 1e-11)
 
 
-@cuda_only
+@pytest.mark.cuda
+@requires_cuda
 def test_fused_geo_kernel_model_rank1_boundary_input_exact_in_float64():
     """A model with a rank-1 boundary input (the RANK-IO configuration) runs the fused
     kernel and matches the eager region to float64 roundoff."""
@@ -251,7 +254,8 @@ def test_fused_geo_kernel_model_rank1_boundary_input_exact_in_float64():
 
 
 # --------------------------------------------------------------------------- torch.compile
-@cuda_only
+@pytest.mark.cuda
+@requires_cuda
 @pytest.mark.parametrize("geo_kernel", ["eager", "fused"])
 def test_torch_compile_fullgraph_matches_eager(geo_kernel):
     """The recipe compiles the whole model (compile: true); it must stay one graph and
@@ -269,7 +273,9 @@ def test_torch_compile_fullgraph_matches_eager(geo_kernel):
 
 
 # --------------------------------------------------------------------------- compiled blocks
-@pytest.mark.parametrize("device", ["cpu", pytest.param("cuda", marks=cuda_only)])
+@pytest.mark.parametrize(
+    "device", ["cpu", pytest.param("cuda", marks=[pytest.mark.cuda, requires_cuda])]
+)
 def test_compile_blocks_matches_eager(device):
     """``compile_blocks=True`` runs each slice block's forward under torch.compile and
     leaves parameter names, the state dict and the arithmetic unchanged: outputs and
@@ -295,7 +301,8 @@ def test_compile_blocks_matches_eager(device):
     assert opt._block_forwards is built
 
 
-@cuda_only
+@pytest.mark.cuda
+@requires_cuda
 def test_query_independent_interior_fused_and_compiled_blocks_match_eager():
     """The training configuration of ISLA-DTT (fused geometry kernel, compiled blocks)
     reproduces the eager model in float64, and its predictions stay
@@ -365,7 +372,9 @@ def _record_block_tokens(model):
     return seen
 
 
-@pytest.mark.parametrize("device", ["cpu", pytest.param("cuda", marks=cuda_only)])
+@pytest.mark.parametrize(
+    "device", ["cpu", pytest.param("cuda", marks=[pytest.mark.cuda, requires_cuda])]
+)
 @pytest.mark.parametrize("task", ["surface", "interior_dtt"])
 def test_compile_blocks_see_an_aligned_token_count(task, device):
     """A padded forward gives the compiled blocks a multiple of TOKEN_ALIGNMENT tokens at a
@@ -427,7 +436,8 @@ def _forced_on_error(run, **kw):
     return err
 
 
-@cuda_only
+@pytest.mark.cuda
+@requires_cuda
 @pytest.mark.parametrize("n", [12000, 12001, 12002, 12003])
 def test_compile_blocks_float32_matches_eager_at_every_token_count(n, monkeypatch):
     """compile_blocks reproduces the eager model in float32 (outputs and gradients) at
@@ -454,7 +464,8 @@ def test_compile_blocks_float32_matches_eager_at_every_token_count(n, monkeypatc
     assert seen == [n], seen
 
 
-@cuda_only
+@pytest.mark.cuda
+@requires_cuda
 @pytest.mark.parametrize("nq", [6001, 6002])
 def test_compile_blocks_query_independent_float32_at_every_token_count(nq, monkeypatch):
     """ISLA-DTT under compile_blocks in float32, at a size where mix-order reduction would

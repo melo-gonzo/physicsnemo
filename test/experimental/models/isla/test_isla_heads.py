@@ -31,6 +31,7 @@ import torch
 
 from physicsnemo.experimental.models import ISLA
 from physicsnemo.mesh.fields import RankSpec
+from test.experimental.models.isla._marks import requires_cuda_triton
 from test.experimental.models.isla._meshes import (
     cloud,
     law,
@@ -326,11 +327,11 @@ def test_checkpoint_round_trip_keeps_the_specs(tmp_path):
     assert all(torch.equal(a[k], b[k]) for k in a)
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="fused kernel needs CUDA")
+@pytest.mark.cuda
+@requires_cuda_triton
 def test_fused_kernel_does_not_touch_the_heads():
     """The fused geometry region is per layer; the heads are downstream of it, so the
     rank-2 outputs of the fused and eager models agree to roundoff in float64."""
-    pytest.importorskip("triton")
     mesh, drv = _boundary(400)
     outputs_ = {
         "p": {"rank": 0},

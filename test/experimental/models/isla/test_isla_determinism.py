@@ -60,6 +60,7 @@ from physicsnemo.experimental.models.isla.tree_read import (
     kernel_geo_width,
 )
 from test.experimental.models.isla._forced import ran
+from test.experimental.models.isla._marks import requires_cuda, requires_cuda_triton
 from test.experimental.models.isla._meshes import (
     cloud,
     live,
@@ -73,11 +74,6 @@ from test.experimental.models.isla.test_isla_interior_geometry import (
 )
 
 D = torch.float64
-HAS_CUDA = torch.cuda.is_available()
-CUDA = pytest.mark.skipif(not HAS_CUDA, reason="CUDA")
-CUDA_TRITON = pytest.mark.skipif(
-    not (HAS_CUDA and geo_kernel.HAS_TRITON), reason="CUDA and Triton"
-)
 
 
 def _bytes(t):
@@ -118,7 +114,7 @@ BUDGET = 100_000
 
 
 @pytest.mark.cuda
-@CUDA
+@requires_cuda
 def test_the_draw_twice_on_cuda_keeps_the_same_cells():
     """The draw run twice on CUDA keeps the same cells bitwise; its float64
     Horvitz-Thompson weights agree to 1e-15 relative but not always bitwise (CUDA's
@@ -139,7 +135,7 @@ def test_the_draw_twice_on_cuda_keeps_the_same_cells():
 
 
 @pytest.mark.cuda
-@CUDA
+@requires_cuda
 def test_hits_planted_on_line_boundaries_keep_one_of_the_two_cells_there():
     """Hits planted on cell boundaries of the systematic line (the start chosen so
     that ``start + j`` is a boundary ``line[i]`` as the CPU draw computes it): every
@@ -191,7 +187,7 @@ def test_hits_planted_on_line_boundaries_keep_one_of_the_two_cells_there():
 
 # --------------------------------------------------------------------------- module level
 @pytest.mark.cuda
-@CUDA_TRITON
+@requires_cuda_triton
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 def test_the_fast_geometry_repeats_on_cuda(dtype):
     """``exact_boundary_geometry(kernel="fast")`` twice on CUDA: d, u and the query
@@ -217,7 +213,7 @@ def test_the_fast_geometry_repeats_on_cuda(dtype):
 
 
 @pytest.mark.cuda
-@CUDA_TRITON
+@requires_cuda_triton
 @pytest.mark.parametrize("autocast", [False, True], ids=["fp32", "bf16_autocast"])
 def test_the_fused_geo_region_repeats_on_cuda(autocast):
     """The fused geometry region twice on CUDA, forward and every input gradient:
@@ -294,7 +290,7 @@ def _read_case(dtype, seed=0):
 
 
 @pytest.mark.cuda
-@CUDA_TRITON
+@requires_cuda_triton
 @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16], ids=["fp32", "bf16"])
 def test_the_fused_read_with_its_node_means_repeats_on_cuda(dtype):
     """The fused node means of the cells' keys and values, then the fused read over
@@ -320,7 +316,7 @@ def test_the_fused_read_with_its_node_means_repeats_on_cuda(dtype):
 
 
 @pytest.mark.cuda
-@CUDA_TRITON
+@requires_cuda_triton
 @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16], ids=["fp32", "bf16"])
 def test_the_segment_softmax_read_repeats_on_cuda_but_for_its_atomic_sums(dtype):
     """The Triton segment-softmax read twice on CUDA: the output and the by-point
@@ -360,7 +356,7 @@ def test_the_segment_softmax_read_repeats_on_cuda_but_for_its_atomic_sums(dtype)
 
 
 @pytest.mark.cuda
-@CUDA
+@requires_cuda
 def test_the_reference_tree_read_on_cuda_spreads_within_its_bound():
     """The reference (unfused) tree read on CUDA in float32, five runs of one block's
     read (node means by ``index_add``, whose atomic order CUDA does not fix, then the
@@ -527,7 +523,7 @@ def _resolved(model, task, device):
 
 
 @pytest.mark.cuda
-@CUDA_TRITON
+@requires_cuda_triton
 @pytest.mark.parametrize("autocast", PRECISIONS)
 @pytest.mark.parametrize("dims", DIMS)
 @pytest.mark.parametrize("task", TASKS)

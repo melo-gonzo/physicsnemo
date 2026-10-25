@@ -36,14 +36,10 @@ from tensordict import TensorDict
 from torch._inductor.utils import fresh_cache
 
 from physicsnemo.experimental.models import ISLA
+from test.experimental.models.isla._marks import requires_cuda
 from test.experimental.models.isla._meshes import cloud, outputs, soup
 
-DEVICES = [
-    "cpu",
-    pytest.param(
-        "cuda", marks=pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA")
-    ),
-]
+DEVICES = ["cpu", pytest.param("cuda", marks=[pytest.mark.cuda, requires_cuda])]
 PV = {"p": {"rank": 0}, "v": {"rank": 1}}
 
 #: Per-case token counts, all distinct (and distinct from every other input
@@ -339,7 +335,8 @@ def test_the_compiled_case_inputs_run_every_sum_as_the_opaque_scan():
 ### DRAW-EXACT: the 0.14.0 draw replaces isla_cumsum's body (a fixed-order float scan
 ### in place of ATen's) and edits this docstring; the test stays.
 @pytest.mark.slow
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA")
+@pytest.mark.cuda
+@requires_cuda
 def test_the_in_model_draw_compiles_under_max_autotune_at_full_resolution():
     """The recipe's compile options (``max-autotune-no-cudagraphs``) on an interior
     model's case inputs at 1.4 million boundary cells: the draw's float64 sums over

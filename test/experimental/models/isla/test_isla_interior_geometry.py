@@ -39,6 +39,7 @@ from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.primitives.curves import circle_2d
 from physicsnemo.mesh.primitives.surfaces import cube_surface, sphere_icosahedral, torus
 from physicsnemo.nn.functional.geometry.sdf import _closest_point_weights
+from test.experimental.models.isla._marks import requires_cuda
 from test.experimental.models.isla._meshes import (
     cloud,
     live,
@@ -907,13 +908,7 @@ def _finned_cube() -> Mesh:
     )
 
 
-_DEVICES = [
-    "cpu",
-    pytest.param(
-        "cuda",
-        marks=pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA"),
-    ),
-]
+_DEVICES = ["cpu", pytest.param("cuda", marks=[pytest.mark.cuda, requires_cuda])]
 
 
 @pytest.mark.parametrize("device", _DEVICES)
@@ -1517,7 +1512,8 @@ def test_least_norm_point_without_a_certified_candidate(k, dim):
     assert ((x - exact).norm(dim=-1) <= (2 * gap.clamp_min(0)).sqrt() + 1e-12).all()
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="compares CUDA with CPU")
+@pytest.mark.cuda
+@requires_cuda
 @pytest.mark.parametrize("dim", [2, 3])
 def test_tie_search_on_cuda_matches_cpu(dim):
     """The search on CUDA (the Warp traversal in three dimensions) finds the same

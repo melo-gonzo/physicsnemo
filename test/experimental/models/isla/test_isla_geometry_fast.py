@@ -31,6 +31,7 @@ from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.geometry._cell_normals import compute_cell_normals
 from physicsnemo.mesh.primitives.surfaces import cube_surface
 from test.experimental.models.isla._forced import ran
+from test.experimental.models.isla._marks import requires_cuda, requires_cuda_triton
 from test.experimental.models.isla._meshes import orthogonal, outputs, transform
 from test.experimental.models.isla.test_isla_geometry_thin import (
     _capped_cube,
@@ -53,12 +54,7 @@ from test.experimental.models.isla.test_isla_interior_geometry import (
 
 D = torch.float64
 
-_DEVICES = [
-    "cpu",
-    pytest.param(
-        "cuda", marks=pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA")
-    ),
-]
+_DEVICES = ["cpu", pytest.param("cuda", marks=[pytest.mark.cuda, requires_cuda])]
 
 
 def _cases():
@@ -285,13 +281,8 @@ def test_geometry_kernel_auto_resolves_to_the_reference_off_cuda_and_honors_expl
         )
 
 
-_TRITON_CUDA = pytest.mark.skipif(
-    not (torch.cuda.is_available() and geometry_fast.HAS_TRITON),
-    reason="CUDA and Triton",
-)
-
-
-@_TRITON_CUDA
+@pytest.mark.cuda
+@requires_cuda_triton
 @pytest.mark.parametrize("n", [1, 5, 1023, 1024, 1025, 70000])
 def test_run_start_kernel_equals_the_torch_scan(n):
     g = torch.Generator().manual_seed(n)
@@ -301,7 +292,8 @@ def test_run_start_kernel_equals_the_torch_scan(n):
     assert torch.equal(geometry_fast.run_start(new.cuda()).cpu(), ref)
 
 
-@_TRITON_CUDA
+@pytest.mark.cuda
+@requires_cuda_triton
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 @pytest.mark.parametrize("d, k", [(2, 2), (3, 3), (3, 2), (2, 3)])
 def test_canonical_cells_kernel_equals_the_torch_sort(d, k, dtype):
@@ -390,7 +382,8 @@ def _pairs_of(case, device="cuda"):
     return _guard_pairs(*next(m for m in _guard_meshes() if m[0] == case)[1:], device)
 
 
-@_TRITON_CUDA
+@pytest.mark.cuda
+@requires_cuda_triton
 @pytest.mark.parametrize("switch", [1, float("inf")])
 @pytest.mark.parametrize("case", [c[0] for c in _guard_meshes()] + ["empty"])
 def test_guard_kernel_equals_the_torch_weights_bitwise(case, switch, monkeypatch):
@@ -416,7 +409,8 @@ def test_guard_kernel_equals_the_torch_weights_bitwise(case, switch, monkeypatch
         assert bool((geometry._closest_weights(q, s, flat) != ref).any())
 
 
-@_TRITON_CUDA
+@pytest.mark.cuda
+@requires_cuda_triton
 @pytest.mark.parametrize("n", [1, 7, 255])
 def test_guard_kernel_on_a_partial_block(n, monkeypatch):
     """A single partial block of pairs, the switched ones first, gives the torch
@@ -434,7 +428,8 @@ def test_guard_kernel_on_a_partial_block(n, monkeypatch):
     assert torch.equal(ref.view(torch.int64), fast.view(torch.int64))
 
 
-@_TRITON_CUDA
+@pytest.mark.cuda
+@requires_cuda_triton
 def test_guard_kernel_without_guarded_pairs(monkeypatch):
     """Pairs of which none is guarded (far queries of a well-shaped triangle) give the
     torch weights bitwise."""
@@ -455,7 +450,8 @@ def test_guard_kernel_without_guarded_pairs(monkeypatch):
     assert torch.equal(ref.view(torch.int64), fast.view(torch.int64))
 
 
-@_TRITON_CUDA
+@pytest.mark.cuda
+@requires_cuda_triton
 @pytest.mark.parametrize("case", ["ordinary float64", "zero area"])
 def test_guard_kernel_with_nan_coordinates(case):
     """NaN coordinates in queries and cells give the torch weights bitwise, NaN
@@ -469,7 +465,8 @@ def test_guard_kernel_with_nan_coordinates(case):
     assert torch.equal(ref.view(torch.int64), fast.view(torch.int64))
 
 
-@_TRITON_CUDA
+@pytest.mark.cuda
+@requires_cuda_triton
 @pytest.mark.parametrize("columns", [False, True], ids=["rows", "columns"])
 @pytest.mark.parametrize("case", [c[0] for c in _guard_meshes()])
 def test_fast_search_equals_the_reference_on_thin_cells(case, columns):

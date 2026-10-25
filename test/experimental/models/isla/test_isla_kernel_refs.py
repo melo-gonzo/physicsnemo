@@ -63,6 +63,7 @@ from physicsnemo.experimental.models.isla.geometry import exact_boundary_geometr
 from physicsnemo.experimental.models.isla.segment_softmax import PairPlan
 from physicsnemo.experimental.models.isla.tree_read import BoundaryForest
 from test.experimental.models.isla._forced import ran
+from test.experimental.models.isla._marks import requires_cuda, requires_cuda_triton
 from test.experimental.models.isla._meshes import cloud
 from test.experimental.models.isla.test_isla_interior_geometry import (
     _near_wall,
@@ -75,17 +76,7 @@ from test.experimental.models.isla.test_isla_tree_read import (
 )
 
 D = torch.float64
-HAS_CUDA = torch.cuda.is_available()
-CUDA_TRITON = pytest.mark.skipif(
-    not (HAS_CUDA and geo_kernel.HAS_TRITON), reason="CUDA and Triton"
-)
-_DEVICES = [
-    "cpu",
-    pytest.param(
-        "cuda",
-        marks=[pytest.mark.cuda, pytest.mark.skipif(not HAS_CUDA, reason="CUDA")],
-    ),
-]
+_DEVICES = ["cpu", pytest.param("cuda", marks=[pytest.mark.cuda, requires_cuda])]
 _LOW = {torch.float32: 1e-6, torch.bfloat16: 1e-3, torch.float16: 1e-3}
 
 
@@ -177,7 +168,7 @@ def _run_region(fused, leaves, wts, k, p, autocast=False, logits_bf16=False):
 
 
 @pytest.mark.cuda
-@CUDA_TRITON
+@requires_cuda_triton
 @pytest.mark.parametrize("k, p", [(1, 0), (2, 1)], ids=["K1P0", "K2P1"])
 def test_fused_geo_region_bf16_backward_obeys_the_2x_error_rule(k, p):
     """Under bfloat16 autocast (bfloat16 pre-logits, as the model's), the fused
@@ -210,7 +201,7 @@ def _assert_region_exact(fused, eager, tol=1e-11):
 
 
 @pytest.mark.cuda
-@CUDA_TRITON
+@requires_cuda_triton
 @pytest.mark.parametrize("s", [257, 513, 1024])
 def test_fused_geo_region_matches_eager_past_every_slice_branch(s):
     """Slice counts past the launch branches at 256 and 512 slices, and the most the
@@ -223,7 +214,7 @@ def test_fused_geo_region_matches_eager_past_every_slice_branch(s):
 
 
 @pytest.mark.cuda
-@CUDA_TRITON
+@requires_cuda_triton
 @pytest.mark.parametrize("block", [1, 2, 4, 8])
 def test_fused_geo_region_matches_eager_at_every_tile_size(block, monkeypatch):
     """``FWD_BLOCK_N`` and ``BWD_BLOCK_N`` set (the launch overrides): every tile size
@@ -276,7 +267,7 @@ def _ssr_run(read, plan_args, leaves, logm, seed, device, dtype, logm_grad=False
 
 
 @pytest.mark.cuda
-@CUDA_TRITON
+@requires_cuda_triton
 @pytest.mark.parametrize("h, kc, c", [(8, 4, 8), (4, 8, 16)])
 @pytest.mark.parametrize(
     "dtype",
@@ -326,7 +317,7 @@ def test_segment_softmax_read_obeys_the_2x_error_rule(dtype, h, kc, c):
 
 
 @pytest.mark.cuda
-@CUDA_TRITON
+@requires_cuda_triton
 @pytest.mark.parametrize("h, kc, c", [(3, 4, 8), (8, 3, 8), (8, 4, 6)])
 def test_segment_softmax_read_of_a_width_not_a_power_of_two_is_the_eager_read(h, kc, c):
     """A head count, key width or value width that is not a power of two takes the
@@ -350,7 +341,7 @@ def test_segment_softmax_read_of_a_width_not_a_power_of_two_is_the_eager_read(h,
 
 
 @pytest.mark.cuda
-@CUDA_TRITON
+@requires_cuda_triton
 def test_only_the_eager_segment_softmax_read_differentiates_the_log_measure():
     """``segment_softmax_read`` is documented differentiable in ker, q, k and v. The
     eager read also differentiates ``logm`` (its CPU, float64 and odd-width paths);
@@ -385,7 +376,7 @@ def test_only_the_eager_segment_softmax_read_differentiates_the_log_measure():
 
 # --------------------------------------------------------------------------- float16 narrow paths
 @pytest.mark.cuda
-@CUDA_TRITON
+@requires_cuda_triton
 @pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16], ids=["bf16", "fp16"])
 def test_fused_kernel_read_in_16_bits_obeys_the_2x_error_rule(dtype):
     """The fused read with float16 operands (``_narrow``: the basis and the weights in
@@ -449,7 +440,7 @@ def test_fused_kernel_read_in_16_bits_obeys_the_2x_error_rule(dtype):
 
 
 @pytest.mark.cuda
-@CUDA_TRITON
+@requires_cuda_triton
 @pytest.mark.parametrize("dim, n_vecs", [(3, 1), (2, 0)])
 def test_fused_kernel_basis_under_float16_autocast_obeys_the_2x_error_rule(
     dim, n_vecs, monkeypatch
@@ -502,7 +493,7 @@ def _draw_case(sizes=(9000, 6000, 3000, 400), seed=0):
 
 
 @pytest.mark.cuda
-@pytest.mark.skipif(not HAS_CUDA, reason="CUDA")
+@requires_cuda
 def test_the_draw_on_cuda_keeps_the_cpu_draws_cells():
     """``sample_boundary_cells`` on CUDA keeps the CPU draw's cells, bitwise, and
     their Horvitz-Thompson weights agree to 1e-12 relative (float64 sums over the
@@ -664,7 +655,7 @@ def test_fused_basis_unsupported_reasons_off_cuda(monkeypatch):
 
 
 @pytest.mark.cuda
-@pytest.mark.skipif(not (HAS_CUDA and fused_basis.HAS_TRITON), reason="CUDA and Triton")
+@requires_cuda_triton
 def test_fused_basis_unsupported_reasons_on_cuda():
     """``unsupported_reason`` on CUDA float32: None for the supported case; a
     float64 parameter, an autocast without its weight cache or in float32, a 4-D
@@ -714,7 +705,7 @@ def _geo_model(**kw):
 
 
 @pytest.mark.cuda
-@pytest.mark.skipif(not (HAS_CUDA and geo_kernel.HAS_TRITON), reason="CUDA and Triton")
+@requires_cuda_triton
 def test_geo_kernel_auto_disqualifiers_on_cuda():
     """On CUDA with Triton, ``geo_kernel="auto"`` picks the fused region for a model
     it fits and the eager region for each disqualifier: no global direction, five
