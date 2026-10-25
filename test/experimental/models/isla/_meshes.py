@@ -186,3 +186,18 @@ def same(a, b, atol, rtol=1e-5) -> bool:
     b = outputs(b) if isinstance(b, Mesh) else b
     assert a.keys() == b.keys()
     return all(torch.allclose(a[k], b[k], atol=atol, rtol=rtol) for k in a)
+
+
+def live(model, seed: int = 0):
+    """``model`` with the output projection of every ISLA-DTT boundary read (``out``,
+    zero-initialized so that a fresh read adds nothing) given seeded random values
+    (``randn * 0.1``), so an interior contract test exercises the read; returns the
+    model. A surface model, which has no read, is returned as it is."""
+    if getattr(model, "kernel_reads", None) is None:
+        return model
+    gen = torch.Generator(device="cpu").manual_seed(seed)
+    with torch.no_grad():
+        for read in model.kernel_reads:
+            w = read.out.weight
+            w.copy_(torch.randn(w.shape, generator=gen, dtype=w.dtype) * 0.1)
+    return model

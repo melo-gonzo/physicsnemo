@@ -29,6 +29,7 @@ from tensordict import TensorDict
 from physicsnemo.experimental.models import ISLA
 from test.experimental.models.isla._meshes import (
     cloud,
+    live,
     orthogonal,
     outputs,
     rescale_measures,
@@ -51,7 +52,7 @@ def _model(global_schema=None, **kw):
     if global_schema is None:
         global_schema = {"g": {"rank": 1}}
     kw.setdefault("boundary_schemas", {"wall": {}})
-    return (
+    return live(
         ISLA(
             output_schema=PV,
             global_schema=global_schema,
@@ -153,7 +154,7 @@ def test_a_derived_direction_counts_among_the_global_vectors(declared):
     m = _model(
         gs,
         boundary_schemas={
-            "wall": {"u": {"rank": 1, "units": {"U": 1}, "velocity_scale": True}}
+            "wall": {"u": {"rank": 1, "units": {"U": 1}, "defines": "U"}}
         },
     )
     K = declared + 1
@@ -186,9 +187,7 @@ def test_two_vectors_interior_path():
     mesh = _boundary()
     q = torch.randn(40, 3, dtype=D, generator=torch.Generator().manual_seed(2))
     gv = torch.randn(2, 3, dtype=D, generator=torch.Generator().manual_seed(1))
-    m = _model(
-        {"g1": {"rank": 1}, "g2": {"rank": 1}}, interior=True, query_independent=False
-    )
+    m = _model({"g1": {"rank": 1}, "g2": {"rank": 1}}, interior=True)
     _assert_se3(m, mesh, {"g1": gv[0], "g2": gv[1]}, q=q)
 
 
@@ -200,7 +199,6 @@ def test_global_scalars_condition_every_token():
     m = _model(
         {"g": {"rank": 1}, "cond.kappa": {"rank": 0}, "cond.E": {"rank": 0}},
         interior=True,
-        query_independent=False,
     )
     assert (
         m.boundary_conditions["wall"].seed.in_features == 1 + 1 + 2
@@ -298,7 +296,6 @@ def test_boundary_data_reaches_the_interior_prediction():
         global_schema={"kappa": {"rank": 0}},
         boundary_schemas={"wall": {"trace": {"rank": 0}}},
         interior=True,
-        query_independent=False,
     )
     assert (
         m.boundary_conditions["wall"].seed.in_features == 1 + 2

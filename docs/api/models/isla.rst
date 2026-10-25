@@ -68,11 +68,11 @@ Mesh API
 ``forward`` follows the mesh-native contract of the mesh models (GLOBE's): one
 case per call, no batch axis. The boundary is a mapping of
 :class:`~physicsnemo.mesh.Mesh` objects keyed by declared boundary-condition
-name (each a ``Mesh[dim - 1, dim]`` whose cells have normals); the per-case data is
+name (each a ``Mesh[n_spatial_dims - 1, n_spatial_dims]`` whose cells have normals); the per-case data is
 a ``TensorDict`` or mapping. Both tasks read every boundary they are given;
 where the outputs are is the second argument: for an interior task
 (``interior=True``) the prediction points, a point-cloud ``Mesh``, of which only
-the points are read, or a bare ``(N, dim)`` tensor; for a surface task the names
+the points are read, or a bare ``(N, n_spatial_dims)`` tensor; for a surface task the names
 of the boundaries at whose cells the outputs are predicted
 (``prediction_boundaries``), the other boundaries being read as conditions only.
 The result is a point-cloud ``Mesh`` whose ``point_data`` holds the declared
@@ -112,21 +112,20 @@ distance enters through its ratio to the frame's length and the ratio's
 ``asinh(s / 1e-6)``, so the encoding is continuous through the surface (a point
 on it gets the code of its neighbours on either side). The
 boundary tokens are drawn from the same cells inside the forward pass. The
-budget is ``boundary_tokens`` per case (default 200,000), shared over the
+budget is ``n_boundary_tokens`` per case (default 200,000), shared over the
 named boundaries by water filling (a boundary with fewer cells than its share
 is kept whole); within a boundary each cell is drawn with probability
 proportional to its measure (capped at one) by systematic sampling along the
 Morton order of the cell centroids, and carries its Horvitz-Thompson measure,
-so the token count is exactly ``min(cells, boundary_tokens)`` (static shapes,
-one compiled graph) and every measure-weighted read is an unbiased quadrature
+so the token count is exactly ``min(cells, n_boundary_tokens)`` (static shapes)
+and every measure-weighted read is an unbiased quadrature
 of the full surface. In training the draw's start comes from the global torch
 RNG (``torch.manual_seed`` reproduces it); in evaluation (``model.eval()``) it
 is fixed, so inference is deterministic. A surface task reads every cell it is
-given and samples none. With
-``query_independent=True`` (ISLA-DTT) the prediction points are passive
-readers of the slices and of the boundary cells, so each prediction depends
-on its own point and the boundary alone and any request can be answered in
-chunks.
+given and samples none. The interior task is ISLA-DTT: the prediction points
+are passive readers of the slices and of the boundary cells, so each prediction
+depends on its own point and the boundary alone and any request can be answered
+in chunks.
 
 The unified external-aerodynamics recipe
 (``examples/cfd/external_aerodynamics/unified_external_aero_recipe``) documents

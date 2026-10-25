@@ -28,10 +28,12 @@ import pytest
 import torch
 
 from physicsnemo.experimental.models import ISLA
+from physicsnemo.experimental.models.isla.tree_read import TREE_READ_THETA
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
 from test.experimental.models.isla._meshes import (
     cloud,
+    live,
     orthogonal,
     outputs,
     points_mesh,
@@ -112,7 +114,7 @@ def test_rotation_equivariance_with_scales():
                 "v": {"rank": 1, "units": {"U": 1}},
             },
             boundary_schemas=WALL,
-            global_schema={"g": {"rank": 1, "units": {"U": 1}, "velocity_scale": True}},
+            global_schema={"g": {"rank": 1, "units": {"U": 1}, "defines": "U"}},
             hidden=32,
             n_layers=2,
             n_slices=8,
@@ -236,9 +238,7 @@ def test_every_parameter_receives_a_gradient(interior):
     no prediction-point parameters and an interior model uses all of its own, so
     in both tasks every parameter receives a gradient."""
     torch.manual_seed(0)
-    m = _isla(
-        hidden=32, n_layers=2, n_slices=8, interior=interior, query_independent=False
-    )
+    m = live(_isla(hidden=32, n_layers=2, n_slices=8, interior=interior))
     pts, nrm, w, drv = cloud(128, dtype=torch.float32)
     q = torch.randn(20, 3) if interior else None
     out = outputs(
@@ -274,68 +274,30 @@ def test_geo_pool_then_project_is_exact():
 
 
 def test_interior_task_contracts():
-    """The interior task (prediction points as interacting tokens): exactly
-    rotation/translation-covariant, finite, and -- by design -- NOT query-set
-    independent; every parameter receives a gradient."""
-    torch.manual_seed(0)
-    n, nq = 400, 150
-    pts, nrm, w, drv = cloud(n)
-    mesh = soup(pts, nrm, w)
-    qpts = torch.randn(nq, 3, dtype=D) * 4.0
-    m = (
-        _isla(
-            hidden=64, n_layers=2, n_slices=16, interior=True, query_independent=False
-        )
-        .double()
-        .eval()
-    )
-    q = _rotation()
-    shift = torch.tensor([3.0, -7.0, 11.0], dtype=D)
-    base = _run(m, mesh, drv, qpts)
-    rot = _run(m, transform(mesh, q, shift), drv @ q.T, qpts @ q.T + shift)
-    sub = _run(m, mesh, drv, qpts[:50])
-    assert base.point_data["p"].shape == (nq,) and base.point_data["v"].shape == (nq, 3)
-    assert base.n_cells == 0 and torch.equal(base.points, qpts)
-    assert all(torch.isfinite(o).all() for o in outputs(base).values())
-    _assert_rotated(rot, base, q)
-    # interacting mode: predictions at shared queries depend on the query set
-    assert not same(outputs(sub), _rows(base, slice(0, 50)), atol=1e-6)
-    # every parameter receives a gradient (DDP safety)
-    m.train()
-    out = outputs(
-        m(
-            boundary_meshes={"wall": mesh},
-            prediction_points=qpts,
-            global_data={"g": drv},
-        )
-    )
-    sum(o.square().mean() for o in out.values()).backward()
-    missing = [k for k, p in m.named_parameters() if p.grad is None]
-    assert not missing, missing
-
-
-def test_query_independent_interior_contracts():
-    """query_independent=True (ISLA-DTT, here with its boundary read at its zero
+    """The interior task, ISLA-DTT (here with its boundary read at its zero
     initialization; test_isla_tree_read.py exercises the read): the prediction points
     read every block's slices and never write into them, so a prediction is exactly
     independent of the other points of the request (alone, a prefix, any order, any
     chunking), while
     rotation/translation covariance, the similarity gauge and boundary-refinement
-    invariance hold as for interacting tokens; there is no routing-mass parameter,
-    every parameter receives a gradient, and bf16 autocast stays finite."""
+    invariance hold; there is no routing-mass parameter,
+    every parameter receives a gradient, and bf16 autocast stays finite. The form is
+    no constructor argument (``query_independent``)."""
     torch.manual_seed(0)
     pts, nrm, w, drv = cloud(400)
     mesh = soup(pts, nrm, w)
     qpts = torch.randn(150, 3, dtype=D) * 4.0
-    m = (
-        _isla(hidden=64, n_layers=2, n_slices=16, interior=True, query_independent=True)
-        .double()
-        .eval()
-    )
-    assert m.qt.logw is None and not any(
+    m = live(_isla(hidden=64, n_layers=2, n_slices=16, interior=True).double().eval())
+    assert not hasattr(m.qt, "logw") and not any(
         n == "qt.logw" for n, _ in m.named_parameters()
     )
     base = _run(m, mesh, drv, qpts)
+    assert base.point_data["p"].shape == (150,) and base.point_data["v"].shape == (
+        150,
+        3,
+    )
+    assert base.n_cells == 0 and torch.equal(base.points, qpts)
+    assert all(torch.isfinite(o).all() for o in outputs(base).values())
     perm = torch.randperm(150, generator=torch.Generator().manual_seed(1))
     assert same(_run(m, mesh, drv, qpts[:50]), _rows(base, slice(0, 50)), atol=1e-12)
     assert same(_run(m, mesh, drv, qpts[7:8]), _rows(base, slice(7, 8)), atol=1e-12)
@@ -358,7 +320,14 @@ def test_query_independent_interior_contracts():
         atol=1e-10,
         rtol=0.0,
     )
-    assert same(_run(m, refine(mesh), drv, qpts), base, atol=1e-10, rtol=0.0)
+    ### Refinement invariance is exact for the exact read (theta = 0, every cell pair
+    ### read); at the default opening angle the refined boundary's forest differs and
+    ### the Barnes-Hut read is an approximation (measured 1.4e-4 on p, 1.9e-3 on v).
+    m._tree_read_theta = 0.0
+    assert same(
+        _run(m, refine(mesh), drv, qpts), _run(m, mesh, drv, qpts), atol=1e-10, rtol=0.0
+    )
+    m._tree_read_theta = TREE_READ_THETA
     m.train()
     out = outputs(
         m(
@@ -370,9 +339,7 @@ def test_query_independent_interior_contracts():
     sum(o.square().mean() for o in out.values()).backward()
     missing = [n for n, p in m.named_parameters() if p.grad is None]
     assert not missing, missing
-    m32 = _isla(
-        hidden=32, n_layers=2, n_slices=8, interior=True, query_independent=True
-    )
+    m32 = live(_isla(hidden=32, n_layers=2, n_slices=8, interior=True))
     with torch.autocast("cpu", dtype=torch.bfloat16):
         out = outputs(
             m32(
@@ -386,42 +353,42 @@ def test_query_independent_interior_contracts():
     assert all(
         torch.isfinite(p.grad).all() for p in m32.parameters() if p.grad is not None
     )
-    with pytest.raises(ValueError, match="interior=True"):
+    with pytest.raises(
+        TypeError, match="unexpected keyword argument 'query_independent'"
+    ):
         _isla(hidden=32, n_layers=1, n_slices=8, query_independent=True)
 
 
-def test_query_mass_refinement_invariance():
-    """Splitting every boundary cell into two coincident half-measure copies leaves
-    the discrete boundary measure unchanged (positions, normals, total area, every
-    integral). The prediction-point tokens' weight is a fraction of the total
-    boundary measure, so the output is exactly unchanged and the geometric-scale
-    contract still holds."""
-    pts, nrm, w, drv = cloud(60, seed=42)
-    mesh = soup(pts, nrm, w)
-    q = pts[:17] * 1.3
-    qm = points_mesh(q)
+def test_live_makes_the_boundary_read_contribute():
+    """The interior contract tests run ISLA-DTT through ``live``, which seeds the
+    boundary read's zero-initialized output projection: under it the read changes the
+    prediction (zeroing the projection again changes the outputs), so those tests
+    cannot pass with a read that adds nothing."""
     torch.manual_seed(0)
-    m = (
-        _isla(hidden=32, n_layers=2, n_slices=8, interior=True, query_independent=False)
-        .double()
-        .eval()
+    pts, nrm, w, drv = cloud(200)
+    mesh = soup(pts, nrm, w)
+    q = pts[:20] * 1.5
+    m = _isla(hidden=32, n_layers=2, n_slices=8, interior=True).double().eval()
+    assert all(not r.out.weight.any() for r in m.kernel_reads)
+    dead = _run(m, mesh, drv, q)
+    live(m)
+    assert all(r.out.weight.any() for r in m.kernel_reads)
+    out = _run(m, mesh, drv, q)
+    assert (
+        max(float((outputs(out)[k] - outputs(dead)[k]).abs().max()) for k in PV) > 1e-3
     )
-    s = 3.7
-    qm_s = points_mesh(q * s)
-    a = _run(m, mesh, drv, qm)
-    b = _run(m, refine(mesh), drv, qm)
-    c = _run(m, transform(mesh, scale=s), drv, qm_s)
-    assert same(b, a, atol=1e-10, rtol=0.0)
-    assert same(c, a, atol=1e-10, rtol=0.0)
+    with torch.no_grad():
+        for r in m.kernel_reads:
+            r.out.weight.zero_()
+    assert same(_run(m, mesh, drv, q), dead, atol=0.0, rtol=0.0)
 
 
 @pytest.mark.parametrize("interior", [False, True], ids=["surface", "interior"])
 def test_geometric_scale_equivariance(interior):
     """For a model without scales: a similarity of the geometry (points x k + shift,
     areas x k^2) leaves the output exactly unchanged, for the boundary alone and with
-    prediction points that are moved along. (With declared scales a geometry scale
-    at a fixed viscosity changes the Reynolds number, as it should: the similarity
-    with every scale is test_isla_scales.py's.)"""
+    prediction points that are moved along. (The similarity with declared scales is
+    test_isla_scales.py's.)"""
     torch.manual_seed(0)
     pts, nrm, w, drv = cloud(400)
     mesh = soup(pts, nrm, w)
@@ -431,11 +398,11 @@ def test_geometric_scale_equivariance(interior):
             n_layers=2,
             n_slices=16,
             interior=interior,
-            query_independent=False,
         )
         .double()
         .eval()
     )
+    live(m)
     assert not m._scaled
     k = 2.7
     shift = torch.tensor([3.0, -7.0, 11.0], dtype=D)
@@ -462,12 +429,12 @@ def test_boundary_scalars_reach_the_interior_prediction():
             n_layers=2,
             n_slices=8,
             interior=True,
-            query_independent=False,
             boundary_schemas={"wall": {"bc_a": {"rank": 0}, "bc_b": {"rank": 0}}},
         )
         .double()
         .eval()
     )
+    live(m)
     q = pts[:17] * 0.5
     out = _run(m, soup(pts, nrm, w, cell_data=bs), drv, q)
     out2 = _run(
@@ -524,11 +491,7 @@ def test_frame_is_sampling_consistent():
     pts, nrm, w, drv = cloud(100000)
     q = pts[:40] * 1.2
     torch.manual_seed(1)
-    m = (
-        _isla(hidden=32, n_layers=2, n_slices=8, interior=True, query_independent=False)
-        .double()
-        .eval()
-    )
+    m = live(_isla(hidden=32, n_layers=2, n_slices=8, interior=True).double().eval())
     n_sub = 10000
     d_bias, d_noise = [], []
 
@@ -553,42 +516,36 @@ def test_frame_is_sampling_consistent():
 
 
 def test_defaults_are_the_reference_configuration():
-    """The class defaults: a surface task (interacting, no query independence), the
+    """The class defaults: a surface task (no prediction points, no boundary read), the
     automatic geometry kernel, one seed invariant n.g and six relational invariants;
     an interior model adds the prediction-point embedding over the built-in distance
-    pair and is ISLA-DTT by default (the boundary read, no routing mass), interacting
-    ISLA with query_independent=False. A surface task with query_independent=True
-    is refused."""
+    pair and is ISLA-DTT (the boundary read, no routing mass). The form is fixed by
+    ``interior``: ``query_independent`` is no constructor argument and no stored one."""
     m = _isla(hidden=32, n_layers=2, n_slices=8)
     assert m.interior is False and m.qt is None
-    assert m.query_independent is False
     assert m.kernel_basis is None and m.kernel_reads is None
-    assert m._args["__args__"]["query_independent"] is False
+    assert "query_independent" not in m._args["__args__"]
     assert m.geo_kernel == "auto"
     assert m.boundary_conditions["wall"].seed.in_features == 1 + 1
     assert m.blocks[0].geo_logit.in_features == 6
     mi = _isla(hidden=32, n_layers=2, n_slices=8, interior=True)
     assert mi.qt.seed.in_features == 1 + 2  # n.g and the built-in distance pair
-    assert mi.query_independent is True
-    assert mi._args["__args__"]["query_independent"] is True
-    assert mi.qt.logw is None  # no routing mass
+    assert "query_independent" not in mi._args["__args__"]
+    assert not hasattr(mi.qt, "logw")  # no routing mass
     assert mi.kernel_basis is not None and len(mi.kernel_reads) == 2
     assert not any(n.startswith("qt.logw") for n, _ in mi.named_parameters())
     assert any(n.startswith("kernel_reads.") for n, _ in mi.named_parameters())
-    mf = _isla(
-        hidden=32, n_layers=2, n_slices=8, interior=True, query_independent=False
-    )
-    assert mf.query_independent is False
-    assert mf._args["__args__"]["query_independent"] is False
-    assert mf.qt.logw is not None  # the learned routing mass
-    assert mf.kernel_basis is None and mf.kernel_reads is None
-    assert not any(
-        n.startswith(("kernel_basis.", "kernel_reads."))
-        for n, _ in mf.named_parameters()
-    )
-    assert mf.qt.seed.in_features == 1 + 2
-    with pytest.raises(ValueError, match="interior=True"):
-        _isla(hidden=32, n_layers=2, n_slices=8, query_independent=True)
+    for interior in (False, True):
+        with pytest.raises(
+            TypeError, match="unexpected keyword argument 'query_independent'"
+        ):
+            _isla(
+                hidden=32,
+                n_layers=2,
+                n_slices=8,
+                interior=interior,
+                query_independent=interior,
+            )
 
 
 def test_constructor_and_forward_are_keyword_only():
@@ -664,9 +621,7 @@ def test_interior_flag_structures_the_forward():
             prediction_points=pts[:3],
             global_data={"g": drv},
         )
-    interior = _isla(
-        hidden=32, n_layers=1, n_slices=8, interior=True, query_independent=False
-    )
+    interior = _isla(hidden=32, n_layers=1, n_slices=8, interior=True)
     with pytest.raises(ValueError, match="pass prediction_points"):
         interior(
             prediction_boundaries=["wall"],
@@ -717,7 +672,7 @@ def test_mesh_validation_errors():
         )
     pts2, nrm2, w2, _ = cloud(20, d=2, dtype=torch.float32)
     with pytest.raises(
-        ValueError, match="has 2 spatial dimensions; this model has dim=3"
+        ValueError, match="has 2 spatial dimensions; this model has n_spatial_dims=3"
     ):
         m(
             prediction_boundaries=["wall"],
@@ -880,8 +835,8 @@ def test_scalar_only_model_has_no_frame_routing_and_every_parameter_gets_a_gradi
             n_layers=2,
             n_slices=8,
             interior=True,
-            query_independent=False,
         )
+        live(m)
         has_vec = any(v["rank"] == 1 for v in outs.values())
         assert m.needs_frame == has_vec and (m.frame_assign is not None) == has_vec
         out = outputs(

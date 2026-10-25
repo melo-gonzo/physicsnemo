@@ -27,7 +27,7 @@
 
 # AirfRANS restricted to its plane (2026-10-02): airfrans_volume.yaml with RestrictToPlane first in the pipeline, so the
 # interior points, the airfoil polyline, the in-plane boundary normals, the SDF normals and the velocity target carry two
-# components and the model runs its native two-dimensional path (pair with conf/model/isla_volume_airfrans.yaml, dim: 2).
+# components and the model runs its native two-dimensional path (pair with conf/model/isla_volume_airfrans.yaml, n_spatial_dims: 2).
 # Everything else (reader, non-dimensionalization, nut normalization, splits, targets) is airfrans_volume.yaml verbatim.
 # AF-WHOLE (2026-10-23): ISLA reads the whole boundary of the PDE domain, the airfoil and the far field. The case
 # files store the airfoil and the release's cropped interior; the far field (the freestream condition on the outer

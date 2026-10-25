@@ -225,13 +225,11 @@ class _QueryTokens(nn.Module):
     ``seed``, which maps their seed (the K terms n_q.g_k, the global scalars, the
     built-in signed distance to the boundary surface as ``[s, asinh(s / 1e-6)]``,
     ``s = d / L``) to the token width, followed, as a boundary condition's input layer is, by the model's
-    shared GELU and linear layer; and the log of the learned fraction of the total
-    boundary measure that is their routing weight (``routing_mass=False``, passive
-    tokens: none, ``logw`` is ``None``)."""
+    shared GELU and linear layer. The tokens are passive (ISLA-DTT): they carry no
+    routing weight, so they own no routing parameter."""
 
-    def __init__(self, hidden: int, n_seed: int, routing_mass: bool = True) -> None:
+    def __init__(self, hidden: int, n_seed: int) -> None:
         super().__init__()
-        self.logw = nn.Parameter(torch.zeros(1)) if routing_mass else None
         self.seed = nn.Linear(n_seed, hidden)
 
 

@@ -533,6 +533,36 @@ RECORDS = {
             "scores_area/*/area/DATASET_USED",
         ],
     ),
+    "isla_api_013": (
+        "isla-api-013-2026-10-24",
+        "ISLA-API: ISLA 0.13.0 (the interior task is ISLA-DTT with no switch; Mesh's names n_spatial_dims and "
+        "n_boundary_tokens; no Reynolds argument; the schema key defines), its design and mapping table, the deleted tests, "
+        "the assertion audit, the suites and the datapipe check of re_z against the in-model z, and the book changes",
+        [
+            "FINAL_REPORT.md",
+            "DESIGN.md",
+            "BOOK_CHANGES.md",
+            "BOOK_PROSE.md",
+            "DELETED_TESTS.md",
+            "DELETED_TESTS_RE.md",
+            "ASSERTION_AUDIT.md",
+            "JOBS.md",
+            "logs/lhr/gb_377645.log",
+        ],
+    ),
+    "reynolds_out": (
+        "isla-reynolds-out-2026-10-24",
+        "REYNOLDS-OUT: the Reynolds feature moved out of ISLA's constructor into the recipe (ComputeBoundaryScales and float64 "
+        "ComputeLogReynolds in ISLA's model configs), its design and evidence, and the bitwise check of z on 160 cases over "
+        "three checkpoints",
+        [
+            "DESIGN.md",
+            "FINAL_REPORT.md",
+            "bitwise/RESULTS_BITWISE.md",
+            "bitwise/JOBS.md",
+            "bitwise/z_cases_376561.tsv",
+        ],
+    ),
 }
 
 

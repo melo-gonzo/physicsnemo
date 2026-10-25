@@ -71,7 +71,7 @@ print(
     "is the book's test of generalization; @sec-aerozoo-why makes the case for it, and @sec-aerozoo gives ISLA's standing there. "
     "On AeroZoo both baselines end as about a zero predictor on pressure, so a pressure comparison there is a comparison with "
     "predicting zero, and there ISLA's two interior forms read a close call, which by Peter's ruling makes ISLA-DTT, whose "
-    "prediction at a point does not depend on the other points queried, ISLA's default interior form, on principle "
+    "prediction at a point does not depend on the other points queried, ISLA's interior form, on principle "
     "(@sec-aerozoo-form). "
     "The other benchmarks, DrivAerML, HiLiftAeroML, SHIFT-SUV, AirfRANS, Tensile2d, the lug and DeepJEB++, are here because the "
     "community measures surrogates on them. Each covers one narrow family, so its native score measures interpolation within that "
