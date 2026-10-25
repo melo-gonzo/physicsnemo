@@ -1,0 +1,112 @@
+# ISLA module goldens
+
+Characterization goldens of ISLA's modules: the A/B harness that proves a refactor or
+a library move bitwise, and the committed CI golden that guards against regressions.
+
+- `cases.py`: the cases. Each builds its inputs on the CPU from seeded
+  `torch.Generator`s (`build()`) and runs the functions under test on a device under
+  a variant (`run(inputs, device, variant)`: the reference, or the fast and fused
+  kernels). Every function is reached through `TARGETS`, one line per function naming
+  the module that owns it: a LIB-MOVE switch retargets that line, and the golden of
+  the moved function must still pass.
+- `record.py`: runs cases and writes a record, or regenerates the committed golden.
+- `compare.py`: compares two records.
+- `../test_isla_goldens.py` and `../data/goldens_v1.pt` (manifest
+  `../data/goldens_v1.json`): the CI golden.
+
+Groups: G-FRAME (`canonical_frame`, `frame_coordinates`, the skew-tie branch), G-SAMP
+(`water_fill`, `pps_inclusion_probabilities`, `sample_boundary_cells`, `draw_inputs`),
+G-FOREST (`BoundaryForest.build`, reference and fast; `node_means`,
+`fused_node_means`), G-WALK (`point_pairs`, `frame_pairs(count_only=True)`, reference
+and fast), G-SEG (`PairPlan.build`, `segment_softmax_read` eager and Triton), G-GEO
+(`exact_boundary_geometry` with its search outputs and winding numbers, 2-D and 3-D,
+the tied, on-wall, thin and degenerate sets; `run_start`, `canonical_cells`,
+`closest_weights`), G-READ (`tree_read_walk`, `walk_range_pairs` over ranges,
+`walk_points_range`, `walk_pair_counts`, `tree_pair_invariants`, `_KernelBasis`,
+`_TreeKernelRead`, `fused_kernel_read`, the fused basis), G-BLOCKS (`_SliceBlock`
+forward and read, `_RoutingLogits`, `_softmax_over_points`, `_relational_invariants`,
+`_geo_region`, `fused_geo_region`), G-HEADS (`_isotropic_tensors`, `_levi_civita`,
+`_OutputLayout`, `_assemble_output`, `_pseudovectors`, `_polar_complement`).
+Every case records its inputs, outputs and the gradients of a fixed cotangent.
+
+Not here yet (they wait for ISLA 0.13.0's constructor): the model, `query_chunks`,
+`scales`, `inputs`, `_QueryTokens`.
+
+## A/B: prove a change bitwise
+
+Record the base and the head **each in its own process** (custom ops such as
+`physicsnemo::isla_closest_candidates` register process-wide, so two versions in one
+process compare one with itself), on the same machine, then compare:
+
+```bash
+G=test.experimental.models.isla.goldens
+git checkout <base> && python -m $G.record --device cpu --out /tmp/a
+git checkout <head> && python -m $G.record --device cpu --out /tmp/b
+python -m $G.compare /tmp/a /tmp/b   # exit 0 PASS, 1 FAIL, 2 INCONCLUSIVE
+```
+
+`--groups G-GEO G-READ` and `--cases 'tree_read_*'` select cases. Each record prints the
+file and md5 of every ISLA module it imported and the `physicsnemo::isla_*` ops
+registered: check that each side ran the code you meant. CPU records run on one
+thread (`--threads`). On CUDA (`--device cuda`, on a GB300 for the CUDA paths) each
+case runs 5 times in-process (`--repeats`).
+
+How compare.py reads the records:
+
+- **CPU: bitwise**, every input, output and gradient.
+- **CUDA, kernels auto: bitwise**, except:
+  - the draw's kept cells are compared first; if they differ the case is
+    **INCONCLUSIVE**: the draw's float64 `cumsum` is not run-to-run deterministic on
+    CUDA, so a kept cell can flip when a hit lands on a cell boundary. Rerun; never
+    read it as a pass. (On CPU the draw is deterministic and a kept difference fails.)
+  - the draw's Horvitz-Thompson weights compare at 1e-15 relative;
+  - the outputs a case declares as its `family` (float atomics: the reference read's
+    node means, the Triton segment softmax's `dk`/`dv`, the exact geometry's vertex
+    gradient) must lie within the run-to-run spread of the 5 repeats of either side
+    (a family that repeats bitwise demands bitwise).
+- A tensor that varies between the repeats of one side without being declared a
+  family fails: the change made something non-deterministic.
+
+## The CI golden
+
+`test_isla_goldens.py` runs every case's CPU variants (and, with CUDA, its CUDA
+variants) against `data/goldens_v1.pt`: inputs and integer outputs exact, float
+outputs within `rtol * max|golden|` on 16 stored elements and on three summaries over
+every element (see the test's docstring and `CPU_RTOL`/`CUDA_RTOL` for the bounds and
+their measurements). A missing golden fails.
+
+Regenerate it only when a change is meant to move the numbers, and say so in the
+commit:
+
+```bash
+python -m test.experimental.models.isla.goldens.record --regenerate
+```
+
+It records on one CPU thread and writes the golden and its manifest (commit, whether
+the model code was modified, library versions, CPU, BLAS/LAPACK, module md5s, date).
+Committed data stays within its budget (350 KB for these goldens): floats are kept
+as samples and summaries, integers and inputs as SHA-256.
+
+Reading a CUDA failure of the CI golden: the CUDA variants are compared with the
+CPU golden, so a difference there is CUDA against CPU (another summation order, the
+fused kernels' own rounding); the A/B harness on a GB300 is what proves a CUDA change
+bitwise.
+
+## Exclusions
+
+- **On-wall and tie directions at near-coplanar ties.** At a quad's diagonal, where
+  two triangles' normals agree to rounding, the on-wall direction is a known defect
+  (`test_on_wall_direction_at_quad_diagonals`, a strict xfail in
+  test_isla_interior_geometry.py): it depends on the numbering. No golden holds it:
+  the 3-D box-tie set keeps only the ties whose closest points lie inside the faces
+  (not the corner diagonals or the centre, whose closest points lie on the faces'
+  quad diagonals), the box-wall and zero-area sets keep their on-wall points on the
+  box's edges and corners and the cells' centroids (not the points inside a side,
+  where coplanar cells meet), the torus keeps generic queries only (not its core
+  circle), and the thin cap (coplanar with its neighbours) records no direction
+  (`u`, the gradients, `tied`, `tie_u`): its `d`, closest cell, sign, on-wall flag,
+  weights and winding numbers stay.
+- **Gradients that are zero in exact arithmetic**: the basis MLP's last bias (a
+  per-head constant on every pair's logit) and a slice block's `geo_logit.bias` (a
+  constant over the slices) cancel in their softmaxes; what is computed is roundoff,
+  and is not recorded.

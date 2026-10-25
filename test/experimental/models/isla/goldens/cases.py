@@ -1,0 +1,1568 @@
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""The golden cases of ISLA's modules.
+
+A case is a pair of functions: ``build()`` makes its inputs on the CPU (every random
+draw through a seeded ``torch.Generator``; the tensors are recorded and hashed as
+``in.*``, since some pass through library primitives and LAPACK), and ``run(inputs,
+device, variant)`` calls the functions under test and returns every output and
+gradient (``out.*``, ``grad.*``). ``variant`` names an implementation choice of the
+device (the reference or the fast/fused kernels); the first CPU variant is the one
+the committed golden stores, and every other variant of every device is compared to
+that golden at the tolerances of ``test_isla_goldens.py``.
+
+Every function under test is reached through :data:`TARGETS`, one line per function
+naming the module that owns it, so that moving a function into the library is a
+one-line change here (its golden must then still pass, bitwise in the A/B harness).
+"""
+
+import fnmatch
+import importlib
+from collections.abc import Callable
+from dataclasses import dataclass, field
+
+import torch
+
+from test.experimental.models.isla._meshes import cloud, soup
+
+D = torch.float64
+F = torch.float32
+ISLA = "physicsnemo.experimental.models.isla"
+
+#: The module that owns each function under test: ``"module:attribute"``, or a
+#: bare module for the G-GEO spies (which patch that module's private search ops
+#: to record their outputs). LIB-MOVE retargets these lines.
+TARGETS = {
+    # G-FRAME, G-SAMP (LIB-MOVE P4)
+    "canonical_frame": f"{ISLA}.tree_read:canonical_frame",
+    "frame_coordinates": f"{ISLA}.tree_read:frame_coordinates",
+    "water_fill": f"{ISLA}.sampling:water_fill",
+    "pps_inclusion_probabilities": f"{ISLA}.sampling:pps_inclusion_probabilities",
+    "draw_inputs": f"{ISLA}.sampling:draw_inputs",
+    "sample_boundary_cells": f"{ISLA}.sampling:sample_boundary_cells",
+    # G-FOREST, G-WALK (LIB-MOVE P1, P2: the build and walk behind these seams)
+    "BoundaryForest": f"{ISLA}.tree_read:BoundaryForest",
+    "node_means": f"{ISLA}.tree_read:node_means",
+    "fused_node_means": f"{ISLA}.fused_read:fused_node_means",
+    # G-SEG (LIB-MOVE P5)
+    "PairPlan": f"{ISLA}.segment_softmax:PairPlan",
+    "segment_softmax_read": f"{ISLA}.segment_softmax:segment_softmax_read",
+    # G-GEO (LIB-MOVE P6)
+    "exact_boundary_geometry": f"{ISLA}.geometry:exact_boundary_geometry",
+    "geometry_spies": f"{ISLA}.geometry",
+    "canonical_cells_reference": f"{ISLA}.geometry:_canonical_cells",
+    "closest_weights_reference": f"{ISLA}.geometry:_closest_weights",
+    "zero_area": f"{ISLA}.geometry:_zero_area",
+    "closest_weights_constants": f"{ISLA}.geometry",
+    "run_start": f"{ISLA}.geometry_fast:run_start",
+    "canonical_cells": f"{ISLA}.geometry_fast:canonical_cells",
+    "closest_weights": f"{ISLA}.geometry_fast:closest_weights",
+    # G-READ (stays in ISLA)
+    "tree_read_walk": f"{ISLA}.tree_read:tree_read_walk",
+    "walk_range_pairs": f"{ISLA}.tree_read:walk_range_pairs",
+    "walk_points_range": f"{ISLA}.tree_read:walk_points_range",
+    "walk_pair_counts": f"{ISLA}.tree_read:walk_pair_counts",
+    "tree_pair_invariants": f"{ISLA}.tree_read:tree_pair_invariants",
+    "kernel_geo_width": f"{ISLA}.tree_read:kernel_geo_width",
+    "KernelBasis": f"{ISLA}.tree_read:_KernelBasis",
+    "TreeKernelRead": f"{ISLA}.tree_read:_TreeKernelRead",
+    "pair_invariants_fused": f"{ISLA}.fused_basis:pair_invariants",
+    "fused_kernel_read": f"{ISLA}.fused_read:fused_kernel_read",
+    # G-BLOCKS
+    "SliceBlock": f"{ISLA}.blocks:_SliceBlock",
+    "RoutingLogits": f"{ISLA}.blocks:_RoutingLogits",
+    "softmax_over_points": f"{ISLA}.blocks:_softmax_over_points",
+    "relational_invariants": f"{ISLA}.blocks:_relational_invariants",
+    "geo_width": f"{ISLA}.blocks:_geo_width",
+    "geo_region": f"{ISLA}.blocks:_geo_region",
+    "fused_vectors": f"{ISLA}.blocks:_fused_vectors",
+    "fused_geo_region": f"{ISLA}.geo_kernel:fused_geo_region",
+    # G-HEADS
+    "levi_civita": f"{ISLA}.heads:_levi_civita",
+    "isotropic_tensors": f"{ISLA}.heads:_isotropic_tensors",
+    "OutputLayout": f"{ISLA}.heads:_OutputLayout",
+    "assemble_output": f"{ISLA}.heads:_assemble_output",
+    "pseudovectors": f"{ISLA}.heads:_pseudovectors",
+    "polar_complement": f"{ISLA}.heads:_polar_complement",
+}
+
+
+def target(name: str):
+    """The function (or module) :data:`TARGETS` names, imported now."""
+    path, _, attr = TARGETS[name].partition(":")
+    mod = importlib.import_module(path)
+    return getattr(mod, attr) if attr else mod
+
+
+@dataclass(frozen=True)
+class Case:
+    """One golden case (see the module docstring).
+
+    ``kept`` and ``weights`` name the draw's kept cells and Horvitz-Thompson weights
+    (read by the A/B harness's rules), ``family`` the CUDA outputs that are known not
+    to repeat bitwise run to run (float atomics), judged against their run-to-run
+    family there (fnmatch patterns). ``cuda_tol`` maps fnmatch patterns of output
+    names to the relative tolerance (of ``max|golden|``) of the CUDA variants against
+    the CPU golden; ``requires`` lists what the CUDA variants need beyond CUDA."""
+
+    group: str
+    name: str
+    build: Callable[[], dict]
+    run: Callable[[dict, str, str], dict]
+    variants: dict = field(
+        default_factory=lambda: {"cpu": ("reference",), "cuda": ("auto",)}
+    )
+    kept: tuple = ()
+    weights: tuple = ()
+    family: tuple = ()
+    cuda_tol: dict = field(default_factory=dict)
+    requires: tuple = ()
+
+    @property
+    def id(self) -> str:
+        return f"{self.group}/{self.name}"
+
+    def matches(self, patterns, name: str) -> bool:
+        return any(fnmatch.fnmatchcase(name, p) for p in patterns)
+
+
+CASES: list[Case] = []
+
+
+def _case(group, name, build, run, **kw):
+    CASES.append(Case(group, name, build, run, **kw))
+
+
+def _gen(seed: int) -> torch.Generator:
+    return torch.Generator().manual_seed(seed)
+
+
+def _to(inputs: dict, device, keys=None) -> dict:
+    return {k: v.to(device) for k, v in inputs.items() if keys is None or k in keys}
+
+
+def _cotangent(t: torch.Tensor, seed: int) -> torch.Tensor:
+    """A fixed random cotangent for ``t`` (drawn in float64 on the CPU)."""
+    return torch.randn(t.shape, generator=_gen(seed), dtype=D).to(t.device, t.dtype)
+
+
+def _params(module: torch.nn.Module, seed: int, std: float = 0.3) -> dict:
+    """Random values for every parameter of ``module`` (``param.<name>``), float64."""
+    g = _gen(seed)
+    return {
+        f"param.{n}": torch.randn(p.shape, generator=g, dtype=D) * std
+        for n, p in module.named_parameters()
+    }
+
+
+def _load(
+    module: torch.nn.Module, inputs: dict, device, dtype, prefix="param."
+) -> torch.nn.Module:
+    module = module.to(device, dtype)
+    with torch.no_grad():
+        for n, p in module.named_parameters():
+            p.copy_(inputs[prefix + n])
+    return module
+
+
+def _param_grads(module: torch.nn.Module, prefix="grad.param.", zero=()) -> dict:
+    """Every parameter's gradient but those named in ``zero``: parameters whose
+    gradient is zero in exact arithmetic (a constant that cancels in a softmax), so
+    that what is computed is roundoff alone, which no golden can hold."""
+    return {
+        prefix + n: p.grad
+        for n, p in module.named_parameters()
+        if p.grad is not None and n not in zero
+    }
+
+
+# --------------------------------------------------------------------------- G-FRAME
+
+
+def _frame_build(d, dtype, kind):
+    def build():
+        if kind == "cloud":
+            pts, _, w, _ = cloud(1500, d=d, seed=21, dtype=dtype)
+        else:
+            ### A symmetric body with distinct variances along the lab axes: every third
+            ### moment vanishes, so each axis's sign is the tie branch's (CANONICAL_SKEW_TIE).
+            lengths = torch.tensor([3.0, 2.0, 1.0][:d], dtype=dtype)
+            axis = torch.linspace(-1, 1, 5, dtype=dtype)
+            pts = torch.cartesian_prod(*[axis] * d) * lengths
+            w = torch.ones(pts.shape[0], dtype=dtype)
+        return {"in.points": pts, "in.measure": w}
+
+    return build
+
+
+def _frame_run(inputs, device, variant):
+    x = _to(inputs, device)
+    frame = target("canonical_frame")(x["in.points"], x["in.measure"])
+    return {
+        "out.frame": frame,
+        "out.coords": target("frame_coordinates")(x["in.points"], frame),
+    }
+
+
+for _d in (2, 3):
+    for _dt, _dn in ((D, "f64"), (F, "f32")):
+        for _kind in ("cloud", "symmetric"):
+            _case(
+                "G-FRAME",
+                f"frame_{_kind}_{_d}d_{_dn}",
+                _frame_build(_d, _dt, _kind),
+                _frame_run,
+            )
+
+
+# --------------------------------------------------------------------------- G-SAMP
+
+_FILL_BUDGETS = (77, 300, 3540, 5000)
+
+
+def _fill_build():
+    return {"in.counts": torch.tensor([500.0, 40.0, 3000.0], dtype=D)}
+
+
+def _fill_run(inputs, device, variant):
+    counts = inputs["in.counts"].to(device)
+    return {f"out.shares_{b}": target("water_fill")(counts, b) for b in _FILL_BUDGETS}
+
+
+_case("G-SAMP", "water_fill", _fill_build, _fill_run)
+
+_PPS_SHARES = (7.5, 77.3, 499.0, 600.0)
+
+
+def _pps_build():
+    _, _, w, _ = cloud(500, seed=0)
+    w[:5] *= 50.0  # five dominant cells, capped at pi = 1 for the larger shares
+    return {"in.measures": w}
+
+
+def _pps_run(inputs, device, variant):
+    a = inputs["in.measures"].to(device)
+    fn = target("pps_inclusion_probabilities")
+    return {f"out.pi_{s}": fn(a, a.new_tensor(s)) for s in _PPS_SHARES}
+
+
+_case("G-SAMP", "pps_inclusion_probabilities", _pps_build, _pps_run)
+
+_DRAWS = {
+    "3d": (
+        (500, 40, 3000),
+        3,
+        ((77, 0.0), (300, 0.37), (300, 0.999), (3540, 0.5), (4000, 0.25)),
+    ),
+    "2d": ((300, 700), 2, ((128, 0.5), (999, 0.125))),
+}
+
+
+def _draw_build(sizes, d):
+    def build():
+        out = {}
+        for i, n in enumerate(sizes):
+            pts, _, w, _ = cloud(n, d=d, seed=40 + i)
+            out[f"in.centroids_{i}"], out[f"in.measures_{i}"] = pts + 2.0 * i, w
+        return out
+
+    return build
+
+
+def _draw_run(sizes, draws):
+    def run(inputs, device, variant):
+        x = _to(inputs, device)
+        m = [x[f"in.measures_{i}"] for i in range(len(sizes))]
+        c = [x[f"in.centroids_{i}"] for i in range(len(sizes))]
+        out = {}
+        for budget, start in draws:
+            kept, w = target("sample_boundary_cells")(
+                m, c, budget, torch.tensor(start, dtype=D, device=device)
+            )
+            out[f"out.kept_{budget}_{start}"], out[f"out.weights_{budget}_{start}"] = (
+                kept,
+                w,
+            )
+        return out
+
+    return run
+
+
+for _name, (_sizes, _d, _draws) in _DRAWS.items():
+    _case(
+        "G-SAMP",
+        f"sample_boundary_cells_{_name}",
+        _draw_build(_sizes, _d),
+        _draw_run(_sizes, _draws),
+        kept=("out.kept_*",),
+        weights=("out.weights_*",),
+    )
+
+
+def _draw_inputs_build():
+    pts, nrm, w, _ = cloud(900, seed=0)
+    mesh = soup(pts, nrm, w)
+    from physicsnemo.mesh.primitives.surfaces import sphere_icosahedral
+
+    sph = sphere_icosahedral.load(radius=1.5, subdivisions=2)
+    return {
+        "in.soup_points": mesh.points,
+        "in.soup_cells": mesh.cells,
+        "in.soup_measures": w,
+        "in.sphere_points": sph.points.float() + 40.0,
+        "in.sphere_cells": sph.cells,
+    }
+
+
+def _draw_inputs_run(inputs, device, variant):
+    from physicsnemo.mesh import Mesh
+    from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
+
+    x = _to(inputs, device)
+    fn = target("draw_inputs")
+    soup_mesh = Mesh(
+        points=x["in.soup_points"],
+        cells=x["in.soup_cells"],
+        cell_data={EFFECTIVE_MEASURE_KEY: x["in.soup_measures"]},
+    )
+    out = dict(zip(("out.soup_measure", "out.soup_centroids"), fn(soup_mesh)))
+    ### float32 points and no stored measure: the geometric measures, in float64.
+    sph = Mesh(points=x["in.sphere_points"], cells=x["in.sphere_cells"])
+    out.update(zip(("out.sphere_measure", "out.sphere_centroids"), fn(sph)))
+    return out
+
+
+_case("G-SAMP", "draw_inputs", _draw_inputs_build, _draw_inputs_run)
+
+
+# --------------------------------------------------------------------------- G-FOREST
+
+_FOREST_FIELDS = (
+    "frame",
+    "node_offset",
+    "cells",
+    "range_start",
+    "range_count",
+    "left",
+    "right",
+    "leaf_ids",
+    "position_leaf",
+    "aabb_min",
+    "aabb_max",
+    "diameter_sq",
+    "center",
+    "normal",
+    "vecs",
+    "measure",
+    "coherent",
+)
+#: The trees' own integer tables (their float boxes are the forest's ``aabb_*``).
+_TREE_FIELDS = (
+    "node_left_child",
+    "node_right_child",
+    "leaf_start",
+    "leaf_count",
+    "node_range_start",
+    "node_range_count",
+    "sorted_source_order",
+    "max_depth",
+    "root_ids",
+)
+_BUILDS = {"cpu": ("reference", "fast"), "cuda": ("fast", "reference")}
+
+
+def _forest_outputs(f) -> dict:
+    out = {
+        f"out.{k}": getattr(f, k) for k in _FOREST_FIELDS if getattr(f, k) is not None
+    }
+    for i, level in enumerate(f.levels):
+        out.update(
+            {
+                f"out.levels.{i}.{k}": t
+                for k, t in zip(("nodes", "left", "right"), level)
+            }
+        )
+    for t, tree in enumerate(f.trees):
+        out[f"out.tree_cells.{t}"] = f.tree_cells[t]
+        out.update({f"out.trees.{t}.{k}": getattr(tree, k) for k in _TREE_FIELDS})
+    return out
+
+
+def _forest_build(d, dtype, kind):
+    def build():
+        pts, nrm, w, _ = cloud(1500, d=d, seed=21, dtype=dtype)
+        vecs = torch.randn(1500, 2, d, generator=_gen(22), dtype=dtype)
+        if kind == "dup":
+            pts = pts.clone()
+            pts[:700] = pts[0]  # equal Morton codes: the midpoint splits
+            return {"in.points": pts, "in.measure": w, "in.normals": nrm}
+        if kind == "tiny":
+            return {
+                "in.points": pts[:9],
+                "in.measure": w[:9],
+                "in.normals": nrm[:9],
+                "in.vecs": vecs[:9],
+            }
+        return {"in.points": pts, "in.measure": w, "in.normals": nrm, "in.vecs": vecs}
+
+    return build
+
+
+def _forest_run(inputs, device, variant):
+    x = _to(inputs, device)
+    f = target("BoundaryForest").build(
+        x["in.points"],
+        x["in.measure"],
+        x["in.normals"],
+        x.get("in.vecs"),
+        theta=1.0,
+        leaf_size=4,
+        build=variant,
+    )
+    return _forest_outputs(f)
+
+
+for _d in (3, 2):
+    for _dt, _dn in ((D, "f64"), (F, "f32")):
+        for _kind in ("cloud", "dup", "tiny"):
+            _case(
+                "G-FOREST",
+                f"forest_{_kind}_{_d}d_{_dn}",
+                _forest_build(_d, _dt, _kind),
+                _forest_run,
+                variants=_BUILDS,
+                requires=("warp",),
+            )
+
+
+def _node_means_build(dtype):
+    def build():
+        pts, nrm, w, _ = cloud(300, d=3, seed=9)
+        x = torch.randn(300, 6, generator=_gen(10), dtype=D).to(dtype)
+        return {"in.points": pts, "in.normals": nrm, "in.measure": w, "in.x": x}
+
+    return build
+
+
+def _node_means_run(inputs, device, variant):
+    x = _to(inputs, device)
+    f = target("BoundaryForest").build(
+        x["in.points"],
+        x["in.measure"],
+        x["in.normals"],
+        None,
+        theta=0.5,
+        leaf_size=8,
+        build="reference",
+    )
+    rows = x["in.x"].clone().requires_grad_()
+    fn = target("fused_node_means") if variant == "fused" else target("node_means")
+    means = fn(rows, f, x["in.measure"])
+    (means * _cotangent(means, 11)).sum().backward()
+    return {"out.means": means.detach(), "grad.x": rows.grad}
+
+
+_case(
+    "G-FOREST",
+    "node_means_f64",
+    _node_means_build(D),
+    _node_means_run,
+    variants={"cpu": ("reference",), "cuda": ("reference",)},
+    family=("out.means",),
+)
+_case(
+    "G-FOREST",
+    "node_means_f32",
+    _node_means_build(F),
+    _node_means_run,
+    variants={"cpu": ("reference",), "cuda": ("fused", "reference")},
+    family=("out.means",),
+    requires=("triton",),
+)
+
+
+# --------------------------------------------------------------------------- G-WALK
+
+_WALKS = {"cpu": ("reference", "fast"), "cuda": ("fast", "reference")}
+
+
+def _walk_build(d, dtype):
+    def build():
+        pts, nrm, w, _ = cloud(900, d=d, seed=3, dtype=dtype)
+        q, _, _, _ = cloud(150, d=d, seed=4, dtype=dtype, scale=(3.0,) * d)
+        q[5] = float("nan")  # opened down to every cell
+        q[6, 0] = float("inf")
+        return {"in.points": pts, "in.normals": nrm, "in.measure": w, "in.queries": q}
+
+    return build
+
+
+def _walk_run(theta):
+    def run(inputs, device, variant):
+        x = _to(inputs, device)
+        f = target("BoundaryForest").build(
+            x["in.points"], x["in.measure"], x["in.normals"], None, theta=theta
+        )
+        qi, si, n_node = f.point_pairs(x["in.queries"], walk=variant)
+        counts = f.frame_pairs(x["in.queries"] @ f.frame, walk=variant, count_only=True)
+        return {
+            "out.qi": qi,
+            "out.si": si,
+            "out.n_node": torch.tensor(n_node),
+            "out.counts": counts,
+        }
+
+    return run
+
+
+for _d in (3, 2):
+    for _dt, _dn in ((D, "f64"), (F, "f32")):
+        for _theta in (0.5, 1.0):
+            _case(
+                "G-WALK",
+                f"walk_{_d}d_{_dn}_theta{_theta}",
+                _walk_build(_d, _dt),
+                _walk_run(_theta),
+                variants=_WALKS,
+                requires=("warp",),
+            )
+
+
+# --------------------------------------------------------------------------- G-SEG
+
+
+def _plan_build():
+    g = _gen(4)
+    n_q, n_b = 60, 500
+    counts = torch.randint(0, 200, (n_q,), generator=g)
+    counts[::7] = 0
+    counts[-3:] = 0  # the last points have no pairs
+    qi = torch.repeat_interleave(torch.arange(n_q), counts)
+    bj = torch.randint(
+        0, n_b - 40, (qi.shape[0],), generator=g
+    )  # the last sources have none
+    bj[: qi.shape[0] // 3] = 17  # one source read by a third of the pairs
+    return {"in.qi": qi, "in.bj": bj, "in.n": torch.tensor([n_q, n_b])}
+
+
+def _plan_run(inputs, device, variant):
+    x = _to(inputs, device)
+    n_q, n_b = inputs["in.n"].tolist()
+    out = {}
+    for tag, cast in (("i64", lambda t: t), ("i32", lambda t: t.int())):
+        plan = target("PairPlan").build(cast(x["in.qi"]), cast(x["in.bj"]), n_q, n_b)
+        out.update(
+            {
+                f"out.{tag}.{k}": getattr(plan, k)
+                for k in ("q_offsets", "perm", "b_offsets", "qi_by_b")
+            }
+        )
+    return out
+
+
+_case("G-SEG", "pair_plan", _plan_build, _plan_run)
+
+
+def _seg_build(dtype, kernel_read=False):
+    def build():
+        g = _gen(3)
+        n_q, n_b, h, kc, c, f = 37, 50, 8, 4, 8, 16
+        counts = torch.randint(0, 500, (n_q,), generator=g)
+        counts[3] = 0
+        p = int(counts.sum())
+        qi = torch.repeat_interleave(torch.arange(n_q), counts)
+        bj = torch.randint(
+            0, n_b - 5, (p,), generator=g
+        )  # sources 45..49 have no pairs
+        bj[: p // 2] = 0  # one source read by half of the pairs
+        x = {"in.qi": qi, "in.bj": bj, "in.n": torch.tensor([n_q, n_b])}
+        if kernel_read:
+            x["in.basis"] = torch.randn(p, f, generator=g, dtype=D).to(dtype)
+            x["in.w"] = (0.3 * torch.randn(h, f, generator=g, dtype=D)).to(dtype)
+            x["in.logm"] = (-torch.rand(n_b, generator=g, dtype=D) * 8).to(
+                F
+            )  # per source
+        else:
+            x["in.ker"] = torch.randn(p, h, generator=g, dtype=D).to(dtype)
+            x["in.logm"] = (-torch.rand(p, generator=g, dtype=D) * 8).to(
+                D if dtype == D else F
+            )
+        x["in.q"] = torch.randn(n_q, h, kc, generator=g, dtype=D).to(dtype)
+        x["in.k"] = torch.randn(n_b, h, kc, generator=g, dtype=D).to(dtype)
+        x["in.v"] = torch.randn(n_b, h, c, generator=g, dtype=D).to(dtype)
+        return x
+
+    return build
+
+
+def _seg_run(inputs, device, variant):
+    x = _to(inputs, device)
+    n_q, n_b = inputs["in.n"].tolist()
+    plan = target("PairPlan").build(x["in.qi"], x["in.bj"], n_q, n_b)
+    leaves = {k: x[f"in.{k}"].clone().requires_grad_() for k in ("ker", "q", "k", "v")}
+    out = target("segment_softmax_read")(
+        leaves["ker"], x["in.logm"], leaves["q"], leaves["k"], leaves["v"], plan, 0.5
+    )
+    (out * _cotangent(out, 5)).sum().backward()
+    return {
+        "out.read": out.detach(),
+        **{f"grad.{k}": t.grad for k, t in leaves.items()},
+    }
+
+
+def _kernel_read_run(inputs, device, variant):
+    """``fused_kernel_read`` on CUDA (variant "auto"); its definition,
+    ``segment_softmax_read(basis @ w.T, logm[bj], ...)``, otherwise."""
+    x = _to(inputs, device)
+    n_q, n_b = inputs["in.n"].tolist()
+    plan = target("PairPlan").build(x["in.qi"], x["in.bj"], n_q, n_b)
+    lv = {
+        k: x[f"in.{k}"].clone().requires_grad_() for k in ("basis", "w", "q", "k", "v")
+    }
+    if variant == "auto":
+        out = target("fused_kernel_read")(
+            lv["basis"], lv["w"], x["in.logm"], lv["q"], lv["k"], lv["v"], plan, 0.5
+        )
+    else:
+        ker = lv["basis"] @ lv["w"].t()
+        out = target("segment_softmax_read")(
+            ker, x["in.logm"][plan.bj.long()], lv["q"], lv["k"], lv["v"], plan, 0.5
+        )
+    (out * _cotangent(out, 5)).sum().backward()
+    return {"out.read": out.detach(), **{f"grad.{k}": t.grad for k, t in lv.items()}}
+
+
+#: Measured run-to-run on CUDA: the Triton read's ``dk``/``dv`` accumulate by atomics.
+_SEG_FAMILY = ("grad.k", "grad.v")
+for _dt, _dn in ((D, "f64"), (F, "f32"), (torch.bfloat16, "bf16")):
+    _case(
+        "G-SEG",
+        f"segment_softmax_read_{_dn}",
+        _seg_build(_dt),
+        _seg_run,
+        family=_SEG_FAMILY,
+        requires=("triton",),
+    )
+for _dt, _dn in ((F, "f32"), (torch.bfloat16, "bf16")):
+    _case(
+        "G-READ",
+        f"kernel_read_{_dn}",
+        _seg_build(_dt, kernel_read=True),
+        _kernel_read_run,
+        variants={"cpu": ("reference",), "cuda": ("auto", "reference")},
+        family=_SEG_FAMILY,
+        requires=("triton",),
+    )
+
+
+# --------------------------------------------------------------------------- G-GEO
+### Surfaces after the geometry test files' builders (copied, so that a change there
+### cannot move these goldens): closed, open, tied, on-wall, thin and degenerate sets.
+
+
+def _oriented(points, cells, outward):
+    from physicsnemo.mesh import Mesh
+
+    m = Mesh(points=points, cells=cells)
+    cells = cells.clone()
+    flip = (m.cell_normals * outward(m.cell_centroids)).sum(-1) < 0
+    cells[flip, -2:] = cells[flip, -2:].flip(-1)
+    return points, cells
+
+
+def _polygon(verts):
+    n = verts.shape[0]
+    cells = torch.stack([torch.arange(n), torch.arange(1, n + 1) % n], -1)
+    x, y = verts[:, 0], verts[:, 1]
+    if (x * y.roll(-1) - x.roll(-1) * y).sum() > 0:
+        cells = cells.flip(-1)  # outward normals
+    return verts, cells
+
+
+def _near_wall(dim, n, seed, band, radius=1.0):
+    g = _gen(seed)
+    dirs = torch.nn.functional.normalize(
+        torch.randn(n, dim, dtype=D, generator=g), dim=-1
+    )
+    return dirs * (radius + band * (2 * torch.rand(n, 1, dtype=D, generator=g) - 1))
+
+
+def _rotation(d, seed):
+    q, r = torch.linalg.qr(torch.randn(d, d, dtype=D, generator=_gen(seed)))
+    q = q * torch.sign(torch.diagonal(r))[None]
+    return q if torch.det(q) > 0 else -q
+
+
+def _geo_sphere():
+    from physicsnemo.mesh.primitives.surfaces import sphere_icosahedral
+
+    m = sphere_icosahedral.load(radius=1.0, subdivisions=2)
+    p, c = _oriented(m.points.double(), m.cells, lambda x: x)
+    q = torch.cat([_near_wall(3, 200, 1, band=0.5), p, p[c[:64, :2]].mean(1)])
+    return p, c, q
+
+
+def _geo_torus():
+    from physicsnemo.mesh.primitives.surfaces import torus
+
+    m = torus.load(n_major=16, n_minor=8)
+
+    def outward(x):
+        return x - torch.nn.functional.normalize(
+            x * torch.tensor([1.0, 1.0, 0.0], dtype=x.dtype), dim=-1
+        )
+
+    p, c = _oriented(m.points.double(), m.cells, outward)
+    ### (generic queries only: the core circle's ties reach the planar quads' diagonals)
+    return p, c, torch.randn(200, 3, dtype=D, generator=_gen(2))
+
+
+def _cube(levels=0):
+    from physicsnemo.mesh import Mesh
+    from physicsnemo.mesh.primitives.surfaces import cube_surface
+
+    m = cube_surface.load()
+    m = Mesh(points=m.points.double(), cells=m.cells)
+    return m.subdivide(levels=levels, filter="linear") if levels else m
+
+
+def _geo_box_ties(dim):
+    """The unit square/cube (outward) in a generic pose and points on its medial
+    surface: equidistant from two sides, three, and all (the centre)."""
+    a = torch.linspace(0.05, 0.45, 9, dtype=D) - 0.5
+    z = torch.zeros_like(a)
+    if dim == 2:
+        p, c = _polygon(
+            torch.tensor([[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]], dtype=D)
+        )
+        q = torch.cat(
+            [
+                torch.stack([s * a, t * a], -1)
+                for s, t in ((1, 1), (-1, 1), (1, -1), (-1, -1))
+            ]
+        )
+    else:
+        m = _cube()
+        p, c = m.points, m.cells
+        ### (not the corner diagonals or the centre: their closest points lie on the
+        ### faces' quad diagonals, a near-coplanar tie; see README.md, "Exclusions")
+        q = torch.cat([torch.stack(v, -1) for v in ((a, a, z), (-a, z, a), (z, a, -a))])
+    if dim == 2:
+        q = torch.cat([q, q.new_zeros(1, dim)])
+    R, t = _rotation(dim, 7), torch.arange(1, dim + 1, dtype=D) / 3
+    return p @ R.T + t, c, q @ R.T + t
+
+
+def _geo_box_wall(dim):
+    """The unit square/cube (outward), its sides split, and points exactly on it: the
+    cells' centroids, and the vertices and edge midpoints on the box's own edges and
+    corners (not those inside a side, where coplanar cells meet: see README.md,
+    "Exclusions")."""
+    if dim == 2:
+        h = torch.tensor([-0.5, 0.0, 0.5, 0.5, 0.5, 0.0, -0.5, -0.5], dtype=D)
+        p, c = _polygon(torch.stack([h, h.roll(-2)], -1))
+        pairs = ((0, 1),)
+    else:
+        m = _cube(1)
+        p, c = m.points, m.cells
+        pairs = ((0, 1), (1, 2), (0, 2))
+    q = torch.cat([p, *[p[c[:, [a, b]]].mean(1) for a, b in pairs]])
+    q = torch.cat([p[c].mean(1), q[(q.abs() == 0.5).sum(-1) >= 2]])
+    return p, c, q
+
+
+def _geo_thin_cap():
+    """The unit cube with a cap of width 1e-6 in its bottom face (the thin set),
+    rotated and shifted, with queries on, just off and beside the cap, and in the box."""
+    p = torch.tensor(
+        [
+            [0, 0, 0],
+            [1, 0, 0],
+            [1, 1, 0],
+            [0, 1, 0],
+            [0, 0, 1],
+            [1, 0, 1],
+            [1, 1, 1],
+            [0, 1, 1],
+            [0.5, 1e-6, 0],
+        ],
+        dtype=D,
+    )
+    c = torch.tensor(
+        [[0, 1, 8], [0, 8, 3], [8, 2, 3], [8, 1, 2], [4, 5, 6], [4, 6, 7], [0, 4, 5], [0, 5, 1], [1, 5, 6],
+         [1, 6, 2], [2, 6, 7], [2, 7, 3], [3, 7, 4], [3, 4, 0]]
+    )  # fmt: skip
+    p, c = _oriented(p, c, lambda x: x - 0.5)
+    g = _gen(11)
+    tri = p[c[0]]
+    w = torch.rand(20, 3, dtype=D, generator=g)
+    on = (w / w.sum(1, keepdim=True)) @ tri
+    nrm = torch.nn.functional.normalize(
+        torch.linalg.cross(tri[1] - tri[0], tri[2] - tri[0]), dim=0
+    )
+    side = torch.rand(20, 1, dtype=D, generator=g) * 2 - 1
+    q = torch.cat(
+        [
+            on,
+            on + 1e-6 * side * nrm,
+            on + 1e-5 * side * nrm,
+            torch.rand(40, 3, dtype=D, generator=g) * 1.4 - 0.2,
+        ]
+    )
+    R, t = _rotation(3, 7), torch.tensor([0.3, -0.2, 0.7], dtype=D)
+    return p @ R.T + t, c, q @ R.T + t
+
+
+def _geo_sliver_soup():
+    """Random triangles, the first eight slivers 1e-13 off their line (the degenerate set)."""
+    g = _gen(500)
+    tri = torch.rand(48, 3, 3, dtype=D, generator=g)
+    tri[:8, 1] = 0.5 * (tri[:8, 0] + tri[:8, 2]) + 1e-13 * torch.randn(
+        8, 3, dtype=D, generator=g
+    )
+    mid = 0.5 * (tri[:8, 0] + tri[:8, 2])
+    q = torch.cat(
+        [
+            torch.rand(80, 3, dtype=D, generator=g) * 1.4 - 0.2,
+            (mid[:, None] + 0.01 * torch.randn(8, 5, 3, dtype=D, generator=g)).reshape(
+                -1, 3
+            ),
+            tri[:8].reshape(-1, 3),
+            mid,
+        ]
+    )
+    return tri.reshape(-1, 3), torch.arange(144).reshape(-1, 3), q
+
+
+def _geo_zero_area_box():
+    """A closed box with zero-area cells (three coincident vertices, and two coincident)
+    added at its vertices and along its edges."""
+    m = _cube(1)
+    p, c = m.points, m.cells
+    extra = torch.cat([c[::6][:, [0, 0, 0]], c[1::6][:, [0, 0, 1]]])
+    corners = p[
+        (p.abs() == 0.5).all(-1)
+    ]  # not the vertices inside a side (coplanar cells)
+    q = torch.cat(
+        [torch.rand(120, 3, dtype=D, generator=_gen(12)) * 1.6 - 0.8, corners]
+    )
+    return p, torch.cat([c, extra]), q
+
+
+def _geo_open_cube():
+    m = _cube(1)
+    keep = m.points[m.cells].mean(1)[:, 2] < 0.49
+    return m.points, m.cells[keep], torch.randn(200, 3, dtype=D, generator=_gen(13))
+
+
+def _geo_circle():
+    from physicsnemo.mesh.primitives.curves import circle_2d
+
+    m = circle_2d.load(n_points=48)
+    p, c = _oriented(m.points.double(), m.cells, lambda x: x)
+    return p, c, torch.cat([_near_wall(2, 150, 3, band=0.5), p, p[c].mean(1)])
+
+
+def _geo_naca():
+    """A NACA 0012 section with a sharp trailing edge (24 cosine-clustered stations)."""
+    beta = torch.linspace(0, torch.pi, 24, dtype=D)
+    x = 0.5 * (1 - torch.cos(beta))
+    yt = 0.6 * (
+        0.2969 * x.sqrt() - 0.1260 * x - 0.3516 * x**2 + 0.2843 * x**3 - 0.1036 * x**4
+    )
+    verts = torch.cat(
+        [torch.stack([x, yt], -1), torch.stack([x, -yt], -1).flip(0)[1:-1]]
+    )
+    p, c = _polygon(verts)
+    q = torch.rand(150, 2, dtype=D, generator=_gen(14)) * torch.tensor(
+        [1.6, 0.6], dtype=D
+    ) - torch.tensor([0.3, 0.3], dtype=D)
+    return p, c, torch.cat([q, p])
+
+
+_GEO_SETS = {
+    "sphere": _geo_sphere,
+    "torus": _geo_torus,
+    "box_ties_3d": lambda: _geo_box_ties(3),
+    "box_wall_3d": lambda: _geo_box_wall(3),
+    "thin_cap": _geo_thin_cap,
+    "sliver_soup": _geo_sliver_soup,
+    "zero_area_box": _geo_zero_area_box,
+    "open_cube": _geo_open_cube,
+    "circle": _geo_circle,
+    "naca": _geo_naca,
+    "box_ties_2d": lambda: _geo_box_ties(2),
+    "box_wall_2d": lambda: _geo_box_wall(2),
+}
+_GEO_SEARCH = ("cell", "tied", "tie_u", "sign", "on_wall", "weights")
+
+
+def _geo_build(maker, dtype):
+    def build():
+        p, c, q = maker()
+        x = {"in.queries": q.to(dtype), "in.points": p.to(dtype), "in.cells": c}
+        if maker is _geo_thin_cap:
+            x["in.thin"] = torch.ones(
+                ()
+            )  # a marker: drop the directions (_GEO_DIRECTIONS)
+        return x
+
+    return build
+
+
+#: Outputs not recorded on the thin cap: its cap and the cells around it are coplanar
+#: (near-coplanar after the rotation), so its queries meet near-coplanar ties, where
+#: the direction is a known defect (README.md, "Exclusions"); d, the closest cell,
+#: the sign, the on-wall decision, the weights and the winding number stay.
+_GEO_DIRECTIONS = (
+    "out.u",
+    "grad.queries",
+    "grad.points",
+    "out.search.tied",
+    "out.search.tie_u",
+)
+
+
+def _geo_run(inputs, device, variant):
+    """``d``, ``u``, their gradients in the queries and the vertices (a fixed
+    cotangent), the six outputs of the closest-feature search and the winding number,
+    recorded by spies on the geometry module's search ops (as test_isla_geometry_fast)."""
+    x = _to(inputs, device)
+    geo = target("geometry_spies")
+    seen = {}
+    saved = {
+        n: getattr(geo, n)
+        for n in (
+            "_closest_candidates",
+            "_closest_candidates_fast",
+            "_winding_sign",
+            "_tree_winding_numbers",
+        )
+    }
+
+    def search(*args, _op):
+        seen["search"] = _op(*args)
+        return seen["search"]
+
+    def sign(query, simplex, parity, tree, w=None, oriented=None):
+        if w is not None:
+            seen["w"] = w / (4 * torch.pi)
+        return saved["_winding_sign"](query, simplex, parity, tree, w, oriented)
+
+    def tree_w(*args):
+        seen["w"] = saved["_tree_winding_numbers"](*args)
+        return seen["w"]
+
+    geo._closest_candidates = lambda *a: search(*a, _op=saved["_closest_candidates"])
+    geo._closest_candidates_fast = lambda *a: search(
+        *a, _op=saved["_closest_candidates_fast"]
+    )
+    geo._winding_sign, geo._tree_winding_numbers = sign, tree_w
+    try:
+        q = x["in.queries"].clone().requires_grad_()
+        p = x["in.points"].clone().requires_grad_()
+        d, u = target("exact_boundary_geometry")(q, p, x["in.cells"], kernel=variant)
+        ramp = torch.linspace(0, 1, u.numel(), dtype=u.dtype, device=u.device).reshape(
+            u.shape
+        )
+        (d.sum() + (u * ramp).sum()).backward()
+    finally:
+        for n, f in saved.items():
+            setattr(geo, n, f)
+    out = {
+        "out.d": d.detach(),
+        "out.u": u.detach(),
+        "grad.queries": q.grad,
+        "grad.points": p.grad,
+    }
+    out.update({f"out.search.{k}": t for k, t in zip(_GEO_SEARCH, seen["search"])})
+    if "w" in seen:  # the 3-D tree's winding numbers (2-D signs by its segment sums)
+        out["out.w"] = seen["w"]
+    if "in.thin" in x:
+        out = {k: v for k, v in out.items() if k not in _GEO_DIRECTIONS}
+    return out
+
+
+#: Measured run-to-run on CUDA: the vertex gradient accumulates by float atomics.
+_GEO_FAMILY = ("grad.points",)
+for _name, _maker in _GEO_SETS.items():
+    _dtypes = (
+        ((D, "f64"), (F, "f32"))
+        if _name in ("sphere", "box_wall_3d", "circle", "thin_cap")
+        else ((D, "f64"),)
+    )
+    for _dt, _dn in _dtypes:
+        _case(
+            "G-GEO",
+            f"exact_geometry_{_name}_{_dn}",
+            _geo_build(_maker, _dt),
+            _geo_run,
+            variants={"cpu": ("reference",), "cuda": ("fast", "reference")},
+            family=_GEO_FAMILY,
+            requires=("warp",),
+        )
+
+
+def _geo_parts_build():
+    g = _gen(15)
+    new = torch.rand(3000, generator=g) < 0.1
+    new[0] = True
+    p, c, _ = _geo_sphere()
+    tri = torch.rand(400, 3, 3, dtype=D, generator=g)
+    tri[:40, 1] = 0.5 * (tri[:40, 0] + tri[:40, 2]) + 1e-9 * torch.randn(
+        40, 3, dtype=D, generator=g
+    )  # thin: guarded
+    tri[40:60, 2] = tri[40:60, 1]  # zero area: their segments
+    q = torch.rand(400, 3, dtype=D, generator=g) * 1.4 - 0.2
+    return {"in.new": new, "in.points": p, "in.cells": c, "in.q": q, "in.simplex": tri}
+
+
+def _geo_parts_run(inputs, device, variant):
+    """``run_start``, ``canonical_cells`` and ``closest_weights`` of geometry_fast:
+    the Triton kernels on CUDA, the reference they stand for elsewhere."""
+    x = _to(inputs, device)
+    geo = target("closest_weights_constants")
+    vert, parity = target("canonical_cells")(
+        x["in.points"], x["in.cells"], target("canonical_cells_reference")
+    )
+    simplex = x["in.simplex"]
+    flat, _ = target("zero_area")(
+        simplex, torch.arange(simplex.shape[0] * 3, device=device).reshape(-1, 3)
+    )
+    w = target("closest_weights")(
+        x["in.q"],
+        simplex,
+        flat,
+        target("closest_weights_reference"),
+        geo._ERICSON_K,
+        geo._SWITCH_UNITS,
+        geo._ORIENT_ERRBOUND,
+    )
+    return {
+        "out.run_start": target("run_start")(x["in.new"]),
+        "out.canonical_cells": vert,
+        "out.parity": parity,
+        "out.flat": flat,
+        "out.closest_weights": w,
+    }
+
+
+_case(
+    "G-GEO",
+    "geometry_fast_parts",
+    _geo_parts_build,
+    _geo_parts_run,
+    requires=("triton",),
+)
+
+
+# --------------------------------------------------------------------------- G-READ
+
+_READS = {"cpu": ("reference",), "cuda": ("auto", "reference")}
+_READ_RANGES = ((0, 40), (40, 95), (95, 120))
+
+
+def _read_build(d, dtype, n_vecs):
+    def build():
+        pts, nrm, w, drv = cloud(300, d=d, seed=0, dtype=D)
+        g = _gen(1)
+        near = pts[:110] + 0.15 * torch.randn(110, d, generator=g, dtype=D)
+        far = 40.0 + torch.randn(10, d, generator=g, dtype=D)
+        x = {
+            "in.boundary_r": pts[None],
+            "in.boundary_n": nrm[None],
+            "in.log_frac": torch.log(w / w.sum())[None],
+            "in.query_r": torch.cat([near, far])[None],
+            "in.query_n": torch.nn.functional.normalize(
+                torch.randn(1, 120, d, generator=g, dtype=D), dim=-1
+            ),
+            "in.query_wall": 0.05 + torch.rand(1, 120, generator=g, dtype=D),
+            "in.g_unit": drv[None, None],
+            "in.h_b": torch.randn(300, 16, generator=g, dtype=D),
+            "in.h_q": torch.randn(120, 16, generator=g, dtype=D),
+        }
+        if n_vecs:
+            x["in.boundary_vecs"] = torch.randn(1, 300, n_vecs, d, generator=g, dtype=D)
+        x = {k: v.to(dtype) for k, v in x.items()}
+        basis = target("KernelBasis")(target("kernel_geo_width")(1, n_vecs))
+        x.update({f"basis.{k}": v.to(dtype) for k, v in _params(basis, 2).items()})
+        x.update(
+            {
+                f"read.{k}": v.to(dtype)
+                for k, v in _params(target("TreeKernelRead")(16), 3).items()
+            }
+        )
+        return x
+
+    return build
+
+
+def _read_run(n_vecs):
+    def run(inputs, device, variant):
+        """The tree read of one block on one case at theta 0.5: the walk's plan and
+        lists, the pair invariants, the kernel basis, the read and every gradient, and
+        the pairs of three ranges of points from a walk made without its lists."""
+        x = _to(inputs, device)
+        dtype = x["in.query_r"].dtype
+        basis = _load(
+            target("KernelBasis")(target("kernel_geo_width")(1, n_vecs)),
+            x,
+            device,
+            dtype,
+            "basis.param.",
+        )
+        read = _load(target("TreeKernelRead")(16), x, device, dtype, "read.param.")
+        fast = variant == "auto"
+        walk_kw = dict(
+            query_r=x["in.query_r"],
+            query_n=x["in.query_n"],
+            query_wall=x["in.query_wall"],
+            boundary_r=x["in.boundary_r"],
+            boundary_n=x["in.boundary_n"],
+            boundary_vecs=x.get("in.boundary_vecs"),
+            log_frac=x["in.log_frac"],
+            g_unit=x["in.g_unit"],
+            theta=0.5,
+            eps=1e-12,
+            walk="auto" if fast else "reference",
+            build="auto" if fast else "reference",
+            kernel="fused" if fast else "reference",
+        )
+        walk = target("tree_read_walk")(**walk_kw)
+        pairs = target("walk_range_pairs")(basis, walk)
+        out = {
+            f"out.plan.{k}": getattr(pairs.plan, k)
+            for k in ("qi", "bj", "q_offsets", "perm", "b_offsets", "qi_by_b")
+        }
+        out["out.n_pairs_node"] = torch.tensor(pairs.n_pairs_node)
+        out["out.log_m"], out["out.src_log_m"] = pairs.log_m, pairs.src_log_m
+        qi, si, _ = walk.lists[0]
+        geometry = walk.geometry[0]
+        with torch.no_grad():
+            if fast and dtype == F:
+                inv = target("pair_invariants_fused")(qi, si, 0, 0, geometry)
+            else:
+                inv = target("tree_pair_invariants")(qi, si, **geometry)
+        out["out.invariants"] = inv
+        h_b = x["in.h_b"].clone().requires_grad_()
+        h_q = x["in.h_q"].clone().requires_grad_()
+        y = read(h_b, h_q, pairs)
+        (y * _cotangent(y, 6)).sum().backward()
+        out["out.basis"], out["out.read"] = pairs.basis.detach(), y.detach()
+        out.update({"grad.h_b": h_b.grad, "grad.h_q": h_q.grad})
+        out.update(_param_grads(read, "grad.read."))
+        ### (the basis MLP's last bias adds a per-head constant to every pair's logit,
+        ### which cancels in each point's softmax: its gradient is roundoff)
+        out.update(_param_grads(basis, "grad.basis.", zero=("net.4.bias",)))
+        ### The pairs of ranges of points (query_chunks' path): each range's lists and basis.
+        lazy = target("tree_read_walk")(**walk_kw, walk_points=False)
+        out["out.pair_counts"] = target("walk_pair_counts")(lazy)
+        with torch.no_grad():
+            for i, (a, b) in enumerate(_READ_RANGES):
+                part = target("walk_range_pairs")(
+                    basis, target("walk_points_range")(lazy, a, b)
+                )
+                out[f"out.range{i}.qi"], out[f"out.range{i}.bj"] = (
+                    part.plan.qi,
+                    part.plan.bj,
+                )
+                out[f"out.range{i}.basis"] = part.basis
+        return out
+
+    return run
+
+
+#: Measured run-to-run on CUDA: the reference read's node means accumulate by float
+#: atomics (index_add), and so does everything downstream of them.
+_READ_FAMILY = ("out.read", "grad.*")
+for _d, _dt, _dn, _nv in (
+    (3, D, "f64", 1),
+    (3, F, "f32", 1),
+    (2, D, "f64", 0),
+    (2, F, "f32", 0),
+):
+    _case(
+        "G-READ",
+        f"tree_read_{_d}d_{_dn}",
+        _read_build(_d, _dt, _nv),
+        _read_run(_nv),
+        variants=_READS,
+        family=_READ_FAMILY,
+        requires=("warp", "triton"),
+    )
+
+
+# --------------------------------------------------------------------------- G-BLOCKS
+
+
+def _block_inputs(g, n, hidden, dtype, k=1, n_vecs=1, n_tens=0):
+    x = {
+        "in.h": torch.randn(1, n, hidden, generator=g, dtype=D),
+        "in.log_w": torch.log(torch.rand(1, n, 1, generator=g, dtype=D) + 0.1),
+        "in.r": torch.randn(1, n, 3, generator=g, dtype=D),
+        "in.n_hat": torch.nn.functional.normalize(
+            torch.randn(1, n, 3, generator=g, dtype=D), dim=-1
+        ),
+        "in.g_hat": torch.nn.functional.normalize(
+            torch.randn(1, 1, k, 3, generator=g, dtype=D), dim=-1
+        )
+        .expand(1, n, k, 3)
+        .contiguous(),
+    }
+    if n_vecs:
+        x["in.vecs"] = torch.randn(1, n, n_vecs, 3, generator=g, dtype=D)
+    if n_tens:
+        t = torch.randn(1, n, n_tens, 3, 3, generator=g, dtype=D)
+        x["in.tens"] = t + t.transpose(-1, -2)
+    return {k: v.to(dtype) for k, v in x.items()}
+
+
+def _slice_block_build(dtype, n_vecs, n_tens):
+    def build():
+        g = _gen(30)
+        x = _block_inputs(g, 200, 32, dtype, n_vecs=n_vecs, n_tens=n_tens)
+        x.update(
+            {
+                f"q.{k}": v
+                for k, v in _block_inputs(
+                    g, 50, 32, dtype, n_vecs=n_vecs, n_tens=n_tens
+                ).items()
+            }
+        )
+        block = target("SliceBlock")(
+            32, 8, n_global_vectors=1, n_block_vecs=n_vecs, n_block_tens=n_tens
+        )
+        x.update({k: v.to(dtype) for k, v in _params(block, 31, 0.2).items()})
+        return x
+
+    return build
+
+
+def _slice_block_run(n_vecs, n_tens):
+    def run(inputs, device, variant):
+        """One slice block over 200 tokens (``forward(slices=True)``) and its read for
+        50 passive tokens, with a fixed cotangent on both: outputs, the slices, and
+        the gradients in the states, positions and parameters."""
+        x = _to(inputs, device)
+        dtype = x["in.h"].dtype
+        geo = "fused" if variant == "auto" else "eager"
+        block = _load(
+            target("SliceBlock")(32, 8, geo, 1, n_vecs, n_tens), x, device, dtype
+        )
+        h, r, hq = (x[k].clone().requires_grad_() for k in ("in.h", "in.r", "q.in.h"))
+        y, slices = block(
+            h,
+            x["in.log_w"],
+            r,
+            x["in.n_hat"],
+            x["in.g_hat"],
+            1e-12,
+            x.get("in.vecs"),
+            x.get("in.tens"),
+            slices=True,
+        )
+        yq = block.read(
+            hq,
+            slices,
+            x["q.in.r"],
+            x["q.in.n_hat"],
+            x["q.in.g_hat"],
+            1e-12,
+            x.get("q.in.vecs"),
+            x.get("q.in.tens"),
+        )
+        ((y * _cotangent(y, 32)).sum() + (yq * _cotangent(yq, 33)).sum()).backward()
+        out = {"out.h": y.detach(), "out.h_read": yq.detach()}
+        out.update(
+            {
+                f"out.slices.{k}": t.detach()
+                for k, t in zip(("protos", "z_pos", "m_s", "z"), slices)
+            }
+        )
+        ### (geo_logit's bias is a constant over the slices, which cancels in both
+        ### softmaxes: its gradient is roundoff)
+        out.update({"grad.h": h.grad, "grad.r": r.grad, "grad.h_read": hq.grad})
+        out.update(_param_grads(block, zero=("geo_logit.bias",)))
+        return out
+
+    return run
+
+
+for _dt, _dn in ((D, "f64"), (F, "f32")):
+    _case(
+        "G-BLOCKS",
+        f"slice_block_{_dn}",
+        _slice_block_build(_dt, 1, 0),
+        _slice_block_run(1, 0),
+        variants={"cpu": ("reference",), "cuda": ("auto", "reference")},
+        requires=("triton",),
+    )
+_case(
+    "G-BLOCKS",
+    "slice_block_tensors_f64",
+    _slice_block_build(D, 1, 1),
+    _slice_block_run(1, 1),
+)
+
+
+def _routing_build(dtype):
+    def build():
+        g = _gen(34)
+        x = {
+            "in.x": torch.randn(1, 100, 32, generator=g, dtype=D).to(dtype),
+            "in.log_w": torch.log(torch.rand(1, 100, 1, generator=g, dtype=D) + 0.1).to(
+                dtype
+            ),
+        }
+        x.update(
+            {
+                k: v.to(dtype)
+                for k, v in _params(target("RoutingLogits")(32, 8), 35).items()
+            }
+        )
+        return x
+
+    return build
+
+
+def _routing_run(inputs, device, variant):
+    x = _to(inputs, device)
+    mod = _load(target("RoutingLogits")(32, 8), x, device, x["in.x"].dtype)
+    h = x["in.x"].clone().requires_grad_()
+    protos = mod.prototypes(h, x["in.log_w"])
+    logits = mod.logits(h, protos)
+    a = target("softmax_over_points")(logits + x["in.log_w"])
+    ((logits * _cotangent(logits, 36)).sum() + (a * _cotangent(a, 37)).sum()).backward()
+    return {
+        "out.protos": protos.detach(),
+        "out.logits": logits.detach(),
+        "out.a": a.detach(),
+        "grad.x": h.grad,
+        **_param_grads(mod),
+    }
+
+
+for _dt, _dn in ((D, "f64"), (F, "f32")):
+    _case("G-BLOCKS", f"routing_logits_{_dn}", _routing_build(_dt), _routing_run)
+
+
+def _region_build(dtype, k, n_vecs, n_tens=0):
+    def build():
+        g = _gen(38)
+        x = _block_inputs(g, 300, 32, dtype, k=k, n_vecs=n_vecs, n_tens=n_tens)
+        del x["in.h"], x["in.log_w"]
+        x["in.logits_pre"] = torch.randn(1, 300, 16, generator=g, dtype=D).to(dtype)
+        x["in.z_pos"] = torch.randn(1, 16, 3, generator=g, dtype=D).to(dtype)
+        x["in.m_s"] = torch.nn.functional.normalize(
+            torch.randn(1, 16, 3, generator=g, dtype=D), dim=-1
+        ).to(dtype)
+        lin = torch.nn.Linear(target("geo_width")(k, n_vecs, n_tens), 1)
+        x.update({k_: v.to(dtype) for k_, v in _params(lin, 39).items()})
+        return x
+
+    return build
+
+
+def _region_run(k, n_vecs, n_tens=0):
+    def run(inputs, device, variant):
+        """The geometry region (bias, point->slice mix, pooled invariants) and its
+        gradients; the invariants themselves; the fused kernel on CUDA."""
+        x = _to(inputs, device)
+        dtype = x["in.r"].dtype
+        lin = _load(
+            torch.nn.Linear(target("geo_width")(k, n_vecs, n_tens), 1), x, device, dtype
+        )
+        names = ("in.logits_pre", "in.r", "in.n_hat", "in.z_pos", "in.m_s")
+        lv = {n: x[n].clone().requires_grad_() for n in names}
+        args = [lv["in.r"], lv["in.n_hat"], x["in.g_hat"], lv["in.z_pos"], lv["in.m_s"]]
+        if variant == "auto":
+            vecs = target("fused_vectors")(x["in.g_hat"], x.get("in.vecs"))
+            res = target("fused_geo_region")(
+                lin,
+                lv["in.logits_pre"],
+                lv["in.r"],
+                lv["in.n_hat"],
+                vecs,
+                lv["in.z_pos"],
+                lv["in.m_s"],
+                1e-12,
+                n_global=k,
+            )
+        else:
+            res = target("geo_region")(
+                lin,
+                lv["in.logits_pre"],
+                *args,
+                1e-12,
+                x.get("in.vecs"),
+                x.get("in.tens"),
+            )
+        sum((t * _cotangent(t, 40 + i)).sum() for i, t in enumerate(res)).backward()
+        out = {f"out.{n}": t.detach() for n, t in zip(("bias", "mix", "pooled"), res)}
+        out.update({f"grad.{n[3:]}": t.grad for n, t in lv.items()})
+        out.update(_param_grads(lin))
+        with torch.no_grad():
+            out["out.invariants"] = target("relational_invariants")(
+                *args, 1e-12, x.get("in.vecs"), x.get("in.tens")
+            )
+        return out
+
+    return run
+
+
+for _dt, _dn in ((D, "f64"), (F, "f32")):
+    _case(
+        "G-BLOCKS",
+        f"geo_region_k2_v1_{_dn}",
+        _region_build(_dt, 2, 1),
+        _region_run(2, 1),
+        variants={"cpu": ("reference",), "cuda": ("auto", "reference")},
+        requires=("triton",),
+    )
+_case(
+    "G-BLOCKS",
+    "geo_region_tensors_f64",
+    _region_build(D, 1, 1, 1),
+    _region_run(1, 1, 1),
+)
+
+
+# --------------------------------------------------------------------------- G-HEADS
+
+
+def _no_inputs():
+    return {}
+
+
+def _head_tables_run(inputs, device, variant):
+    """The isotropic tensors of every rank, symmetry and parity in 2 and 3 dimensions,
+    the Levi-Civita symbols, and the coefficient index of a set of output layouts."""
+    from physicsnemo.mesh.fields import RankSpec
+
+    out = {f"out.levi_civita_{d}": target("levi_civita")(d) for d in (2, 3)}
+    for d in (2, 3):
+        for rank in range(5):
+            for sym in (False, True):
+                for parity in ("even", "odd"):
+                    iso = target("isotropic_tensors")(rank, sym, parity, d)
+                    if iso:
+                        out[
+                            f"out.iso.{d}d.r{rank}.{'sym' if sym else 'gen'}.{parity}"
+                        ] = torch.stack(iso)
+    for d, rank, sym, parity, m, p in _LAYOUTS:
+        lay = target("OutputLayout")(
+            RankSpec(rank, symmetric=sym, parity=parity), m, p, d
+        )
+        key = f"out.layout.{d}d.r{rank}.{'sym' if sym else 'gen'}.{parity}.m{m}p{p}"
+        out[key + ".index"] = lay.index
+        out[key + ".sizes"] = torch.tensor([lay.n_vec, lay.n_free, lay.n_coeffs])
+    return out
+
+
+#: (dim, rank, symmetric, parity, true vectors, pseudovectors)
+_LAYOUTS = (
+    (3, 1, False, "even", 3, 3),
+    (3, 1, False, "odd", 3, 3),
+    (3, 2, True, "even", 3, 3),
+    (3, 2, False, "odd", 2, 1),
+    (3, 3, False, "odd", 2, 1),
+    (3, 4, True, "even", 2, 1),
+    (2, 1, False, "odd", 2, 2),
+    (2, 2, False, "odd", 2, 2),
+    (2, 2, True, "even", 2, 2),
+)
+_case("G-HEADS", "tables", _no_inputs, _head_tables_run)
+
+
+def _assemble_build():
+    g = _gen(50)
+    x = {}
+    for d in (2, 3):
+        x[f"in.true_{d}"] = torch.randn(2, 40, 3, d, generator=g, dtype=D)
+        x[f"in.pseudo_{d}"] = torch.randn(2, 40, 3, d, generator=g, dtype=D)
+    x["in.r_hat"] = torch.nn.functional.normalize(
+        torch.randn(40, 3, generator=g, dtype=D), dim=-1
+    )
+    x["in.r_hat"][:4] = 0.0  # zero where r_hat is zero
+    x["in.v"] = torch.randn(40, 3, generator=g, dtype=D)
+    x["in.coeffs"] = torch.randn(2, 40, 64, generator=g, dtype=D)
+    return x
+
+
+def _assemble_run(inputs, device, variant):
+    """Every layout of :data:`_LAYOUTS` assembled from random coefficients and basis
+    vectors (with the gradients in both), the pseudovectors of 2 and 3 dimensions,
+    and the polar complement."""
+    from physicsnemo.mesh.fields import RankSpec
+
+    x = _to(inputs, device)
+    out = {}
+    for d, rank, sym, parity, m, p in _LAYOUTS:
+        lay = target("OutputLayout")(
+            RankSpec(rank, symmetric=sym, parity=parity), m, p, d
+        )
+        c = x["in.coeffs"][..., : lay.n_coeffs].clone().requires_grad_()
+        tv = x[f"in.true_{d}"][:, :, :m].clone().requires_grad_()
+        pv = x[f"in.pseudo_{d}"][:, :, :p].clone().requires_grad_()
+        y = target("assemble_output")(c, lay, tv, pv, lay.index.to(device))
+        (y * _cotangent(y, 51)).sum().backward()
+        key = f"{d}d.r{rank}.{'sym' if sym else 'gen'}.{parity}.m{m}p{p}"
+        out[f"out.{key}"] = y.detach()
+        out[f"grad.{key}.coeffs"], out[f"grad.{key}.true"] = c.grad, tv.grad
+        if pv.grad is not None:
+            out[f"grad.{key}.pseudo"] = pv.grad
+    for d in (2, 3):
+        prim = list(x[f"in.true_{d}"].unbind(2))
+        out[f"out.pseudovectors_{d}"] = torch.stack(target("pseudovectors")(prim, d), 2)
+    out["out.polar_complement"] = target("polar_complement")(x["in.r_hat"], x["in.v"])
+    return out
+
+
+_case("G-HEADS", "assemble", _assemble_build, _assemble_run)
+
+
+GROUPS = tuple(dict.fromkeys(c.group for c in CASES))
+
+
+def select(groups=None, names=None) -> list[Case]:
+    """The cases of the named groups (all by default), optionally only those whose
+    name matches one of the fnmatch patterns ``names``."""
+    out = [c for c in CASES if groups is None or c.group in groups]
+    if names:
+        out = [c for c in out if any(fnmatch.fnmatchcase(c.name, p) for p in names)]
+    return out
+
+
+def available(case: Case, device: str) -> str | None:
+    """Why ``case`` cannot run on ``device`` here, or None."""
+    if device == "cuda" and not torch.cuda.is_available():
+        return "CUDA is not available"
+    if device == "cuda" and "triton" in case.requires:
+        from physicsnemo.core.version_check import is_package_available
+
+        if not is_package_available("triton"):
+            return "Triton is not installed"
+    return None
+
+
+def run_case(case: Case, device: str, variant: str, inputs: dict | None = None) -> dict:
+    """The case's tensors on ``device`` under ``variant``: its inputs (``in.*``, the
+    given ones or freshly built) and every output and gradient, detached, on the CPU."""
+    inputs = case.build() if inputs is None else inputs
+    out = case.run(inputs, device, variant)
+    tensors = {**inputs, **out}
+    return {k: v.detach().cpu() for k, v in tensors.items()}
