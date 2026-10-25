@@ -1,0 +1,779 @@
+{
+ "protocol": "HiLiftAeroML standing on the deduplicated wing (HL-DUP stage 2, 2026-10-24): ISLA 0.9.0 at its reference\nconfiguration (width 512, 12 layers, 512 slices, 3.75e-4, 200,000 cells), GeoTransolver 256 (200,000 cells) and\nTransolver 512 x 16 (100,000 cells), both baselines reading the unit freestream direction U_inf_dir, each trained 500\nepochs on the 510-case rung with the recipe option drop_duplicate_cells (the stored wing's extra copies of its root cells\ndropped at load, the dataset unchanged), two seeds (42, 43), and scored in float32 on the final checkpoint on the 180\nvalidation cases: 200,000 cells drawn per case and the extra copies then dropped (about 186,000 kept), so the metric runs\nover distinct cells. Native mesh and rotated + translated; the uniform point cloud was not scored on this data.\n\nInputs, all copied unmodified into results/campaigns_2026-10-23/hl_dup_stage2_scores/ (RECORDS.md lists their md5s):\n  scores_stage2/<run>/<protocol>/<run>/metrics.jsonl   the scorer's per-case rows of the six runs hldupx_hl_{isla,gt,t}_seed{42,43}\n  score_summary.json                                   stage 1's scores of the stored-wing standing checkpoints: (a) as the\n                                                       standing scored them, (b) the same predictions with the copies left out\n                                                       of the metric, (c) the copies left out of the input too; per-case pressure\nand results/char/hilift_surface_090.json (immutable) for the unit-drive control below.\n\nReduction as every standing: per seed and protocol the mean over cases of the per-case relative L2 (the last infer_step row\nper sample id after the last config row), then the mean over seeds. Each config row must name epoch 500 and the dataset\nhighlift_surface_medium_dedup (its _posed variant for the posed scoring), and each protocol must hold 180 cases.\n\nWrites results/char/hilift_surface_090_dedup.json in the standing schema of book/standing.py (protocols, fields, isla_arm,\nstatus, in_flight, arms[arm][protocol][field] = {mean, per_seed, n_cases, n_seeds}, degenerate, complete) plus:\n  isla_runs           the score folder, epoch and run stems\n  fair_input          what each baseline reads\n  stored_wing_b       stage 1's (b): each arm's stored-wing checkpoints scored over the same distinct cells, the like-for-like\n                      figure the old standing gives; and (a), the old standing's own metric, for the record\n  registered          the rule of scratch/isla-hl-dup-2026-10-24/PREREG.md (md5 072b6b1c), as registered: G against the\n                      registered (b) references, per cell and seed, and its verdict\n  case_level          per-case readouts of the native scores (the schema of hilift_surface_090.json's case_level), plus the\n                      angle-of-attack bands of the registration (4-12 and 14-22 degrees): seed means, seed-matched ratios\n                      and the cases on which ISLA's seed-mean pressure is lower, and the same count under (b)\n  unit_drive_control  the input-scale control on the stored wing, from hilift_surface_090.json: the unit-direction baselines,\n                      the same configurations reading the physical vector U_inf (raw_drive_<arch>), and the standing's\n                      stored-wing ISLA, native and uniform point cloud; no deduplicated physical-vector arm exists\n\nusage: python hilift_surface_090_dedup_2026-10-24.py\n",
+ "protocols": {
+  "native": "native mesh",
+  "posed": "rotated + translated"
+ },
+ "fields": {
+  "pressure_l2": "pressure",
+  "tau_wall_l2": "wall shear"
+ },
+ "isla_arm": "ISLA 512 with 512 slices",
+ "status": "final",
+ "in_flight": null,
+ "arms": {
+  "ISLA 512 with 512 slices": {
+   "native": {
+    "pressure_l2": {
+     "mean": 0.05458442715720998,
+     "per_seed": {
+      "42": 0.05303723684822519,
+      "43": 0.056131617466194765
+     },
+     "n_cases": 180,
+     "n_seeds": 2
+    },
+    "tau_wall_l2": {
+     "mean": 0.09632567595690489,
+     "per_seed": {
+      "42": 0.09452706865138477,
+      "43": 0.098124283262425
+     },
+     "n_cases": 180,
+     "n_seeds": 2
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "mean": 0.05508756436821487,
+     "per_seed": {
+      "42": 0.0535309931056367,
+      "43": 0.05664413563079304
+     },
+     "n_cases": 180,
+     "n_seeds": 2
+    },
+    "tau_wall_l2": {
+     "mean": 0.09684961431970199,
+     "per_seed": {
+      "42": 0.09506172392931249,
+      "43": 0.09863750471009149
+     },
+     "n_cases": 180,
+     "n_seeds": 2
+    }
+   }
+  },
+  "GeoTransolver 256": {
+   "native": {
+    "pressure_l2": {
+     "mean": 0.051088964504500234,
+     "per_seed": {
+      "42": 0.05056431328670846,
+      "43": 0.051613615722292
+     },
+     "n_cases": 180,
+     "n_seeds": 2
+    },
+    "tau_wall_l2": {
+     "mean": 0.09214190339876546,
+     "per_seed": {
+      "42": 0.09210721862812837,
+      "43": 0.09217658816940255
+     },
+     "n_cases": 180,
+     "n_seeds": 2
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "mean": 1.0170275825593207,
+     "per_seed": {
+      "42": 1.0258534729480744,
+      "43": 1.008201692170567
+     },
+     "n_cases": 180,
+     "n_seeds": 2
+    },
+    "tau_wall_l2": {
+     "mean": 1.2618116127120125,
+     "per_seed": {
+      "42": 1.2833913471963672,
+      "43": 1.2402318782276578
+     },
+     "n_cases": 180,
+     "n_seeds": 2
+    }
+   }
+  },
+  "Transolver 512 x 16, trained at 100k cells": {
+   "native": {
+    "pressure_l2": {
+     "mean": 0.05274263556736211,
+     "per_seed": {
+      "42": 0.05420022171197666,
+      "43": 0.05128504942274756
+     },
+     "n_cases": 180,
+     "n_seeds": 2
+    },
+    "tau_wall_l2": {
+     "mean": 0.09189134365361598,
+     "per_seed": {
+      "42": 0.09339106612735325,
+      "43": 0.09039162117987871
+     },
+     "n_cases": 180,
+     "n_seeds": 2
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "mean": 0.9932548402084245,
+     "per_seed": {
+      "42": 1.0094155646032756,
+      "43": 0.9770941158135732
+     },
+     "n_cases": 180,
+     "n_seeds": 2
+    },
+    "tau_wall_l2": {
+     "mean": 1.28169890013006,
+     "per_seed": {
+      "42": 1.3199084914392896,
+      "43": 1.2434893088208305
+     },
+     "n_cases": 180,
+     "n_seeds": 2
+    }
+   }
+  }
+ },
+ "complete": true,
+ "degenerate": {},
+ "isla_runs": {
+  "scores": "results/campaigns_2026-10-23/hl_dup_stage2_scores/scores_stage2",
+  "epoch": 500,
+  "dataset": "highlift_surface_medium_dedup",
+  "ISLA 512 with 512 slices": "hldupx_hl_isla_seed{42,43}",
+  "GeoTransolver 256": "hldupx_hl_gt_seed{42,43}",
+  "Transolver 512 x 16, trained at 100k cells": "hldupx_hl_t_seed{42,43}"
+ },
+ "fair_input": {
+  "GeoTransolver 256": "reads U_inf_dir as its global embedding (global_embedding: global_data.U_inf_dir in the saved resolved config)",
+  "Transolver 512 x 16, trained at 100k cells": "reads U_inf_dir (fx.source: global_data.U_inf_dir in the saved resolved config), trained at 100,000 cells and scored on ISLA's draw"
+ },
+ "stored_wing_b": {
+  "what": "the stored-wing standing's checkpoints (hilift_surface_090.json) scored by stage 1 on the same draw: (b) leaves the copies out of the metric only, so it runs over the same distinct cells as this file's arms; (a) is the old standing's own metric, with the copies",
+  "ISLA": {
+   "a": {
+    "pressure_l2": {
+     "mean": 0.042723022654859555,
+     "per_seed": {
+      "42": 0.0427080820625027,
+      "43": 0.04273796324721641
+     }
+    },
+    "tau_wall_l2": {
+     "mean": 0.09634321259541645,
+     "per_seed": {
+      "42": 0.09611840405397945,
+      "43": 0.09656802113685344
+     }
+    }
+   },
+   "b": {
+    "pressure_l2": {
+     "mean": 0.058882924816053776,
+     "per_seed": {
+      "42": 0.058960004802793266,
+      "43": 0.05880584482931429
+     }
+    },
+    "tau_wall_l2": {
+     "mean": 0.10273231497655312,
+     "per_seed": {
+      "42": 0.10249672242336803,
+      "43": 0.10296790752973821
+     }
+    }
+   }
+  },
+  "GeoTransolver": {
+   "a": {
+    "pressure_l2": {
+     "mean": 0.03902203898566464,
+     "per_seed": {
+      "42": 0.03905200597623156,
+      "43": 0.03899207199509773
+     }
+    },
+    "tau_wall_l2": {
+     "mean": 0.08903456614870164,
+     "per_seed": {
+      "42": 0.08902168725099828,
+      "43": 0.089047445046405
+     }
+    }
+   },
+   "b": {
+    "pressure_l2": {
+     "mean": 0.0539975416380912,
+     "per_seed": {
+      "42": 0.05408924924623635,
+      "43": 0.05390583402994606
+     }
+    },
+    "tau_wall_l2": {
+     "mean": 0.0947287268522713,
+     "per_seed": {
+      "42": 0.09472905674742328,
+      "43": 0.0947283969571193
+     }
+    }
+   }
+  },
+  "Transolver": {
+   "a": {
+    "pressure_l2": {
+     "mean": 0.03941012561424739,
+     "per_seed": {
+      "42": 0.040795937987665336,
+      "43": 0.038024313240829444
+     }
+    },
+    "tau_wall_l2": {
+     "mean": 0.08783322238466806,
+     "per_seed": {
+      "42": 0.08883734560675091,
+      "43": 0.0868290991625852
+     }
+    }
+   },
+   "b": {
+    "pressure_l2": {
+     "mean": 0.05443245102134016,
+     "per_seed": {
+      "42": 0.056114672051949636,
+      "43": 0.05275022999073068
+     }
+    },
+    "tau_wall_l2": {
+     "mean": 0.09334624189262589,
+     "per_seed": {
+      "42": 0.09441061562134159,
+      "43": 0.09228186816391018
+     }
+    }
+   }
+  }
+ },
+ "registered": {
+  "HL-DUP stage 2": {
+   "source": "scratch/isla-hl-dup-2026-10-24/PREREG.md (md5 072b6b1c), 'Rule': G = seed-mean baseline / seed-mean ISLA, both trained on the deduplicated wing, native, pressure and wall shear, against the stage-1 (b) ratio; narrows: every cell rises by at least 0.03 with both seed ratios above the reference; widens: every cell falls by at least 0.03 with both below; unchanged: every cell within 0.03; else mixed, reported per cell",
+   "cells": {
+    "GeoTransolver/pressure_l2": {
+     "reference": 0.917,
+     "G": 0.9359622728540803,
+     "change": 0.018962272854080253,
+     "per_seed": {
+      "42": 0.953373823591274,
+      "43": 0.9195105726888464
+     },
+     "narrows": false,
+     "widens": false,
+     "within_band": true
+    },
+    "GeoTransolver/tau_wall_l2": {
+     "reference": 0.922,
+     "G": 0.9565663825706118,
+     "change": 0.03456638257061173,
+     "per_seed": {
+      "42": 0.9744004542002589,
+      "43": 0.9393861040786831
+     },
+     "narrows": true,
+     "widens": false,
+     "within_band": false
+    },
+    "Transolver/pressure_l2": {
+     "reference": 0.924,
+     "G": 0.9662579294907084,
+     "change": 0.04225792949070839,
+     "per_seed": {
+      "42": 1.0219277046253283,
+      "43": 0.9136570748853612
+     },
+     "narrows": false,
+     "widens": false,
+     "within_band": false
+    },
+    "Transolver/tau_wall_l2": {
+     "reference": 0.909,
+     "G": 0.9539652095950742,
+     "change": 0.04496520959507422,
+     "per_seed": {
+      "42": 0.9879822516424254,
+      "43": 0.9211952248164101
+     },
+     "narrows": true,
+     "widens": false,
+     "within_band": false
+    }
+   },
+   "verdict": "mixed"
+  }
+ },
+ "case_level": {
+  "n_cases": 180,
+  "per_baseline": {
+   "GeoTransolver": {
+    "pressure_l2": {
+     "lower_on": 64,
+     "median_ratio": 1.0232441030587793
+    },
+    "tau_wall_l2": {
+     "lower_on": 125,
+     "median_ratio": 0.9890787238890745
+    }
+   },
+   "Transolver": {
+    "pressure_l2": {
+     "lower_on": 145,
+     "median_ratio": 0.9301990292791464
+    },
+    "tau_wall_l2": {
+     "lower_on": 157,
+     "median_ratio": 0.9393681510839786
+    }
+   }
+  },
+  "geotransolver_lead_in_isla_worst": {
+   "field": "pressure_l2",
+   "n_worst": 18,
+   "share_of_mean_lead": 1.0624679046342966,
+   "aoa_deg": [
+    14,
+    14,
+    16,
+    16,
+    16,
+    16,
+    18,
+    18,
+    18,
+    18,
+    18,
+    18,
+    20,
+    20,
+    22,
+    22,
+    22,
+    22
+   ],
+   "isla_mean": 0.21012748115592533,
+   "geotransolver_mean": 0.17298931235240567
+  },
+  "by_aoa": {
+   "4": {
+    "n": 17,
+    "ISLA": 0.030747197513632914,
+    "GeoTransolver": 0.032119164188556815,
+    "Transolver": 0.028764877249212825
+   },
+   "6": {
+    "n": 18,
+    "ISLA": 0.026142372698005702,
+    "GeoTransolver": 0.02682933511419429,
+    "Transolver": 0.02375349738738603
+   },
+   "8": {
+    "n": 19,
+    "ISLA": 0.025065053989620584,
+    "GeoTransolver": 0.025505714069463704,
+    "Transolver": 0.022813366431938976
+   },
+   "10": {
+    "n": 13,
+    "ISLA": 0.026399683493834276,
+    "GeoTransolver": 0.0270305430659881,
+    "Transolver": 0.02488457576300089
+   },
+   "12": {
+    "n": 17,
+    "ISLA": 0.02291139675413861,
+    "GeoTransolver": 0.024106032982030335,
+    "Transolver": 0.02140849582193529
+   },
+   "14": {
+    "n": 15,
+    "ISLA": 0.07178216874599457,
+    "GeoTransolver": 0.07496996428817511,
+    "Transolver": 0.07441030976672967
+   },
+   "16": {
+    "n": 15,
+    "ISLA": 0.09633584059774876,
+    "GeoTransolver": 0.062068732207020125,
+    "Transolver": 0.08889687651147445
+   },
+   "18": {
+    "n": 27,
+    "ISLA": 0.07714702489061488,
+    "GeoTransolver": 0.07038706451378486,
+    "Transolver": 0.07439652813115606
+   },
+   "20": {
+    "n": 15,
+    "ISLA": 0.0725838728249073,
+    "GeoTransolver": 0.07222598306834697,
+    "Transolver": 0.0689724466452996
+   },
+   "22": {
+    "n": 24,
+    "ISLA": 0.08039617755760749,
+    "GeoTransolver": 0.07840961101464927,
+    "Transolver": 0.08180457943429549
+   }
+  },
+  "bands": {
+   "4-12": {
+    "n": 84,
+    "ISLA": 0.026216556218319705,
+    "GeoTransolver": 0.027080500132537315,
+    "Transolver": 0.024255520741765697,
+    "per_seed": {
+     "ISLA": {
+      "42": 0.025827369852257625,
+      "43": 0.026605742584381784
+     },
+     "GeoTransolver": {
+      "42": 0.027122068374107283,
+      "43": 0.027038931890967347
+     },
+     "Transolver": {
+      "42": 0.024157368134529816,
+      "43": 0.024353673349001577
+     }
+    },
+    "ratio": {
+     "GeoTransolver": 1.032954134289152,
+     "Transolver": 0.9251985859537238
+    },
+    "ratio_per_seed": {
+     "GeoTransolver": {
+      "42": 1.0501289341212763,
+      "43": 1.0162817972552984
+     },
+     "Transolver": {
+      "42": 0.9353398457806252,
+      "43": 0.915354016966915
+     }
+    },
+    "isla_lower_on": {
+     "GeoTransolver": 66,
+     "Transolver": 7
+    },
+    "isla_lower_on_stored_wing_b": {
+     "GeoTransolver": 25,
+     "Transolver": 0
+    },
+    "isla_stored_wing_b": 0.029199407812917515
+   },
+   "14-22": {
+    "n": 96,
+    "ISLA": 0.07940631422873898,
+    "GeoTransolver": 0.07209637082996778,
+    "Transolver": 0.07766886103975897,
+    "per_seed": {
+     "ISLA": {
+      "42": 0.07684587046969682,
+      "43": 0.08196675798778112
+     },
+     "GeoTransolver": {
+      "42": 0.07107627758523449,
+      "43": 0.07311646407470107
+     },
+     "Transolver": {
+      "42": 0.08048771859224264,
+      "43": 0.07485000348727529
+     }
+    },
+    "ratio": {
+     "GeoTransolver": 0.907942542482024,
+     "Transolver": 0.9781194580575157
+    },
+    "ratio_per_seed": {
+     "GeoTransolver": {
+      "42": 0.9249199358508472,
+      "43": 0.8920258147284613
+     },
+     "Transolver": {
+      "42": 1.047391591770464,
+      "43": 0.9131751129943833
+     }
+    },
+    "isla_lower_on": {
+     "GeoTransolver": 50,
+     "Transolver": 28
+    },
+    "isla_lower_on_stored_wing_b": {
+     "GeoTransolver": 29,
+     "Transolver": 20
+    },
+    "isla_stored_wing_b": 0.084856002193798
+   },
+   "all": {
+    "n": 180,
+    "ISLA": 0.05458442715720998,
+    "GeoTransolver": 0.051088964504500234,
+    "Transolver": 0.05274263556736211,
+    "per_seed": {
+     "ISLA": {
+      "42": 0.05303723684822519,
+      "43": 0.056131617466194765
+     },
+     "GeoTransolver": {
+      "42": 0.05056431328670846,
+      "43": 0.051613615722292
+     },
+     "Transolver": {
+      "42": 0.05420022171197666,
+      "43": 0.05128504942274756
+     }
+    },
+    "ratio": {
+     "GeoTransolver": 0.9359622728540803,
+     "Transolver": 0.9662579294907084
+    },
+    "ratio_per_seed": {
+     "GeoTransolver": {
+      "42": 0.953373823591274,
+      "43": 0.9195105726888464
+     },
+     "Transolver": {
+      "42": 1.0219277046253283,
+      "43": 0.9136570748853612
+     }
+    },
+    "isla_lower_on": {
+     "GeoTransolver": 116,
+     "Transolver": 35
+    },
+    "isla_lower_on_stored_wing_b": {
+     "GeoTransolver": 54,
+     "Transolver": 20
+    },
+    "isla_stored_wing_b": 0.058882924816053776
+   }
+  }
+ },
+ "unit_drive_control": {
+  "what": "the wing meshes as stored, with their duplicated root cells, 200,000 cells per case, the 180 validation cases: the stored-wing standing's unit-direction baselines and ISLA (results/char/hilift_surface_090.json arms) and the same baseline configurations reading the physical freestream vector U_inf in inch/s (its raw_drive_<arch>)",
+  "ISLA": {
+   "native": {
+    "pressure_l2": {
+     "mean": 0.04272302197706368,
+     "per_seed": {
+      "42": 0.04270808181415001,
+      "43": 0.04273796213997735
+     },
+     "n_cases": 180,
+     "n_seeds": 2
+    },
+    "tau_wall_l2": {
+     "mean": 0.09634321143643723,
+     "per_seed": {
+      "42": 0.09611840368145042,
+      "43": 0.09656801919142405
+     },
+     "n_cases": 180,
+     "n_seeds": 2
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "mean": 0.04280508657037798,
+     "per_seed": {
+      "42": 0.04261318931563033,
+      "43": 0.04299698382512563
+     },
+     "n_cases": 180,
+     "n_seeds": 2
+    },
+    "tau_wall_l2": {
+     "mean": 0.09680650050027503,
+     "per_seed": {
+      "42": 0.09617263202865918,
+      "43": 0.09744036897189087
+     },
+     "n_cases": 180,
+     "n_seeds": 2
+    }
+   }
+  },
+  "GeoTransolver": {
+   "unit": {
+    "native": {
+     "pressure_l2": {
+      "mean": 0.0390220390425788,
+      "per_seed": {
+       "42": 0.039052006933424206,
+       "43": 0.0389920711517334
+      },
+      "n_cases": 180,
+      "n_seeds": 2
+     },
+     "tau_wall_l2": {
+      "mean": 0.08903456264071995,
+      "per_seed": {
+       "42": 0.08902168273925781,
+       "43": 0.08904744254218208
+      },
+      "n_cases": 180,
+      "n_seeds": 2
+     }
+    },
+    "area": {
+     "pressure_l2": {
+      "mean": 0.16801320181952584,
+      "per_seed": {
+       "42": 0.13446216583251952,
+       "43": 0.20156423780653213
+      },
+      "n_cases": 180,
+      "n_seeds": 2
+     },
+     "tau_wall_l2": {
+      "mean": 0.27772145801120335,
+      "per_seed": {
+       "42": 0.23357166714138455,
+       "43": 0.32187124888102214
+      },
+      "n_cases": 180,
+      "n_seeds": 2
+     }
+    }
+   },
+   "physical": {
+    "native": {
+     "pressure_l2": {
+      "mean": 0.05246401362948948,
+      "per_seed": {
+       "42": 0.055364529291788735,
+       "43": 0.049563497967190215
+      },
+      "n_cases": 180,
+      "n_seeds": 2
+     },
+     "tau_wall_l2": {
+      "mean": 0.12365332179599339,
+      "per_seed": {
+       "42": 0.13043787214491104,
+       "43": 0.11686877144707573
+      },
+      "n_cases": 180,
+      "n_seeds": 2
+     }
+    },
+    "area": {
+     "pressure_l2": {
+      "mean": 0.22148732079399958,
+      "per_seed": {
+       "42": 0.23598512013753256,
+       "43": 0.2069895214504666
+      },
+      "n_cases": 180,
+      "n_seeds": 2
+     },
+     "tau_wall_l2": {
+      "mean": 0.3785927454630534,
+      "per_seed": {
+       "42": 0.38905643886990016,
+       "43": 0.3681290520562066
+      },
+      "n_cases": 180,
+      "n_seeds": 2
+     }
+    }
+   }
+  },
+  "Transolver": {
+   "unit": {
+    "native": {
+     "pressure_l2": {
+      "mean": 0.03941012620925903,
+      "per_seed": {
+       "42": 0.040795938173929853,
+       "43": 0.038024314244588214
+      },
+      "n_cases": 180,
+      "n_seeds": 2
+     },
+     "tau_wall_l2": {
+      "mean": 0.08783322440253363,
+      "per_seed": {
+       "42": 0.08883734809027778,
+       "43": 0.0868291007147895
+      },
+      "n_cases": 180,
+      "n_seeds": 2
+     }
+    },
+    "area": {
+     "pressure_l2": {
+      "mean": 0.13683049943712022,
+      "per_seed": {
+       "42": 0.14043423334757488,
+       "43": 0.13322676552666557
+      },
+      "n_cases": 180,
+      "n_seeds": 2
+     },
+     "tau_wall_l2": {
+      "mean": 0.2555576112535265,
+      "per_seed": {
+       "42": 0.2593239042494032,
+       "43": 0.2517913182576497
+      },
+      "n_cases": 180,
+      "n_seeds": 2
+     }
+    }
+   },
+   "physical": {
+    "native": {
+     "pressure_l2": {
+      "mean": 0.04340056975682577,
+      "per_seed": {
+       "42": 0.04352816210852729,
+       "43": 0.043272977405124244
+      },
+      "n_cases": 180,
+      "n_seeds": 2
+     },
+     "tau_wall_l2": {
+      "mean": 0.10048415395948622,
+      "per_seed": {
+       "42": 0.10078846613566081,
+       "43": 0.10017984178331163
+      },
+      "n_cases": 180,
+      "n_seeds": 2
+     }
+    },
+    "area": {
+     "pressure_l2": {
+      "mean": 0.28896391126844617,
+      "per_seed": {
+       "42": 0.2940169016520182,
+       "43": 0.28391092088487413
+      },
+      "n_cases": 180,
+      "n_seeds": 2
+     },
+     "tau_wall_l2": {
+      "mean": 0.4638838662041558,
+      "per_seed": {
+       "42": 0.47379828559027776,
+       "43": 0.45396944681803386
+      },
+      "n_cases": 180,
+      "n_seeds": 2
+     }
+    }
+   }
+  }
+ }
+}
