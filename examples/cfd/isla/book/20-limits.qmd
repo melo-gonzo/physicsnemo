@@ -428,23 +428,25 @@ assert all(r_["renumbering moves base -> head"].endswith("-> 0") for r_ in GT_ i
 flip = re.search(r"It flipped one query ([\d.e-]+) off the wall under renumbering", " ".join(R.load("geo_tieorder", "FINAL_REPORT.md").split())).group(1)
 assert all(r_["d changed"].startswith("0") or "lug" in r_["dataset (dump, queries)"] for r_ in GT_)
 GTF = " ".join(R.load("geo_tieorder", "FINAL_REPORT.md").split())
-inf = re.search(r"Largest \|log new/old\|: DrivAerML ([\d.e-]+), AirfRANS ([\d.e-]+), lug ([\d.e-]+)", GTF).groups()
+inf = re.search(r"Largest \|log new/old\|: DrivAerML ([\d.e-]+), AirfRANS ([\d.e-]+), lug ([\d.e-]+); the worst single case is ([\d.e-]*\d)", GTF).groups()
 print("**On the wall, where the normals of the cells that hold a point agree only to within their rounding, the class's direction "
       "follows the order of the cells and the precision of the inputs.** Cells that share a closest point compute it bitwise, so they "
       "tie exactly in distance, and the search keeps the cell of least index. Where their normals are certified distinct, the tie rule "
       "takes their least-norm point, a function of the tie set alone (@sec-arch-interior-geometry); where they are not, the direction "
       "is that first cell's normal. The certification's bound scales with the precision of the queries, so a float32 point and its "
-      "float64 copy can fall on different sides of it. At the diagonal midpoints of a planar quad mesh, renumbering the vertices and "
+      "float64 copy can fall on different sides of it. At the diagonal midpoints of a torus mesh of planar quads, renumbering the vertices and "
       f"cells moves the direction at {n_ren} of {n_q:,} points, by up to {sci(R.num(ren['max abs diff in u']))}, and float32 "
       f"inputs give a different direction from their float64 copies at {n_prc} of {n_pq}; the expected-failure test "
       "`test_on_wall_direction_at_quad_diagonals` records both, and fails the suite if they stop failing. On the recipe's draws, "
       f"renumbering moves the on-wall direction at {mov[0]:,} and {mov[1]:,} of 200,000 points of two DrivAerML Volume draws with the "
       f"whole boundary and at {af['renumbering moves base -> head'].split(' ->')[0].replace('-', ' to ')} points of each AirfRANS draw, and float32 and "
-      f"float64 copies disagree at {mis[0][0]:,} of the {mis[0][1]:,} on-wall points of one DrivAerML draw. The wall distance, its sign "
-      "and the on-wall label do not move. A rule that breaks exact distance ties by the cells' positions and, on the wall, takes the "
+      f"float64 copies disagree at {mis[0][0]:,} of the {mis[0][1]:,} on-wall points of one DrivAerML draw. The wall distance does "
+      "not move. A rule that breaks exact distance ties by the cells' positions and, on the wall, takes the "
       "least-norm point of the holding cells' normals wherever they differ removes every such move on the measured draws; it changes "
       f"the direction at {min(chg):,} to {max(chg):,} of those 200,000 DrivAerML points (median {sci(min(du[1::2]))}, largest "
-      f"{sci(max(du[0::2]))}) and moves no metric of the standings' checkpoints by more than {sci(float(inf[0]))} in log. Whether "
+      f"{sci(max(du[0::2]))}), changes no distance, sign or on-wall label, and moves no field metric of five trained checkpoints (the "
+      f"lug, AirfRANS with its far field, one DrivAerML case) by more than {sci(float(inf[0]))} in log, nor any single case by more "
+      f"than {sci(float(inf[3]))}. Whether "
       "the class takes it is open. A residue of the same kind sits in the sign: the winding number's far field groups cells by a "
       f"tree whose ties follow the cells' order, and it flipped the sign of one float64 point {sci(float(flip))} off the wall under renumbering. "
       f"Data: {R.source('main_merge', 'DEFECT_TORUS.md')}; {R.source('geo_tieorder', 'RESULTS.md')} (section 2); "
@@ -615,7 +617,7 @@ print("**Zero-shot transfer to a new geometry family is measured twice: on SHIFT
       "and fastbacks are not harder in themselves, so most of the wall-shear gap is transfer; the reverse direction is @sec-oq-transfer. On AeroZoo, whose held-out splits hold out a geometry bank, an enclosure family, a boundary-condition layout or "
       f"a Reynolds range, ISLA's velocity error on a held-out split, on AeroZoo's own metric, is {min(zpen.values()):.1f} to "
       f"{max(zpen.values()):.0f} times its `{AZ_IN}` error, and GeoTransolver ÷ ISLA on velocity is above one on {gt_above} of the "
-      f"{len(AZ_HELD)} held-out splits, against a GeoTransolver whose velocity is not converged at the last epoch and is no better than "
+      f"{len(AZ_HELD)} held-out splits, against a GeoTransolver whose velocity is not converged at the last epoch and sits about at "
       "AeroZoo's free stream; on pressure both baselines are about a zero predictor (@sec-interior-aerozoo). ISLA's own failures there "
       "are @sec-oq-aerozoo. Data: results/char/shift_suv_xfam_090.json, results/char/aerozoo_090_specmetric.json, "
       "results/char/aerozoo_090_final.json.")
@@ -1440,7 +1442,7 @@ print("Leaving the mean normal unnormalized, which removes the constant and the 
       "task with the tunnel's pieces read, two seeds against a control trained alike, it raises the error "
       f"{dra[0]:.3f} times on pressure and {dra[1]:.3f} times on wall shear, worse on every one of the {n_dra} validation cases, which the "
       "rule registered for it reads as harms; so that form is not a candidate, whatever the interior datasets read. "
-      f"Data: {R.source('slice_normal_exp', 'reading_DRA.md')}; {R.source('slice_normal_exp', 'PREREG.md')} (sections A1 and F2).")
+      f"Data: {R.source('slice_normal_exp', 'reading_DRA.md')}; {R.source('slice_normal_exp', 'PREREG.md')} (A section 5, A3 and A5).")
 print()
 print("::: {.callout-note title=\"In flight\"}\nThis question rests on the normalization with its clamp, as the code has it. ISLA "
       "with the mean normal unnormalized and each slice's distances softened by the slice's own spread is being measured on AirfRANS, "

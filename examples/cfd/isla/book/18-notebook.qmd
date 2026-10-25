@@ -42576,7 +42576,7 @@ EDT, the validation re-read dropped; to 265 at 02:58).
   of interacting ISLA on `family_non_box` (0.706 against 0.720) and interacting ISLA ahead of ISLA-DTT on `reynolds` (0.371
   against 0.401). On medians and `mean_stable` a few more pairs swap (21 of 96 rows change on at least one field, ORDERS.md).
 - **The references.** Both baselines are at the zero predictor on pressure (GeoTransolver's ε_p 1.00 to 1.03 times it) and
-  no better than AeroZoo's free stream on velocity (0.97 to 1.90 times its ε_U). Both forms of ISLA are 0.16 to 0.27 of the
+  about at AeroZoo's free stream on velocity (0.97 to 1.90 times its ε_U, never more than 3 percent below it). Both forms of ISLA are 0.16 to 0.27 of the
   free stream's ε_U on `full`, `bank_zero_to_cad`, `bank_blobs` and `reynolds`, 0.77 to 0.83 on `profile_dual_inlet`, and
   1.47 to 1.55 on `family_non_box` and `profile_crossflow`, where their ε_p is also above the zero predictor's (crossflow
   5.01 and 4.74 against 2.59; non-box 0.720 and 0.706 against 0.467). GeoTransolver ÷ ISLA on ε_U: `full` 8.78, above one on
@@ -43687,8 +43687,8 @@ registered; results/campaigns_2026-10-23/outlet_exp/).
 - **Adoption.** Not adopted by the rule: the first clause needs "helps" on crossflow; the on-principle clause (helps nowhere,
   harms nowhere) needs the cost check, which fails. **The supervisor's decision (2026-10-25 04:33 EDT): not adopted**,
   because R1 reads no change on both splits, the near-outlet error shows the gauge is not crossflow's main error, and the
-  cost check fails at 1.5 times the step. It is not kept as an opt-in in the canonical code (Peter's rule: no parallel old
-  implementation; options are scaffolds); it lives only on the unmerged branch `psharpe/isla-outlet-gauge` at 9250072af, as
+  cost check fails at 1.5 times the step. It is not kept as an opt-in in the canonical code (Peter's rule of 2026-10-17:
+  no parallel old implementations; and the supervisor's rule that options are scaffolds); it lives only on the unmerged branch `psharpe/isla-outlet-gauge` at 9250072af, as
   the record. No follow-up now; a bounded-probe design with more crossflow seeds is a candidate after the reruns.
 - Predictions: M1 passes (0.95) yes; crossflow no change (0.60) yes; full no change (0.85) yes; B's crossflow band below
   0.3 RMS p (0.7) no; cost within 25 percent (0.85) no.

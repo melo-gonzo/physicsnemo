@@ -785,8 +785,9 @@ print("\n: Interacting ISLA's error under a change of the request, divided by it
 
 **Exact geometry has no ties between samples, and in the geometry the standings trained with three of its steps turned
 on float32 rounding: the closest feature of a point equally far from two, the sign of the distance at a fold of the
-surface, and which cells the token draw keeps. The class's geometry makes the first two functions of the mesh alone and
-the third independent of the compute precision.** The tie takes the least-norm direction of the tied features, the sign
+surface, and which cells the token draw keeps. The class's geometry makes the first two functions of the mesh alone,
+where the tied directions are certified distinct (on the wall, @sec-limits-tie-order), and the third independent of the
+compute precision.** The tie takes the least-norm direction of the tied features, the sign
 comes from the generalized winding number, and the draw is computed in float64 in the boundary's canonical frame
 (@sec-arch-interior-geometry, @sec-arch-boundary-draw). Below, each step is measured first as the standings' checkpoints
 saw it, then with the class's rule (@sec-standing-geometry).

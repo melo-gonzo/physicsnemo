@@ -62,7 +62,7 @@ print(f"**AeroZoo is the book's generalization benchmark: {n:,} RANS solutions a
       "belongs to. The chapter first says why generalization is the test this book takes as decisive, then shows the problem and its "
       "diversity, the benchmark protocol and what each model reads under it, why each held-out split asks a different question, the "
       "standing, and what the dataset does not say. The task is the interior task on five of the release's seven fields, scored "
-      "with AeroZoo's own metrics. Under the protocol both baselines end at the zero predictor on pressure and no better than "
+      "with AeroZoo's own metrics. Under the protocol both baselines end at the zero predictor on pressure and about at "
       f"AeroZoo's free stream on velocity, GeoTransolver's velocity error is above ISLA's on {_gt_above} of the "
       f"{len(_E['splits'])} splits, and ISLA's own failures are two held-out families (@sec-interior-aerozoo).")
 ```
@@ -639,7 +639,7 @@ assert flips == [("nonbox", "eps_U", "ISLA", "GeoTransolver"), ("nonbox", "eps_U
 assert ec("GeoTransolver", "nonbox", "eps_U")["mean"] < min(ec(a, "nonbox", "eps_U")["mean"] for a in FORMS)
 assert ec("ISLA-DTT", "nonbox", "eps_p")["mean"] < ec("ISLA", "nonbox", "eps_p")["mean"]
 assert ec("ISLA", "reynolds", "eps_p")["mean"] < ec("ISLA-DTT", "reynolds", "eps_p")["mean"]
-print("**Scored with AeroZoo's own metrics, both baselines end at the zero predictor on pressure and no better than AeroZoo's free "
+print("**Scored with AeroZoo's own metrics, both baselines end at the zero predictor on pressure and about at AeroZoo's free "
       "stream on velocity, so ISLA's leads on AeroZoo are leads over those two references; GeoTransolver ÷ ISLA on the velocity error "
       f"$\\varepsilon_U$ is {S.fmt_ratio(eps_r('GeoTransolver', 'full', 'eps_U'))} on `full` and above one on {gt_v_above} of the "
       f"six held-out splits; and on two held-out families, {' and '.join(sn(s) for s in over_z)}, both forms of ISLA are worse than "
@@ -647,11 +647,13 @@ print("**Scored with AeroZoo's own metrics, both baselines end at the zero predi
       f"Every model is scored on every interior cell of every test case ({min(CELLS) / 1e6:.1f} to {max(CELLS) / 1e6:.0f} million "
       "cells), from its final checkpoint (epoch 250), with AeroZoo's reference functions in float64; inference runs in chunks of "
       "200,000 points in float32 (@sec-aerozoo-request). Two references calibrate the metric (@tbl-aerozoo-standing). Predicting "
-      "zero gives an $\\varepsilon_U$ near one and an $\\varepsilon_p$ equal to the case's own pressure in units of its dynamic "
+      f"zero gives an $\\varepsilon_U$ near one on most splits ({g3(ec('zero', 'profile_dual_inlet', 'eps_U')['mean'])} on "
+      "`profile_dual_inlet`) and an $\\varepsilon_p$ equal to the case's own pressure in units of its dynamic "
       "pressure, so it differs from split to split. AeroZoo's free stream predicts the area-weighted mean prescribed inlet velocity "
       "everywhere and zero pressure, so its $\\varepsilon_p$ is the zero predictor's. GeoTransolver's $\\varepsilon_U$ is "
       f"{min(gt_fs):.2f} to {max(gt_fs):.2f} times the free stream's and its $\\varepsilon_p$ {min(gt_z):.2f} to {max(gt_z):.2f} "
-      "times the zero predictor's, so neither baseline has skill beyond the free stream on any split. The $\\varepsilon_U$ of the two "
+      f"times the zero predictor's, so neither baseline has skill beyond the free stream by more than {(1 - min(gt_fs)) * 100:.0f}% on "
+      "any split. The $\\varepsilon_U$ of the two "
       f"forms of ISLA is {fsr(grp['good'])} of the free stream's on {fp(grp['good'])}, {fsr(grp['mid'])} on {fp(grp['mid'])} and "
       f"{fsr(grp['bad'])} on {fp(grp['bad'])}. GeoTransolver leads ISLA on the velocity of {fp(gt_v_lead)} ("
       + "; ".join(f"{em('GeoTransolver', s, 'eps_U')} against {em('ISLA', s, 'eps_U')}" for s in gt_v_lead)
@@ -708,8 +710,9 @@ print(": The AeroZoo standing on AeroZoo's interior metrics, all test cases: the
       "on 200,000 cells in float32, with the same statistics; predicting zero scores exactly 1 on it. ISLA, ISLA-DTT and "
       "GeoTransolver are at their reference configurations and Transolver at this dataset's configuration (@sec-aerozoo-measured); "
       "the ISLA rows are interacting ISLA, the ISLA-DTT rows the same configuration with read-only prediction points. "
-      f"GeoTransolver: {AZA['GeoTransolver']['note']}. Transolver receives no boundary condition and is a floor: "
-      f"{AZA['Transolver']['note']}. The free stream is AeroZoo's own calibration, the area-weighted mean prescribed inlet "
+      "GeoTransolver's pressure output is about zero at the final epoch and its velocity is learned in part; Transolver "
+      "receives no boundary condition and is a floor, its predictions constants, about zero, on every case "
+      "(@sec-aerozoo-baselines). The free stream is AeroZoo's own calibration, the area-weighted mean prescribed inlet "
       "velocity everywhere and zero pressure. $\\varepsilon^N$ is averaged over the cases that have cells within one reference "
       f"length of a body face ({near_txt('all')}; every case elsewhere). How to read this: lower is better; a model above the free "
       "stream on $\\varepsilon_U$, or above predicting zero on $\\varepsilon_p$, has no skill there; a mean far above its median is "
@@ -1080,7 +1083,7 @@ f2_ = lambda xs: " and ".join(f"{x:.2f}" for x in xs)
 f3_ = lambda xs: " and ".join(f"{x:.3f}" for x in xs)
 print("**Holding the outlet at its prescribed gauge pressure by construction does not remove the crossflow failure.** ISLA trained "
       "with its pressure shifted by the one constant that gives the outlet's drawn cells, weighted by their measure, the prescribed "
-      f"mean holds that mean on every one of the {n_mech:,} scored test cases, to at most {res_mech[0]} of the scale (the tolerance "
+      f"mean holds that mean on all {n_mech // 2:,} test cases of both seeds ({n_mech:,} scorings), to at most {res_mech[0]} of the scale (the tolerance "
       f"is {res_mech[1]}). On `profile_crossflow` its median relative L2 of the pressure is {f2_(cp)} (seeds 42 and 43) against "
       f"{f2_(ap)} for ISLA, and of the velocity {f2_(cv)} against {f2_(av)}; on `full` its pressure error is unchanged ({f3_(fpB)} "
       f"against {f3_(fpA)}). By the rule registered for it, both splits read *no change*: on crossflow the seed-mean pressure ratio "
@@ -1112,11 +1115,15 @@ PT = R.md_table("az_rescore", "PARTITION.md", None, 0)
 _cols = ("eps_U", "eps_p", "eps_U_near", "eps_p_near", "rel_velocity", "rel_pressure")
 pmax = lambda tag, probe="pseed 1": max(abs(float(r_[c])) for r_ in PT if f"_{tag}_" in r_["lane"] and r_["probe"].startswith(probe) for c in _cols)
 dtt_max = max(abs(float(r_[c])) for r_ in PT if "_dtt_" in r_["lane"] for c in _cols)
+# the smallest gap the standing reads: |R - 1| of ISLA-DTT against ISLA and |ratio - 1| of GeoTransolver against ISLA, on eps
+gap_min = min([abs(Re_[f][s_] - 1) for f in EPF for s_ in HELD + ["full"]]
+              + [abs(eps_r("GeoTransolver", s_, f) - 1) for f in EPF for s_ in AZE["splits"]])
 print("The standing's scoring inherits that dependence in a milder form: the full mesh is run through the model in chunks of 200,000 "
       f"points. Partitioned again with another seed, on two `full` test cases, interacting ISLA's per-case metrics move by at most "
       f"{pmax('isla'):.1e} relative, GeoTransolver's by {pmax('gt'):.1e} and Transolver's by {pmax('t'):.0e}. ISLA-DTT moves by up "
       f"to {dtt_max:.1e} between chunks of 200,000, 1,000,000 and 2,000,000 points, which is float32 roundoff, since its prediction "
-      "does not depend on the chunk. Every gap the standing reads is two orders of magnitude or more above these. Data: "
+      f"does not depend on the chunk. Every gap the standing reads is at least {gap_min / max(pmax('isla'), dtt_max):.0f} times "
+      "these. Data: "
       f"{R.source('az_rescore', 'PARTITION.md')}.")
 ```
 
@@ -1129,7 +1136,7 @@ print("**AeroZoo tests generalization across families within one PDE, steady inc
       "interior task.**")
 print()
 print("- **The comparison is a comparison with AeroZoo's references.** Both baselines end at the zero predictor on pressure and "
-      "no better than the free stream on velocity (@sec-aerozoo-baselines), so the standing says ISLA has skill where they have "
+      "about at the free stream on velocity (@sec-aerozoo-baselines), so the standing says ISLA has skill where they have "
       "none, not by how much it beats a working baseline; and GeoTransolver's velocity is not converged at the last epoch.")
 print("- **Not resource-matched.** The four configurations differ in parameters and memory and do not receive the same inputs "
       "(@tbl-aerozoo-inputs); the protocol compares the configurations as each is scored on every dataset.")

@@ -559,8 +559,8 @@ print(f"**At the reference configuration interacting ISLA leads ISLA-DTT on Airf
       + " / ".join(l for _, l in FIELDS) + " (ratios of arithmetic seed means).** The reduced form is defined with the attribution study (@sec-airfrans-attribution). "
       "Both forms gain from ISLA's components, interacting ISLA more: its error falls to " + " / ".join(f"{bundle['isla'][f]:.2f}" for f in FK)
       + " of the reduced form's, ISLA-DTT's to " + " / ".join(f"{bundle['dtt'][f]:.2f}" for f in FK)
-      + ". Without the declared scales, ISLA-DTT pays a cost that interacting ISLA does not. With the raw inlet speed in their place, "
-      "its error is " + " / ".join(f"{dtt_nosc[f]:.3f}" for f in FK) + " times ISLA-DTT's, and on pressure "
+      + ". Without the declared scales and with the inlet speed standardized, ISLA-DTT pays a cost that interacting ISLA does not, "
+      "resolved on pressure (below). With the raw inlet speed in their place, its error is " + " / ".join(f"{dtt_nosc[f]:.3f}" for f in FK) + " times ISLA-DTT's, and on pressure "
       f"{dtt_nosc_cont:.2f} times its reduced form's, which also reads the raw inlet speed (each exp(Δ), a ratio of geometric seed means). "
       "Neither of the two pieces that might carry that cost does so measurably: with the stored signed distance put back, ISLA-DTT's "
       "error is " + " / ".join(f"{mirror['DTT-SDF'][f]:.3f}" for f in FK) + " times ISLA-DTT's, and with the reduced form's "

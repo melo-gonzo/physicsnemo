@@ -72,7 +72,7 @@ print(
     "case, so a similarity of the problem leaves its internal states unchanged. "
     "AeroZoo, whose held-out splits take a whole enclosure family, geometry bank, inflow layout or Reynolds range out of training, "
     "is the book's test of generalization; @sec-aerozoo-why makes the case for it, and @sec-aerozoo gives ISLA's standing there. "
-    "On AeroZoo, scored with its own metrics, both baselines end at the zero predictor on pressure and no better than AeroZoo's "
+    "On AeroZoo, scored with its own metrics, both baselines end at the zero predictor on pressure and about at AeroZoo's "
     "free stream on velocity, so a comparison there is a comparison with those references; ISLA beats both on "
     f"{len(_azb)} of the {len(_AZE['held_out'])} held-out splits and is worse than both on the other {len(_AZE['held_out']) - len(_azb)}, "
     "and there ISLA's two interior forms read a close call, which by Peter's ruling makes ISLA-DTT, whose "

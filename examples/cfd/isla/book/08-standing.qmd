@@ -198,7 +198,7 @@ v_below = [sp for sp in HO if ec("ISLA", sp, "eps_U")["mean"] < ec("freestream",
 assert p_below == v_below
 print("**Scored on families they never saw, the three architectures degrade alike on SHIFT-SUV pressure, ISLA transfers "
       "better than both baselines on SHIFT-SUV wall shear, estates to fastbacks, and on AeroZoo, scored with its own metrics, both "
-      "baselines are about a zero predictor on pressure and no better than AeroZoo's free stream on velocity, while ISLA beats both "
+      "baselines are about a zero predictor on pressure and about at AeroZoo's free stream on velocity, while ISLA beats both "
       f"references on {len(p_below)} of the {len(HO)} held-out splits and is worse than both on the other "
       f"{len(HO) - len(p_below)}.** Two datasets score models outside the family they trained on. SHIFT-SUV's standing "
       "models, trained on estates, are scored zero-shot on the fastback test cases; the *penalty* of a model is its fastback "
@@ -252,10 +252,10 @@ print(f": AeroZoo, the {({**S._COUNT, 6: 'six', 7: 'seven'})[len(HO)]} held-out 
       "the case's reference speed and dynamic pressure, seed means over two seeds averaged over the splits (*mean*: the case mean; "
       "*median*: AeroZoo's, the seed mean of each seed's median over cases), the two references AeroZoo calibrates them with, and the "
       "ratio GeoTransolver ÷ ISLA, its six-split mean and the count of splits on which it exceeds one; the registered readout of "
-      f"the same ratio on the relative L2 is in @sec-interior-aerozoo. GeoTransolver is {AZ['arms'][ARM['GeoTransolver']]['note']}; "
-      "its velocity error is still falling at the last epoch, so its velocity is not converged. Transolver, at AeroZoo's own "
-      f"configuration ({ARM['Transolver']}), which receives no inlet value, is scored on the `full` split only and is "
-      f"{AZ['arms'][ARM['Transolver']]['note']}. How to read this: a split's references set its scale, so a six-split mean mixes "
+      "the same ratio on the relative L2 is in @sec-interior-aerozoo. GeoTransolver's pressure output is about zero at the final "
+      "epoch and its velocity is learned in part; its velocity error is still falling at the last epoch, so its velocity is not "
+      f"converged. Transolver, at AeroZoo's own configuration ({ARM['Transolver']}), which receives no inlet value, is scored on "
+      "the `full` split only, and its predictions are constants, about zero, on every case. How to read this: a split's references set its scale, so a six-split mean mixes "
       "splits whose references differ several-fold, and the last row is the reading; the per-split numbers, ISLA's failures on two "
       "held-out families and the reasons are in @sec-aerozoo. Data: results/char/aerozoo_090_specmetric.json.")
 ```
