@@ -64,6 +64,16 @@ source. Do not edit by hand.
 | `hl_dup_stage2_area/` | HL-AREA: HL-DUP stage 2's six deduplicated-wing checkpoints scored on the uniform point cloud (per-case rows, reduction and table), and the six lanes' training cost from their own logs (extract_cost.py's lines and the cost report) | `scratch/isla-hl-area-2026-10-24/` |
 | `isla_api_013/` | ISLA-API: ISLA 0.13.0 (the interior task is ISLA-DTT with no switch; Mesh's names n_spatial_dims and n_boundary_tokens; no Reynolds argument; the schema key defines), its design and mapping table, the deleted tests, the assertion audit, the suites and the datapipe check of re_z against the in-model z, and the book changes | `scratch/isla-api-013-2026-10-24/` |
 | `reynolds_out/` | REYNOLDS-OUT: the Reynolds feature moved out of ISLA's constructor into the recipe (ComputeBoundaryScales and float64 ComputeLogReynolds in ISLA's model configs), its design and evidence, and the bitwise check of z on 160 cases over three checkpoints | `scratch/isla-reynolds-out-2026-10-24/` |
+| `az_spec_audit/` | AZ-SPEC-AUDIT: the AeroZoo runs against AeroZoo's task specification (inputs, statistics, splits, targets, metric, loss and reporting), with the deviations M1, T1, I1, I2, L1, S1, S1b, R1 and the hardening notes | `scratch/isla-az-spec-audit-2026-10-24/` |
+| `az_rescore/` | AZ-RESCORE: the 48 AeroZoo checkpoints rescored with AeroZoo's own interior metrics (eps_U, eps_p, eps^N; mean and median over all test cases and the mean_stable ones; full-mesh float64, chunked inference), with the zero and free-stream predictors, the orders, the partition probes and the registered readings beside | `scratch/isla-az-rescore-2026-10-24/` |
+| `outlet_exp/` | OUTLET-EXP: ISLA trained with AeroZoo's outlet gauge pressure held by construction, read on profile_crossflow and full by its registered rule, its cost and the supervisor's decision not to adopt it | `scratch/isla-outlet-exp-2026-10-22/` |
+| `geo_tieorder/` | GEO-TIEORDER: the on-wall direction's dependence on cell order and precision at near-equal normals, its two causes, the rule that removes it (a candidate for ISLA 0.14.0) and its measured function change and cost | `scratch/isla-geo-tieorder-2026-10-25/` |
+| `draw_exact/` | DRAW-EXACT: the token draw's run-to-run and CPU-to-GPU dependence at exact ties, the duplicate and dropped cells of today's GPU evaluation draw, and the exact int64 line that removes them (a candidate for ISLA 0.14.0) | `scratch/isla-draw-exact-2026-10-25/` |
+| `slice_normal_exp/` | SLICE-NORMAL-EXP: the no-harm retrain check of the slice mean normal, its registration and the DrivAerML Surface read of option (a), the unnormalized mean normal | `scratch/isla-slice-normal-exp-2026-10-24/` |
+| `dtt_knobs_r5/` | DTT-KNOBS stage 2, R5: ISLA-DTT without its physical scales on a standardized inlet speed against the AirfRANS standing's pair, and its second read | `scratch/isla-dtt-knobs-2026-10-23/` |
+| `main_merge/` | MAIN-MERGE: upstream main merged into psharpe/isla, its effect on ISLA, its recipe and its book, and the on-wall direction's defect at quad diagonals that it found | `scratch/isla-main-merge-2026-10-24/` |
+| `lib_tree/` | LIB-TREE: the cluster tree's Warp build and walk and the grouped forest in physicsnemo.mesh.spatial, a library-only branch, with its bitwise proofs against ISLA and GLOBE and its timings | `scratch/lib-tree-2026-10-24/` |
+| `test_audit/` | TEST-AUDIT: ISLA's test suite audited (coverage on CPU and GB300, MOD-008, determinism on the GPU) and the test plan | `scratch/isla-test-audit-2026-10-24/` |
 
 | topic | file | source | md5 |
 | --- | --- | --- | --- |
@@ -377,3 +387,35 @@ source. Do not edit by hand.
 | reynolds_out | bitwise/RESULTS_BITWISE.md | scratch/isla-reynolds-out-2026-10-24/bitwise/RESULTS_BITWISE.md | af1c962a0c00e5cf43e5c70a2d16af01 |
 | reynolds_out | bitwise/JOBS.md | scratch/isla-reynolds-out-2026-10-24/bitwise/JOBS.md | 5e512c7119ec3e8b488f31669d6849bf |
 | reynolds_out | bitwise/z_cases_376561.tsv | scratch/isla-reynolds-out-2026-10-24/bitwise/z_cases_376561.tsv | 6b0fb046be4818b1f4a2e6bf58648ab8 |
+| az_spec_audit | AUDIT.md | scratch/isla-az-spec-audit-2026-10-24/AUDIT.md | 448bd6f1b6b8a0a63df73cf3feef717e |
+| az_rescore | RESULTS.md | scratch/isla-az-rescore-2026-10-24/RESULTS.md | 20ba0df7eab971666fe4bea93ced9d4a |
+| az_rescore | NOTEBOOK_DRAFT.md | scratch/isla-az-rescore-2026-10-24/NOTEBOOK_DRAFT.md | 7fb158a11a34a0754de24999965a7a7d |
+| az_rescore | AEROZOO_SPECMETRIC.json | scratch/isla-az-rescore-2026-10-24/AEROZOO_SPECMETRIC.json | c8fb1c822f8cb67afa8ef56d520587f5 |
+| az_rescore | TABLES_FULL.md | scratch/isla-az-rescore-2026-10-24/TABLES_FULL.md | 1b71f6c498ac7a6b111c12fdae989e27 |
+| az_rescore | ORDERS.md | scratch/isla-az-rescore-2026-10-24/ORDERS.md | a7d0ee73d0033f805737463f434875d5 |
+| az_rescore | PARTITION.md | scratch/isla-az-rescore-2026-10-24/PARTITION.md | d25bc4f7836c7b2ddc5881e00dd2eee8 |
+| az_rescore | READINGS.md | scratch/isla-az-rescore-2026-10-24/READINGS.md | 52d594623a684dc66e9c684dcabbee7c |
+| az_rescore | JOBS.md | scratch/isla-az-rescore-2026-10-24/JOBS.md | 676d29c1a757a38536b5db36a81e8c80 |
+| outlet_exp | RESULTS.md | scratch/isla-outlet-exp-2026-10-22/RESULTS.md | 457eba6e05c54bdd5fb88ad1c833f87f |
+| outlet_exp | NOTEBOOK_DRAFT_OUTLET.md | scratch/isla-outlet-exp-2026-10-22/NOTEBOOK_DRAFT_OUTLET.md | 7857d3c43c8c03b3eadf8eaeeda71d01 |
+| outlet_exp | tables.md | scratch/isla-outlet-exp-2026-10-22/tables.md | 1bdbde00f7a97d52a70b3a9138c06f5b |
+| geo_tieorder | FINAL_REPORT.md | scratch/isla-geo-tieorder-2026-10-25/FINAL_REPORT.md | e10e95eb5610555c127b875f5c7d7c66 |
+| geo_tieorder | RESULTS.md | scratch/isla-geo-tieorder-2026-10-25/RESULTS.md | e73972e897efcefb287511d5dfe6315a |
+| geo_tieorder | NOTEBOOK_DRAFT.md | scratch/isla-geo-tieorder-2026-10-25/NOTEBOOK_DRAFT.md | b2372ba725edcb9e449b89295dacbba9 |
+| draw_exact | FINAL_REPORT.md | scratch/isla-draw-exact-2026-10-25/FINAL_REPORT.md | a07009001c0f666602248fb6b4f9d788 |
+| draw_exact | DESIGN.md | scratch/isla-draw-exact-2026-10-25/DESIGN.md | 67dace2c118f96f21a49f8a1fceeb917 |
+| slice_normal_exp | PREREG.md | scratch/isla-slice-normal-exp-2026-10-24/PREREG.md | 4580615da2b06f2a25bf793b8aba0a30 |
+| slice_normal_exp | reading_DRA.md | scratch/isla-slice-normal-exp-2026-10-24/reading_DRA.md | e9badbe9ec671650e6fbedcf45ab1514 |
+| slice_normal_exp | reading_DRA.json | scratch/isla-slice-normal-exp-2026-10-24/reading_DRA.json | 3b5ea8dfcce592c427ba00cc679f293c |
+| dtt_knobs_r5 | RESULTS.md | scratch/isla-dtt-knobs-2026-10-23/RESULTS.md | 3b462f0df18edf0463d90a5cd9495a5c |
+| dtt_knobs_r5 | RESULTS_R5_REVIEW.md | scratch/isla-dtt-knobs-2026-10-23/RESULTS_R5_REVIEW.md | 03323923894f13c36c0af41d44265a97 |
+| main_merge | FINAL_REPORT.md | scratch/isla-main-merge-2026-10-24/FINAL_REPORT.md | b984edca2ad8b0c30936be0e225e866b |
+| main_merge | IMPACT.md | scratch/isla-main-merge-2026-10-24/IMPACT.md | 741b66a410a99ac78a594ec06a2b912b |
+| main_merge | DEFECT_TORUS.md | scratch/isla-main-merge-2026-10-24/DEFECT_TORUS.md | de9f1f468393efe35c788427a00c9042 |
+| lib_tree | FINAL_REPORT.md | scratch/lib-tree-2026-10-24/FINAL_REPORT.md | 349e78ded5e3b95f700cb79247bfea8c |
+| lib_tree | RESULTS.md | scratch/lib-tree-2026-10-24/RESULTS.md | ebc455c1edf19ada2a77bd6b8bc8e06f |
+| test_audit | FINAL_REPORT.md | scratch/isla-test-audit-2026-10-24/FINAL_REPORT.md | 8d41b6664272c669c7747072d307f43c |
+| test_audit | AUDIT.md | scratch/isla-test-audit-2026-10-24/AUDIT.md | bd76134d1953e0183d4dc9093261e02e |
+| test_audit | COVERAGE.md | scratch/isla-test-audit-2026-10-24/COVERAGE.md | 133446aa26804b917f2928a6f01d87d6 |
+| test_audit | DETERMINISM.md | scratch/isla-test-audit-2026-10-24/DETERMINISM.md | afbaf878ec109e1d3d44afc1a1737a2a |
+| test_audit | TEST_PLAN.md | scratch/isla-test-audit-2026-10-24/TEST_PLAN.md | f275c4931c3e5916d16bebbc452640ec |

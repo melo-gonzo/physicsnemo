@@ -563,6 +563,81 @@ RECORDS = {
             "bitwise/z_cases_376561.tsv",
         ],
     ),
+    "az_spec_audit": (
+        "isla-az-spec-audit-2026-10-24",
+        "AZ-SPEC-AUDIT: the AeroZoo runs against AeroZoo's task specification (inputs, statistics, splits, targets, metric, "
+        "loss and reporting), with the deviations M1, T1, I1, I2, L1, S1, S1b, R1 and the hardening notes",
+        ["AUDIT.md"],
+    ),
+    "az_rescore": (
+        "isla-az-rescore-2026-10-24",
+        "AZ-RESCORE: the 48 AeroZoo checkpoints rescored with AeroZoo's own interior metrics (eps_U, eps_p, eps^N; mean and "
+        "median over all test cases and the mean_stable ones; full-mesh float64, chunked inference), with the zero and "
+        "free-stream predictors, the orders, the partition probes and the registered readings beside",
+        [
+            "RESULTS.md",
+            "NOTEBOOK_DRAFT.md",
+            "AEROZOO_SPECMETRIC.json",
+            "TABLES_FULL.md",
+            "ORDERS.md",
+            "PARTITION.md",
+            "READINGS.md",
+            "JOBS.md",
+        ],
+    ),
+    "outlet_exp": (
+        "isla-outlet-exp-2026-10-22",
+        "OUTLET-EXP: ISLA trained with AeroZoo's outlet gauge pressure held by construction, read on profile_crossflow and "
+        "full by its registered rule, its cost and the supervisor's decision not to adopt it",
+        ["RESULTS.md", "NOTEBOOK_DRAFT_OUTLET.md", "tables.md"],
+    ),
+    "geo_tieorder": (
+        "isla-geo-tieorder-2026-10-25",
+        "GEO-TIEORDER: the on-wall direction's dependence on cell order and precision at near-equal normals, its two causes, "
+        "the rule that removes it (a candidate for ISLA 0.14.0) and its measured function change and cost",
+        ["FINAL_REPORT.md", "RESULTS.md", "NOTEBOOK_DRAFT.md"],
+    ),
+    "draw_exact": (
+        "isla-draw-exact-2026-10-25",
+        "DRAW-EXACT: the token draw's run-to-run and CPU-to-GPU dependence at exact ties, the duplicate and dropped cells of "
+        "today's GPU evaluation draw, and the exact int64 line that removes them (a candidate for ISLA 0.14.0)",
+        ["FINAL_REPORT.md", "DESIGN.md"],
+    ),
+    "slice_normal_exp": (
+        "isla-slice-normal-exp-2026-10-24",
+        "SLICE-NORMAL-EXP: the no-harm retrain check of the slice mean normal, its registration and the DrivAerML Surface "
+        "read of option (a), the unnormalized mean normal",
+        ["PREREG.md", "reading_DRA.md", "reading_DRA.json"],
+    ),
+    "dtt_knobs_r5": (
+        "isla-dtt-knobs-2026-10-23",
+        "DTT-KNOBS stage 2, R5: ISLA-DTT without its physical scales on a standardized inlet speed against the AirfRANS "
+        "standing's pair, and its second read",
+        ["RESULTS.md", "RESULTS_R5_REVIEW.md"],
+    ),
+    "main_merge": (
+        "isla-main-merge-2026-10-24",
+        "MAIN-MERGE: upstream main merged into psharpe/isla, its effect on ISLA, its recipe and its book, and the on-wall "
+        "direction's defect at quad diagonals that it found",
+        ["FINAL_REPORT.md", "IMPACT.md", "DEFECT_TORUS.md"],
+    ),
+    "lib_tree": (
+        "lib-tree-2026-10-24",
+        "LIB-TREE: the cluster tree's Warp build and walk and the grouped forest in physicsnemo.mesh.spatial, a library-only "
+        "branch, with its bitwise proofs against ISLA and GLOBE and its timings",
+        ["FINAL_REPORT.md", "RESULTS.md"],
+    ),
+    "test_audit": (
+        "isla-test-audit-2026-10-24",
+        "TEST-AUDIT: ISLA's test suite audited (coverage on CPU and GB300, MOD-008, determinism on the GPU) and the test plan",
+        [
+            "FINAL_REPORT.md",
+            "AUDIT.md",
+            "COVERAGE.md",
+            "DETERMINISM.md",
+            "TEST_PLAN.md",
+        ],
+    ),
 }
 
 
