@@ -28,9 +28,11 @@ Exit 0 (PASS), 1 (FAIL) or 2 (INCONCLUSIVE). The reading rules:
     FAIL (the CPU draw is deterministic);
   - the draw's Horvitz-Thompson weights compare at 1e-15 relative to ``max|A|``;
   - the outputs a case names as its ``family`` (float atomics, measured) compare
-    against the run-to-run family: ``max|B_0 - A_0|`` must not exceed the largest
-    ``max|X_i - X_0|`` of either side's repeats (a family that repeats bitwise
-    demands bitwise).
+    against the run-to-run family: the median over every pair of repeats across the
+    sides of ``max|B_i - A_j|`` must not exceed the largest ``max|X_i - X_j|`` within
+    either side (one code, one distribution: a cross pair is then one more draw of
+    the within-side distances, so their median lies inside the within-side range; a
+    family that repeats bitwise demands bitwise).
 - Any tensor not named a family that differs between the repeats of one side is a
   FAIL (non-determinism the case does not declare).
 - Cases or tensors present on one side only are a FAIL.
@@ -38,6 +40,7 @@ Exit 0 (PASS), 1 (FAIL) or 2 (INCONCLUSIVE). The reading rules:
 
 import argparse
 import fnmatch
+import statistics
 import sys
 from pathlib import Path
 
@@ -61,9 +64,22 @@ def _maxdiff(a: torch.Tensor, b: torch.Tensor) -> float:
     return float(torch.where(same, 0.0, (a - b).abs()).max()) if a.numel() else 0.0
 
 
-def _spread(rec: dict, key: str, name: str) -> float:
-    runs = rec["tensors"][key][name]
-    return max((_maxdiff(r, runs[0]) for r in runs[1:]), default=0.0)
+def _runs(rec: dict, key: str, name: str) -> list:
+    """Every repeat of a tensor (the record stores the first and those that differ)."""
+    hashes = rec["cases"][key]["tensors"][name]["sha256"]
+    stored = iter(rec["tensors"][key][name][1:])
+    first = rec["tensors"][key][name][0]
+    return [first if h == hashes[0] else next(stored) for h in hashes]
+
+
+def _family(a: dict, b: dict, key: str, name: str) -> tuple[float, float]:
+    """The median cross-side distance and the largest within-side distance."""
+    ra, rb = _runs(a, key, name), _runs(b, key, name)
+    within = [
+        _maxdiff(x, y) for r in (ra, rb) for i, x in enumerate(r) for y in r[i + 1 :]
+    ]
+    cross = [_maxdiff(x, y) for x in ra for y in rb]
+    return statistics.median(cross), max(within, default=0.0)
 
 
 def compare_case(a: dict, b: dict, key: str) -> tuple[int, list]:
@@ -125,13 +141,13 @@ def compare_case(a: dict, b: dict, key: str) -> tuple[int, list]:
                 )
             )
         elif family:
-            spread = max(_spread(a, key, n), _spread(b, key, n))
+            d, spread = _family(a, b, key, n)
             ok = d <= spread
             rows.append(
                 (
                     n,
                     "PASS" if ok else "FAIL",
-                    f"family: max diff {d:.3e}, run-to-run spread {spread:.3e}",
+                    f"family: median cross-side max diff {d:.3e}, within-side spread {spread:.3e}",
                 )
             )
         else:

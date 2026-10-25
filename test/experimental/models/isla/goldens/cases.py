@@ -157,15 +157,27 @@ def _to(inputs: dict, device, keys=None) -> dict:
     return {k: v.to(device) for k, v in inputs.items() if keys is None or k in keys}
 
 
-### Inputs are built from correctly rounded operations only (+, -, *, /, sqrt, one
-### per torch op, and float64 Generator draws, cast once to float32), so they are the
-### same bits on every platform: transcendental functions, fused reductions
-### (``normalize``), matrix products and LAPACK (QR) round differently on x86 and
-### Grace, and a discontinuous output (a tie's chosen cell) then moves with them.
+### Inputs are built from correctly rounded operations only (+, -, *, /, one per
+### torch op, and float64 Generator draws, cast once to float32), so they are the
+### same bits on every platform: transcendental functions and even ``sqrt``, fused
+### reductions (``normalize``), matrix products and LAPACK (QR) round differently on
+### x86 and Grace (measured in jobs 377631 and 377864), and a discontinuous output
+### then moves with them.
+
+
+def _directions(g: torch.Generator, *shape: int) -> torch.Tensor:
+    """Unit vectors ``shape`` (last axis the dimension) without a square root: the
+    inverse stereographic projection ``(2x, |x|^2 - 1) / (|x|^2 + 1)`` of Gaussian
+    ``x`` in one dimension fewer (unit to rounding)."""
+    x = torch.randn(*shape[:-1], shape[-1] - 1, generator=g, dtype=D)
+    s = x[..., 0] * x[..., 0]
+    for k in range(1, x.shape[-1]):
+        s = s + x[..., k] * x[..., k]
+    return torch.cat([2 * x, (s - 1)[..., None]], -1) / (s + 1)[..., None]
 
 
 def _unit(x: torch.Tensor) -> torch.Tensor:
-    """``x`` normalized along its last axis, by elementwise operations."""
+    """``x`` normalized along its last axis (only for orientation decisions)."""
     sq = x[..., 0] * x[..., 0]
     for k in range(1, x.shape[-1]):
         sq = sq + x[..., k] * x[..., k]
@@ -202,9 +214,9 @@ def _cloud(n, d=3, seed=0, *, dtype=D, scale=None):
         else torch.as_tensor(scale, dtype=D)
     )
     pts = torch.randn(n, d, generator=g, dtype=D) * scale
-    nrm = _unit(torch.randn(n, d, generator=g, dtype=D))
+    nrm = _directions(g, n, d)
     w = torch.rand(n, generator=g, dtype=D) + 0.5
-    drv = _unit(torch.randn(d, generator=g, dtype=D))
+    drv = _directions(g, d)
     return tuple(t.to(dtype) for t in (pts, nrm, w, drv))
 
 
@@ -703,11 +715,13 @@ def _kernel_read_run(inputs, device, variant):
     return {"out.read": out.detach(), **{f"grad.{k}": t.grad for k, t in lv.items()}}
 
 
-#: Measured run-to-run on CUDA: the Triton read's ``dk``/``dv`` accumulate by atomics.
+#: Measured run-to-run on CUDA: the Triton read's ``dk``/``dv`` accumulate by atomics,
+#: and the eager read (float64 there) sums by ``index_add``, atomics too.
 _SEG_FAMILY = ("grad.k", "grad.v")
+_SEG_FAMILY_F64 = ("out.read", "grad.*")
 #: bfloat16 ``dk``/``dv`` are not compared on CUDA: the CPU golden is the eager read's,
 #: whose backward accumulates the gathered keys' and values' gradients in bfloat16
-#: (29% off float64 at the largest ``dv``; BUGS_W1.md), the Triton read's in float32.
+#: (29% off float64 at the largest ``dv``: it gathers before it casts; reported), the Triton read's in float32.
 _BF16_CUDA = {"grad.k": None, "grad.v": None}
 for _dt, _dn in ((D, "f64"), (F, "f32"), (torch.bfloat16, "bf16")):
     _case(
@@ -715,7 +729,7 @@ for _dt, _dn in ((D, "f64"), (F, "f32"), (torch.bfloat16, "bf16")):
         f"segment_softmax_read_{_dn}",
         _seg_build(_dt),
         _seg_run,
-        family=_SEG_FAMILY,
+        family=_SEG_FAMILY_F64 if _dt == D else _SEG_FAMILY,
         cuda_tol=_BF16_CUDA if _dt == torch.bfloat16 else {},
         requires=("triton",),
     )
@@ -758,7 +772,7 @@ def _polygon(verts):
 
 def _near_wall(dim, n, seed, band, radius=1.0):
     g = _gen(seed)
-    dirs = _unit(torch.randn(n, dim, dtype=D, generator=g))
+    dirs = _directions(g, n, dim)
     return dirs * (radius + band * (2 * torch.rand(n, 1, dtype=D, generator=g) - 1))
 
 
@@ -865,16 +879,9 @@ def _geo_thin_cap():
     w = torch.rand(20, 3, dtype=D, generator=g)
     w = w / (w[:, :1] + w[:, 1:2] + w[:, 2:])
     on = w[:, :1] * tri[0] + w[:, 1:2] * tri[1] + w[:, 2:] * tri[2]
-    a, b = tri[1] - tri[0], tri[2] - tri[0]
-    nrm = _unit(
-        torch.stack(
-            [
-                a[1] * b[2] - a[2] * b[1],
-                a[2] * b[0] - a[0] * b[2],
-                a[0] * b[1] - a[1] * b[0],
-            ]
-        )
-    )
+    nrm = torch.tensor(
+        [0.0, 0.0, 1.0], dtype=D
+    )  # the cap lies in z = 0 (before the rotation)
     side = torch.rand(20, 1, dtype=D, generator=g) * 2 - 1
     q = torch.cat(
         [
@@ -939,17 +946,13 @@ def _geo_circle():
 
 
 def _geo_naca():
-    """A NACA 0012 section with a sharp trailing edge (24 stations clustered at both
-    ends by a cubic, in place of the cosine spacing)."""
+    """A NACA 0012 section with a sharp trailing edge (24 stations at ``x = t^2``,
+    clustered at the leading edge, so that ``sqrt(x) = t`` takes no square root)."""
     t = torch.arange(24, dtype=D) / 23
-    x = t * t * (3 - 2 * t)
+    x = t * t
     x2 = x * x
     yt = 0.6 * (
-        0.2969 * x.sqrt()
-        - 0.1260 * x
-        - 0.3516 * x2
-        + 0.2843 * x2 * x
-        - 0.1036 * x2 * x2
+        0.2969 * t - 0.1260 * x - 0.3516 * x2 + 0.2843 * x2 * x - 0.1036 * x2 * x2
     )
     verts = torch.cat(
         [torch.stack([x, yt], -1), torch.stack([x, -yt], -1).flip(0)[1:-1]]
@@ -1001,6 +1004,22 @@ _GEO_DROP = {
     ### The closest point's weights on slivers 1e-13 off their line are ill-posed
     ### (x86 and Grace differ by 3e-5 on the same inputs); d and the rest stay.
     "sliver_soup": ("out.search.weights",),
+    ### At a tie the reported cell, its weights and the gradients (taken through that
+    ### cell: a selection from the subdifferential) differ between x86, Grace and
+    ### GB300 on the same inputs, and move under a one-ulp change of the vertices;
+    ### d, u, the tie flag, its direction, the sign and the winding numbers stay.
+    "box_ties_3d": (
+        "out.search.cell",
+        "out.search.weights",
+        "grad.queries",
+        "grad.points",
+    ),
+    "box_ties_2d": (
+        "out.search.cell",
+        "out.search.weights",
+        "grad.queries",
+        "grad.points",
+    ),
 }
 
 
@@ -1075,10 +1094,12 @@ _GEO_FAMILY = ("grad.points",)
 #: The thin cap's closest-point weights: conditioned by 1/h = 1e6 (x86 against Grace,
 #: with queries one ulp apart: 2.8e-11).
 _GEO_TOL = {"thin_cap": {"out.search.weights": 1e-8}}
-#: The 3-D winding numbers off the wall on CUDA: the tree's far-field approximation
-#: opens other nodes there (its float32 box tests), within its error (measured 3.6e-9
-#: on the torus and the open cube).
-_GEO_CUDA_TOL = {"out.w": 1e-7}
+#: The 3-D winding numbers are not compared with the golden (the A/B harness records
+#: them bitwise): their values follow the tree's float32 opening decisions, which
+#: differ between x86, Grace and GB300 on the same inputs (by up to 4.4e-3 near the
+#: sphere), within the far-field approximation; their sign, which is what reaches d,
+#: is compared (``out.search.sign``).
+_GEO_TOL = {**_GEO_TOL, "*": {"out.w": None}}
 for _name, _maker in _GEO_SETS.items():
     _dtypes = (
         ((D, "f64"), (F, "f32"))
@@ -1093,8 +1114,7 @@ for _name, _maker in _GEO_SETS.items():
             functools.partial(_geo_run, drop=_GEO_DROP.get(_name, ())),
             variants={"cpu": ("reference",), "cuda": ("fast", "reference")},
             family=_GEO_FAMILY,
-            tol=_GEO_TOL.get(_name, {}),
-            cuda_tol=_GEO_CUDA_TOL,
+            tol={**_GEO_TOL["*"], **_GEO_TOL.get(_name, {})},
             requires=("warp",),
         )
 
@@ -1170,7 +1190,7 @@ def _read_build(d, dtype, n_vecs):
             ### log measure fractions about log(1 / 300), drawn directly (no log)
             "in.log_frac": (-6.0 + w)[None],
             "in.query_r": torch.cat([near, far])[None],
-            "in.query_n": _unit(torch.randn(1, 120, d, generator=g, dtype=D)),
+            "in.query_n": _directions(g, 1, 120, d),
             "in.query_wall": 0.05 + torch.rand(1, 120, generator=g, dtype=D),
             "in.g_unit": drv[None, None],
             "in.h_b": torch.randn(300, 16, generator=g, dtype=D),
@@ -1295,10 +1315,8 @@ def _block_inputs(g, n, hidden, dtype, k=1, n_vecs=1, n_tens=0):
         "in.h": torch.randn(1, n, hidden, generator=g, dtype=D),
         "in.log_w": -3.0 * torch.rand(1, n, 1, generator=g, dtype=D),
         "in.r": torch.randn(1, n, 3, generator=g, dtype=D),
-        "in.n_hat": _unit(torch.randn(1, n, 3, generator=g, dtype=D)),
-        "in.g_hat": _unit(torch.randn(1, 1, k, 3, generator=g, dtype=D))
-        .expand(1, n, k, 3)
-        .contiguous(),
+        "in.n_hat": _directions(g, 1, n, 3),
+        "in.g_hat": _directions(g, 1, 1, k, 3).expand(1, n, k, 3).contiguous(),
     }
     if n_vecs:
         x["in.vecs"] = torch.randn(1, n, n_vecs, 3, generator=g, dtype=D)
@@ -1450,7 +1468,7 @@ def _region_build(dtype, k, n_vecs, n_tens=0):
         del x["in.h"], x["in.log_w"]
         x["in.logits_pre"] = torch.randn(1, 300, 16, generator=g, dtype=D).to(dtype)
         x["in.z_pos"] = torch.randn(1, 16, 3, generator=g, dtype=D).to(dtype)
-        x["in.m_s"] = _unit(torch.randn(1, 16, 3, generator=g, dtype=D)).to(dtype)
+        x["in.m_s"] = _directions(g, 1, 16, 3).to(dtype)
         lin = torch.nn.Linear(target("geo_width")(k, n_vecs, n_tens), 1)
         x.update({k_: v.to(dtype) for k_, v in _params(lin, 39).items()})
         return x
@@ -1579,7 +1597,7 @@ def _assemble_build():
     for d in (2, 3):
         x[f"in.true_{d}"] = torch.randn(2, 40, 3, d, generator=g, dtype=D)
         x[f"in.pseudo_{d}"] = torch.randn(2, 40, 3, d, generator=g, dtype=D)
-    x["in.r_hat"] = _unit(torch.randn(40, 3, generator=g, dtype=D))
+    x["in.r_hat"] = _directions(g, 40, 3)
     x["in.r_hat"][:4] = 0.0  # zero where r_hat is zero
     x["in.v"] = torch.randn(40, 3, generator=g, dtype=D)
     x["in.coeffs"] = torch.randn(2, 40, 64, generator=g, dtype=D)

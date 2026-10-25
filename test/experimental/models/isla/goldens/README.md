@@ -4,7 +4,11 @@ Characterization goldens of ISLA's modules: the A/B harness that proves a refact
 a library move bitwise, and the committed CI golden that guards against regressions.
 
 - `cases.py`: the cases. Each builds its inputs on the CPU from seeded
-  `torch.Generator`s (`build()`) and runs the functions under test on a device under
+  `torch.Generator`s (`build()`), by correctly rounded operations only (float64
+  draws, `+ - * /` and `sqrt` one per op, a cast to float32), so that they are the
+  same bits on x86 and Grace (`normalize`, `log`, `cos`, matrix products, QR and
+  float32 `randn` are not; measured in job 377631), and runs the functions under
+  test on a device under
   a variant (`run(inputs, device, variant)`: the reference, or the fast and fused
   kernels). Every function is reached through `TARGETS`, one line per function naming
   the module that owns it: a LIB-MOVE switch retargets that line, and the golden of
@@ -106,6 +110,13 @@ bitwise.
   circle), and the thin cap (coplanar with its neighbours) records no direction
   (`u`, the gradients, `tied`, `tie_u`): its `d`, closest cell, sign, on-wall flag,
   weights and winding numbers stay.
+- **Ill-posed outputs**: the closest point's weights on slivers 1e-13 off their line
+  (x86 and Grace differ by 3e-5 on the same inputs); and, at on-wall queries, the
+  winding number and the sign (`d = 0` there, the winding number is 1/2 up to
+  rounding; they differ by up to 0.44 across platforms), recorded as 0.
+- **bfloat16 `dk`/`dv` on CUDA against the CPU golden**: the CPU golden is the eager
+  read's, which adds those gradients up in bfloat16 (a reported defect:
+  `_eager_segment_softmax_read` gathers before it casts); not compared there.
 - **Gradients that are zero in exact arithmetic**: the basis MLP's last bias (a
   per-head constant on every pair's logit) and a slice block's `geo_logit.bias` (a
   constant over the slices) cancel in their softmaxes; what is computed is roundoff,
