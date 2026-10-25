@@ -63,6 +63,10 @@
 input_type: mesh
 output_type: mesh
 
+# The dataset's steps only the baselines read, removed for this model only (src/datasets.py):
+dataset_drop_transforms:
+  - ComputeSDFFromBoundary            # sdf / sdf_normals at the prediction points: the baselines' inputs, not ISLA's
+
 # Learning rate pinned at the reference configuration's rate, 3.75e-4 (REF-80
 # verdict, 2026-10-04; the width rule 1e-3 x 192 / hidden at 512): the recipe
 # default of 3e-3 drives the model to a mean-field plateau (book notebook:

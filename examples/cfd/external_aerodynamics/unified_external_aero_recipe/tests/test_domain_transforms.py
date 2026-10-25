@@ -365,6 +365,56 @@ def test_flip_boundary_orientation_reverses_the_named_boundaries():
         FlipBoundaryOrientation(boundaries=["outlet"]).apply_to_domain(domain)
 
 
+@pytest.mark.parametrize("dtype", [torch.int64, torch.int32])
+@pytest.mark.parametrize("width", [2, 3, 4])
+def test_flip_boundary_orientation_swaps_the_last_two_vertices(width, dtype):
+    """The flip's cells equal the list-index swap of the last two vertices, in the
+    cells' own dtype, for segments, triangles and tetrahedra; the normals negate."""
+    from domain_transforms import FlipBoundaryOrientation
+
+    torch.manual_seed(0)
+    cells = torch.stack([torch.randperm(8)[:width] for _ in range(5)]).to(dtype)
+    wall = Mesh(
+        points=torch.randn(8, 3), cells=cells, cell_data={"n": torch.randn(5, 3)}
+    )
+    domain = DomainMesh(interior=Mesh(points=torch.randn(4, 3)), boundaries={"w": wall})
+    out = FlipBoundaryOrientation(boundaries=["w"], normal_fields=["n"])
+    flipped = out.apply_to_domain(domain).boundaries["w"]
+    expected = cells[:, [*range(width - 2), width - 1, width - 2]]
+    assert flipped.cells.dtype == dtype and flipped.cells.is_contiguous()
+    assert torch.equal(flipped.cells, expected)
+    assert torch.equal(flipped.cell_data["n"], -wall.cell_data["n"])
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+def test_flip_boundary_orientation_does_not_sync_on_cuda():
+    """On the GPU the flip launches no host-device synchronization (the list-index
+    swap it replaces copied its index host-to-device, which the check catches)."""
+    from domain_transforms import FlipBoundaryOrientation
+
+    device = torch.device("cuda")
+    wall = Mesh(
+        points=torch.randn(6, 3, device=device),
+        cells=torch.tensor([[0, 1, 2], [3, 4, 5]], device=device),
+        cell_data={"normals": torch.randn(2, 3, device=device)},
+    )
+    domain = DomainMesh(
+        interior=Mesh(points=torch.randn(5, 3, device=device)),
+        boundaries={"wall": wall},
+    )
+    flip = FlipBoundaryOrientation(boundaries=["wall"], normal_fields=["normals"])
+    torch.cuda.synchronize()
+    mode = torch.cuda.get_sync_debug_mode()
+    torch.cuda.set_sync_debug_mode("error")
+    try:
+        with pytest.raises(RuntimeError):
+            wall.cells[:, [0, 2, 1]]  # the old form: the check detects its sync
+        out = flip.apply_to_domain(domain)
+    finally:
+        torch.cuda.set_sync_debug_mode(mode)
+    assert torch.equal(out.boundaries["wall"].cells, wall.cells[:, [0, 2, 1]])
+
+
 def _tunnel_case(ground: float, roof: float, lowest: float) -> DomainMesh:
     """A DrivAerML-like case: a body whose lowest point is at z = lowest, interior nodes
     from lowest to lowest + 20, and the four box meshes with their ground at z = ground
