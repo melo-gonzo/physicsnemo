@@ -448,11 +448,12 @@ V2_CONFIGS = {
 }
 #: Tolerances relative to each field's largest magnitude. CPU (reference kernels):
 #: float64 1e-12, which holds across BLAS builds, CPU architectures and thread counts
-#: (measured at most 1e-14 on these outputs, G-MODEL); float32 1e-5 (measured at most
-#: 3e-6). CUDA, kernels auto (the fused geometry region, the fast forest, walk and
-#: geometry search, the fused read; TF32 off) against the CPU golden: float64 1e-10
-#: and float32 1e-4, the reordered sums of the fused kernels and of CUDA's atomics.
-V2_TOL = {("cpu", D): 1e-12, ("cpu", F): 1e-5, ("cuda", D): 1e-10, ("cuda", F): 1e-4}
+#: (measured at most 6.2e-16 on Grace against the x86 golden, job 379372); float32
+#: 1e-5 (measured 1.4e-6). CUDA, kernels auto (the fused geometry region, the fast
+#: forest, walk and geometry search, the fused read; TF32 off) against the CPU golden:
+#: float64 1e-12 and float32 1e-4, for the reordered sums of the fused kernels and of
+#: CUDA's atomics (measured 7.7e-16 and 1.6e-6 on GB300, job 379372).
+V2_TOL = {("cpu", D): 1e-12, ("cpu", F): 1e-5, ("cuda", D): 1e-12, ("cuda", F): 1e-4}
 
 
 def _v2_case(name: str, device: str):
