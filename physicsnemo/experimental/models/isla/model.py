@@ -247,9 +247,9 @@ declare it as a boundary input instead).
 of the same arithmetic: the eager PyTorch region, which rebuilds its
 intermediates in backward instead of storing them, and the fused one (one
 Triton kernel per direction that never materializes the (B, N, S, .) tensor;
-CUDA, float32/float64 geometry, one to four per-point vectors counting the
-global directions and the token's rank-1 inputs together, at most 1024
-slices, no rank-2 inputs). At the first forward pass the model picks the
+CUDA, float32/float64 geometry, autocast off or in bfloat16, one to four per-point
+vectors counting the global directions and the token's rank-1 inputs together, at
+most 1024 slices, no rank-2 inputs). At the first forward pass the model picks the
 fused kernel when the inputs are on CUDA, Triton is importable and the
 constraints hold, and the eager region otherwise, logging the choice once
 (:meth:`ISLA.resolve_geo_kernel`; the ``geo_kernel`` attribute, ``"auto"``,
@@ -1209,14 +1209,17 @@ class ISLA(Module):
 
         ``"eager"`` or ``"fused"`` when the ``geo_kernel`` attribute forces it;
         under the default (``"auto"``) the fused kernel when ``points`` is on CUDA, Triton is
-        importable, the model has one to four per-point vectors (global directions
+        importable, CUDA autocast is off or in bfloat16 (the fused kernel's only
+        autocast dtype), the model has one to four per-point vectors (global directions
         plus rank-1 token inputs), at most 1024 slices and no rank-2 inputs, else the
         eager region. The
-        decision is cached per device and logged once.
+        decision is cached per device and autocast dtype and logged once.
         """
         if self.geo_kernel != "auto":
             return self.geo_kernel
-        key = (points.device.type, points.device.index)
+        dev = points.device.type
+        amp = torch.get_autocast_dtype(dev) if torch.is_autocast_enabled(dev) else None
+        key = (dev, points.device.index, amp)
         cached = getattr(self, "_geo_kernel_cache", None)
         if cached is not None and cached[0] == key:
             return cached[1]
@@ -1228,6 +1231,7 @@ class ISLA(Module):
         ok = (
             points.is_cuda
             and HAS_TRITON
+            and amp in (None, torch.bfloat16)
             and self.n_spatial_dims == 3  # the fused kernel is written for three components
             and self.n_global_vectors >= 1
             and self.n_global_vectors + self.n_block_vecs <= MAX_DIRECTIONS
@@ -1241,16 +1245,18 @@ class ISLA(Module):
             return chosen
         self._geo_kernel_cache = (key, chosen)
         logger.info(
-            "ISLA geo_kernel=auto resolved to %r on %s (cuda=%s, triton=%s, global_vectors=%d, slices=%d, token_vector_inputs=%s)",
+            "ISLA geo_kernel=auto resolved to %r on %s (cuda=%s, triton=%s, autocast=%s, global_vectors=%d, slices=%d, "
+            "token_vector_inputs=%s)",
             chosen,
             points.device,
             points.is_cuda,
             HAS_TRITON,
+            amp,
             self.n_global_vectors,
             self.n_slices,
             has_token_inputs,
         )
-        if points.is_cuda and HAS_TRITON and has_token_inputs and chosen == "eager":
+        if points.is_cuda and HAS_TRITON and amp in (None, torch.bfloat16) and has_token_inputs and chosen == "eager":
             logger.warning(
                 "ISLA: rank-1 or rank-2 boundary inputs are present, so the fused "
                 "geometry kernel is not used (kernel follow-up); running the eager region."

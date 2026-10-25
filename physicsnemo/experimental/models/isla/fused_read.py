@@ -613,13 +613,20 @@ def fused_kernel_read(
     ``w`` ``(H, F)`` the block's kernel weights in the basis's dtype, ``logm`` ``(n_b,)``
     the sources' log measures (per source, not per pair); the rest as
     :func:`~physicsnemo.experimental.models.isla.segment_softmax.segment_softmax_read`.
-    Differentiable in ``basis``, ``w``, ``q``, ``k`` and ``v``; requires
-    :func:`supported`. Reads of one basis share its :func:`basis_sink` (``sink``);
-    without one, the read's basis gradient is its own. The output is rounded to
+    Differentiable in ``basis``, ``w``, ``q``, ``k`` and ``v``, not in ``logm`` (a
+    ``logm`` that requires a gradient is refused); requires :func:`supported`. Reads of
+    one basis share its :func:`basis_sink` (``sink``); without one, the read's basis
+    gradient is its own. The output is rounded to
     ``out_dtype``: under autocast the dtype the next matmul rounds it to anyway, so
     its gradient arrives in that dtype, as the reference's (cast back to float32) does."""
     if w.dtype != basis.dtype:
         raise TypeError(f"the kernel weights ({w.dtype}) must be in the basis's dtype ({basis.dtype})")
+    if torch.is_grad_enabled() and logm.requires_grad:
+        raise ValueError(
+            "fused_kernel_read is not differentiable in logm, which requires a gradient here; "
+            "for a gradient of the log measures, read through segment_softmax_read, or, in an ISLA "
+            'model whose measure weights require a gradient, set its tree_read_kernel to "reference"'
+        )
     if sink is None:
         sink = basis_sink(basis)
     token, grad = sink if sink is not None else (None, None)

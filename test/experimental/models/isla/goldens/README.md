@@ -183,9 +183,6 @@ bitwise.
   harness records the values bitwise.
 - **The thin cap's closest-point weights** compare at 1e-8 relative: they are
   conditioned by 1/h = 1e6 (measured at most 6.9e-12 across x86, Grace and GB300).
-- **bfloat16 `dk`/`dv` on CUDA against the CPU golden**: the CPU golden is the eager
-  read's, which adds those gradients up in bfloat16 (a reported defect:
-  `_eager_segment_softmax_read` gathers before it casts); not compared there.
 - **Gradients that are zero in exact arithmetic**: the basis MLP's last bias (a
   per-head constant on every pair's logit) and a slice block's `geo_logit.bias` (a
   constant over the slices) cancel in their softmaxes; what is computed is roundoff,

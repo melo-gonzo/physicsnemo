@@ -212,9 +212,16 @@ class _RoutingLogits(nn.Module):
     @staticmethod
     def logits(x: torch.Tensor, protos: torch.Tensor) -> torch.Tensor:
         """Bounded cosine logits (B, N, S) of token states against given prototypes."""
-        return ROUTING_TEMPERATURE * torch.einsum(
-            "bnh,bsh->bns", F.normalize(x, dim=-1), F.normalize(protos, dim=-1)
-        )
+
+        def unit(t):
+            ### float16 cannot hold F.normalize's eps (1e-12 underflows to 0, so a padding
+            ### token's zero state gives 0/0): normalize in float32, as CUDA autocast does,
+            ### and hand the einsum the float16 rows it had.
+            if t.dtype == torch.float16:
+                return F.normalize(t.float(), dim=-1).to(t.dtype)
+            return F.normalize(t, dim=-1)
+
+        return ROUTING_TEMPERATURE * torch.einsum("bnh,bsh->bns", unit(x), unit(protos))
 
     def forward(self, x: torch.Tensor, log_w: torch.Tensor | None = None) -> torch.Tensor:
         return self.logits(x, self.prototypes(x, log_w))
