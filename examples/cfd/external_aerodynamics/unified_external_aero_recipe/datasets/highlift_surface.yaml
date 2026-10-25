@@ -85,6 +85,7 @@ pipeline:
         high:
           _target_: torch.tensor
           data: [1.0, 1.0, 0.0]
+        validate_args: false
   transforms:
     # The far field of the PDE domain, which 1,798 of the 1,800 case files do not store: the
     # hemisphere of radius 24,533.41796875 in (88.95 MAC) about the raw origin, split into inlet
