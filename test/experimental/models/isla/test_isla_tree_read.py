@@ -581,6 +581,7 @@ def test_tree_walk_resolution_and_the_models_walks_agree(monkeypatch):
         with ran(tree_walk.walk_pairs) as r:
             runs[walk] = outputs(_run(tree, mesh, drv, q))
         assert (r.count(tree_walk.walk_pairs) > 0) == (walk == "fast")
+        assert None not in r.returns(tree_walk.walk_pairs)  # no silent fallback
     assert all(
         torch.equal(runs["fast"][k], runs["reference"][k]) for k in runs["reference"]
     )
@@ -1948,7 +1949,7 @@ def test_fused_basis_chunks_sum_their_weight_gradients_as_the_reference(monkeypa
     finally:
         torch.set_num_threads(threads)
     ### 10000 pairs in chunks of 3000 (else both steps run the reference basis).
-    assert len(calls) == 4
+    assert len(calls) == math.ceil(10000 / tree_read.TREE_READ_PAIR_CHUNK)
     assert ref[0].dtype == torch.bfloat16
     assert all(torch.equal(a, b) for a, b in zip(fused, ref))
 

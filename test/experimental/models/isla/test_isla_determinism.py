@@ -537,12 +537,18 @@ def test_the_model_repeats_bitwise_on_cuda_with_kernels_auto(task, dims, autocas
     training step twice, the outputs, every parameter gradient and the draw bitwise.
     The kernels that resolve are recorded and asserted: the fused geometry region in
     3-D (the eager region in 2-D, which it does not take), and for ISLA-DTT the fast
-    exact geometry, the fused read, the fast forest build and the fast walk.
+    exact geometry, the fused read (seen running: the fused read and node means, not
+    the segment softmax read), the fast forest build and the fast walk.
 
     DRAW-EXACT: ISLA-DTT's draw (its float64 weights included) is bitwise here at 400
     cells today; the 0.14.0 draw makes it so at any size, and this test stays."""
     model = _model(task, dims).cuda()
-    with ran(tree_build.forest_tables, tree_walk.walk_pairs) as r:
+    reads = (
+        fused_read.fused_kernel_read,
+        fused_read.fused_node_means,
+        segment_softmax.segment_softmax_read,
+    )
+    with ran(tree_build.forest_tables, tree_walk.walk_pairs, *reads) as r:
         a, b = (_step(model, task, "cuda", autocast) for _ in range(2))
     kernels = _resolved(model, task, "cuda")
     if task == "dtt":
@@ -552,9 +558,11 @@ def test_the_model_repeats_bitwise_on_cuda_with_kernels_auto(task, dims, autocas
         )
         kernels["build"] = "fast" if tables and None not in tables else "reference"
         kernels["walk"] = "fast" if walks and None not in walks else "reference"
+        kernels["read_ran"] = {f.__name__ for f in reads if r.count(f)}
     print("resolved:", kernels)
     want = {"geo": "fused" if dims == 3 else "eager"}
     if task == "dtt":
         want.update(geometry="fast", tree_read="fused", build="fast", walk="fast")
+        want["read_ran"] = {"fused_kernel_read", "fused_node_means"}
     assert kernels == want
     assert not _not_bitwise(a, b)

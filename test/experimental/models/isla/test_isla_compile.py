@@ -310,6 +310,32 @@ def test_a_warm_compile_cache_reuses_the_graph_across_the_budget():
                     _drawn(compiled, case)
 
 
+def test_the_compiled_case_inputs_run_every_sum_as_the_opaque_scan():
+    """The interior model's case inputs (the graph the recipe compiles) traced with
+    one graph, before Inductor, run every sum as the custom op
+    ``physicsnemo::isla_cumsum`` and have no cumsum of their own: a cumsum added
+    anywhere in them, not only in the draw (test_isla_sampling's guard), would
+    bring back Inductor's split scan, whose kernel failed on GB300 at full
+    resolution under max-autotune (the slow test below runs that on CUDA)."""
+    graphs = []
+
+    def capture(gm, example_inputs):
+        graphs.append(gm)
+        return gm.forward
+
+    torch._dynamo.reset()
+    model = _budget_model()
+    compiled = torch.compile(
+        model._case_inputs, fullgraph=True, dynamic=True, backend=capture
+    )
+    s, nq = BUDGET_SIZES[1]  # sampled down to the budget: the draw's sums run
+    with torch.no_grad():
+        _drawn(compiled, _case("interior", s, "cpu", seed=0, nq=nq))
+    assert len(graphs) == 1
+    scans = [n.target for n in graphs[0].graph.nodes if "cumsum" in str(n.target)]
+    assert scans and set(scans) == {torch.ops.physicsnemo.isla_cumsum.default}, scans
+
+
 ### DRAW-EXACT: the 0.14.0 draw replaces isla_cumsum's body (a fixed-order float scan
 ### in place of ATen's) and edits this docstring; the test stays.
 @pytest.mark.slow
