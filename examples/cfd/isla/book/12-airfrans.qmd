@@ -993,6 +993,8 @@ print("- **Whether ISLA's declared scales add accuracy where the Reynolds number
       "interacting ISLA without them but with the inlet speed standardized is as accurate as interacting ISLA, so standardizing the "
       "global input carries its gain on this dataset (@sec-airfrans-attribution), while ISLA-DTT without them loses accuracy on every "
       "field (@sec-airfrans-dtt-reference); AeroZoo, whose Reynolds number varies widely, has no such arm.")
+print("- **The standing reads the airfoil alone.** The class reads the far field as well, and on this task that costs accuracy "
+      "as its encoding stands: trained with it, ISLA's error rises on every field and ISLA-DTT's pose breaks (@sec-limits-af-whole).")
 print("- **Interacting ISLA depends on its request.** The query-population dependence has no knob that removes it, so it is a limit of the "
       "interacting form (@sec-airfrans-query-population, @sec-limits-query-independence).")
 ```

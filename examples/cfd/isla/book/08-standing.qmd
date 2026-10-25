@@ -71,6 +71,11 @@ for k in KEYS:
         print(S.in_flight_callout({"what": f"{s.in_flight['what']}, on {INS(s)}",
                                    "replacement": s.in_flight["replacement"]}))
 print(S.interior_form_callout(KEYS))
+if "airfrans" in KEYS:
+    print(S.in_flight_callout({"what": "ISLA 0.9.0 on the AirfRANS interior task trained and scored with the airfoil alone, while the "
+                                       "class reads the far field as well, which on AirfRANS costs accuracy as its encoding stands "
+                                       "(@sec-limits-af-whole)",
+                               "replacement": "ISLA reading the far field, retrained in the final reference run,"}))
 ```
 
 ## The two invariances, measured {#sec-standing-invariances}

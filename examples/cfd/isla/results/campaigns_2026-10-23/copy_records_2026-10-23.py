@@ -627,6 +627,12 @@ RECORDS = {
         "branch, with its bitwise proofs against ISLA and GLOBE and its timings",
         ["FINAL_REPORT.md", "RESULTS.md"],
     ),
+    "af_whole_read": (
+        "isla-af-whole-2026-10-23",
+        "AF-WHOLE, the read: ISLA and ISLA-DTT trained with AirfRANS's far field as a named boundary against the eager "
+        "airfoil-only standings, by field, by wall-distance band and under pose, with the octant-tie analysis",
+        ["FINAL_REPORT.md", "RESULTS.md", "read.md", "FACTS.md", "NOTEBOOK_DRAFT.md"],
+    ),
     "test_audit": (
         "isla-test-audit-2026-10-24",
         "TEST-AUDIT: ISLA's test suite audited (coverage on CPU and GB300, MOD-008, determinism on the GPU) and the test plan",

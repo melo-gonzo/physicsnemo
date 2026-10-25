@@ -73,6 +73,7 @@ source. Do not edit by hand.
 | `dtt_knobs_r5/` | DTT-KNOBS stage 2, R5: ISLA-DTT without its physical scales on a standardized inlet speed against the AirfRANS standing's pair, and its second read | `scratch/isla-dtt-knobs-2026-10-23/` |
 | `main_merge/` | MAIN-MERGE: upstream main merged into psharpe/isla, its effect on ISLA, its recipe and its book, and the on-wall direction's defect at quad diagonals that it found | `scratch/isla-main-merge-2026-10-24/` |
 | `lib_tree/` | LIB-TREE: the cluster tree's Warp build and walk and the grouped forest in physicsnemo.mesh.spatial, a library-only branch, with its bitwise proofs against ISLA and GLOBE and its timings | `scratch/lib-tree-2026-10-24/` |
+| `af_whole_read/` | AF-WHOLE, the read: ISLA and ISLA-DTT trained with AirfRANS's far field as a named boundary against the eager airfoil-only standings, by field, by wall-distance band and under pose, with the octant-tie analysis | `scratch/isla-af-whole-2026-10-23/` |
 | `test_audit/` | TEST-AUDIT: ISLA's test suite audited (coverage on CPU and GB300, MOD-008, determinism on the GPU) and the test plan | `scratch/isla-test-audit-2026-10-24/` |
 
 | topic | file | source | md5 |
@@ -414,6 +415,11 @@ source. Do not edit by hand.
 | main_merge | DEFECT_TORUS.md | scratch/isla-main-merge-2026-10-24/DEFECT_TORUS.md | de9f1f468393efe35c788427a00c9042 |
 | lib_tree | FINAL_REPORT.md | scratch/lib-tree-2026-10-24/FINAL_REPORT.md | 349e78ded5e3b95f700cb79247bfea8c |
 | lib_tree | RESULTS.md | scratch/lib-tree-2026-10-24/RESULTS.md | ebc455c1edf19ada2a77bd6b8bc8e06f |
+| af_whole_read | FINAL_REPORT.md | scratch/isla-af-whole-2026-10-23/FINAL_REPORT.md | 114b737caaaf1b3cad50c3cd93062543 |
+| af_whole_read | RESULTS.md | scratch/isla-af-whole-2026-10-23/RESULTS.md | c085e7640e1565031d45886bc8d79ecb |
+| af_whole_read | read.md | scratch/isla-af-whole-2026-10-23/read.md | 5bd11101d78b39382b13ca4122d56dc7 |
+| af_whole_read | FACTS.md | scratch/isla-af-whole-2026-10-23/FACTS.md | 8984de36791f7efdd709dc9d49e76f57 |
+| af_whole_read | NOTEBOOK_DRAFT.md | scratch/isla-af-whole-2026-10-23/NOTEBOOK_DRAFT.md | 09bb686aaf4331d04ac8f8348900f345 |
 | test_audit | FINAL_REPORT.md | scratch/isla-test-audit-2026-10-24/FINAL_REPORT.md | 8d41b6664272c669c7747072d307f43c |
 | test_audit | AUDIT.md | scratch/isla-test-audit-2026-10-24/AUDIT.md | bd76134d1953e0183d4dc9093261e02e |
 | test_audit | COVERAGE.md | scratch/isla-test-audit-2026-10-24/COVERAGE.md | 133446aa26804b917f2928a6f01d87d6 |

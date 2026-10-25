@@ -103,6 +103,7 @@ FOLDER = {
     "main_merge": "campaigns_2026-10-23",
     "lib_tree": "campaigns_2026-10-23",
     "test_audit": "campaigns_2026-10-23",
+    "af_whole_read": "campaigns_2026-10-23",
 }
 
 

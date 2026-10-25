@@ -676,6 +676,68 @@ print("**ISLA's input is the whole boundary of the PDE domain, every piece a dat
       f"{R.source('af_whole', 'PREREG.md')} (section 3).")
 ```
 
+### What the whole boundary costs on AirfRANS {#sec-limits-af-whole}
+
+```{python}
+#| label: para-limits-af-whole
+#| output: asis
+RD = R.md_table("af_whole_read", "read.md", "W-ISLA against B-ISLA", 0)
+RDD = R.md_table("af_whole_read", "read.md", "W-DTT against B-DTT", 0)
+BD = R.md_table("af_whole_read", "read.md", "W-ISLA against B-ISLA", 1)
+AFR = " ".join(R.load("af_whole_read", "RESULTS.md").split())
+AFF = R.load("af_whole_read", "FACTS.md")
+fct = lambda key: float(re.search(re.escape(key) + r": min [\d.e+-]+ median ([\d.e+-]+)", AFF).group(1))
+wb = lambda rows: [R.num(r_["W / B"]) for r_ in rows]
+assert all(r_["R1 (native)"] == "harms" for r_ in RD + RDD)
+assert "**R3: pose holds**" in R.load("af_whole_read", "read.md") and "**R3: pose broken**" in R.load("af_whole_read", "read.md")
+pose_d = [float(x) for x in re.search(r"W-DTT: pressure ([\d.]+) / ([\d.]+), velocity ([\d.]+) / ([\d.]+), nut ([\d.]+) / ([\d.]+)", AFR).groups()]
+pose_i = [float(x) for x in re.search(r"W-ISLA: pressure ([\d.]+) / ([\d.]+), velocity ([\d.]+) / ([\d.]+), nut ([\d.]+) / ([\d.]+)", AFR).groups()]
+band = {r_["band (chords)"]: r_ for r_ in BD}
+first = band["[1e-06,1e-05)"]; below = band["[-inf,0.000305)"]; above = band["[0.000305,inf)"]
+oct_ = re.search(r"moves \*\*(\d+)-(\d+) % \(median (\d+) %\) of the far-field cells", AFR).groups()
+comp = re.search(r"one component of every edge normal is about \+-([\d.e-]+) \(as low as ([\d.e-]+)\)", AFR).groups()
+share = re.search(r"the far field holds ([\d.]+) % of the boundary measure", AFR).group(1)
+step = re.search(r"W / B median step ([\d.]+) \(ISLA, [^)]*\) and ([\d.]+) \(DTT", AFR).groups()
+n_norm = re.search(r"On (\d+) of the ([\d,]+) case files", AFR).groups()
+L_w, knee = fct("L_whole (chords)"), fct("1e-6 L_whole (chords)")
+lin_w, lin_a = fct("linear-part fraction, all nodes, L_whole"), fct("linear-part fraction, all nodes, L_airfoil")
+print("**Reading the far field, as the class does, costs ISLA accuracy on the AirfRANS interior task as its encoding stands: "
+      f"{f3(wb(RD), 3)} times the airfoil-only standing's error on pressure / velocity / eddy viscosity, and ISLA-DTT "
+      f"{f3(wb(RDD), 3)} times, with its pose broken.** Both forms were trained with the far field as the named condition "
+      "`freestream`, two seeds each, on the standings' configuration and training path, and read against the eager-trained "
+      "standings by the rule registered for them, which reads *harms* on every field of both. ISLA's pose holds (posed ÷ "
+      f"native {min(pose_i):.4f} to {max(pose_i):.4f}); ISLA-DTT's does not ({min(pose_d):.2f} to {max(pose_d):.2f}). The step "
+      f"costs the same ({step[0]} and {step[1]} times the standings' on one node). Where the harm sits:")
+print()
+print(f"- **Velocity and eddy viscosity, at the wall.** With the far field, ISLA's length unit $L$ is {L_w:.1f} chords, so the "
+      f"distance channel's softening at $10^{{-6}} L$, ${knee * 1e4:.2f} \\times 10^{{-4}}$ chords, covers the boundary layer: {100 * lin_w:.1f}% of the "
+      f"interior points fall in its linear part, against {100 * lin_a:.2f}% with the airfoil alone (@sec-oq-nearwall). ISLA's "
+      f"velocity error is {R.num(first['velocity W / B (label)']):.2f} times the standing's in the first decade off the wall "
+      f"and {R.num(below['velocity W / B (label)']):.2f} below the softening's knee against "
+      f"{R.num(above['velocity W / B (label)']):.2f} above it; eddy viscosity {R.num(below['nut W / B (label)']):.2f} against "
+      f"{R.num(above['nut W / B (label)']):.2f}, larger below the knee on both seeds.")
+print("- **Pressure, not at the wall.** Its ratio is "
+      f"{R.num(band['[1e-06,1e-05)']['pressure W / B (label)']):.2f} to {R.num(band['[0.0001,0.001)']['pressure W / B (label)']):.2f} "
+      f"in the three bands nearest the wall and {R.num(band['[0.01,0.1)']['pressure W / B (label)']):.2f} at 0.01 to 0.1 chord. "
+      f"One candidate cause, untested: the far field holds {share}% of the boundary measure, which weights ISLA's slices.")
+print(f"- **ISLA-DTT's pose, an octant tie.** This is an analysis beside the registered read, from a probe. The far field's "
+      "straight edges have normals along the forest's axes, so one component of each is near zero (about "
+      f"{sci(float(comp[0]))}, down to {sci(float(comp[1]))}), and the sign test that sorts cells into octant trees "
+      f"(@sec-arch-tree-read) reads rounding there: posed against native, {oct_[0]} to {oct_[1]}% of the far-field cells "
+      f"(median {oct_[2]}%) change octant on the 200 test cases. It is the lug's tie (@sec-oq-dtt-frame) at a larger scale.")
+print()
+print("Peter's ruling stands whatever this costs: \"not only CAN it read the whole boundary - it SHOULD read the whole "
+      "boundary!\", and \"Even if there were an accuracy *cost* to reading the whole boundary (not that I expect it), I would "
+      "recommend this.\" So the open question is the encoding, not the input, and the supervisor's course is to change the "
+      "encoding. The three candidates the measurements point to "
+      "are a near-wall length that does not grow with the domain, an octant rule without exact ties, and a weighting that keeps "
+      "the far field from holding nearly all the slices' measure; none is decided. The AirfRANS standing is ISLA's airfoil-only "
+      f"one (@sec-standing-geometry). Beside it: on {n_norm[0]} of the {n_norm[1]} AirfRANS case files the stored airfoil "
+      "normals disagree with the polyline's winding on some segments; ISLA reads the geometric normals, not that field. Data: "
+      f"{R.source('af_whole_read', 'read.md')}; {R.source('af_whole_read', 'RESULTS.md')} (sections 1 to 3 and 6); "
+      f"{R.source('af_whole_read', 'FACTS.md')}.")
+```
+
 ## Open questions, and what would settle each {#sec-open-questions}
 
 **Each open question below names the measurement that would settle it and what that measurement
@@ -740,9 +802,9 @@ rows = [
     ("Do the SHIFT-SUV and HiLiftAeroML standings move when ISLA reads the pieces of their domains' boundaries that their files do not store? (@sec-oq-whole-boundary)",
      "the missing pieces built in the recipe, SHIFT-SUV's box from constants and HiLiftAeroML's inlet and outlet at the stored far-field radius and its symmetry plane from the source STL's root cap, the datasets unchanged; then each standing retrained with ISLA reading them, two seeds",
      "not priced (the supply sets the runs)"),
-    ("Does the whole boundary cost ISLA near-wall accuracy through its distance channel? (@sec-oq-nearwall)",
-     "ISLA trained on AirfRANS with its far field, read near the wall against the standing; if it reads a harm there, the viscous softening trained on the same configuration with only the channel changed, two seeds",
-     "in flight; then about 180 to 225 for the viscous softening"),
+    ("Which near-wall length removes the near-wall cost of the whole boundary on AirfRANS? (@sec-oq-nearwall)",
+     "a near-wall length that does not grow with the domain, such as the viscous softening, trained on AirfRANS with its far field with only the channel changed, two seeds, read near the wall against the standing",
+     "about 180 to 225 for the viscous softening"),
     ("Does a quarter of the slices cost nothing on ISLA-DTT and on the surface task? (@sec-oq-slices)",
      "ISLA-DTT with 128 slices against 512 on AirfRANS and the lug, and interacting ISLA with 128 against 512 on the DrivAerML Surface task, two seeds each, read for harm by the same rule",
      "not priced"),
@@ -1302,29 +1364,28 @@ NW_COST = re.search(r"Cost: about ([\d]+)-([\d]+) GPU-h for the AirfRANS pair", 
 # the viscous softening's input rounding at 30 chords (p99.9 / max); the arithmetic's share is removed by the float64 offset
 NW_IN = re.search(r"\| \(ii\) nu / U \| compute \|[^|]+\|[^|]+\|[^|]+\|[^|]+\|[^|]+\| \| \| input \| 0 \| [^|]+\| ([\d.]+) / ([\d.]+) \|", NWR).groups()
 assert re.search(r"\| \(i\) 1e-6 L whole \| compute \|[^|]+\|[^|]+\|[^|]+\|[^|]+\|[^|]+\| \| \| input \| 0 \| [^|]+\| [^|]+\| [\d.]+ / 0\.065 \|", NWR)
-print("**The open question is whether the whole boundary costs ISLA near-wall accuracy through its distance channel.** "
+print("**The whole boundary costs ISLA near-wall accuracy on AirfRANS through its distance channel; the open question is which "
+      "near-wall length removes the cost.** "
       "The channel $\\operatorname{asinh}(s_q / 10^{-6})$ is linear for distances below $10^{-6} L$, and with the whole "
       f"boundary that holds {NW_AF}% of AirfRANS's drawn points, its viscous sublayer, buffer layer and the start of its log "
       "layer, where the trained input layers code $\\log d$ (@sec-arch-interior-geometry). The supervisor holds one "
       "alternative ready: a viscous softening, $\\operatorname{asinh}(d U / \\nu)$, in which the length unit cancels, so the "
-      "near-wall code does not depend on how far out the domain's outer boundary is drawn. It is defined only where a "
+      "near-wall code does not depend on how far out the domain's outer boundary is drawn; it is one candidate, not a decided "
+      "change. It is defined only where a "
       "viscosity is declared (AirfRANS and AeroZoo); elsewhere the channel stays as it is. On AirfRANS with its far field its "
       f"knee sits at $U d / \\nu = 1$, against $10^{{-6}} \\mathrm{{Re}}_L$ = {NW_REL[0]} to {NW_REL[1]} for the present channel. "
       "It gives up the present channel's guarantee that storing the coordinates in float32 moves it by at most 0.065 wherever "
       "the body sits in its domain: with the body 30 chords from the origin of the coordinates, that rounding moves it by up to "
       f"{NW_IN[1]} ({NW_IN[0]} at the 99.9th percentile), and points within that rounding of the wall are read as on it. It is "
-      "to be tested only if ISLA trained on AirfRANS with its far field reads a harm near the wall, and adopting "
-      "it is Peter's decision. What would settle it: that retrain read on velocity and eddy viscosity near the wall against "
-      "the standing; if it reads a harm there, the viscous softening trained on the same configuration with only the channel "
-      f"changed, two seeds. Cost: the retrain is in flight; the viscous arm about {NW_COST[0]} to {NW_COST[1]} GPU-hours. Data: "
+      "ISLA trained on AirfRANS with its far field reads a harm there: its velocity and eddy-viscosity errors are largest in the "
+      "first decades off the wall and larger below the channel's knee than above it, on both seeds (@sec-limits-af-whole). "
+      "Adopting a new channel is Peter's decision. What would settle it: a near-wall length that does not grow with the domain, "
+      "such as the viscous softening, trained on the same configuration with only the channel changed, two seeds, and read near "
+      f"the wall against the airfoil-only standing. Cost: the viscous arm about {NW_COST[0]} to {NW_COST[1]} GPU-hours. Data: "
+      f"{R.source('af_whole_read', 'RESULTS.md')} (section 2); "
       f"{R.source('nearwall', 'RESULTS.md')} (A1 to A3); {R.source('nearwall', 'DESIGN.md')} (sections 3 and 4); "
       f"{R.source('geo_band_final', 'RESULTS.md')} (item 3).")
 ```
-
-::: {.callout-note title="In flight"}
-This question rests on probes of the standings' trained input layers at fixed weights. ISLA trained on
-AirfRANS with its far field, read near the wall, is being measured, and the ledger (@sec-ledger) tracks it.
-:::
 
 ### A slice's mean normal on a closed boundary {#sec-oq-slice-normal}
 

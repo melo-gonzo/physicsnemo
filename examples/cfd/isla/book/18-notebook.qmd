@@ -42688,6 +42688,75 @@ psharpe/isla-draw-exact 5b5e72c2f, pushed, not merged; LHR 377433, 377520, 37808
   fail on the base.
 - **The supervisor's intent:** adopt it at the 0.14.0 freeze; adopting the function change is Peter's decision.
 
+## 2026-10-25 — AF-WHOLE read: with the AirfRANS far field, ISLA reads a harm on every field (1.35 / 1.20 / 1.28), ISLA-DTT a harm and a broken pose through an octant tie; the velocity and eddy-viscosity harm sits at the wall, where the length unit of the whole boundary stretches the distance channel's softening over the boundary layer {#sec-nb-af-whole-read}
+
+AF-WHOLE trained ISLA 0.9.0 and ISLA-DTT on full AirfRANS with the far field read as the named condition `freestream`. The
+far field comes from the raw release's `_freestream.vtp`, geometry only, through `VtkBoundaryDomainMeshReader`
+(psharpe/isla-whole-boundary 8e93f2307). The arms are two seeds each, eager-trained like the standings, and the read is
+against r090eag_af_isla / r090eag_af_dtt (@sec-nb-af-whole-prereg). All checks and the supervisor's far-field guard
+passed. The input is Peter's ruling (2026-10-23); this measures its effect.
+
+**Result.**
+
+| pair | pressure | velocity | eddy viscosity | pose (posed / native) |
+|---|---|---|---|---|
+| ISLA, far field / standing | harms, 1.35 | harms, 1.20 | harms, 1.28 | holds, 1.0001-1.0014 |
+| ISLA-DTT, far field / standing | harms, 1.94 | harms, 1.53 | harms, 1.89 | **broken**, 1.53-2.52 |
+
+ISLA's pressure is 0.0164 / 0.0173 against 0.0132 / 0.0118. The far field beats the standing on 8-16 % of the test cases.
+
+**Where.**
+- ISLA's velocity and eddy-viscosity harm sits at the wall: 1.43 and 1.12 in the first decade off it (1e-6 to 1e-5
+  chords), falling to 1.01 and 1.00 beyond 0.1 chord. It is larger below the softening's knee, 1e-6 L = 3.05e-4 chords,
+  than above it on both seeds (velocity 1.24 against 1.12). The far field makes L = 305 chords and puts 20 % of the points
+  in the channel's linear part, so the trained model does not recover the log resolution NEARWALL found lost at fixed
+  weights (@sec-oq-nearwall).
+- ISLA's pressure harm does not sit at the wall: 1.01-1.07 there, 1.28 at 0.01-0.1 chord. One untested candidate: the far
+  field holds 99.86 % of the boundary measure that ISLA's slices are weighted by.
+- ISLA-DTT's harm is spread over every band (1.3-1.9).
+
+**ISLA-DTT's pose: the octant tie, now on AirfRANS.**
+- The far field's straight edges have normals on the dataset's axes, and so on the forest's frame, which the far field
+  sets (eigenvalue gap 3.3 %) and the airfoil tilts by about 1e-6.
+- Their small normal component is about 2e-6 (down to 1.7e-8), so the sign test that picks a cell's octant tree reads
+  that tilt and float32 rounding.
+- Posed against native, 16-45 % of the far-field cells (median 29 %, all 200 test cases) change octant, against a
+  median of 2 airfoil cells.
+- It is the lug's tie (05-forward-pass.qmd, the octant paragraph) at a larger scale. The frame itself does not tie: 0 sign
+  flips of either axis on the 200 cases.
+
+Cost: 397.5 of 520 GPU-h. Per step the far field costs nothing on AirfRANS (0.98x ISLA, 1.01x ISLA-DTT at the smoke).
+
+**What it leaves open, for the supervisor and Peter.**
+- NEARWALL's contingency trigger is met (a harm on velocity and eddy viscosity near the wall). The held viscous softening
+  asinh(d U / nu), trained with only the channel changed and two seeds, is the registered next test.
+- ISLA-DTT on AirfRANS with its far field needs an octant rule without exact ties, as on the lug, before its accuracy
+  can be read apart from the tie.
+- Whether the far-field runs replace the AirfRANS standings is the supervisor's call. Canonical ISLA reads the whole
+  boundary, so its AirfRANS numbers are these.
+
+Data: scratch/isla-af-whole-2026-10-23/RESULTS.md (sections 1-3), read.md, out/octant_pose_summary.txt,
+out/frame_pose_summary.txt; jobs in JOBS.md.
+
+**Side finding** (RESULTS.md section 6, no action): on 168 of the 1,000 AirfRANS case files (36 in `full_test`), the stored
+airfoil `normals` field disagrees with the polyline's geometric normals on 0.8 to 38.6 percent of the segments; the
+converter oriented each segment away from the polyline's mean point, which fails on cambered aft sections. No ISLA
+configuration reads that field; a baseline that reads `boundaries.airfoil.cell_data.normals` would see the flipped segments.
+
+**The supervisor's course** (07:24 EDT 2026-10-25). Peter's ruling stands: "not only CAN it read the whole boundary - it
+SHOULD read the whole boundary!", and "Even if there were an accuracy *cost* to reading the whole boundary (not that I expect
+it), I would recommend this." So the canonical code reads the far field, and on AirfRANS that costs, as the encoding stands,
+the amounts above. The AirfRANS standing stays B's, ISLA 0.9.0 with the airfoil alone, until the final rerun, marked by an
+In-flight callout in 08 and the limit in 20. The supervisor's course is to fix the encoding; lane AF-FIX designs the fixes:
+the near-wall length, ISLA-DTT's octant tie and the measure dominance. No fix is decided.
+
+**Book changes.** 20 gains `sec-limits-af-whole`; its near-wall question states the read and drops its In-flight callout;
+08 gains an In-flight callout on the AirfRANS standing; 05's distance-channel and octant paragraphs and 12's limits say
+what the far field does. Records: results/campaigns_2026-10-23/af_whole_read/ (FINAL_REPORT.md md5 114b737c, RESULTS.md
+c085e764, read.md 5bd11101, FACTS.md 8984de36, NOTEBOOK_DRAFT.md 09bb686a).
+
+*Drafted by AF-WHOLE; applied by BOOK-NIGHT for the supervisor on 2026-10-25.*
+
 ## 2026-10-25 — SLICE-NORMAL-EXP, the DrivAerML Surface read of option (a): leaving the slice's mean normal unnormalized harms (pressure 1.167, wall shear 1.121, worse on 48 of 48 cases), so (a) is not a candidate; the combined arm's reads are still to come {#sec-nb-slice-normal-dra}
 
 The no-harm retrain check of SLICE-NORMAL's options (results/campaigns_2026-10-23/slice_normal_exp/, PREREG.md md5
@@ -42710,7 +42779,7 @@ the AirfRANS and lug arms read. The combined arm (a)+(s), (s) the slice distance
 the supervisor's amendment A6, runs on AirfRANS, the lug and the DrivAerML Surface task, and its reads are to come. 20's question on the slice mean normal states the (a) read and keeps its In-flight callout, now naming the combined
 arm.
 
-*Read by BOOK-NIGHT for the supervisor on 2026-10-25, with the eight entries above; second-read by a lane reviewer
+*Applied by BOOK-NIGHT for the supervisor on 2026-10-25, with the other 2026-10-24 and 2026-10-25 entries above; second-read by a lane reviewer
 (scratch/isla-book-night-2026-10-25/SECOND_READ_NIGHT.md).*
 
 ## 2026-10-22 — MECH-090: on Tensile2d the fixed compiled path's float32 gradients sit at a one-ulp eager floor, and pytorch/pytorch#195845 added a unit-dependent sink to ISLA's slice-state softmax (registered emulations not confirmed; a post-smoke emulation matches) {#sec-nb-mech090}
