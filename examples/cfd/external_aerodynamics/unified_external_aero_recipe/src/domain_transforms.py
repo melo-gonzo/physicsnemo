@@ -1683,7 +1683,7 @@ class ComputeBoundaryScales(MeshTransform):
             rms_pairwise_distance,
         )
         from physicsnemo.experimental.models.isla.model import EPS
-        from physicsnemo.experimental.models.isla.scales import velocity_moments
+        from physicsnemo.experimental.models.isla.scales import rms_moments
 
         who = "ComputeBoundaryScales"
         missing = [b for b in self.boundaries if b not in domain.boundary_names]
@@ -1706,7 +1706,7 @@ class ComputeBoundaryScales(MeshTransform):
         )
         if self.sources is not None:
             present = dict(zip(self.boundaries, zip(meshes, measures)))
-            s0, s2, _ = velocity_moments(
+            s0, s2, _ = rms_moments(
                 (present[b][0].cell_data[as_nested_key(f)], present[b][1])
                 for b, f in self.sources
             )

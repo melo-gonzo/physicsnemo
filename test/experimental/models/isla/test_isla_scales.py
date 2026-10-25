@@ -16,13 +16,14 @@
 
 r"""ISLA brings its own scales (module docstring, *Scales*), in float64.
 
-The length L (the full-resolution boundary's RMS pairwise distance), the velocity U
-and direction g of the ``velocity_scale`` sources and the density role: a similarity
-of the problem (with its dimensionless global inputs unchanged) leaves every internal
-state unchanged and scales the outputs by their units; the condition that
-carries the source can have any name; U, g and L are the same for every draw and
-under refinement; a model that declares nothing is the release model; the scales
-take their hand values and an absent or zero source is refused; ``output_stats`` is
+The length L (the full-resolution boundary's RMS pairwise distance), the scale U
+and direction g its rank-1 sources define and the scale rho a rank-0 global defines
+(``defines``): a similarity of the problem (with its dimensionless global inputs
+unchanged) leaves every internal state unchanged and scales the outputs by their
+units; the condition that carries the source, and the scales, can have any name; U,
+g and L are the same for every draw and under refinement; a model that declares
+nothing is the release model; the scales take their hand values and an absent or
+zero source and bad declarations are refused; ``output_stats`` is
 the recipe's NormalizeMeshFields; and a global source (AirfRANS) adds no direction.
 """
 
@@ -56,7 +57,7 @@ DATA_DIR = Path(__file__).parent / "data"
 #: An AeroZoo-like declaration (DESIGN_v2 section 4): the inlet's velocity is the source.
 SCHEMAS = {
     "inlet": {
-        "bc_velocity": {"rank": 1, "units": {"U": 1}, "velocity_scale": True},
+        "bc_velocity": {"rank": 1, "units": {"U": 1}, "defines": "U"},
         "bc_tke": {"rank": 0, "units": {"U": 2}},
         "bc_omega": {"rank": 0, "units": {"U": 1, "L": -1}},
         "bc_gamma": {"rank": 0},
@@ -65,7 +66,7 @@ SCHEMAS = {
     "wall": {},
 }
 GLOBALS = {
-    "physics.density": {"rank": 0, "role": "density"},
+    "physics.density": {"rank": 0, "defines": "rho"},
     "re_z": {"rank": 0},  # a dimensionless global, the recipe's standardized log10 Re
 }
 OUTPUTS = {
@@ -339,7 +340,7 @@ def test_the_length_unit_is_exact_under_subdivision(dim):
 
 @pytest.mark.parametrize("config", ["default", "dtt"])
 def test_declaring_nothing_is_the_release_model(config):
-    """Keys that declare nothing (``units: {}``, ``velocity_scale: false``) leave the
+    """Keys that declare nothing (``units: {}``) leave the
     model the unscaled one: bitwise equal to the release configuration with the same
     parameters, and equal to the release goldens at their tolerance (the goldens are
     bitwise on the recording architecture and differ at the last bits across CPU
@@ -352,7 +353,6 @@ def test_declaring_nothing_is_the_release_model(config):
 
     cfg = dict(CONFIGS[config])
     cfg["output_schema"] = {"p": {"rank": 0, "units": {}}, "v": {"rank": 1}}
-    cfg["global_schema"] = {"g": {"rank": 1, "velocity_scale": False}}
     model, release = _instantiate_model(**cfg), _instantiate_model(**CONFIGS[config])
     assert not model._scaled and not model._fp32_head
     inputs = _make_inputs("cpu", query=(config != "default"))
@@ -368,8 +368,8 @@ def test_the_scales_take_their_hand_values():
     """U = sqrt(sum a |v|^2 / sum a) pooled over two sources, g = sum a v / |sum a v|,
     rho the density's; g is the last global direction."""
     schemas = {
-        "a": {"v": {"rank": 1, "units": {"U": 1}, "velocity_scale": True}},
-        "b": {"w": {"rank": 1, "units": {"U": 1}, "velocity_scale": True}},
+        "a": {"v": {"rank": 1, "units": {"U": 1}, "defines": "U"}},
+        "b": {"w": {"rank": 1, "units": {"U": 1}, "defines": "U"}},
     }
     m = _model(
         schemas=schemas, outputs_={"p": {"rank": 0, "units": {"U": 2, "rho": 1}}}
@@ -429,7 +429,7 @@ def test_an_absent_or_zero_source_and_bad_declarations_are_refused():
             gd,
             q,
         )
-    with pytest.raises(ValueError, match="density"):
+    with pytest.raises(ValueError, match="'physics.density'\\) must be positive"):
         _run(m, meshes, {**gd, "physics.density": torch.tensor(0.0, dtype=D)}, q)
     with pytest.raises(NotImplementedError, match="pass the meshes to forward"):
         m._forward_tensors(
@@ -439,7 +439,7 @@ def test_an_absent_or_zero_source_and_bad_declarations_are_refused():
         )
     bad = [
         (
-            dict(globals_={**GLOBALS, "U_inf": {"rank": 1, "velocity_scale": True}}),
+            dict(globals_={**GLOBALS, "U_inf": {"rank": 1, "defines": "U"}}),
             "not both",
         ),
         (
@@ -449,23 +449,47 @@ def test_an_absent_or_zero_source_and_bad_declarations_are_refused():
                     "inlet": {"bc_velocity": {"rank": 1, "units": {"U": 1}}},
                 }
             ),
-            "no field is a velocity_scale",
+            r"\['U'\], which no field defines",
         ),
-        (dict(globals_={"re_z": GLOBALS["re_z"]}), "role 'density'"),
-        (dict(outputs_={"p": {"rank": 0, "units": {"T": 1}}}), "base scales"),
-        (dict(outputs_={"p": {"rank": 0, "velocity_scale": True}}), "an output cannot"),
         (
-            dict(
-                schemas={**SCHEMAS, "wall": {"k": {"rank": 0, "velocity_scale": True}}}
-            ),
+            dict(globals_={"re_z": GLOBALS["re_z"]}),
+            r"\['rho'\], which no field defines",
+        ),
+        (
+            dict(outputs_={"p": {"rank": 0, "units": {"T": 1}}}),
+            "which no field defines",
+        ),
+        (
+            dict(schemas={**SCHEMAS, "wall": {"T": {"rank": 2, "defines": "E"}}}),
+            "got rank 2",
+        ),
+        (
+            dict(globals_={**GLOBALS, "s": {"rank": 0, "defines": "L"}}),
+            "built-in length",
+        ),
+        (
+            dict(globals_={**GLOBALS, "s": {"rank": 0, "defines": True}}),
+            "non-empty string",
+        ),
+        (
+            dict(schemas={**SCHEMAS, "wall": {"w": {"rank": 1, "defines": "V"}}}),
+            "at most one scale is defined by rank-1 fields",
+        ),
+        (
+            dict(globals_={**GLOBALS, "s": {"rank": 0, "defines": "U"}}),
+            "defined by a rank-1 field and by the rank-0 global",
+        ),
+        (dict(outputs_={"p": {"rank": 0, "defines": "U"}}), "an output cannot"),
+        (
+            dict(schemas={**SCHEMAS, "wall": {"k": {"rank": 0, "defines": "U"}}}),
             "rank-1 field",
         ),
         (
-            dict(schemas={**SCHEMAS, "wall": {"k": {"rank": 0, "role": "density"}}}),
+            dict(schemas={**SCHEMAS, "wall": {"k": {"rank": 0, "defines": "rho"}}}),
             "rank-0 global",
         ),
         (
-            dict(globals_={**GLOBALS, "rho2": {"rank": 0, "role": "density"}}),
+            dict(globals_={**GLOBALS, "rho2": {"rank": 0, "defines": "rho"}}),
             "two fields",
         ),
         (
@@ -474,12 +498,12 @@ def test_an_absent_or_zero_source_and_bad_declarations_are_refused():
                     **GLOBALS,
                     "physics.density": {
                         "rank": 0,
-                        "role": "density",
+                        "defines": "rho",
                         "units": {"U": 1},
                     },
                 }
             ),
-            "has the units",
+            "takes no units",
         ),
         (
             dict(output_stats={"velocity": {"mean": [1.0, 0.0, 0.0], "std": 2.0}}),
@@ -494,10 +518,10 @@ def test_an_absent_or_zero_source_and_bad_declarations_are_refused():
             dict(
                 globals_={
                     **GLOBALS,
-                    "physics.density": {"rank": 0, "role": "density", "scale": 2.0},
+                    "physics.density": {"rank": 0, "defines": "rho", "scale": 2.0},
                 }
             ),
-            "takes no scale",
+            "no units and no scale",
         ),
         (
             dict(globals_={**GLOBALS, "d": {"rank": 1, "units": {"L": 1}}}),
@@ -507,6 +531,36 @@ def test_an_absent_or_zero_source_and_bad_declarations_are_refused():
     for kw, match in bad:
         with pytest.raises((ValueError, TypeError), match=match):
             _model(**kw)
+
+
+def test_the_scale_names_are_free():
+    """The code names no scale but L: the same declaration with U and rho renamed S
+    and m gives the same outputs for the same parameters, bitwise."""
+
+    def renamed(spec):
+        if isinstance(spec, dict):
+            out = {}
+            for k, v in spec.items():
+                if k == "units":
+                    v = {{"U": "S", "rho": "m"}.get(n, n): e for n, e in v.items()}
+                elif k == "defines":
+                    v = {"U": "S", "rho": "m"}[v]
+                else:
+                    v = renamed(v)
+                out[k] = v
+            return out
+        return spec
+
+    a = _model()
+    b = _model(
+        schemas=renamed(SCHEMAS), globals_=renamed(GLOBALS), outputs_=renamed(OUTPUTS)
+    )
+    b.load_state_dict(a.state_dict())
+    assert b._rms_scale == "S" and b._defined_values == {"m": "physics.density"}
+    meshes, gd, q = _case()
+    ya, yb = _run(a, meshes, gd, q), _run(b, meshes, gd, q)
+    for name in ya:
+        assert torch.equal(yb[name], ya[name]), name
 
 
 def test_output_stats_are_the_dataset_s_normalize_mesh_fields():
@@ -542,9 +596,9 @@ def test_output_stats_are_the_dataset_s_normalize_mesh_fields():
     assert args["boundary_schemas"]["inlet"]["bc_velocity"] == {
         "rank": 1,
         "units": {"U": 1},
-        "velocity_scale": True,
+        "defines": "U",
     }
-    assert args["global_schema"]["physics.density"] == {"rank": 0, "role": "density"}
+    assert args["global_schema"]["physics.density"] == {"rank": 0, "defines": "rho"}
     rebuilt = ISLA(**args)
     assert (
         rebuilt._boundary_sources == [("inlet", "bc_velocity")]
@@ -557,7 +611,7 @@ def test_a_global_source_adds_no_direction():
     direction (K unchanged); x -> s x, U_inf -> c U_inf with re_z unchanged leaves the
     dimensionless outputs (v / U, Cp) unchanged and scales nut by s c."""
     globals_ = {
-        "U_inf": {"rank": 1, "units": {"U": 1}, "velocity_scale": True},
+        "U_inf": {"rank": 1, "units": {"U": 1}, "defines": "U"},
         "re_z": {"rank": 0},
     }
     outs = {

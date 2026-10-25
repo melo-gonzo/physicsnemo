@@ -70,7 +70,7 @@ OFFSETS = {
 #: and of the derived direction g, the fields and outputs carry units.
 SCALED = {
     "inlet": {
-        "u": {"rank": 1, "units": {"U": 1}, "velocity_scale": True},
+        "u": {"rank": 1, "units": {"U": 1}, "defines": "U"},
         "k": {"rank": 0, "units": {"U": 2}},
     },
     "outlet": {

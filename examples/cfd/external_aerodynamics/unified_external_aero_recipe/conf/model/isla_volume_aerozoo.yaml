@@ -30,9 +30,9 @@
 #
 # ISLA brings its own scales (DESIGN_v2 section 4; the model's docstring, *Scales*): the length L is the RMS
 # pairwise distance of the four boundaries' faces at full resolution, the velocity U the area-weighted RMS
-# speed of the inlet's prescribed velocity (its velocity_scale source) and g its area-weighted mean direction
-# (the one global direction, K = 1) and rho the density (physics.density, the PDE's parameter, consumed by its
-# role). Each declared input is divided by its units' scale before it enters the model, the standardized
+# speed of the inlet's prescribed velocity (the field that `defines: U`) and g its area-weighted mean direction
+# (the one global direction, K = 1) and rho the density (physics.density, the PDE's parameter, consumed as the
+# scale it defines). Each declared input is divided by its units' scale before it enters the model, the standardized
 # log10(U L / nu) with the same U and L and nu the kinematic viscosity (the recipe's ComputeBoundaryScales and
 # ComputeLogReynolds below) is one global scalar, re_z, and each output is the head's dimensionless
 # prediction times its units' scale, then standardized by the dataset's own NormalizeMeshFields stats
@@ -127,7 +127,7 @@ model:
   # takes one.
   boundary_schemas:
     inlet:                       # Dirichlet: prescribed.dirichlet.{velocity, turbulence}
-      bc_velocity: {rank: 1, units: {U: 1}, velocity_scale: true}   # the source of U and g
+      bc_velocity: {rank: 1, units: {U: 1}, defines: U}             # the source of U and g
       bc_tke: {rank: 0, units: {U: 2}, scale: null}
       bc_omega: {rank: 0, units: {U: 1, L: -1}, scale: null}
       bc_intermittency: {rank: 0, scale: null}                      # dimensionless
@@ -142,7 +142,7 @@ model:
     no_slip: {}                  # the bodies: a wall at rest (its prescribed velocity is zero)
     slip: {}                     # the slip walls
   global_schema:                 # no direction: g is derived from the inlet (K = 1)
-    physics.density: {rank: 0, role: density}            # kg/m^3, consumed for the units only
+    physics.density: {rank: 0, defines: rho}             # kg/m^3, consumed for the units only
     re_z: {rank: 0}              # (log10(U L / nu) - mean) / std, dataset_append_transforms above
   output_stats: null             # injected by train.py: the dataset's NormalizeMeshFields stats of the targets
   interior: true                 # predict at prediction_points: passive tokens that read the boundary (ISLA-DTT)

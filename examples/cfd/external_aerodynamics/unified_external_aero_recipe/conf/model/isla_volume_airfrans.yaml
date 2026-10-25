@@ -21,7 +21,7 @@
 #
 # ISLA brings its own scales (the model's docstring, *Scales*): the length L is the RMS pairwise distance of
 # the whole boundary, which the far field sets (305.3 chords; the airfoil's alone is 0.41-0.44), the velocity U = |U_inf| (the farfield Dirichlet value, the global
-# velocity_scale source, whose direction is the one global direction, K = 1); with nu the air's kinematic
+# field that `defines: U`, whose direction is the one global direction, K = 1); with nu the air's kinematic
 # viscosity, the constant 1.56e-5 m^2/s (SetGlobalField below; AirfRANS varies Re through U_inf alone), the
 # standardized log10(U L / nu), computed by the recipe (below), is a global scalar in place of the raw speed in m/s. The velocity and pressure
 # outputs are dimensionless because the dataset's NonDimensionalizeByMetadata divides the targets by the same
@@ -105,7 +105,7 @@ model:
     airfoil: {}                  # the airfoil, a no-slip wall: no per-cell fields
     freestream: {}               # the far field, OpenFOAM's freestream condition from U_inf (the global input): no per-cell fields
   global_schema:
-    U_inf: {rank: 1, units: {U: 1}, velocity_scale: true}   # the farfield velocity (m/s): U = |U_inf|, g its direction
+    U_inf: {rank: 1, units: {U: 1}, defines: U}             # the farfield velocity (m/s): U = |U_inf|, g its direction
     re_z: {rank: 0}              # (log10(U L / nu) - mean) / std, dataset_append_transforms above
   output_stats: null             # injected by train.py: the dataset's NormalizeMeshFields stats (nut)
   n_spatial_dims: 2                       # the problem is planar: pair with datasets/airfrans_uvolume_2d.yaml (RestrictToPlane first after the uniform draw)

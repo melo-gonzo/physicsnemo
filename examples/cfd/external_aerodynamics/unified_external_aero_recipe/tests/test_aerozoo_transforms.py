@@ -300,9 +300,7 @@ def test_boundary_scales_and_log_reynolds_are_isla_s_bitwise():
     model = ISLA(
         output_schema={"p": {"rank": 0, "units": {"U": 2}}},
         boundary_schemas={
-            "inlet": {
-                "bc_velocity": {"rank": 1, "units": {"U": 1}, "velocity_scale": True}
-            },
+            "inlet": {"bc_velocity": {"rank": 1, "units": {"U": 1}, "defines": "U"}},
             "outlet": {},
             "wall": {},
         },

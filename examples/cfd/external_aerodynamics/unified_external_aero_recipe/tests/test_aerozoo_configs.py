@@ -734,14 +734,14 @@ def test_scale_only_standardization_makes_the_metric_physical():
 
 
 def test_isla_config_brings_its_own_scales_and_runs():
-    """ISLA declares the four conditions by name with the values each prescribes (in SI units, with their
-    units), drops the steps only the baselines read, consumes rho by its role and derives its own scales: U
-    and the direction g from the inlet's velocity (K = 1, no label-derived global), L from the four
+    """ISLA declares the four conditions by name with the values each prescribes (in SI units, with their units),
+    drops the steps only the baselines read, consumes rho as the scale it defines and derives its own scales:
+    U and the direction g from the inlet's velocity (K = 1, no label-derived global), L from the four
     boundaries. Its Reynolds number re_z is the recipe's, appended to the chain with the dataset file's
     isla_constants.reynolds, and is bitwise the one the model computed up to 0.12.0 from the same U and L (its
-    arithmetic copied here); a dataset file without the constants is refused. Its outputs are standardized by the dataset's own NormalizeMeshFields stats (injected as
-    output_stats), so the per-case relative loss with velocity weighed 3 (the baselines') compares them with
-    the same targets."""
+    arithmetic copied here); a dataset file without the constants is refused. Its outputs are standardized by
+    the dataset's own NormalizeMeshFields stats (injected as output_stats), so the per-case relative loss with
+    velocity weighed 3 (the baselines') compares them with the same targets."""
     cfg = _compose(
         "isla_volume_aerozoo",
         "model.hidden=16",

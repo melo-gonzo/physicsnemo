@@ -57,7 +57,7 @@ SCHEMAS = {
     "scales": {
         "inlet": {
             "bc": {"rank": 0, "units": {"U": 2}},
-            "u_bc": {"rank": 1, "units": {"U": 1}, "velocity_scale": True},
+            "u_bc": {"rank": 1, "units": {"U": 1}, "defines": "U"},
         },
         "wall": {},
     },
@@ -84,7 +84,7 @@ def _model(task: str) -> ISLA:
             },
             boundary_schemas={"wall": {}},
             global_schema={
-                "g": {"rank": 1, "units": {"U": 1}, "velocity_scale": True},
+                "g": {"rank": 1, "units": {"U": 1}, "defines": "U"},
                 "re_z": {"rank": 0},
             },
             output_stats={"nut": {"mean": 1e-3, "std": 2e-3}},
@@ -100,7 +100,7 @@ def _model(task: str) -> ISLA:
             },
             boundary_schemas=SCHEMAS["scales"],
             global_schema={
-                "rho": {"rank": 0, "role": "density"},
+                "rho": {"rank": 0, "defines": "rho"},
                 "re_z": {"rank": 0},
             },
             output_stats={

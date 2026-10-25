@@ -154,7 +154,7 @@ def test_a_derived_direction_counts_among_the_global_vectors(declared):
     m = _model(
         gs,
         boundary_schemas={
-            "wall": {"u": {"rank": 1, "units": {"U": 1}, "velocity_scale": True}}
+            "wall": {"u": {"rank": 1, "units": {"U": 1}, "defines": "U"}}
         },
     )
     K = declared + 1

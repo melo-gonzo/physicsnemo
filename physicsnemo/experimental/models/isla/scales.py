@@ -18,13 +18,14 @@
 
 A field of a boundary condition's schema, of ``global_schema`` or of
 ``output_schema`` may carry, next to its rank spec, the keys of :data:`SCALE_KEYS`:
-``units`` (exponents of the base scales :data:`BASE_SCALES`: the length ``L``, the
-velocity ``U`` and the density ``rho``), ``velocity_scale: true`` (a rank-1 field
-that is a source of ``U`` and of the direction ``g``) and, for a rank-0 global,
-``role`` (``density``, consumed for the units) and, for an output, a boundary field or a rank-0 global input, ``scale`` (a
-positive constant ``c``, the typical size of the field made dimensionless by its units:
-an input enters as ``x / (c prod scale^exp)``, and the head predicts ``y / (c prod
-scale^exp)``, both of order one). :func:`split_scale_keys` pops them before
+``units`` (exponents of named scales: the built-in length ``L`` and any scale a
+field defines), ``defines: <name>`` (the field defines the scale ``name``: a rank-1
+field its measure-weighted RMS magnitude and, on the boundary, the direction ``g``;
+a rank-0 global its value, consumed rather than read as an input) and, for an
+output, a boundary field or a rank-0 global input, ``scale`` (a positive constant
+``c``, the typical size of the field made dimensionless by its units: an input enters
+as ``x / (c prod scale^exp)``, and the head predicts ``y / (c prod scale^exp)``, both
+of order one). :func:`split_scale_keys` pops them before
 :meth:`~physicsnemo.mesh.fields.FieldSchema.parse`, so the shared
 :class:`~physicsnemo.mesh.fields.RankSpec` grammar is untouched. Private to
 :mod:`physicsnemo.experimental.models.isla`."""
@@ -37,30 +38,29 @@ import torch
 
 from physicsnemo.mesh.fields import RankSpec
 
-#: The base scales a field's ``units`` may name.
-BASE_SCALES = ("L", "U", "rho")
-#: The roles of rank-0 globals, each with the units it implies.
-ROLES = {"density": {"rho": 1}}
+#: The built-in scale, the length unit of the boundary.
+LENGTH = "L"
+#: The key with which a field defines a scale (its name, the key's value).
+DEFINES = "defines"
 #: The ISLA-local keys of a field declaration.
-SCALE_KEYS = ("units", "velocity_scale", "role", "scale")
+SCALE_KEYS = ("units", DEFINES, "scale")
 
 
 def _check_local(kind: str, name: str, local: Mapping) -> dict:
-    """One field's ISLA-local keys, checked and in a JSON-safe form."""
+    """One field's ISLA-local keys, checked and in a JSON-safe form. Whether the
+    scales its ``units`` name are defined is checked against every field
+    (``ISLA._init_scales``)."""
     where = f"{kind}[{name!r}]"
     out = {}
     if "units" in local:
         units = local["units"]
         if not isinstance(units, Mapping):
             raise TypeError(
-                f"{where}: units must be a mapping of base scale to exponent; got {units!r}"
-            )
-        unknown = sorted(str(k) for k in units if k not in BASE_SCALES)
-        if unknown:
-            raise ValueError(
-                f"{where}: units names {unknown!r}; the base scales are {list(BASE_SCALES)!r}"
+                f"{where}: units must be a mapping of scale name to exponent; got {units!r}"
             )
         for k, e in units.items():
+            if not isinstance(k, str):
+                raise TypeError(f"{where}: units names a scale by a string; got {k!r}")
             if isinstance(e, bool) or not isinstance(e, Real) or not math.isfinite(e):
                 raise TypeError(
                     f"{where}: the exponent of {k!r} must be a finite number; got {e!r}"
@@ -70,14 +70,19 @@ def _check_local(kind: str, name: str, local: Mapping) -> dict:
             for k, e in units.items()
             if e
         }
-    if "velocity_scale" in local:
-        if not isinstance(local["velocity_scale"], bool):
+    if DEFINES in local:
+        defined = local[DEFINES]
+        if not isinstance(defined, str) or not defined:
             raise TypeError(
-                f"{where}: velocity_scale must be a bool; got {local['velocity_scale']!r}"
+                f"{where}: {DEFINES} names a scale by a non-empty string; got {defined!r}"
             )
-        if kind == "output_schema" and local["velocity_scale"]:
-            raise ValueError(f"{where}: an output cannot be a velocity_scale source")
-        out["velocity_scale"] = local["velocity_scale"]
+        if defined == LENGTH:
+            raise ValueError(
+                f"{where}: {LENGTH!r} is the built-in length unit; a field cannot define it"
+            )
+        if kind == "output_schema":
+            raise ValueError(f"{where}: an output cannot define a scale")
+        out[DEFINES] = defined
     if "scale" in local:
         c = local["scale"]
         if (
@@ -89,21 +94,6 @@ def _check_local(kind: str, name: str, local: Mapping) -> dict:
                 f"{where}: scale must be a positive finite number; got {c!r}"
             )
         out["scale"] = float(c)
-    if "role" in local:
-        if kind != "global_schema":
-            raise ValueError(
-                f"{where}: a role is declared on a rank-0 global; got one in {kind}"
-            )
-        if local["role"] not in ROLES:
-            raise ValueError(
-                f"{where}: role must be one of {list(ROLES)!r}; got {local['role']!r}"
-            )
-        implied = ROLES[local["role"]]
-        if out.get("units", implied) != implied:
-            raise ValueError(
-                f"{where}: the role {local['role']!r} has the units {implied!r}; got {out['units']!r}"
-            )
-        out["role"] = local["role"]
     return out
 
 
@@ -196,7 +186,7 @@ def scale_factor(units: Mapping | None, scales: Mapping):
     return factor
 
 
-def velocity_moments(sources):
+def rms_moments(sources):
     """``(sum a, sum a |v|^2, sum a v)`` in float64 over ``sources``, pairs of a
     per-cell vector field ``v (n, d)`` and the cells' measures ``a (n,)``."""
     s0 = s2 = s1 = 0.0

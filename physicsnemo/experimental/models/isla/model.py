@@ -25,7 +25,7 @@ are the tokens, with their centroids, normals and effective measures: every
 cell for a surface task, a sample of the full-resolution cells drawn inside the
 model for an interior task), the
 problem's data as *named fields of declared tensor rank*: global inputs in a
-TensorDict (a direction, a diffusivity, a Reynolds number), per-cell boundary
+TensorDict (a direction, a diffusivity, a dimensionless group), per-cell boundary
 inputs in the meshes' ``cell_data``, declared per condition (an inlet's
 prescribed velocity, a loaded face's traction; a no-slip wall declares none);
 an interior task's prediction points are read by their positions alone (their
@@ -122,16 +122,17 @@ carries no information about where the mesher placed its cells.
 
 **Scales (opt-in).** A field of a condition's schema, of ``global_schema`` or of
 ``output_schema`` may declare, next to its rank spec, ``units``: exponents of
-the three base scales, the length :math:`L` above, a velocity :math:`U` and a
-density :math:`\rho` (``{"U": 2, "rho": 1}`` for a gauge pressure in Pa). A
-rank-1 boundary field or one rank-1 global flagged ``velocity_scale: true`` is a
-source: :math:`U = (\sum a |v|^2 / \sum a)^{1/2}`, the measure-weighted RMS speed
-pooled over the boundary sources' full-resolution cells (a global source's
-magnitude), and with boundary sources :math:`\hat g = \sum a v / |\sum a v|` is
-appended to the global directions (a global source is a direction already); both
-are computed per case in float64 before the draw, and an absent or zero source
-is refused (in eager mode; torch.compile skips the data-dependent checks). A rank-0 global with the ``role`` ``density`` gives
-:math:`\rho` and is not appended. Every declared boundary field and rank-0 global is divided by its
+named scales, the built-in length :math:`L` above and the scales the fields define
+(``{"L": -1, "E": 1}``, with ``E`` a scale a field defines). A field defines
+a scale with ``defines: <name>``: rank-1 boundary fields (pooled) or one rank-1
+global define one scale, :math:`S = (\sum a |v|^2 / \sum a)^{1/2}`, the
+measure-weighted RMS magnitude over the boundary sources' full-resolution cells
+(a global source's magnitude), and with boundary sources :math:`\hat g = \sum a v /
+|\sum a v|` is appended to the global directions (a global source is a direction
+already); both are computed per case in float64 before the draw, and an absent or
+zero source is refused (in eager mode; torch.compile skips the data-dependent
+checks). A rank-0 global that defines a scale gives its value and is not
+appended. Every declared boundary field and rank-0 global is divided by its
 units' :math:`\prod \text{scale}^{\text{exp}}` and by its constant ``scale`` (the
 typical size of the dimensionless field, default 1) before it enters the invariants,
 and every output with units is the head's dimensionless prediction times both, then
@@ -140,8 +141,9 @@ standardized by the constants ``output_stats`` (vector means zero). The length
 second moment about its centroid, so a subdivision of the cells changes nothing. The
 keys are ISLA's own, popped before the shared grammar parses the field; with
 none declared the model is the unscaled one. So a similarity of the problem
-(lengths times :math:`s`, velocities :math:`c`, densities :math:`r`) leaves
-every internal state unchanged and scales each output by its units.
+(lengths times :math:`s`, each defined scale times its own factor, every field
+times its units' factor) leaves every internal state unchanged and scales each
+output by its units.
 
 **Routing.** Each block routes tokens to slices by bounded cosine logits:
 :data:`ROUTING_TEMPERATURE` times the cosine between the normalized token
@@ -330,11 +332,13 @@ from physicsnemo.experimental.models.isla.inputs import (
 )
 from physicsnemo.experimental.models.isla.sampling import draw_inputs, sample_boundary_cells
 from physicsnemo.experimental.models.isla.scales import (
+    DEFINES,
+    LENGTH,
     check_output_stats,
     merged,
+    rms_moments,
     scale_factor,
     split_scale_keys,
-    velocity_moments,
 )
 from physicsnemo.experimental.models.isla.tree_read import (
     TREE_READ_THETA,
@@ -635,13 +639,13 @@ class ISLA(Module):
             std``, so the model predicts a dataset's standardized physical targets.
             The mean of a field of rank 1 or more must be 0. ``None`` (default):
             the outputs as the head gives them (in physical units when declared).
-            The units, sources and roles are declared in the schemas: each field's
-            mapping may carry ``units`` ({``"L"``, ``"U"``, ``"rho"``} to
-            exponents), ``velocity_scale`` (rank 1, boundary or global),
-            ``role`` (rank-0 global, ``"density"``) and
-            ``scale`` (an output's positive constant ``c``: ``y = c yhat prod
-            scale^exp``). With any of them, or ``output_stats``, the head and
-            the output assembly run in the parameters' precision under autocast.
+            The units and the defined scales are declared in the schemas: each
+            field's mapping may carry ``units`` (``"L"`` and the defined scales'
+            names to exponents), ``defines`` (a scale's name, on a rank-1 field
+            or a rank-0 global) and ``scale`` (an output's positive constant
+            ``c``: ``y = c yhat prod scale^exp``). With any of them, or
+            ``output_stats``, the head and the output assembly run in the
+            parameters' precision under autocast.
 
     Output contract: a field declared with rank ``r`` and even parity
     transforms as a true rank-``r`` tensor under every orthogonal map of the
@@ -668,8 +672,8 @@ class ISLA(Module):
     ### forward). 0.9.0: the interior task's length unit is the full-resolution
     ### boundary's RMS pairwise distance, exact and independent of the token draw (in
     ### place of its estimate from the drawn tokens; same parameters, new forward),
-    ### and the opt-in scales (units, velocity_scale, the density and viscosity roles,
-    ### reynolds, output_stats). 0.11.0: the geometry robustness bundle (least-norm
+    ### and the opt-in scales (units, the defined scales, a standardized group,
+    ### output_stats). 0.11.0: the geometry robustness bundle (least-norm
     ### tie directions, the winding-number sign of the wall distance, the float64
     ### canonical-frame token draw, the on-wall rule, float64 cell normals, and the
     ### cell-tree seed of the search radius; same parameters, new forward). 0.10.0
@@ -726,8 +730,8 @@ class ISLA(Module):
         self.n_spatial_dims = int(n_spatial_dims)
         ### Every input and output is a named field of declared rank; the grammar
         ### is the mesh models' shared one (physicsnemo.mesh.fields), flattened to
-        ### dotted names here. The ISLA-local keys of a field (units, velocity_scale,
-        ### role; scales.py) are popped before the shared grammar parses it.
+        ### dotted names here. The ISLA-local keys of a field (units, defines, scale;
+        ### scales.py) are popped before the shared grammar parses it.
         output_schema, out_extras = split_scale_keys("output_schema", output_schema)
         self.output_schema = _declare(
             "output_schema",
@@ -811,13 +815,13 @@ class ISLA(Module):
         ### direction cosine rel.g_k per point-anchor pair, and the head basis
         ### gains g_k with the spherical complements of (u, g_k)) and zero or more
         ### global SCALARS (PDE parameters; appended to every token's seed). With
-        ### boundary velocity sources the derived direction g is the last direction;
-        ### the density role is consumed, not appended.
+        ### rank-1 boundary sources the derived direction g is the last direction;
+        ### a rank-0 global that defines a scale is consumed, not appended.
         self.global_vector_names = [
             n for n, s in self.global_schema.items() if s.rank == 1
         ]
         self.global_scalar_names = [
-            n for n, s in self.global_schema.items() if s.rank == 0 and n not in self._roles.values()
+            n for n, s in self.global_schema.items() if s.rank == 0 and n not in self._defined_values.values()
         ]
         self.n_global_vectors = K = len(self.global_vector_names) + bool(self._boundary_sources)
         self.n_global_scalars = len(self.global_scalar_names)
@@ -1005,29 +1009,34 @@ class ISLA(Module):
         for kind, extras in decl.items():
             for name, local in extras.items():
                 rank = schemas[kind][name].rank
-                if local.get("velocity_scale") and rank != 1:
-                    raise ValueError(f"{kind}[{name!r}]: a velocity_scale source is a rank-1 field; got rank {rank}")
-                if "role" in local and rank != 0:
-                    raise ValueError(f"{kind}[{name!r}]: a {local['role']} is a rank-0 global; got rank {rank}")
-                if "role" in local and "scale" in local:
-                    raise ValueError(f"{kind}[{name!r}]: the {local['role']} is consumed, not an input; it takes no scale")
-                if kind == "global_schema" and rank == 1 and not local.get("velocity_scale"):
+                defined = local.get(DEFINES)
+                if defined is not None and not (rank == 1 or (rank == 0 and kind == "global_schema")):
+                    raise ValueError(
+                        f"{kind}[{name!r}]: a scale is defined by a rank-1 field or a rank-0 global; got rank {rank}"
+                    )
+                if defined is not None and rank == 0 and ("units" in local or "scale" in local):
+                    raise ValueError(
+                        f"{kind}[{name!r}]: the value of the scale {defined!r} is consumed, not an input; "
+                        "it takes no units and no scale"
+                    )
+                if kind == "global_schema" and rank == 1 and defined is None:
                     if "units" in local or "scale" in local:
                         raise ValueError(
-                            f"{kind}[{name!r}]: a rank-1 global that is not a velocity_scale source enters as a "
+                            f"{kind}[{name!r}]: a rank-1 global that defines no scale enters as a "
                             "direction only, so units and a scale have no effect on it; declare its magnitude as a "
                             "rank-0 global"
                         )
                 if kind == "global_schema" and rank == 1 and "scale" in local:
-                    raise ValueError(f"{kind}[{name!r}]: a velocity source's magnitude is U; it takes no scale")
-                if "role" not in local:
-                    used |= set(local.get("units", {}))
+                    raise ValueError(
+                        f"{kind}[{name!r}]: a rank-1 global's magnitude is the scale {defined!r}; it takes no scale"
+                    )
+                used |= set(local.get("units", {}))
         self._output_units = {n: e["units"] for n, e in out_extras.items() if e.get("units")}
         self._output_scale = {n: e["scale"] for n, e in out_extras.items() if "scale" in e}
         self._global_units = {
             n: e["units"]
             for n, e in g_extras.items()
-            if e.get("units") and "role" not in e and self.global_schema[n].rank == 0
+            if e.get("units") and DEFINES not in e and self.global_schema[n].rank == 0
         }
         self._global_scale = {n: e["scale"] for n, e in g_extras.items() if "scale" in e}
         self._boundary_units = {
@@ -1036,40 +1045,54 @@ class ISLA(Module):
         self._boundary_scale = {
             c: {n: e["scale"] for n, e in extras.items() if "scale" in e} for c, extras in b_extras.items()
         }
+        ### The rank-1 sources of the one RMS scale (boundary fields, pooled, or one
+        ### global) and the rank-0 globals whose values are scales (consumed).
         self._boundary_sources = [
-            (c, n) for c, extras in b_extras.items() for n, e in extras.items() if e.get("velocity_scale")
+            (c, n) for c, extras in b_extras.items() for n, e in extras.items() if DEFINES in e
         ]
-        self._global_sources = [n for n, e in g_extras.items() if e.get("velocity_scale")]
-        self._roles = {}
+        self._global_sources = [
+            n for n, e in g_extras.items() if DEFINES in e and self.global_schema[n].rank == 1
+        ]
+        self._defined_values = {}
         for n, e in g_extras.items():
-            if "role" in e:
-                if e["role"] in self._roles:
-                    raise ValueError(f"global_schema: two fields have the role {e['role']!r}")
-                self._roles[e["role"]] = n
+            if DEFINES in e and self.global_schema[n].rank == 0:
+                if e[DEFINES] in self._defined_values:
+                    raise ValueError(f"global_schema: two fields define the scale {e[DEFINES]!r}")
+                self._defined_values[e[DEFINES]] = n
+        rms = {b_extras[c][n][DEFINES] for c, n in self._boundary_sources}
+        rms |= {g_extras[n][DEFINES] for n in self._global_sources}
+        if len(rms) > 1:
+            raise ValueError(f"at most one scale is defined by rank-1 fields; got {sorted(rms)!r}")
+        self._rms_scale = next(iter(rms), None)
+        if self._rms_scale in self._defined_values:
+            raise ValueError(
+                f"the scale {self._rms_scale!r} is defined by a rank-1 field and by the rank-0 global "
+                f"{self._defined_values[self._rms_scale]!r}"
+            )
         if self._boundary_sources and self._global_sources:
             raise ValueError(
-                "the velocity_scale sources are rank-1 boundary fields or one rank-1 global, not both: "
-                f"got {self._boundary_sources!r} and {self._global_sources!r}"
+                f"the sources of the scale {self._rms_scale!r} are rank-1 boundary fields or one rank-1 global, "
+                f"not both: got {self._boundary_sources!r} and {self._global_sources!r}"
             )
         if len(self._global_sources) > 1:
             raise ValueError(
-                f"at most one rank-1 global is a velocity_scale source; got {self._global_sources!r}"
+                f"at most one rank-1 global defines the scale {self._rms_scale!r}; got {self._global_sources!r}"
             )
+        declared = {LENGTH, *self._defined_values, *rms}
+        undefined = sorted(used - declared)
+        if undefined:
+            raise ValueError(f"units name {undefined!r}, which no field defines; the scales are {sorted(declared)!r}")
         has_source = bool(self._boundary_sources or self._global_sources)
-        if "U" in used and not has_source:
-            raise ValueError("units name U, but no field is a velocity_scale source")
-        if "rho" in used and "density" not in self._roles:
-            raise ValueError("units name rho, but no global has the role 'density'")
         self.output_stats = check_output_stats(output_stats, self.output_schema)
-        ### The scales are declared when any field has units, an input scale or is a
-        ### source, or a role is.
+        ### The scales are declared when any field has units or an input scale or
+        ### defines a scale.
         has_input_scale = bool(self._global_scale or any(self._boundary_scale.values()))
-        self._scaled = bool(used or has_source or self._roles or has_input_scale)
+        self._scaled = bool(used or has_source or self._defined_values or has_input_scale)
         ### The head and the redimensionalization run in the parameters' precision
         ### under autocast whenever a physical output is assembled or standardized. The
         ### outputs' precision is bounded by the bf16 trunk either way; the fp32 head keeps
-        ### bf16's rounding of the head's own product and of a nonzero output mean (an
-        ### AirfRANS nut with mean / std 0.3) out of the outputs.
+        ### bf16's rounding of the head's own product and of a nonzero output mean (a
+        ### mean / std of 0.3, for one) out of the outputs.
         self._fp32_head = self._scaled or self.output_stats is not None or bool(self._output_scale)
 
     @staticmethod
@@ -1428,44 +1451,48 @@ class ISLA(Module):
 
     def _case_scales(self, names, meshes, measures, global_rows: TensorDict, gauge) -> dict:
         """The case's scales in float64 from its full-resolution boundary and its
-        globals, before the token draw: ``L`` (the gauge), ``U`` (the
-        measure-weighted RMS speed pooled over the boundary sources, or the global
-        source's magnitude), ``rho`` (the density role), the derived direction
-        ``g`` ``(1, 1, d)`` (``None`` unless the sources are boundary fields). An
-        absent or zero source, or a non-positive density, is refused in eager mode; under
+        globals, before the token draw, by name: ``L`` (the gauge), the scale the
+        rank-1 fields define (the measure-weighted RMS magnitude pooled over the
+        boundary sources, or the global source's magnitude), each scale a rank-0
+        global defines (its value), and ``g``, the derived direction ``(1, 1, d)``
+        (``None`` unless the sources are boundary fields). An absent or zero
+        source, or a non-positive value, is refused in eager mode; under
         torch.compile these data-dependent checks are skipped (as every input check
         of ``forward`` is), so a compiled model reads such a case as NaN or inf."""
         check = not torch.compiler.is_compiling()
         scales = {"L": gauge.reshape(()).double(), "g": None}
         if self._boundary_sources:
             present = dict(zip(names, zip(meshes, measures)))
-            s0, s2, s1 = velocity_moments(
+            s0, s2, s1 = rms_moments(
                 (present[c][0].cell_data.get(FieldSchema.key(n)), present[c][1])
                 for c, n in self._boundary_sources
                 if c in present
             )
             if check and not (isinstance(s0, torch.Tensor) and bool(s0 > 0) and bool(s2 > 0)):
                 raise ValueError(
-                    f"the velocity_scale sources {self._boundary_sources!r} are absent from this case, "
-                    "have no cells or are zero everywhere: U is undefined"
+                    f"the sources {self._boundary_sources!r} of the scale {self._rms_scale!r} are absent from this "
+                    "case, have no cells or are zero everywhere: the scale is undefined"
                 )
             norm = s1.norm()
             if check and not bool(norm > 0):
                 raise ValueError(
-                    f"the velocity_scale sources {self._boundary_sources!r} cancel (sum of a v is zero): "
-                    "the direction g is undefined"
+                    f"the sources {self._boundary_sources!r} of the scale {self._rms_scale!r} cancel (sum of a v "
+                    "is zero): the direction g is undefined"
                 )
-            scales["U"] = (s2 / s0).sqrt()
+            scales[self._rms_scale] = (s2 / s0).sqrt()
             scales["g"] = (s1 / norm)[None, None]
         elif self._global_sources:
             v = global_rows.get(FieldSchema.key(self._global_sources[0]))[0].double()
-            scales["U"] = v.norm()
-            if check and not bool(scales["U"] > 0):
-                raise ValueError(f"the velocity_scale source {self._global_sources[0]!r} is zero: U is undefined")
-        if "density" in self._roles:
-            scales["rho"] = global_rows.get(FieldSchema.key(self._roles["density"]))[0].double().reshape(())
-            if check and not bool(scales["rho"] > 0):
-                raise ValueError(f"the density {self._roles['density']!r} must be positive; got {scales['rho'].item()}")
+            scales[self._rms_scale] = v.norm()
+            if check and not bool(scales[self._rms_scale] > 0):
+                raise ValueError(
+                    f"the source {self._global_sources[0]!r} of the scale {self._rms_scale!r} is zero: "
+                    "the scale is undefined"
+                )
+        for key, n in self._defined_values.items():
+            scales[key] = global_rows.get(FieldSchema.key(n))[0].double().reshape(())
+            if check and not bool(scales[key] > 0):
+                raise ValueError(f"the scale {key!r} ({n!r}) must be positive; got {scales[key].item()}")
         return scales
 
     @staticmethod
@@ -2196,7 +2223,7 @@ class ISLA(Module):
         K, dim = self.n_global_vectors, self.n_spatial_dims
         ### With declared scales or output_stats the head and the assembly run in the
         ### parameters' precision under autocast: bf16's relative step (4e-3) would be
-        ### carried into the physical outputs (Pa pressure) by the redimensionalization.
+        ### carried into the physical outputs by the redimensionalization.
         head_dtype = self.head.weight.dtype
         if self._fp32_head:
             head_ctx = lambda: torch.autocast(out["h"].device.type, enabled=False)  # noqa: E731

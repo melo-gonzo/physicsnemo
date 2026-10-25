@@ -114,7 +114,7 @@ def test_rotation_equivariance_with_scales():
                 "v": {"rank": 1, "units": {"U": 1}},
             },
             boundary_schemas=WALL,
-            global_schema={"g": {"rank": 1, "units": {"U": 1}, "velocity_scale": True}},
+            global_schema={"g": {"rank": 1, "units": {"U": 1}, "defines": "U"}},
             hidden=32,
             n_layers=2,
             n_slices=8,

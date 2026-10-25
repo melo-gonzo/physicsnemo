@@ -673,7 +673,7 @@ def test_isla_airfrans_scales_follow_the_dataset_s_nondimensionalization():
     the same source and the constant nu the config sets."""
     cfg = _compose("isla_volume_airfrans", "airfrans_volume_2d")
     gs = OmegaConf.to_container(cfg.model.global_schema)
-    (source,) = [k for k, v in gs.items() if v.get("velocity_scale")]
+    (source,) = [k for k, v in gs.items() if v.get("defines")]
     assert [k for k, v in gs.items() if v["rank"] == 0] == ["re_z"] and gs["re_z"] == {
         "rank": 0
     }
