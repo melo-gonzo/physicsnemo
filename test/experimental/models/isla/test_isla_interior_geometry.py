@@ -823,6 +823,9 @@ def test_an_open_surface_signs_its_far_field_consistently():
     "shape",
     [
         "naca",
+        ### a 320-cell sphere and 300 queries: the three-dimensional sign and the
+        ### BVH's far-field bound in the fast tier
+        "small_sphere",
         ### 2-11 s (sphere) and 4-40 s (torus) on LHR CPU: the exact winding number
         ### over every (query, cell) pair, memory-bound
         pytest.param("sphere", marks=pytest.mark.slow),
@@ -830,7 +833,7 @@ def test_an_open_surface_signs_its_far_field_consistently():
     ],
 )
 def test_closed_surfaces_take_the_sign_of_the_exact_winding_number(shape):
-    """On watertight surfaces (a NACA 0012, a sphere, a torus), natively, in a
+    """On watertight surfaces (a NACA 0012, two spheres, a torus), natively, in a
     generic pose, with every cell split and with every cell doubled, d takes
     sign(sigma / 2 - w) of the exact winding number at every query off the surface,
     so the inside-outside sign of the closed surface; in three dimensions the
@@ -842,6 +845,9 @@ def test_closed_surfaces_take_the_sign_of_the_exact_winding_number(shape):
         q = torch.randn(1500, 2, dtype=D, generator=g) * 0.6 + torch.tensor(
             [0.5, 0.0], dtype=D
         )
+    elif shape == "small_sphere":
+        mesh = _sphere(2)
+        q = _near_wall(3, 300, 3, band=0.5)
     elif shape == "sphere":
         mesh = _sphere(3)
         q = _near_wall(3, 1500, 3, band=0.5)

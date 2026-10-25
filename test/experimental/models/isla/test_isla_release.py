@@ -734,6 +734,23 @@ def test_isla_checkpoint_round_trip(tmp_path, schema):
     )
     C._model_kernels(loaded, "reference")
     assert _comparable(loaded) == _comparable(model)
+    ### the stored order of the schemas, which the dict comparison ignores (only the
+    ### outputs' order changes the outputs)
+    assert [
+        list(s)
+        for s in (
+            loaded.output_schema,
+            loaded.global_schema,
+            *loaded.boundary_schemas.values(),
+        )
+    ] == [
+        list(s)
+        for s in (
+            model.output_schema,
+            model.global_schema,
+            *model.boundary_schemas.values(),
+        )
+    ]
     with torch.no_grad():
         a, b = outputs(loaded(**kw)), outputs(model(**kw))
     assert a.keys() == b.keys()

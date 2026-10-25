@@ -107,15 +107,17 @@ def test_the_count_is_exact(budget):
         assert torch.equal(kept, kept.unique())
 
 
-@pytest.mark.slow  # 5 s on LHR CPU: 2,000 draws
-def test_horvitz_thompson_measure_sums_are_unbiased():
+### 2,000 draws: 5 s on LHR CPU; 300 draws keep the property in the fast tier (the
+### bounds are in standard errors and deviations, so they hold at any count)
+@pytest.mark.parametrize("draws", [300, pytest.param(2_000, marks=pytest.mark.slow)])
+def test_horvitz_thompson_measure_sums_are_unbiased(draws):
     """Over random starts each condition's sum of token weights is unbiased for its
-    total measure (within four standard errors over 2,000 draws), the condition kept
+    total measure (within four standard errors over the draws), the condition kept
     whole (40 cells under a share of 100) exactly; every cell's inclusion frequency
     matches its probability."""
     sizes = [500, 40, 3000]
     measures, centroids = _conditions(sizes)
-    budget, draws = 300, 2_000
+    budget = 300
     shares = water_fill(torch.tensor(sizes, dtype=D), budget)
     pi = torch.cat(
         [pps_inclusion_probabilities(a, s) for a, s in zip(measures, shares)]

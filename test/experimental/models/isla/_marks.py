@@ -22,7 +22,10 @@ and one of these skips; a CUDA parameter carries both in its ``marks``. The
 ``conftest.py`` only register it.
 
 Triton counts as present when every ISLA module with Triton kernels loaded it
-(each treats a broken install as absent)."""
+(each treats a broken install as absent). ``fused_basis`` and ``geo_kernel`` also
+need Triton's libdevice, so on a Triton without it every ``requires_cuda_triton``
+test skips, those of ``geometry_fast``, ``segment_softmax`` and ``fused_read``
+included."""
 
 import pytest
 import torch
