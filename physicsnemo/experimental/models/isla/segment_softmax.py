@@ -326,13 +326,15 @@ def _eager_segment_softmax_read(ker, logm, q, k, v, plan: PairPlan, scale: float
     """The same read pair by pair (CPU, float64, the reference of the Triton path)."""
     acc = torch.promote_types(q.dtype, torch.float32)
     qi, bj = plan.qi.long(), plan.bj.long()
-    score = (q[qi].to(acc) * k[bj].to(acc)).sum(-1)
+    ### Cast before the gathers, so that their backward adds each source's (and each
+    ### point's) pair gradients in acc and rounds once, as the Triton read does.
+    score = (q.to(acc)[qi] * k.to(acc)[bj]).sum(-1)
     logit = ker.to(acc) + score * scale + logm.to(acc)[:, None]
     counts = plan.q_offsets[1:] - plan.q_offsets[:-1]
     seg_max = torch.segment_reduce(logit.detach(), "max", lengths=counts, axis=0, unsafe=True)
     e = torch.exp(logit - seg_max[qi])
     den = e.new_zeros(plan.n_q, e.shape[1]).index_add(0, qi, e)
-    num = e.new_zeros(plan.n_q, e.shape[1], v.shape[2]).index_add(0, qi, e[..., None] * v[bj].to(acc))
+    num = e.new_zeros(plan.n_q, e.shape[1], v.shape[2]).index_add(0, qi, e[..., None] * v.to(acc)[bj])
     return num / den.clamp_min(torch.finfo(acc).tiny)[..., None]
 
 

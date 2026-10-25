@@ -791,10 +791,6 @@ def _kernel_read_run(inputs, device, variant):
 #: and the eager read (float64 there) sums by ``index_add``, atomics too.
 _SEG_FAMILY = ("grad.k", "grad.v")
 _SEG_FAMILY_F64 = ("out.read", "grad.*")
-#: bfloat16 ``dk``/``dv`` are not compared on CUDA: the CPU golden is the eager read's,
-#: whose backward accumulates the gathered keys' and values' gradients in bfloat16
-#: (29% off float64 at the largest ``dv``: it gathers before it casts; reported), the Triton read's in float32.
-_BF16_CUDA = {"grad.k": None, "grad.v": None}
 #: The bfloat16 kernel gradients are the large tensors at the coarse bf16 bound
 #: (n = 153k and 77k): their summaries' slack, sqrt(n) of the per-element bound, is
 #: 6.1 and 4.3 times their largest element, so one element could move by all of it
@@ -810,7 +806,6 @@ for _dt, _dn in ((D, "f64"), (F, "f32"), (torch.bfloat16, "bf16")):
         _seg_build(_dt),
         _seg_run,
         family=_SEG_FAMILY_F64 if _dt == D else _SEG_FAMILY,
-        cuda_tol=_BF16_CUDA if _dt == torch.bfloat16 else {},
         chunks={"grad.ker": BF16_CHUNK} if _dt == torch.bfloat16 else {},
         requires=("triton",),
     )
@@ -822,7 +817,6 @@ for _dt, _dn in ((F, "f32"), (torch.bfloat16, "bf16")):
         _kernel_read_run,
         variants={"cpu": ("reference",), "cuda": ("auto", "reference")},
         family=_SEG_FAMILY,
-        cuda_tol=_BF16_CUDA if _dt == torch.bfloat16 else {},
         chunks={"grad.basis": BF16_CHUNK} if _dt == torch.bfloat16 else {},
         requires=("triton",),
     )

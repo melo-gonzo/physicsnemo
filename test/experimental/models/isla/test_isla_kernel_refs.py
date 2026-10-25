@@ -355,6 +355,26 @@ def test_both_segment_softmax_reads_differentiate_the_log_measure_alike():
         assert torch.equal(triton[i], plain[i]), name
 
 
+@pytest.mark.parametrize("h, kc, c", [(8, 4, 8), (4, 8, 16)])
+def test_the_eager_segment_softmax_read_in_bfloat16_rounds_its_gradients_once(h, kc, c):
+    """The eager read with bfloat16 ker, q, k and v (the CPU path, and CUDA's where
+    the Triton read does not apply) against the float64 read of the same inputs: its
+    output and the gradients of ker, q, k and v within one bfloat16 ulp of each
+    float64 tensor's largest entry, 2**-7 (they are computed in float32 and rounded
+    once to bfloat16, at most 2**-8 of it; measured at most 3.0e-3). Casting after the
+    gathers instead added each source's pair gradients up in bfloat16 (BUGS_W1.md B1:
+    0.58 for dv here)."""
+    plan_args, leaves, logm, seed, _ = _ssr_case(h, kc, c, n_q=20)
+    leaves = [t.bfloat16().double() for t in leaves]
+    eager = segment_softmax._eager_segment_softmax_read
+    low = _ssr_run(eager, plan_args, leaves, logm, seed, "cpu", torch.bfloat16)
+    exact = _ssr_run(eager, plan_args, leaves, logm, seed, "cpu", D)
+    for name, a, e in zip(("out", "ker", "q", "k", "v"), low, exact):
+        err = float((a.double() - e).abs().max() / e.abs().max())
+        print(f"{name}: {err:.2e} of max|float64|")
+        assert err <= 2**-7, (name, err)
+
+
 def test_the_fused_read_refuses_a_log_measure_that_requires_a_gradient(monkeypatch):
     """``fused_kernel_read`` is not differentiable in ``logm``: a ``logm`` that
     requires a gradient is refused, naming it, before any kernel runs (so on any
