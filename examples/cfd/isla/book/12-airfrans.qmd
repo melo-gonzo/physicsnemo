@@ -229,7 +229,7 @@ print("No model trains with rotation or translation augmentation. **The three do
 
 | | boundary | global inputs | at each prediction point |
 |---|---|---|---|
-| ISLA | the airfoil polyline, the one condition `airfoil`: each segment's position, normal and length; the far field, the rest of the domain's boundary, is not given to the standing's models, and ISLA's configuration reads it as the condition `freestream` (@sec-data-airfrans) | the inlet velocity `U_inf` (rank 1), declared as the velocity source: its direction is $\hat g_1$ and its magnitude the velocity scale $U = U_\infty$; with the air's kinematic viscosity, a constant of the configuration, and the length unit $L$ of the airfoil, the one global scalar is the standardized $\log_{10}(U L / \nu)$ (@sec-using-scales) | position, entering only through relational invariants; the exact signed distance and direction to the full-resolution airfoil, computed inside the model |
+| ISLA | the airfoil polyline, the one condition `airfoil`: each segment's position, normal and length; the far field, the rest of the domain's boundary, is not given to the standing's models, and ISLA's configuration reads it as the condition `freestream` (@sec-data-airfrans) | the inlet velocity `U_inf` (rank 1), which defines the velocity scale: its direction is $\hat g_1$ and its magnitude the velocity scale $U = U_\infty$; the one global scalar, `re_z`, is the standardized $\log_{10}(U L / \nu)$, which the recipe computes in ISLA's configuration from $U$, the length unit $L$ and the air's kinematic viscosity, a constant of the configuration (@sec-using-scales) | position, entering only through relational invariants; the exact signed distance and direction to the full-resolution airfoil, computed inside the model |
 | GeoTransolver | none | $\hat g_1$ and the inlet speed standardized over the 800 training airfoils, read by the context projector | coordinates; the stored `sdf` and `sdf_normals` |
 | Transolver | none | the same two, concatenated to every point's features | coordinates; the stored `sdf` and `sdf_normals` |
 
@@ -570,7 +570,7 @@ print("**Interior writers drawn from the boundary, tested on ISLA of the nearest
 print()
 print("**One planar dataset does not choose ISLA's interior form.** These are two seeds per form on the `full` split, in distribution, on a "
       "boundary of about a thousand segments. The form was chosen on AeroZoo's held-out splits, where the two read a close call "
-      "and ISLA-DTT is ISLA's default interior form, on principle (@sec-aerozoo-form).")
+      "and ISLA-DTT is ISLA's interior form, on principle (@sec-aerozoo-form).")
 ```
 
 ```{python}
@@ -728,7 +728,7 @@ ca = CLC["arms"]; cp = {a: ca[a]["clamped"]["pressure_l2"] for a in ca}
 CLJ = R.load("af_extrap", "clamp.json")   # the registered reading per arm and side (2-sigma band, both seeds)
 clamp_nut_b = [ca[a]["ratio"]["nut_l2"] for a in BASE]
 print(f"**A post hoc diagnostic, not a fix: holding ISLA's Reynolds input at the edge of its training range at inference halves its "
-      f"below-band pressure error.** ISLA reads the standardized log Reynolds number its declared scales form (@sec-using-scales), and the "
+      f"below-band pressure error.** ISLA reads the standardized log Reynolds number `re_z`, which the recipe forms from ISLA's own scales (@sec-using-scales), and the "
       f"baselines read the standardized inlet speed (on AirfRANS, where the viscosity is constant and $L$ nearly so, the first is close to a "
       f"monotone reparametrization of the second, and the two train equally well in distribution, @sec-airfrans-attribution). Clamping each model's input to its training range, on the {CLC['n_cases']} `reynolds` test "
       f"airfoils below the band ({CLC['n_cases'] - CLJ['isla']['sides']['below']['n']} of them already lie inside ISLA's range and are "
@@ -882,8 +882,8 @@ print(f"**Interacting ISLA's prediction at a point depends on which other points
       "@tbl-airfrans-qpop asks the same checkpoints for different populations. Splitting the native points into halves or four requests "
       f"costs {100 * (qr('isla', 'half', 'pressure_l2') - 1):.0f}% and {100 * (qr('isla', 'chunks4', 'pressure_l2') - 1):.0f}% on pressure; "
       f"adding points far from the airfoil multiplies the pressure error by {qr('isla', 'far', 'pressure_l2'):.0f}. No knob of the model "
-      "makes the dependence vanish, so it is a limit of the interacting form (@sec-limits-query-independence): request interacting ISLA with "
-      "the population it trained on, in one request, and use ISLA-DTT for point queries. The checkpoints are the standing's, trained "
+      "makes the dependence vanish, so it is a limit of the interacting form (@sec-limits-query-independence): interacting ISLA's numbers "
+      "hold for the population it trained on, in one request, and ISLA-DTT, ISLA's interior form, answers point queries. The checkpoints are the standing's, trained "
       "without compilation.")
 ```
 
@@ -960,7 +960,7 @@ print("- **No cross-architecture discretization reading.** The boundary's discre
       "never read the airfoil (@sec-airfrans-discretization); discretization independence across architectures is measured on the surface "
       "datasets (@sec-invariances).")
 print("- **No choice of ISLA's interior form.** ISLA-DTT ÷ ISLA is " + " / ".join(f"{dtt_r[f]:.3f}" for f in FK) + " at the reference "
-      "configuration with both forms trained alike (ratios of arithmetic seed means; @sec-airfrans-dtt-reference), on one planar dataset in distribution with two seeds; ISLA's default "
+      "configuration with both forms trained alike (ratios of arithmetic seed means; @sec-airfrans-dtt-reference), on one planar dataset in distribution with two seeds; ISLA's "
       "interior form is ISLA-DTT, on principle, after a close call on AeroZoo's held-out splits (@sec-aerozoo-form).")
 print("- **Reynolds extrapolation is measured on this dataset only.** ISLA's error grows more than the baselines' below the training band, "
       "as registered (@sec-interior-extrapolation); trained with its Reynolds input on a fixed scale, its below-band pressure error is "

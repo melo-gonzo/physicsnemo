@@ -23,7 +23,7 @@ Mesh wrapper over the internal batched routine; checkpoint save and
 refusal of a checkpoint of an earlier version); and the backbone golden.
 
 **Regenerating the goldens**: delete ``data/isla_default_v1.pth``,
-``data/isla_interior_v1.pth``, ``data/isla_dtt_v1.pth``, ``data/isla_default_v1.mdlus`` and
+``data/isla_dtt_v1.pth``, ``data/isla_default_v1.mdlus`` and
 ``data/isla_default_checkpoint_output_v1.pth`` and run
 
     uv run --no-sync python -m pytest test/experimental/models/isla/test_isla_release.py
@@ -60,17 +60,11 @@ IO = dict(
     global_schema={"g": {"rank": 1}},
 )
 
-#: One small configuration in its three forms: a surface task, an interior task of
-#: interacting ISLA (the constructor's ``interior`` flag with ``query_independent=False``)
-#: and ISLA-DTT (``query_independent=True``, the interior task's default).
+#: One small configuration in its two forms: a surface task and an interior task
+#: (the constructor's ``interior`` flag), which is ISLA-DTT.
 CONFIGS = {
     "default": dict(hidden=32, n_layers=2, n_slices=8, **IO),
-    "interior": dict(
-        hidden=32, n_layers=2, n_slices=8, interior=True, query_independent=False, **IO
-    ),
-    "dtt": dict(
-        hidden=32, n_layers=2, n_slices=8, interior=True, query_independent=True, **IO
-    ),
+    "dtt": dict(hidden=32, n_layers=2, n_slices=8, interior=True, **IO),
 }
 
 
@@ -180,7 +174,6 @@ def test_isla_constructor_attributes(config):
                 "outlet": {},
             },
             interior=True,
-            query_independent=False,
             hidden=64,
             n_layers=3,
             n_slices=16,
@@ -290,10 +283,15 @@ def test_isla_backbone_matches_the_recorded_backbone():
 
 
 def test_isla_save_from_checkpoint_round_trip(device, tmp_path):
-    model = _instantiate_model(seed=3, **CONFIGS["interior"]).to(device)
+    model = _instantiate_model(seed=3, **CONFIGS["dtt"]).to(device)
     inputs = _make_inputs(device, query=True)
     path = tmp_path / "isla_interior.mdlus"
     model.save(path)
+    ### Module.__new__ stores the bound defaults, so a checkpoint names every
+    ### constructor argument and never depends on the class defaults.
+    assert set(_stored_args(path)) == set(
+        inspect.signature(ISLA.__init__).parameters
+    ) - {"self"}
     loaded = Module.from_checkpoint(str(path)).to(device).eval()
     assert isinstance(loaded, ISLA)
     ### geo_kernel is an execution choice the checkpoint does not store: the loaded model
@@ -316,7 +314,7 @@ def test_isla_save_from_checkpoint_round_trip(device, tmp_path):
 
 
 def test_isla_reference_checkpoint_matches_golden(device):
-    """The committed reference checkpoint (version 0.12.0) keeps loading, without a
+    """The committed reference checkpoint (version 0.13.0) keeps loading, without a
     warning, and keeps its outputs."""
     DATA_DIR.mkdir(exist_ok=True)
     ckpt = DATA_DIR / "isla_default_v1.mdlus"
@@ -353,97 +351,20 @@ def _stored_args(path) -> dict:
         return json.loads(z.read("args.json"))["__args__"]
 
 
-def _boundary_read_parameters(model) -> list[str]:
-    return [
-        n
-        for n, _ in model.named_parameters()
-        if n.startswith(("kernel_basis.", "kernel_reads."))
-    ]
-
-
-def test_a_state_dict_of_one_interior_form_does_not_load_into_the_other(tmp_path):
-    """ISLA-DTT and interacting ISLA own different parameters (the boundary read; the
-    routing mass), so a state dict of either fails to load into the other, both
-    ways: strict ``load_state_dict``, ``Module.load`` (the recipe's resume path) and
-    ``Module.from_checkpoint`` of a checkpoint whose arguments name the other form."""
-    import zipfile
-
-    dtt = _instantiate_model(**CONFIGS["dtt"])
-    inter = _instantiate_model(**CONFIGS["interior"])
-    for src, dst, unexpected, missing in (
-        (dtt, inter, "kernel_reads.0.", "qt.logw"),
-        (inter, dtt, "qt.logw", "kernel_reads.0."),
-    ):
-        with pytest.raises(RuntimeError, match="Missing key") as err:
-            dst.load_state_dict(src.state_dict())
-        msg = str(err.value)
-        assert "Unexpected key" in msg
-        assert unexpected in msg.split("Unexpected key")[1]
-        assert missing in msg.split("Unexpected key")[0]
-        path = tmp_path / f"src_{src.query_independent}.mdlus"
-        src.save(path)
-        with pytest.raises(RuntimeError, match="Missing key"):
-            dst.load(str(path), strict=True)
-        dst_path = tmp_path / f"dst_{dst.query_independent}.mdlus"
-        dst.save(dst_path)
-        mixed = tmp_path / f"mixed_{dst.query_independent}.mdlus"
-        with (
-            zipfile.ZipFile(dst_path) as za,
-            zipfile.ZipFile(path) as zs,
-            zipfile.ZipFile(mixed, "w") as zout,
-        ):
-            for item in za.infolist():  # the other form's arguments, src's weights
-                data = (
-                    zs.read("model.pt")
-                    if item.filename == "model.pt"
-                    else za.read(item)
-                )
-                zout.writestr(item, data)
-        assert _stored_args(mixed)["query_independent"] is dst.query_independent
-        with pytest.raises(RuntimeError, match="Missing key"):
-            Module.from_checkpoint(str(mixed))
-
-
-@pytest.mark.parametrize("form", ["default", "interacting"])
-def test_new_interior_checkpoints_store_their_form(tmp_path, form):
-    """An interior model built without ``query_independent`` is ISLA-DTT and stores
-    ``query_independent=True`` in its checkpoint's arguments; one built with
-    ``query_independent=False`` stores ``False``. Each round-trips as its form with
-    its outputs. ``Module.__new__`` stores the bound defaults, so a checkpoint names
-    every constructor argument, the interior form among them, and never depends on
-    the class default. (An interior checkpoint written before 0.12.0, when the
-    default was interacting ISLA, is refused with its version named, as every
-    earlier checkpoint is: test_isla_checkpoint_of_an_earlier_version_is_refused and
-    test_isla_0_7_0_to_0_11_0_state_dicts_are_refused_on_every_loading_path.)"""
-    kw = dict(CONFIGS["dtt"])
-    del kw["query_independent"]
-    if form == "interacting":
-        kw["query_independent"] = False
-    model = _instantiate_model(seed=5, **kw)
-    dtt = form == "default"
-    assert model.query_independent is dtt
-    path = tmp_path / "isla.mdlus"
-    model.save(path)
-    args = _stored_args(path)
-    assert set(args) == set(inspect.signature(ISLA.__init__).parameters) - {"self"}
-    assert args["query_independent"] is dtt and args["interior"] is True
-    loaded = Module.from_checkpoint(str(path)).eval()
-    assert isinstance(loaded, ISLA) and loaded.interior is True
-    assert loaded.query_independent is dtt
-    assert bool(_boundary_read_parameters(loaded)) is dtt
-    assert (loaded.kernel_basis is None and loaded.kernel_reads is None) is not dtt
-    assert (loaded.qt.logw is None) is dtt
-    loaded.geo_kernel = model.geo_kernel
-    inputs = _make_inputs("cpu", query=True)
-    with torch.no_grad():
-        _assert_dict_close(
-            outputs(loaded(**inputs)), outputs(model(**inputs)), atol=0.0, rtol=0.0
-        )
-
-
 @pytest.mark.parametrize(
     "version",
-    ["0.3.0", "0.4.0", "0.5.0", "0.6.0", "0.7.0", "0.8.0", "0.9.0", "0.10.0", "0.11.0"],
+    [
+        "0.3.0",
+        "0.4.0",
+        "0.5.0",
+        "0.6.0",
+        "0.7.0",
+        "0.8.0",
+        "0.9.0",
+        "0.10.0",
+        "0.11.0",
+        "0.12.0",
+    ],
 )
 def test_isla_checkpoint_of_an_earlier_version_is_refused(tmp_path, version):
     """ISLA keeps no upgrade path: a checkpoint written at an earlier version (here
@@ -464,11 +385,11 @@ def test_isla_checkpoint_of_an_earlier_version_is_refused(tmp_path, version):
                 meta["mdlus_file_version"] = version
                 data = json.dumps(meta).encode()
             zout.writestr(item, data)
-    assert ISLA.__model_checkpoint_version__ == "0.12.0"
+    assert ISLA.__model_checkpoint_version__ == "0.13.0"
     with pytest.raises(
         IOError,
         match=re.escape(
-            f"version {version} is not compatible with current version 0.12.0"
+            f"version {version} is not compatible with current version 0.13.0"
         ),
     ):
         Module.from_checkpoint(str(old))
@@ -483,7 +404,7 @@ def test_isla_earlier_state_dict_is_refused_on_every_loading_path(tmp_path):
     import io
     import zipfile
 
-    model = _instantiate_model(**CONFIGS["interior"])
+    model = _instantiate_model(**CONFIGS["dtt"])
     path = tmp_path / "isla.mdlus"
     model.save(path)
     old = {
@@ -505,7 +426,7 @@ def test_isla_earlier_state_dict_is_refused_on_every_loading_path(tmp_path):
                 if item.filename == "model.pt"
                 else zin.read(item.filename),
             )
-    fresh = ISLA(**CONFIGS["interior"])
+    fresh = ISLA(**CONFIGS["dtt"])
     with pytest.raises(
         RuntimeError, match="parameter layout of a checkpoint before version 0.7.0"
     ):
@@ -522,28 +443,36 @@ def test_isla_earlier_state_dict_is_refused_on_every_loading_path(tmp_path):
 
 @pytest.mark.parametrize(
     "release, version",
-    [("0.7.0", 1), ("0.8.0", 8), ("0.9.0", 9), ("0.10.0", 10), ("0.11.0", 11)],
+    [
+        ("0.7.0", 1),
+        ("0.8.0", 8),
+        ("0.9.0", 9),
+        ("0.10.0", 10),
+        ("0.11.0", 11),
+        ("0.12.0", 12),
+    ],
 )
-def test_isla_0_7_0_to_0_11_0_state_dicts_are_refused_on_every_loading_path(
+def test_isla_0_7_0_to_0_12_0_state_dicts_are_refused_on_every_loading_path(
     tmp_path, release, version
 ):
-    """0.7.0 to 0.11.0 and the unmerged head-frame candidate 0.10.0 have the current
-    parameter layout but an earlier forward (the prediction points' geometry encoding
-    before 0.8.0, the interior task's length unit measured on the drawn tokens before
-    0.9.0, the geometry before its robustness bundle in 0.11.0, the candidate's head
-    frame, and the exact geometry's first-order bands before 0.12.0): their state
-    dicts, told apart by the state-dict version torch records (1 before 0.8.0, as every
-    0.7.0 checkpoint carries, 8 for 0.8.0, 9 for 0.9.0, 10 for the candidate and 11 for
-    0.11.0), are refused by ``Module.load``, ``load_state_dict`` and through
+    """0.7.0 to 0.12.0 and the unmerged head-frame candidate 0.10.0 have the current
+    parameter layout but an earlier forward or constructor (the prediction points'
+    geometry encoding before 0.8.0, the interior task's length unit measured on the
+    drawn tokens before 0.9.0, the geometry before its robustness bundle in 0.11.0, the
+    candidate's head frame, the exact geometry's first-order bands before 0.12.0, and
+    the constructor's dim, boundary_tokens, query_independent and reynolds before 0.13.0): their state dicts,
+    told apart by the state-dict version torch records (1 before 0.8.0, as every 0.7.0
+    checkpoint carries, 8 for 0.8.0, 9 for 0.9.0, 10 for the candidate, 11 for 0.11.0
+    and 12 for 0.12.0), are refused by ``Module.load``, ``load_state_dict`` and through
     a DDP-style wrapper, with the version named; the current state dict loads."""
     import io
     import zipfile
 
-    model = _instantiate_model(**CONFIGS["interior"])
+    model = _instantiate_model(**CONFIGS["dtt"])
     path = tmp_path / "isla.mdlus"
     model.save(path)
     old = model.state_dict()
-    assert old._metadata[""]["version"] == ISLA._version == 12
+    assert old._metadata[""]["version"] == ISLA._version == 13
     old._metadata[""]["version"] = version  # what that release wrote
     buf = io.BytesIO()
     torch.save(old, buf)
@@ -556,16 +485,16 @@ def test_isla_0_7_0_to_0_11_0_state_dicts_are_refused_on_every_loading_path(
                 if item.filename == "model.pt"
                 else zin.read(item.filename),
             )
-    fresh = ISLA(**CONFIGS["interior"])
+    fresh = ISLA(**CONFIGS["dtt"])
     with pytest.raises(
-        RuntimeError, match=rf"before version 0\.12\.0 \(state-dict version {version}"
+        RuntimeError, match=rf"before version 0\.13\.0 \(state-dict version {version}"
     ):
         fresh.load(str(stale), strict=True)
     with pytest.raises(RuntimeError, match="no upgrade path"):
         fresh.load_state_dict(old, strict=False)
     wrapped = torch.nn.ModuleDict({"module": model}).state_dict()
     wrapped._metadata["module"]["version"] = version
-    with pytest.raises(RuntimeError, match="before version 0.12.0"):
+    with pytest.raises(RuntimeError, match="before version 0.13.0"):
         torch.nn.ModuleDict({"module": fresh}).load_state_dict(wrapped)
     fresh.load(str(path))  # the current state dict loads
     _assert_dict_close(fresh.state_dict(), model.state_dict(), atol=0.0, rtol=0.0)

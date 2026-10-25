@@ -377,12 +377,9 @@ padded rows to its column sums (pytorch/pytorch#195845), see
 `isla_volume_airfrans.yaml`): one graph with dynamic
 shapes, so a new mesh size does not recompile it (see `isla_volume.yaml` for
 the first compile's cost and the one exception); the per-block
-`compile_blocks` is off. The interior configs are ISLA-DTT
-(`model.query_independent: true`, the class default for an interior task), whose
-boundary read breaks the whole-model graph, so they set `compile: false` and
-`model.compile_blocks: true`; `compile=true model.query_independent=false
-model.compile_blocks=false` gives interacting ISLA's whole-model compile with the
-`compile_options` kept in each file. ISLA-DTT trains in chunks of
+`compile_blocks` is off. The interior configs are ISLA-DTT (the interior
+task's one form, `interior: true`), whose boundary read breaks the whole-model
+graph, so they set `compile: false` and `model.compile_blocks: true`. ISLA-DTT trains in chunks of
 prediction points, with the unchunked step's gradients up to summation order:
 the boundary side runs once, then the points in the fewest chunks whose peak
 memory, predicted from the walk's pair count and the point count once the
@@ -444,13 +441,13 @@ Mesh's points; the dataset subsamples the vehicle to the cells it predicts at. T
 (`isla_volume.yaml`, `interior: true`) adds `prediction_points: interior`,
 the dataset's interior point-cloud Mesh, and takes `boundary_meshes` at full
 resolution, its only boundary input. The prediction points are ISLA-DTT's
-passive tokens (`query_independent: true`), which read the boundary without
+passive tokens, which read the boundary without
 writing into it, so a prediction depends on its point and the boundary alone; each one's signed distance to the boundary surface
 (the cells of `boundary_meshes`) and direction from it are computed inside
 the model from the exact closest point on the cells, never read from the
 dataset, and the distance is positive on the side the cells' normals point
 to. The boundary tokens are drawn from the same cells inside the model:
-`boundary_tokens` per case (200,000, the class default, which every interior
+`n_boundary_tokens` per case (200,000, the class default, which every interior
 config states), water-filled over the named boundaries (a boundary with fewer
 cells than its share is kept whole, its unused share going to the others: on
 AeroZoo 50,000 per role when all four roles exceed that), each cell drawn with
@@ -519,7 +516,7 @@ target (`{type: symmetric_tensor, components: {...}}` in the dataset's
 `(N, 3, 3)` leaf. Planar datasets that store a boundary vector component by
 component stack it with `StackScalarFields` (`src/domain_transforms.py`);
 `RestrictToPlane` drops the constant axis so a planar problem runs with
-`dim: 2`; `SqueezeScalarFields` turns a stored `(N, 1)` scalar column into
+`n_spatial_dims: 2`; `SqueezeScalarFields` turns a stored `(N, 1)` scalar column into
 the `(N,)` field a rank-0 schema reads; `SplitGlobalVector` standardizes a
 per-case parameter vector and splits it into named rank-0 global fields
 (one per `global_schema` entry), keeping the standardized vector for the

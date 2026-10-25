@@ -98,8 +98,8 @@ def model_output_stats(model_cfg: DictConfig, normalizer: Any | None) -> dict:
 
 
 def model_dataset_constants(model_cfg: DictConfig, dataset_cfg: DictConfig) -> dict:
-    """The constants a model config leaves to the dataset (ISLA's own scales: ``reynolds:
-    null`` and an output's or a boundary input's ``scale: null``), from the dataset file's ``isla_constants``
+    """The constants a model config leaves to the dataset (ISLA's own scales: an output's or a
+    boundary input's ``scale: null``), from the dataset file's ``isla_constants``
     block, which is fitted per split on its training side like the targets' stats;
     ``{}`` for a model config that leaves none. A config that leaves one to a dataset
     file without it is refused."""
@@ -111,7 +111,6 @@ def model_dataset_constants(model_cfg: DictConfig, dataset_cfg: DictConfig) -> d
             if isinstance(f, dict) and "scale" in f and f["scale"] is None
         ]
 
-    wants_re = "reynolds" in model_cfg and model_cfg.get("reynolds") is None
     outputs = (
         OmegaConf.to_container(model_cfg.output_schema)
         if "output_schema" in model_cfg
@@ -124,30 +123,24 @@ def model_dataset_constants(model_cfg: DictConfig, dataset_cfg: DictConfig) -> d
     )
     null_out = nulls(outputs)
     null_in = {c: nulls(f or {}) for c, f in conditions.items() if nulls(f or {})}
-    if not (wants_re or null_out or null_in):
+    if not (null_out or null_in):
         return {}
     block = OmegaConf.select(dataset_cfg, "isla_constants", default=None)
     block = OmegaConf.to_container(block) if block is not None else {}
     given_in = block.get("input_scale", {})
-    missing = (
-        (["reynolds"] if wants_re and "reynolds" not in block else [])
-        + [
-            f"output_scale.{n}"
-            for n in null_out
-            if n not in block.get("output_scale", {})
-        ]
-        + [
-            f"input_scale.{c}.{n}"
-            for c, names in null_in.items()
-            for n in names
-            if n not in given_in.get(c, {})
-        ]
-    )
+    missing = [
+        f"output_scale.{n}" for n in null_out if n not in block.get("output_scale", {})
+    ] + [
+        f"input_scale.{c}.{n}"
+        for c, names in null_in.items()
+        for n in names
+        if n not in given_in.get(c, {})
+    ]
     if missing:
         raise ValueError(
             f"the model config leaves {missing!r} to the dataset, whose file has no such isla_constants entry"
         )
-    out = {"reynolds": block["reynolds"]} if wants_re else {}
+    out = {}
     if null_out:
         for n in null_out:
             outputs[n]["scale"] = block["output_scale"][n]

@@ -1142,7 +1142,7 @@ def fit(arm):
     return dict(kt=kt, ct=ct, km=km, rt=np.max(np.abs((kt * x + ct) / t - 1)), rm=np.max(np.abs((km * x + cm) / m - 1)),
                 lo=int(x.min() * 1e5), hi=int(x.max() * 1e5), n=len(rows))
 FITS = {a: fit(a) for a, *_ in RS_ARMS}
-VB = S.recipe_model("isla_volume")["boundary_tokens"]
+VB = S.recipe_model("isla_volume")["n_boundary_tokens"]
 VCELLS = ok("isla_volume_090")[0]["input_shapes"]["boundary_meshes.vehicle.cells"][0]
 assert VB < VCELLS
 ```

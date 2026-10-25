@@ -457,7 +457,7 @@ def in_flight_callout(what) -> str:
     )
 
 
-#: The interior standings: their ISLA rows are interacting ISLA 0.9.0, while ISLA's default interior form is ISLA-DTT.
+#: The interior standings: their ISLA rows are interacting ISLA 0.9.0, while ISLA's interior form is ISLA-DTT.
 INTERIOR = ("drivaerml_volume", "airfrans", "aerozoo", "tensile2d", "lug")
 
 
@@ -467,12 +467,12 @@ def form_callout(
     also: str = "",
     also_one: bool = False,
 ) -> str:
-    """STYLE's "In flight" callout on an interior standing: its numbers come from ``what``; ISLA's default interior form
+    """STYLE's "In flight" callout on an interior standing: its numbers come from ``what``; ISLA's interior form
     is ISLA-DTT, and ``measured`` (a clause) says what ISLA-DTT reads on this dataset; ``also`` names, after "and", what
     else on the same standing is being measured (``also_one`` when that is one thing)."""
     return (
         '::: {.callout-note title="In flight"}\n'
-        f"These numbers come from {what}. ISLA's default interior form is ISLA-DTT; {measured}. "
+        f"These numbers come from {what}. ISLA's interior form is ISLA-DTT; {measured}. "
         + (
             f"{also[0].upper() + also[1:].rstrip(',')} {'is' if also_one else 'are'} being measured, and ISLA-DTT as the class builds it is "
             "measured on every interior dataset in the final reference run; the ledger (@sec-ledger) tracks them.\n:::\n"
@@ -875,7 +875,7 @@ def isla_constants(name: str) -> dict:
 
 def recipe_model(name: str) -> dict:
     """The ``model`` block of the recipe's ``conf/model/<name>.yaml`` with the constants it leaves to its dataset
-    (``reynolds: null``, ``scale: null``) filled from the dataset file's ``isla_constants``, as train.py and infer.py
+    (``scale: null``) filled from the dataset file's ``isla_constants``, as train.py and infer.py
     fill them (``output_normalize.model_dataset_constants``); the class refuses the block without them."""
     import sys
 
