@@ -144,6 +144,10 @@ def test_hits_planted_on_line_boundaries_keep_one_of_the_two_cells_there():
     for i in torch.linspace(1000, line.shape[0] - 1000, 6).long().tolist():
         j = torch.floor(line[i])
         start = line[i] - j
+        ### (the hit start + j lands on line[i] to within two ulps, and is one of the k hits)
+        assert (start + j - line[i]).abs() <= 2 * torch.finfo(D).eps * line[
+            i
+        ] and j < BUDGET
         kept_cpu, _ = sampling.sample_boundary_cells(cpu_m, cpu_x, BUDGET, start)
         for _ in range(3):
             kept, _ = sampling.sample_boundary_cells(
