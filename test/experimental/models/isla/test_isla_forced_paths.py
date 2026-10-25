@@ -34,6 +34,7 @@ import torch
 
 ### The modules that own each seam today. LIB-MOVE retargets these imports (and the
 ### patch-then-compare tests' patches); nothing else in this file names a module.
+from physicsnemo.experimental.models import ISLA
 from physicsnemo.experimental.models.isla import (
     fused_basis,
     geometry,
@@ -42,6 +43,7 @@ from physicsnemo.experimental.models.isla import (
     tree_read,
     tree_walk,
 )
+from physicsnemo.experimental.models.isla import model as isla_model
 from physicsnemo.experimental.models.isla.geometry import exact_boundary_geometry
 from physicsnemo.experimental.models.isla.tree_read import (
     BoundaryForest,
@@ -50,7 +52,7 @@ from physicsnemo.experimental.models.isla.tree_read import (
 )
 from physicsnemo.mesh.spatial.cluster_tree import ClusterTree
 from test.experimental.models.isla._forced import ran, reaches
-from test.experimental.models.isla._meshes import cloud
+from test.experimental.models.isla._meshes import cloud, live, points_mesh, soup
 from test.experimental.models.isla.test_isla_geometry_thin import _capped_cube
 from test.experimental.models.isla.test_isla_interior_geometry import (
     _box_ties,
@@ -212,6 +214,66 @@ def test_the_fused_basis_seam_and_the_pair_chunk_reach_the_chunked_basis(monkeyp
         )
     assert r.count(tree_read._chunked_basis_from_plan) == 1
     assert calls == [300, 300, 300, 100]
+
+
+# --------------------------------------------------------------------------- the model's seams
+def _dtt_forward():
+    """One evaluation forward of a small float64 ISLA-DTT model (its read live) on
+    CPU, on a 3-D cloud's soup with 40 prediction points."""
+    torch.manual_seed(0)
+    m = ISLA(
+        output_schema={"p": {"rank": 0}, "v": {"rank": 1}},
+        boundary_schemas={"wall": {}},
+        global_schema={"g": {"rank": 1}},
+        interior=True,
+        hidden=32,
+        n_layers=2,
+        n_slices=8,
+    )
+    m = live(m).double().eval()
+    pts, nrm, w, drv = cloud(200, d=3, seed=1)
+    q, _, _, _ = cloud(40, d=3, seed=2, scale=(3.0,) * 3)
+    with torch.no_grad():
+        m(
+            boundary_meshes={"wall": soup(pts, nrm, w)},
+            prediction_points=points_mesh(q),
+            global_data={"g": drv},
+        )
+
+
+def test_the_models_pair_assembly_seam_reaches_the_read(monkeypatch):
+    """``model.walk_range_pairs`` spied
+    (test_isla_tree_read's ``test_tree_read_cuda_matches_cpu_float64`` captures the
+    plans through it): an ISLA-DTT forward looks the name up in the model's module,
+    once, and the tree read's pair assembly runs behind it."""
+    calls = reaches(monkeypatch, isla_model, "walk_range_pairs")
+    with ran(tree_read.walk_range_pairs) as r:
+        _dtt_forward()
+    assert len(calls) == 1 and r.count(tree_read.walk_range_pairs) == 1
+
+
+@pytest.mark.parametrize("kernel", ["reference", "fused"])
+def test_a_forced_tree_read_kernel_builds_the_basis_its_way(kernel, monkeypatch):
+    """``ISLA.resolve_tree_read_kernel`` patched to name the read
+    (``test_tree_read_kernel_resolves_to_the_reference_on_cpu_and_its_basis_flow_is_exact``
+    forces ``"fused"`` on CPU): the model consults the patched resolver, and the pairs'
+    basis comes from the plan (``_chunked_basis_from_plan``, the fused path's flow)
+    under ``"fused"`` and from the pair lists (``_chunked_basis``) under
+    ``"reference"``, never both."""
+    calls = []
+    monkeypatch.setattr(
+        ISLA,
+        "resolve_tree_read_kernel",
+        lambda self, p, k=kernel: calls.append(p) or k,
+    )
+    with ran(tree_read._chunked_basis_from_plan, tree_read._chunked_basis) as r:
+        _dtt_forward()
+    assert calls, "the patched resolver was not consulted"
+    plan, lists = (
+        r.count(tree_read._chunked_basis_from_plan),
+        r.count(tree_read._chunked_basis),
+    )
+    assert (plan > 0, lists > 0) == (kernel == "fused", kernel == "reference")
 
 
 # --------------------------------------------------------------------------- the exact geometry
