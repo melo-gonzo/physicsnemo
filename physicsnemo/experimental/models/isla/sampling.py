@@ -47,20 +47,19 @@ the forward pass from the full-resolution surfaces (:func:`sample_boundary_cells
 - **Precision.** The measures and centroids the draw reads are computed in
   float64 from the mesh's coordinates as given (:func:`draw_inputs`), whatever
   the model's precision, so the draw is a function of the input mesh only: a
-  float32 and a float64 run on the same inputs keep the same cells. After the
-  float64 probabilities the draw is exact integer arithmetic. The sums of the
-  measures are exact int64 sums of the measures floored to a grid, within
-  about :math:`n\,2^{-60}` of their total. The line is in units of :math:`2^{-Q}`,
-  :math:`Q = 62 - b`, :math:`b` the bit length of the budget (a Python int), each
-  cell an interval of :math:`\operatorname{round}(\pi_i 2^Q)` units; a cell with
-  :math:`\pi_i = 1` is exactly :math:`2^Q` units, and the start is clamped by the
-  line's rounding residual, so such a cell holds exactly one hit. The drawn
-  inclusion probability is that length over :math:`2^Q`, within
-  :math:`2^{-(Q+1)}` of :math:`\pi_i` (about 3e-14 at a budget of 200,000).
-  Integer sums are exact in any order, so the draw is bitwise the same run to run,
-  and on CPU and CUDA given the same float64 inputs. (The Morton order reads the
-  canonical frame, which devices compute to roundoff, so a centroid on a grid
-  line could still order differently.)
+  float32 and a float64 run on the same inputs keep the same cells. The tail
+  sums of the measures are a fixed-order float64 scan (:func:`_cumsum`), the
+  same bits on every device. The line is exact int64 arithmetic in units of
+  :math:`2^{-Q}`, :math:`Q = 62 - b`, :math:`b` the bit length of the budget (a
+  Python int), each cell an interval of :math:`\operatorname{round}(\pi_i 2^Q)`
+  units; a cell with :math:`\pi_i = 1` is exactly :math:`2^Q` units, and the
+  start is clamped by the line's rounding residual, so such a cell holds exactly
+  one hit. The drawn inclusion probability is that length over :math:`2^Q`,
+  within :math:`2^{-(Q+1)}` of :math:`\pi_i` (about 3e-14 at a budget of
+  200,000). So the draw is bitwise the same run to run, and on CPU and CUDA
+  given the same float64 inputs. (The Morton order reads the canonical frame,
+  which devices compute to roundoff, so a centroid on a grid line could still
+  order differently.)
 
 Everything is tensor arithmetic without a data-dependent shape, so the draw
 traces into one graph under ``torch.compile(fullgraph=True, dynamic=True)``.
@@ -84,56 +83,35 @@ from physicsnemo.mesh.utilities._gather import gather_rows
 
 @torch.library.custom_op("physicsnemo::isla_cumsum", mutates_args=())
 def _cumsum(x: torch.Tensor) -> torch.Tensor:
-    """``x.cumsum(0)``, run by ATen under torch.compile as in eager.
+    r"""``x.cumsum(0)``, run under torch.compile as in eager: ATen's for integers, a
+    doubling (Kogge-Stone) scan of elementwise adds for floats.
 
-    The draw scans int64 (exact integer sums, so any order gives the same result)
-    over every full-resolution cell, an axis long enough for Inductor to emit a split
-    scan; under the whole-model compile with ``mode="max-autotune-no-cudagraphs"``
-    that kernel failed on GB300 (an illegal memory access, or "operation not
-    supported on global/shared address space"; torch 2.12 and 2.14.1). As an opaque
-    op the scan is ATen's, so the compiled draw is the eager one, bitwise."""
-    return x.cumsum(0)
+    The draw's sums run over every full-resolution cell, an axis long enough for
+    Inductor to emit a split scan; under the whole-model compile with
+    ``mode="max-autotune-no-cudagraphs"`` that kernel failed on GB300 (an illegal
+    memory access, or "operation not supported on global/shared address space";
+    torch 2.12 and 2.14.1). As an opaque op the scan runs eagerly, so the compiled
+    draw is the eager one, bitwise. Integer sums are exact in any order. A float sum
+    depends on its order, and ATen's CUDA float scan is not run-to-run deterministic;
+    in the doubling scan every partial sum is a fixed binary tree of correctly rounded
+    adds, so its bits are the same run to run and on every device, within about
+    :math:`\log_2 n` roundings of the exact sum for nonnegative ``x``."""
+    if not x.is_floating_point():
+        return x.cumsum(0)
+    n = x.shape[0]
+    y, z = x.clone(), torch.empty_like(x)
+    s = 1
+    while s < n:
+        z[:s] = y[:s]
+        torch.add(y[s:], y[: n - s], out=z[s:])
+        y, z = z, y
+        s *= 2
+    return y
 
 
 @_cumsum.register_fake
 def _(x):
     return torch.empty_like(x)
-
-
-def _pow2(e: Int[torch.Tensor, "*shape"]) -> Float[torch.Tensor, "*shape"]:
-    """``2.0 ** e`` in float64, exactly, for integers ``e`` in [-1022, 1023], built from
-    its bits (``torch.ldexp`` promotes an integer exponent to float32, which overflows
-    past 2**127)."""
-    return ((e.to(torch.int64) + 1023) << 52).view(torch.float64)
-
-
-def _scale(x: Float[torch.Tensor, "*shape"], e: Int[torch.Tensor, "*shape"]) -> Float[torch.Tensor, "*shape"]:
-    """``x * 2**e`` in two power-of-two steps, so ``e`` may lie past float64's exponent
-    range when the result does not; exact when the result is normal."""
-    half = e >> 1
-    return x * _pow2(half) * _pow2(e - half)
-
-
-def _tail_sums(a: Float[torch.Tensor, " n"]) -> Float[torch.Tensor, " n"]:
-    r"""``a[i:].sum()`` for every ``i``, of nonnegative float64 ``a``: the exact int64
-    sums of the values floored to a grid, each rounded once back to float64.
-
-    A first pass floors the values to the grid :math:`2^{-s_1}`, :math:`s_1 = 62 -
-    e(\max a) - e(n)` with :math:`x < 2^{e(x)}` (each below :math:`2^{62} / n` units,
-    so their sum is exact), which gives the total to within :math:`n` units; the grid
-    :math:`2^{-s}` then puts the total below :math:`2^{61}` units and above about
-    :math:`2^{60}`, so each tail is within about :math:`n\,2^{-60}` of the total of
-    its exact value, whatever the spread of the values. Integer sums are exact in any order. Floored, no tail exceeds its
-    exact value.
-    """
-    n = a.shape[0]
-    e_max = torch.frexp(a.amax(0, keepdim=True)).exponent.to(torch.int64)
-    e_n = torch.frexp(a.new_full((1,), n)).exponent.to(torch.int64)
-    s1 = 62 - e_max - e_n
-    total = _scale(a, s1).floor().to(torch.int64).sum(0, keepdim=True) + n
-    s = s1 + 61 - torch.frexp(total.to(a.dtype)).exponent.to(torch.int64)
-    q = _scale(a, s).floor().to(torch.int64)
-    return _scale(_cumsum(q.flip(0)).flip(0).to(a.dtype), -s)
 
 
 def _systematic_positions(
@@ -204,14 +182,12 @@ def pps_inclusion_probabilities(
     order), which is the fixed point of the iterative adjustment (cap, rescale the
     rest, repeat). ``share`` at least the cell count gives every :math:`\pi_i = 1`.
     In float64. The sort is stable, so ties resolve the same on every device, and the
-    sums of the sorted measures are exact sums of the measures floored to a grid
-    (:func:`_tail_sums`), so the probabilities are bitwise the same on every device.
-    Floored, no tail exceeds :math:`(n - r)\,a_{(r)}`, so a share of at least the
-    count still caps every cell.
+    tail sums of the sorted measures are a fixed-order scan (:func:`_cumsum`), so the
+    probabilities are bitwise the same on every device.
     """
     n = measures.shape[0]
     a, order = measures.sort(descending=True, stable=True)
-    tail = _tail_sums(a)  # sum of the measures from rank m on
+    tail = _cumsum(a.flip(0)).flip(0)  # sum of the measures from rank m on
     rank = torch.arange(n, device=a.device, dtype=a.dtype)
     uncapped = (share - rank) * a < tail
     m = torch.where(uncapped.any(), uncapped.to(torch.int8).argmax(), n)
@@ -219,6 +195,8 @@ def pps_inclusion_probabilities(
     tail_m = tail.gather(0, m.clamp_max(n - 1).reshape(1))[0]
     c = (share - m) / tail_m.clamp_min(torch.finfo(a.dtype).tiny)
     pi = torch.where(rank < m, 1.0, (c * a).clamp(max=1.0))
+    ### share >= n keeps every cell: float tails can leave one a rounding below 1.
+    pi = torch.where(share >= n, 1.0, pi)
     return torch.empty_like(pi).scatter_(0, order, pi)
 
 
@@ -250,9 +228,10 @@ def sample_boundary_cells(
     Returns the indices of the kept cells into the concatenation of the
     conditions' cells, in increasing order, ``(k,)`` with :math:`k = \min(\sum_c N_c,` ``budget``
     :math:`)`, and their Horvitz-Thompson measure weights :math:`a_i / \pi_i`
-    ``(k,)``, in the dtype of the measures, with the float64 :math:`\pi_i`. The line
-    and its hits are exact int64 fixed point (:func:`_systematic_positions`), so the
-    draw is bitwise the same run to run and on every device for the same order.
+    ``(k,)``, in the dtype of the measures, with the float64 :math:`\pi_i`. The tail
+    sums are a fixed-order float64 scan and the line and its hits exact int64 fixed
+    point (:func:`_systematic_positions`), so the draw is bitwise the same run to run
+    and on every device for the same order.
     See the module docstring.
     """
     with torch.no_grad():

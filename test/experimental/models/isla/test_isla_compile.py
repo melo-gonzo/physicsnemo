@@ -315,9 +315,9 @@ def test_a_warm_compile_cache_reuses_the_graph_across_the_budget():
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA")
 def test_the_in_model_draw_compiles_under_max_autotune_at_full_resolution():
     """The recipe's whole-model compile (``max-autotune-no-cudagraphs``) of an interior
-    model on 1.4 million boundary cells: the draw's int64 sums over every cell are
+    model on 1.4 million boundary cells: the draw's sums over every cell are
     long enough for Inductor's split scan, whose kernel failed on GB300 in this compile;
-    the draw runs them through ATen (``sampling._cumsum``). The compiled model gives the
+    the draw runs them eagerly (``sampling._cumsum``). The compiled model gives the
     eager outputs."""
     torch._dynamo.reset()
     torch.manual_seed(0)

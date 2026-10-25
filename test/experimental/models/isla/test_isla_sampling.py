@@ -108,8 +108,7 @@ def test_inclusion_probabilities_are_capped_proportional_to_size():
 
 def test_a_share_of_the_count_caps_every_cell():
     """A share of at least the cell count gives every pi = 1 on full-precision float64
-    measures, whose smallest values lie off the grid of the exact tail sums: floored
-    to it, no tail exceeds its exact value."""
+    measures."""
     for seed in range(4):
         g = torch.Generator().manual_seed(seed)
         for n in (2, 40, 3000, 52_119):
@@ -117,6 +116,18 @@ def test_a_share_of_the_count_caps_every_cell():
             for share in (n, n + 0.5):
                 pi = pps_inclusion_probabilities(a, torch.tensor(float(share), dtype=D))
                 assert torch.equal(pi, torch.ones_like(a)), (seed, n, share)
+
+
+def test_equal_measures_with_a_share_of_the_count_are_kept_whole():
+    """Equal measures (a uniform mesh) with a share of at least the count give every
+    pi exactly 1, though the float tail sums of n equal values need not reach n times
+    the value (a = 0.1, n = 100: 91 cells a rounding below 1 from the tails alone)."""
+    for value in (0.1, 0.3, 0.7, 3.3):
+        for n in (7, 100, 3000, 300_001):
+            a = torch.full((n,), value, dtype=D)
+            for share in (n, n + 0.5):
+                pi = pps_inclusion_probabilities(a, torch.tensor(float(share), dtype=D))
+                assert torch.equal(pi, torch.ones_like(a)), (value, n, share)
 
 
 @pytest.mark.parametrize("budget", [1, 77, 300, 3539, 3540, 10**6])
@@ -231,12 +242,48 @@ def test_a_hit_on_a_cell_boundary_takes_the_later_cell():
 def test_a_condition_kept_whole_last_is_kept_at_every_start(u):
     """The line's end differs from k units by the rounding of the intervals; the start
     is clamped by that residual, so a condition kept whole at the end of the line keeps
-    every cell once at any start, including the ends of [0, 1)."""
-    measures, centroids = _conditions([5000, 40], seed=3)
-    kept, w = sample_boundary_cells(measures, centroids, 300, torch.tensor(u, dtype=D))
-    counts, _ = _per_condition(kept, w, [5000, 40])
+    every cell once at any start, including the ends of [0, 1). On full-precision
+    float64 measures and on float32 stored ones, whose line (seed 1) is shorter than k
+    units, so the start's upper clamp is needed."""
+    sizes = [5000, 40]
+    full, centroids = _conditions(sizes, seed=3)
+    g = torch.Generator().manual_seed(1)
+    stored = [
+        (torch.rand(n, generator=g, dtype=D) + 1e-3).float().double() for n in sizes
+    ]
+    for measures in (full, stored):
+        kept, w = sample_boundary_cells(
+            measures, centroids, 300, torch.tensor(u, dtype=D)
+        )
+        counts, _ = _per_condition(kept, w, sizes)
+        assert counts.tolist() == [260, 40]
+        _whole_kept_once(kept, measures, 300)
+
+
+def test_tiny_measures_keep_their_share():
+    """100 cells of ordinary measure and 4,900 of 1e-17 in one condition of share 260:
+    the large cells are capped and the tiny ones share the rest, so the probabilities
+    are nonnegative and sum to the share, the 300 kept cells are distinct, the second
+    condition is whole, and the first's Horvitz-Thompson sum is its measure."""
+    g = torch.Generator().manual_seed(0)
+    a = torch.cat(
+        [
+            torch.rand(100, generator=g, dtype=D) + 0.5,
+            torch.full((4900,), 1e-17, dtype=D),
+        ]
+    )
+    measures = [a, torch.rand(40, generator=g, dtype=D)]
+    centroids = [torch.randn(n, 3, generator=g, dtype=D) for n in (5000, 40)]
+    pi = pps_inclusion_probabilities(a, torch.tensor(260.0, dtype=D))
+    assert bool((pi >= 0).all())
+    assert abs(float(pi.sum()) - 260) < 1e-9
+    kept, w = sample_boundary_cells(
+        measures, centroids, 300, torch.tensor(0.5, dtype=D)
+    )
+    counts, sums = _per_condition(kept, w, [5000, 40])
+    assert kept.unique().shape[0] == 300
     assert counts.tolist() == [260, 40]
-    _whole_kept_once(kept, measures, 300)
+    assert abs(float(sums[0] / a.sum()) - 1) < 1e-12
 
 
 def test_the_integer_search_is_the_search_for_the_hits():
