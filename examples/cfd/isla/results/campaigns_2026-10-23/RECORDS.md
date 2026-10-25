@@ -60,6 +60,8 @@ source. Do not edit by hand.
 | `hl_dup_stage2/` | HL-DUP, stage 2: ISLA and both unit-drive baselines retrained and scored on the deduplicated HiLift wing, its review, and the failed root-outline rebuild | `scratch/isla-hl-dup-2026-10-24/` |
 | `dtt_fast_final_table_p5/` | DTT-FAST, pass 2's table with its pass-3 columns added, as it now stands | `scratch/isla-dtt-fast-2026-10-23/final/` |
 | `hl_dup_stage2_scores/` | HL-DUP, stage 2: the scorer's per-case rows of the six deduplicated-wing runs (native and posed), and the stage-1 scores of the stored-wing checkpoints that its rule and its like-for-like figures read | `scratch/isla-hl-dup-2026-10-24/` |
+| `hl_symplane/` | HL-SYMPLANE: HiLiftAeroML's symmetry plane built at load from the source STL's root cap, its per-case check and tolerance, the census of the 690 canonical cases, the comparison with the curation pipeline's plane, and the book changes | `scratch/isla-hl-symplane-2026-10-24/` |
+| `hl_dup_stage2_area/` | HL-AREA: HL-DUP stage 2's six deduplicated-wing checkpoints scored on the uniform point cloud (per-case rows, reduction and table), and the six lanes' training cost from their own logs (extract_cost.py's lines and the cost report) | `scratch/isla-hl-area-2026-10-24/` |
 
 | topic | file | source | md5 |
 | --- | --- | --- | --- |
@@ -336,3 +338,26 @@ source. Do not edit by hand.
 | hl_dup_stage2_scores | score_summary.json | scratch/isla-hl-dup-2026-10-24/score_summary.json | b49b4a6baa0dcade745dc99c6df0848e |
 | hl_dup_stage2_scores | score_table.md | scratch/isla-hl-dup-2026-10-24/score_table.md | 17b91d1106afc2b951494c10a72fba37 |
 | hl_dup_stage2_scores | stage2_summary.json | scratch/isla-hl-dup-2026-10-24/stage2_summary.json | f08ac2ef904f1ef561cc67d2d646df28 |
+| hl_symplane | FINAL_REPORT.md | scratch/isla-hl-symplane-2026-10-24/FINAL_REPORT.md | 11ee5fb8db9ef973aa63092083ceaecd |
+| hl_symplane | RESULTS.md | scratch/isla-hl-symplane-2026-10-24/RESULTS.md | 399ad8e84bad76bbb3e70c2c5af556a7 |
+| hl_symplane | BOOK_CHANGES.md | scratch/isla-hl-symplane-2026-10-24/BOOK_CHANGES.md | 4c2a160497d0b3f05023f97e02e6b776 |
+| hl_dup_stage2_area | RESULTS.md | scratch/isla-hl-area-2026-10-24/RESULTS.md | 3e2efaff2a2dbaed9f93904ee92723f2 |
+| hl_dup_stage2_area | FINAL_REPORT.md | scratch/isla-hl-area-2026-10-24/FINAL_REPORT.md | 49371bd5f75dc0076f9fcd2ebcc54cf6 |
+| hl_dup_stage2_area | NOTEBOOK_DRAFT.md | scratch/isla-hl-area-2026-10-24/NOTEBOOK_DRAFT.md | 21c27372d43b2cee5ee77886b5ff4e3d |
+| hl_dup_stage2_area | area_table.md | scratch/isla-hl-area-2026-10-24/area_table.md | 784802a14d10f14c59c0e21e8c58c216 |
+| hl_dup_stage2_area | area_summary.json | scratch/isla-hl-area-2026-10-24/area_summary.json | feb1aff2f4c133955e0c5e1c51e4be49 |
+| hl_dup_stage2_area | COST_REPORT.md | scratch/isla-hl-area-2026-10-24/COST_REPORT.md | 6a0492af470839fd7a0e3d7cad9ba111 |
+| hl_dup_stage2_area | cost/cost_hldupx.json | scratch/isla-hl-area-2026-10-24/cost/cost_hldupx.json | 313ddf9b089678b52bb4614f517cd45f |
+| hl_dup_stage2_area | cost/extract.jsonl | scratch/isla-hl-area-2026-10-24/cost/extract.jsonl | 3879a90c82b6a1f8d1ecace3d3c6e056 |
+| hl_dup_stage2_area | scores_area/hldupx_hl_gt_seed42/area/hldupx_hl_gt_seed42/metrics.jsonl | scratch/isla-hl-area-2026-10-24/scores_area/hldupx_hl_gt_seed42/area/hldupx_hl_gt_seed42/metrics.jsonl | 612ad290b0edcb01b37cbfdc8c413dfc |
+| hl_dup_stage2_area | scores_area/hldupx_hl_gt_seed43/area/hldupx_hl_gt_seed43/metrics.jsonl | scratch/isla-hl-area-2026-10-24/scores_area/hldupx_hl_gt_seed43/area/hldupx_hl_gt_seed43/metrics.jsonl | d6dfaa8b73f18fceffbc64d530d4ee53 |
+| hl_dup_stage2_area | scores_area/hldupx_hl_isla_seed42/area/hldupx_hl_isla_seed42/metrics.jsonl | scratch/isla-hl-area-2026-10-24/scores_area/hldupx_hl_isla_seed42/area/hldupx_hl_isla_seed42/metrics.jsonl | 8ef1974ef04cd5958f45eedad40d94d2 |
+| hl_dup_stage2_area | scores_area/hldupx_hl_isla_seed43/area/hldupx_hl_isla_seed43/metrics.jsonl | scratch/isla-hl-area-2026-10-24/scores_area/hldupx_hl_isla_seed43/area/hldupx_hl_isla_seed43/metrics.jsonl | 3e7bf1a2f67041f0fe3a9731c4a77159 |
+| hl_dup_stage2_area | scores_area/hldupx_hl_t_seed42/area/hldupx_hl_t_seed42/metrics.jsonl | scratch/isla-hl-area-2026-10-24/scores_area/hldupx_hl_t_seed42/area/hldupx_hl_t_seed42/metrics.jsonl | 52a6bb4b68451266bf62a961cbfc4b67 |
+| hl_dup_stage2_area | scores_area/hldupx_hl_t_seed43/area/hldupx_hl_t_seed43/metrics.jsonl | scratch/isla-hl-area-2026-10-24/scores_area/hldupx_hl_t_seed43/area/hldupx_hl_t_seed43/metrics.jsonl | 2eb33a9b3227e96f8bb83ed2f022ad68 |
+| hl_dup_stage2_area | scores_area/hldupx_hl_gt_seed42/area/DATASET_USED | scratch/isla-hl-area-2026-10-24/scores_area/hldupx_hl_gt_seed42/area/DATASET_USED | 9beeb4739f8b4a0b198608ed2dcb4e05 |
+| hl_dup_stage2_area | scores_area/hldupx_hl_gt_seed43/area/DATASET_USED | scratch/isla-hl-area-2026-10-24/scores_area/hldupx_hl_gt_seed43/area/DATASET_USED | 9beeb4739f8b4a0b198608ed2dcb4e05 |
+| hl_dup_stage2_area | scores_area/hldupx_hl_isla_seed42/area/DATASET_USED | scratch/isla-hl-area-2026-10-24/scores_area/hldupx_hl_isla_seed42/area/DATASET_USED | 9beeb4739f8b4a0b198608ed2dcb4e05 |
+| hl_dup_stage2_area | scores_area/hldupx_hl_isla_seed43/area/DATASET_USED | scratch/isla-hl-area-2026-10-24/scores_area/hldupx_hl_isla_seed43/area/DATASET_USED | 9beeb4739f8b4a0b198608ed2dcb4e05 |
+| hl_dup_stage2_area | scores_area/hldupx_hl_t_seed42/area/DATASET_USED | scratch/isla-hl-area-2026-10-24/scores_area/hldupx_hl_t_seed42/area/DATASET_USED | 9beeb4739f8b4a0b198608ed2dcb4e05 |
+| hl_dup_stage2_area | scores_area/hldupx_hl_t_seed43/area/DATASET_USED | scratch/isla-hl-area-2026-10-24/scores_area/hldupx_hl_t_seed43/area/DATASET_USED | 9beeb4739f8b4a0b198608ed2dcb4e05 |

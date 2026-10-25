@@ -377,14 +377,13 @@ iarea = [ST[k].shift("ISLA", f, "area") for k in area_fin for f in ST[k].ds.head
 print(f"**At the reference configurations, rotating and translating every case leaves ISLA's error within 2% of its native "
       f"error on {'all ' if len(held) == len(FIN) else f'{len(held)} of the '}{len(FIN)} tasks with a final standing, and the "
       f"uniform point cloud leaves it within {max(abs(r - 1) for r in iarea) * 100:.1f}% on "
-      f"{'both' if len(area_fin) == 2 else f'all {len(area_fin)}'} of them where that cloud resamples the scored cells and the "
-      "standing scores it. The same rotation multiplies GeoTransolver's and Transolver's errors by "
+      f"{ {2: 'both', 3: 'all three', 4: 'all four'}.get(len(area_fin), f'all {len(area_fin)}')} of them where that cloud resamples the scored cells. The same rotation multiplies GeoTransolver's and Transolver's errors by "
       f"{min(bpose):.1f} to {max(bpose):.0f}, and the point cloud by {min(barea):.1f} to {max(barea):.1f}.** {S.tally_note()} "
-      "Every standing artifact but HiLiftAeroML's scores each final checkpoint three times on the same validation cases: on the *native mesh*, on "
+      "Every standing artifact scores each final checkpoint three times on the same validation cases: on the *native mesh*, on "
       "the *uniform point cloud* (the area-proportional law with exact Horvitz–Thompson weights), and *rotated and translated* "
       "(a random rotation and a translation of one RMS radius, the root-mean-square distance of the case's points from their "
       "centroid, per case, in-plane on the planar datasets, tensor targets rotated "
-      "as tensors); HiLiftAeroML's, on the deduplicated wing, scores the native mesh and the rotated and translated cases only. "
+      "as tensors). "
       "@fig-contract-shifts shows each architecture's *shift*: its error under a protocol divided by its own "
       f"native error. The architectures are at their reference configurations: {S.CONFIG['ISLA']}, {S.CONFIG['GeoTransolver']} "
       f"and {S.CONFIG['Transolver']} (@sec-protocol).")
@@ -397,8 +396,7 @@ if NONREF:
 #| fig-cap: >
 #|   Each architecture's error under the two other scorings divided by its own native-mesh error, at the reference
 #|   configurations, on every task with a standing artifact. Top: rotated and translated ÷ native. Bottom: uniform point
-#|   cloud ÷ native, on the surface tasks where that protocol resamples the scored cells and the standing scores it (the
-#|   HiLiftAeroML standing, on the deduplicated wing, does not). Each large marker is the
+#|   cloud ÷ native, on the surface tasks where that protocol resamples the scored cells. Each large marker is the
 #|   seed mean of the task's first headline field (a field its standing reports, named in the row label), joined to 1 (no
 #|   shift) by a thin line on a log axis; small open dots are the seeds and the printed number is the seed mean. ISLA blue, GeoTransolver red, Transolver amber. How to read
 #|   this: a marker at 1 means the protocol leaves that architecture's error unchanged; the figure does not rank native
@@ -457,7 +455,7 @@ print("\n".join(out))
 print("\n: Shifts of every headline field at the reference configurations: each architecture's seed-mean error under the "
       "rotated-and-translated protocol and under the uniform point cloud, divided by its own seed-mean native-mesh error, "
       f"float32, final checkpoints, {SEEDS_TXT}. The point-cloud columns are filled only where that protocol resamples the "
-      "scored cells and the standing scores it; the HiLiftAeroML standing, on the deduplicated wing, is not scored on it. "
+      "scored cells. "
       "Elsewhere the point cloud gives every arm its native input; on the DrivAerML Volume task "
       + ST["drivaerml_volume"].degenerate["area"] + ". How to read this: 1.00 is no shift; a ratio here compares an "
       "architecture with itself, never with another architecture. Data: " + "; ".join(ST[k].source for k in KEYS)

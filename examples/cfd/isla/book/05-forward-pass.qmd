@@ -245,10 +245,12 @@ print(": The boundary conditions of the recipe's ISLA configurations, read from 
       "class as the page renders, conditions in the stored (sorted) order. The input-layer columns are $1 + K + n_\\beta + S$ "
       "(the constant, the $K$ normal-direction cosines, the invariants of the condition's own fields, the $S$ global "
       "scalars); a condition's vectors are its rank-1 fields, and the shared channels number as many as the widest "
-      "condition has. Each configuration reads every piece of the domain's boundary its dataset stores (on HiLiftAeroML "
-      "the wing, the only piece all but two of its files store): the DrivAerML configurations the vehicle and the wind tunnel's four other pieces, the AirfRANS one the airfoil and the far field "
-      "`freestream`. The standings' checkpoints were trained with configurations that read the body alone "
-      "(@sec-standing-geometry). How to read this: a condition without fields still has its own input layer; the table does not "
+      "condition has. Each configuration reads every piece of the domain's boundary its dataset stores: the DrivAerML "
+      "configurations the vehicle and the wind tunnel's four other pieces, the AirfRANS one the airfoil and the far field "
+      "`freestream`, the HiLiftAeroML one the wing, the far field's `inlet` and `outlet` and the symmetry plane `symmetry`, and "
+      "the SHIFT-SUV one the vehicle and its CFD box, the pieces those two datasets do not store built at load. The standings' "
+      "checkpoints on the DrivAerML tasks, SHIFT-SUV, HiLiftAeroML and AirfRANS were trained with configurations that read the "
+      "body alone (@sec-standing-geometry). How to read this: a condition without fields still has its own input layer; the table does not "
       "show the labels by which the lug, Tensile2d and DeepJEB++ datasets mark their conditions inside one mesh, which a "
       "recipe transform splits into these meshes before the model sees them (@sec-isla-inputs).")
 ```
