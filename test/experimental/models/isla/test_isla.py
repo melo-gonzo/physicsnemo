@@ -500,7 +500,8 @@ def _run_on(device, m, mesh, drv, q):
 
 #: The float32 contracts' bound, relative to the largest output: float32 roundoff
 #: (eps 1.2e-7) of the moved inputs, amplified through the network and its kernels
-#: (measured below 1e-5 on CPU and CUDA).
+#: (measured at most 3e-6 on x86, 9e-6 on Grace and 2.4e-6 on a GB300 with the fused
+#: kernels; the translation by about 13 units is the larger).
 F32_BOUND = 1e-4
 
 

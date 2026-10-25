@@ -288,3 +288,133 @@ def test_the_drawn_boundary_moves_with_the_case(improper, monkeypatch):
     assert torch.equal(seen["kept"][1], seen["kept"][0])
     assert torch.allclose(out["p"], base["p"], atol=1e-12, rtol=0.0)
     assert torch.allclose(out["v"], base["v"] @ R.T, atol=1e-12, rtol=0.0)
+
+
+cuda_only = pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA")
+
+
+def _float32_case(device, n_boundary_tokens=None):
+    """A float32 ISLA-DTT model on ``device`` (its read live) and a case of 500 cells
+    with 150 prediction points, as float32 tensors on ``device``."""
+    kw = {} if n_boundary_tokens is None else {"n_boundary_tokens": n_boundary_tokens}
+    m = _model(**kw).float().to(device)
+    mesh, drv, q = _case(n=500, nq=150)
+    mesh = Mesh(
+        points=mesh.points.float(),
+        cells=mesh.cells,
+        cell_data=mesh.cell_data.apply(lambda t: t.float()),
+    )
+    return m, mesh.to(device), drv.float().to(device), q.float().to(device)
+
+
+@cuda_only
+@pytest.mark.parametrize("budget", [None, 200], ids=["every_cell", "drawn"])
+def test_the_interior_model_repeats_bitwise_on_cuda(budget):
+    """One training step of the interior model on CUDA in float32, every kernel at
+    ``auto`` (the fused geometry region and the fused tree read), from the same seed,
+    three times: the outputs and every parameter gradient are bitwise the same, with
+    every cell kept and with the draw subsampling (its float64 weights keep the same
+    cells here). The surface model's run-twice baseline is test_isla_determinism.py's."""
+    pytest.importorskip("triton")
+    m, mesh, drv, q = _float32_case("cuda", budget)
+    m.train()
+    assert m.resolve_geo_kernel(q) == "fused"
+    assert m.resolve_tree_read_kernel(q) == "fused"
+    runs = []
+    for _ in range(3):
+        m.zero_grad(set_to_none=True)
+        torch.manual_seed(3)
+        out = outputs(
+            m(
+                boundary_meshes={"wall": mesh},
+                prediction_points=q,
+                global_data={"g": drv},
+            )
+        )
+        sum(o.double().square().mean() for o in out.values()).backward()
+        runs.append(
+            {
+                **{k: v.detach() for k, v in out.items()},
+                **{n: p.grad for n, p in m.named_parameters()},
+            }
+        )
+    for run in runs[1:]:
+        assert run.keys() == runs[0].keys()
+        bad = [k for k in run if not torch.equal(run[k], runs[0][k])]
+        assert not bad, bad
+
+
+@pytest.mark.parametrize(
+    "device",
+    [
+        pytest.param(
+            "cpu",
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason="BUG W2-2 (BUGS_W2.md): on CPU, F.normalize's eps 1e-12 "
+                "underflows to 0 in float16, so the zero states of the padding "
+                "tokens give 0/0 in the routing logits (blocks.py:216), and the NaN "
+                "reaches every output",
+            ),
+        ),
+        pytest.param(
+            "cuda",
+            marks=[
+                cuda_only,
+                pytest.mark.xfail(
+                    strict=True,
+                    raises=RuntimeError,
+                    reason="BUG W2-1 (BUGS_W2.md): geo_kernel='auto' resolves to "
+                    "the fused region under float16 autocast, which refuses it "
+                    "(geo_kernel.py:999) instead of falling back to eager",
+                ),
+            ],
+        ),
+    ],
+)
+def test_a_float16_autocast_forward_is_finite(device):
+    """Under float16 autocast, a forward pass of the interior model with every kernel
+    at ``auto`` gives finite outputs, as it does under bfloat16 (and as the eager
+    kernels do on CUDA)."""
+    m, mesh, drv, q = _float32_case(device)
+    with torch.no_grad(), torch.autocast(device, dtype=torch.float16):
+        out = outputs(
+            m(
+                boundary_meshes={"wall": mesh},
+                prediction_points=q,
+                global_data={"g": drv},
+            )
+        )
+    assert all(torch.isfinite(o).all() for o in out.values())
+
+
+@cuda_only
+def test_mixed_devices_are_refused_and_global_data_follows_the_boundary():
+    """Documented behaviour, as it is: inputs on another device than the model are
+    refused, by torch's own device check deep in the forward pass (ISLA's validation
+    does not name the argument), and ``global_data`` is moved to the boundary's
+    device."""
+    m, mesh, drv, q = _float32_case("cuda")
+    gd = {"g": drv}
+    for kw in (
+        dict(
+            boundary_meshes={"wall": mesh.to("cpu")},
+            prediction_points=q,
+            global_data=gd,
+        ),
+        dict(boundary_meshes={"wall": mesh}, prediction_points=q.cpu(), global_data=gd),
+    ):
+        with torch.no_grad(), pytest.raises(RuntimeError, match="same device"):
+            m(**kw)
+    with torch.no_grad():
+        out = outputs(
+            m(
+                boundary_meshes={"wall": mesh},
+                prediction_points=q,
+                global_data={"g": drv.cpu()},
+            )
+        )
+        ref = outputs(
+            m(boundary_meshes={"wall": mesh}, prediction_points=q, global_data=gd)
+        )
+    assert all(torch.equal(out[k], ref[k]) for k in ref)
