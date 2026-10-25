@@ -268,7 +268,7 @@ def _ssr_run(read, plan_args, leaves, logm, seed, device, dtype, logm_grad=False
     plan = PairPlan.build(
         plan_args[0].to(device), plan_args[1].to(device), *plan_args[2:]
     )
-    ins = [t.to(device, dtype).requires_grad_(True) for t in leaves]
+    ins = [t.detach().to(device, dtype, copy=True).requires_grad_(True) for t in leaves]
     lm = logm.to(device, D if dtype == D else torch.float32).requires_grad_(logm_grad)
     out = read(ins[0], lm, ins[1], ins[2], ins[3], plan, 0.5)
     (out.double() * seed.to(device)).sum().backward()
@@ -332,9 +332,10 @@ def test_segment_softmax_read_of_a_width_not_a_power_of_two_is_the_eager_read(h,
     """A head count, key width or value width that is not a power of two takes the
     eager read on CUDA (float32): ``_eager_segment_softmax_read`` runs and the Triton
     Function does not, and the output and every gradient agree with a direct eager
-    run's to 1e-5 relative to each tensor's largest entry. (Not bitwise: the eager
-    read's ``index_add`` sums by atomics on CUDA, in no fixed order, so it does not
-    repeat bitwise itself.)"""
+    run's to 1e-4 relative to each tensor's largest entry. (Not bitwise: the eager
+    read's ``index_add`` sums up to 5000 pairs per point by float32 atomics on CUDA,
+    in no fixed order, so it does not repeat bitwise itself; 1.1e-5 measured in LHR
+    job 377613.)"""
     plan_args, leaves, logm, seed, _ = _ssr_case(h, kc, c, n_q=20)
     args = (plan_args, leaves, logm, seed, "cuda", torch.float32)
     eager = segment_softmax._eager_segment_softmax_read
@@ -343,7 +344,7 @@ def test_segment_softmax_read_of_a_width_not_a_power_of_two_is_the_eager_read(h,
     assert r.count(segment_softmax._SegmentSoftmaxRead) == 0 and r.count(eager) == 1
     want = _ssr_run(eager, *args)
     for name, a, b in zip(("out", "ker", "q", "k", "v"), got, want):
-        assert float((a - b).abs().max() / b.abs().max()) < 1e-5, name
+        assert float((a - b).abs().max() / b.abs().max()) < 1e-4, name
 
 
 @pytest.mark.cuda
@@ -410,7 +411,9 @@ def test_fused_kernel_read_in_16_bits_obeys_the_2x_error_rule(dtype):
 
     def run(kind, device, dt):
         plan = PairPlan.build(qi.to(device), bj.to(device), n_q, n_b)
-        b, w, q, k, v = ins = [t.to(device, dt).requires_grad_(True) for t in leaves]
+        b, w, q, k, v = ins = [
+            t.detach().to(device, dt, copy=True).requires_grad_(True) for t in leaves
+        ]
         lm = logm.to(device, torch.float32 if dt != D else D)
         if kind == "fused":
             assert fused_read.supported(b, q, k, v) and fused_read._narrow(b)

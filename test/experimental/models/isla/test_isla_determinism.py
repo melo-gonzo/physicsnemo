@@ -380,6 +380,10 @@ def test_the_reference_tree_read_on_cuda_spreads_within_its_bound():
         return [out.detach()] + [p.grad.clone() for p in read.parameters()]
 
     runs = [run() for _ in range(5)]
+    names = ["out"] + [n for n, _ in read.named_parameters()]
+    for i, name in enumerate(names):
+        per = max(_rel_norm(r[i], runs[0][i]) for r in runs[1:])
+        print(f"{name}: five-run spread {per:.2e} in norm")
     spread = max(_rel_norm(x, y) for r in runs[1:] for x, y in zip(r, runs[0]))
     worst = max(_rel_max(x, y) for r in runs[1:] for x, y in zip(r, runs[0]))
     print(
