@@ -1798,7 +1798,7 @@ print("| Cost on small meshes | from 100,000 tokens up a training step's memory 
       f"{fp_af[0]} times compiled and {fp_af[1]} times eager and the lug's eager step to {fp_lug[0]} to {fp_lug[1]} times, the "
       f"lug's compiled step within the host's noise ({fp_noise.replace('-', ' to ')}) | on the small finite-element meshes of Tensile2d and the lug ISLA's median training step is "
       f"{lo:.1f} to {hi:.1f} times the baselines' (@tbl-ref-cost); the padded kernel's compiled path certified on trained "
-      "checkpoints, and Peter's decision on it and on the profile's other speedups "
+      "checkpoints (Peter approved building it with five of the profile's other speedups) "
       f"({R.source('perf_survey', 'OPPORTUNITIES.md')}) |")
 print("| Inference on a small budget | the stratified sampler removes most of the quadrature variance at 10,000 cells "
       "(@sec-deficit-anatomy, @sec-using-sampler) | a default that picks the sampler from the requested count |")
