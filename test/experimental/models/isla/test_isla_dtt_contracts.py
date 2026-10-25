@@ -31,6 +31,8 @@ Owners of what these tests reach (one place, for the library moves): the draw is
 the walk are ``isla.tree_read``'s, reached through ``ISLA._tree_read_walk``.
 """
 
+import importlib.util
+
 import pytest
 import torch
 
@@ -293,11 +295,10 @@ def test_the_drawn_boundary_moves_with_the_case(improper, monkeypatch):
 cuda_only = pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA")
 
 
-def _float32_case(device, n_boundary_tokens=None):
+def _float32_interior_case(device):
     """A float32 ISLA-DTT model on ``device`` (its read live) and a case of 500 cells
     with 150 prediction points, as float32 tensors on ``device``."""
-    kw = {} if n_boundary_tokens is None else {"n_boundary_tokens": n_boundary_tokens}
-    m = _model(**kw).float().to(device)
+    m = _model().float().to(device)
     mesh, drv, q = _case(n=500, nq=150)
     mesh = Mesh(
         points=mesh.points.float(),
@@ -308,20 +309,18 @@ def _float32_case(device, n_boundary_tokens=None):
 
 
 @cuda_only
-@pytest.mark.parametrize("budget", [None, 200], ids=["every_cell", "drawn"])
-def test_the_interior_model_repeats_bitwise_on_cuda(budget):
+def test_the_interior_model_repeats_bitwise_on_cuda_with_every_cell_kept():
     """One training step of the interior model on CUDA in float32, every kernel at
     ``auto`` (the fused geometry region and the fused tree read), from the same seed,
-    three times: the outputs and every parameter gradient are bitwise the same, with
-    every cell kept and with the draw subsampling. The surface model's run-twice
-    baseline is test_isla_determinism.py's.
+    three times, with every cell kept (500 cells under the default budget): the
+    outputs and every parameter gradient are bitwise the same. With the draw
+    subsampling, test_isla_determinism.py's
+    test_the_model_repeats_bitwise_on_cuda_with_kernels_auto covers it.
 
-    DRAW-EXACT: this pins today's run-to-run behaviour of the draw on CUDA. Its float64
-    weights can differ by a few ulps run to run (CUDA's cumsum), which the cast to the
-    float32 token measures absorbs in this case (and no kept cell flips); the exact
-    draw makes the weights themselves bitwise."""
+    DRAW-EXACT: this pins today's run-to-run behaviour on CUDA of the draw's line,
+    which runs over the inclusion probabilities even when every cell is kept."""
     pytest.importorskip("triton")
-    m, mesh, drv, q = _float32_case("cuda", budget)
+    m, mesh, drv, q = _float32_interior_case("cuda")
     m.train()
     assert m.resolve_geo_kernel(q) == "fused"
     assert m.resolve_tree_read_kernel(q) == "fused"
@@ -356,6 +355,7 @@ def test_the_interior_model_repeats_bitwise_on_cuda(budget):
             "cpu",
             marks=pytest.mark.xfail(
                 strict=True,
+                raises=AssertionError,
                 reason="BUG W2-2 (BUGS_W2.md): on CPU, F.normalize's eps 1e-12 "
                 "underflows to 0 in float16, so the zero states of the padding "
                 "tokens give 0/0 in the routing logits (blocks.py:216), and the NaN "
@@ -366,6 +366,10 @@ def test_the_interior_model_repeats_bitwise_on_cuda(budget):
             "cuda",
             marks=[
                 cuda_only,
+                ### without triton, auto resolves to the eager region, finite in float16
+                pytest.mark.skipif(
+                    importlib.util.find_spec("triton") is None, reason="triton"
+                ),
                 pytest.mark.xfail(
                     strict=True,
                     raises=RuntimeError,
@@ -381,7 +385,7 @@ def test_a_float16_autocast_forward_is_finite(device):
     """Under float16 autocast, a forward pass of the interior model with every kernel
     at ``auto`` gives finite outputs, as it does under bfloat16 (and as the eager
     kernels do on CUDA)."""
-    m, mesh, drv, q = _float32_case(device)
+    m, mesh, drv, q = _float32_interior_case(device)
     with torch.no_grad(), torch.autocast(device, dtype=torch.float16):
         out = outputs(
             m(
@@ -399,7 +403,7 @@ def test_mixed_devices_are_refused_and_global_data_follows_the_boundary():
     refused, by torch's own device check deep in the forward pass (ISLA's validation
     does not name the argument), and ``global_data`` is moved to the boundary's
     device."""
-    m, mesh, drv, q = _float32_case("cuda")
+    m, mesh, drv, q = _float32_interior_case("cuda")
     gd = {"g": drv}
     for kw in (
         dict(

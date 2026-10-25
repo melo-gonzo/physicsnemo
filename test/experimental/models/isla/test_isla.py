@@ -540,9 +540,9 @@ def test_float32_translation_invariance_on_every_device(device, interior):
 @pytest.mark.parametrize("interior", [False, True], ids=["surface", "interior"])
 def test_the_default_configuration_keeps_the_contracts(interior):
     """At the default width, slices and layers (the release configuration), on 2000
-    cells in float64, the interior task with its read live: a reflection with a
-    translation keeps p and maps v, to 1e-10 absolute (float64 roundoff through every
-    layer). Slow: the default network on CPU."""
+    cells in float64, in each task (the interior task with its read live): a
+    reflection with a translation keeps p and maps v, to 1e-10 absolute (float64
+    roundoff through every layer). Slow: the default network on CPU."""
     torch.manual_seed(0)
     m = live(_isla(interior=interior)).double().eval()
     pts, nrm, w, drv = cloud(2000)
