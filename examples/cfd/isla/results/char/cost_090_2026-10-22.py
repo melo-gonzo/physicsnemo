@@ -38,7 +38,7 @@ scorer rows (results/campaigns_2026-10-02/char/protocols/<run>/native/metrics.js
 
 Writes results/char/cost_090_v2.json: cost[key][arch] = {peak_gib, step_seconds, n_parameters, gpus, ranks, precision, source, note,
 seeds, per_seed, code, completed}. The first version of this script priced HiLiftAeroML from the lanes trained on the wing as
-stored (h090_hl_isla, udrv_hl_gt, udrv_hl_t) and wrote results/char/cost_090.json, which is kept as it was; every other entry of
+stored (h090_hl_isla, udrv_hl_gt, udrv_hl_t) and wrote results/char/cost_090.json (commit b05ba6b6e), which is kept as it was; every other entry of
 the two files is equal.
 usage: python cost_090_2026-10-22.py
 """

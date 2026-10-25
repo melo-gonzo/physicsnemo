@@ -137,7 +137,9 @@ MI = [
      "cells alone, and the standing's checkpoints were trained with the wing alone (@sec-standing-geometry)",
      f"{GP}; `U_inf_dir`, angle of attack 4 to 22°",
      "the same, with `U_inf_dir` concatenated", "the same"),
-    ("shift_suv", f"{BC}, the vehicle alone, as the standing's checkpoints were trained; `U_inf_dir`, constant", f"{GP}; `U_inf_dir`, constant",
+    ("shift_suv", f"{BC}; `U_inf_dir`, constant; ISLA's configuration also reads the CFD box's `inlet`, `outlet`, `floor`, "
+     "`side_walls` and `roof`, built at load, named by role with no condition type, predicting at the vehicle's cells alone, and "
+     "the standing's checkpoints were trained with the vehicle alone (@sec-standing-geometry)", f"{GP}; `U_inf_dir`, constant",
      "the same, with `U_inf_dir` concatenated", "the same"),
     ("airfrans", f"{BC}; {NT}; the inlet velocity `U_inf` as the velocity source of its declared scales: its direction, and as the one "
      "scalar the Reynolds number from its magnitude, the length unit of the given boundary and the configuration's "
@@ -727,8 +729,9 @@ are held out per checkpoint but do not confirm a result across the whole set of 
 steps, and the class refuses those checkpoints (@sec-using-checkpoint).** The parameters and the network are the same; the
 forward differs only in how a prediction point's wall geometry is built and how the boundary tokens are drawn. On the DrivAerML tasks,
 SHIFT-SUV, AirfRANS and HiLiftAeroML they were trained with configurations that read the body alone (the
-vehicle, the airfoil, the wing); on AeroZoo, the lug, Tensile2d and DeepJEB++ with every stored piece. The recipe's configurations read every stored piece of the domain's boundary, so on
-the DrivAerML tasks, SHIFT-SUV, HiLiftAeroML and AirfRANS they read more than the standings were trained with
+vehicle, the airfoil, the wing); on AeroZoo, the lug, Tensile2d and DeepJEB++ with every stored piece. The recipe's configurations read every stored piece of the domain's boundary, and on SHIFT-SUV and HiLiftAeroML
+the pieces the recipe builds, so on the DrivAerML tasks, SHIFT-SUV, HiLiftAeroML and AirfRANS they read more than the
+standings were trained with
 (@sec-limits-whole-boundary). On a surface
 task, which computes no wall geometry and draws no tokens, the four steps do not arise. @tbl-standing-geometry lists them.
 

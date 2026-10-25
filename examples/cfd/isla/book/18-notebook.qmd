@@ -42262,9 +42262,9 @@ scratch/isla-hl-dup-2026-10-24/NOTEBOOK_DRAFT_STAGE2.md (md5 9512b28d).
 
 ## 2026-10-24 — HL-SYMPLANE: HiLiftAeroML's symmetry plane built at load from the closed root cap of the dataset's own source STL, after a per-case check; all 690 canonical cases pass, the worst vertex 0.061 in from the cap's outline against a derived tolerance of 0.1345 in; the built plane matches the curation pipeline's to 4.6e-9 in area; the baselines' inputs bitwise unchanged; merged with this batch {#sec-nb-hl-symplane}
 
-**Question.** The supervisor asked Peter, at about 19:10 EDT: "may HiLift's symmetry plane take its root outline from the
-closed root cap in the dataset's own source STL files, applied to every case after a check that the case's own root points
-lie on it?" Peter answered: "Yes, that works". Can the plane be built so, at load, for every canonical case, and does it
+**Question.** The supervisor asked Peter: "may HiLift's symmetry plane take its root outline from the closed root cap in the
+dataset's own source STL files, applied to every case after a check that the case's own root points lie on it?" Peter
+answered, at about 19:10 EDT: "Yes, that works". Can the plane be built so, at load, for every canonical case, and does it
 match the plane the curation pipeline stored on its two files?
 
 **Method.** `AddSymmetryPlane` (`src/symmetry.py`, psharpe/isla-hl-symplane bc4081e75) runs in HiLift's reader on the whole
@@ -42315,8 +42315,8 @@ leave `isla_surface_highlift` without the boundary it names.
 with the check, its tolerance, the census and the comparison; the symmetry-plane In-flight callouts in 10 and 20 are gone.
 Records: results/campaigns_2026-10-23/hl_symplane/ (FINAL_REPORT.md, RESULTS.md, BOOK_CHANGES.md).
 
-*Applied for the supervisor by the book lane BOOK-SYM and second-read by a lane reviewer on 2026-10-24
-(scratch/isla-book-sym-2026-10-24/SECOND_READ_SYM.md).*
+*Applied for the supervisor by the book lane BOOK-SYM and second-read by a lane reviewer on 2026-10-24, its findings applied
+(scratch/isla-book-sym-2026-10-24/SECOND_READ_SYM.md, SECOND_READ_DISPOSITION.md).*
 
 ## 2026-10-24 — HL-AREA: on the uniform point cloud ISLA's error on the deduplicated HiLift wing is unchanged (0.989 to 0.999 of native) while the baselines' pressure error rises 3.6 to 5.5 times; the deduplicated lanes price within 6% of the stored-wing lanes {#sec-nb-hl-area}
 
@@ -42370,12 +42370,12 @@ table's cross-architecture ratios do not change.
 **For the book.** The point-cloud scores are records (`hl_dup_stage2_area`); `hilift_surface_090_dedup_2026-10-24.py` now
 reads them and writes `results/char/hilift_surface_090_dedup_v2.json`, and `cost_090_2026-10-22.py` prices HiLift from the
 deduplicated lanes into `results/char/cost_090_v2.json`; the earlier files stay as they were, and every other entry equals
-theirs. HiLift's point-cloud column is back in 04, 08, 10 and the index (three surface tasks), and the stored-wing cost label
+theirs. HiLift's point-cloud column is back in 04, 07, 08, 10 and the index (three surface tasks), and the stored-wing cost label
 in 08 and 19 is gone. Records: results/campaigns_2026-10-23/hl_dup_stage2_area/ (RESULTS.md, area_table.md, COST_REPORT.md,
 cost/); LHR job 375068, 1.09 GPU-h.
 
-*Applied for the supervisor by the book lane BOOK-SYM and second-read by a lane reviewer on 2026-10-24
-(scratch/isla-book-sym-2026-10-24/SECOND_READ_SYM.md).*
+*Applied for the supervisor by the book lane BOOK-SYM and second-read by a lane reviewer on 2026-10-24, its findings applied
+(scratch/isla-book-sym-2026-10-24/SECOND_READ_SYM.md, SECOND_READ_DISPOSITION.md).*
 
 ## 2026-10-22 — MECH-090: on Tensile2d the fixed compiled path's float32 gradients sit at a one-ulp eager floor, and pytorch/pytorch#195845 added a unit-dependent sink to ISLA's slice-state softmax (registered emulations not confirmed; a post-smoke emulation matches) {#sec-nb-mech090}
 
