@@ -641,7 +641,7 @@ def test_builtin_geometry_is_the_surface_s_for_every_draw_of_the_tokens():
     ref = exact_boundary_geometry(q, surface.points, surface.cells)
     seen = {}
     for budget in (50, 200, 10**6):
-        m = _interior(2, boundary_tokens=budget)
+        m = _interior(2, n_boundary_tokens=budget)
         for train in (False, True):
             m.train(train)
             tokens, d, u, out = _captured(
@@ -677,7 +677,7 @@ def test_outputs_are_invariant_to_the_resolution_of_the_input_mesh():
             gd = {"g": torch.ones(3, dtype=D)}
         fine = surface.subdivide(levels=1, filter="linear")
         finer = fine.subdivide(levels=1, filter="linear")
-        m = _interior(dim, boundary_tokens=400)
+        m = _interior(dim, n_boundary_tokens=400)
         run = lambda s: outputs(  # noqa: E731
             m(boundary_meshes={"wall": s}, prediction_points=q, global_data=gd)
         )
@@ -713,7 +713,7 @@ def test_evaluation_is_deterministic_and_training_draws_from_the_global_rng():
     training each call draws its start from the global torch RNG: two calls differ,
     and torch.manual_seed reproduces a call bitwise."""
     surface, q, gd = _airfoil_case()
-    m = _interior(2, boundary_tokens=100)
+    m = _interior(2, n_boundary_tokens=100)
     kw = dict(boundary_meshes={"airfoil": surface}, prediction_points=q, global_data=gd)
     t1, _, _, e1 = _captured(m, **kw)
     t2, _, _, e2 = _captured(m, **kw)
@@ -746,7 +746,7 @@ def test_the_tokens_are_an_exact_count_with_small_conditions_kept_whole():
         prediction_points=q,
         global_data=gd,
     )
-    tokens, _, _, _ = _captured(_interior(2, boundary_tokens=100), **kw)
+    tokens, _, _, _ = _captured(_interior(2, n_boundary_tokens=100), **kw)
     assert tokens.shape[0] == 100
     on_far = tokens["points"].norm(dim=-1) > 2
     assert int(on_far.sum()) == 12
@@ -770,7 +770,7 @@ def test_the_tokens_are_an_exact_count_with_small_conditions_kept_whole():
     )
 
 
-def test_boundary_tokens_is_validated():
+def test_n_boundary_tokens_is_validated():
     """A positive integer; a surface model, which samples nothing, takes only the
     default; an interior model needs boundary cells; the interior task is refused
     outside two and three dimensions."""
@@ -780,11 +780,11 @@ def test_boundary_tokens_is_validated():
                 output_schema=PV,
                 boundary_schemas=WALL,
                 interior=True,
-                boundary_tokens=bad,
+                n_boundary_tokens=bad,
             )
     with pytest.raises(ValueError, match="surface task"):
-        ISLA(output_schema=PV, boundary_schemas=WALL, boundary_tokens=1000)
-    ISLA(output_schema=PV, boundary_schemas=WALL, boundary_tokens=200_000)
+        ISLA(output_schema=PV, boundary_schemas=WALL, n_boundary_tokens=1000)
+    ISLA(output_schema=PV, boundary_schemas=WALL, n_boundary_tokens=200_000)
     surface, q, gd = _airfoil_case(60, 10)
     empty = Mesh(points=surface.points, cells=surface.cells[:0])
     with torch.no_grad(), pytest.raises(ValueError, match="have no cells"):

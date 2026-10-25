@@ -233,7 +233,7 @@ BUDGET_SIZES = [
 
 
 def _budget_model() -> ISLA:
-    """An interior model (ISLA-DTT) whose boundary_tokens (60) lies between the cell
+    """An interior model (ISLA-DTT) whose n_boundary_tokens (60) lies between the cell
     counts of BUDGET_SIZES, in evaluation (the draw's fixed start)."""
     torch.manual_seed(0)
     return ISLA(
@@ -241,7 +241,7 @@ def _budget_model() -> ISLA:
         boundary_schemas=SCHEMAS["interior"],
         global_schema={"g": {"rank": 1}, "re": {"rank": 0}},
         interior=True,
-        boundary_tokens=60,
+        n_boundary_tokens=60,
         hidden=32,
         n_layers=2,
         n_slices=8,

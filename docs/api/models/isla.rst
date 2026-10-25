@@ -112,12 +112,12 @@ distance enters through its ratio to the frame's length and the ratio's
 ``asinh(s / 1e-6)``, so the encoding is continuous through the surface (a point
 on it gets the code of its neighbours on either side). The
 boundary tokens are drawn from the same cells inside the forward pass. The
-budget is ``boundary_tokens`` per case (default 200,000), shared over the
+budget is ``n_boundary_tokens`` per case (default 200,000), shared over the
 named boundaries by water filling (a boundary with fewer cells than its share
 is kept whole); within a boundary each cell is drawn with probability
 proportional to its measure (capped at one) by systematic sampling along the
 Morton order of the cell centroids, and carries its Horvitz-Thompson measure,
-so the token count is exactly ``min(cells, boundary_tokens)`` (static shapes)
+so the token count is exactly ``min(cells, n_boundary_tokens)`` (static shapes)
 and every measure-weighted read is an unbiased quadrature
 of the full surface. In training the draw's start comes from the global torch
 RNG (``torch.manual_seed`` reproduces it); in evaluation (``model.eval()``) it

@@ -265,7 +265,7 @@ def test_scales_are_independent_of_the_draw_and_of_refinement():
     draw: two training draws (different starts) of 60 of the 190 cells, and a
     subdivision of the source condition's cells (each triangle into four, its data
     carried), give the same scales; L is the full mesh's exact one."""
-    m = _model(boundary_tokens=60).train()
+    m = _model(n_boundary_tokens=60).train()
     seen = _spy(m)
     meshes, gd, q = _case()
     for seed in (0, 1):

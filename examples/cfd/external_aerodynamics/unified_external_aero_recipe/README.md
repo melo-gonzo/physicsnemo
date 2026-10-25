@@ -446,7 +446,7 @@ writing into it, so a prediction depends on its point and the boundary alone; ea
 the model from the exact closest point on the cells, never read from the
 dataset, and the distance is positive on the side the cells' normals point
 to. The boundary tokens are drawn from the same cells inside the model:
-`boundary_tokens` per case (200,000, the class default, which every interior
+`n_boundary_tokens` per case (200,000, the class default, which every interior
 config states), water-filled over the named boundaries (a boundary with fewer
 cells than its share is kept whole, its unused share going to the others: on
 AeroZoo 50,000 per role when all four roles exceed that), each cell drawn with

@@ -510,11 +510,11 @@ def test_interior_isla_configs_use_the_class_default_boundary_budget(model):
     from physicsnemo.experimental.models.isla import ISLA
 
     cfg = _compose(model, "drivaer_ml_volume_reference")
-    default = inspect.signature(ISLA.__init__).parameters["boundary_tokens"].default
+    default = inspect.signature(ISLA.__init__).parameters["n_boundary_tokens"].default
     if cfg.model.get("interior", False):
-        assert cfg.model.boundary_tokens == default == 200_000
+        assert cfg.model.n_boundary_tokens == default == 200_000
     else:
-        assert "boundary_tokens" not in cfg.model
+        assert "n_boundary_tokens" not in cfg.model
 
 
 @pytest.mark.parametrize(

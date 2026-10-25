@@ -50,7 +50,7 @@
 # the direction from it, is computed inside the model from the exact closest
 # point on their cells (positive in the fluid) and is never an input. The
 # boundary tokens are drawn from the same cells inside the model:
-# `boundary_tokens` (200,000, the class default) cells, shared over the five by
+# `n_boundary_tokens` (200,000, the class default) cells, shared over the five by
 # water filling (the domain meshes, a few thousand faces, are kept whole), with
 # probability proportional to their area, each carrying its Horvitz-Thompson
 # measure, so the measure-weighted reads are quadratures of the whole boundary;
@@ -121,7 +121,7 @@ model:
   global_schema:
     U_inf_dir: {rank: 1}         # the unit freestream direction, read from global_data.U_inf_dir
   interior: true                 # predict at prediction_points: passive tokens that read the boundary (ISLA-DTT)
-  boundary_tokens: 200000        # boundary tokens drawn per case inside the model (equal to the class default)
+  n_boundary_tokens: 200000        # boundary tokens drawn per case inside the model (equal to the class default)
   hidden: 512                  # the reference configuration (REF-80 verdict, 2026-10-04): most accurate under 80 GiB per GPU on DrivAerML Surface and the 210-wing rung; equal to the class defaults
   n_layers: 12
   n_slices: 512

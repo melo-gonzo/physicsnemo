@@ -742,7 +742,7 @@ def test_isla_config_brings_its_own_scales_and_runs():
         "model.n_layers=1",
         "model.n_slices=4",
         "model.compile_blocks=false",
-        "model.boundary_tokens=64",
+        "model.n_boundary_tokens=64",
     )
     assert {
         name: {k: v["rank"] for k, v in schema.items()}

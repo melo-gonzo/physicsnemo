@@ -216,12 +216,12 @@ differences of positions, so every covariance contract holds.
 **Boundary tokens of the interior task.** The boundary tokens are a sample of
 the same cells, drawn inside the forward pass
 (:func:`~physicsnemo.experimental.models.isla.sampling.sample_boundary_cells`):
-``boundary_tokens`` (default 200,000) tokens per case, shared over the named
+``n_boundary_tokens`` (default 200,000) tokens per case, shared over the named
 boundaries by water filling (a boundary with fewer cells than its share is kept
 whole and its unused share goes to the others), each cell drawn with
 probability :math:`\pi_i` proportional to its measure (capped at one) by
 systematic sampling along the Morton order of the cell centroids. The count is
-exactly :math:`\min(\text{cells}, \text{boundary\_tokens})`, a function of the
+exactly :math:`\min(\text{cells}, \text{n\_boundary\_tokens})`, a function of the
 cell counts only, so the draw keeps static shapes; each kept cell's measure is its Horvitz-Thompson weight
 :math:`a_i / \pi_i`, so every measure-weighted read is an unbiased quadrature
 of the full surface, exact on a boundary kept whole; and the sample is spread
@@ -587,7 +587,7 @@ class ISLA(Module):
             ``compile_blocks``), and rank-2 boundary inputs are refused. The two
             are different parameter sets (a parameter without a gradient stops
             DDP), so the choice is made at construction.
-        boundary_tokens: Interior task only: the number of boundary tokens per
+        n_boundary_tokens: Interior task only: the number of boundary tokens per
             case (default 200,000, the reference configuration's). ``forward``
             takes each named boundary at full resolution and draws its tokens
             from the cells inside the model
@@ -599,7 +599,7 @@ class ISLA(Module):
             one) by systematic sampling along the Morton order of their
             centroids, and each kept cell carries its Horvitz-Thompson measure
             (its measure over its inclusion probability). The token count is
-            exactly ``min(total cells, boundary_tokens)``; a boundary with all
+            exactly ``min(total cells, n_boundary_tokens)``; a boundary with all
             its cells kept is read as given. In training the draw's start is
             uniform from the global torch RNG (``torch.manual_seed`` reproduces
             it), in evaluation (``model.eval()``) it is fixed, so inference is
@@ -708,7 +708,7 @@ class ISLA(Module):
         boundary_schemas: Mapping[str, FieldSchemaLike],
         global_schema: FieldSchemaLike | None = None,
         interior: bool = False,
-        boundary_tokens: int = BOUNDARY_TOKENS,
+        n_boundary_tokens: int = BOUNDARY_TOKENS,
         hidden: int = 512,
         n_layers: int = 12,
         n_slices: int = 512,
@@ -800,15 +800,15 @@ class ISLA(Module):
                 "the interior task's built-in geometry (the exact distance to the boundary "
                 f"surface) is implemented in two and three dimensions; got n_spatial_dims={self.n_spatial_dims}"
             )
-        if isinstance(boundary_tokens, bool) or int(boundary_tokens) != boundary_tokens or boundary_tokens < 1:
-            raise ValueError(f"boundary_tokens must be a positive integer; got {boundary_tokens!r}")
-        if not self.interior and boundary_tokens != BOUNDARY_TOKENS:
+        if isinstance(n_boundary_tokens, bool) or int(n_boundary_tokens) != n_boundary_tokens or n_boundary_tokens < 1:
+            raise ValueError(f"n_boundary_tokens must be a positive integer; got {n_boundary_tokens!r}")
+        if not self.interior and n_boundary_tokens != BOUNDARY_TOKENS:
             raise ValueError(
-                "boundary_tokens is the interior task's budget of boundary tokens; a surface "
+                "n_boundary_tokens is the interior task's budget of boundary tokens; a surface "
                 "task (interior=False) reads every boundary cell it is given and samples "
-                f"none, so it takes the default ({BOUNDARY_TOKENS}); got {boundary_tokens!r}"
+                f"none, so it takes the default ({BOUNDARY_TOKENS}); got {n_boundary_tokens!r}"
             )
-        self.boundary_tokens = int(boundary_tokens)
+        self.n_boundary_tokens = int(n_boundary_tokens)
         ### Checkpoints store the constructor arguments as JSON. A FieldSchema
         ### is a dict and serializes as it stands; recording the parsed schemas
         ### keeps the metadata JSON-safe whatever container the caller passed
@@ -1737,7 +1737,7 @@ class ISLA(Module):
                 boundaries and those read as conditions only (a tunnel's floor,
                 walls, inlet and outlet). An interior task takes the boundaries at full
                 resolution: their cells are the surface of the prediction
-                points' geometry, and its tokens are ``boundary_tokens`` of
+                points' geometry, and its tokens are ``n_boundary_tokens`` of
                 them drawn inside the model (module docstring), each kept cell
                 with its Horvitz-Thompson measure.
             prediction_points: The interior task's prediction points
@@ -1917,7 +1917,7 @@ class ISLA(Module):
             with torch.autocast(q_points.device.type, enabled=False):
                 draw = [draw_inputs(m) for m in meshes]
                 kept, weights = sample_boundary_cells(
-                    [a for a, _ in draw], [x for _, x in draw], self.boundary_tokens, start
+                    [a for a, _ in draw], [x for _, x in draw], self.n_boundary_tokens, start
                 )
             boundary = boundary.apply(lambda t: t[:, kept], batch_size=[1, kept.shape[0]])
             boundary["measure"] = weights[None].to(boundary["measure"].dtype)

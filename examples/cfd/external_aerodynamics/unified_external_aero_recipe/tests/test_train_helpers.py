@@ -289,7 +289,7 @@ def _isla_dtt_case(n: int, measured: bool = True, seed: int = 0):
         boundary_schemas={"vehicle": {}},
         global_schema={"U_inf_dir": {"rank": 1}},
         interior=True,
-        boundary_tokens=40,
+        n_boundary_tokens=40,
         hidden=16,
         n_layers=2,
         n_slices=4,
