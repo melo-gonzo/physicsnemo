@@ -52,6 +52,7 @@ pipeline:
         high:
           _target_: torch.tensor
           data: [1.0, 1.0, 0.0]
+        validate_args: false
   transforms:
     # The other boundaries of the PDE domain, which the case files do not store: the CFD box,
     # x -40..80 m, y -20..20 m, z -0.024..19.976 m. It is the interior's exact bounding box,

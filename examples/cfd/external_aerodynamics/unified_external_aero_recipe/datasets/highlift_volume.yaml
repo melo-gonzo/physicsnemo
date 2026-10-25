@@ -59,6 +59,7 @@ pipeline:
   #       high:
   #         _target_: torch.tensor
   #         data: [1.0, 1.0, 0.0]
+  #       validate_args: false
   transforms:
     # The unit freestream direction is the baseline's global input
     # (geotransolver_volume_highlift.yaml reads global_data.U_inf_dir), as in
