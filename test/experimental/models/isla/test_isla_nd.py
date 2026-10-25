@@ -44,8 +44,8 @@ def _reflection(d: int) -> torch.Tensor:
     return r
 
 
-def _problem(d: int, n: int = 160, seed: int = 0):
-    pts, nrm, w, drv = cloud(n, d, seed=seed, dtype=torch.float32)
+def _problem(d: int, n: int = 160, seed: int = 0, dtype=torch.float32):
+    pts, nrm, w, drv = cloud(n, d, seed=seed, dtype=dtype)
     return soup(pts, nrm, w), drv
 
 
@@ -113,23 +113,26 @@ def test_levi_civita_symbol_and_pseudovector_counts():
     assert m2.output_layouts["p"].dim == 2
 
 
-def test_two_dimensional_contracts_rotation_translation_magnitude_and_reflection():
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64], ids=["fp32", "fp64"])
+def test_two_dimensional_contracts_rotation_translation_magnitude_and_reflection(dtype):
     """On a polyline boundary: rotation equivariance of every rank and parity under a
     random SO(2) map, translation invariance, magnitude invariance of the global
     direction, and the reflection behaviour: even fields transform as tensors, odd
-    fields pick up the extra sign."""
+    fields pick up the extra sign. Float32 at 1e-4 relative; float64 at 1e-11
+    absolute (roundoff of outputs of order one)."""
     d = 2
-    m = _model(d, OUT2)
-    mesh, drv = _problem(d)
+    m = _model(d, OUT2).to(dtype)
+    mesh, drv = _problem(d, dtype=dtype)
     assert mesh.n_manifold_dims == 1
-    q = orthogonal(d, 3).float()
-    r = _reflection(d)
+    q = orthogonal(d, 3).to(dtype)
+    r = _reflection(d).to(dtype)
     base = _run(m, mesh, drv)
     rot = _run(m, transform(mesh, q), drv @ q.T)
-    shifted = _run(m, transform(mesh, shift=torch.full((d,), 7.0)), drv)
+    shifted = _run(m, transform(mesh, shift=torch.full((d,), 7.0, dtype=dtype)), drv)
     mag = _run(m, mesh, 3.5 * drv)
     ref = _run(m, transform(mesh, r), drv @ r.T)
-    tol = dict(rtol=1e-4, atol=1e-5)
+    f64 = dtype == torch.float64
+    tol = dict(rtol=0.0, atol=1e-11) if f64 else dict(rtol=1e-4, atol=1e-5)
     n = mesh.n_cells
     assert (
         base["p"].shape == (n,)
@@ -143,7 +146,8 @@ def test_two_dimensional_contracts_rotation_translation_magnitude_and_reflection
     torch.testing.assert_close(rot["a"], law(base["a"], q, 2), **tol)
     for k in base:
         ### a shift of 7 length units moves the float32 positions' roundoff by ~1e-5
-        torch.testing.assert_close(shifted[k], base[k], rtol=1e-4, atol=1e-4)
+        shift_tol = tol if f64 else dict(rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(shifted[k], base[k], **shift_tol)
         torch.testing.assert_close(mag[k], base[k], **tol)
     ### det(r) = -1: even fields transform as tensors, odd fields flip in addition.
     torch.testing.assert_close(ref["p"], base["p"], **tol)

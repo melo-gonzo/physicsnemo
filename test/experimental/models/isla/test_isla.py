@@ -67,8 +67,8 @@ def _rows(out, sl):
 
 def _assert_rotated(rot, base, q, atol=1e-10):
     rot, base = outputs(rot), outputs(base)
-    assert torch.allclose(rot["p"], base["p"], atol=atol)
-    assert torch.allclose(rot["v"], base["v"] @ q.T, atol=atol)
+    assert torch.allclose(rot["p"], base["p"], atol=atol, rtol=0.0)
+    assert torch.allclose(rot["v"], base["v"] @ q.T, atol=atol, rtol=0.0)
 
 
 def _rotation(seed=0):
@@ -274,8 +274,8 @@ def test_geo_pool_then_project_is_exact():
 
 
 def test_interior_task_contracts():
-    """The interior task, ISLA-DTT (here with its boundary read at its zero
-    initialization; test_isla_tree_read.py exercises the read): the prediction points
+    """The interior task, ISLA-DTT (its boundary read live, at the default opening
+    angle but for the refinement check): the prediction points
     read every block's slices and never write into them, so a prediction is exactly
     independent of the other points of the request (alone, a prefix, any order, any
     chunking), while
@@ -480,6 +480,81 @@ def test_frame_contracts():
     assert same(_run(m, transform(mesh, shift=shift), drv), base, atol=1e-10)
     q = _rotation()
     _assert_rotated(_run(m, transform(mesh, q), drv @ q.T), base, q)
+
+
+def _float32_case(device, interior):
+    """A float32 model (its boundary read live for the interior task) on ``device``
+    and a case of 500 cells, with 150 prediction points about four units out."""
+    torch.manual_seed(0)
+    m = live(_isla(hidden=64, n_layers=3, n_slices=32, interior=interior))
+    pts, nrm, w, drv = cloud(500, dtype=torch.float32)
+    q = cloud(150, seed=1, scale=(4.0, 4.0, 4.0), dtype=torch.float32)[0]
+    return m.to(device).eval(), soup(pts, nrm, w), drv, q if interior else None
+
+
+def _run_on(device, m, mesh, drv, q):
+    return outputs(
+        _run(m, mesh.to(device), drv.to(device), None if q is None else q.to(device))
+    )
+
+
+#: The float32 contracts' bound, relative to the largest output: float32 roundoff
+#: (eps 1.2e-7) of the moved inputs, amplified through the network and its kernels
+#: (measured at most 3e-6 on x86, 9e-6 on Grace and 2.4e-6 on a GB300 with the fused
+#: kernels; the translation by about 13 units is the larger).
+F32_BOUND = 1e-4
+
+
+@pytest.mark.parametrize("interior", [False, True], ids=["surface", "interior"])
+def test_float32_rotation_equivariance_on_every_device(device, interior):
+    """In float32, on CPU and on CUDA (every kernel at ``auto``): a rotation of the
+    boundary, the global direction and the prediction points keeps p and rotates v,
+    to F32_BOUND of the largest output."""
+    m, mesh, drv, q = _float32_case(device, interior)
+    base = _run_on(device, m, mesh, drv, q)
+    R = _rotation().float()
+    rot = _run_on(
+        device, m, transform(mesh, R), drv @ R.T, None if q is None else q @ R.T
+    )
+    tol = F32_BOUND * max(float(v.abs().max()) for v in base.values())
+    assert torch.allclose(rot["p"], base["p"], atol=tol, rtol=0.0)
+    assert torch.allclose(rot["v"], base["v"] @ R.T.to(device), atol=tol, rtol=0.0)
+
+
+@pytest.mark.parametrize("interior", [False, True], ids=["surface", "interior"])
+def test_float32_translation_invariance_on_every_device(device, interior):
+    """In float32, on CPU and on CUDA (every kernel at ``auto``): a translation of
+    the boundary and the prediction points changes no output, to F32_BOUND of the
+    largest output."""
+    m, mesh, drv, q = _float32_case(device, interior)
+    base = _run_on(device, m, mesh, drv, q)
+    t = torch.tensor([3.0, -7.0, 11.0])
+    moved = _run_on(
+        device, m, transform(mesh, shift=t), drv, None if q is None else q + t
+    )
+    tol = F32_BOUND * max(float(v.abs().max()) for v in base.values())
+    assert same(moved, base, atol=tol)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("interior", [False, True], ids=["surface", "interior"])
+def test_the_default_configuration_keeps_the_contracts(interior):
+    """At the default width, slices and layers (the release configuration), on 2000
+    cells in float64, in each task (the interior task with its read live): a
+    reflection with a translation keeps p and maps v, to 1e-10 absolute (float64
+    roundoff through every layer). Slow: the default network on CPU."""
+    torch.manual_seed(0)
+    m = live(_isla(interior=interior)).double().eval()
+    pts, nrm, w, drv = cloud(2000)
+    mesh = soup(pts, nrm, w)
+    q = cloud(200, seed=1, scale=(4.0, 4.0, 4.0))[0] if interior else None
+    base = _run(m, mesh, drv, q)
+    R = orthogonal(3, 0, improper=True)
+    t = torch.tensor([3.0, -7.0, 11.0], dtype=D)
+    moved = _run(
+        m, transform(mesh, R, t), drv @ R.T, None if q is None else q @ R.T + t
+    )
+    _assert_rotated(moved, base, R)
 
 
 def test_frame_is_sampling_consistent():
@@ -689,6 +764,79 @@ def test_mesh_validation_errors():
             boundary_meshes={"wall": soup(pts, nrm, w)},
             global_data=drv,
         )
+
+
+def test_the_batched_routine_validates_its_inputs():
+    """``_forward_tensors`` (the batched routine the release tests pin) refuses, with
+    the offending argument named, an undeclared condition or one with fields, tensors
+    of the wrong shape, prediction points the task does not take or without the
+    boundary surface, and global inputs that are not the declared set."""
+    m = _isla(hidden=16, n_layers=1, n_slices=4).double()
+    mi = _isla(hidden=16, n_layers=1, n_slices=4, interior=True).double()
+    mf = _isla(
+        hidden=16, n_layers=1, n_slices=4, boundary_schemas={"wall": {"t": {"rank": 0}}}
+    )
+    pts = torch.randn(1, 6, 3, dtype=D)
+    nrm = torch.nn.functional.normalize(torch.randn(1, 6, 3, dtype=D), dim=-1)
+    kw = {"points": pts, "normals": nrm, "global_inputs": {"g": torch.ones(3, dtype=D)}}
+    q = torch.randn(1, 4, 3, dtype=D)
+    cases = [
+        (
+            m,
+            {"condition": "inlet"},
+            r"condition 'inlet' is not one of the declared boundary conditions \['wall'\]",
+        ),
+        (
+            mf,
+            {},
+            "the batched routine takes no per-token inputs; pass the meshes to forward",
+        ),
+        (
+            m,
+            {"points": pts[..., :2]},
+            r"Expected points of shape \(B, N, 3\) \(this model has n_spatial_dims=3\) but got tensor of shape \(1, 6, 2\)",
+        ),
+        (
+            m,
+            {"normals": nrm[:, :5]},
+            r"Expected normals of shape \(1, 6, 3\) but got tensor of shape \(1, 5, 3\)",
+        ),
+        (
+            m,
+            {"measure_weights": torch.ones(1, 5, dtype=D)},
+            r"Expected measure_weights of shape \(1, 6\)",
+        ),
+        (mi, {}, r"an interior model \(interior=True\) needs query_points"),
+        (
+            m,
+            {"query_points": q},
+            r"query_points given to a surface model \(interior=False\)",
+        ),
+        (
+            mi,
+            {"query_points": q[0]},
+            r"Expected query_points of shape \(1, Q, 3\) but got tensor of shape \(4, 3\)",
+        ),
+        (
+            mi,
+            {"query_points": q},
+            "query_points need the boundary surface: surface_points and surface_cells",
+        ),
+        (
+            m,
+            {"global_inputs": {"h": torch.ones(3, dtype=D)}},
+            r"global_inputs fields do not match the declared set: missing \['g'\], unexpected \['h'\]",
+        ),
+        (
+            m,
+            {"global_inputs": {"g": torch.ones(2, dtype=D)}},
+            r"global_inputs\['g'\]: expected 3 values per case, got \(2,\)",
+        ),
+    ]
+    for model, args, match in cases:
+        with pytest.raises(ValueError, match=match):
+            model._forward_tensors(**{**kw, **args})
+    assert m._forward_tensors(**kw)["p"].shape == (1, 6)
 
 
 def test_rms_distance_scale_contracts():

@@ -168,7 +168,7 @@ def test_covariance_of_every_rank_and_parity(K, improper):
         out = _forward(m, mesh, drv, K, R=R, shift=shift)
         for name, spec in m.output_schema.items():
             assert torch.allclose(
-                out[name], _transform(base[name], R, spec), atol=1e-11
+                out[name], _transform(base[name], R, spec), atol=1e-11, rtol=0.0
             ), (name, K, improper)
 
 
@@ -178,7 +178,7 @@ def test_translation_invariance_alone():
     base = _forward(m, mesh, drv, 1)
     tr = _forward(m, mesh, drv, 1, shift=torch.tensor([3.0, -7.0, 11.0], dtype=D))
     for k in base:
-        assert torch.allclose(tr[k], base[k], atol=1e-11), k
+        assert torch.allclose(tr[k], base[k], atol=1e-11, rtol=0.0), k
 
 
 def test_symmetric_outputs_are_symmetric():
@@ -186,11 +186,11 @@ def test_symmetric_outputs_are_symmetric():
     mesh, drv = _boundary()
     out = _forward(m, mesh, drv, 1)
     ts, t3s, t4s = out["ts"], out["t3s"], out["t4s"]
-    assert torch.allclose(ts, ts.transpose(-1, -2), atol=1e-12)
+    assert torch.allclose(ts, ts.transpose(-1, -2), atol=1e-12, rtol=0.0)
     for perm in ((0, 2, 3, 1), (0, 1, 3, 2), (0, 3, 2, 1)):
-        assert torch.allclose(t3s, t3s.permute(*perm), atol=1e-12)
+        assert torch.allclose(t3s, t3s.permute(*perm), atol=1e-12, rtol=0.0)
     for perm in ((0, 2, 1, 3, 4), (0, 1, 2, 4, 3), (0, 4, 3, 2, 1)):
-        assert torch.allclose(t4s, t4s.permute(*perm), atol=1e-12)
+        assert torch.allclose(t4s, t4s.permute(*perm), atol=1e-12, rtol=0.0)
     ### the general rank-2 output is generically NOT symmetric
     assert not torch.allclose(out["t"], out["t"].transpose(-1, -2), atol=1e-6)
 
@@ -203,10 +203,14 @@ def test_odd_outputs_are_pseudotensors_and_even_ones_are_not():
     mesh, drv = _boundary()
     base = _forward(m, mesh, drv, 1)
     out = _forward(m, mesh, drv, 1, R=-torch.eye(3, dtype=D))
-    assert torch.allclose(out["pv"], base["pv"], atol=1e-11)  # (-1)^1 * det = +1
-    assert torch.allclose(out["v"], -base["v"], atol=1e-11)
-    assert torch.allclose(out["pt"], -base["pt"], atol=1e-11)  # (-1)^2 * det = -1
-    assert torch.allclose(out["t"], base["t"], atol=1e-11)
+    assert torch.allclose(
+        out["pv"], base["pv"], atol=1e-11, rtol=0.0
+    )  # (-1)^1 * det = +1
+    assert torch.allclose(out["v"], -base["v"], atol=1e-11, rtol=0.0)
+    assert torch.allclose(
+        out["pt"], -base["pt"], atol=1e-11, rtol=0.0
+    )  # (-1)^2 * det = -1
+    assert torch.allclose(out["t"], base["t"], atol=1e-11, rtol=0.0)
     assert base["pv"].norm() > 1e-3 and base["pt"].norm() > 1e-3
     assert base["t3o"].norm() > 1e-3
 
@@ -291,7 +295,7 @@ def test_rank_two_output_in_the_interior_task():
         out = _forward(m, mesh, drv, 1, R=R, q=q)
         for name, spec in m.output_schema.items():
             assert torch.allclose(
-                out[name], _transform(base[name], R, spec), atol=1e-11
+                out[name], _transform(base[name], R, spec), atol=1e-11, rtol=0.0
             ), (name, improper)
 
 

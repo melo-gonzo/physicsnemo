@@ -173,7 +173,7 @@ def test_pose_covariance_with_the_domain_moved_alike(improper):
     ya, yb = outputs(a), outputs(b)
     for name, spec in OUT.items():
         torch.testing.assert_close(
-            yb[name], law(ya[name], R, spec["rank"]), atol=1e-9, rtol=1e-7
+            yb[name], law(ya[name], R, spec["rank"]), atol=1e-9, rtol=0.0
         )
 
 
