@@ -815,6 +815,8 @@ def _geo_region_bwd(
     b, n, s = logits_pre.shape
     t, k = d_hat.shape[2], n_global
     nw = weight.numel()
+    ### The kernel reads r and n_hat with the strides it writes gr and gn with.
+    r, n_hat = r.contiguous(), n_hat.contiguous()
     grad_bias = grad_bias.contiguous()
     grad_mix = grad_mix.contiguous()
     grad_pooled = grad_pooled.contiguous()
@@ -856,8 +858,8 @@ def _geo_region_bwd(
         n_tiles,
         r.stride(0),
         r.stride(1),
-        gn.stride(0),
-        gn.stride(1),
+        n_hat.stride(0),
+        n_hat.stride(1),
         d_hat.stride(0),
         d_hat.stride(1),
         d_hat.stride(2),
