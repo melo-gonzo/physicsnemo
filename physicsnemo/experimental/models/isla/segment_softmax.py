@@ -116,8 +116,10 @@ if HAS_TRITON:
     ):  # fmt: skip
         """One point: online softmax over its pairs; out[s] (H, C), lse[s] (H)."""
         s = tl.program_id(0).to(tl.int64)
-        start = tl.load(off_ptr + s)
-        end = tl.load(off_ptr + s + 1)
+        ### int64 pair offsets whatever the plan's dtype: p * H passes 2**31 at
+        ### P > 2**28 pairs, and PairPlan.build gives int32 offsets for int32 indices.
+        start = tl.load(off_ptr + s).to(tl.int64)
+        end = tl.load(off_ptr + s + 1).to(tl.int64)
         hh = tl.arange(0, H)
         q = tl.reshape(tl.load(q_ptr + s * (H * KC) + tl.arange(0, H * KC)).to(tl.float32), [H, KC])
         m_run = tl.full([H], float("-inf"), tl.float32)
@@ -167,8 +169,8 @@ if HAS_TRITON:
         ``LOGM_GRAD``, also the log measure's, the kernel-term gradient summed over
         the heads, in float32)."""
         s = tl.program_id(0).to(tl.int64)
-        start = tl.load(off_ptr + s)
-        end = tl.load(off_ptr + s + 1)
+        start = tl.load(off_ptr + s).to(tl.int64)  # int64 pair offsets, as in the forward
+        end = tl.load(off_ptr + s + 1).to(tl.int64)
         hh = tl.arange(0, H)
         q = tl.reshape(tl.load(q_ptr + s * (H * KC) + tl.arange(0, H * KC)).to(tl.float32), [H, KC])
         lse = tl.load(lse_ptr + s * H + hh)
