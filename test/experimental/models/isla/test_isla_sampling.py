@@ -107,6 +107,7 @@ def test_the_count_is_exact(budget):
         assert torch.equal(kept, kept.unique())
 
 
+@pytest.mark.slow  # 5 s on LHR CPU: 2,000 draws
 def test_horvitz_thompson_measure_sums_are_unbiased():
     """Over random starts each condition's sum of token weights is unbiased for its
     total measure (within four standard errors over 2,000 draws), the condition kept
@@ -163,6 +164,7 @@ def test_an_empty_condition_takes_no_tokens():
     assert counts.tolist() == [0, 30, 30]
 
 
+@pytest.mark.slow  # 5 s on LHR CPU: a compile over every cell count
 def test_one_compiled_graph_for_every_cell_count():
     """Under torch.compile(fullgraph=True, dynamic=True) the draw is one graph whether
     the cells exceed the budget or not, and matches eager."""

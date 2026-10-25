@@ -155,6 +155,7 @@ def _assert_close(a, b, device, rel=3e-2):
         assert (a - b).norm() <= rel * b.norm() + 1e-6
 
 
+@pytest.mark.slow  # 32-55 s per case on LHR CPU: Inductor compiles the whole model
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("task", ["surface", "inputs", "scales", "global_source"])
 def test_whole_model_compiles_fullgraph_with_dynamic_shapes_and_matches_eager(
@@ -256,6 +257,7 @@ def _drawn(fn, case) -> dict:
     return leaves
 
 
+@pytest.mark.slow  # 32 s on LHR CPU: the case inputs compiled in evaluation and training
 def test_the_in_model_boundary_draw_compiles_once_across_the_budget():
     """The interior model's case inputs (the in-model draw, then the prediction
     points' geometry) compiled with one graph, in evaluation (the fixed start), give
@@ -284,6 +286,7 @@ def test_the_in_model_boundary_draw_compiles_once_across_the_budget():
         assert all(torch.isfinite(v).all() for v in out.values())
 
 
+@pytest.mark.slow  # 30 s on LHR CPU: a cold and a warm compile
 def test_a_warm_compile_cache_reuses_the_graph_across_the_budget():
     """A second run on the first run's Inductor cache (a cache hit on its first
     case) compiles no second graph for the cases on the other side of the budget.

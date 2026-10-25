@@ -433,6 +433,7 @@ def test_every_condition_s_parameters_train_even_when_it_is_absent():
     assert all(torch.isfinite(v).all() for v in out.values())
 
 
+@pytest.mark.slow  # 12 s on LHR CPU: one compile per subset
 def test_a_change_of_condition_subset_compiles_once_per_subset():
     """Under the whole-model compile (the surface task's), cases of one subset with
     other cell counts reuse a graph; another subset is another graph, compiled once,

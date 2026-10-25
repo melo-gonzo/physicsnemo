@@ -273,6 +273,7 @@ def test_torch_compile_fullgraph_matches_eager(geo_kernel):
 
 
 # --------------------------------------------------------------------------- compiled blocks
+@pytest.mark.slow  # 6 s on LHR CPU, 9 s on GB300: compiled blocks
 @pytest.mark.parametrize(
     "device", ["cpu", pytest.param("cuda", marks=[pytest.mark.cuda, requires_cuda])]
 )
