@@ -1773,7 +1773,7 @@ def _centroid(simplex: torch.Tensor, flat=None) -> torch.Tensor:
 def _certified_tied(tq: torch.Tensor, c: torch.Tensor, tau: torch.Tensor, nq: int) -> torch.Tensor:
     """Per query ``(nq,)``, whether its tie rows (``tq`` ``(P,)``, sorted) hold two
     directions ``c`` ``(P, d)`` farther apart than the sum of their bounds ``tau``
-    ``(P,)``. Chunked over the queries."""
+    ``(P,)`` (with zero bounds, two that differ). Chunked over the queries."""
     tied = torch.zeros(nq, dtype=torch.bool, device=c.device)
     if tq.numel() == 0:
         return tied
@@ -1826,15 +1826,24 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     beside the foot of the perpendicular on a cell next to the vertex), except on
     the surface, where every cell within the bound holds the query. The query is
     on the surface when its closest cell's distance interval reaches 0, ``D_min -
-    E_min <= 0``: its coordinates cannot tell it from a point of the surface. A tie's
+    E_min <= 0``: its coordinates cannot tell it from a point of the surface. Cells
+    at exactly the least distance (cells sharing the closest point compute it
+    bitwise) are ordered by their positions, the lexicographic order of their
+    canonical vertices as given and then their parity, not by their indices, so the
+    closest cell, its bound and its weights do not depend on the cells' order. A tie's
     directions are the unit vectors from the surface to the query, and on the
     surface the unit normals of the tied cells that have one (with none, the query
-    keeps its closest cell's normal). The query is tied when two of them are
-    certified distinct, farther apart than the sum of their bounds ``tau = sqrt(2)
-    s`` (2 where ``s >= 1``), ``s`` a bound on the sine of the angle between a
-    computed direction and the exact one of the inputs as given (below); the
-    least-norm point is then taken over all of the tie's directions, odd in them on
-    the surface (half its value at the normals less its value at their negations),
+    keeps its closest cell's normal). On the surface the query is tied when two of
+    these normals differ, certified distinct or not: their least-norm point lies in
+    their hull, so within ``tau_k + max_j tau_j`` of each member ``k`` (the group's
+    certified uncertainty) where none is certified distinct, and it is a function of
+    the set, where one of them would depend on the cells' order and the certificate
+    on the queries' precision. Off the surface it is tied when two of its directions
+    are certified distinct, farther apart than the sum of their bounds
+    ``tau = sqrt(2) s`` (2 where ``s >= 1``), ``s`` a bound on the sine of the angle
+    between a computed direction and the exact one of the inputs as given (below).
+    The least-norm point is then taken over all of the tie's directions, odd in them
+    on the surface (half its value at the normals less its value at their negations),
     so a winding flip negates it bitwise.
 
     The exact search runs on candidate pairs that contain every cell with
@@ -1948,7 +1957,8 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
         w_sum = None
         rounding = 40 * torch.finfo(query_points.dtype).eps / 2 * (q_norm + reach.max())
         li, pk = _segment_candidates(query_c, points_c, cells, (2 * (rounding + err_max)).to(query_points.dtype))
-    ### In the order of (query, cell), so the first minimum is the least cell index.
+    ### In the order of (query, cell): the same pairs in the same order from either
+    ### traversal.
     f = cells.shape[0]
     key = (li * f + pk).sort().values
     li, pk = key // f, key % f
@@ -1964,6 +1974,19 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     first = torch.full((nq,), li.shape[0], dtype=torch.long, device=dev).scatter_reduce(
         0, li, torch.where(dist == d_min[li], pair, li.shape[0]), "amin"
     )
+    ### Equal least distances (cells sharing the closest point compute it bitwise, so
+    ### they tie exactly) are broken by the cells' positions, not by their indices: the
+    ### lexicographic order of their canonical vertices as given, then their parity.
+    ### So the closest cell, its band and its weights are functions of the positions.
+    ### One key column at a time, each keeping the rows at the query's least value;
+    ### identical keys are the same cell, so the least pair among them is the cell.
+    least = dist == d_min[li]
+    key = torch.cat([points[cells[pk]].flatten(1), parity[pk, None].to(points.dtype)], 1)
+    for k in key.unbind(1):
+        k_min = k.new_full((nq,), torch.inf).scatter_reduce(0, li, torch.where(least, k, torch.inf), "amin")
+        least = least & (k == k_min[li])
+    pick = torch.full_like(first, li.shape[0]).scatter_reduce(0, li, torch.where(least, pair, li.shape[0]), "amin")
+    first = torch.where(pick < li.shape[0], pick, first)
     idx, on_wall = pk[first], d_min - err[first] <= 0
     ### The feature of each closest point (a vertex, an edge, or -1 for a cell's
     ### interior), and whether all of its cells reach it.
@@ -2023,13 +2046,13 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     )
     wall = on_wall[tq]
     tc = torch.where(wall[:, None], wall_n[pk[tie]], tc)
-    ### A tie is two certified-distinct directions, |c_i - c_j| > tau_i + tau_j, tau =
-    ### sqrt(2) s (the chord of a sine error s < 1; else 2). A cell's normal: its
-    ### vertices each within eta = u |v| of the exact ones (their storage rounding),
-    ### so |dX| <= 4 eta L + 4 eta^2 against the certified |X| - |E| (Shewchuk), with
-    ### the float64 normal's own bound (delta) and its normalization. A direction from
-    ### a point: the point within the band E_k (and Ericson's misplacement on a
-    ### face), over D_k.
+    ### Off the surface, a tie is two certified-distinct directions, |c_i - c_j| >
+    ### tau_i + tau_j, tau = sqrt(2) s (the chord of a sine error s < 1; else 2).
+    ### A cell's normal: its vertices each within eta = u |v| of the exact ones (their
+    ### storage rounding), so |dX| <= 4 eta L + 4 eta^2 against the certified
+    ### |X| - |E| (Shewchuk), with the float64 normal's own bound (delta) and its
+    ### normalization. A direction from a point: the point within the band E_k (and
+    ### Ericson's misplacement on a face), over D_k.
     pt = pk[tie]
     st = simplex[pt]
     eta = u_in * given_reach[pt]
@@ -2047,7 +2070,11 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     s_p = torch.where(d_t > 0, (e_t + 4 * u64 * d_t) / d_t, torch.inf)
     s_c = s_n + torch.where(d_t > 0, (mis + e_t) / d_t, torch.inf)
     s = torch.where(wall, s_n, torch.where(on_cell, s_c, s_p))
-    tied = _certified_tied(tq, tc, torch.where(s < 1, 2.0**0.5 * s, 2.0), nq)
+    ### On the surface the bound is 0 (normals that differ tie): the least-norm point of
+    ### their hull lies within tau_k + max_j tau_j of each member k, the group's
+    ### certified uncertainty, so it needs no certificate, and it is the certified case's own value, so u does not depend on
+    ### the queries' precision.
+    tied = _certified_tied(tq, tc, torch.where(wall, 0.0, torch.where(s < 1, 2.0**0.5 * s, 2.0)), nq)
     if any_flat:
         ### On a zero-area closest cell the direction is the tie's over the cells
         ### that hold the query and have a normal: theirs, or 0 with none (the
@@ -2200,7 +2227,9 @@ def exact_boundary_geometry(
     :math:`\operatorname{sign}(d)\, u` is the least-norm element of the Clarke
     generalized gradient of :math:`d`: the midpoint of two directions, zero when
     they cancel (no preferred direction). It is a function of the tie set, not of
-    the order of the vertices, the cells or the search, and a winding flip
+    the order of the vertices, the cells or the search (where cells lie at exactly
+    the least distance and their directions do not tie, the closest cell is chosen
+    by their positions, not their indices), and a winding flip
     negates :math:`d` and :math:`\operatorname{sign}(d)\, u` bitwise (every closest point is
     computed on its cell's vertices in the lexicographic order of their
     positions).
@@ -2212,12 +2241,14 @@ def exact_boundary_geometry(
     cells re-oriented so their normals follow the map), :math:`d` scaling
     with the geometry.
 
-    Every decision (a tie, the query on the surface) is certified against the
-    inputs' own rounding: the error bound is the rounding of the coordinates as
-    given in the queries' precision plus a worst case of the float64 arithmetic,
-    which runs in the boundary's centred frame (its measure-weighted centroid as
-    the origin), so a boundary far from the origin costs the arithmetic nothing;
-    and directions tie only where they are certified distinct.
+    Every decision (a tie off the surface, the query on the surface and the cells
+    that hold it) is certified against the inputs' own rounding: the error bound is
+    the rounding of the coordinates as given in the queries' precision plus a worst
+    case of the float64 arithmetic, which runs in the boundary's centred frame (its
+    measure-weighted centroid as the origin), so a boundary far from the origin
+    costs the arithmetic nothing; and off the surface directions tie only where
+    they are certified distinct (on it the cells that hold the query are certified,
+    and u is the least-norm point of their normals wherever they differ).
 
     The search runs without gradient; the offset :math:`x - p` is then rebuilt
     from the query and its cell's vertices with the barycentric weights of its
