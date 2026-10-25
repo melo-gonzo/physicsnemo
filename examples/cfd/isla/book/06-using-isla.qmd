@@ -1460,17 +1460,22 @@ import physicsnemo.experimental.models.isla.geo_kernel as GK
 vol = ISLA_CFGS["isla_volume"]
 opts = vol["compile_options"]
 print(f"- **The geometry kernel is chosen for you.** At the first forward pass the model selects the fused Triton kernel "
-      f"when the inputs are on CUDA, Triton is importable, the problem is three-dimensional, there is at least one global "
+      f"when the inputs are on CUDA, Triton is importable, CUDA autocast is off or in bfloat16 (the kernel's one autocast "
+      f"type; under float16 autocast it runs the eager region), the problem is three-dimensional, there is at least one global "
       f"direction, the global directions and the shared boundary vector channels number at most {GK.MAX_DIRECTIONS}, there are at most "
       f"{GK.MAX_SLICES:,} slices and no rank-2 per-token input; otherwise it runs the eager region, which computes the same "
       "function. It logs the choice once. A planar model, a model with no global direction (the lug) and a model with "
       "rank-2 inputs run eager. To force one path, set the model's `geo_kernel` attribute to `\"eager\"` or `\"fused\"` "
-      "before the first forward pass.")
+      "before the first forward pass. The fused kernel faults once the tokens it processes times the slices reach $2^{31}$ "
+      "(@sec-limits-int32).")
 print("- **So are ISLA-DTT's tree-read kernels.** Under the default `tree_read_kernel=\"auto\"` the forest build and the walk "
       "run their Warp kernels on CUDA (Warp, like Triton, is a Python framework for writing GPU kernels) and the read its fused "
       "Triton kernel on CUDA outside float64, each where its own requirements hold, and each logs its choice once; on the CPU "
       "every piece runs its reference, and in float64 the read does. All of them compute the same forest, the same pairs and "
-      "the same read up to summation order (@sec-arch-tree-exec). Set `\"reference\"` to run every reference. The recipe "
+      "the same read up to summation order (@sec-arch-tree-exec). Set `\"reference\"` to run every reference. The fused read "
+      "does not differentiate the log measures, so an interior forward on CUDA outside float64, given `measure_weights` that "
+      "require a gradient with gradients enabled, raises a `ValueError` that names `\"reference\"`, whose read gives that "
+      "gradient. The recipe "
       "trains ISLA-DTT in the fewest chunks of prediction points that fit the GPU, chosen before any point's forward pass and "
       "bounded alike on every rank (@sec-using-dtt-cost).")
 from physicsnemo.experimental.models.isla import model as IM
@@ -1592,3 +1597,56 @@ cause a residual. For an interior model, transform the prediction points
 with the boundary; the read-only model (ISLA-DTT) can also be checked for
 query independence by predicting at a subset of the points and comparing
 with the full request.
+
+## The class's own tests {#sec-using-tests}
+
+```{python}
+#| label: para-using-tests
+#| output: asis
+import re
+import records as RC   # R is the rotation of the contracts demo above
+KBT = {r_["tier"]: r_ for r_ in RC.md_table("kernel_bugs", "FINAL_REPORT.md", None, 0)}
+cpu_t = [int(RC.num(KBT["full CPU"]["passed / skipped / xfailed"], k)) for k in range(3)]
+gpu_t = [int(RC.num(KBT["GB300 GPU"]["passed / skipped / xfailed"], k)) for k in range(3)]
+assert cpu_t[2] == gpu_t[2] == 5 and all(r_["rc"] == "0" for r_ in KBT.values())
+TBT = {r_["run"]: r_ for r_ in RC.md_table("test_build", "FINAL_REPORT.md", None, 1)}
+fast = next(r_ for k_, r_ in TBT.items() if "fast tier" in k_)
+fast_s = RC.num(fast["wall"])
+KBF_ = " ".join(RC.load("kernel_bugs", "FINAL_REPORT.md").split())
+data_b = int(RC.num(re.search(r"`data/` is ([\d,]+) B, under 1 MB", KBF_).group(1)))
+_T = Path(physicsnemo.__file__).parent.parent / "test" / "experimental" / "models" / "isla"
+_xf = sorted(p.name for p in _T.glob("test_*.py") if "strict=True" in p.read_text() and "xfail(" in p.read_text())
+print("**The class's tests run in three tiers: a CI tier on the CPU of about "
+      f"{fast_s / 60:.0f} minutes for everyday changes, the whole directory on the CPU, and the whole directory with every CUDA "
+      "test on a GPU.** The whole "
+      f"directory, `test/experimental/models/isla/`, passes {cpu_t[0]:,} tests on the CPU, where {cpu_t[1]} skip, "
+      f"and {gpu_t[0]:,} on a GB300 with every CUDA test, with no failure in either; the CI tier, `-m \"not slow\"`, takes "
+      f"{fast_s:.0f} s. What the tests hold the code to:")
+print()
+print(f"- **Goldens.** Module and whole-model outputs and gradients recorded bitwise per device, {data_b:,} bytes of data in "
+      "all; a change that moves one fails until its commit regenerates that file with "
+      "`python -m test.experimental.models.isla.goldens.record --regenerate <file>`.")
+print("- **The release.** Three configurations with every constructor argument and attribute asserted, float64, 2-D, draw "
+      "and `query_chunks` goldens, a stored ISLA-DTT checkpoint that must load bitwise, and the refusal of every earlier version.")
+print("- **Properties and gradients.** The contracts of @sec-isla-contracts, chunking with the draw, parity; `gradcheck` "
+      "and `opcheck` on the custom operators and autograd functions; each fused kernel against its reference, its distance "
+      "to float64 at most twice the reference's.")
+print("- **Determinism.** Two runs on the same inputs are bitwise equal for the fast exact geometry, the fused kernels and the whole "
+      "model (the surface task and ISLA-DTT with its draw, in 3-D and 2-D, in float32 and under bfloat16 autocast, forward "
+      "and backward), on the CPU with one thread and on CUDA with the kernels on `auto`; they agree to a stated tolerance where CUDA does not fix the "
+      "order of a sum: the draw's float64 weights (@sec-limits-draw-ties), the key and value gradients of the segment-softmax "
+      "read, and the reference tree read. No test sets a global deterministic mode, so each states what a user meets by "
+      "default (`test_isla_determinism.py`).")
+print("- **Forced paths.** A test meant for one kernel or branch fails if the forward takes another, so no test passes by "
+      "skipping the code it names.")
+print("- **Float16.** A forward under float16 autocast with padded tokens is finite on the CPU and on CUDA, the tests' "
+      "cases: on CUDA the class runs the eager geometry region, and the routing normalizes float16 rows in float32, so the "
+      "zero states of padding tokens give no 0/0. A slice whose mean normal rounds to exactly zero, as it can on a closed "
+      "boundary, still divides by zero in float16 (@sec-oq-slice-normal). The recipe trains in bfloat16, and no number in "
+      "this book is a float16 inference.")
+print()
+print(f"Five tests are strict expected failures, in {', '.join(f'`{n}`' for n in _xf[:-1])} and `{_xf[-1]}`: each records a known defect "
+      "and fails the suite if the defect goes away unnoticed (@sec-limits-xfail). Run the CPU tier with "
+      "`pytest test/experimental/models/isla -m \"not slow\"`. Data: "
+      f"{RC.source('kernel_bugs', 'FINAL_REPORT.md')}; {RC.source('test_build', 'FINAL_REPORT.md')}.")
+```
