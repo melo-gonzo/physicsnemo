@@ -698,9 +698,8 @@ def test_highlift_dataset_reads_the_plane_with_the_far_fields_hemisphere():
         "d3b5c68bdac50aa7c0cc688443795dc2",
     ]
     paths = OmegaConf.load(_RECIPE_ROOT / "datasets" / "dataset_paths.yaml")
-    assert OmegaConf.is_missing(
-        paths, "highlift_aero_ml_symmetry_check"
-    )  # ??? like the masks'
+    # Declared (??? here; a deployment fills it in, so its value is not asserted).
+    assert "highlift_aero_ml_symmetry_check" in paths.keys()
 
 
 _HL_ROOT = os.environ.get("HIGHLIFT_AERO_ML_ROOT")

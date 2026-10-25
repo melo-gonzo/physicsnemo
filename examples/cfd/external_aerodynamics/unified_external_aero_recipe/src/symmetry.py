@@ -148,6 +148,10 @@ def outline_tolerance(outline: np.ndarray) -> dict:
     ### 0.0613 in of the outline (the 0.061 in Hausdorff distance HL-DUP found between the cap and
     ### curator's hole); HL-DUP's 0.011 in is a different quantity (the broken roots' CFD vertices
     ### against LHC001's CFD outline, two meshes about 10 times denser than the STL), at 8 % of tau.
+    ### The census (record md5 bc2ed653, LHR jobs 374043-374045): all 690 -medium cases that store a
+    ### wing pass. The worst on-plane vertex is 0.0613 in (0.46 tau) on every case; the worst open-edge
+    ### midpoint is 0.0601 in on 689, and 0.1266 in (0.94 tau) on geo_LHC024_AoA_8, where two open
+    ### edges of about 20 in near the slat end within 0.004 in of the outline: their own chord sagitta.
     v = np.asarray(outline, dtype=np.float32).astype(np.float64)
     n = len(v)
     d = np.roll(v, -1, axis=0) - v  # chord j: v_j -> v_{j+1}
