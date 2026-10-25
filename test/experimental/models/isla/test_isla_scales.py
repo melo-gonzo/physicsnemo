@@ -634,6 +634,8 @@ def test_a_global_source_adds_no_direction():
         .double()
         .eval()
     )
+    m._tree_read_theta = 0.0  # the exact boundary read, as in _model
+    m = live(m)
     assert m.n_global_vectors == 1 and m.n_global_scalars == 1
     seen = _spy(m)
     pts, nrm, w, _ = cloud(80, d=2, seed=3)
