@@ -80,7 +80,7 @@ source. Do not edit by hand.
 | `af_fix/` | AF-FIX: the mechanisms behind the AirfRANS far-field harm (the octant tie under faces, the near-wall length's candidates, where the slices' and the tree read's mass goes) and the drafted campaign | `scratch/isla-af-fix-2026-10-25/` |
 | `af_campaign/` | AF-CAMPAIGN: the frozen pre-registration of ISLA-DTT on AirfRANS with its far field, arms F, FN, FNC and FNOmega | `scratch/isla-af-campaign-2026-10-25/` |
 | `pr_2170/` | NVIDIA/physicsnemo#2170 (LIB-TREE's library branch): its CI, the one bot comment and its fix | `scratch/pr-2170-2026-10-25/` |
-| `perf_survey/` | PERF-SURVEY: a profile of ISLA 0.13.0's training step on GB300 and the ranked performance opportunities, measured | `scratch/isla-perf-survey-2026-10-25/` |
+| `perf_survey/` | PERF-SURVEY: a profile of ISLA 0.13.0's training step on GB300 and the ranked performance opportunities, measured, with its inference child's details (the read path's memory against points, the fused geometry kernel past 2^31) | `scratch/isla-perf-survey-2026-10-25/` |
 
 | topic | file | source | md5 |
 | --- | --- | --- | --- |
@@ -442,3 +442,4 @@ source. Do not edit by hand.
 | pr_2170 | FINAL_REPORT.md | scratch/pr-2170-2026-10-25/FINAL_REPORT.md | f76f0cf34507bb97f060a663487fa050 |
 | perf_survey | FINAL_REPORT.md | scratch/isla-perf-survey-2026-10-25/FINAL_REPORT.md | a8d88b8509954a501514c926d0a5e119 |
 | perf_survey | OPPORTUNITIES.md | scratch/isla-perf-survey-2026-10-25/OPPORTUNITIES.md | f85d83b754f804ac2feb55c9117be624 |
+| perf_survey | infer/RESULTS.md | scratch/isla-perf-survey-2026-10-25/infer/RESULTS.md | e476ea414b2a2fc9caa345af85dab41e |

@@ -42403,13 +42403,13 @@ His (c), the library moves, and (d), merging main periodically, are other lanes'
   `ComputeBoundaryScales` writes the case's $L$ and $U$, computed as the model computes them, and `ComputeLogReynolds`,
   now in float64, writes `re_z`, an ordinary rank-0 global; model.py loses `reynolds`, the viscosity role and z.
 - A generic vocabulary for the scales: the schema key `defines: <name>` replaces `velocity_scale` and the density and
-  viscosity roles, `units` names $L$ and any defined scale, and model.py names no fluid quantity. Peter approved the
-  key's name with the signature names (below).
+  viscosity roles, `units` names $L$ and any defined scale, and model.py names no fluid quantity. The supervisor reads
+  Peter's approval of the signature names (below) to cover the key, so it is no longer provisional.
 - (e): `dim` becomes `n_spatial_dims`; `boundary_tokens` becomes `n_boundary_tokens`, after Mesh's `n_` counts;
   `boundary_meshes` and `prediction_boundaries` stay, GLOBE's names. Each rename is its own commit.
 - **Peter's approval** (received by 09:15 EDT 2026-10-25), verbatim: "I approve of the new ISLA signature names, by the
-  way. Thanks for not blocking on that". So `n_spatial_dims`, `n_boundary_tokens`, `boundary_meshes`,
-  `prediction_boundaries` and the schema key `defines` are final.
+  way. Thanks for not blocking on that". So `n_spatial_dims`, `n_boundary_tokens`, `boundary_meshes` and
+  `prediction_boundaries` are final, and, by the supervisor's reading, the schema key `defines`.
 - One version, ISLA 0.13.0, covers (a), (b) and (e).
 - For the book (this batch): the standings stay interacting ISLA 0.9.0's until the final reference rerun, with their
   callouts; interacting ISLA's parameter count is no longer computed from the class, so 05 names its one routing-mass
@@ -42919,12 +42919,12 @@ book presents no fix as adopted. 20's `sec-limits-af-whole` states the measured 
 gone on the class's geometry and points to the campaign; `sec-oq-dtt-frame` and 05's forest paragraph state the face
 forest's far-field count.
 
-## 2026-10-25 — PERF-SURVEY: where ISLA 0.13.0's training step goes on a GB300, and fifteen measured opportunities ranked by what Peter is likely to approve; a correctness fault past 2^31 elements in the fused geometry kernel {#sec-nb-perf-survey}
+## 2026-10-25 — PERF-SURVEY: where ISLA 0.13.0's training step goes on a GB300, and fifteen opportunities ranked by what Peter is likely to approve; a correctness fault past 2^31 elements in the fused geometry kernel {#sec-nb-perf-survey}
 
 **Why.** Peter asked, in a forked session, verbatim: "Please look at the current ISLA model architecture, and look for
 performance optimization opportunities that I am likely to approve of." Lane PERF-SURVEY, launched 08:00 EDT 2026-10-25,
 eight children; records results/campaigns_2026-10-23/perf_survey/ (FINAL_REPORT.md md5 a8d88b85, OPPORTUNITIES.md
-f85d83b7). 39 GB300 jobs, 9.24 of 12 GPU-h.
+f85d83b7, infer/RESULTS.md e476ea41). 39 GB300 jobs, 9.24 of 12 GPU-h.
 
 **The profile** (382020; bf16, the recipe's configurations, one GB300, median of 10 steps): DrivAerML Volume with the
 whole boundary at 200k, 1,190 ms and 143 GiB (geometry 31 percent, blocks and point reads 26, fused read 18, basis 8; 92
@@ -42934,12 +42934,12 @@ ms compiled, host-bound (GPU busy 42 percent); the DrivAerML Surface task 246 ms
 Every case peaks in the chunk's backward. The optimizer launches 750 to 850 kernels a step and starves the GPU 25 to 70
 ms on the small cases.
 
-**Brought to Peter** (each measured; exactness B bitwise, C certified within rounding, N a numerics change):
+**Five for Peter's decision** (each measured; exactness B bitwise, C certified within rounding, N a numerics change):
 1. FUSED-PAD: 2-D models and models without a global direction take the fused geometry region with exact zero padding.
    AirfRANS step 0.59x compiled and 0.42x eager; lug eager 0.78 to 0.82x, lug compiled neutral; C for eager blocks; the
    compiled-regions certification on real AirfRANS, lug and Tensile2d checkpoints is left.
 2. 64-bit offsets in `geo_kernel`: a correctness bug, since ISLA's forward faults once tokens x slices reaches 2^31, at
-   2^31/512 + 64 points with 512 slices, as a full AeroZoo case (5.87M points) does at inference. B below the limit;
+   2^31/512 + 64 tokens with 512 slices, as a full AeroZoo case (5.87M points and 200k boundary tokens) does at inference. B below the limit;
    kernel time 0.995 to 1.012x. Whether the read kernels share it is not checked.
 3. Geometry G2 + G3 in physicsnemo.mesh.spatial: B; DrivAerML's geometry call 400 to 347 ms; geometry peak -29 percent,
    so a boundary of HiLift's size fits at 202 GiB.

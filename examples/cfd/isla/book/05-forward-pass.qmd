@@ -2086,10 +2086,10 @@ its rounding, so a few cells per case sit within rounding of a face's edge
 or a Morton grid line, which leaves 0.52% of the pairs unmatched on the
 DrivAerML Volume task (results/campaigns_2026-10-23/dtt_pose/DESIGN.md, sections 2, 3 and 6).
 On AirfRANS with its far field, posed as the scorer poses it, the cube faces
-move no far-field cell between trees on any of the 200 test cases, where the
-octants move 15.4 to 45.1% of them; the pair lists still leave a median 15.8%
-of the posed pairs with no native match, most of them in the airfoil's trees,
-which sit 27.8 chords from the forest's origin
+move no far-field cell between trees on any of the 200 test cases; on 24 of
+them the pair lists still leave a median 15.8% of the posed pairs with no
+native match, most of them in the airfoil's trees, which sit 27.8 chords from
+the forest's origin
 (results/campaigns_2026-10-23/af_fix/DESIGN.md, section 1).
 
 ::: {.callout-note title="In flight"}

@@ -674,8 +674,9 @@ RECORDS = {
     ),
     "perf_survey": (
         "isla-perf-survey-2026-10-25",
-        "PERF-SURVEY: a profile of ISLA 0.13.0's training step on GB300 and the ranked performance opportunities, measured",
-        ["FINAL_REPORT.md", "OPPORTUNITIES.md"],
+        "PERF-SURVEY: a profile of ISLA 0.13.0's training step on GB300 and the ranked performance opportunities, measured, "
+        "with its inference child's details (the read path's memory against points, the fused geometry kernel past 2^31)",
+        ["FINAL_REPORT.md", "OPPORTUNITIES.md", "infer/RESULTS.md"],
     ),
 }
 
