@@ -159,7 +159,7 @@ def select_tensor_components(
 ) -> torch.Tensor:
     """The listed laboratory components of a ``(..., d, d)`` tensor, in YAML order, as ``(..., n_listed)``.
 
-    ``d`` is 3, or 2 for a planar problem restricted to its plane (``RestrictToPlane`` + ``ISLA(dim=2)``,
+    ``d`` is 3, or 2 for a planar problem restricted to its plane (``RestrictToPlane`` + ``ISLA(n_spatial_dims=2)``,
     2026-10-03): then only the in-plane labels ``xx``, ``yy``, ``xy`` can be listed.
     """
     d = tensor.shape[-1]

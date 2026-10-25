@@ -34,6 +34,7 @@ from physicsnemo.mesh.fields import RankSpec
 from test.experimental.models.isla._meshes import (
     cloud,
     law,
+    live,
     orthogonal,
     outputs,
     points_mesh,
@@ -80,7 +81,7 @@ def _model(K=1, output_schema=OUTPUTS, **kw):
         global_schema=_globals(K),
     )
     base.update(kw)
-    return ISLA(**base).double().eval()
+    return live(ISLA(**base).double().eval())
 
 
 def _forward(m, mesh, drv, K, R=None, shift=None, q=None):
@@ -281,7 +282,7 @@ def test_rank_two_output_in_the_interior_task():
         "sig": {"rank": 2, "symmetric": True},
         "t": {"rank": 2},
     }
-    m = _model(1, output_schema=outputs_, interior=True, query_independent=False)
+    m = _model(1, output_schema=outputs_, interior=True)
     q = points_mesh(q_pts)
     base = _forward(m, mesh, drv, 1, q=q)
     assert base["sig"].shape == (50, 3, 3)
@@ -295,7 +296,7 @@ def test_rank_two_output_in_the_interior_task():
 
 
 def test_all_parameters_receive_gradients():
-    m = _model(1, interior=True, query_independent=False).train()
+    m = _model(1, interior=True).train()
     mesh, drv = _boundary(100)
     out = outputs(
         m(

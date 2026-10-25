@@ -16,7 +16,7 @@
 
 r"""ISLA-DTT's boundary read: passive prediction points read every boundary cell.
 
-With ``query_independent=True`` (ISLA-DTT) every passive prediction point :math:`q`
+In the interior task (ISLA-DTT) every passive prediction point :math:`q`
 gets one more residual update after every slice block: a read of every boundary cell
 :math:`j`, a softmax over the cells of
 

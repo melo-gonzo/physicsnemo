@@ -31,6 +31,7 @@ from tensordict import TensorDict
 from physicsnemo.experimental.models import ISLA
 from test.experimental.models.isla._meshes import (
     cloud,
+    live,
     orthogonal,
     points_mesh,
     soup,
@@ -74,7 +75,7 @@ def _model(**kw):
         n_slices=8,
     )
     base.update(kw)
-    m = ISLA(**base).double().eval()
+    m = live(ISLA(**base).double().eval())
     m.geo_kernel = "eager"
     return m
 
@@ -177,7 +178,6 @@ def test_mixed_flat_and_nested_names_and_the_interior_task():
         global_schema={"freestream": {"rank": 1}},
         boundary_schemas={"wall": {}},
         interior=True,
-        query_independent=False,
     )
     with torch.no_grad():
         out = m(

@@ -30,16 +30,17 @@
 #
 # ISLA brings its own scales (DESIGN_v2 section 4; the model's docstring, *Scales*): the length L is the RMS
 # pairwise distance of the four boundaries' faces at full resolution, the velocity U the area-weighted RMS
-# speed of the inlet's prescribed velocity (its velocity_scale source) and g its area-weighted mean direction
-# (the one global direction, K = 1), rho the density and nu the kinematic viscosity (physics.*, the PDE's
-# parameters, consumed by their roles). Each declared input is divided by its units' scale before it enters
-# the model, the standardized log10(U L / nu) is one global scalar, and each output is the head's dimensionless
+# speed of the inlet's prescribed velocity (the field that `defines: U`) and g its area-weighted mean direction
+# (the one global direction, K = 1) and rho the density (physics.density, the PDE's parameter, consumed as the
+# scale it defines). Each declared input is divided by its units' scale before it enters the model, the standardized
+# log10(U L / nu) with the same U and L and nu the kinematic viscosity (the recipe's ComputeBoundaryScales and
+# ComputeLogReynolds below) is one global scalar, re_z, and each output is the head's dimensionless
 # prediction times its units' scale, then standardized by the dataset's own NormalizeMeshFields stats
 # (output_stats, which train.py injects and checks), so the loss compares it with the same physical targets as
 # every other arm. No label and no per-case scale of the recipe is read.
 #
 # The four boundaries go in at full resolution and ISLA draws its boundary tokens inside the model:
-# `boundary_tokens` (200,000, the class default) per case, water-filled over the four roles (50,000 each when
+# `n_boundary_tokens` (200,000, the class default) per case, water-filled over the four roles (50,000 each when
 # all four have more faces; a role with fewer is kept whole and its unused share goes to the others), each
 # face drawn with probability proportional to its area and carrying its Horvitz-Thompson measure. So the
 # datapipe's boundary subsampling is switched off for this model only (the baselines keep it): the files'
@@ -50,6 +51,25 @@ dataset_drop_transforms:
   - ComputeSDFFromBoundary            # sdf_wall / sdf_wall_normals: the baselines' inputs, not ISLA's
   - HarmonizeBoundaryFields           # the one-hot role labels and zero-filled fields: ISLA reads each condition's own
   - MergeBoundaries                   # GeoTransolver's face tokens, made from the harmonized fields
+# ISLA's Reynolds number, computed here rather than in the model (2026-10-24): after the dataset's chain, on the
+# meshes the model receives, L (the four boundaries' RMS pairwise distance) and U (the inlet's area-weighted RMS
+# speed) exactly as ISLA computes its scales, then re_z = (log10(U L / nu) - mean) / std in float64. mean and std
+# are null here: src/datasets.py fills them from the dataset file's isla_constants.reynolds, fitted on the split's
+# train cases. Only the posed problem is read (the meshes, the inlet's velocity, physics.kinematic_viscosity).
+dataset_append_transforms:
+  - _target_: ${dp:ComputeBoundaryScales}
+    boundaries: [inlet, outlet, no_slip, slip]    # forward_kwargs.boundary_meshes
+    length_field: L
+    speed_field: U
+    sources: [[inlet, bc_velocity]]
+  - _target_: ${dp:ComputeLogReynolds}
+    speed_field: U
+    length_field: L
+    viscosity_field: physics.kinematic_viscosity
+    mean: null
+    std: null
+    output_field: log_re
+    standardized_field: re_z
 input_type: mesh
 output_type: mesh
 
@@ -69,11 +89,7 @@ training:
 
 # Per-block compile (compile_blocks below), as in isla_volume.yaml: ISLA-DTT's boundary read breaks the
 # whole-model fullgraph trace. The blocks see the token count, which is the 200,000 boundary tokens plus the
-# interior sample whenever a case has more boundary faces than that. With compile=true
-# model.query_independent=false model.compile_blocks=false, interacting ISLA's whole model compiles with these
-# options; on AeroZoo's four boundaries that graph recompiles (2026-10-16): Dynamo's duck sizing ties
-# boundaries with equal cell counts in the first case, and the input meshes' caches, whose contents differ
-# by case with what the pipeline computed, are guarded by their size.
+# interior sample whenever a case has more boundary faces than that.
 compile: false
 compile_options:
   fullgraph: true
@@ -111,7 +127,7 @@ model:
   # takes one.
   boundary_schemas:
     inlet:                       # Dirichlet: prescribed.dirichlet.{velocity, turbulence}
-      bc_velocity: {rank: 1, units: {U: 1}, velocity_scale: true}   # the source of U and g
+      bc_velocity: {rank: 1, units: {U: 1}, defines: U}             # the source of U and g
       bc_tke: {rank: 0, units: {U: 2}, scale: null}
       bc_omega: {rank: 0, units: {U: 1, L: -1}, scale: null}
       bc_intermittency: {rank: 0, scale: null}                      # dimensionless
@@ -126,15 +142,11 @@ model:
     no_slip: {}                  # the bodies: a wall at rest (its prescribed velocity is zero)
     slip: {}                     # the slip walls
   global_schema:                 # no direction: g is derived from the inlet (K = 1)
-    physics.density: {rank: 0, role: density}            # kg/m^3, consumed for the units only
-    physics.kinematic_viscosity: {rank: 0, units: {U: 1, L: 1}, role: viscosity}   # m^2/s, consumed for Re
-  # z = (log10(U L / nu) - mean) / std, with ISLA's own U and L: the split's mean and std over its train cases, the
-  # dataset file's isla_constants.reynolds (injected by train.py and infer.py).
-  reynolds: null
+    physics.density: {rank: 0, defines: rho}             # kg/m^3, consumed for the units only
+    re_z: {rank: 0}              # (log10(U L / nu) - mean) / std, dataset_append_transforms above
   output_stats: null             # injected by train.py: the dataset's NormalizeMeshFields stats of the targets
   interior: true                 # predict at prediction_points: passive tokens that read the boundary (ISLA-DTT)
-  query_independent: true        # ISLA-DTT, the interior task's reference form (the class default for interior: true, stated here)
-  boundary_tokens: 200000        # boundary tokens drawn per case inside the model, water-filled over the four roles (equal to the class default)
+  n_boundary_tokens: 200000        # boundary tokens drawn per case inside the model, water-filled over the four roles (equal to the class default)
   hidden: 512                  # the reference configuration (REF-80 verdict, 2026-10-04): most accurate under 80 GiB per GPU on DrivAerML Surface and the 210-wing rung; equal to the class defaults
   n_layers: 12
   n_slices: 512
