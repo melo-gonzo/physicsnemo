@@ -1,0 +1,545 @@
+{
+ "checks": {
+  "hldupx_hl_isla_seed42/native": {
+   "epoch": 500,
+   "cases": 180,
+   "dataset": "highlift_surface_medium_dedup",
+   "precision": null
+  },
+  "hldupx_hl_isla_seed42/posed": {
+   "epoch": 500,
+   "cases": 180,
+   "dataset": "highlift_surface_medium_dedup_posed",
+   "precision": null
+  },
+  "hldupx_hl_isla_seed42/area": {
+   "epoch": 500,
+   "cases": 180,
+   "dataset": "highlift_surface_medium_dedup_area",
+   "precision": null
+  },
+  "hldupx_hl_isla_seed42/area_cases_equal_native": true,
+  "hldupx_hl_isla_seed42/area_identical_cases_pressure": 0,
+  "hldupx_hl_isla_seed43/native": {
+   "epoch": 500,
+   "cases": 180,
+   "dataset": "highlift_surface_medium_dedup",
+   "precision": null
+  },
+  "hldupx_hl_isla_seed43/posed": {
+   "epoch": 500,
+   "cases": 180,
+   "dataset": "highlift_surface_medium_dedup_posed",
+   "precision": null
+  },
+  "hldupx_hl_isla_seed43/area": {
+   "epoch": 500,
+   "cases": 180,
+   "dataset": "highlift_surface_medium_dedup_area",
+   "precision": null
+  },
+  "hldupx_hl_isla_seed43/area_cases_equal_native": true,
+  "hldupx_hl_isla_seed43/area_identical_cases_pressure": 0,
+  "hldupx_hl_gt_seed42/native": {
+   "epoch": 500,
+   "cases": 180,
+   "dataset": "highlift_surface_medium_dedup",
+   "precision": null
+  },
+  "hldupx_hl_gt_seed42/posed": {
+   "epoch": 500,
+   "cases": 180,
+   "dataset": "highlift_surface_medium_dedup_posed",
+   "precision": null
+  },
+  "hldupx_hl_gt_seed42/area": {
+   "epoch": 500,
+   "cases": 180,
+   "dataset": "highlift_surface_medium_dedup_area",
+   "precision": null
+  },
+  "hldupx_hl_gt_seed42/area_cases_equal_native": true,
+  "hldupx_hl_gt_seed42/area_identical_cases_pressure": 0,
+  "hldupx_hl_gt_seed43/native": {
+   "epoch": 500,
+   "cases": 180,
+   "dataset": "highlift_surface_medium_dedup",
+   "precision": null
+  },
+  "hldupx_hl_gt_seed43/posed": {
+   "epoch": 500,
+   "cases": 180,
+   "dataset": "highlift_surface_medium_dedup_posed",
+   "precision": null
+  },
+  "hldupx_hl_gt_seed43/area": {
+   "epoch": 500,
+   "cases": 180,
+   "dataset": "highlift_surface_medium_dedup_area",
+   "precision": null
+  },
+  "hldupx_hl_gt_seed43/area_cases_equal_native": true,
+  "hldupx_hl_gt_seed43/area_identical_cases_pressure": 0,
+  "hldupx_hl_t_seed42/native": {
+   "epoch": 500,
+   "cases": 180,
+   "dataset": "highlift_surface_medium_dedup",
+   "precision": null
+  },
+  "hldupx_hl_t_seed42/posed": {
+   "epoch": 500,
+   "cases": 180,
+   "dataset": "highlift_surface_medium_dedup_posed",
+   "precision": null
+  },
+  "hldupx_hl_t_seed42/area": {
+   "epoch": 500,
+   "cases": 180,
+   "dataset": "highlift_surface_medium_dedup_area",
+   "precision": null
+  },
+  "hldupx_hl_t_seed42/area_cases_equal_native": true,
+  "hldupx_hl_t_seed42/area_identical_cases_pressure": 0,
+  "hldupx_hl_t_seed43/native": {
+   "epoch": 500,
+   "cases": 180,
+   "dataset": "highlift_surface_medium_dedup",
+   "precision": null
+  },
+  "hldupx_hl_t_seed43/posed": {
+   "epoch": 500,
+   "cases": 180,
+   "dataset": "highlift_surface_medium_dedup_posed",
+   "precision": null
+  },
+  "hldupx_hl_t_seed43/area": {
+   "epoch": 500,
+   "cases": 180,
+   "dataset": "highlift_surface_medium_dedup_area",
+   "precision": null
+  },
+  "hldupx_hl_t_seed43/area_cases_equal_native": true,
+  "hldupx_hl_t_seed43/area_identical_cases_pressure": 0
+ },
+ "means": {
+  "ISLA": {
+   "native": {
+    "pressure_l2": {
+     "mean": 0.05458442715720998,
+     "seed42": 0.05303723684822519,
+     "seed43": 0.056131617466194765
+    },
+    "tau_wall_l2": {
+     "mean": 0.09632567595690489,
+     "seed42": 0.09452706865138477,
+     "seed43": 0.098124283262425
+    },
+    "velocity_l2": {
+     "mean": 0.07113096375639241,
+     "seed42": 0.06996872242954043,
+     "seed43": 0.07229320508324438
+    },
+    "density_l2": {
+     "mean": 0.0540068941966941,
+     "seed42": 0.052532169109003414,
+     "seed43": 0.05548161928438478
+    },
+    "temperature_l2": {
+     "mean": 0.06365735451173452,
+     "seed42": 0.06277929736922185,
+     "seed43": 0.06453541165424717
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "mean": 0.05508756436821487,
+     "seed42": 0.0535309931056367,
+     "seed43": 0.05664413563079304
+    },
+    "tau_wall_l2": {
+     "mean": 0.09684961431970199,
+     "seed42": 0.09506172392931249,
+     "seed43": 0.09863750471009149
+    },
+    "velocity_l2": {
+     "mean": 0.07134372307401565,
+     "seed42": 0.07018780780749188,
+     "seed43": 0.07249963834053941
+    },
+    "density_l2": {
+     "mean": 0.05442257977297736,
+     "seed42": 0.05294275629437632,
+     "seed43": 0.05590240325157841
+    },
+    "temperature_l2": {
+     "mean": 0.06391862894718846,
+     "seed42": 0.06303560648941331,
+     "seed43": 0.0648016514049636
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "mean": 0.0542550896656596,
+     "seed42": 0.05245038263706697,
+     "seed43": 0.05605979669425223
+    },
+    "tau_wall_l2": {
+     "mean": 0.09611816642185053,
+     "seed42": 0.09416744021905793,
+     "seed43": 0.09806889262464312
+    },
+    "velocity_l2": {
+     "mean": 0.07090921337819761,
+     "seed42": 0.06974356327619817,
+     "seed43": 0.07207486348019707
+    },
+    "density_l2": {
+     "mean": 0.053698246419015855,
+     "seed42": 0.05199772600705425,
+     "seed43": 0.05539876683097747
+    },
+    "temperature_l2": {
+     "mean": 0.06334949491752519,
+     "seed42": 0.06229909287972583,
+     "seed43": 0.06439989695532454
+    }
+   }
+  },
+  "GeoTransolver": {
+   "native": {
+    "pressure_l2": {
+     "mean": 0.051088964504500234,
+     "seed42": 0.05056431328670846,
+     "seed43": 0.051613615722292
+    },
+    "tau_wall_l2": {
+     "mean": 0.09214190339876546,
+     "seed42": 0.09210721862812837,
+     "seed43": 0.09217658816940255
+    },
+    "velocity_l2": {
+     "mean": 0.06822754650687178,
+     "seed42": 0.06829134995738666,
+     "seed43": 0.0681637430563569
+    },
+    "density_l2": {
+     "mean": 0.050595185853954824,
+     "seed42": 0.05016453583828277,
+     "seed43": 0.05102583586962687
+    },
+    "temperature_l2": {
+     "mean": 0.061229850424246654,
+     "seed42": 0.06088869228131241,
+     "seed43": 0.061571008567180896
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "mean": 1.0170275825593207,
+     "seed42": 1.0258534729480744,
+     "seed43": 1.008201692170567
+    },
+    "tau_wall_l2": {
+     "mean": 1.2618116127120125,
+     "seed42": 1.2833913471963672,
+     "seed43": 1.2402318782276578
+    },
+    "velocity_l2": {
+     "mean": 1.2003339462810092,
+     "seed42": 1.19806386993991,
+     "seed43": 1.2026040226221084
+    },
+    "density_l2": {
+     "mean": 0.9996600031852723,
+     "seed42": 1.009459830654992,
+     "seed43": 0.9898601757155524
+    },
+    "temperature_l2": {
+     "mean": 0.6277233021126853,
+     "seed42": 0.634174813164605,
+     "seed43": 0.6212717910607656
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "mean": 0.26087775669164126,
+     "seed42": 0.23886109673314623,
+     "seed43": 0.2828944166501363
+    },
+    "tau_wall_l2": {
+     "mean": 0.3527482498437166,
+     "seed42": 0.3309416723748048,
+     "seed43": 0.3745548273126284
+    },
+    "velocity_l2": {
+     "mean": 0.23895418097575505,
+     "seed42": 0.22366366874840524,
+     "seed43": 0.2542446932031049
+    },
+    "density_l2": {
+     "mean": 0.24314303588536051,
+     "seed42": 0.223530772411161,
+     "seed43": 0.26275529935956
+    },
+    "temperature_l2": {
+     "mean": 0.23237995437035958,
+     "seed42": 0.21676367740664218,
+     "seed43": 0.247996231334077
+    }
+   }
+  },
+  "Transolver": {
+   "native": {
+    "pressure_l2": {
+     "mean": 0.05274263556736211,
+     "seed42": 0.05420022171197666,
+     "seed43": 0.05128504942274756
+    },
+    "tau_wall_l2": {
+     "mean": 0.09189134365361598,
+     "seed42": 0.09339106612735325,
+     "seed43": 0.09039162117987871
+    },
+    "velocity_l2": {
+     "mean": 0.06916781398985121,
+     "seed42": 0.07039004024118185,
+     "seed43": 0.06794558773852057
+    },
+    "density_l2": {
+     "mean": 0.05211319930644499,
+     "seed42": 0.05351841864693496,
+     "seed43": 0.05070797996595502
+    },
+    "temperature_l2": {
+     "mean": 0.06277894269054135,
+     "seed42": 0.06382585149258375,
+     "seed43": 0.06173203388849894
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "mean": 0.9932548402084245,
+     "seed42": 1.0094155646032756,
+     "seed43": 0.9770941158135732
+    },
+    "tau_wall_l2": {
+     "mean": 1.28169890013006,
+     "seed42": 1.3199084914392896,
+     "seed43": 1.2434893088208305
+    },
+    "velocity_l2": {
+     "mean": 1.2525456244746844,
+     "seed42": 1.279223824871911,
+     "seed43": 1.2258674240774579
+    },
+    "density_l2": {
+     "mean": 0.9676168862316343,
+     "seed42": 0.9799274186293284,
+     "seed43": 0.9553063538339402
+    },
+    "temperature_l2": {
+     "mean": 0.6341050580971771,
+     "seed42": 0.6604568507936266,
+     "seed43": 0.6077532654007276
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "mean": 0.189379275466005,
+     "seed42": 0.19495073076751496,
+     "seed43": 0.18380782016449504
+    },
+    "tau_wall_l2": {
+     "mean": 0.2954054538160562,
+     "seed42": 0.3104908040828175,
+     "seed43": 0.280320103549295
+    },
+    "velocity_l2": {
+     "mean": 0.20052373179545005,
+     "seed42": 0.21047476372785037,
+     "seed43": 0.19057269986304973
+    },
+    "density_l2": {
+     "mean": 0.1759478607111507,
+     "seed42": 0.18047007367842727,
+     "seed43": 0.17142564774387412
+    },
+    "temperature_l2": {
+     "mean": 0.18805346389611563,
+     "seed42": 0.19391209011276564,
+     "seed43": 0.18219483767946562
+    }
+   }
+  }
+ },
+ "ratios": {
+  "GeoTransolver": {
+   "native": {
+    "pressure_l2": {
+     "seedmean": 0.9359622728540803,
+     "per_seed": [
+      0.953373823591274,
+      0.9195105726888464
+     ]
+    },
+    "tau_wall_l2": {
+     "seedmean": 0.9565663825706118,
+     "per_seed": [
+      0.9744004542002589,
+      0.9393861040786831
+     ]
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "seedmean": 18.462017593686504,
+     "per_seed": [
+      19.1637295225157,
+      17.79887151499732
+     ]
+    },
+    "tau_wall_l2": {
+     "seedmean": 13.028566211391963,
+     "per_seed": [
+      13.500610909925133,
+      12.573633952651797
+     ]
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "seedmean": 4.8083554611976265,
+     "per_seed": [
+      4.554039164708434,
+      5.046297584577957
+     ]
+    },
+    "tau_wall_l2": {
+     "seedmean": 3.669943601457699,
+     "per_seed": [
+      3.5143959696148532,
+      3.81930311731193
+     ]
+    }
+   }
+  },
+  "Transolver": {
+   "native": {
+    "pressure_l2": {
+     "seedmean": 0.9662579294907084,
+     "per_seed": [
+      1.0219277046253283,
+      0.9136570748853612
+     ]
+    },
+    "tau_wall_l2": {
+     "seedmean": 0.9539652095950742,
+     "per_seed": [
+      0.9879822516424254,
+      0.9211952248164101
+     ]
+    }
+   },
+   "posed": {
+    "pressure_l2": {
+     "seedmean": 18.030472967897733,
+     "per_seed": [
+      18.856656789671746,
+      17.24969592937707
+     ]
+    },
+    "tau_wall_l2": {
+     "seedmean": 13.233908148556516,
+     "per_seed": [
+      13.884752315461565,
+      12.606658212569428
+     ]
+    }
+   },
+   "area": {
+    "pressure_l2": {
+     "seedmean": 3.490534743063402,
+     "per_seed": [
+      3.7168600297253542,
+      3.2787814263218817
+     ]
+    },
+    "tau_wall_l2": {
+     "seedmean": 3.0733571479043706,
+     "per_seed": [
+      3.297220391257692,
+      2.8583998049433985
+     ]
+    }
+   }
+  }
+ },
+ "area_over_native": {
+  "ISLA": {
+   "pressure_l2": [
+    0.9889350530677606,
+    0.9987204934547665
+   ],
+   "tau_wall_l2": [
+    0.9961954978879843,
+    0.9994355053006222
+   ],
+   "velocity_l2": [
+    0.996782002793191,
+    0.9969797769680304
+   ],
+   "density_l2": [
+    0.9898263652346012,
+    0.9985066684340514
+   ],
+   "temperature_l2": [
+    0.9923509100990442,
+    0.9979001497712813
+   ]
+  },
+  "GeoTransolver": {
+   "pressure_l2": [
+    4.723906668696601,
+    5.481003659426902
+   ],
+   "tau_wall_l2": [
+    3.5930047319194527,
+    4.063448590918443
+   ],
+   "velocity_l2": [
+    3.2751390752704386,
+    3.7299109732412825
+   ],
+   "density_l2": [
+    4.4559521717048325,
+    5.149456052634017
+   ],
+   "temperature_l2": [
+    3.559998897745583,
+    4.0278084946990145
+   ]
+  },
+  "Transolver": {
+   "pressure_l2": [
+    3.5968622380088267,
+    3.5840429566392658
+   ],
+   "tau_wall_l2": [
+    3.3246306842606868,
+    3.101173536775714
+   ],
+   "velocity_l2": [
+    2.9901213723800604,
+    2.8047840368449393
+   ],
+   "density_l2": [
+    3.3721114756585377,
+    3.3806443849462764
+   ],
+   "temperature_l2": [
+    3.0381434102026397,
+    2.9513823893855156
+   ]
+  }
+ }
+}

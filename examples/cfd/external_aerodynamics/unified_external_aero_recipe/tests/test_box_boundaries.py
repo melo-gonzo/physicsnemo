@@ -317,16 +317,26 @@ def test_add_hemisphere_boundaries_on_a_domain_and_what_it_refuses():
 
 
 def _hl_dataset_cfg(tmp_path, posed: bool):
+    """highlift_surface.yaml on ``tmp_path``, whose first case also stores a source STL, so the
+    reader's AddSymmetryPlane loads its cap (the exact check at load, no record)."""
+    from test_symmetry_plane import cap_key, cone_stl, ellipse
+
+    stl = cone_stl(ellipse())
+    Mesh(points=torch.from_numpy(stl[0]), cells=torch.from_numpy(stl[1])).save(
+        tmp_path / "geo_LHC001_AoA_22" / "geo_LHC001_AoA_22.stl.pmsh"
+    )
     cfg = OmegaConf.merge(
         OmegaConf.load(_RECIPE_ROOT / "datasets" / "highlift_surface.yaml"),
         {
             "dataset_paths": {
                 "highlift_aero_ml": str(tmp_path),
                 "highlift_aero_ml_duplicate_masks": None,
+                "highlift_aero_ml_symmetry_check": None,
             },
             "sampling_resolution": 1500,
         },
     )
+    cfg.pipeline.reader.whole_surface_transforms[0].cap_md5 = [cap_key(stl)]
     if posed:
         ### The posed protocol of the other datasets' _posed files: the pose right after the far
         ### field, seeded by the case key.
@@ -345,7 +355,8 @@ def test_highlift_pipeline_moves_the_far_field_with_the_wing(tmp_path, posed):
     and ends with SurfaceMeshToDomainMesh. Through its whole chain (the deduplicating reader, the
     posed protocol's FixedRandomPose where set, the augmentations, CenterMesh and the L_ref scaling)
     the far field undergoes the wing's rigid motion and scaling: the one similarity that maps the
-    raw far field onto the output one maps every output wing point onto a stored one."""
+    raw far field onto the output one maps every output wing point onto a stored one. This random
+    wing has no root on the plane, so it gets no symmetry plane (test_symmetry_plane.py builds one)."""
     from domain_transforms import AddHemisphereBoundaries
 
     wing = _hl_wing(_u_inf(22))
@@ -360,8 +371,11 @@ def test_highlift_pipeline_moves_the_far_field_with_the_wing(tmp_path, posed):
     cfg = _hl_dataset_cfg(tmp_path, posed)
     raw_cfg = OmegaConf.to_container(cfg.pipeline.transforms, resolve=False)
     assert str(raw_cfg[0]["_target_"]) == "${dp:AddHemisphereBoundaries}"
-    assert raw_cfg[0]["radius"] == HL_RADIUS
-    assert (raw_cfg[0]["n_theta"], raw_cfg[0]["n_phi"]) == (64, 32)
+    assert cfg.pipeline.transforms[0].radius == HL_RADIUS
+    assert (cfg.pipeline.transforms[0].n_theta, cfg.pipeline.transforms[0].n_phi) == (
+        64,
+        32,
+    )
     assert sum("AddHemisphereBoundaries" in str(t["_target_"]) for t in raw_cfg) == 1
     assert str(raw_cfg[-1]["_target_"]) == "${dp:SurfaceMeshToDomainMesh}"
     dataset_ = build_dataset(cfg, augment=True, device=None, num_workers=1)

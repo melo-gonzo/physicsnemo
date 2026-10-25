@@ -132,9 +132,14 @@ MI = [
      "the same, with `U_inf_dir` concatenated to every point", "the same"),
     ("drivaerml_volume", f"{BC}; {NT}; `U_inf_dir`, constant{DRV_DOM_V}", f"{GV}; `U_inf_dir`, constant (GeoTransolver-volume)",
      "the same per-point fields, with `U_inf_dir` concatenated", "the same globals; the baselines read the stored distance field, ISLA computes the exact distance to the full-resolution surface"),
-    ("hilift", f"{BC}; `U_inf_dir`, angle of attack 4 to 22°", f"{GP}; `U_inf_dir`, angle of attack 4 to 22°",
+    ("hilift", f"{BC}; `U_inf_dir`, angle of attack 4 to 22°; ISLA's configuration also reads the far field's `inlet` and "
+     "`outlet` and the symmetry plane `symmetry`, built at load, named conditions without fields, predicting at the wing's "
+     "cells alone, and the standing's checkpoints were trained with the wing alone (@sec-standing-geometry)",
+     f"{GP}; `U_inf_dir`, angle of attack 4 to 22°",
      "the same, with `U_inf_dir` concatenated", "the same"),
-    ("shift_suv", f"{BC}, the vehicle alone, as the standing's checkpoints were trained; `U_inf_dir`, constant", f"{GP}; `U_inf_dir`, constant",
+    ("shift_suv", f"{BC}; `U_inf_dir`, constant; ISLA's configuration also reads the CFD box's `inlet`, `outlet`, `floor`, "
+     "`side_walls` and `roof`, built at load, named by role with no condition type, predicting at the vehicle's cells alone, and "
+     "the standing's checkpoints were trained with the vehicle alone (@sec-standing-geometry)", f"{GP}; `U_inf_dir`, constant",
      "the same, with `U_inf_dir` concatenated", "the same"),
     ("airfrans", f"{BC}; {NT}; the inlet velocity `U_inf` as the velocity source of its declared scales: its direction, and as the one "
      "scalar the Reynolds number from its magnitude, the length unit of the given boundary and the configuration's "
@@ -687,7 +692,7 @@ area-weighted relative L2 error of @sec-metrics, computed per case and averaged 
 | checkpoint | the final epoch of each seed; no selection on validation error |
 | seeds | 42 and 43, both reported (42 to 45 for ISLA on Tensile2d); the standing quotes the seed mean and applies the seed rule of @sec-fair-comparison |
 | metric | area-weighted relative L2 per case, averaged over the scored cases (@sec-metrics) |
-| scorings | the *native mesh*; the *uniform point cloud*, the area-proportional law with exact Horvitz–Thompson weights (not scored on HiLiftAeroML's deduplicated wing); *rotated and translated*, a random rotation and a translation of one RMS radius per case (the root-mean-square distance of the case's points from their centroid; in-plane on the planar datasets) |
+| scorings | the *native mesh*; the *uniform point cloud*, the area-proportional law with exact Horvitz–Thompson weights; *rotated and translated*, a random rotation and a translation of one RMS radius per case (the root-mean-square distance of the case's points from their centroid; in-plane on the planar datasets) |
 | AeroZoo | the native mesh only, 200,000 interior points of each split's test cases, the relative L2 error per field and case in physical units averaged over cases, the checkpoint of epoch 250 (@sec-aerozoo-allowed) |
 
 : The scoring protocol of every standing. How to read this: the three scorings rescore one checkpoint and train nothing; a
@@ -706,8 +711,8 @@ things:
   to ISLA is measured in @sec-interior-boundary-law;
 - on AirfRANS, Tensile2d, the lug and DeepJEB++ it returns the native mesh, and the column repeats the native error.
 
-Of the first group, the DrivAerML Surface task and SHIFT-SUV appear as point-cloud standings (@fig-contract-shifts); the
-HiLiftAeroML standing, on the deduplicated wing, was not scored on the point cloud.
+Of the first group, the DrivAerML Surface task, HiLiftAeroML and SHIFT-SUV appear as point-cloud standings
+(@fig-contract-shifts).
 
 ::: {.callout-warning title="What the validation set is used for"}
 The DrivAerML and HiLiftAeroML accuracy figures are validation-set figures with no checkpoint selection behind them. The
@@ -724,8 +729,10 @@ are held out per checkpoint but do not confirm a result across the whole set of 
 steps, and the class refuses those checkpoints (@sec-using-checkpoint).** The parameters and the network are the same; the
 forward differs only in how a prediction point's wall geometry is built and how the boundary tokens are drawn. On the DrivAerML tasks,
 SHIFT-SUV, AirfRANS and HiLiftAeroML they were trained with configurations that read the body alone (the
-vehicle, the airfoil, the wing); on AeroZoo, the lug, Tensile2d and DeepJEB++ with every stored piece. The recipe's configurations read every stored piece of the domain's boundary, so on
-the DrivAerML tasks and AirfRANS they read more than the standings were trained with (@sec-limits-whole-boundary). On a surface
+vehicle, the airfoil, the wing); on AeroZoo, the lug, Tensile2d and DeepJEB++ with every stored piece. The recipe's configurations read every stored piece of the domain's boundary, and on SHIFT-SUV and HiLiftAeroML
+the pieces the recipe builds, so on the DrivAerML tasks, SHIFT-SUV, HiLiftAeroML and AirfRANS they read more than the
+standings were trained with
+(@sec-limits-whole-boundary). On a surface
 task, which computes no wall geometry and draws no tokens, the four steps do not arise. @tbl-standing-geometry lists them.
 
 | step | the standings' checkpoints (ISLA 0.9.0) | the class (@sec-arch-interior-geometry, @sec-arch-boundary-draw) |

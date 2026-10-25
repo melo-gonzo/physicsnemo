@@ -20,10 +20,16 @@ Transolver 512 x 16 (100,000 cells), both baselines reading the unit freestream 
 epochs on the 510-case rung with the recipe option drop_duplicate_cells (the stored wing's extra copies of its root cells
 dropped at load, the dataset unchanged), two seeds (42, 43), and scored in float32 on the final checkpoint on the 180
 validation cases: 200,000 cells drawn per case and the extra copies then dropped (about 186,000 kept), so the metric runs
-over distinct cells. Native mesh and rotated + translated; the uniform point cloud was not scored on this data.
+over distinct cells. Native mesh, uniform point cloud (a 1,000,000-cell draw without its extra copies, then the
+area-proportional draw of about 200,000 cells with exact Horvitz-Thompson weights; HL-AREA, LHR job 375068) and rotated +
+translated.
 
-Inputs, all copied unmodified into results/campaigns_2026-10-23/hl_dup_stage2_scores/ (RECORDS.md lists their md5s):
-  scores_stage2/<run>/<protocol>/<run>/metrics.jsonl   the scorer's per-case rows of the six runs hldupx_hl_{isla,gt,t}_seed{42,43}
+Inputs, all copied unmodified into results/campaigns_2026-10-23/ (RECORDS.md lists their md5s):
+  hl_dup_stage2_scores/scores_stage2/<run>/<protocol>/<run>/metrics.jsonl
+                                                       the scorer's per-case rows of the six runs hldupx_hl_{isla,gt,t}_seed{42,43},
+                                                       native and posed
+  hl_dup_stage2_area/scores_area/<run>/area/<run>/metrics.jsonl
+                                                       the same six runs on the uniform point cloud (HL-AREA)
   score_summary.json                                   stage 1's scores of the stored-wing standing checkpoints: (a) as the
                                                        standing scored them, (b) the same predictions with the copies left out
                                                        of the metric, (c) the copies left out of the input too; per-case pressure
@@ -31,9 +37,10 @@ and results/char/hilift_surface_090.json (immutable) for the unit-drive control 
 
 Reduction as every standing: per seed and protocol the mean over cases of the per-case relative L2 (the last infer_step row
 per sample id after the last config row), then the mean over seeds. Each config row must name epoch 500 and the dataset
-highlift_surface_medium_dedup (its _posed variant for the posed scoring), and each protocol must hold 180 cases.
+highlift_surface_medium_dedup (its _posed or _area variant for the posed or point-cloud scoring), and each protocol must hold
+180 cases, the point cloud the same sample ids as the native mesh.
 
-Writes results/char/hilift_surface_090_dedup.json in the standing schema of book/standing.py (protocols, fields, isla_arm,
+Writes results/char/hilift_surface_090_dedup_v2.json in the standing schema of book/standing.py (protocols, fields, isla_arm,
 status, in_flight, arms[arm][protocol][field] = {mean, per_seed, n_cases, n_seeds}, degenerate, complete) plus:
   isla_runs           the score folder, epoch and run stems
   fair_input          what each baseline reads
@@ -48,6 +55,9 @@ status, in_flight, arms[arm][protocol][field] = {mean, per_seed, n_cases, n_seed
                       the same configurations reading the physical vector U_inf (raw_drive_<arch>), and the standing's
                       stored-wing ISLA, native and uniform point cloud; no deduplicated physical-vector arm exists
 
+The first version of this script, without the point cloud, wrote results/char/hilift_surface_090_dedup.json (commit
+495eb4003); that file is kept as it was, and its arms equal this file's on the native mesh and rotated + translated.
+
 usage: python hilift_surface_090_dedup_2026-10-24.py
 """
 
@@ -58,13 +68,18 @@ from pathlib import Path
 
 R = Path(__file__).resolve().parent
 SRC = R.parent / "campaigns_2026-10-23" / "hl_dup_stage2_scores"
+AREA = R.parent / "campaigns_2026-10-23" / "hl_dup_stage2_area"
 OLD = json.load(open(R / "hilift_surface_090.json"))
 S1 = json.load(open(SRC / "score_summary.json"))
 
 SEEDS = ("42", "43")
 EPOCH, N_CASES, DATASET = 500, 180, "highlift_surface_medium_dedup"
 FIELDS = {"pressure_l2": "pressure", "tau_wall_l2": "wall shear"}
-PROTOS = {"native": "native mesh", "posed": "rotated + translated"}
+PROTOS = {
+    "native": "native mesh",
+    "area": "uniform point cloud",
+    "posed": "rotated + translated",
+}
 ISLA_ARM = "ISLA 512 with 512 slices"
 GT_ARM, T_ARM = "GeoTransolver 256", "Transolver 512 x 16, trained at 100k cells"
 RUN = {ISLA_ARM: "hldupx_hl_isla", GT_ARM: "hldupx_hl_gt", T_ARM: "hldupx_hl_t"}
@@ -83,7 +98,10 @@ AOA_BANDS = {"4-12": (4, 12), "14-22": (14, 22)}
 def rows(run, protocol):
     """{case id: metrics} of one scoring (last row per id after the last config row), with its epoch, dataset and case count
     checked; case ids without the dataset-index prefix and the domain suffix."""
-    path = SRC / "scores_stage2" / run / protocol / run / "metrics.jsonl"
+    if protocol == "area":
+        path = AREA / "scores_area" / run / protocol / run / "metrics.jsonl"
+    else:
+        path = SRC / "scores_stage2" / run / protocol / run / "metrics.jsonl"
     cfg, by = None, {}
     for line in open(path):
         r = json.loads(line)
@@ -91,7 +109,7 @@ def rows(run, protocol):
             cfg, by = r, {}
         elif r.get("phase") == "infer_step":
             by[r["sample_id"].split("_", 1)[1].rsplit("_domain", 1)[0]] = r["metrics"]
-    want = DATASET + ("_posed" if protocol == "posed" else "")
+    want = DATASET + {"native": "", "posed": "_posed", "area": "_area"}[protocol]
     assert cfg and cfg["epoch"] == EPOCH and cfg["dataset"] == want, (path, cfg)
     assert len(by) == N_CASES, (path, len(by))
     return by
@@ -100,6 +118,9 @@ def rows(run, protocol):
 PER = {
     (a, s, p): rows(f"{RUN[a]}_seed{s}", p) for a in RUN for s in SEEDS for p in PROTOS
 }
+assert all(
+    set(PER[(a, s, "area")]) == set(PER[(a, s, "native")]) for a in RUN for s in SEEDS
+)
 
 
 def cell(a, p, f):
@@ -128,6 +149,7 @@ out = {
     "degenerate": {},
     "isla_runs": {
         "scores": "results/campaigns_2026-10-23/hl_dup_stage2_scores/scores_stage2",
+        "scores_area": "results/campaigns_2026-10-23/hl_dup_stage2_area/scores_area",
         "epoch": EPOCH,
         "dataset": DATASET,
         **{a: f"{RUN[a]}_seed{{42,43}}" for a in RUN},
@@ -327,7 +349,7 @@ out["unit_drive_control"] = {
     },
 }
 
-json.dump(out, open(R / "hilift_surface_090_dedup.json", "w"), indent=1)
+json.dump(out, open(R / "hilift_surface_090_dedup_v2.json", "w"), indent=1)
 for a in RUN:
     print(
         f"{ARCH[a]:14s}",

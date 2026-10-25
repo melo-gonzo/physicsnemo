@@ -28,6 +28,7 @@ import sys
 from pathlib import Path
 
 import hydra
+import numpy as np
 import pytest
 import torch
 from hydra import compose, initialize_config_dir
@@ -322,12 +323,13 @@ def test_isla_surface_shift_suv_reads_the_box_and_predicts_at_the_vehicle():
 
 
 def test_isla_surface_highlift_reads_the_far_field_and_predicts_at_the_wing():
-    """HiLift: the model reads the wing and the inlet and outlet of the far field its dataset builds
-    (AddHemisphereBoundaries; no symmetry plane), predicts at the wing's cells only, and reverses
-    the wing's winding (into the body as stored) for ISLA only."""
-    from domain_transforms import AddHemisphereBoundaries
+    """HiLift: the model reads the wing, the inlet and outlet of the far field its dataset builds
+    (AddHemisphereBoundaries) and the symmetry plane its reader builds (AddSymmetryPlane) by name,
+    predicts at the wing's cells only, and reverses the wing's winding (into the body as stored) for
+    ISLA only."""
+    from domain_transforms import AddHemisphereBoundaries, AddSymmetryPlane
 
-    names = ("vehicle", "inlet", "outlet")
+    names = ("vehicle", "inlet", "outlet", "symmetry")
     cfg = _compose("isla_surface_highlift", "highlift_surface", *SMALL)
     assert cfg.forward_kwargs.boundary_meshes == {n: f"boundaries.{n}" for n in names}
     assert OmegaConf.to_container(cfg.model.boundary_schemas) == {n: {} for n in names}
@@ -345,6 +347,23 @@ def test_isla_surface_highlift_reads_the_far_field_and_predicts_at_the_wing():
             global_data={"U_inf": torch.tensor([0.98, 0.0, 0.17])},
         )
     ).boundaries
+    far = {
+        **{n: far[n] for n in far.keys()},
+        "symmetry": AddSymmetryPlane(
+            radius=4.0, cap_root="unused", cap_md5=[], n_theta=6, n_phi=3
+        ).plane(
+            np.array(
+                [
+                    [0.0, 0.0],
+                    [1.0, 0.0],
+                    [1.5, 0.5],
+                    [1.0, 1.0],
+                    [0.0, 1.0],
+                    [-0.5, 0.5],
+                ]
+            )
+        ),
+    }
     targets = _targets("highlift_surface")
     domain = _surface_sample(
         {k: () if v == "scalar" else (3,) for k, v in targets.items()},

@@ -167,16 +167,16 @@ DATASETS = {
             "sec-interior-results",
         ),
         # every arm trained and scored on the deduplicated wing (HL-DUP stage 2: hldupx_hl_isla, hldupx_hl_gt, hldupx_hl_t, the
-        # baselines reading U_inf_dir), scored over the distinct cells of ISLA's 200,000-cell draw, native and posed (the uniform
-        # point cloud was not scored on this data); the file adds the registered rule (registered), stage 1's (a) and (b) of the
+        # baselines reading U_inf_dir), scored over the distinct cells of ISLA's 200,000-cell draw, native, on the uniform point
+        # cloud (HL-AREA) and posed; the file adds the registered rule (registered), stage 1's (a) and (b) of the
         # stored-wing checkpoints (stored_wing_b), the per-case readouts and angle bands (case_level), and the input-scale
         # control on the stored wing (unit_drive_control, read by unit_drive)
         Dataset(
             "hilift",
             "HiLiftAeroML (510 training cases)",
-            "hilift_surface_090_dedup.json",
+            "hilift_surface_090_dedup_v2.json",
             ("pressure_l2", "tau_wall_l2"),
-            ("native", "posed"),
+            ("native", "area", "posed"),
             "sec-de-result",
         ),
         Dataset(
@@ -815,7 +815,7 @@ def plot_shifts(ax, protocol="posed", keys=None, field=None):
 #: the compile steps; the peak allocated device memory in GiB, the maximum over ranks; the parameter count; the GPUs, ranks
 #: and precision. ISLA trains on four GB300 ranks in bfloat16 with its blocks compiled one by one; "note" says where a
 #: lane differs from that (an uncompiled baseline, a lane in flight, a smoke lane standing in for a lost log).
-COST_FILE = "cost_090.json"
+COST_FILE = "cost_090_v2.json"
 _COST_FIELDS = (
     "peak_gib",
     "step_seconds",

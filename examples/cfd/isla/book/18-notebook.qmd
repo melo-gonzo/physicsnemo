@@ -42260,6 +42260,123 @@ scratch/isla-hl-dup-2026-10-24/NOTEBOOK_DRAFT_STAGE2.md (md5 9512b28d).
 
 **Later (2026-10-24).** The standing switch is done (HL-STANDING). Stage 2's per-case scores are records (`hl_dup_stage2_scores`), and `results/char/hilift_surface_090_dedup.json`, built from them by `hilift_surface_090_dedup_2026-10-24.py`, is HiLift's standing in `standing.py`, so 04, 07, 08, 10, 11, 19, 20 and the index read it, and HiLift's In-flight mark is gone. Its seed means and seed-matched ratios equal stage2_summary.json exactly; RESULTS_STAGE2.md's table prints GeoTransolver's wall-shear seed mean as 0.09215, where its seeds give 0.092142. By the seed rule ISLA is level with Transolver on pressure, where the seeds overlap, and trails on the other three cells, so ISLA trails in 11 of the index's 36 comparisons (12 before) and in 20 is level in 8 and trails in 11 of 38 (7 and 12 before). The uniform point cloud was not scored on the deduplicated wing, so HiLift leaves that protocol's figures; the input-scale control, the data-efficiency ladders, the one-case capacity floor and the cost table stay on the stored wing, labelled so. HiLift's symmetry-plane callout stays until HL-SYMPLANE lands (scratch/isla-book-hldup-2026-10-24/FINAL_REPORT.md).
 
+## 2026-10-24 — HL-SYMPLANE: HiLiftAeroML's symmetry plane built at load from the closed root cap of the dataset's own source STL, after a per-case check; all 690 canonical cases pass, the worst vertex 0.061 in from the cap's outline against a derived tolerance of 0.1345 in; the built plane matches the curation pipeline's to 4.6e-9 in area; the baselines' inputs bitwise unchanged; merged with this batch {#sec-nb-hl-symplane}
+
+**Question.** The supervisor asked Peter: "may HiLift's symmetry plane take its root outline from the closed root cap in the
+dataset's own source STL files, applied to every case after a check that the case's own root points lie on it?" Peter
+answered, at about 19:10 EDT: "Yes, that works". Can the plane be built so, at load, for every canonical case, and does it
+match the plane the curation pipeline stored on its two files?
+
+**Method.** `AddSymmetryPlane` (`src/symmetry.py`, psharpe/isla-hl-symplane bc4081e75) runs in HiLift's reader on the whole
+stored wing, in raw inches. It reads the cap from the first source STL in sorted order (geo_LHC001_AoA_10, 966 cells, its key
+accepted; the outline is one simple loop of 968 vertices) and builds the far field's $y = 0$ disk with that outline as its hole,
+triangulated by constrained Delaunay with every normal into the fluid, on the same hemisphere as `AddHemisphereBoundaries`.
+A case gets the plane only if every stored on-plane vertex and open root edge lies on the outline within a tolerance tau
+derived from the cap alone:
+
+- storage: eps = sqrt(2) × the float32 spacing at 2,583 in = 3.45e-4 in, which bounds the change of a point-to-segment
+  distance under storage rounding;
+- the chord sagitta: between two cap vertices the section is a convex arc inside the tangent triangle of its end turnings,
+  widened by their float32 uncertainty, of height L / (cot b1 + cot b2); the largest, 0.1341 in, is on a 1-in chord near the
+  flap whose ends turn 11.8° and 20.5°;
+- tau = 0.1341 + 0.0003 = 0.1345 in.
+
+The exact check costs 13 to 23 s and a 6.4 GB scan per wing, so it cannot run at every load. The supervisor decided at
+19:28 EDT to keep the verdicts in one fingerprinted dataset-level record on LHR, which holds no geometry; the reader checks each
+case's fingerprints against it at every load. A case that fails gets no plane, logged.
+
+**Checks.**
+
+- Census (LHR 374043 to 374045, 6.2 core-h; record md5 bc2ed653): 690 of 690 canonical cases (train 510, val 180) pass. The
+  worst on-plane vertex is 0.061264 in (0.46 tau), the same vertex on every case. The worst open-edge midpoint is 0.060 in on
+  689 cases and 0.1266 in (0.94 tau) on geo_LHC024_AoA_8, where two root edges of about 20 in have their ends within 0.004 in
+  of the outline, so the distance is those edges' own sagitta.
+- Against the stored plane of LHC001_AoA_10 and _12 (LHR 374370): the equator is bitwise equal; the area differs by +4.6e-9
+  of the whole; the hole holds 0.99999 of the stored hole's area; the hole Hausdorff distance is 0.0613 in from the stored hole
+  to the built one and 0.00085 in back; the built hole is one simple loop where the stored one, the pipeline's walk of the CFD
+  root, has 11 vertices of degree 4. Inlet, outlet and plane together leave open exactly the 968 hole edges.
+- One similarity moves every piece with the wing (8 samples, posed rotations 121° and 165°; residuals at most 1.5e-5 of the
+  extent).
+- GeoTransolver's and Transolver's collated inputs and targets: 24 of 24 items bitwise equal.
+- Recipe tests: 605 passed, 12 skipped; the 2 test_campaign_c_hooks failures carry the base's messages. GB300 smoke with the
+  plane: 32.51 GB and 98,300 tokens (the plane adds 1,032), against 32.23 GB and 97,268 without it, step time unchanged.
+- The condition type is the dataset paper's (arXiv:2605.19565v2, section 2.3 and appendix A.2.1): "The symmetry plane is
+  treated with a no-stress boundary condition". The README documents none.
+
+**Reading.** Canonical ISLA's configuration on HiLift now reads the whole boundary of its PDE domain: the deduplicated wing,
+the inlet, the outlet and the symmetry plane, the last three built at load, the dataset unchanged. HiLift's standing is still
+of checkpoints trained with the wing alone; the final reference rerun retrains ISLA with the plane.
+
+**Left open.** The full 1,800-case root has no record yet (about 15 core-h to build); the open-edge check includes a long edge's
+own sagitta, so a future case with a longer root edge could fail although its root is correct; and a case that failed would
+leave `isla_surface_highlift` without the boundary it names.
+
+**For the book.** 05's, 06's and 20's generated tables gain `symmetry`; 06, 07, 10, 20 and 21 say the plane is built and read,
+with the check, its tolerance, the census and the comparison; the symmetry-plane In-flight callouts in 10 and 20 are gone.
+Records: results/campaigns_2026-10-23/hl_symplane/ (FINAL_REPORT.md, RESULTS.md, BOOK_CHANGES.md).
+
+*Applied for the supervisor by the book lane BOOK-SYM and second-read by a lane reviewer on 2026-10-24, its findings applied
+(scratch/isla-book-sym-2026-10-24/SECOND_READ_SYM.md, SECOND_READ_DISPOSITION.md).*
+
+## 2026-10-24 — HL-AREA: on the uniform point cloud ISLA's error on the deduplicated HiLift wing is unchanged (0.989 to 0.999 of native) while the baselines' pressure error rises 3.6 to 5.5 times; the deduplicated lanes price within 6% of the stored-wing lanes {#sec-nb-hl-area}
+
+**Question.** HL-DUP stage 2 scored its six deduplicated-wing checkpoints (ISLA 0.9.0, GeoTransolver and Transolver
+with the unit drive, seeds 42 and 43) on the native mesh and rotated and translated only, and the book priced HiLift from
+the lanes trained on the wing as stored. What do the same checkpoints score on the uniform point cloud, and what did their
+own training cost?
+
+**Method.** The scorer was HL-DUP stage 2's, with only these changes: the protocol, the run directory, the time limit, the
+bad nodes excluded, and the Transolver rows run beside two others on the same node to stay within a 3 GPU-h cap. It used
+the same inference command: float32, the 180 validation cases, the final checkpoint. The point cloud is CHAR-PROTOCOLS'
+twin applied to the deduplicated dataset file. The reader draws a 1,000,000-cell block and drops the extra copies (about
+934,000 cells kept). The area-proportional draw with exact Horvitz–Thompson weights then takes about 200,000 cells. The
+cost is the book's rule (cost_090), from the six lanes' own training logs: the median step without compile steps, the
+peak memory, and GPU-h from the scheduler.
+
+**Checks.** Every row was at epoch 500 and scored the same 180 cases as native. The protocol is not degenerate: the
+per-case pressure differs from native on 180 of 180 cases for every run. HL-DUP's RESULTS_STAGE2 ("Not done here") calls the
+area protocol "degenerate for ISLA, as before"; on HiLift it is not, since the point cloud redraws the scored cells for every
+arm, as CHAR-PROTOCOLS' audit of 2026-10-16 found. The cost extractor, rerun on the stored-wing lanes, reproduces
+cost_090.json's per-seed values exactly.
+
+**Result.** Seed means, seeds 42 / 43 in parentheses:
+
+| arm | pressure, point cloud | wall shear, point cloud | point cloud ÷ native, pressure |
+|---|---|---|---|
+| ISLA 0.9.0 | 0.0543 (0.0525, 0.0561) | 0.0961 (0.0942, 0.0981) | 0.989, 0.999 |
+| GeoTransolver 256 | 0.261 (0.239, 0.283) | 0.353 (0.331, 0.375) | 4.72, 5.48 |
+| Transolver 512 × 16 | 0.189 (0.195, 0.184) | 0.295 (0.310, 0.280) | 3.60, 3.58 |
+
+Baseline ÷ ISLA on the point cloud is 4.81 (pressure) and 3.67 (wall shear) for GeoTransolver, and 3.49 and 3.07 for
+Transolver. The per-seed ratios run from 2.86 to 5.05. On the native mesh the same ratios are 0.936 / 0.957 and
+0.966 / 0.954. ISLA's point-cloud error is 0.1 to 1.1% below its native error on every field and seed.
+
+Cost, seed means, deduplicated (stored wing):
+
+| | step [s] | peak [GiB per GPU] | GPU-h per lane |
+|---|---|---|---|
+| ISLA | 0.323 (0.341) | 64.6 (65.6) | 32.8 (32.5) |
+| GeoTransolver | 0.431 (0.457) | 77.9 (77.9) | 38.3 (39.2) |
+| Transolver | 0.323 (0.342) | 62.3 (62.3) | 32.3 (31.9) |
+
+Each step is 5 to 6% shorter on every architecture because each draw keeps about 7% fewer cells. Loading and validation
+fill the rest of each epoch, so GPU-h per lane moves only 0.98 to 1.01 times.
+
+**Reading.** HiLiftAeroML has a point-cloud standing again, and it reads as DrivAerML Surface and SHIFT-SUV do. ISLA's
+prediction does not depend on how the surface was sampled. Both baselines read the mesher's cell density, and their
+errors rise 2.8 to 5.5 times across the five fields. Firm: the two seeds agree within 15% on every baseline ratio. The cost
+table's cross-architecture ratios do not change.
+
+**For the book.** The point-cloud scores are records (`hl_dup_stage2_area`); `hilift_surface_090_dedup_2026-10-24.py` now
+reads them and writes `results/char/hilift_surface_090_dedup_v2.json`, and `cost_090_2026-10-22.py` prices HiLift from the
+deduplicated lanes into `results/char/cost_090_v2.json`; the earlier files stay as they were, and every other entry equals
+theirs. HiLift's point-cloud column is back in 04, 07, 08, 10 and the index (three surface tasks), and the stored-wing cost label
+in 08 and 19 is gone. Records: results/campaigns_2026-10-23/hl_dup_stage2_area/ (RESULTS.md, area_table.md, COST_REPORT.md,
+cost/); LHR job 375068, 1.09 GPU-h.
+
+*Applied for the supervisor by the book lane BOOK-SYM and second-read by a lane reviewer on 2026-10-24, its findings applied
+(scratch/isla-book-sym-2026-10-24/SECOND_READ_SYM.md, SECOND_READ_DISPOSITION.md).*
+
 ## 2026-10-22 — MECH-090: on Tensile2d the fixed compiled path's float32 gradients sit at a one-ulp eager floor, and pytorch/pytorch#195845 added a unit-dependent sink to ISLA's slice-state softmax (registered emulations not confirmed; a post-smoke emulation matches) {#sec-nb-mech090}
 
 **Question.** REF-090's Tensile2d control (@sec-nb-ref090-t2d-control) read (b) by its registered weighing, in which A2
