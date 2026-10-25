@@ -362,15 +362,9 @@ def test_the_interior_model_repeats_bitwise_on_cuda_with_every_cell_kept():
             "cuda",
             marks=[
                 pytest.mark.cuda,
-                ### without triton, auto resolves to the eager region, finite in float16
+                ### with triton: auto must not pick the fused region, which refuses
+                ### float16 autocast (BUGS_W2.md W2-1)
                 requires_cuda_triton,
-                pytest.mark.xfail(
-                    strict=True,
-                    raises=RuntimeError,
-                    reason="BUG W2-1 (BUGS_W2.md): geo_kernel='auto' resolves to "
-                    "the fused region under float16 autocast, which refuses it "
-                    "(geo_kernel.py:999) instead of falling back to eager",
-                ),
             ],
         ),
     ],

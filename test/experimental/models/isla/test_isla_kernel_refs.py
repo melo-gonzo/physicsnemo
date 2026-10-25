@@ -732,9 +732,19 @@ def test_geo_kernel_auto_disqualifiers_on_cuda():
     it fits and the eager region for each disqualifier: no global direction, five
     per-point vectors (five global directions, or two and three rank-1 boundary
     inputs), more slices than ``MAX_SLICES``, a rank-2 boundary input, two spatial
-    dimensions."""
+    dimensions, float16 autocast (the fused region's only autocast dtype is bfloat16;
+    the choice is re-made when the autocast dtype changes)."""
     pts = torch.zeros(4, 3, device="cuda")
-    assert _geo_model().resolve_geo_kernel(pts) == "fused"
+    m = _geo_model()
+    assert m.resolve_geo_kernel(pts) == "fused"
+    for dtype, want in (
+        (torch.float16, "eager"),
+        (torch.bfloat16, "fused"),
+        (torch.float16, "eager"),
+    ):
+        with torch.autocast("cuda", dtype=dtype):
+            assert m.resolve_geo_kernel(pts) == want, dtype
+    assert m.resolve_geo_kernel(pts) == "fused"
     five = {f"g{i}": {"rank": 1} for i in range(5)}
     cases = {
         "no global direction": _geo_model(global_schema={"s": {"rank": 0}}),
