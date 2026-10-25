@@ -64,7 +64,7 @@ from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
 from physicsnemo.mesh.spatial.cluster_tree import ClusterTree
 from test.experimental.models.isla._forced import ran
 from test.experimental.models.isla._kernel_cases import _basis_case, _basis_step, _to
-from test.experimental.models.isla._marks import requires_cuda
+from test.experimental.models.isla._marks import requires_cuda, requires_cuda_triton
 from test.experimental.models.isla._meshes import (
     cloud,
     orthogonal,
@@ -1440,6 +1440,112 @@ def test_fused_kernel_read_backward_is_deterministic(dtype):
     for a, b in zip(*grads):
         assert torch.equal(a, b)
     assert not grads[0][3][-3:].any() and not grads[0][4][-3:].any()
+
+
+def _int32_plan_past(limit, tail, per=1024, n_b=4096):
+    """A plan of int32 indices (so int32 offsets, as ``PairPlan.build`` gives) over
+    ``n_b`` sources, ``per`` pairs per point, whose last ``tail`` points' pairs start at
+    ``limit``: their indices, the point count and the plan's maker."""
+    from physicsnemo.experimental.models.isla.segment_softmax import PairPlan
+
+    n_q = limit // per + tail
+    g = torch.Generator(device="cuda").manual_seed(0)
+    qi = torch.arange(n_q, device="cuda", dtype=torch.int32).repeat_interleave(per)
+    bj = torch.randint(0, n_b, qi.shape, generator=g, device="cuda", dtype=torch.int32)
+
+    def plan(first):
+        """The plan of the points from ``first`` on, indexed from zero."""
+        p = PairPlan.build(
+            qi[first * per :] - first, bj[first * per :], n_q - first, n_b
+        )
+        assert p.q_offsets.dtype == torch.int32
+        return p
+
+    return n_q, g, plan
+
+
+@pytest.mark.cuda
+@requires_cuda_triton
+@pytest.mark.slow
+def test_fused_kernel_read_with_int32_offsets_past_2_27_pairs():
+    """An int32-offset plan of 2**27 + 65,536 pairs (F = 16): the last 64 points, whose
+    pairs' basis offsets p * F pass 2**31, get the outputs, query gradients and pair
+    basis gradients of the same points read alone (each point's program reads only its
+    own pairs), bitwise. With the plan's int32 offsets the kernels read and wrote the
+    wrong basis rows or faulted. Needs about 21 GiB of device memory: the bfloat16 basis
+    and its gradient (4.3 GB each), the backward's (P, 2H) float32 softmax weights and
+    logit gradients (8.6 GB) and the plan."""
+    from physicsnemo.experimental.models.isla.fused_read import fused_kernel_read
+
+    per, tail, n_b, h, kc, c, f = 1024, 64, 4096, 8, 4, 8, 16
+    if torch.cuda.mem_get_info()[0] < 32 * 2**30:
+        pytest.skip("needs about 21 GiB of free device memory")
+    n_q, g, plan = _int32_plan_past(2**27, tail, per, n_b)
+    bf = torch.bfloat16
+    basis = torch.randn(n_q * per, f, generator=g, device="cuda", dtype=bf)
+    w, q, k, v = (
+        torch.randn(*s, generator=g, device="cuda", dtype=bf)
+        for s in ((h, f), (n_q, h, kc), (n_b, h, kc), (n_b, h, c))
+    )
+    logm = -8 * torch.rand(n_b, generator=g, device="cuda")
+    seed = torch.randn(tail, h, c, generator=g, device="cuda")
+
+    def run(first):
+        b, qq = basis[first * per :].requires_grad_(), q[first:].requires_grad_()
+        out = fused_kernel_read(b, w, logm, qq, k, v, plan(first), 0.5)
+        (out[-tail:] * seed).sum().backward()
+        return [
+            t[-tail * n :].detach().clone()
+            for t, n in ((out, 1), (qq.grad, 1), (b.grad, per))
+        ]
+
+    whole = run(0)
+    alone = run(n_q - tail)
+    for a, b in zip(whole, alone):
+        assert torch.equal(a, b)
+
+
+@pytest.mark.cuda
+@requires_cuda_triton
+@pytest.mark.slow
+def test_segment_softmax_read_with_int32_offsets_past_2_28_pairs():
+    """An int32-offset plan of 2**28 + 65,536 pairs (H = 8) through the Triton read: the
+    last 64 points, whose pairs' kernel-term offsets p * H pass 2**31, get the outputs,
+    query gradients and pair kernel-term and log-measure gradients of the same points
+    read alone, bitwise. With the plan's int32 offsets the kernels read and wrote the
+    wrong rows or faulted. Needs about 17 GiB of device memory: the bfloat16 kernel terms
+    and their gradient (4.3 GB each), the float32 log measures and their gradient, and
+    the plan."""
+    from physicsnemo.experimental.models.isla.segment_softmax import (
+        segment_softmax_read,
+    )
+
+    per, tail, n_b, h, kc, c = 1024, 64, 4096, 8, 4, 8
+    if torch.cuda.mem_get_info()[0] < 24 * 2**30:
+        pytest.skip("needs about 17 GiB of free device memory")
+    n_q, g, plan = _int32_plan_past(2**28, tail, per, n_b)
+    bf = torch.bfloat16
+    ker = torch.randn(n_q * per, h, generator=g, device="cuda", dtype=bf)
+    logm = -8 * torch.rand(n_q * per, generator=g, device="cuda")
+    q, k, v = (
+        torch.randn(*s, generator=g, device="cuda", dtype=bf)
+        for s in ((n_q, h, kc), (n_b, h, kc), (n_b, h, c))
+    )
+    seed = torch.randn(tail, h, c, generator=g, device="cuda")
+
+    def run(first):
+        pairs = slice(first * per, None)
+        x, lm = ker[pairs].requires_grad_(), logm[pairs].requires_grad_()
+        qq = q[first:].requires_grad_()
+        out = segment_softmax_read(x, lm, qq, k, v, plan(first), 0.5)
+        (out[-tail:] * seed).sum().backward()
+        rows = ((out, 1), (qq.grad, 1), (x.grad, per), (lm.grad, per))
+        return [t[-tail * n :].detach().clone() for t, n in rows]
+
+    whole = run(0)
+    alone = run(n_q - tail)
+    for a, b in zip(whole, alone):
+        assert torch.equal(a, b)
 
 
 @pytest.mark.parametrize("dim", [3, 2])

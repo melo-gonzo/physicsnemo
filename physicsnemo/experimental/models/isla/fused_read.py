@@ -143,8 +143,10 @@ if HAS_TRITON:
     ):  # fmt: skip
         """One point: online softmax over its pairs; out[s] (H, C), lse[s] (H)."""
         s = tl.program_id(0).to(tl.int64)
-        start = tl.load(off_ptr + s)
-        end = tl.load(off_ptr + s + 1)
+        ### int64 pair offsets whatever the plan's dtype: p * F passes 2**31 at
+        ### P > 2**27 pairs, and PairPlan.build gives int32 offsets for int32 indices.
+        start = tl.load(off_ptr + s).to(tl.int64)
+        end = tl.load(off_ptr + s + 1).to(tl.int64)
         hh = tl.arange(0, H)
         w = _weights(w_ptr, H, F)
         wp = _weights_padded(w_ptr, H, F)
@@ -200,8 +202,8 @@ if HAS_TRITON:
         plan's by-source order (inv: each pair's position there). NARROW: the basis is
         bfloat16 or float16."""
         s = tl.program_id(0).to(tl.int64)
-        start = tl.load(off_ptr + s)
-        end = tl.load(off_ptr + s + 1)
+        start = tl.load(off_ptr + s).to(tl.int64)  # int64 pair offsets, as in the forward
+        end = tl.load(off_ptr + s + 1).to(tl.int64)
         hh = tl.arange(0, H)
         ff = tl.arange(0, F)
         rr = tl.arange(0, 2 * H)
@@ -322,8 +324,8 @@ if HAS_TRITON:
     ):  # fmt: skip
         """One source: dk[j] and dv[j], the sum of its items' parts in item order."""
         j = tl.program_id(0).to(tl.int64)
-        a = tl.load(item_off_ptr + j)
-        b = tl.load(item_off_ptr + j + 1)
+        a = tl.load(item_off_ptr + j).to(tl.int64)
+        b = tl.load(item_off_ptr + j + 1).to(tl.int64)
         dk = tl.zeros([H * KC], tl.float32)
         dv = tl.zeros([H * C], tl.float32)
         for t in range(a, b):
