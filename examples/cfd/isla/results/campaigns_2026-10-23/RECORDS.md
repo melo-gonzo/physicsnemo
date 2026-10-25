@@ -62,6 +62,8 @@ source. Do not edit by hand.
 | `hl_dup_stage2_scores/` | HL-DUP, stage 2: the scorer's per-case rows of the six deduplicated-wing runs (native and posed), and the stage-1 scores of the stored-wing checkpoints that its rule and its like-for-like figures read | `scratch/isla-hl-dup-2026-10-24/` |
 | `hl_symplane/` | HL-SYMPLANE: HiLiftAeroML's symmetry plane built at load from the source STL's root cap, its per-case check and tolerance, the census of the 690 canonical cases, the comparison with the curation pipeline's plane, and the book changes | `scratch/isla-hl-symplane-2026-10-24/` |
 | `hl_dup_stage2_area/` | HL-AREA: HL-DUP stage 2's six deduplicated-wing checkpoints scored on the uniform point cloud (per-case rows, reduction and table), and the six lanes' training cost from their own logs (extract_cost.py's lines and the cost report) | `scratch/isla-hl-area-2026-10-24/` |
+| `isla_api_013/` | ISLA-API: ISLA 0.13.0 (the interior task is ISLA-DTT with no switch; Mesh's names n_spatial_dims and n_boundary_tokens; no Reynolds argument; the schema key defines), its design and mapping table, the deleted tests, the assertion audit, the suites and the datapipe check of re_z against the in-model z, and the book changes | `scratch/isla-api-013-2026-10-24/` |
+| `reynolds_out/` | REYNOLDS-OUT: the Reynolds feature moved out of ISLA's constructor into the recipe (ComputeBoundaryScales and float64 ComputeLogReynolds in ISLA's model configs), its design and evidence, and the bitwise check of z on 160 cases over three checkpoints | `scratch/isla-reynolds-out-2026-10-24/` |
 
 | topic | file | source | md5 |
 | --- | --- | --- | --- |
@@ -361,3 +363,17 @@ source. Do not edit by hand.
 | hl_dup_stage2_area | scores_area/hldupx_hl_isla_seed43/area/DATASET_USED | scratch/isla-hl-area-2026-10-24/scores_area/hldupx_hl_isla_seed43/area/DATASET_USED | 9beeb4739f8b4a0b198608ed2dcb4e05 |
 | hl_dup_stage2_area | scores_area/hldupx_hl_t_seed42/area/DATASET_USED | scratch/isla-hl-area-2026-10-24/scores_area/hldupx_hl_t_seed42/area/DATASET_USED | 9beeb4739f8b4a0b198608ed2dcb4e05 |
 | hl_dup_stage2_area | scores_area/hldupx_hl_t_seed43/area/DATASET_USED | scratch/isla-hl-area-2026-10-24/scores_area/hldupx_hl_t_seed43/area/DATASET_USED | 9beeb4739f8b4a0b198608ed2dcb4e05 |
+| isla_api_013 | FINAL_REPORT.md | scratch/isla-api-013-2026-10-24/FINAL_REPORT.md | 00824edd70e9c78705603ac46ca36dd4 |
+| isla_api_013 | DESIGN.md | scratch/isla-api-013-2026-10-24/DESIGN.md | 3fa9227c0cc9d24e37523c0e65adeb76 |
+| isla_api_013 | BOOK_CHANGES.md | scratch/isla-api-013-2026-10-24/BOOK_CHANGES.md | 471c1a6b15efbc93cd2bf0d52f80383a |
+| isla_api_013 | BOOK_PROSE.md | scratch/isla-api-013-2026-10-24/BOOK_PROSE.md | a213ff8efa724cc241f9c204117276d7 |
+| isla_api_013 | DELETED_TESTS.md | scratch/isla-api-013-2026-10-24/DELETED_TESTS.md | 1930f91d3f428b329c10a268b3bf7ca6 |
+| isla_api_013 | DELETED_TESTS_RE.md | scratch/isla-api-013-2026-10-24/DELETED_TESTS_RE.md | c28917aae2c912f3af9669b039e7e230 |
+| isla_api_013 | ASSERTION_AUDIT.md | scratch/isla-api-013-2026-10-24/ASSERTION_AUDIT.md | 1422d98b93f707b47bd416370fd0d043 |
+| isla_api_013 | JOBS.md | scratch/isla-api-013-2026-10-24/JOBS.md | 441ac4a4fb8bad9fddbf09b5a6db04e8 |
+| isla_api_013 | logs/lhr/gb_377645.log | scratch/isla-api-013-2026-10-24/logs/lhr/gb_377645.log | d15086b3dfe5999f464f96241e0dee7b |
+| reynolds_out | DESIGN.md | scratch/isla-reynolds-out-2026-10-24/DESIGN.md | 44f40d13d7577dd42a9327e6837f4543 |
+| reynolds_out | FINAL_REPORT.md | scratch/isla-reynolds-out-2026-10-24/FINAL_REPORT.md | 62256c8f033f502a802a338c76131e8b |
+| reynolds_out | bitwise/RESULTS_BITWISE.md | scratch/isla-reynolds-out-2026-10-24/bitwise/RESULTS_BITWISE.md | af1c962a0c00e5cf43e5c70a2d16af01 |
+| reynolds_out | bitwise/JOBS.md | scratch/isla-reynolds-out-2026-10-24/bitwise/JOBS.md | 5e512c7119ec3e8b488f31669d6849bf |
+| reynolds_out | bitwise/z_cases_376561.tsv | scratch/isla-reynolds-out-2026-10-24/bitwise/z_cases_376561.tsv | 6b0fb046be4818b1f4a2e6bf58648ab8 |
