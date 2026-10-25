@@ -31,26 +31,24 @@ from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.geometry._cell_normals import compute_cell_normals
 from physicsnemo.mesh.primitives.surfaces import cube_surface
 from test.experimental.models.isla._forced import ran
-from test.experimental.models.isla._marks import requires_cuda, requires_cuda_triton
-from test.experimental.models.isla._meshes import orthogonal, outputs, transform
-from test.experimental.models.isla.test_isla_geometry_thin import (
-    _capped_cube,
-    _face_queries,
-    _rotation,
-    _soup,
-)
-from test.experimental.models.isla.test_isla_interior_geometry import (
+from test.experimental.models.isla._geometry_cases import (
     _box_ties,
     _box_wall,
+    _capped_cube,
     _circle,
+    _face_queries,
     _finned_cube,
     _interior,
     _naca,
     _near_wall,
     _polygon,
+    _rotation,
+    _soup,
     _sphere,
     _torus,
 )
+from test.experimental.models.isla._marks import requires_cuda, requires_cuda_triton
+from test.experimental.models.isla._meshes import orthogonal, outputs, transform
 
 D = torch.float64
 

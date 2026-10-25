@@ -31,49 +31,19 @@ import torch
 from physicsnemo.experimental.models.isla import geometry
 from physicsnemo.experimental.models.isla.geometry import exact_boundary_geometry
 from physicsnemo.mesh.geometry._cell_normals import compute_cell_normals
+from test.experimental.models.isla._geometry_cases import (
+    _capped_cube,
+    _exact_d2,
+    _face_queries,
+    _rotation,
+    _soup,
+)
 from test.experimental.models.isla._marks import requires_cuda
 
 D = torch.float64
 U64 = 2.0**-53
 
 _DEVICES = ["cpu", pytest.param("cuda", marks=[pytest.mark.cuda, requires_cuda])]
-
-
-def _exact_d2(x, tri):
-    """The squared distance from ``x`` to the closed triangle ``tri``, exactly (a
-    Fraction): the least over its edges and, where the projection falls inside it,
-    its plane."""
-    q = [Fraction(v) for v in x]
-    a, b, c = ([Fraction(v) for v in p] for p in tri)
-
-    def sub(u, v):
-        return [u[i] - v[i] for i in range(3)]
-
-    def dot(u, v):
-        return u[0] * v[0] + u[1] * v[1] + u[2] * v[2]
-
-    def cross(u, v):
-        return [
-            u[1] * v[2] - u[2] * v[1],
-            u[2] * v[0] - u[0] * v[2],
-            u[0] * v[1] - u[1] * v[0],
-        ]
-
-    best = None
-    for p0, p1 in ((a, b), (b, c), (a, c)):
-        e = sub(p1, p0)
-        t = min(max(dot(sub(q, p0), e) / dot(e, e), Fraction(0)), Fraction(1))
-        r = [q[i] - p0[i] - t * e[i] for i in range(3)]
-        best = dot(r, r) if best is None else min(best, dot(r, r))
-    n = cross(sub(b, a), sub(c, a))
-    nn = dot(n, n)
-    h = dot(sub(q, a), n)
-    p = [q[i] - h / nn * n[i] for i in range(3)]
-    if all(
-        dot(cross(sub(y, p), sub(z, p)), n) >= 0 for y, z in ((b, c), (c, a), (a, b))
-    ):
-        best = min(best, h * h / nn)
-    return best
 
 
 def _segment_d2(q, a, b):
@@ -186,82 +156,6 @@ def _check(q, p, c, device):
     assert wrong == 0
 
 
-def _rotation(seed):
-    g = torch.Generator().manual_seed(seed)
-    qm, r = torch.linalg.qr(torch.randn(3, 3, dtype=D, generator=g))
-    qm = qm * torch.sign(torch.diagonal(r))[None]
-    return qm if torch.det(qm) > 0 else -qm
-
-
-def _capped_cube(h, kind):
-    """The unit cube's surface, outward, two triangles a face, except its bottom face
-    z = 0, split at a vertex ``m`` beside its edge y = 0 into four cells: the first
-    is the cap (0,0,0)-(1,0,0)-m of width ``h`` (``m = (0.5, h, 0)``) or a needle
-    (``m = (1 - h, h, 0)``), ``rho = h``; and the cube as two triangles a face."""
-    p = torch.tensor(
-        [
-            [0, 0, 0],
-            [1, 0, 0],
-            [1, 1, 0],
-            [0, 1, 0],
-            [0, 0, 1],
-            [1, 0, 1],
-            [1, 1, 1],
-            [0, 1, 1],
-        ],
-        dtype=D,
-    )
-    m = {"cap": [0.5, h, 0.0], "needle": [1 - h, h, 0.0]}[kind]
-    p = torch.cat([p, torch.tensor([m], dtype=D)])
-    rest = [
-        [4, 5, 6],
-        [4, 6, 7],
-        [0, 4, 5],
-        [0, 5, 1],
-        [1, 5, 6],
-        [1, 6, 2],
-        [2, 6, 7],
-        [2, 7, 3],
-        [3, 7, 4],
-        [3, 4, 0],
-    ]
-
-    def outward(c):
-        c = torch.tensor(c)
-        v = p[c]
-        n = torch.linalg.cross(v[:, 1] - v[:, 0], v[:, 2] - v[:, 0], dim=-1)
-        flip = (n * (v.mean(1) - 0.5)).sum(-1) < 0
-        return torch.where(flip[:, None], c[:, [0, 2, 1]], c)
-
-    return (
-        p,
-        outward([[0, 1, 8], [0, 8, 3], [8, 2, 3], [8, 1, 2], *rest]),
-        outward([[0, 1, 2], [0, 2, 3], *rest]),
-    )
-
-
-def _face_queries(g, tri, h, n):
-    """``n`` points on the triangle ``tri`` (random barycentric), the same moved off
-    its plane by ``h`` times a random factor in (-1, 1), and by far less (a few
-    hundred float32 units of the coordinates, still clearly off the wall in
-    float64), and points near its longest edge."""
-    w = torch.rand(n, 3, dtype=D, generator=g)
-    on = (w / w.sum(1, keepdim=True)) @ tri
-    nrm = torch.linalg.cross(tri[1] - tri[0], tri[2] - tri[0])
-    nrm = nrm / nrm.norm()
-    side = torch.rand(n, 1, dtype=D, generator=g) * 2 - 1
-    s = torch.rand(n, 1, dtype=D, generator=g)
-    edge = tri[0] + s * (tri[1] - tri[0])
-    return torch.cat(
-        [
-            on,
-            on + h * side * nrm,
-            on + 1e-5 * side * nrm,
-            edge + h * torch.randn(n, 3, dtype=D, generator=g),
-        ]
-    )
-
-
 @pytest.mark.parametrize("device", _DEVICES)
 @pytest.mark.parametrize("dtype", [torch.float32, D])
 @pytest.mark.parametrize("rho", [1e-3, 1e-6])
@@ -280,29 +174,6 @@ def test_rotated_thin_cells(kind, rho, dtype, device):
     )
     rot, shift = _rotation(7), torch.tensor([0.3, -0.2, 0.7], dtype=D)
     _check((q @ rot.T + shift).to(dtype), (p @ rot.T + shift).to(dtype), c, device)
-
-
-def _soup(seed, h):
-    """GEO-DEGEN's sliver soup, smaller: random triangles in the unit cube, the
-    first eight slivers (the middle vertex ``h`` off the line of the other two), with
-    random queries and queries around the slivers."""
-    g = torch.Generator().manual_seed(500 + seed)
-    tri = torch.rand(48, 3, 3, dtype=D, generator=g)
-    tri[:8, 1] = 0.5 * (tri[:8, 0] + tri[:8, 2]) + h * torch.randn(
-        8, 3, dtype=D, generator=g
-    )
-    mid = 0.5 * (tri[:8, 0] + tri[:8, 2])
-    q = torch.cat(
-        [
-            torch.rand(80, 3, dtype=D, generator=g) * 1.4 - 0.2,
-            (mid[:, None] + 0.01 * torch.randn(8, 10, 3, dtype=D, generator=g)).reshape(
-                -1, 3
-            ),
-            tri[:8].reshape(-1, 3),
-            mid,
-        ]
-    )
-    return tri.reshape(-1, 3), torch.arange(144).reshape(-1, 3), q
 
 
 @pytest.mark.parametrize("device", _DEVICES)

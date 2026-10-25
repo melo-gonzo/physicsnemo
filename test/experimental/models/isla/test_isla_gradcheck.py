@@ -54,9 +54,9 @@ from physicsnemo.experimental.models.isla import (
 )
 from physicsnemo.experimental.models.isla.geometry import exact_boundary_geometry
 from physicsnemo.mesh.geometry._cell_normals import compute_cell_normals
+from test.experimental.models.isla._geometry_cases import _circle, _sphere
+from test.experimental.models.isla._kernel_cases import _two_x
 from test.experimental.models.isla._marks import requires_cuda, requires_cuda_triton
-from test.experimental.models.isla.test_isla_interior_geometry import _circle, _sphere
-from test.experimental.models.isla.test_isla_kernel_refs import _two_x
 
 D = torch.float64
 GRADCHECK = dict(eps=1e-6, atol=1e-7, rtol=1e-6, check_batched_grad=False)

@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Bounded (cosine) routing logits."""
+"""Bounded (cosine) routing logits, and the softmax over points that normalizes them."""
 
 import torch
 
@@ -22,6 +22,7 @@ from physicsnemo.experimental.models import ISLA
 from physicsnemo.experimental.models.isla.blocks import (
     ROUTING_TEMPERATURE,
     _RoutingLogits,
+    _softmax_over_points,
 )
 from test.experimental.models.isla._meshes import (
     cloud,
@@ -107,3 +108,22 @@ def test_cosine_routing_keeps_the_contracts_and_all_parameters_train():
     sum(o.square().mean() for o in out.values()).backward()
     missing = [n for n, p in m.named_parameters() if p.grad is None]
     assert not missing, missing
+
+
+def test_softmax_over_points_matches_middle_dim_softmax():
+    """The point softmax (reduction along a contiguous last dimension after a
+    transpose) is the same arithmetic as a softmax over the middle dimension: exact in
+    float64, at roundoff in float32."""
+    x = torch.randn(2, 500, 64, dtype=torch.float64)
+    assert torch.allclose(_softmax_over_points(x), torch.softmax(x, dim=1), atol=1e-14)
+    assert torch.allclose(
+        _softmax_over_points(x).sum(dim=1),
+        torch.ones(2, 64, dtype=torch.float64),
+        atol=1e-14,
+    )
+    x32 = x.float()
+    rel = (
+        (_softmax_over_points(x32) - torch.softmax(x32, dim=1)).norm()
+        / torch.softmax(x32, dim=1).norm()
+    ).item()
+    assert rel < 1e-6

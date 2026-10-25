@@ -52,14 +52,14 @@ from physicsnemo.experimental.models.isla.tree_read import (
 )
 from physicsnemo.mesh.spatial.cluster_tree import ClusterTree
 from test.experimental.models.isla._forced import ran, reaches
-from test.experimental.models.isla._meshes import cloud, live, points_mesh, soup
-from test.experimental.models.isla.test_isla_geometry_thin import _capped_cube
-from test.experimental.models.isla.test_isla_interior_geometry import (
+from test.experimental.models.isla._geometry_cases import (
     _box_ties,
+    _capped_cube,
     _circle,
     _near_wall,
     _sphere,
 )
+from test.experimental.models.isla._meshes import cloud, live, points_mesh, soup
 
 D = torch.float64
 #: The reference walk and build: GLOBE's cluster tree, tree by tree.

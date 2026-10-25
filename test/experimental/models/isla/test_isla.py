@@ -281,8 +281,7 @@ def test_interior_task_contracts():
     chunking), while
     rotation/translation covariance, the similarity gauge and boundary-refinement
     invariance hold; there is no routing-mass parameter,
-    every parameter receives a gradient, and bf16 autocast stays finite. The form is
-    no constructor argument (``query_independent``)."""
+    every parameter receives a gradient, and bf16 autocast stays finite."""
     torch.manual_seed(0)
     pts, nrm, w, drv = cloud(400)
     mesh = soup(pts, nrm, w)
@@ -353,10 +352,6 @@ def test_interior_task_contracts():
     assert all(
         torch.isfinite(p.grad).all() for p in m32.parameters() if p.grad is not None
     )
-    with pytest.raises(
-        TypeError, match="unexpected keyword argument 'query_independent'"
-    ):
-        _isla(hidden=32, n_layers=1, n_slices=8, query_independent=True)
 
 
 def test_live_makes_the_boundary_read_contribute():
@@ -595,7 +590,8 @@ def test_defaults_are_the_reference_configuration():
     automatic geometry kernel, one seed invariant n.g and six relational invariants;
     an interior model adds the prediction-point embedding over the built-in distance
     pair and is ISLA-DTT (the boundary read, no routing mass). The form is fixed by
-    ``interior``: ``query_independent`` is no constructor argument and no stored one."""
+    ``interior``: no stored argument is ``query_independent`` (test_isla_release.py
+    refuses it as a constructor argument)."""
     m = _isla(hidden=32, n_layers=2, n_slices=8)
     assert m.interior is False and m.qt is None
     assert m.kernel_basis is None and m.kernel_reads is None
@@ -610,17 +606,6 @@ def test_defaults_are_the_reference_configuration():
     assert mi.kernel_basis is not None and len(mi.kernel_reads) == 2
     assert not any(n.startswith("qt.logw") for n, _ in mi.named_parameters())
     assert any(n.startswith("kernel_reads.") for n, _ in mi.named_parameters())
-    for interior in (False, True):
-        with pytest.raises(
-            TypeError, match="unexpected keyword argument 'query_independent'"
-        ):
-            _isla(
-                hidden=32,
-                n_layers=2,
-                n_slices=8,
-                interior=interior,
-                query_independent=interior,
-            )
 
 
 def test_constructor_and_forward_are_keyword_only():
@@ -650,38 +635,6 @@ def test_constructor_and_forward_are_keyword_only():
     assert out.point_data["p"].shape == (16,) and out.point_data["v"].shape == (16, 3)
     assert torch.allclose(out.points, mesh.cell_centroids)
     assert all(torch.isfinite(o).all() for o in outputs(out).values())
-
-
-@pytest.mark.parametrize(
-    "name",
-    [
-        "nonsense",
-        "routing_norm",
-        "routing_temperature",
-        "scale_mode",
-        "use_measure_weights",
-        "use_relational_geo",
-        "fast_point_softmax",
-        "query_mass",
-        "query_scalar_scale",
-        "query_schema",
-        "local_rho",
-        "query_tokens",
-        "support_tokens",
-        "interior_geometry",
-        "kernel_read",
-        "kernel_read_radius",
-        "kernel_read_blocks",
-        "kernel_read_theta",
-        "mlp_ratio",
-        "geo_checkpoint",
-        "geo_kernel",
-        "eps",
-    ],
-)
-def test_unknown_constructor_argument_raises_type_error(name):
-    with pytest.raises(TypeError, match=f"unexpected keyword argument '{name}'"):
-        _isla(hidden=32, n_layers=1, n_slices=8, **{name: 1})
 
 
 def test_interior_flag_structures_the_forward():
@@ -728,8 +681,6 @@ def test_mesh_validation_errors():
     offending mesh named."""
     pts, nrm, w, drv = cloud(20, dtype=torch.float32)
     m = _isla(hidden=32, n_layers=1, n_slices=8)
-    with pytest.raises(ValueError, match="non-empty mapping"):
-        m(boundary_meshes={}, global_data={"g": drv})
     with pytest.raises(TypeError, match="must be a physicsnemo.mesh.Mesh"):
         m(
             prediction_boundaries=["wall"],

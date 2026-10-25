@@ -112,13 +112,13 @@ def _assert_same(ref, opt, dtype, out_tol, grad_tol, n=700):
     "K,P",
     [(1, 0), (2, 0), (3, 0), (4, 0), (1, 1), (1, 2), (1, 3), (2, 1), (2, 2), (3, 1)],
 )
-def test_fused_geo_region_matches_eager_region(dtype, K, P):
+def test_fused_geo_region_matches_eager_region(dtype, K, P, monkeypatch):
     """Region level: forward outputs (bias, mix, pooled) and every input gradient, for
     K global directions plus P per-token rank-1 vectors (the (5 + K + P)-invariant set
     in the eager order) with the linear routing-bias head."""
     from physicsnemo.experimental.models.isla.geo_kernel import fused_geo_region
 
-    torch.backends.cuda.matmul.allow_tf32 = False
+    monkeypatch.setattr(torch.backends.cuda.matmul, "allow_tf32", False)
     b, n, s = 2, 500, 40
     g = torch.Generator().manual_seed(0)
 
@@ -257,10 +257,10 @@ def test_fused_geo_kernel_model_rank1_boundary_input_exact_in_float64():
 @pytest.mark.cuda
 @requires_cuda
 @pytest.mark.parametrize("geo_kernel", ["eager", "fused"])
-def test_torch_compile_fullgraph_matches_eager(geo_kernel):
+def test_torch_compile_fullgraph_matches_eager(geo_kernel, monkeypatch):
     """The recipe compiles the whole model (compile: true); it must stay one graph and
     reproduce the eager reference within the study's float32 bars."""
-    torch.backends.cuda.matmul.allow_tf32 = False
+    monkeypatch.setattr(torch.backends.cuda.matmul, "allow_tf32", False)
     torch._dynamo.reset()
     ref, opt = _pair(torch.float32, geo_kernel=geo_kernel)
     inputs, _ = _boundary(300)
@@ -401,7 +401,6 @@ def test_compile_blocks_see_an_aligned_token_count(task, device):
 def _mix_pair(**kw):
     import torch._inductor.metrics
 
-    torch.backends.cuda.matmul.allow_tf32 = False
     torch._dynamo.reset()
     torch._inductor.metrics.reset()
     torch.manual_seed(0)
@@ -446,6 +445,7 @@ def test_compile_blocks_float32_matches_eager_at_every_token_count(n, monkeypatc
     builds no mix-order kernel."""
     from physicsnemo.experimental.models.isla import model
 
+    monkeypatch.setattr(torch.backends.cuda.matmul, "allow_tf32", False)
     monkeypatch.setattr(model, "TOKEN_ALIGNMENT", 1)
     inputs, tgt = _boundary(n)
 
@@ -475,6 +475,7 @@ def test_compile_blocks_query_independent_float32_at_every_token_count(nq, monke
     queries does not depend on the other queries of the request."""
     from physicsnemo.experimental.models.isla import model
 
+    monkeypatch.setattr(torch.backends.cuda.matmul, "allow_tf32", False)
     monkeypatch.setattr(model, "TOKEN_ALIGNMENT", 1)
     inputs, _ = _boundary(6000)
     q = torch.randn(nq, 3, generator=torch.Generator().manual_seed(5)).cuda() * 3.0

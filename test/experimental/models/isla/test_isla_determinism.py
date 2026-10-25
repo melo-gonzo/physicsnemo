@@ -60,6 +60,10 @@ from physicsnemo.experimental.models.isla.tree_read import (
     kernel_geo_width,
 )
 from test.experimental.models.isla._forced import ran
+from test.experimental.models.isla._geometry_cases import (
+    _near_wall,
+    _sphere,
+)
 from test.experimental.models.isla._marks import requires_cuda, requires_cuda_triton
 from test.experimental.models.isla._meshes import (
     cloud,
@@ -67,10 +71,6 @@ from test.experimental.models.isla._meshes import (
     outputs,
     points_mesh,
     soup,
-)
-from test.experimental.models.isla.test_isla_interior_geometry import (
-    _near_wall,
-    _sphere,
 )
 
 D = torch.float64

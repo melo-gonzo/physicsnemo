@@ -63,17 +63,18 @@ from physicsnemo.experimental.models.isla.geometry import exact_boundary_geometr
 from physicsnemo.experimental.models.isla.segment_softmax import PairPlan
 from physicsnemo.experimental.models.isla.tree_read import BoundaryForest
 from test.experimental.models.isla._forced import ran
-from test.experimental.models.isla._marks import requires_cuda, requires_cuda_triton
-from test.experimental.models.isla._meshes import cloud
-from test.experimental.models.isla.test_isla_interior_geometry import (
+from test.experimental.models.isla._geometry_cases import (
     _near_wall,
     _sphere,
 )
-from test.experimental.models.isla.test_isla_tree_read import (
+from test.experimental.models.isla._kernel_cases import (
     _basis_case,
     _basis_step,
     _to,
+    _two_x,
 )
+from test.experimental.models.isla._marks import requires_cuda, requires_cuda_triton
+from test.experimental.models.isla._meshes import cloud
 
 D = torch.float64
 _DEVICES = ["cpu", pytest.param("cuda", marks=[pytest.mark.cuda, requires_cuda])]
@@ -82,18 +83,6 @@ _LOW = {torch.float32: 1e-6, torch.bfloat16: 1e-3, torch.float16: 1e-3}
 
 def _rel(a, b) -> float:
     return float((a.double() - b.double()).norm() / b.double().norm())
-
-
-def _two_x(name, fast, eager, exact, floor):
-    """The 2x-error rule for one tensor (relative to the float64 tensor's largest entry)."""
-    fast, eager, exact = (t.detach().double().cpu() for t in (fast, eager, exact))
-    scale = exact.abs().max()
-    d_fast, d_eager = (
-        (fast - exact).abs().max() / scale,
-        (eager - exact).abs().max() / scale,
-    )
-    print(f"{name}: fast {d_fast:.2e}, eager {d_eager:.2e}")
-    assert d_fast <= 2 * d_eager + floor, (name, float(d_fast), float(d_eager))
 
 
 # --------------------------------------------------------------------------- fused geometry region

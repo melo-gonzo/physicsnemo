@@ -63,6 +63,7 @@ from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
 from physicsnemo.mesh.spatial.cluster_tree import ClusterTree
 from test.experimental.models.isla._forced import ran
+from test.experimental.models.isla._kernel_cases import _basis_case, _basis_step, _to
 from test.experimental.models.isla._marks import requires_cuda
 from test.experimental.models.isla._meshes import (
     cloud,
@@ -1858,59 +1859,6 @@ def test_walk_of_a_range_of_points_is_those_rows_of_the_walk_of_every_point(
         assert part.n_queries == stop - start
         for k in ("query_r", "query_n", "query_wall"):
             assert torch.equal(part.geometry[0][k], full.geometry[0][k][start:stop])
-
-
-def _basis_case(dim, n_vecs, n_pairs=20000, seed=0):
-    """One case's geometry for the kernel basis (float64, CPU; two global directions,
-    ``n_vecs`` rank-1 inputs per source), a random plan of ``n_pairs`` pairs and a
-    basis MLP."""
-    g = torch.Generator().manual_seed(seed)
-    nq, ns = 300, 500
-
-    def unit(*s):
-        return torch.nn.functional.normalize(
-            torch.randn(*s, generator=g, dtype=D), dim=-1
-        )
-
-    geometry = dict(
-        query_r=torch.randn(nq, dim, generator=g, dtype=D),
-        query_n=unit(nq, dim),
-        query_wall=torch.rand(nq, generator=g, dtype=D) + 0.01,
-        src_r=torch.randn(ns, dim, generator=g, dtype=D),
-        src_n=unit(ns, dim),
-        src_vecs=torch.randn(ns, n_vecs, dim, generator=g, dtype=D) if n_vecs else None,
-        g_unit=unit(2, dim),
-        eps=1e-12,
-    )
-    plan = types.SimpleNamespace(
-        qi=torch.randint(0, nq, (n_pairs,), generator=g).int(),
-        bj=torch.randint(0, ns, (n_pairs,), generator=g).int(),
-    )
-    return geometry, plan, _KernelBasis(kernel_geo_width(2, n_vecs)).double()
-
-
-def _to(x, device, dtype):
-    if torch.is_tensor(x):
-        return x.to(device, dtype) if x.is_floating_point() else x.to(device)
-    if isinstance(x, dict):
-        return {k: _to(v, device, dtype) for k, v in x.items()}
-    if isinstance(x, types.SimpleNamespace):
-        return types.SimpleNamespace(**_to(vars(x), device, dtype))
-    return x
-
-
-def _basis_step(basis, plan, geometry, seed, autocast=False, weights=False):
-    """The chunked basis of every pair from the plan, and its MLP's gradients for the
-    basis gradient ``seed``."""
-    basis.zero_grad(set_to_none=True)
-    dev = geometry["query_r"].device.type
-    with torch.autocast(dev, dtype=torch.bfloat16, enabled=autocast):
-        w = tree_read.fused_basis.mlp_weights(basis) if weights else None
-        out = tree_read._chunked_basis_from_plan(
-            basis, plan, 0, int(plan.qi.shape[0]), 0, 0, geometry, w
-        )
-    out.backward(seed.to(out.dtype))
-    return [out.detach()] + [p.grad.clone() for p in basis.parameters()]
 
 
 class _MlpProbe(torch.autograd.Function):

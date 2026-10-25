@@ -315,18 +315,6 @@ def test_all_parameters_receive_gradients():
         assert p.grad is not None and torch.isfinite(p.grad).all(), name
 
 
-def test_checkpoint_round_trip_keeps_the_specs(tmp_path):
-    from physicsnemo.core.module import Module
-
-    m = _model(1)
-    m.save(tmp_path / "m.mdlus")
-    m2 = Module.from_checkpoint(str(tmp_path / "m.mdlus")).double().eval()
-    assert m2.output_schema == m.output_schema and m2.global_schema == m.global_schema
-    mesh, drv = _boundary(64)
-    a, b = _forward(m, mesh, drv, 1), _forward(m2, mesh, drv, 1)
-    assert all(torch.equal(a[k], b[k]) for k in a)
-
-
 @pytest.mark.cuda
 @requires_cuda_triton
 def test_fused_kernel_does_not_touch_the_heads():

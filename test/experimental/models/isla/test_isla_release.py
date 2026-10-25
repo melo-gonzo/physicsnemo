@@ -62,27 +62,19 @@ from physicsnemo.core.module import Module
 from physicsnemo.experimental.models import ISLA
 from physicsnemo.experimental.models.isla.geometry import cell_second_moments
 from physicsnemo.mesh.calculus.measure import cell_measures
-from test.experimental.models.isla._meshes import outputs, soup
+from test.experimental.models.isla._meshes import outputs
+from test.experimental.models.isla._release_cases import (
+    CONFIGS,
+    IO,
+    _instantiate_model,
+    _make_inputs,
+)
 from test.experimental.models.isla.goldens import cases as C
 
 DATA_DIR = Path(__file__).parent / "data"
 REGENERATE = "python -m test.experimental.models.isla.goldens.record --regenerate"
 D, F = torch.float64, torch.float32
 
-#: Every configuration declares one scalar and one vector output, one boundary condition
-#: without fields and one global direction.
-IO = dict(
-    output_schema={"p": {"rank": 0}, "v": {"rank": 1}},
-    boundary_schemas={"wall": {}},
-    global_schema={"g": {"rank": 1}},
-)
-
-#: One small configuration in its two forms: a surface task and an interior task
-#: (the constructor's ``interior`` flag), which is ISLA-DTT.
-CONFIGS = {
-    "default": dict(hidden=32, n_layers=2, n_slices=8, **IO),
-    "dtt": dict(hidden=32, n_layers=2, n_slices=8, interior=True, **IO),
-}
 #: The committed reference checkpoints: the file, its configuration and the seed of
 #: its parameters. ISLA-DTT's is narrower (hidden 16) to keep ``data/`` within its
 #: budget.
@@ -90,18 +82,6 @@ CHECKPOINTS = {
     "isla_default_v1.mdlus": (CONFIGS["default"], 7),
     "isla_dtt_v1.mdlus": (dict(CONFIGS["dtt"], hidden=16), 8),
 }
-
-
-def _instantiate_model(seed: int = 0, **kwargs) -> ISLA:
-    """Build an ISLA with reproducible random parameters (MOD-008b pattern), forced to
-    the eager geometry region (the one the goldens were recorded with)."""
-    model = ISLA(**kwargs)
-    model.geo_kernel = "eager"
-    gen = torch.Generator(device="cpu").manual_seed(seed)
-    with torch.no_grad():
-        for p in model.parameters():
-            p.copy_(torch.randn(p.shape, generator=gen, dtype=p.dtype) * 0.1)
-    return model.eval()
 
 
 def _make_tensors(device, seed: int = 1234) -> dict:
@@ -116,29 +96,6 @@ def _make_tensors(device, seed: int = 1234) -> dict:
     inputs = dict(points=pts, normals=nrm, measure_weights=w)
     inputs = {k: v.to(device) for k, v in inputs.items()}
     inputs["global_inputs"] = {"g": g.to(device)}
-    return inputs
-
-
-def _make_inputs(device, query: bool = False, seed: int = 1234) -> dict:
-    """Deterministic mesh inputs: one case, a 64-cell boundary soup with unit normals
-    and positive effective measures, one global direction, and 40 prediction points
-    for the interior task."""
-    gen = torch.Generator(device="cpu").manual_seed(seed)
-    n = 64
-    pts = torch.randn(n, 3, generator=gen) * torch.tensor([3.0, 2.0, 1.0])
-    nrm = torch.nn.functional.normalize(torch.randn(n, 3, generator=gen), dim=-1)
-    w = torch.rand(n, generator=gen) + 0.5
-    g = torch.nn.functional.normalize(torch.randn(3, generator=gen), dim=-1)
-    inputs = dict(
-        boundary_meshes={"wall": soup(pts, nrm, w).to(device)},
-        global_data={"g": g.to(device)},
-    )
-    if query:
-        inputs["prediction_points"] = (torch.randn(40, 3, generator=gen) * 2.0).to(
-            device
-        )
-    else:
-        inputs["prediction_boundaries"] = ["wall"]
     return inputs
 
 

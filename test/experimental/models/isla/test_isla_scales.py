@@ -290,7 +290,7 @@ def test_the_length_unit_is_exact_under_subdivision(dim):
     cell with its own second moment: subdividing every cell (segments in two in two
     dimensions, triangles in four in three) at three levels leaves it unchanged to
     roundoff, where the centroids alone converge only as h^2 (a 4 % change here)."""
-    from test.experimental.models.isla.test_isla_interior_geometry import (
+    from test.experimental.models.isla._geometry_cases import (
         _polygon,
         _sphere,
     )
@@ -345,7 +345,7 @@ def test_declaring_nothing_is_the_release_model(config):
     parameters, and equal to the release goldens at their tolerance (the goldens are
     bitwise on the recording architecture and differ at the last bits across CPU
     architectures, BLAS reduction order)."""
-    from test.experimental.models.isla.test_isla_release import (
+    from test.experimental.models.isla._release_cases import (
         CONFIGS,
         _instantiate_model,
         _make_inputs,
