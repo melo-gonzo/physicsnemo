@@ -247,9 +247,10 @@ declare it as a boundary input instead).
 of the same arithmetic: the eager PyTorch region, which rebuilds its
 intermediates in backward instead of storing them, and the fused one (one
 Triton kernel per direction that never materializes the (B, N, S, .) tensor;
-CUDA, float32/float64 geometry, autocast off or in bfloat16, one to four per-point
-vectors counting the global directions and the token's rank-1 inputs together, at
-most 1024 slices, no rank-2 inputs). At the first forward pass the model picks the
+CUDA, float32/float64 geometry, autocast off or in bfloat16, at most three spatial
+dimensions, at most four per-point vectors counting the global directions (none
+counts as one) and the token's rank-1 inputs together, at most 1024
+slices, no rank-2 inputs). At the first forward pass the model picks the
 fused kernel when the inputs are on CUDA, Triton is importable and the
 constraints hold, and the eager region otherwise, logging the choice once
 (:meth:`ISLA.resolve_geo_kernel`; the ``geo_kernel`` attribute, ``"auto"``,
@@ -631,8 +632,8 @@ class ISLA(Module):
             (pseudovectors by the Levi-Civita construction: cross products in
             three dimensions, perpendiculars in two; odd-parity outputs are
             refused for ``n_spatial_dims >= 4``). The fused Triton geometry
-            kernel is written for three dimensions; other dimensions run the
-            eager region. The interior task (its exact boundary geometry) is
+            kernel runs two and three dimensions; higher ones run the eager
+            region. The interior task (its exact boundary geometry) is
             implemented in two and three dimensions. A two-dimensional problem
             is passed with ``n_spatial_dims=2`` (polyline boundaries) rather
             than embedded with a zero third coordinate.
@@ -1210,9 +1211,9 @@ class ISLA(Module):
         ``"eager"`` or ``"fused"`` when the ``geo_kernel`` attribute forces it;
         under the default (``"auto"``) the fused kernel when ``points`` is on CUDA, Triton is
         importable, CUDA autocast is off or in bfloat16 (the fused kernel's only
-        autocast dtype), the model has one to four per-point vectors (global directions
-        plus rank-1 token inputs), at most 1024 slices and no rank-2 inputs, else the
-        eager region. The
+        autocast dtype), the model has at most three spatial dimensions, at most four
+        per-point vectors (global directions, none counted as one, plus rank-1 token
+        inputs), at most 1024 slices and no rank-2 inputs, else the eager region. The
         decision is cached per device and autocast dtype and logged once.
         """
         if self.geo_kernel != "auto":
@@ -1232,9 +1233,8 @@ class ISLA(Module):
             points.is_cuda
             and HAS_TRITON
             and amp in (None, torch.bfloat16)
-            and self.n_spatial_dims == 3  # the fused kernel is written for three components
-            and self.n_global_vectors >= 1
-            and self.n_global_vectors + self.n_block_vecs <= MAX_DIRECTIONS
+            and self.n_spatial_dims <= 3
+            and max(self.n_global_vectors, 1) + self.n_block_vecs <= MAX_DIRECTIONS
             and self.n_slices <= MAX_SLICES
             and not self.n_block_tens
         )

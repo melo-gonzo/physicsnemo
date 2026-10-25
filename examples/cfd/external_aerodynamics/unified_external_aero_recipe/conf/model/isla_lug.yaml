@@ -22,8 +22,7 @@
 # with its applied pressure, the rest of the hole and the free surface, together the same cells. The four design parameters
 # enter as named rank-0 global inputs (the dataset's SplitGlobalVector standardizes `params` and splits it). No query_schema:
 # each node's distance and direction to the surface are computed inside the model, exactly, from the boundary meshes, so the
-# dataset's stored sdf and sdf_normals (the baselines' inputs) are not read. The lug has no global direction, so the fused
-# geometry kernel (which needs one) does not apply and the model runs the eager region.
+# dataset's stored sdf and sdf_normals (the baselines' inputs) are not read.
 input_type: mesh
 output_type: mesh
 

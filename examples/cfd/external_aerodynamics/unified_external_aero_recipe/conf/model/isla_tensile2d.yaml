@@ -24,7 +24,7 @@
 # scalars enter as named rank-0 global inputs (the dataset's SplitGlobalVector standardizes `params` and splits it). No
 # query_schema: each node's distance and direction to the boundary are computed inside the model, exactly, from the
 # boundary meshes, so the dataset's stored sdf and sdf_normals (the baselines' inputs) are not read. The targets are the dataset's
-# native fields: four scalars and the in-plane displacement vector. No global direction: the fused kernel does not apply.
+# native fields: four scalars and the in-plane displacement vector.
 input_type: mesh
 output_type: mesh
 

@@ -53,6 +53,7 @@ from __future__ import annotations
 import importlib
 
 import torch
+import torch.nn.functional as F
 
 from physicsnemo.core.version_check import is_package_available
 
@@ -979,13 +980,19 @@ def fused_geo_region(
 ):
     """Drop-in for ``blocks._geo_region``: returns (bias (B,N,S), mix (B,N,S),
     pooled (B,N,geo)) from one fused kernel. ``d_hat`` holds the per-point unit
-    vectors as (B, N, T, 3): the ``n_global`` global directions first (K, at
-    least one), then the token's rank-1 vectors (P' = T - K), T at most
-    :data:`MAX_DIRECTIONS`; the invariant order is the eager region's (the K
-    direction dots right after log distance, the token-vector dots after n.m),
-    so the routing Linear's weights mean the same on both paths. ``n_global``
-    defaults to T (every vector a global direction). ``lin`` is the routing-bias
-    head, ``nn.Linear(n_geo, 1)``."""
+    vectors as (B, N, T, d), d at most 3: the ``n_global`` global directions
+    first (K, possibly none), then the token's rank-1 vectors (P' = T - K), T at
+    most :data:`MAX_DIRECTIONS` with K = 0 counted as one; the invariant order is
+    the eager region's (the K direction dots right after log distance, the
+    token-vector dots after n.m), so the routing Linear's weights mean the same on
+    both paths. ``n_global`` defaults to T (every vector a global direction).
+    ``lin`` is the routing-bias head, ``nn.Linear(n_geo, 1)``.
+
+    The kernels are written for three components and at least one direction. A
+    problem in fewer dimensions enters with zero trailing components, and K = 0 as
+    one zero direction with a zero routing weight: both add exact zeros to every
+    norm, dot product and bias sum, so the arithmetic is the unpadded region's, and
+    the padded parts of the outputs and gradients are dropped."""
     if not HAS_TRITON:
         raise RuntimeError("fused geo region requires triton")
     if not isinstance(lin, torch.nn.Linear):
@@ -997,16 +1004,16 @@ def fused_geo_region(
     )
     if torch.is_autocast_enabled("cuda") and not lin_bf16:
         raise RuntimeError("fused geo region supports autocast in bfloat16 only")
-    return _geo_region_fwd(
-        logits_pre,
-        r,
-        n_hat,
-        d_hat,
-        z_pos,
-        m_s,
-        weight,
-        bias,
-        float(eps),
-        bool(lin_bf16),
-        int(d_hat.shape[2] if n_global is None else n_global),
+    k = int(d_hat.shape[2] if n_global is None else n_global)
+    if k == 0:
+        d_hat = torch.cat([d_hat.new_zeros(*d_hat.shape[:2], 1, d_hat.shape[3]), d_hat], dim=2)
+        weight = torch.cat([weight[:, :2], weight.new_zeros(1, 1), weight[:, 2:]], dim=1)
+    if r.shape[-1] < 3:
+        pad = (0, 3 - r.shape[-1])
+        r, n_hat, d_hat, z_pos, m_s = (F.pad(t, pad) for t in (r, n_hat, d_hat, z_pos, m_s))
+    bias_out, mix, pooled = _geo_region_fwd(
+        logits_pre, r, n_hat, d_hat, z_pos, m_s, weight, bias, float(eps), bool(lin_bf16), max(k, 1)
     )
+    if k == 0:
+        pooled = torch.cat([pooled[..., :2], pooled[..., 3:]], dim=-1)
+    return bias_out, mix, pooled
