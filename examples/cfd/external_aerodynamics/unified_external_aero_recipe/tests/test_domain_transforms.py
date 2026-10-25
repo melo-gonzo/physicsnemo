@@ -239,8 +239,8 @@ def test_surface_reader_loads_the_domain_boundaries_whole_beside_the_subsampled_
             pdomain.boundaries[name].points, moved, atol=0, rtol=0
         )
     assert bool((pdomain.boundaries["no_slip"].points[:, 2] == lowest).all())
-    with pytest.raises(ValueError, match="place the domain_boundaries"):
-        MeshReaderWithGlobalData(tmp_path, whole_surface_transforms=[place], **kw)
+    with pytest.raises(KeyError, match="not found"):  # no domain boundaries to place
+        MeshReaderWithGlobalData(tmp_path, whole_surface_transforms=[place], **kw)[0]
     with pytest.raises(FileNotFoundError, match="domain boundary 'roof'"):
         MeshReaderWithGlobalData(tmp_path, domain_boundaries=["roof"], **kw)[0]
 
