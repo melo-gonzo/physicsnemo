@@ -173,9 +173,16 @@ def _direction_cases():
                 ### a cell's interior; at a vertex the weights are constant, on an edge
                 ### they move with the query and the vertices, and u's Jacobian misses
                 ### that motion. Strict: it fails at every edge-region query.
-                marks = pytest.mark.xfail(
-                    strict=True, reason="u's gradient in edge regions (BUGS_W3.md B1)"
-                )
+                marks = [
+                    pytest.mark.xfail(
+                        strict=True,
+                        reason="u's gradient in edge regions (BUGS_W3.md B1)",
+                    )
+                ]
+                if wrt == "vertices":
+                    ### (about 6 s on CPU: a failing check builds the full Jacobian in the
+                    ### 126 vertex coordinates; the query case pins B1 in the fast tier)
+                    marks.append(pytest.mark.slow)
             yield pytest.param(
                 dim, region, wrt, marks=marks, id=f"{dim}d-{region}-{wrt}"
             )
