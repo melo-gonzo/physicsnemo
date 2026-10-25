@@ -38,10 +38,11 @@ Python function that launches it.
 import sys
 import types
 
+import pytest
 import torch
 
-_monitoring = sys.monitoring
-_EVENTS = _monitoring.events.PY_START | _monitoring.events.PY_RETURN
+### sys.monitoring (PEP 669) exists from Python 3.12; on 3.11 a test that uses ran skips.
+_monitoring = getattr(sys, "monitoring", None)
 
 
 def code_of(fn):
@@ -83,6 +84,9 @@ class ran:
         self._returns[code].append(value)
 
     def __enter__(self):
+        if _monitoring is None:
+            pytest.skip("the forced-path guard needs sys.monitoring (Python 3.12+)")
+        events = _monitoring.events.PY_START | _monitoring.events.PY_RETURN
         free = [i for i in (3, 4, 5, 2, 1, 0) if _monitoring.get_tool(i) is None]
         if not free:
             raise RuntimeError("every sys.monitoring tool id is taken")
@@ -95,7 +99,7 @@ class ran:
             self._tool, _monitoring.events.PY_RETURN, self._return
         )
         for code in self._codes:
-            _monitoring.set_local_events(self._tool, code, _EVENTS)
+            _monitoring.set_local_events(self._tool, code, events)
         return self
 
     def __exit__(self, *exc):

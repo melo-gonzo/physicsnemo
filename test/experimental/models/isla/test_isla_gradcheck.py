@@ -55,6 +55,7 @@ from physicsnemo.experimental.models.isla import (
 from physicsnemo.experimental.models.isla.geometry import exact_boundary_geometry
 from physicsnemo.mesh.geometry._cell_normals import compute_cell_normals
 from test.experimental.models.isla.test_isla_interior_geometry import _circle, _sphere
+from test.experimental.models.isla.test_isla_kernel_refs import _two_x
 
 D = torch.float64
 GRADCHECK = dict(eps=1e-6, atol=1e-7, rtol=1e-6, check_batched_grad=False)
@@ -176,6 +177,7 @@ def _direction_cases():
                 marks = [
                     pytest.mark.xfail(
                         strict=True,
+                        raises=AssertionError,
                         reason="u's gradient in edge regions (BUGS_W3.md B1)",
                     )
                 ]
@@ -234,10 +236,12 @@ def test_closest_candidates_ops_pass_opcheck(name, dim, dtype, device):
 
 @pytest.mark.parametrize("device", _DEVICES)
 def test_cumsum_op_passes_opcheck(device):
-    """The draw's opaque float64 scan, ``isla_cumsum``."""
+    """The draw's opaque float64 scan, ``isla_cumsum``; on CPU it is ``cumsum``
+    bitwise (not compared on CUDA, whose float64 scan does not repeat bitwise)."""
     x = torch.rand(3000, dtype=D, generator=torch.Generator().manual_seed(0)).to(device)
     torch.library.opcheck(torch.ops.physicsnemo.isla_cumsum.default, (x,))
-    assert torch.equal(sampling._cumsum(x), x.cumsum(0))
+    if device == "cpu":
+        assert torch.equal(sampling._cumsum(x), x.cumsum(0))
 
 
 def _region_inputs(dtype, k, p, b=1, n=6, s=5, seed=0, device="cuda"):
@@ -383,10 +387,7 @@ def test_fused_node_means_obey_the_2x_error_rule(dtype):
     fused = run(fused_read.fused_node_means, dtype)
     floor = 1e-6 if dtype == torch.float32 else 1e-3
     for name, a, b, e in zip(("means", "grad x"), fused, eager, exact):
-        scale = e.abs().max()
-        d_fused, d_eager = (a - e).abs().max() / scale, (b - e).abs().max() / scale
-        print(f"{name}: fused {d_fused:.2e}, eager {d_eager:.2e}")
-        assert d_fused <= 2 * d_eager + floor, name
+        _two_x(name, a, b, e, floor)
 
 
 # --------------------------------------------------------------------------- the references

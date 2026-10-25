@@ -119,7 +119,8 @@ def test_a_forced_walk_runs_that_walk(walk, monkeypatch):
         f.point_pairs(q)
     assert calls, "the patched resolver was not consulted"
     fast, ref = r.count(tree_walk.walk_pairs), r.count(REFERENCE_WALK)
-    assert (fast, ref > 0) == ((1, False) if walk == "fast" else (0, True))
+    assert fast == (1 if walk == "fast" else 0)
+    assert (ref > 0) == (walk == "reference")
     if walk == "fast":
         assert r.returns(tree_walk.walk_pairs)[0] is not None
 

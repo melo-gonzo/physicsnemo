@@ -344,7 +344,9 @@ def test_segment_softmax_read_of_a_width_not_a_power_of_two_is_the_eager_read(h,
     assert r.count(segment_softmax._SegmentSoftmaxRead) == 0 and r.count(eager) == 1
     want = _ssr_run(eager, *args)
     for name, a, b in zip(("out", "ker", "q", "k", "v"), got, want):
-        assert float((a - b).abs().max() / b.abs().max()) < 1e-4, name
+        diff = float((a - b).abs().max() / b.abs().max())
+        print(f"{name}: against a direct eager run {diff:.2e}")
+        assert diff < 1e-4, name
 
 
 @pytest.mark.cuda
@@ -676,6 +678,7 @@ def test_fused_basis_unsupported_reasons_on_cuda():
         assert "autocast" in fused_basis.unsupported_reason(basis, geometry_)
     with torch.autocast("cuda", dtype=torch.float32):
         assert "autocast" in fused_basis.unsupported_reason(basis, geometry_)
+    ### (Module.double() and .float() convert the basis in place: back to float32 here)
     assert "not CUDA float32" in fused_basis.unsupported_reason(
         basis.double(), geometry_
     )

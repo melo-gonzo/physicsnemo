@@ -21,7 +21,7 @@ No test sets a global deterministic mode (``torch.use_deterministic_algorithms``
 that would hide what a user meets by default. Each test runs a path twice (or five
 times) in one process on the same inputs and states what repeats:
 
-- bitwise: the fast exact geometry (d, u, the query gradient), the fused geometry
+- bitwise: the fast exact geometry (d, u, both gradients), the fused geometry
   region, the fused node means and the fused read with their backward passes, the
   segment-softmax read's forward and its by-point gradients, the whole model (the
   surface task and ISLA-DTT with its draw, in 3-D and 2-D, in float32 and under
@@ -29,9 +29,8 @@ times) in one process on the same inputs and states what repeats:
   kernels auto;
 - to a stated tolerance, where the code sums in an order CUDA does not fix: the
   draw's float64 Horvitz-Thompson weights (CUDA's floating-point ``cumsum``,
-  ulps), the segment-softmax read's key and value gradients (atomic adds), the fast
-  geometry's vertex gradient (the gather's backward), and the reference (unfused)
-  tree read on CUDA (``node_means``' ``index_add``).
+  ulps), the segment-softmax read's key and value gradients (atomic adds), and the
+  reference (unfused) tree read on CUDA (``node_means``' ``index_add``).
 
 When a source of order is made exact (the draw in int64 fixed point,
 DETERMINISM.md (a)), its test here tightens to bitwise.
@@ -133,6 +132,8 @@ def test_the_draw_twice_on_cuda_keeps_the_same_cells():
     ]
     (kept0, w0), (kept1, w1) = runs
     assert kept0.shape == (BUDGET,) and torch.equal(kept0, kept1)
+    spread = float(((w1 - w0).abs() / w0.abs()).max())
+    print(f"the draw's weights, run-to-run: {spread:.2e} relative (bound 1e-15)")
     ### DRAW-EXACT (0.14.0 candidate, int64 sums): make this torch.equal(w1, w0).
     assert torch.allclose(w1, w0, rtol=1e-15, atol=0)
 
@@ -143,7 +144,8 @@ def test_hits_planted_on_line_boundaries_keep_one_of_the_two_cells_there():
     """Hits planted on cell boundaries of the systematic line (the start chosen so
     that ``start + j`` is a boundary ``line[i]`` as the CPU draw computes it): every
     CUDA run, and the CPU run, keeps the same cells except, at most, which of the two
-    cells beside the planted boundary takes that hit (the line's ulp-level wobble
+    cells beside the planted boundary (found by moving the CPU's start a few ulps
+    either way) takes that hit (the line's ulp-level wobble
     decides it on CUDA today: DETERMINISM.md (a)). Once the draw's sums are exact this
     tightens to: every run keeps the CPU's cells bitwise."""
     measures, centroids = _draw_case(seed=1)
@@ -160,6 +162,16 @@ def test_hits_planted_on_line_boundaries_keep_one_of_the_two_cells_there():
             i
         ] and j < BUDGET
         kept_cpu, _ = sampling.sample_boundary_cells(cpu_m, cpu_x, BUDGET, start)
+        ### The two cells beside the planted boundary: those the CPU draw swaps when
+        ### the start moves 8 ulps of line[i] either way (no other hit is that close
+        ### to a boundary).
+        delta = 8 * torch.finfo(D).eps * line[i]
+        lo, hi = (
+            sampling.sample_boundary_cells(cpu_m, cpu_x, BUDGET, start + e)[0]
+            for e in (-delta, delta)
+        )
+        beside = torch.cat([lo[~torch.isin(lo, hi)], hi[~torch.isin(hi, lo)]])
+        assert beside.numel() == 2, (i, beside)
         for _ in range(3):
             kept, _ = sampling.sample_boundary_cells(
                 measures, centroids, BUDGET, start.cuda()
@@ -174,6 +186,7 @@ def test_hits_planted_on_line_boundaries_keep_one_of_the_two_cells_there():
             )
             ### DRAW-EXACT (0.14.0 candidate): make this torch.equal(kept, kept_cpu).
             assert differ.numel() in (0, 2), (i, differ)
+            assert bool(torch.isin(differ, beside).all()), (i, differ, beside)
 
 
 # --------------------------------------------------------------------------- module level
@@ -182,9 +195,8 @@ def test_hits_planted_on_line_boundaries_keep_one_of_the_two_cells_there():
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 def test_the_fast_geometry_repeats_on_cuda(dtype):
     """``exact_boundary_geometry(kernel="fast")`` twice on CUDA: d, u and the query
-    gradient bitwise; the vertex gradient (a scatter-add over the queries' cells in
-    the gather's backward, whose order CUDA does not fix) to 1e-12 relative in float64
-    and 1e-5 in float32 (a few roundings of a sum of up to a few hundred terms)."""
+    and vertex gradients bitwise (the gather's backward is CUDA's sort-based
+    ``index_put_``, which sums in a fixed order)."""
     mesh = _sphere(3)
     q0 = _near_wall(3, 20000, 2, band=0.5).to("cuda", dtype)
     p0, cells = mesh.points.to("cuda", dtype), mesh.cells.cuda()
@@ -198,9 +210,10 @@ def test_the_fast_geometry_repeats_on_cuda(dtype):
         return d, u, gq, gp
 
     a, b = run(), run()
-    for name, x, y in zip(("d", "u", "dq"), a[:3], b[:3]):
+    for name, x, y in zip(("d", "u", "dq", "dp"), a, b):
+        if not _bitwise(x, y):
+            print(f"{name}: run-to-run {_rel_max(x, y):.2e}")
         assert _bitwise(x, y), name
-    assert _rel_max(a[3], b[3]) < (1e-12 if dtype == D else 1e-5)
 
 
 @pytest.mark.cuda
