@@ -30,6 +30,7 @@ from physicsnemo.experimental.models.isla.geometry import exact_boundary_geometr
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.geometry._cell_normals import compute_cell_normals
 from physicsnemo.mesh.primitives.surfaces import cube_surface
+from test.experimental.models.isla._forced import ran
 from test.experimental.models.isla._meshes import orthogonal, outputs, transform
 from test.experimental.models.isla.test_isla_geometry_thin import (
     _capped_cube,
@@ -441,7 +442,10 @@ def test_guard_kernel_without_guarded_pairs(monkeypatch):
     q = (1e2 * torch.randn(300, 3, dtype=D, generator=g)).cuda()
     s = torch.tensor([[0.0, 0, 0], [1, 0, 0], [0, 1, 0]], dtype=D).expand(300, 3, 3)
     s = s.contiguous().cuda()
-    ref = geometry._closest_weights(q, s)
+    ### (the premise, read where the torch code runs: no pair takes the accurate point)
+    with ran(geometry._accurate_weights) as r:
+        ref = geometry._closest_weights(q, s)
+    assert r.count(geometry._accurate_weights) == 0
 
     def unguarded(*args):
         raise AssertionError("a guarded pair")

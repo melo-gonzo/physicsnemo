@@ -330,32 +330,20 @@ def test_segment_softmax_read_obeys_the_2x_error_rule(dtype, h, kc, c):
 @pytest.mark.parametrize("h, kc, c", [(3, 4, 8), (8, 3, 8), (8, 4, 6)])
 def test_segment_softmax_read_of_a_width_not_a_power_of_two_is_the_eager_read(h, kc, c):
     """A head count, key width or value width that is not a power of two takes the
-    eager read on CUDA (float32): its output and every gradient equal
-    ``_eager_segment_softmax_read``'s on the same device bitwise, and the Triton
-    Function does not run."""
+    eager read on CUDA (float32): ``_eager_segment_softmax_read`` runs and the Triton
+    Function does not, and the output and every gradient agree with a direct eager
+    run's to 1e-5 relative to each tensor's largest entry. (Not bitwise: the eager
+    read's ``index_add`` sums by atomics on CUDA, in no fixed order, so it does not
+    repeat bitwise itself.)"""
     plan_args, leaves, logm, seed, _ = _ssr_case(h, kc, c, n_q=20)
-    with ran(segment_softmax._SegmentSoftmaxRead) as r:
-        got = _ssr_run(
-            segment_softmax.segment_softmax_read,
-            plan_args,
-            leaves,
-            logm,
-            seed,
-            "cuda",
-            torch.float32,
-        )
-    assert r.count(segment_softmax._SegmentSoftmaxRead) == 0
-    want = _ssr_run(
-        segment_softmax._eager_segment_softmax_read,
-        plan_args,
-        leaves,
-        logm,
-        seed,
-        "cuda",
-        torch.float32,
-    )
-    for a, b in zip(got, want):
-        assert torch.equal(a, b)
+    args = (plan_args, leaves, logm, seed, "cuda", torch.float32)
+    eager = segment_softmax._eager_segment_softmax_read
+    with ran(segment_softmax._SegmentSoftmaxRead, eager) as r:
+        got = _ssr_run(segment_softmax.segment_softmax_read, *args)
+    assert r.count(segment_softmax._SegmentSoftmaxRead) == 0 and r.count(eager) == 1
+    want = _ssr_run(eager, *args)
+    for name, a, b in zip(("out", "ker", "q", "k", "v"), got, want):
+        assert float((a - b).abs().max() / b.abs().max()) < 1e-5, name
 
 
 @pytest.mark.cuda
@@ -392,13 +380,15 @@ def test_only_the_eager_segment_softmax_read_differentiates_the_log_measure():
     assert eager[-1] is not None and eager[-1].abs().sum() > 0
 
 
+# --------------------------------------------------------------------------- float16 narrow paths
 @pytest.mark.cuda
 @CUDA_TRITON
-# --------------------------------------------------------------------------- float16 narrow paths
-def test_fused_kernel_read_in_float16_obeys_the_2x_error_rule():
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16], ids=["bf16", "fp16"])
+def test_fused_kernel_read_in_16_bits_obeys_the_2x_error_rule(dtype):
     """The fused read with float16 operands (``_narrow``: the basis and the weights in
-    float16, as under float16 autocast) against the reference read fed ``basis @ W.T``
-    in float16: output and the gradients of basis, w, q, k and v each as close to the
+    float16, as under float16 autocast; bfloat16 beside it, as test_isla_tree_read.py
+    has it) against the reference read fed ``basis @ W.T`` in the same dtype: output
+    and the gradients of basis, w, q, k and v each given, and each as close to the
     float64 eager read as the reference's (floor 1e-3)."""
     g = torch.Generator().manual_seed(4)
     n_q, n_b, h, kc, c, f = 37, 50, 8, 4, 8, 16
@@ -436,10 +426,15 @@ def test_fused_kernel_read_in_float16_obeys_the_2x_error_rule():
         return [out.detach()] + [t.grad for t in ins]
 
     exact = run("eager", "cpu", D)
-    fused, ref = (
-        run("fused", "cuda", torch.float16),
-        run("reference", "cuda", torch.float16),
-    )
+    fused, ref = run("fused", "cuda", dtype), run("reference", "cuda", dtype)
+    names = ("out", "basis", "w", "q", "k", "v")
+    missing = [
+        f"{kind} {n}"
+        for kind, res in (("fused", fused), ("reference", ref))
+        for n, t in zip(names, res)
+        if t is None
+    ]
+    assert not missing, missing
     rows = counts > 0
     for i, name in enumerate(("out", "basis", "w", "q", "k", "v")):
         a, b, e = fused[i], ref[i], exact[i]

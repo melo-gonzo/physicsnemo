@@ -233,16 +233,16 @@ def test_cumsum_op_passes_opcheck(device):
     assert torch.equal(sampling._cumsum(x), x.cumsum(0))
 
 
-def _region_inputs(dtype, k, p, b=1, n=6, s=5, seed=0):
-    """Small inputs of the fused geometry region on CUDA: pre-logits, the points'
-    anchors and normals, ``k`` global directions plus ``p`` token vectors, the slices'
-    anchors and directions, and the routing Linear's weight and bias."""
+def _region_inputs(dtype, k, p, b=1, n=6, s=5, seed=0, device="cuda"):
+    """Small inputs of the geometry region (on CUDA for the fused one): pre-logits,
+    the points' anchors and normals, ``k`` global directions plus ``p`` token vectors,
+    the slices' anchors and directions, and the routing Linear's weight and bias."""
     g = torch.Generator().manual_seed(seed)
 
     def rnd(*shape, scale=1.0, unit=False):
         x = torch.randn(*shape, generator=g, dtype=D)
         x = torch.nn.functional.normalize(x, dim=-1) if unit else scale * x
-        return x.to("cuda", dtype)
+        return x.to(device, dtype)
 
     return [
         rnd(b, n, s),
@@ -366,7 +366,7 @@ def test_fused_node_means_obey_the_2x_error_rule(dtype):
     gout = torch.randn(forest.n_nodes, 96, generator=g, dtype=D).to(dev)
 
     def run(fn, dt):
-        x = x0.to(dt).requires_grad_(True)
+        x = x0.detach().to(dt, copy=True).requires_grad_(True)
         y = fn(x, forest, omega if dt == D else omega.float())
         y.backward(gout.to(dt))
         return y.detach().double(), x.grad.double()
@@ -380,3 +380,56 @@ def test_fused_node_means_obey_the_2x_error_rule(dtype):
         d_fused, d_eager = (a - e).abs().max() / scale, (b - e).abs().max() / scale
         print(f"{name}: fused {d_fused:.2e}, eager {d_eager:.2e}")
         assert d_fused <= 2 * d_eager + floor, name
+
+
+# --------------------------------------------------------------------------- the references
+def test_the_eager_references_pass_gradcheck():
+    """The float64 references the 2x-error rules measure against: the eager
+    segment-softmax read (in ker, logm, q, k and v, on a ragged plan with a point and
+    a source without pairs), the eager geometry region (every tensor input, with a
+    token vector) and ``node_means`` (in the cells' rows), on CPU."""
+    from physicsnemo.experimental.models.isla.blocks import _geo_region
+    from physicsnemo.experimental.models.isla.segment_softmax import (
+        PairPlan,
+        _eager_segment_softmax_read,
+    )
+
+    g = torch.Generator().manual_seed(2)
+    counts = torch.tensor([3, 0, 5, 1, 4])
+    qi = torch.repeat_interleave(torch.arange(5), counts)
+    bj = torch.randint(0, 5, (int(counts.sum()),), generator=g)
+    plan = PairPlan.build(qi, bj, 5, 6)
+    ins = [
+        torch.randn(*s, generator=g, dtype=D)
+        for s in ((13, 2), (13,), (5, 2, 4), (6, 2, 4), (6, 2, 3))
+    ]
+    ins = [t.requires_grad_(True) for t in ins]
+    assert torch.autograd.gradcheck(
+        lambda *x: _eager_segment_softmax_read(*x, plan, 0.5), tuple(ins), **GRADCHECK
+    )
+
+    region = [
+        t.cpu().requires_grad_(True) for t in _region_inputs(D, 1, 1, device="cpu")
+    ]
+
+    def eager_region(logits, r, nh, d, z, ms, w, b):
+        lin = torch.nn.Linear(7, 1).double()
+        del lin.weight, lin.bias
+        lin.weight, lin.bias = w, b
+        return _geo_region(lin, logits, r, nh, d[:, :, :1], z, ms, 1e-12, d[:, :, 1:])
+
+    assert torch.autograd.gradcheck(eager_region, tuple(region), **GRADCHECK)
+
+    pts = torch.randn(60, 3, generator=g, dtype=D)
+    nrm = torch.nn.functional.normalize(
+        torch.randn(60, 3, generator=g, dtype=D), dim=-1
+    )
+    w = torch.rand(60, generator=g, dtype=D) + 0.5
+    omega = w / w.sum()
+    forest = tree_read.BoundaryForest.build(
+        pts, omega, nrm, None, theta=1.0, leaf_size=4
+    )
+    x = torch.randn(60, 5, generator=g, dtype=D).requires_grad_(True)
+    assert torch.autograd.gradcheck(
+        lambda x: tree_read.node_means(x, forest, omega), (x,), **GRADCHECK
+    )
