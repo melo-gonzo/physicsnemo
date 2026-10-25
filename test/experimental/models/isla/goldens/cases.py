@@ -1404,10 +1404,6 @@ for _dt, _dn in ((D, "f64"), (F, "f32")):
         _slice_block_build(_dt, 1, 0),
         _slice_block_run(1, 0),
         variants={"cpu": ("reference",), "cuda": ("auto", "reference")},
-        ### the prototype gain's gradient: one scalar summed over every token and slice
-        ### with cancellation (float64: 1.3e-13 between thread counts; float32 on GB300
-        ### against the x86 golden: 3.8e-4, near the float32 bound)
-        tol={"grad.param.assign.gain": 2e-3} if _dt == F else {},
         requires=("triton",),
     )
 _case(

@@ -32,7 +32,16 @@ written only by ``python -m test.experimental.models.isla.goldens.record
   per element, the summaries within the bound that per-element bound implies
   (``n * rtol * max|golden|``, plus 1e-14 of the sum of magnitudes for float64
   summation order). ``rtol`` is 1e-12 in float64, which holds across BLAS builds and
-  CPU architectures; float32 and bfloat16 bounds are stated at :data:`CPU_RTOL`.
+  CPU architectures; float32 and bfloat16 bounds are stated at :data:`CPU_RTOL`; a
+  case may state its own bound for a named output, with its reason
+  (``Case.tol``, ``Case.cuda_tol``; ``None``: not compared, see goldens/README.md,
+  "Exclusions").
+
+The inputs are built so that they are the same bits on every platform (correctly
+rounded operations only; see ``cases.py``). Measured across x86 (the golden's
+platform), the LHR CPU partition, and Grace with GB300 (jobs 377997, 378376), the
+largest relative errors were 4.6e-14 in float64 (6.9e-12 on the thin cap's weights,
+bound 1e-8 there), 2.3e-5 in float32 and 5.7e-3 in bfloat16.
 
 The CUDA variants (the fast and fused kernels, and the references on CUDA) are
 compared with the same CPU golden at :data:`CUDA_RTOL`, integers exact where the code
@@ -54,8 +63,8 @@ from test.experimental.models.isla.goldens import record as R
 #: thread counts (measured: at most 1.3e-13, a slice block's prototype-gain gradient,
 #: a scalar reduction over every token and slice, between one and four threads).
 #: float32: the same bound scaled by the ratio of the unit roundoffs, 2**29 (the
-#: computations are the same, so their conditioning is; measured at most 2.2e-5, the
-#: same gradient). bfloat16 (the segment-softmax read's bf16 gradients, computed in
+#: computations are the same, so their conditioning is; measured at most 2.3e-5,
+#: between thread counts and across x86, Grace and GB300). bfloat16 (the segment-softmax read's bf16 gradients, computed in
 #: float32 and rounded once): two bf16 ulps of the largest element, 2**-6.
 CPU_RTOL = {"float64": 1e-12, "float32": 1e-12 * 2**29, "bfloat16": 2**-6}
 #: The same for the CUDA variants (TF32 off).

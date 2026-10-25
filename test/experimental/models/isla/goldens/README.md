@@ -114,6 +114,18 @@ bitwise.
   (x86 and Grace differ by 3e-5 on the same inputs); and, at on-wall queries, the
   winding number and the sign (`d = 0` there, the winding number is 1/2 up to
   rounding; they differ by up to 0.44 across platforms), recorded as 0.
+- **Tie selections** (the box-tie sets): at a tie the reported closest cell, its
+  weights and the gradients, which are taken through that cell (a selection from the
+  subdifferential), differ between x86, Grace and GB300 on the same inputs and move
+  under a one-ulp change of the vertices. They are not recorded; `d`, `u`, the tie
+  flag and direction, the sign and the winding numbers are.
+- **The 3-D winding numbers' values** follow the tree's float32 opening decisions,
+  which differ between x86, Grace and GB300 on the same inputs (by up to 4.4e-3 near
+  the sphere, within the far-field approximation). The CI golden compares their
+  sign, which is what reaches `d` (`out.search.sign`), not their values; the A/B
+  harness records the values bitwise.
+- **The thin cap's closest-point weights** compare at 1e-8 relative: they are
+  conditioned by 1/h = 1e6 (measured at most 6.9e-12 across x86, Grace and GB300).
 - **bfloat16 `dk`/`dv` on CUDA against the CPU golden**: the CPU golden is the eager
   read's, which adds those gradients up in bfloat16 (a reported defect:
   `_eager_segment_softmax_read` gathers before it casts); not compared there.
