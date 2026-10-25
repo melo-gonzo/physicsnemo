@@ -31,6 +31,7 @@ from physicsnemo.experimental.models import ISLA
 from test.experimental.models.isla._meshes import (
     cloud,
     law,
+    live,
     orthogonal,
     outputs,
     points_mesh,
@@ -160,6 +161,71 @@ def test_boundary_inputs_covariance(improper):
             )
         )
     assert not torch.allclose(skew["p"], base["p"], atol=1e-6)
+
+
+@pytest.mark.parametrize("improper", [False, True], ids=["rotation", "reflection"])
+@pytest.mark.parametrize("interior", [False, True], ids=["surface", "interior"])
+def test_two_vector_fields_of_one_condition_are_covariant_with_their_gradients(
+    interior, improper
+):
+    """One condition with two rank-1 fields, whose dot product enters the seed beside
+    each one's frame contractions and norm: under a rotation or a reflection with a
+    translation every output maps by its rank (1e-11 absolute, float64 roundoff of
+    outputs of order one), and the gradient of an invariant loss with respect to
+    each field maps as that field does (``g -> g R^T``), to 1e-11 of the largest
+    gradient entry; every parameter receives a gradient. Both tasks, the interior
+    one with its boundary read live."""
+    m = live(
+        _model(
+            interior=interior,
+            boundary_schemas={"wall": {"a": {"rank": 1}, "b": {"rank": 1}}},
+        )
+    )
+    F, P = 2, 2  # the frame [n_hat, g] and the two fields
+    assert (
+        m.boundary_conditions["wall"].inputs.n_features == P * F + P + P * (P - 1) // 2
+    )
+    pts, nrm, w, _ = cloud(200)
+    g = torch.Generator().manual_seed(5)
+    fields = {k: torch.randn(200, 3, dtype=D, generator=g) for k in "ab"}
+    mesh = soup(pts, nrm, w)
+    q = cloud(40, seed=1, scale=(4.0, 4.0, 4.0))[0] if interior else None
+
+    def call(R, shift):
+        moved = transform(mesh, R, shift)
+        leaves = {k: (v @ R.T).requires_grad_() for k, v in fields.items()}
+        m.zero_grad(set_to_none=True)
+        out = outputs(
+            m(
+                boundary_meshes={
+                    "wall": moved.with_data(
+                        cell_data={**moved.cell_data.to_dict(), **leaves}
+                    )
+                },
+                prediction_points=None if q is None else q @ R.T + shift,
+                prediction_boundaries=None if interior else ["wall"],
+                global_data={"g": DRV @ R.T},
+            )
+        )
+        sum(o.square().sum() for o in out.values()).backward()
+        return {k: v.detach() for k, v in out.items()}, {
+            k: v.grad for k, v in leaves.items()
+        }
+
+    base, grad = call(torch.eye(3, dtype=D), torch.zeros(3, dtype=D))
+    missing = [n for n, p in m.named_parameters() if p.grad is None]
+    assert not missing, missing
+    R = orthogonal(3, 4, improper)
+    out, moved_grad = call(R, torch.tensor([2.0, -5.0, 1.0], dtype=D))
+    for name, spec in m.output_schema.items():
+        want = law(base[name], R, spec.rank)
+        assert torch.allclose(out[name], want, atol=1e-11, rtol=0.0), name
+    scale = max(float(v.abs().max()) for v in grad.values())
+    for k in fields:
+        assert grad[k].abs().max() > 0, k
+        assert torch.allclose(
+            moved_grad[k], grad[k] @ R.T, atol=1e-11 * scale, rtol=0.0
+        ), k
 
 
 def test_geometry_width_and_seed_width():

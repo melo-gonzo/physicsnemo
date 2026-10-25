@@ -533,6 +533,80 @@ def test_an_absent_or_zero_source_and_bad_declarations_are_refused():
             _model(**kw)
 
 
+def test_malformed_scale_keys_and_a_zero_global_source_are_refused():
+    """The declarations' ISLA-local keys are checked at construction with the field
+    named (the units a mapping of scale names to finite exponents, ``output_stats`` a
+    mapping with one positive std and a scalar's one mean, a rank-1 global that
+    defines a scale taking no constant scale, one rank-1 global source at most), and
+    a global source that is zero in a case leaves its scale undefined."""
+    velocity = {"rank": 1, "units": {"U": 1}}
+    bad = [
+        (
+            TypeError,
+            dict(outputs_={"p": {"rank": 0, "units": ["U"]}}),
+            r"output_schema\['p'\]: units must be a mapping",
+        ),
+        (
+            TypeError,
+            dict(outputs_={"p": {"rank": 0, "units": {1: 1}}}),
+            "units names a scale by a string; got 1",
+        ),
+        (
+            TypeError,
+            dict(outputs_={"p": {"rank": 0, "units": {"U": float("inf")}}}),
+            "the exponent of 'U' must be a finite number",
+        ),
+        (
+            TypeError,
+            dict(outputs_={"p": {"rank": 0, "units": {"U": True}}}),
+            "the exponent of 'U' must be a finite number",
+        ),
+        (
+            TypeError,
+            dict(output_stats=[("velocity", 1.0)]),
+            "output_stats must be a mapping",
+        ),
+        (
+            ValueError,
+            dict(output_stats={"pressure": {"mean": 0.0, "std": 0.0}}),
+            r"output_stats\['pressure'\]: std must be one positive number",
+        ),
+        (
+            ValueError,
+            dict(output_stats={"pressure": {"mean": [0.0, 1.0], "std": 1.0}}),
+            "a scalar's mean is one number",
+        ),
+    ]
+    for error, kw, match in bad:
+        with pytest.raises(error, match=match):
+            _model(**kw)
+    ### a rank-1 global source, alone (the inlet's velocity defines nothing)
+    plain = {**SCHEMAS, "inlet": {"bc_gamma": {"rank": 0}}, "outlet": {}}
+    sources = [
+        (
+            {"U_inf": {**velocity, "defines": "U", "scale": 2.0}},
+            "a rank-1 global's magnitude is the scale 'U'; it takes no scale",
+        ),
+        (
+            {"U_a": {**velocity, "defines": "U"}, "U_b": {**velocity, "defines": "U"}},
+            r"at most one rank-1 global defines the scale 'U'; got \['U_a', 'U_b'\]",
+        ),
+    ]
+    for extra, match in sources:
+        with pytest.raises(ValueError, match=match):
+            _model(schemas=plain, globals_={**GLOBALS, **extra})
+    m = _model(
+        schemas=plain, globals_={**GLOBALS, "U_inf": {**velocity, "defines": "U"}}
+    )
+    meshes, gd, q = _case(schemas=plain)
+    _run(m, meshes, {**gd, "U_inf": torch.tensor([3.0, 0.0, 0.0], dtype=D)}, q)
+    with pytest.raises(
+        ValueError,
+        match="the source 'U_inf' of the scale 'U' is zero: the scale is undefined",
+    ):
+        _run(m, meshes, {**gd, "U_inf": torch.zeros(3, dtype=D)}, q)
+
+
 def test_the_scale_names_are_free():
     """The code names no scale but L: the same declaration with U and rho renamed S
     and m gives the same outputs for the same parameters, bitwise."""

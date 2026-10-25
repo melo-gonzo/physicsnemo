@@ -691,6 +691,79 @@ def test_mesh_validation_errors():
         )
 
 
+def test_the_batched_routine_validates_its_inputs():
+    """``_forward_tensors`` (the batched routine the release tests pin) refuses, with
+    the offending argument named, an undeclared condition or one with fields, tensors
+    of the wrong shape, prediction points the task does not take or without the
+    boundary surface, and global inputs that are not the declared set."""
+    m = _isla(hidden=16, n_layers=1, n_slices=4).double()
+    mi = _isla(hidden=16, n_layers=1, n_slices=4, interior=True).double()
+    mf = _isla(
+        hidden=16, n_layers=1, n_slices=4, boundary_schemas={"wall": {"t": {"rank": 0}}}
+    )
+    pts = torch.randn(1, 6, 3, dtype=D)
+    nrm = torch.nn.functional.normalize(torch.randn(1, 6, 3, dtype=D), dim=-1)
+    kw = {"points": pts, "normals": nrm, "global_inputs": {"g": torch.ones(3, dtype=D)}}
+    q = torch.randn(1, 4, 3, dtype=D)
+    cases = [
+        (
+            m,
+            {"condition": "inlet"},
+            r"condition 'inlet' is not one of the declared boundary conditions \['wall'\]",
+        ),
+        (
+            mf,
+            {},
+            "the batched routine takes no per-token inputs; pass the meshes to forward",
+        ),
+        (
+            m,
+            {"points": pts[..., :2]},
+            r"Expected points of shape \(B, N, 3\) \(this model has n_spatial_dims=3\) but got tensor of shape \(1, 6, 2\)",
+        ),
+        (
+            m,
+            {"normals": nrm[:, :5]},
+            r"Expected normals of shape \(1, 6, 3\) but got tensor of shape \(1, 5, 3\)",
+        ),
+        (
+            m,
+            {"measure_weights": torch.ones(1, 5, dtype=D)},
+            r"Expected measure_weights of shape \(1, 6\)",
+        ),
+        (mi, {}, r"an interior model \(interior=True\) needs query_points"),
+        (
+            m,
+            {"query_points": q},
+            r"query_points given to a surface model \(interior=False\)",
+        ),
+        (
+            mi,
+            {"query_points": q[0]},
+            r"Expected query_points of shape \(1, Q, 3\) but got tensor of shape \(4, 3\)",
+        ),
+        (
+            mi,
+            {"query_points": q},
+            "query_points need the boundary surface: surface_points and surface_cells",
+        ),
+        (
+            m,
+            {"global_inputs": {"h": torch.ones(3, dtype=D)}},
+            r"global_inputs fields do not match the declared set: missing \['g'\], unexpected \['h'\]",
+        ),
+        (
+            m,
+            {"global_inputs": {"g": torch.ones(2, dtype=D)}},
+            r"global_inputs\['g'\]: expected 3 values per case, got \(2,\)",
+        ),
+    ]
+    for model, args, match in cases:
+        with pytest.raises(ValueError, match=match):
+            model._forward_tensors(**{**kw, **args})
+    assert m._forward_tensors(**kw)["p"].shape == (1, 6)
+
+
 def test_rms_distance_scale_contracts():
     """The RMS-pairwise-distance length unit keeps exact translation invariance and
     rotation covariance, is invariant to a geometric rescale of the boundary (with
