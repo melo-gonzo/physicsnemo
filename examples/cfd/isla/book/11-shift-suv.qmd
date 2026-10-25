@@ -251,8 +251,11 @@ protocol_dots(SUV, SUV_F); plt.show()
 #| output: asis
 posed_floor = min(SUV.err(a, f, "posed") for a in S.BASELINES for f in SUV_F)
 gts = SUV.seeds("GeoTransolver", "pressure_l2", "area")
-assert all(S.Standing(k).verdict("Transolver", f) == "trails" for k in ("shift_suv", "hilift") for f in S.DATASETS[k].headline)
-print(f"Three readings. **First, Transolver leads on the native mesh, as it does on HiLiftAeroML.** Transolver's "
+assert all(SUV.verdict("Transolver", f) == "trails" for f in S.DATASETS["shift_suv"].headline)
+_hl = S.Standing("hilift"); _hlt = [_hl.fields[f] for f in _hl.ds.headline if _hl.verdict("Transolver", f) == "trails"]
+assert _hlt
+_hl_on = "" if len(_hlt) == len(_hl.ds.headline) else f" on {' and '.join(_hlt)}"
+print(f"Three readings. **First, Transolver leads on the native mesh, as it does on HiLiftAeroML{_hl_on}.** Transolver's "
       f"pressure seeds are {seeds_txt('Transolver', 'pressure_l2')} against ISLA's {seeds_txt('ISLA', 'pressure_l2')}, a gap of "
       f"{pct(SUV.ratio('Transolver', 'pressure_l2'))} on pressure and {pct(SUV.ratio('Transolver', 'wss_l2'))} on wall shear; GeoTransolver's "
       f"seeds ({seeds_txt('GeoTransolver', 'pressure_l2')}) interleave with ISLA's. "

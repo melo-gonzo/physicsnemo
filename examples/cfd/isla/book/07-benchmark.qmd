@@ -281,7 +281,8 @@ print(f": The input-scale control at 35 HiLiftAeroML training cases (256 wide, 1
 #| label: para-hilift-drive-cost
 #| output: asis
 HLU = {b: S.unit_drive("hilift", b)["pressure_l2"] for b in S.BASELINES}
-print("At the reference configurations on HiLiftAeroML, where the vector varies per case, the physical vector in inch/s "
+print("At the reference configurations on HiLiftAeroML, where the vector varies per case, trained and scored on the wing as stored, "
+      "the physical vector in inch/s "
       f"multiplies GeoTransolver's native pressure error by {1 / HLU['GeoTransolver']:.2f} and Transolver's by "
       f"{1 / HLU['Transolver']:.2f} over their unit-direction twins (@tbl-hilift-unit-drive).")
 ```

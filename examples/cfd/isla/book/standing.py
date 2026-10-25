@@ -166,15 +166,17 @@ DATASETS = {
             ("native", "posed"),
             "sec-interior-results",
         ),
-        # ISLA's arm is h090_hl_isla and the baselines read U_inf_dir (UDRV-HL: udrv_hl_gt, udrv_hl_t), every arm on ISLA's
-        # 200,000-cell set; the baselines reading U_inf, the physical freestream vector in inch/s, are kept in the file
-        # (raw_drive_<arch>, char_baselines), with the registered R-HL090 outcome (registered) and the per-case readouts (case_level)
+        # every arm trained and scored on the deduplicated wing (HL-DUP stage 2: hldupx_hl_isla, hldupx_hl_gt, hldupx_hl_t, the
+        # baselines reading U_inf_dir), scored over the distinct cells of ISLA's 200,000-cell draw, native and posed (the uniform
+        # point cloud was not scored on this data); the file adds the registered rule (registered), stage 1's (a) and (b) of the
+        # stored-wing checkpoints (stored_wing_b), the per-case readouts and angle bands (case_level), and the input-scale
+        # control on the stored wing (unit_drive_control, read by unit_drive)
         Dataset(
             "hilift",
             "HiLiftAeroML (510 training cases)",
-            "hilift_surface_090.json",
+            "hilift_surface_090_dedup.json",
             ("pressure_l2", "tau_wall_l2"),
-            ("native", "area", "posed"),
+            ("native", "posed"),
             "sec-de-result",
         ),
         Dataset(
@@ -236,14 +238,7 @@ def _arch(arm_name: str) -> str:
 #: Standings that a running experiment will replace although their results file says "final" (results files are never
 #: edited): dataset key -> {ledger row, what the numbers are, what replaces them, which rows}. Only the mark: ``status`` and
 #: ``final()`` read the file, so every count keeps the dataset.
-BOOK_IN_FLIGHT = {
-    "hilift": {
-        "ledger": "HL-STANDING",
-        "what": "checkpoints trained and scored on the wing meshes as stored, with their duplicated root cells",
-        "replacement": "The per-case standing of ISLA, GeoTransolver and Transolver trained and scored with the copies dropped",
-        "rows": "The rows",
-    },
-}
+BOOK_IN_FLIGHT = {}
 
 
 class Standing:
@@ -628,8 +623,15 @@ def unit_drive_control(scored_set: str = "registered"):
 
 def unit_drive(key: str, arch: str) -> dict:
     """{field: native error reading the unit direction ÷ native error reading the physical vector}, seed means, for a baseline arm
-    that FAIR_INPUT replaced (the standing's arm over its ``raw_drive_<arch>``); empty if the standing keeps no such arm."""
+    that FAIR_INPUT replaced (the standing's arm over its ``raw_drive_<arch>``, or both arms from the file's
+    ``unit_drive_control`` where the control was measured on other data than the standing); empty if the standing keeps none."""
     s = Standing(key)
+    ctl = s.raw.get("unit_drive_control", {}).get(arch)
+    if ctl:  # the control measured on other data than the standing's (its "what" says which): both arms from it
+        return {
+            f: ctl["unit"]["native"][f]["mean"] / ctl["physical"]["native"][f]["mean"]
+            for f in s.ds.headline
+        }
     raw = s.raw.get(f"raw_drive_{arch.lower()}")
     return (
         {f: s.err(arch, f) / raw["native"][f]["mean"] for f in s.ds.headline}
