@@ -377,7 +377,7 @@ iarea = [ST[k].shift("ISLA", f, "area") for k in area_fin for f in ST[k].ds.head
 print(f"**At the reference configurations, rotating and translating every case leaves ISLA's error within 2% of its native "
       f"error on {'all ' if len(held) == len(FIN) else f'{len(held)} of the '}{len(FIN)} tasks with a final standing, and the "
       f"uniform point cloud leaves it within {max(abs(r - 1) for r in iarea) * 100:.1f}% on "
-      f"{'both' if len(area_fin) == 2 else f'all {len(area_fin)}'} of them where that cloud resamples the scored cells. The same rotation multiplies GeoTransolver's and Transolver's errors by "
+      f"{ {2: 'both', 3: 'all three', 4: 'all four'}.get(len(area_fin), f'all {len(area_fin)}')} of them where that cloud resamples the scored cells. The same rotation multiplies GeoTransolver's and Transolver's errors by "
       f"{min(bpose):.1f} to {max(bpose):.0f}, and the point cloud by {min(barea):.1f} to {max(barea):.1f}.** {S.tally_note()} "
       "Every standing artifact scores each final checkpoint three times on the same validation cases: on the *native mesh*, on "
       "the *uniform point cloud* (the area-proportional law with exact Horvitz–Thompson weights), and *rotated and translated* "

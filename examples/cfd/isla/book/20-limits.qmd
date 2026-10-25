@@ -1092,7 +1092,7 @@ print(f"- **Not stored.** SHIFT-SUV's {SUV_N} files store the vehicle alone, ope
       "that cap cut out, for each case that passes the check. A case passes when its own on-plane vertices and open root edges "
       f"lie on the cap's outline to within {SP_TAU_S} in: the largest bound on the sagitta of any of the cap's chords, "
       f"{float(SP_H):.4f} in, plus {float(SP_EPS):.5f} in for float32 storage, both derived from the cap alone. All "
-      f"{SP_N} canonical cases pass. On every case the worst vertex lies {float(SP_WV):.3f} in from the outline, "
+      f"{SP_N} cases of its curated training and validation manifests pass. On every case the worst vertex lies {float(SP_WV):.3f} in from the outline, "
       f"{float(SP_WV) / SP_TAU:.2f} of the tolerance. The worst open-edge midpoint lies {float(SP_E):.3f} in from it on "
       f"{SP_EN} cases; on {SP_ECASE.replace('geo_', '')} it lies {float(SP_EMAX):.3f} in, {float(SP_EMAX) / SP_TAU:.2f} of the "
       "tolerance, where two long root edges span a curved stretch of the outline, so the distance is the edges' own sagitta. "
