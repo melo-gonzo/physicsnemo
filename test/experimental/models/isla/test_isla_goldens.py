@@ -21,7 +21,7 @@ G-READ, G-BLOCKS, G-HEADS, G-MODEL, G-PARTS) is run here and compared with
 ``data/goldens_v1.pt``, which was recorded on one CPU (its manifest
 ``data/goldens_v1.json`` names it) and is
 written only by ``python -m test.experimental.models.isla.goldens.record
---regenerate``; a missing golden fails. The reading, per tensor:
+--regenerate goldens_v1.pt``; a missing golden fails. The reading, per tensor:
 
 - inputs (``in.*`` and the parameters): bitwise (their SHA-256), so a change of a
   fixture or of a library primitive feeding one is reported as such, not as a
@@ -33,7 +33,9 @@ written only by ``python -m test.experimental.models.isla.goldens.record
   per element, the summaries within ``sqrt(n) * rtol * max|golden|`` (the rounding
   of n elements adding up as a random walk; so one element of a large tensor cannot
   move by much unseen), plus 1e-14 of the sum of magnitudes for float64 summation
-  order. ``rtol`` is 1e-12 in float64, which holds across BLAS builds and
+  order; where a case keeps sums over chunks of a large tensor (``Case.chunks``),
+  each within ``sqrt(m) * rtol * max|golden|`` for a chunk of m elements, and the
+  same 1e-14 term. ``rtol`` is 1e-12 in float64, which holds across BLAS builds and
   CPU architectures; float32 and bfloat16 bounds are stated at :data:`CPU_RTOL`; a
   case may state its own bound for a named output, with its reason
   (``Case.tol``, ``Case.cuda_tol``; ``None``: not compared, see goldens/README.md,
@@ -81,7 +83,8 @@ cuda_only = pytest.mark.skipif(
 def golden():
     if not R.GOLDEN.exists():
         pytest.fail(
-            f"{R.GOLDEN} is missing: regenerate it with `python -m {R.__name__} --regenerate`"
+            f"{R.GOLDEN} is missing: regenerate it with "
+            f"`python -m {R.__name__} --regenerate {R.GOLDEN.name}`"
         )
     return R.load_golden()
 
@@ -125,6 +128,15 @@ def _float_failures(name, entry, t, rtol) -> list[str]:
             bad.append(
                 f"{name}: {k} {v!r} against golden {r!r}, off by {abs(v - r):.3e} > {b:.3e}"
             )
+    if "chunk" in entry:
+        chunks, ref_chunks = xz.split(entry["chunk"]), entry["chunk_sums"]
+        for j, (c, r) in enumerate(zip(chunks, ref_chunks, strict=True)):
+            b = math.sqrt(c.numel()) * tol + 1e-14 * entry["l1"]
+            if abs(float(c.sum()) - r) > b:
+                bad.append(
+                    f"{name}: chunk {j} sum {float(c.sum())!r} against golden {r!r}, "
+                    f"off by {abs(float(c.sum()) - r):.3e} > {b:.3e}"
+                )
     return bad
 
 
@@ -200,6 +212,9 @@ def test_the_golden_holds_every_case_and_its_manifest():
     stale) and a manifest naming its commit, platform and module versions."""
     g = R.load_golden()
     assert set(g["cases"]) == {c.id for c in C.CASES}
+    for case in C.CASES:  # the chunk sums a case asks for are there
+        for name, entry in g["cases"][case.id].items():
+            assert entry.get("chunk") == case.chunk_length(name), (case.id, name)
     m = g["manifest"]
     assert {"commit", "date", "platform", "versions"} <= m.keys()
     assert m["platform"]["device"] == "cpu" and m["platform"]["threads"] == 1
@@ -395,3 +410,5 @@ def test_the_ab_harness_reads_every_repeat_and_refuses_an_empty_comparison(tmp_p
         R.main(["--groups", "G-Geo", "--out", str(tmp_path / "x")])
     with pytest.raises(SystemExit):
         R.main(["--cases", "no_such_case*", "--out", str(tmp_path / "x")])
+    with pytest.raises(SystemExit):  # name the files, or `all`
+        R.main(["--regenerate"])

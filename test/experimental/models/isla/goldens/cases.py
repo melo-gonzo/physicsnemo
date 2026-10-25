@@ -126,7 +126,11 @@ class Case:
     committed golden stores, where fewer than the default keep it within its budget.
     ``family_rtol`` maps fnmatch patterns of family outputs to the largest run-to-run
     spread the A/B harness allows them on CUDA (relative to ``max|A|``), where the
-    dtype's (``compare.FAMILY_RTOL``) is too tight, each with its measurement."""
+    dtype's (``compare.FAMILY_RTOL``) is too tight, each with its measurement.
+    ``chunks`` maps fnmatch patterns of float outputs to a chunk length: the committed
+    golden also keeps the sum of each run of that many elements of the flattened
+    tensor, where the summaries over every element are too coarse to see one element
+    move."""
 
     group: str
     name: str
@@ -143,6 +147,7 @@ class Case:
     requires: tuple = ()
     samples: dict = field(default_factory=dict)
     family_rtol: dict = field(default_factory=dict)
+    chunks: dict = field(default_factory=dict)
 
     @property
     def id(self) -> str:
@@ -159,6 +164,12 @@ class Case:
         return next(
             (k for p, k in self.samples.items() if fnmatch.fnmatchcase(name, p)),
             SAMPLES,
+        )
+
+    def chunk_length(self, name: str) -> int | None:
+        """The length of the chunks whose sums the golden keeps of ``name``, or None."""
+        return next(
+            (k for p, k in self.chunks.items() if fnmatch.fnmatchcase(name, p)), None
         )
 
 
@@ -784,6 +795,14 @@ _SEG_FAMILY_F64 = ("out.read", "grad.*")
 #: whose backward accumulates the gathered keys' and values' gradients in bfloat16
 #: (29% off float64 at the largest ``dv``: it gathers before it casts; reported), the Triton read's in float32.
 _BF16_CUDA = {"grad.k": None, "grad.v": None}
+#: The bfloat16 kernel gradients are the large tensors at the coarse bf16 bound
+#: (n = 153k and 77k): their summaries' slack, sqrt(n) of the per-element bound, is
+#: 6.1 and 4.3 times their largest element, so one element could move by all of it
+#: unseen. The golden keeps their sums over runs of 1,024 elements, whose slack is
+#: half the largest element (measured on CPU against the same read in float32 and in
+#: float64, rounded once to bf16, as CUDA's fused and Triton reads compute it: at
+#: most 9.5e-3 of the largest element).
+BF16_CHUNK = 1024
 for _dt, _dn in ((D, "f64"), (F, "f32"), (torch.bfloat16, "bf16")):
     _case(
         "G-SEG",
@@ -792,6 +811,7 @@ for _dt, _dn in ((D, "f64"), (F, "f32"), (torch.bfloat16, "bf16")):
         _seg_run,
         family=_SEG_FAMILY_F64 if _dt == D else _SEG_FAMILY,
         cuda_tol=_BF16_CUDA if _dt == torch.bfloat16 else {},
+        chunks={"grad.ker": BF16_CHUNK} if _dt == torch.bfloat16 else {},
         requires=("triton",),
     )
 for _dt, _dn in ((F, "f32"), (torch.bfloat16, "bf16")):
@@ -803,6 +823,7 @@ for _dt, _dn in ((F, "f32"), (torch.bfloat16, "bf16")):
         variants={"cpu": ("reference",), "cuda": ("auto", "reference")},
         family=_SEG_FAMILY,
         cuda_tol=_BF16_CUDA if _dt == torch.bfloat16 else {},
+        chunks={"grad.basis": BF16_CHUNK} if _dt == torch.bfloat16 else {},
         requires=("triton",),
     )
 
@@ -2000,7 +2021,7 @@ def _flatten(prefix: str, value, out: dict) -> None:
 def _parts_run(spec: _ModelSpec):
     def run(inputs, device, variant):
         """The forward pass's intermediate values, call by call: each slice block's
-        output and passive read, the boundary reads' updates, the head frame's routing
+        output, the boundary reads' updates, the head frame's routing
         (prototypes and logits), the prediction points' input layer, and the results of
         :data:`_PART_FUNCTIONS` (the length unit and the cells' second moments, the
         soft log length, the scales' moments and factors, the draw, the pseudovectors
@@ -2027,7 +2048,6 @@ def _parts_run(spec: _ModelSpec):
             hooks.append(
                 block.register_forward_hook(lambda m, a, y, i=i: record(f"block{i}", y))
             )
-            block.read = spy(f"block{i}.read", block.read)
         if model.frame_assign is not None:
             fa = model.frame_assign
             fa.prototypes = spy("frame.prototypes", fa.prototypes)
@@ -2133,11 +2153,12 @@ _MODEL_TOL = {
     F: dict.fromkeys(_ROUTING_GRADS, None),
 }
 #: The scales' moments and factors are float64 sums of a float32 model's cell
-#: measures and fields, so they carry float32 rounding (CUDA's cell measures against
-#: the CPU's: 2e-9 relative, job 379129): the float32 bound there.
-_MODEL_TOL[F].update(
-    dict.fromkeys(("out.rms_moments.*", "out.scale_factor.*"), 1e-12 * 2**29)
-)
+#: measures and fields, so they carry float32 rounding. Measured against the x86
+#: golden in job 379129 (parts_rich_surface_f32, the only case with scales): Grace
+#: within the float64 bound (1e-12); GB300, whose cell measures differ from the
+#: CPU's by float32 roundoff, up to 1.2e-7 of the largest element (scale_factor.6
+#: and .9; summaries 3.6e-8). Bound 1e-6: eight times the largest measured.
+_MODEL_TOL[F].update(dict.fromkeys(("out.rms_moments.*", "out.scale_factor.*"), 1e-6))
 #: On CUDA the reference read's node means, and the exact geometry's vertex
 #: gradient, accumulate by float atomics: ISLA-DTT's outputs and gradients are
 #: judged against their run-to-run family there.

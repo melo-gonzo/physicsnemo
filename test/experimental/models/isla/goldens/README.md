@@ -100,8 +100,11 @@ How compare.py reads the records:
 variants) against `data/goldens_v1.pt`: inputs and integer outputs exact, float
 outputs within `rtol * max|golden|` on 16 stored elements and three summaries over
 every element within `sqrt(n) * rtol * max|golden|` (see the test's docstring and
-`CPU_RTOL`/`CUDA_RTOL` for the bounds and their measurements). A missing golden
-fails.
+`CPU_RTOL`/`CUDA_RTOL` for the bounds and their measurements). For the two large
+bfloat16 gradients (`kernel_read_bf16`'s `grad.basis`, `segment_softmax_read_bf16`'s
+`grad.ker`), whose summaries' slack exceeds their largest element, the golden also
+keeps the sums over runs of 1,024 elements, each within `sqrt(1024) * rtol *
+max|golden|`, half the largest element (`Case.chunks`). A missing golden fails.
 
 Regenerate it only when a change is meant to move the numbers, and say so in the
 commit:
@@ -113,9 +116,11 @@ python -m test.experimental.models.isla.goldens.record --regenerate goldens_v1.p
 It records on one CPU thread and writes the golden and its manifest (commit, whether
 the code it depends on (the model, the modules `TARGETS` names, this harness) was
 modified, the harness files' md5s, library versions, CPU, BLAS/LAPACK, module md5s, date).
-The same command writes every other file of `data/` (`--regenerate` alone: all of
-them; or name them): the goldens and reference checkpoints of `test_isla_release.py`
-(its `WRITERS`). Nothing else writes `data/`, and a missing file fails.
+The same command writes every other file of `data/`, named (or `--regenerate all`):
+the goldens and reference checkpoints of `test_isla_release.py` (its `WRITERS`). A bare
+`--regenerate` is refused: name `goldens_v1.pt` to regenerate this golden alone, so
+that the older goldens (`isla_*_v1.pth`, which move by about 1e-6 when re-recorded)
+stay as they are. Nothing else writes `data/`, and a missing file fails.
 Committed data stays within its budget (350 KB for these goldens): floats are kept
 as samples and summaries, integers and inputs as SHA-256.
 
@@ -159,7 +164,8 @@ bitwise.
   near-coplanar cells (above). GEO-TIEORDER at 3a1a15d48 leaves every recorded `u`,
   `d` and gradient within the golden's bounds (CPU, run against this golden). If a
   later change of the on-wall rule moves them, regenerate with
-  `python -m test.experimental.models.isla.goldens.record --regenerate` in its commit;
+  `python -m test.experimental.models.isla.goldens.record --regenerate goldens_v1.pt`
+  in its commit;
   reason: the on-wall direction at a tie is defined by that rule.
 - **The draw's hits off the cells' boundaries.** Systematic sampling keeps the cell
   whose interval on the line holds each hit `start + m`; a hit within rounding of a

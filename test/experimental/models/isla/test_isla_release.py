@@ -34,10 +34,10 @@ r"""Release-readiness tests for ISLA (MODELS_IMPLEMENTATION.md MOD-008a/b/c).
 **Regenerating the data.** Every file in ``data/`` is written by one command, and
 only by it (a missing file fails; nothing is created on the fly)::
 
-    python -m test.experimental.models.isla.goldens.record --regenerate [FILE ...]
+    python -m test.experimental.models.isla.goldens.record --regenerate FILE ... | all
 
-with no FILE every file (the module goldens included), else the named ones (e.g.
-``isla_release_v2.pth``). Regenerate only what a change is meant to move, and say so
+with the named files (e.g. ``isla_release_v2.pth``), or ``all`` for every file (the
+module goldens included); a bare ``--regenerate`` is refused. Regenerate only what a change is meant to move, and say so
 in the commit: the reference checkpoints stand for a checkpoint written by the code
 of their version (regenerate them at a version bump), and ``isla_backbone_v1.pth``
 only when the backbone changes by decision (a forward hook on ``norm_out`` under
@@ -179,9 +179,9 @@ def _assert_scaled_close(out: dict, ref: dict, tol: float) -> None:
 # MOD-008a: constructor and public attributes
 # ---------------------------------------------------------------------------
 
-#: Every public attribute an ISLA has (``vars(model)``: not a submodule, a parameter
-#: or a buffer). A new one fails ``test_isla_constructor_attributes`` until it is
-#: listed here and its value asserted there.
+#: Every public attribute an ISLA has (``vars(model)``, where submodules, parameters
+#: and buffers never sit). A new one fails ``test_isla_constructor_attributes`` until
+#: it is listed here and its value asserted there; one that is gone fails there too.
 PUBLIC_ATTRIBUTES = (
     "training",
     "meta",
@@ -216,7 +216,6 @@ PUBLIC_ATTRIBUTES = (
     "tree_read_kernel",
     "kernel_basis",
     "kernel_reads",
-    "frame_assign",
 )
 
 #: Every constructor argument at a value other than its default: an interior task in
@@ -363,12 +362,7 @@ def _expected_attributes(config: str) -> dict:
 
 
 def _public_attributes(model) -> dict:
-    return {
-        k: v
-        for k, v in vars(model).items()
-        if not k.startswith("_")
-        and not isinstance(v, (torch.nn.Module, torch.nn.Parameter, torch.Tensor))
-    }
+    return {k: v for k, v in vars(model).items() if not k.startswith("_")}
 
 
 def test_the_custom_configuration_sets_every_argument():
@@ -383,7 +377,8 @@ def test_the_custom_configuration_sets_every_argument():
 @pytest.mark.parametrize("config", list(ATTRIBUTE_CONFIGS))
 def test_isla_constructor_attributes(config):
     """Every public attribute of the model (``vars``, not a submodule or a parameter)
-    is in :data:`PUBLIC_ATTRIBUTES` and has its expected value, and the modules the
+    is in :data:`PUBLIC_ATTRIBUTES` and has its expected value, the default
+    configuration has exactly the listed ones (no stale entry), and the modules the
     configuration implies are built."""
     kw = ATTRIBUTE_CONFIGS[config]
     m = ISLA(**kw)
@@ -393,6 +388,10 @@ def test_isla_constructor_attributes(config):
     )
     expected = _expected_attributes(config)
     assert set(found) == set(expected), sorted(set(found) ^ set(expected))
+    if config == "with_defaults":
+        assert set(PUBLIC_ATTRIBUTES) == set(expected), sorted(
+            set(PUBLIC_ATTRIBUTES) ^ set(expected)
+        )
     for name, value in found.items():
         want = expected[name]
         assert want(value) if callable(want) else value == want, (name, value)
@@ -849,6 +848,32 @@ def test_isla_checkpoint_of_an_earlier_version_is_refused(tmp_path, file_name, r
     weights_only = _rewritten(src, tmp_path / f"weights_{release}.mdlus", None, sd)
     with pytest.raises(RuntimeError, match=sd_version):
         Module.from_checkpoint(str(weights_only))
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="physicsnemo core gap: Module.load never reads the metadata's "
+    "mdlus_file_version, so a checkpoint whose metadata alone names an earlier "
+    "version loads (from_checkpoint refuses it)",
+)
+def test_isla_checkpoint_relabelled_in_its_metadata_alone_is_refused_by_module_load(
+    tmp_path,
+):
+    """A reference checkpoint whose metadata alone names an earlier release (its
+    weights current) is refused by ``Module.from_checkpoint`` and should be by
+    ``Module.load`` too (MOD-008c: every loading path). ``Module.load`` loads it."""
+    cfg, _ = CHECKPOINTS["isla_dtt_v1.mdlus"]
+    old = _rewritten(DATA_DIR / "isla_dtt_v1.mdlus", tmp_path / "old.mdlus", "0.12.0")
+    with pytest.raises(
+        IOError, match=re.escape("version 0.12.0 is not compatible with current")
+    ):
+        Module.from_checkpoint(str(old))
+    try:
+        ISLA(**cfg).load(str(old), strict=True)
+    except Exception:  # noqa: BLE001 - any refusal is what core should do
+        return
+    raise AssertionError("Module.load accepted a checkpoint of version 0.12.0")
 
 
 def test_isla_earlier_state_dict_is_refused_on_every_loading_path(tmp_path):

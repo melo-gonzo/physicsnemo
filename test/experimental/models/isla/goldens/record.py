@@ -30,11 +30,12 @@ outputs known to vary run to run against their family.
 
 Regenerate the committed data (CPU, one thread)::
 
-    python -m test.experimental.models.isla.goldens.record --regenerate [FILE ...]
+    python -m test.experimental.models.isla.goldens.record --regenerate FILE ... | all
 
-writes every file of ``data/`` (or the named ones): ``goldens_v1.pt`` and its manifest
-``goldens_v1.json``, and the goldens and reference checkpoints of
-``test_isla_release.py`` (its ``WRITERS``). Nothing else writes them.
+writes the named files of ``data/`` (``all``: every one): ``goldens_v1.pt`` and its
+manifest ``goldens_v1.json``, and the goldens and reference checkpoints of
+``test_isla_release.py`` (its ``WRITERS``). Nothing else writes them. A bare
+``--regenerate`` is refused, so that no one rewrites the older goldens by accident.
 """
 
 import argparse
@@ -245,12 +246,16 @@ def is_output(name: str) -> bool:
     return name.startswith(("out.", "grad."))
 
 
-def summarize(t: torch.Tensor, exact: bool, samples: int = SAMPLES) -> dict:
+def summarize(
+    t: torch.Tensor, exact: bool, samples: int = SAMPLES, chunk: int | None = None
+) -> dict:
     """What the golden keeps of a tensor: dtype and shape; the SHA-256 of integer and
     boolean tensors, and of every tensor with ``exact`` (the inputs); for floats the
     largest finite magnitude ``scale``, the sum of magnitudes ``l1`` and a fixed
     weighted sum ``dot`` of every finite element (in float64), the count of non-finite
-    elements, and ``samples`` elements (:data:`SAMPLES` unless the case says fewer)."""
+    elements, and ``samples`` elements (:data:`SAMPLES` unless the case says fewer);
+    with ``chunk``, that length and the sums ``chunk_sums`` of the finite elements
+    over each run of ``chunk`` elements of the flattened tensor."""
     t = t.detach().cpu().contiguous()
     entry = {"dtype": str(t.dtype).removeprefix("torch."), "shape": list(t.shape)}
     if exact or not t.is_floating_point():
@@ -269,6 +274,8 @@ def summarize(t: torch.Tensor, exact: bool, samples: int = SAMPLES) -> dict:
         nonfinite=int((~finite).sum()),
         samples=x[sample_index(x.numel(), samples)].tolist(),
     )
+    if chunk:
+        entry.update(chunk=chunk, chunk_sums=[float(c.sum()) for c in xz.split(chunk)])
     return entry
 
 
@@ -281,7 +288,9 @@ def regenerate(log=print) -> dict:
         variant = case.variants["cpu"][0]
         tensors = C.run_case(case, "cpu", variant)
         golden[case.id] = {
-            name: summarize(t, not is_output(name), case.n_samples(name))
+            name: summarize(
+                t, not is_output(name), case.n_samples(name), case.chunk_length(name)
+            )
             for name, t in tensors.items()
         }
         log(f"golden {case.id} ({variant}): {len(tensors)} tensors")
@@ -376,19 +385,23 @@ def main(argv=None) -> int:
         "--regenerate",
         nargs="*",
         metavar="FILE",
-        help="write the named files of data/ (default: every file; goldens_v1.pt with "
-        "its manifest, and the files of test_isla_release.py)",
+        help="write the named files of data/, or `all` for every one (goldens_v1.pt "
+        "with its manifest, and the files of test_isla_release.py); a bare "
+        "--regenerate is refused",
     )
     args = p.parse_args(argv)
     if args.regenerate is not None:
         from test.experimental.models.isla import test_isla_release as release
 
-        names = set(args.regenerate) or {GOLDEN.name, *release.WRITERS}
-        unknown = names - {GOLDEN.name, *release.WRITERS}
+        files = [GOLDEN.name, *release.WRITERS]
+        if not args.regenerate:
+            p.error(f"--regenerate needs the files to write ({files}) or `all`")
+        names = set(args.regenerate)
+        if "all" in names:
+            names = (names - {"all"}) | set(files)
+        unknown = names - set(files)
         if unknown:
-            p.error(
-                f"unknown data files {sorted(unknown)}; the files are {[GOLDEN.name, *release.WRITERS]}"
-            )
+            p.error(f"unknown data files {sorted(unknown)}; the files are {files}")
         torch.set_num_threads(1)
         if GOLDEN.name in names:
             regenerate()
