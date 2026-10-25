@@ -516,6 +516,23 @@ RECORDS = {
         "tolerance, the census of the 690 canonical cases, the comparison with the curation pipeline's plane, and the book changes",
         ["FINAL_REPORT.md", "RESULTS.md", "BOOK_CHANGES.md"],
     ),
+    "hl_dup_stage2_area": (
+        "isla-hl-area-2026-10-24",
+        "HL-AREA: HL-DUP stage 2's six deduplicated-wing checkpoints scored on the uniform point cloud (per-case rows, reduction and "
+        "table), and the six lanes' training cost from their own logs (extract_cost.py's lines and the cost report)",
+        [
+            "RESULTS.md",
+            "FINAL_REPORT.md",
+            "NOTEBOOK_DRAFT.md",
+            "area_table.md",
+            "area_summary.json",
+            "COST_REPORT.md",
+            "cost/cost_hldupx.json",
+            "cost/extract.jsonl",
+            "scores_area/*/area/*/metrics.jsonl",
+            "scores_area/*/area/DATASET_USED",
+        ],
+    ),
 }
 
 
