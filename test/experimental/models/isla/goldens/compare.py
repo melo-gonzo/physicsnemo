@@ -155,6 +155,13 @@ def compare(a: dict, b: dict, log=print, show_all: bool = False, only=None) -> i
         keys = [k for k in keys if any(fnmatch.fnmatchcase(k, p) for p in only)]
     worst, counts = PASS, {s: 0 for s in STATUS.values()}
     log(f"{'case variant':<62} {'tensor':<34} verdict  detail")
+    for key in sorted(set(a.get("errors", {})) | set(b.get("errors", {}))):
+        side = "A" if key in a.get("errors", {}) else "B"
+        log(
+            f"{key:<62} {'-':<34} FAIL     raised on side {side} (traceback in its record.json)"
+        )
+        counts["FAIL"] += 1
+        worst = FAIL
     for key in keys:
         if key not in a["cases"] or key not in b["cases"]:
             status, rows = (

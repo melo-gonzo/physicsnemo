@@ -1,8 +1,8 @@
 {
  "format": 1,
- "commit": "fc6ed19d08e48b3fd4d47c674b8028c28411ea19",
+ "commit": "9d4bf6b6fdb604bd2ee518b22e69a8e5cae4c884",
  "model_code_modified": false,
- "date": "2026-10-25T00:13:38-04:00",
+ "date": "2026-10-25T00:58:48-04:00",
  "platform": {
   "python": "3.13.8",
   "torch": "2.13.0+cu130",
@@ -35,5 +35,5 @@
  },
  "samples": 16,
  "cases": 72,
- "tensors": 2221
+ "tensors": 2218
 }

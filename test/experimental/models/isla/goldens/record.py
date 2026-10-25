@@ -46,6 +46,7 @@ import re
 import shutil
 import subprocess
 import sys
+import traceback
 from pathlib import Path
 
 import torch
@@ -144,6 +145,7 @@ def record(cases, device: str, repeats: int = 1, log=print) -> dict:
         "cases": {},
         "tensors": {},
         "skipped": {},
+        "errors": {},
     }
     for case in cases:
         why = C.available(case, device)
@@ -154,7 +156,17 @@ def record(cases, device: str, repeats: int = 1, log=print) -> dict:
         inputs = case.build()
         for variant in variants:
             key = _key(case, device, variant)
-            runs = [C.run_case(case, device, variant, inputs) for _ in range(repeats)]
+            ### On CUDA a case without a declared family needs two runs to show that it
+            ### repeats bitwise; a family gets every repeat.
+            n_runs = repeats if device == "cpu" or case.family else min(repeats, 2)
+            try:
+                runs = [
+                    C.run_case(case, device, variant, inputs) for _ in range(n_runs)
+                ]
+            except Exception:
+                rec["errors"][key] = traceback.format_exc()
+                log(f"ERROR {key}:\n{rec['errors'][key]}")
+                continue
             meta, store = {}, {}
             for name, t0 in runs[0].items():
                 hashes = [tensor_hash(r[name]) for r in runs]
@@ -170,7 +182,7 @@ def record(cases, device: str, repeats: int = 1, log=print) -> dict:
                 "group": case.group,
                 "variant": variant,
                 "device": device,
-                "repeats": repeats,
+                "repeats": n_runs,
                 "kept": [n for n in meta if case.matches(case.kept, n)],
                 "weights": [n for n in meta if case.matches(case.weights, n)],
                 "family": [n for n in meta if case.matches(case.family, n)],
@@ -360,6 +372,8 @@ def main(argv=None) -> int:
     print_versions(rec)
     for cid, why in rec["skipped"].items():
         print(f"skipped {cid}: {why}")
+    for key in rec["errors"]:
+        print(f"ERROR {key} (traceback in record.json)")
     print(f"wrote {args.out}: {len(rec['cases'])} case variants, pid {os.getpid()}")
     return 0
 

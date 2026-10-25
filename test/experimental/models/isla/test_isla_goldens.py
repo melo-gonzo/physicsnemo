@@ -157,6 +157,8 @@ def check(
         for pattern, value in (overrides or {}).items():
             if fnmatch.fnmatchcase(name, pattern):
                 tol = value
+        if tol is None:  # not compared here (the case says why)
+            continue
         bad += _float_failures(name, entry, t, tol)
         if entry["scale"] > 0 and t.numel():
             ref = torch.tensor(entry["samples"], dtype=torch.float64)
@@ -195,7 +197,10 @@ def test_cpu_matches_the_golden(case, variant, golden, record_property):
     claim the reference's results bitwise) against the committed golden: inputs and
     integers exact, floats within :data:`CPU_RTOL` of ``max|golden|``."""
     bad, worst = check(
-        golden["cases"][case.id], C.run_case(case, "cpu", variant), CPU_RTOL
+        golden["cases"][case.id],
+        C.run_case(case, "cpu", variant),
+        CPU_RTOL,
+        overrides=case.tol,
     )
     for dtype, rel in worst.items():
         record_property(f"max_rel_err_{dtype}", f"{rel:.3e}")
@@ -222,7 +227,7 @@ def test_cuda_matches_the_cpu_golden(case, variant, golden, record_property):
         golden["cases"][case.id],
         tensors,
         CUDA_RTOL,
-        overrides=case.cuda_tol,
+        overrides={**case.tol, **case.cuda_tol},
     )
     for dtype, rel in worst.items():
         record_property(f"max_rel_err_{dtype}", f"{rel:.3e}")
