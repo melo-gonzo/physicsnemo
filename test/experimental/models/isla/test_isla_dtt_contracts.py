@@ -347,17 +347,9 @@ def test_the_interior_model_repeats_bitwise_on_cuda_with_every_cell_kept():
 @pytest.mark.parametrize(
     "device",
     [
-        pytest.param(
-            "cpu",
-            marks=pytest.mark.xfail(
-                strict=True,
-                raises=AssertionError,
-                reason="BUG W2-2 (BUGS_W2.md): on CPU, F.normalize's eps 1e-12 "
-                "underflows to 0 in float16, so the zero states of the padding "
-                "tokens give 0/0 in the routing logits (blocks.py:216), and the NaN "
-                "reaches every output",
-            ),
-        ),
+        ### on CPU the padding tokens' zero states once gave 0/0 in the routing
+        ### logits' float16 normalize (BUGS_W2.md W2-2)
+        "cpu",
         pytest.param(
             "cuda",
             marks=[
