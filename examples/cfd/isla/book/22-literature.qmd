@@ -411,7 +411,7 @@ routing that is too soft or too concentrated for the task.
 
 ### Read-only prediction points with a tree-evaluated boundary read {#sec-vs-novel-tree}
 
-*What ISLA does.* ISLA-DTT (`query_independent=True`) makes interior
+*What ISLA does.* ISLA-DTT, ISLA's interior task, makes interior
 prediction points passive readers: they carry no routing mass, so they
 never write into the slices, and after every block each one also reads
 the whole boundary through a learned kernel of relative geometry and an
@@ -452,7 +452,7 @@ trained opening angle $\theta = 1$ and by
 the tree's approximation (@sec-oq-dtt-frame). The interior chapters measure
 it against the interacting form (@sec-drivaerml, @sec-airfrans), and on
 AeroZoo's held-out splits the two read a close call, which makes ISLA-DTT
-ISLA's default interior form, on principle (@sec-aerozoo-form).
+ISLA's interior form, on principle (@sec-aerozoo-form).
 
 *Caveat.* ISLA-DTT is not the more accurate form everywhere: interacting
 ISLA leads it on AirfRANS velocity and eddy viscosity and on the lug
