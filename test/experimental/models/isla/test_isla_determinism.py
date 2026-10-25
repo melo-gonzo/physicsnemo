@@ -123,6 +123,7 @@ def test_the_draw_twice_on_cuda_keeps_the_same_cells():
     ]
     (kept0, w0), (kept1, w1) = runs
     assert kept0.shape == (BUDGET,) and torch.equal(kept0, kept1)
+    ### DRAW-EXACT (0.14.0 candidate, int64 sums): make this torch.equal(w1, w0).
     assert torch.allclose(w1, w0, rtol=1e-15, atol=0)
 
 
@@ -161,6 +162,7 @@ def test_hits_planted_on_line_boundaries_keep_one_of_the_two_cells_there():
                     kept_cpu[~torch.isin(kept_cpu, kept)],
                 ]
             )
+            ### DRAW-EXACT (0.14.0 candidate): make this torch.equal(kept, kept_cpu).
             assert differ.numel() in (0, 2), (i, differ)
 
 

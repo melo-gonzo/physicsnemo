@@ -513,6 +513,7 @@ def test_the_draw_on_cuda_keeps_the_cpu_draws_cells():
         [m.cuda() for m in measures], [x.cuda() for x in centroids], 6000, start.cuda()
     )
     assert kept.shape == (6000,) and torch.equal(kept_c.cpu(), kept)
+    ### DRAW-EXACT (0.14.0 candidate, int64 sums): tighten to bitwise if its weights are.
     assert torch.allclose(weights_c.cpu(), weights, rtol=1e-12, atol=0)
 
 
@@ -715,8 +716,8 @@ def test_geo_kernel_auto_disqualifiers_on_cuda():
     """On CUDA with Triton, ``geo_kernel="auto"`` picks the fused region for a model
     it fits and the eager region for each disqualifier: no global direction, five
     per-point vectors (five global directions, or two and three rank-1 boundary
-    inputs), more slices than ``MAX_SLICES``, a rank-2 boundary input. (A model in two
-    dimensions is the other disqualifier; it waits for the 0.13.0 constructor.)"""
+    inputs), more slices than ``MAX_SLICES``, a rank-2 boundary input, two spatial
+    dimensions."""
     pts = torch.zeros(4, 3, device="cuda")
     assert _geo_model().resolve_geo_kernel(pts) == "fused"
     five = {f"g{i}": {"rank": 1} for i in range(5)}
@@ -728,8 +729,9 @@ def test_geo_kernel_auto_disqualifiers_on_cuda():
             boundary_schemas={"wall": {f"t{i}": {"rank": 1} for i in range(3)}},
         ),
         "slices past MAX_SLICES": _geo_model(n_slices=geo_kernel.MAX_SLICES + 1),
+        "two dimensions": _geo_model(n_spatial_dims=2),
         "rank-2 boundary input": _geo_model(
-            boundary_schemas={"wall": {"tau": {"rank": 2}}}
+            boundary_schemas={"wall": {"tau": {"rank": 2, "symmetric": True}}}
         ),
     }
     m = cases["no global direction"]
@@ -737,6 +739,10 @@ def test_geo_kernel_auto_disqualifiers_on_cuda():
     assert cases["five global directions"].n_global_vectors == 5
     m = cases["two directions, three boundary vectors"]
     assert m.n_global_vectors + m.n_block_vecs == 5
-    assert cases["rank-2 boundary input"].n_block_tens == 1
+    m = cases["rank-2 boundary input"]
+    ### (symmetric: its two derived vectors keep K + P at 3, so the rank-2 input alone
+    ### disqualifies; a general one adds four and passes MAX_DIRECTIONS too)
+    assert m.n_block_tens == 1
+    assert m.n_global_vectors + m.n_block_vecs <= geo_kernel.MAX_DIRECTIONS
     for name, m in cases.items():
         assert m.geo_kernel == "auto" and m.resolve_geo_kernel(pts) == "eager", name
