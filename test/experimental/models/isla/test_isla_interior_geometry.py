@@ -1228,7 +1228,11 @@ def test_on_wall_direction_is_a_function_of_the_input_mesh(surface):
     as on the lug's hex faces), and differed from float64's at 594 of 781 on-wall
     points of the icosphere."""
     if surface == "split":
-        m = torus.load(n_major=28, n_minor=12)
+        ### The torus in its winding before #2148 made its normals outward: the
+        ### midpoints of cells[:, :2] are then quad sides, the points this test was
+        ### written for; the new winding puts each quad's diagonal there
+        ### (test_on_wall_direction_at_quad_diagonals).
+        m = _flipped(torus.load(n_major=28, n_minor=12))
         g = torch.Generator().manual_seed(0)
         p = m.points.double() * (
             1 + 1e-5 * (2 * torch.rand(m.n_points, 1, dtype=D, generator=g) - 1)
@@ -1291,7 +1295,9 @@ def test_float32_points_within_the_bound_are_on_the_wall(surface):
     if surface == "sphere":
         m = sphere_icosahedral.load(radius=1.0, subdivisions=3)
     else:
-        m = torus.load(n_major=48, n_minor=24)
+        ### The winding before #2148, so that the midpoints of cells[:, :2] are quad
+        ### sides, as this test was written for (test_on_wall_direction_at_quad_diagonals).
+        m = _flipped(torus.load(n_major=48, n_minor=24))
     pts = (m.points.double() @ orthogonal(3, 7).T).float()
     tri = pts[m.cells].double()
     n = torch.nn.functional.normalize(
@@ -1324,6 +1330,54 @@ def test_float32_points_within_the_bound_are_on_the_wall(surface):
     cells = inv[m.cells][torch.randperm(m.n_cells, generator=g)].roll(1, -1)
     d3, u3 = exact_boundary_geometry(q, pts[perm], cells)
     assert torch.equal(d3, d) and torch.equal(u3, u)
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="Known defect (found 2026-10-24 when #2148 changed torus.load's winding): at a "
+    "quad's diagonal, where its two triangles' normals agree to rounding (a torus quad is "
+    "planar), the on-wall u is not a function of the input mesh alone: renumbering moves it "
+    "at 51 of the 1152 diagonal midpoints of the 48 x 24 torus, by up to 1.79e-6, and on "
+    "the split torus u from float32 inputs differs from u from float64 copies at 5 of the 35 "
+    "on-wall diagonal midpoints, by up to 1.61e-6. Remove this marker once the geometry is fixed.",
+)
+@pytest.mark.parametrize("case", ["renumbering", "precision"])
+def test_on_wall_direction_at_quad_diagonals(case):
+    """At the midpoints of the torus's quad diagonals (the edge each quad's two
+    triangles share, which near-duplicate normals meet across) in a generic pose,
+    the on-wall u is bitwise invariant to renumbering the vertices and reordering
+    the cells (``renumbering``, the 48 x 24 torus), and from float32 inputs it is
+    bitwise u from float64 copies after the cast (``precision``, the split torus of
+    test_on_wall_direction_is_a_function_of_the_input_mesh)."""
+    if case == "renumbering":
+        m = torus.load(n_major=48, n_minor=24)
+        pts = (m.points.double() @ orthogonal(3, 7).T).float()
+    else:
+        m = torus.load(n_major=28, n_minor=12)
+        g = torch.Generator().manual_seed(0)
+        p = m.points.double() * (
+            1 + 1e-5 * (2 * torch.rand(m.n_points, 1, dtype=D, generator=g) - 1)
+        )
+        pts = (p @ orthogonal(3, 7).T + torch.arange(1, 4, dtype=D) / 3).float()
+    ### torus.load writes each quad's two triangles at k and k + n_quads.
+    n_quads = m.n_cells // 2
+    a, b = m.cells[:n_quads], m.cells[n_quads:]
+    shared = (a[:, :, None] == b[:, None, :]).any(-1)
+    q = pts[a[shared].view(n_quads, 2)].mean(1)
+    d, u = exact_boundary_geometry(q, pts, m.cells)
+    if case == "renumbering":
+        g = torch.Generator().manual_seed(0)
+        perm = torch.randperm(pts.shape[0], generator=g)
+        inv = torch.empty_like(perm)
+        inv[perm] = torch.arange(pts.shape[0])
+        cells = inv[m.cells][torch.randperm(m.n_cells, generator=g)].roll(1, -1)
+        d3, u3 = exact_boundary_geometry(q, pts[perm], cells)
+        assert torch.equal(d3, d) and torch.equal(u3, u)
+    else:
+        d64, u64 = exact_boundary_geometry(q.double(), pts.double(), m.cells)
+        wall = (d == 0) & (d64 == 0)
+        assert wall.any()
+        assert torch.equal(u[wall], u64[wall].float())
 
 
 @pytest.mark.parametrize("dim", [2, 3])

@@ -1,0 +1,329 @@
+{
+ "protocol": "cost_090 rule (results/char/cost_090.json 'protocol'): step_seconds = median of train_step rows with step_time_s < 10 s, seed mean; peak_gib = max over epochs of train_summary peak_memory_gib, seed mean; n_parameters from the config row (checked equal to the scorer's); gpus/ranks from train.log CUDA devices; precision from the config row. Extract by extract_cost.py (unchanged, md5 9b87878e). gpu_hours = sum over the chain's links of sacct ElapsedRaw x AllocTRES gres/gpu (one lane per 1-node 4-GPU job, so no sharing), failed links included; wall_hours = the same sum of ElapsedRaw.",
+ "cost": {
+  "hilift_dedup": {
+   "ISLA": {
+    "peak_gib": 64.60777282714844,
+    "step_seconds": 0.3229707847422105,
+    "n_parameters": 68817006,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "scratch/isla-hl-area-2026-10-24/cost/extract.jsonl: hldupx_hl_isla_seed{42,43}",
+    "note": "trained on code_h090 with model.compile_blocks=true, as the stored-wing h090 lanes (before the compile fix); dataset highlift_surface_medium_dedup",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.32198500250524376,
+      "peak_gib": 64.60784912109375,
+      "gpu_hours": 32.843333333333334,
+      "wall_hours": 8.210833333333333,
+      "train_epoch_hours": 7.799121215707443,
+      "n_links": 4,
+      "links": [
+       "367678_0 TIMEOUT 14356s gpu=4 nodes=1",
+       "367684_0 TIMEOUT 14345s gpu=4 nodes=1",
+       "369503_0 COMPLETED 849s gpu=4 nodes=1",
+       "371318_0 COMPLETED 9s gpu=4 nodes=1"
+      ],
+      "metrics_md5": "2dc73a54950877db7e29aaf375687103"
+     },
+     "43": {
+      "step_seconds": 0.3239565669791773,
+      "peak_gib": 64.60769653320312,
+      "gpu_hours": 32.69777777777778,
+      "wall_hours": 8.174444444444445,
+      "train_epoch_hours": 7.719881947141427,
+      "n_links": 5,
+      "links": [
+       "367679_1 FAILED 293s gpu=4 nodes=1",
+       "367683_1 TIMEOUT 14358s gpu=4 nodes=1",
+       "367733_1 TIMEOUT 14350s gpu=4 nodes=1",
+       "369595_1 COMPLETED 418s gpu=4 nodes=1",
+       "371387_1 COMPLETED 9s gpu=4 nodes=1"
+      ],
+      "metrics_md5": "4a03e9555a9331175e6045f0dd4ae26d"
+     }
+    },
+    "code": [
+     "code_h090"
+    ],
+    "completed": true,
+    "gpu_hours": 32.77055555555556,
+    "gpu_hours_total": 65.54111111111112
+   },
+   "GeoTransolver": {
+    "peak_gib": 77.85752487182617,
+    "step_seconds": 0.43065024848328903,
+    "n_parameters": 9047301,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "scratch/isla-hl-area-2026-10-24/cost/extract.jsonl: hldupx_hl_gt_seed{42,43}",
+    "note": "uncompiled, as released (code_a2r, as the stored-wing udrv lanes); dataset highlift_surface_medium_dedup",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.4335960959724616,
+      "peak_gib": 77.85760498046875,
+      "gpu_hours": 38.49333333333333,
+      "wall_hours": 9.623333333333333,
+      "train_epoch_hours": 9.222205244200248,
+      "n_links": 4,
+      "links": [
+       "367681_0 TIMEOUT 14363s gpu=4 nodes=1",
+       "367709_0 TIMEOUT 14345s gpu=4 nodes=1",
+       "369504_0 COMPLETED 5926s gpu=4 nodes=1",
+       "371317_0 COMPLETED 10s gpu=4 nodes=1"
+      ],
+      "metrics_md5": "c3a7e89986a184eccbc9d53585919b8d"
+     },
+     "43": {
+      "step_seconds": 0.42770440099411644,
+      "peak_gib": 77.8574447631836,
+      "gpu_hours": 38.14,
+      "wall_hours": 9.535,
+      "train_epoch_hours": 9.162009461163777,
+      "n_links": 4,
+      "links": [
+       "367682_1 TIMEOUT 14351s gpu=4 nodes=1",
+       "367710_1 TIMEOUT 14368s gpu=4 nodes=1",
+       "369538_1 COMPLETED 5599s gpu=4 nodes=1",
+       "371356_1 COMPLETED 8s gpu=4 nodes=1"
+      ],
+      "metrics_md5": "c1ad39fdc5537ed62474b2a35c36c229"
+     }
+    },
+    "code": [
+     "code_a2r"
+    ],
+    "completed": true,
+    "gpu_hours": 38.31666666666666,
+    "gpu_hours_total": 76.63333333333333
+   },
+   "Transolver": {
+    "peak_gib": 62.26203536987305,
+    "step_seconds": 0.32275882751855534,
+    "n_parameters": 47239305,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "scratch/isla-hl-area-2026-10-24/cost/extract.jsonl: hldupx_hl_t_seed{42,43}",
+    "note": "uncompiled, as released (code_a2r, as the stored-wing udrv lanes); dataset highlift_surface_medium_dedup",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.32179963201633655,
+      "peak_gib": 62.25995635986328,
+      "gpu_hours": 32.46888888888889,
+      "wall_hours": 8.117222222222223,
+      "train_epoch_hours": 7.729298527795488,
+      "n_links": 4,
+      "links": [
+       "367686_2 TIMEOUT 14351s gpu=4 nodes=1",
+       "367711_2 TIMEOUT 14368s gpu=4 nodes=1",
+       "369539_2 COMPLETED 493s gpu=4 nodes=1",
+       "371357_2 COMPLETED 10s gpu=4 nodes=1"
+      ],
+      "metrics_md5": "d941341eb851585d0cf5a72301baf69b"
+     },
+     "43": {
+      "step_seconds": 0.3237180230207741,
+      "peak_gib": 62.26411437988281,
+      "gpu_hours": 32.17888888888889,
+      "wall_hours": 8.044722222222223,
+      "train_epoch_hours": 7.664451164807275,
+      "n_links": 4,
+      "links": [
+       "367687_3 TIMEOUT 14340s gpu=4 nodes=1",
+       "367723_3 TIMEOUT 14368s gpu=4 nodes=1",
+       "369540_3 COMPLETED 244s gpu=4 nodes=1",
+       "371355_3 COMPLETED 9s gpu=4 nodes=1"
+      ],
+      "metrics_md5": "eacf787250c13b78277e4d669acce014"
+     }
+    },
+    "code": [
+     "code_a2r"
+    ],
+    "completed": true,
+    "gpu_hours": 32.32388888888889,
+    "gpu_hours_total": 64.64777777777778
+   }
+  }
+ },
+ "stored_gpu_hours": {
+  "ISLA": {
+   "42": {
+    "gpu_hours": 32.425555555555555,
+    "wall_hours": 8.106388888888889,
+    "train_epoch_hours": 7.764151409788821,
+    "n_links": 4,
+    "links": [
+     "300297_0 TIMEOUT 14344s gpu=4 nodes=1",
+     "300400_0 TIMEOUT 14346s gpu=4 nodes=1",
+     "302845_0 COMPLETED 483s gpu=4 nodes=1",
+     "304731_0 COMPLETED 10s gpu=4 nodes=1"
+    ],
+    "step_seconds": 0.34090400906279683,
+    "peak_gib": 66.48234558105469,
+    "code": [
+     "code_h090"
+    ],
+    "compile": "False",
+    "compile_blocks": "True",
+    "precision": "bfloat16",
+    "devices": [
+     "cuda:0",
+     "cuda:1",
+     "cuda:2",
+     "cuda:3"
+    ]
+   },
+   "43": {
+    "gpu_hours": 32.62888888888889,
+    "wall_hours": 8.157222222222222,
+    "train_epoch_hours": 7.766120126615812,
+    "n_links": 5,
+    "links": [
+     "300298_1 TIMEOUT 14344s gpu=4 nodes=1",
+     "300401_1 FAILED 132s gpu=4 nodes=1",
+     "302846_1 TIMEOUT 14365s gpu=4 nodes=1",
+     "302865_1 COMPLETED 515s gpu=4 nodes=1",
+     "304768_1 COMPLETED 10s gpu=4 nodes=1"
+    ],
+    "step_seconds": 0.341805195028428,
+    "peak_gib": 64.65188598632812,
+    "code": [
+     "code_h090"
+    ],
+    "compile": "False",
+    "compile_blocks": "True",
+    "precision": "bfloat16",
+    "devices": [
+     "cuda:0",
+     "cuda:1",
+     "cuda:2",
+     "cuda:3"
+    ]
+   }
+  },
+  "GeoTransolver": {
+   "42": {
+    "gpu_hours": 38.86222222222222,
+    "wall_hours": 9.715555555555556,
+    "train_epoch_hours": 9.39673686757154,
+    "n_links": 4,
+    "links": [
+     "288792_0 TIMEOUT 14365s gpu=4 nodes=1",
+     "289797_0 TIMEOUT 14354s gpu=4 nodes=1",
+     "294236_0 COMPLETED 6248s gpu=4 nodes=1",
+     "297542_0 COMPLETED 9s gpu=4 nodes=1"
+    ],
+    "step_seconds": 0.4565785690683697,
+    "peak_gib": 77.91194152832031,
+    "code": [
+     "code_a2r"
+    ],
+    "compile": "False",
+    "compile_blocks": null,
+    "precision": "bfloat16",
+    "devices": [
+     "cuda:0",
+     "cuda:1",
+     "cuda:2",
+     "cuda:3"
+    ]
+   },
+   "43": {
+    "gpu_hours": 39.474444444444444,
+    "wall_hours": 9.868611111111111,
+    "train_epoch_hours": 9.535476548173401,
+    "n_links": 4,
+    "links": [
+     "288793_1 TIMEOUT 14359s gpu=4 nodes=1",
+     "289824_1 TIMEOUT 14348s gpu=4 nodes=1",
+     "294262_1 COMPLETED 6810s gpu=4 nodes=1",
+     "297539_1 COMPLETED 10s gpu=4 nodes=1"
+    ],
+    "step_seconds": 0.45790993655100465,
+    "peak_gib": 77.91143798828125,
+    "code": [
+     "code_a2r"
+    ],
+    "compile": "False",
+    "compile_blocks": null,
+    "precision": "bfloat16",
+    "devices": [
+     "cuda:0",
+     "cuda:1",
+     "cuda:2",
+     "cuda:3"
+    ]
+   }
+  },
+  "Transolver": {
+   "42": {
+    "gpu_hours": 31.566666666666666,
+    "wall_hours": 7.891666666666667,
+    "train_epoch_hours": 7.597838104524918,
+    "n_links": 3,
+    "links": [
+     "288795_2 TIMEOUT 14359s gpu=4 nodes=1",
+     "289827_2 COMPLETED 14042s gpu=4 nodes=1",
+     "294260_2 COMPLETED 9s gpu=4 nodes=1"
+    ],
+    "step_seconds": 0.34078397299163043,
+    "peak_gib": 62.307525634765625,
+    "code": [
+     "code_a2r"
+    ],
+    "compile": "False",
+    "compile_blocks": null,
+    "precision": "bfloat16",
+    "devices": [
+     "cuda:0",
+     "cuda:1",
+     "cuda:2",
+     "cuda:3"
+    ]
+   },
+   "43": {
+    "gpu_hours": 32.315555555555555,
+    "wall_hours": 8.078888888888889,
+    "train_epoch_hours": 7.609753662991651,
+    "n_links": 4,
+    "links": [
+     "288796_3 NODE_FAIL 705s gpu=4 nodes=1",
+     "288796_3 TIMEOUT 14348s gpu=4 nodes=1",
+     "289825_3 COMPLETED 14022s gpu=4 nodes=1",
+     "294590_3 COMPLETED 9s gpu=4 nodes=1"
+    ],
+    "step_seconds": 0.34313042799476534,
+    "peak_gib": 62.30693054199219,
+    "code": [
+     "code_a2r"
+    ],
+    "compile": "False",
+    "compile_blocks": null,
+    "precision": "bfloat16",
+    "devices": [
+     "cuda:0",
+     "cuda:1",
+     "cuda:2",
+     "cuda:3"
+    ]
+   }
+  }
+ },
+ "gpu_hours_total_all_six": 206.82222222222222
+}

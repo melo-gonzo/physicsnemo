@@ -17,11 +17,11 @@
 
 # ISLA, surface task, on the HiLift wing datasets (highlift_surface_*): the reference configuration of isla_surface.yaml
 # with the wings' five cell targets (pressure, temperature, density scalars; velocity and wall shear vectors), reading
-# the wing (its duplicated cells dropped by the dataset's reader) and the hemisphere far field the dataset builds
-# (AddHemisphereBoundaries: inlet, outlet), and predicting at the wing's cells.
-# The domain's third boundary, the symmetry plane y = 0, is absent: its hole at the wing root needs the root's
-# outline, and the stored roots are open on every geometry but LHC001, so it cannot be built for every case (a
-# rebuild of the root outline from the stored vertices is being prototyped).
+# the wing (its duplicated cells dropped by the dataset's reader), the hemisphere far field the dataset builds
+# (AddHemisphereBoundaries: inlet, outlet) and the symmetry plane y = 0 (AddSymmetryPlane: the far field's equatorial
+# disk minus the wing's root section, outlined by the closed root cap of the dataset's source STL), and predicting at
+# the wing's cells. The reader builds the plane only for a case whose stored root lies on that outline; a case that
+# fails the check gets no plane, so this model cannot read it.
 # The far field points into the fluid; the stored wing is wound into the body (its signed volume is negative on the
 # 4 cases checked), so it is reversed for ISLA only, as isla_surface.yaml reverses DrivAerML's vehicle.
 
@@ -59,6 +59,7 @@ forward_kwargs:
     vehicle: boundaries.vehicle       # the subsampled wing, with its Horvitz-Thompson measures
     inlet: boundaries.inlet           # the hemisphere's upstream half, whole, as the dataset builds it
     outlet: boundaries.outlet         # its downstream half
+    symmetry: boundaries.symmetry     # the y = 0 plane: the far field's disk minus the wing's root section, whole
   prediction_boundaries: {literal: [vehicle]}   # the outputs are predicted at the wing's cells only
   global_data: global_data            # the case's TensorDict; the model selects its declared leaves
 
@@ -74,6 +75,7 @@ model:
     vehicle: {}                  # the wing surface, a no-slip wall: no per-cell fields
     inlet: {}                    # the far field's pieces carry no field: each condition is its name
     outlet: {}
+    symmetry: {}                 # the y = 0 plane, a no-stress condition per the dataset's paper; carries no field
   global_schema:
     U_inf_dir: {rank: 1}         # a rank-1 global input, read from global_data.U_inf_dir; normalized to a unit direction inside the model
   hidden: 512                  # the reference configuration (REF-80 verdict, 2026-10-04): most accurate under 80 GiB per GPU on DrivAerML Surface and the 210-wing rung; equal to the class defaults

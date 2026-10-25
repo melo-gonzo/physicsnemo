@@ -238,7 +238,7 @@ REFP = {a: ref_point(SURF, a) for a, _ in REF_KEYS}
 #|   same validation cars, a different instrument (200,000 training cells, 100,000 for Transolver;
 #|   for ISLA 512 slices, the normalized slice reads, exact wall geometry, its own scales and
 #|   boundary conditions by name; results/char/drivaerml_surface_090.json,
-#|   parameters from results/char/cost_090.json). The gray band spans the best two
+#|   parameters from results/char/cost_090_v2.json). The gray band spans the best two
 #|   ladder runs of each architecture. How to read this: the x axis is parameters, not memory or
 #|   time (those are @tbl-ref-cost and @fig-cost-sweep); GeoTransolver-2,048's count is extrapolated
 #|   from its measured 256 to 1,024 ladder; the y axis starts below the floor. Data:
@@ -678,8 +678,8 @@ print(": What the reference configurations spend, per dataset and task, in the t
       "lane of the same configuration, one seed: " + ", ".join(f"{d} {a} (seed {s}, {int(n.replace(',', '')):,} steps)" for d, a, s, n in smoke) + ". "
       "‡ The lane trained on the compiled training path after its fault was fixed (" + ", ".join(fixed) + "); the eager-trained lanes "
       "behind those standings are not priced, and eager training takes longer per step. "
-      f"The {S.DATASETS['hilift'].short} lanes priced are the same configurations trained on the wing as stored; its errors are of the "
-      "deduplicated wing, whose lanes drop the copies from each draw and are not priced here. "
+      f"The {S.DATASETS['hilift'].short} lanes train on the deduplicated wing, so each draw keeps only the distinct cells of the "
+      "200,000 drawn (Transolver's of 100,000). "
       + (f"The {' and '.join(flight)} {'errors are' if len(flight) > 1 else 'error is'} in flight, as "
          f"{'their dataset chapters say' if len(flight) > 1 else 'its dataset chapter says'} (@sec-ledger). " if flight else "")
       + "How to read this: the table pairs a price with a result; it does not say what each architecture would score at another "
@@ -737,7 +737,7 @@ toward a floor at the large ones, on both datasets.
 #|   1e-3. Black-edged stars: the three reference configurations at the full training set of 435
 #|   cars and of 510 wing cases, a different instrument (results/char/drivaerml_surface_090.json;
 #|   on the wings the checkpoints trained and scored on the wing as stored, like the ladders,
-#|   results/char/hilift_surface_090_dedup.json `unit_drive_control`; every baseline reading the unit direction), offset
+#|   results/char/hilift_surface_090_dedup_v2.json `unit_drive_control`; every baseline reading the unit direction), offset
 #|   sideways for legibility. How to read this: the
 #|   vertical spread between shades is what parameters buy at one training-set size; the slope is
 #|   what cases buy. Both axes are logarithmic. Data: results/scalelaw_2026-10-08.json.

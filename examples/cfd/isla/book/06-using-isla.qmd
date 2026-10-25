@@ -684,8 +684,9 @@ DrivAerML, AirfRANS and HiLiftAeroML no condition declares a field: the
 DrivAerML configurations read the vehicle and the four other pieces of the
 wind tunnel's box (`no_slip`, the ground under and behind the car; `slip`,
 the sides, the roof and the ground upstream; `inlet`; `outlet`), the
-AirfRANS one the airfoil and the far field `freestream`, and the HiLiftAeroML one the wing, the only piece all but two of its files
-store. AeroZoo's
+AirfRANS one the airfoil and the far field `freestream`, and the HiLiftAeroML one the wing, the far field's `inlet` and
+`outlet` and the symmetry plane `symmetry`, the last three built at load since all but two of its files store the wing
+alone. AeroZoo's
 four boundaries are four conditions read directly from the dataset, each
 declaring only the values it prescribes. The GINOT bracket lug, PLAID
 Tensile2d and DeepJEB++ store their conditions in one labelled boundary,

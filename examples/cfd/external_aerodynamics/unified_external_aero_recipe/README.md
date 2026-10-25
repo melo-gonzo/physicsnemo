@@ -128,7 +128,8 @@ flowchart LR
   Augmentations are inserted after `CenterMesh` by the dataset builder.
   Rotation is restricted to the vertical axis.  Translation is restricted
   to horizontal axes by setting the vertical component of the offset
-  distribution to zero.
+  distribution to zero (`low == high`), which needs
+  `validate_args: false` on the `Uniform`.
 
 - **NonDimensionalizeByMetadata** — Converts raw physical fields into
   non-dimensional coefficients using the per-sample freestream
@@ -809,8 +810,10 @@ python src/train.py model=geotransolver_surface dataset=highlift_surface \
     training.num_epochs=200 sampling_resolution=100000 \
     dataloader.prefetch_factor=4 dataloader.num_workers=4
 
-# HiLift surface (ISLA reference configuration), reading the wing and the hemisphere far
-# field the dataset builds (AddHemisphereBoundaries: inlet, outlet)
+# HiLift surface (ISLA reference configuration), reading the wing, the hemisphere far
+# field the dataset builds (AddHemisphereBoundaries: inlet, outlet) and the symmetry plane
+# its reader builds for each case whose root passes the check (AddSymmetryPlane: symmetry;
+# dataset_paths.highlift_aero_ml_symmetry_check names tools/build_symmetry_check.py's record)
 python src/train.py model=isla_surface_highlift dataset=highlift_surface \
     training.num_epochs=200 sampling_resolution=100000
 
@@ -882,6 +885,7 @@ pipeline:
         high:
           _target_: torch.tensor
           data: [1.0, 1.0, 0.0]
+        validate_args: false
   transforms:
     - _target_: ${dp:DropMeshFields}
       global_data: [TimeValue]

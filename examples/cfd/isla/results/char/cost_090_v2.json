@@ -1,0 +1,962 @@
+{
+ "protocol": "Training cost of the reference configurations at ISLA 0.9.0 (2026-10-22): per dataset (a book/standing.py DATASETS key) and\narchitecture (ISLA, ISLA-DTT, GeoTransolver 256, Transolver 512 x 16), the lanes behind the standings, each priced from its own\ntraining log as the seed mean of\n\n* step_seconds: the median training step, over the train_step rows with step_time_s < 10 s, which leaves out the compile steps of\n  the first epoch and of each restarted link (the AZ-DECIDE rule, scratch/isla-az-decide-2026-10-21/reduce_azdecide.py);\n* peak_gib: the peak allocated device memory, the maximum over epochs of the train_summary peak_memory_gib (the trainer's maximum\n  over ranks);\n\nwith n_parameters from the scorer's config row (checked equal to the training config row), the GPUs and ranks (the CUDA devices\nthe training log names), the precision of the training config row, and a note where a lane differs from the configuration that\ntrains ISLA.\n\nInputs: results/campaigns_2026-10-22/cost_090/extract.jsonl, one line per run made on LHR by extract_cost.py beside it (README.md\nthere names each source and its md5), and, for the HiLiftAeroML lanes on the deduplicated wing (hldupx_hl_*, the standing's own),\nresults/campaigns_2026-10-23/hl_dup_stage2_area/cost/extract.jsonl, made on LHR by the same extract_cost.py (md5 9b87878e,\nunchanged; HL-AREA's COST_REPORT.md names the logs). Five standing baseline lanes have no training log left on LHR (cl_r_t2dz_gt, cl_r_t2dz_t,\ncl_r_jeb_gt, cl_r_jeb_t, cl_r_lug_t); each is priced from the one-epoch smoke lane of the same configuration\n(results/campaigns_2026-10-02/char/cs/cs_r_<task>_<arch>/metrics.jsonl, seed 42), its parameter count from the standing lane's\nscorer rows (results/campaigns_2026-10-02/char/protocols/<run>/native/metrics.jsonl). The lanes trained before the compile fix\n(r090_af_*, r090_lug_*, r090_t2dz_isla) are kept under compiled_before_fix.\n\nWrites results/char/cost_090_v2.json: cost[key][arch] = {peak_gib, step_seconds, n_parameters, gpus, ranks, precision, source, note,\nseeds, per_seed, code, completed}. The first version of this script priced HiLiftAeroML from the lanes trained on the wing as\nstored (h090_hl_isla, udrv_hl_gt, udrv_hl_t) and wrote results/char/cost_090.json (commit b05ba6b6e), which is kept as it was; every other entry of\nthe two files is equal.\nusage: python cost_090_2026-10-22.py\n",
+ "note": "The cost of the configuration that trains ISLA: GB300 GPUs, four ranks, bfloat16 autocast, the blocks compiled one by one with Inductor's mix-order reduction off; the baselines train uncompiled, as released. The eager-trained lanes (r090eag_*) are not priced: they trained eager only for the training-path control, at about twice the step time.",
+ "cost": {
+  "drivaerml_surface": {
+   "ISLA": {
+    "peak_gib": 64.64579772949219,
+    "step_seconds": 0.2430651654722169,
+    "n_parameters": 68813415,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-22/cost_090/extract.jsonl: r090_dr_isla_seed{42,43}",
+    "note": "trained on code_r090, before the compile fix (the compiled blocks ran Inductor's mix-order reduction)",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.24131423945073038,
+      "peak_gib": 64.64579772949219
+     },
+     "43": {
+      "step_seconds": 0.24481609149370342,
+      "peak_gib": 64.64579772949219
+     }
+    },
+    "code": [
+     "code_r090"
+    ],
+    "completed": true
+   },
+   "GeoTransolver": {
+    "peak_gib": 77.87652587890625,
+    "step_seconds": 0.38889451266732067,
+    "n_parameters": 9046016,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-22/cost_090/extract.jsonl: r80ud_dr_gt_h256_seed{42,43}",
+    "note": "uncompiled, as released",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.38873996341135353,
+      "peak_gib": 77.87652587890625
+     },
+     "43": {
+      "step_seconds": 0.3890490619232878,
+      "peak_gib": 77.87652587890625
+     }
+    },
+    "code": [
+     "code_v18"
+    ],
+    "completed": true
+   },
+   "Transolver": {
+    "peak_gib": 62.130802154541016,
+    "step_seconds": 0.27007823705207556,
+    "n_parameters": 47236740,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-22/cost_090/extract.jsonl: r80ud_dr_t_h512_l16_c100k_seed{42,43}",
+    "note": "uncompiled, as released",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.2701076320372522,
+      "peak_gib": 62.130802154541016
+     },
+     "43": {
+      "step_seconds": 0.27004884206689894,
+      "peak_gib": 62.130802154541016
+     }
+    },
+    "code": [
+     "code_v18"
+    ],
+    "completed": true
+   }
+  },
+  "drivaerml_volume": {
+   "ISLA": {
+    "peak_gib": 128.96139526367188,
+    "step_seconds": 0.5930457310169004,
+    "n_parameters": 68815977,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-22/cost_090/extract.jsonl: r090_vol_isla_seed{42,43}",
+    "note": "trained on code_r090, before the compile fix (the compiled blocks ran Inductor's mix-order reduction)",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.5927622949238867,
+      "peak_gib": 128.96139526367188
+     },
+     "43": {
+      "step_seconds": 0.5933291671099141,
+      "peak_gib": 128.96139526367188
+     }
+    },
+    "code": [
+     "code_r090"
+    ],
+    "completed": true
+   },
+   "GeoTransolver": {
+    "peak_gib": 118.0041732788086,
+    "step_seconds": 0.9828027825569734,
+    "n_parameters": 27574449,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-22/cost_090/extract.jsonl: clud_vol_gt_seed{42,43}",
+    "note": "uncompiled, as released",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.9824227511417121,
+      "peak_gib": 118.0041732788086
+     },
+     "43": {
+      "step_seconds": 0.9831828139722347,
+      "peak_gib": 118.0041732788086
+     }
+    },
+    "code": [
+     "code_v20"
+    ],
+    "completed": true
+   },
+   "Transolver": {
+    "peak_gib": 62.119537353515625,
+    "step_seconds": 0.2724882079055533,
+    "n_parameters": 47238277,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-22/cost_090/extract.jsonl: clud_vol_t_seed{42,43}",
+    "note": "uncompiled, as released",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.2714358048979193,
+      "peak_gib": 62.119537353515625
+     },
+     "43": {
+      "step_seconds": 0.27354061091318727,
+      "peak_gib": 62.119537353515625
+     }
+    },
+    "code": [
+     "code_v20"
+    ],
+    "completed": true
+   }
+  },
+  "hilift": {
+   "ISLA": {
+    "peak_gib": 64.60777282714844,
+    "step_seconds": 0.3229707847422105,
+    "n_parameters": 68817006,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-23/hl_dup_stage2_area/cost/extract.jsonl: hldupx_hl_isla_seed{42,43}",
+    "note": "trained on code_h090, before the compile fix (the compiled blocks ran Inductor's mix-order reduction)",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.32198500250524376,
+      "peak_gib": 64.60784912109375
+     },
+     "43": {
+      "step_seconds": 0.3239565669791773,
+      "peak_gib": 64.60769653320312
+     }
+    },
+    "code": [
+     "code_h090"
+    ],
+    "completed": true
+   },
+   "GeoTransolver": {
+    "peak_gib": 77.85752487182617,
+    "step_seconds": 0.43065024848328903,
+    "n_parameters": 9047301,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-23/hl_dup_stage2_area/cost/extract.jsonl: hldupx_hl_gt_seed{42,43}",
+    "note": "uncompiled, as released",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.4335960959724616,
+      "peak_gib": 77.85760498046875
+     },
+     "43": {
+      "step_seconds": 0.42770440099411644,
+      "peak_gib": 77.8574447631836
+     }
+    },
+    "code": [
+     "code_a2r"
+    ],
+    "completed": true
+   },
+   "Transolver": {
+    "peak_gib": 62.26203536987305,
+    "step_seconds": 0.32275882751855534,
+    "n_parameters": 47239305,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-23/hl_dup_stage2_area/cost/extract.jsonl: hldupx_hl_t_seed{42,43}",
+    "note": "uncompiled, as released",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.32179963201633655,
+      "peak_gib": 62.25995635986328
+     },
+     "43": {
+      "step_seconds": 0.3237180230207741,
+      "peak_gib": 62.26411437988281
+     }
+    },
+    "code": [
+     "code_a2r"
+    ],
+    "completed": true
+   }
+  },
+  "shift_suv": {
+   "ISLA": {
+    "peak_gib": 64.64192199707031,
+    "step_seconds": 0.2432944424872403,
+    "n_parameters": 68813415,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-22/cost_090/extract.jsonl: r090_suv_isla_seed{42,43}",
+    "note": "trained on code_r090, before the compile fix (the compiled blocks ran Inductor's mix-order reduction)",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.24390116496942937,
+      "peak_gib": 64.64192199707031
+     },
+     "43": {
+      "step_seconds": 0.24268772000505123,
+      "peak_gib": 64.64192199707031
+     }
+    },
+    "code": [
+     "code_r090"
+    ],
+    "completed": true
+   },
+   "GeoTransolver": {
+    "peak_gib": 77.87265014648438,
+    "step_seconds": 0.42304588595288806,
+    "n_parameters": 9046016,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-22/cost_090/extract.jsonl: clud_suv_gt_seed{42,43}",
+    "note": "uncompiled, as released",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.42082081688567996,
+      "peak_gib": 77.87265014648438
+     },
+     "43": {
+      "step_seconds": 0.42527095502009615,
+      "peak_gib": 77.87265014648438
+     }
+    },
+    "code": [
+     "code_v20"
+    ],
+    "completed": true
+   },
+   "Transolver": {
+    "peak_gib": 62.12908172607422,
+    "step_seconds": 0.3046917445026338,
+    "n_parameters": 47236740,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-22/cost_090/extract.jsonl: clud_suv_t_seed{42,43}",
+    "note": "uncompiled, as released",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.30400628596544266,
+      "peak_gib": 62.12908172607422
+     },
+     "43": {
+      "step_seconds": 0.30537720303982496,
+      "peak_gib": 62.12908172607422
+     }
+    },
+    "code": [
+     "code_v20"
+    ],
+    "completed": true
+   }
+  },
+  "airfrans": {
+   "ISLA": {
+    "peak_gib": 35.07872772216797,
+    "step_seconds": 0.3899738070058447,
+    "n_parameters": 68817001,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-22/cost_090/extract.jsonl: r090fix_af_isla_seed{42,43}",
+    "note": "the compile fix moves the median step from 0.384 s to 0.390 s (compiled_before_fix)",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.3904006970115006,
+      "peak_gib": 35.07872772216797
+     },
+     "43": {
+      "step_seconds": 0.38954691700018884,
+      "peak_gib": 35.07872772216797
+     }
+    },
+    "code": [
+     "code_cmpaf_fix"
+    ],
+    "completed": true
+   },
+   "ISLA-DTT": {
+    "peak_gib": 39.41312026977539,
+    "step_seconds": 0.5705389242507408,
+    "n_parameters": 70029304,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-22/cost_090/extract.jsonl: r090fix_af_dtt_seed{42,43}",
+    "note": "the compile fix moves the median step from 0.564 s to 0.571 s (compiled_before_fix)",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.5664540195102745,
+      "peak_gib": 39.413055419921875
+     },
+     "43": {
+      "step_seconds": 0.5746238289912071,
+      "peak_gib": 39.413185119628906
+     }
+    },
+    "code": [
+     "code_cmpaf_fix"
+    ],
+    "completed": true
+   },
+   "GeoTransolver": {
+    "peak_gib": 38.900062561035156,
+    "step_seconds": 0.20558894600253552,
+    "n_parameters": 9047297,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-22/cost_090/extract.jsonl: afu_ud_gt_seed{42,43}",
+    "note": "uncompiled, as released",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.20519877603510395,
+      "peak_gib": 38.900062561035156
+     },
+     "43": {
+      "step_seconds": 0.2059791159699671,
+      "peak_gib": 38.900062561035156
+     }
+    },
+    "code": [
+     "code_v20"
+    ],
+    "completed": true
+   },
+   "Transolver": {
+    "peak_gib": 61.868995666503906,
+    "step_seconds": 0.29841593478340656,
+    "n_parameters": 47239301,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-22/cost_090/extract.jsonl: afu_ud_t_seed{42,43}",
+    "note": "uncompiled, as released",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.2978758930694312,
+      "peak_gib": 61.868995666503906
+     },
+     "43": {
+      "step_seconds": 0.2989559764973819,
+      "peak_gib": 61.868995666503906
+     }
+    },
+    "code": [
+     "code_v20"
+    ],
+    "completed": true
+   }
+  },
+  "aerozoo": {
+   "ISLA": {
+    "peak_gib": 126.62866973876953,
+    "step_seconds": 0.5397727825329639,
+    "n_parameters": 68833401,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-22/cost_090/extract.jsonl: azc_full_isla_seed{42,43}",
+    "note": "trained on code_r090, before the compile fix (the compiled blocks ran Inductor's mix-order reduction)",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.5407048501074314,
+      "peak_gib": 126.62866973876953
+     },
+     "43": {
+      "step_seconds": 0.5388407149584964,
+      "peak_gib": 126.62866973876953
+     }
+    },
+    "code": [
+     "code_r090"
+    ],
+    "completed": true
+   },
+   "ISLA-DTT": {
+    "peak_gib": 173.69014739990234,
+    "step_seconds": 1.3019686715524585,
+    "n_parameters": 70045832,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-22/cost_090/extract.jsonl: azc_full_dtt_seed{42,43}",
+    "note": "trained on code_r090, before the compile fix (the compiled blocks ran Inductor's mix-order reduction); in flight: 167 and 166 of 250 epochs logged; parameter count from the training config row (not yet scored)",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 1.3038559691049159,
+      "peak_gib": 173.5380859375
+     },
+     "43": {
+      "step_seconds": 1.3000813740000012,
+      "peak_gib": 173.8422088623047
+     }
+    },
+    "code": [
+     "code_r090"
+    ],
+    "completed": false
+   },
+   "GeoTransolver": {
+    "peak_gib": 101.12591171264648,
+    "step_seconds": 0.7426041399594396,
+    "n_parameters": 9056003,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "float32",
+    "source": "campaigns_2026-10-22/cost_090/extract.jsonl: azc_full_gt_seed{42,43}",
+    "note": "uncompiled, as released",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.7426506949122995,
+      "peak_gib": 101.12590789794922
+     },
+     "43": {
+      "step_seconds": 0.7425575850065798,
+      "peak_gib": 101.12591552734375
+     }
+    },
+    "code": [
+     "code_azv2"
+    ],
+    "completed": true
+   },
+   "Transolver": {
+    "peak_gib": 96.13825607299805,
+    "step_seconds": 0.7059972152928822,
+    "n_parameters": 8964199,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "float32",
+    "source": "campaigns_2026-10-22/cost_090/extract.jsonl: azc_full_t_seed{42,43}",
+    "note": "uncompiled, as released",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.7098592130932957,
+      "peak_gib": 96.13825225830078
+     },
+     "43": {
+      "step_seconds": 0.7021352174924687,
+      "peak_gib": 96.13825988769531
+     }
+    },
+    "code": [
+     "code_azv2"
+    ],
+    "completed": true
+   }
+  },
+  "tensile2d": {
+   "ISLA": {
+    "peak_gib": 5.294024109840393,
+    "step_seconds": 0.1467318701215845,
+    "n_parameters": 68831329,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-22/cost_090/extract.jsonl: r090fix_t2dz_isla_seed{42,43,44,45}",
+    "note": "the standing's ISLA checkpoints trained eager (r090eag_t2dz_isla) for the training-path control, at about twice this step time; this is the compiled lane of the same configuration; the compile fix moves the median step from 0.149 s to 0.147 s (compiled_before_fix)",
+    "seeds": [
+     "42",
+     "43",
+     "44",
+     "45"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.1468324855377432,
+      "peak_gib": 5.334889888763428
+     },
+     "43": {
+      "step_seconds": 0.14482590247644112,
+      "peak_gib": 5.334889888763428
+     },
+     "44": {
+      "step_seconds": 0.14450860499346163,
+      "peak_gib": 5.276156902313232
+     },
+     "45": {
+      "step_seconds": 0.15076048747869208,
+      "peak_gib": 5.230159759521484
+     }
+    },
+    "code": [
+     "code_cmpaf_fix"
+    ],
+    "completed": true
+   },
+   "GeoTransolver": {
+    "peak_gib": 4.765137672424316,
+    "step_seconds": 0.11343398410826921,
+    "n_parameters": 9050371,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-02/char/cs/cs_r_t2dz_gt/metrics.jsonl; parameters: campaigns_2026-10-02/char/protocols/cl_r_t2dz_gt_seed{42,43}/native/metrics.jsonl",
+    "note": "uncompiled, as released; the standing lane's training log (cl_r_t2dz_gt) is gone, so this is the one-epoch smoke lane of the same configuration, one seed (42), 99 steps",
+    "seeds": [
+     "42"
+    ],
+    "per_seed": null,
+    "code": null,
+    "completed": true
+   },
+   "Transolver": {
+    "peak_gib": 7.920585632324219,
+    "step_seconds": 0.1036677120719105,
+    "n_parameters": 47245447,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-02/char/cs/cs_r_t2dz_t/metrics.jsonl; parameters: campaigns_2026-10-02/char/protocols/cl_r_t2dz_t_seed{42,43}/native/metrics.jsonl",
+    "note": "uncompiled, as released; the standing lane's training log (cl_r_t2dz_t) is gone, so this is the one-epoch smoke lane of the same configuration, one seed (42), 99 steps",
+    "seeds": [
+     "42"
+    ],
+    "per_seed": null,
+    "code": null,
+    "completed": true
+   }
+  },
+  "lug": {
+   "ISLA": {
+    "peak_gib": 9.053050994873047,
+    "step_seconds": 0.1523132422571507,
+    "n_parameters": 68034646,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-22/cost_090/extract.jsonl: r090fix_lug_isla_seed{42,43}",
+    "note": "the compile fix moves the median step from 0.156 s to 0.152 s (compiled_before_fix)",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.1528715710155666,
+      "peak_gib": 9.053050994873047
+     },
+     "43": {
+      "step_seconds": 0.15175491349873482,
+      "peak_gib": 9.053050994873047
+     }
+    },
+    "code": [
+     "code_cmpaf_fix"
+    ],
+    "completed": true
+   },
+   "ISLA-DTT": {
+    "peak_gib": 10.520589828491211,
+    "step_seconds": 0.42433933027496096,
+    "n_parameters": 69246821,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-22/cost_090/extract.jsonl: r090fix_lug_dtt_seed{42,43}",
+    "note": "in flight: 310 and 326 of 500 epochs logged; parameter count from the training config row (not yet scored); the compile fix moves the median step from 0.423 s to 0.424 s (compiled_before_fix)",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.42810853556147777,
+      "peak_gib": 10.520589828491211
+     },
+     "43": {
+      "step_seconds": 0.42057012498844415,
+      "peak_gib": 10.520589828491211
+     }
+    },
+    "code": [
+     "code_cmpaf_fix"
+    ],
+    "completed": false
+   },
+   "GeoTransolver": {
+    "peak_gib": 5.950288772583008,
+    "step_seconds": 0.113010864763055,
+    "n_parameters": 9049853,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-22/cost_090/extract.jsonl: lugbc_gt_seed{42,43}",
+    "note": "uncompiled, as released",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.11146068351808935,
+      "peak_gib": 5.950288772583008
+     },
+     "43": {
+      "step_seconds": 0.11456104600802064,
+      "peak_gib": 5.950288772583008
+     }
+    },
+    "code": [
+     "code_v20"
+    ],
+    "completed": true
+   },
+   "Transolver": {
+    "peak_gib": 10.004556655883789,
+    "step_seconds": 0.09296438004821539,
+    "n_parameters": 47237249,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-02/char/cs/cs_r_lug_t/metrics.jsonl; parameters: campaigns_2026-10-02/char/protocols/cl_r_lug_t_seed{42,43}/native/metrics.jsonl",
+    "note": "uncompiled, as released; the standing lane's training log (cl_r_lug_t) is gone, so this is the one-epoch smoke lane of the same configuration, one seed (42), 599 steps",
+    "seeds": [
+     "42"
+    ],
+    "per_seed": null,
+    "code": null,
+    "completed": true
+   }
+  },
+  "deepjeb": {
+   "ISLA": {
+    "peak_gib": 17.396324157714844,
+    "step_seconds": 0.13206713722320274,
+    "n_parameters": 68823156,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-22/cost_090/extract.jsonl: r090_jb_isla_seed{42,43}",
+    "note": "trained on code_r090, before the compile fix (the compiled blocks ran Inductor's mix-order reduction)",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.13092245394364,
+      "peak_gib": 17.396324157714844
+     },
+     "43": {
+      "step_seconds": 0.13321182050276548,
+      "peak_gib": 17.396324157714844
+     }
+    },
+    "code": [
+     "code_r090"
+    ],
+    "completed": true
+   },
+   "GeoTransolver": {
+    "peak_gib": 19.739818572998047,
+    "step_seconds": 0.1353855007328093,
+    "n_parameters": 9049600,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-02/char/cs/cs_r_jeb_gt/metrics.jsonl; parameters: campaigns_2026-10-02/char/protocols/cl_r_jeb_gt_seed{42,43}/native/metrics.jsonl",
+    "note": "uncompiled, as released; the standing lane's training log (cl_r_jeb_gt) is gone, so this is the one-epoch smoke lane of the same configuration, one seed (42), 12450 steps",
+    "seeds": [
+     "42"
+    ],
+    "per_seed": null,
+    "code": null,
+    "completed": true
+   },
+   "Transolver": {
+    "peak_gib": 31.511154174804688,
+    "step_seconds": 0.1576099896337837,
+    "n_parameters": 47243908,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-02/char/cs/cs_r_jeb_t/metrics.jsonl; parameters: campaigns_2026-10-02/char/protocols/cl_r_jeb_t_seed{42,43}/native/metrics.jsonl",
+    "note": "uncompiled, as released; the standing lane's training log (cl_r_jeb_t) is gone, so this is the one-epoch smoke lane of the same configuration, one seed (42), 12450 steps",
+    "seeds": [
+     "42"
+    ],
+    "per_seed": null,
+    "code": null,
+    "completed": true
+   }
+  }
+ },
+ "compiled_before_fix": {
+  "airfrans": {
+   "ISLA": {
+    "peak_gib": 35.07872772216797,
+    "step_seconds": 0.3843501332739834,
+    "n_parameters": 68817001,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-22/cost_090/extract.jsonl: r090_af_isla_seed{42,43}",
+    "note": "trained on code_r090, before the compile fix (the compiled blocks ran Inductor's mix-order reduction)",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.38480668351985514,
+      "peak_gib": 35.07872772216797
+     },
+     "43": {
+      "step_seconds": 0.3838935830281116,
+      "peak_gib": 35.07872772216797
+     }
+    },
+    "code": [
+     "code_r090"
+    ],
+    "completed": true
+   },
+   "ISLA-DTT": {
+    "peak_gib": 39.41312026977539,
+    "step_seconds": 0.5643405485898256,
+    "n_parameters": 70029304,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-22/cost_090/extract.jsonl: r090_af_dtt_seed{42,43}",
+    "note": "trained on code_r090, before the compile fix (the compiled blocks ran Inductor's mix-order reduction)",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.5656629300210625,
+      "peak_gib": 39.413055419921875
+     },
+     "43": {
+      "step_seconds": 0.5630181671585888,
+      "peak_gib": 39.413185119628906
+     }
+    },
+    "code": [
+     "code_r090"
+    ],
+    "completed": true
+   }
+  },
+  "lug": {
+   "ISLA": {
+    "peak_gib": 8.859996795654297,
+    "step_seconds": 0.1561877880594693,
+    "n_parameters": 68034646,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-22/cost_090/extract.jsonl: r090_lug_isla_seed{42,43}",
+    "note": "trained on code_r090, before the compile fix (the compiled blocks ran Inductor's mix-order reduction)",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.15577450511045754,
+      "peak_gib": 8.859996795654297
+     },
+     "43": {
+      "step_seconds": 0.15660107100848109,
+      "peak_gib": 8.859996795654297
+     }
+    },
+    "code": [
+     "code_r090"
+    ],
+    "completed": true
+   },
+   "ISLA-DTT": {
+    "peak_gib": 10.327470779418945,
+    "step_seconds": 0.42317134916083887,
+    "n_parameters": 69246821,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-22/cost_090/extract.jsonl: r090_lug_dtt_seed{42,43}",
+    "note": "trained on code_r090, before the compile fix (the compiled blocks ran Inductor's mix-order reduction); in flight: 286 and 286 of 500 epochs logged; parameter count from the training config row (not yet scored)",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.4250377418939024,
+      "peak_gib": 10.327470779418945
+     },
+     "43": {
+      "step_seconds": 0.4213049564277753,
+      "peak_gib": 10.327470779418945
+     }
+    },
+    "code": [
+     "code_r090"
+    ],
+    "completed": false
+   }
+  },
+  "tensile2d": {
+   "ISLA": {
+    "peak_gib": 5.23460054397583,
+    "step_seconds": 0.14884629199514166,
+    "n_parameters": 68831329,
+    "gpus": 4,
+    "ranks": 4,
+    "precision": "bfloat16",
+    "source": "campaigns_2026-10-22/cost_090/extract.jsonl: r090_t2dz_isla_seed{42,43}",
+    "note": "the standing's ISLA checkpoints trained eager (r090eag_t2dz_isla) for the training-path control, at about twice this step time; this is the compiled lane of the same configuration; trained on code_r090, before the compile fix (the compiled blocks ran Inductor's mix-order reduction)",
+    "seeds": [
+     "42",
+     "43"
+    ],
+    "per_seed": {
+     "42": {
+      "step_seconds": 0.15619169001001865,
+      "peak_gib": 5.23460054397583
+     },
+     "43": {
+      "step_seconds": 0.14150089398026466,
+      "peak_gib": 5.23460054397583
+     }
+    },
+    "code": [
+     "code_r090"
+    ],
+    "completed": true
+   }
+  }
+ }
+}

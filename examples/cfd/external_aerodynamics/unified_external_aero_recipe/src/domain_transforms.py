@@ -45,7 +45,9 @@ Recipe-local datapipe components that the library does not provide.
   not store (SHIFT-SUV's), built from constants.
 - :class:`AddHemisphereBoundaries`: the far field of a hemispherical half-model
   domain a case file does not store (HiLift's inlet and outlet), built from
-  constants and the case's freestream as physicsnemo-curator built it.
+  constants and the case's freestream as physicsnemo-curator built it; and
+  :class:`AddSymmetryPlane`, its symmetry plane, with the wing root's outline from
+  the dataset's source STL, for each case whose stored root lies on it.
 - Physical-input AeroZoo: :class:`StandardizeGlobalLeaf`, a global PDE
   parameter standardized by per-dataset constants, and :class:`MergeBoundaries`,
   the boundaries' faces as one token set for a tensor-input model.
@@ -59,12 +61,14 @@ YAML configs.  Import this module before Hydra instantiation
 
 from __future__ import annotations
 
+import logging
 import zlib
 from collections.abc import Sequence
 from typing import Literal
 
 import numpy as np
 import torch
+from symmetry import check_root, load_check_record, load_root_cap, recorded_verdict
 from tensordict import TensorDict
 
 from physicsnemo.datapipes.keys import as_nested_key, key_to_str
@@ -88,6 +92,8 @@ from physicsnemo.mesh.calculus.measure import (
 from physicsnemo.mesh.primitives.planar import structured_grid
 from physicsnemo.mesh.projections import project
 from physicsnemo.mesh.spatial.bvh import _compute_morton_codes
+
+logger = logging.getLogger(__name__)
 
 
 @register()
@@ -2280,6 +2286,239 @@ class AddHemisphereBoundaries(MeshTransform):
         return (
             f"radius={self.radius}, n_theta={self.n_theta}, n_phi={self.n_phi}, "
             f"freestream_field={self.freestream_field!r}"
+        )
+
+
+### The two functions below are physicsnemo-curator's, from
+### src/physicsnemo_curator/domains/mesh/boundaries/_geometry.py at commit ee6aeda (the code with which
+### HemisphereBoundaries.generate builds the symmetry plane), copied with their arithmetic unchanged so
+### that the plane is built as curator builds it; only the docstrings are shortened.
+
+
+def _curator_point_in_polygon(
+    points_xz: torch.Tensor, polygon_xz: torch.Tensor
+) -> torch.Tensor:
+    """curator's ``point_in_polygon``: whether each ``(N, 2)`` point lies inside the polygon
+    ``(M, 2)`` (loop order, implicitly closed), by horizontal ray casting."""
+    qx = points_xz[:, 0:1]
+    qz = points_xz[:, 1:2]
+    a = polygon_xz
+    b = polygon_xz.roll(-1, dims=0)
+    az = a[:, 1].unsqueeze(0)
+    bz = b[:, 1].unsqueeze(0)
+    ax = a[:, 0].unsqueeze(0)
+    bx = b[:, 0].unsqueeze(0)
+
+    crosses = (az > qz) != (bz > qz)
+    denom = bz - az
+    safe_denom = torch.where(denom != 0.0, denom, torch.ones_like(denom))
+    t = (qz - az) / safe_denom
+    inter_x = ax + t * (bx - ax)
+
+    n_crossings = (crosses & (inter_x > qx)).sum(dim=-1)
+    return (n_crossings % 2) == 1
+
+
+def _curator_constrained_delaunay_disk(
+    *,
+    equator_xz: torch.Tensor,
+    silhouette_xzs: list[torch.Tensor],
+) -> Mesh:
+    """curator's ``constrained_delaunay_disk``: the disk bounded by the equator with the silhouettes
+    as holes, triangulated by ``vtkDelaunay2D`` (via PyVista) with every loop as edge constraints, at
+    ``y = 0`` with ``+y`` (inward) normals; its points are the inputs' bit for bit."""
+    import pyvista as pv
+
+    if equator_xz.shape[0] < 3:
+        msg = f"equator must have >=3 vertices, got {equator_xz.shape[0]}"
+        raise ValueError(msg)
+
+    blocks = [equator_xz, *list(silhouette_xzs)]
+    offsets = np.cumsum([0] + [b.shape[0] for b in blocks]).tolist()
+    all_xz = torch.cat(blocks, dim=0).cpu().numpy()
+
+    points_in_xy = np.column_stack(
+        [all_xz[:, 0], all_xz[:, 1], np.zeros(len(all_xz))]
+    ).astype(np.float64)
+
+    line_records: list[int] = []
+    for lo, hi in zip(offsets[:-1], offsets[1:], strict=True):
+        n = hi - lo
+        for i in range(n):
+            line_records.extend([2, lo + i, lo + (i + 1) % n])
+
+    edge_source = pv.PolyData(points_in_xy, lines=np.asarray(line_records))
+    point_set = pv.PolyData(points_in_xy)
+    triangulated = point_set.delaunay_2d(edge_source=edge_source, alpha=0.0, tol=1e-8)
+
+    faces = np.asarray(triangulated.faces)
+    if faces.size == 0:
+        msg = "vtkDelaunay2D returned zero triangles; check that the equator encloses every silhouette."
+        raise RuntimeError(msg)
+    faces = faces.reshape(-1, 4)
+    if not np.all(faces[:, 0] == 3):
+        msg = f"vtkDelaunay2D returned non-triangle cells (sizes: {np.unique(faces[:, 0])})"
+        raise RuntimeError(msg)
+    out_cells = torch.from_numpy(faces[:, 1:].astype(np.int64))
+
+    # Drop spurious triangles that vtkDelaunay2D places inside silhouette holes.
+    if silhouette_xzs:
+        cell_centroids_xz = torch.from_numpy(all_xz[out_cells.numpy()].mean(axis=1))
+        keep_mask = torch.ones(out_cells.shape[0], dtype=torch.bool)
+        for sil in silhouette_xzs:
+            keep_mask &= ~_curator_point_in_polygon(cell_centroids_xz, sil)
+        out_cells = out_cells[keep_mask]
+
+    out_points = torch.from_numpy(
+        np.column_stack([all_xz[:, 0], np.zeros(len(all_xz)), all_xz[:, 1]])
+    ).float()
+
+    # Re-orient each cell to +y (inward); vtkDelaunay2D winding is not
+    # guaranteed consistent under our axis swap.
+    p0_all = out_points[out_cells[:, 0]]
+    p1_all = out_points[out_cells[:, 1]]
+    p2_all = out_points[out_cells[:, 2]]
+    ny_all = torch.linalg.cross(p1_all - p0_all, p2_all - p0_all)[:, 1]
+    flip_mask = ny_all < 0.0
+    if bool(flip_mask.any()):
+        fixed = out_cells.clone()
+        fixed[flip_mask] = out_cells[flip_mask][:, [0, 2, 1]]
+        out_cells = fixed
+
+    return Mesh(points=out_points, cells=out_cells)
+
+
+#: The cases whose failed symmetry check has been logged (once per case and process).
+_SYMMETRY_FAILURES_LOGGED: set[str] = set()
+
+
+@register()
+class AddSymmetryPlane(MeshTransform):
+    r"""Add HiLift's symmetry plane, the far field's ``y = 0`` disk minus the wing's root section (2026-10-24).
+
+    HiLiftAeroML's PDE domain is the half space ``y >= 0`` inside a hemisphere; its third boundary,
+    the symmetry plane, is stored by no case file. Its condition: "The symmetry plane is treated with
+    a no-stress boundary condition" (Ashton et al., HiLiftAeroML, arXiv:2605.19565v2, section 2.3;
+    also appendix A.2.1, "Symmetry: A no-stress boundary condition is applied at the symmetry
+    plane"); the dataset's README documents none. This transform builds it as physicsnemo-curator's
+    ``HemisphereBoundaries.generate`` builds ``symmetry``: the equator of curator's hemisphere
+    (``radius``, ``n_theta``, ``n_phi``, the values given to :class:`AddHemisphereBoundaries`, so the
+    seam matches the inlet and outlet bit for bit) and the wing's root outline as the one silhouette,
+    triangulated by curator's constrained Delaunay disk, every normal ``+y`` (into the fluid). The
+    outline is the closed root cap of the dataset's own source STL (:func:`symmetry.load_root_cap`,
+    refused unless its key is in ``cap_md5``), read once per process (Peter's ruling of 2026-10-24).
+
+    A case gets the plane only if its own stored root lies on that outline (:func:`symmetry.check_root`:
+    every on-plane vertex and open on-plane edge of the whole stored wing within the derived
+    tolerance), read from ``check_record`` (``tools/build_symmetry_check.py``; a case it lacks, a
+    fingerprint that differs from the case's, or a record made with another cap, tolerance or
+    ``y_eps`` is refused) or, without one, computed at load (exact, 13-23 s per HiLift wing). A case
+    that fails gets no plane, and a warning with both measured maxima and the tolerance is logged
+    once per case.
+
+    It runs only in :class:`~merge_global_data.MeshReaderWithGlobalData`'s ``whole_surface_transforms``,
+    which pass the whole stored ``surface``, in raw coordinates, and the ``case`` name; the plane goes
+    to the surface's device and dtype.
+
+    Args:
+        radius: the hemisphere's radius, in the files' units.
+        cap_root: the dataset root holding the source STL files.
+        cap_md5: the accepted keys of the root cap (:func:`symmetry.cap_md5`).
+        n_theta: azimuthal divisions of the hemisphere (curator's default).
+        n_phi: polar divisions of the hemisphere (curator's default).
+        check_record: the record of the check's verdicts; ``None`` runs the exact check at load.
+        surface: the boundary that is the wing.
+        y_eps: the on-plane tolerance (curator's).
+        name: the plane's boundary name (curator's).
+    """
+
+    def __init__(
+        self,
+        radius: float,
+        cap_root: str,
+        cap_md5: Sequence[str],
+        n_theta: int = 64,
+        n_phi: int = 32,
+        check_record: str | None = None,
+        surface: str = "vehicle",
+        y_eps: float = 1e-3,
+        name: str = "symmetry",
+    ) -> None:
+        super().__init__()
+        if not radius > 0:
+            raise ValueError(f"AddSymmetryPlane: radius must be > 0, got {radius!r}")
+        self.radius = float(radius)
+        self.cap_root = str(cap_root)
+        self.cap_md5 = tuple(str(m) for m in cap_md5)
+        self.n_theta = int(n_theta)
+        self.n_phi = int(n_phi)
+        self.check_record = None if check_record is None else str(check_record)
+        self.surface = str(surface)
+        self.y_eps = float(y_eps)
+        self.name = str(name)
+
+    def __call__(self, mesh: Mesh) -> Mesh:
+        raise TypeError(
+            "AddSymmetryPlane needs the whole stored wing and its case name: place it in the "
+            "reader's whole_surface_transforms"
+        )
+
+    def plane(self, outline: np.ndarray) -> Mesh:
+        """The disk of the hemisphere's equator with ``outline`` ``(n, 2)`` (x, z) as its hole."""
+        hemisphere, equator = _curator_build_hemisphere(
+            self.radius, n_theta=self.n_theta, n_phi=self.n_phi
+        )
+        return _curator_constrained_delaunay_disk(
+            equator_xz=hemisphere.points[equator][:, [0, 2]],
+            silhouette_xzs=[torch.from_numpy(np.array(outline, dtype=np.float32))],
+        )
+
+    def apply_to_domain(self, domain: DomainMesh, case: str) -> DomainMesh:  # type: ignore[override]
+        """Add the plane beside the domain's boundaries if ``case``'s root passes the check."""
+        if self.name in domain.boundary_names:
+            raise ValueError(f"AddSymmetryPlane: boundary {self.name!r} exists already")
+        wing = domain.boundaries[self.surface]
+        cap = load_root_cap(self.cap_root, self.cap_md5, self.y_eps)
+        if self.check_record is None:
+            verdict = check_root(wing.points, wing.cells, cap, y_eps=self.y_eps)
+        else:
+            verdict = recorded_verdict(
+                load_check_record(self.check_record),
+                cap,
+                case,
+                wing.points,
+                wing.cells,
+                y_eps=self.y_eps,
+            )
+        if not verdict["passed"]:
+            if case not in _SYMMETRY_FAILURES_LOGGED:
+                _SYMMETRY_FAILURES_LOGGED.add(case)
+                logger.warning(
+                    f"AddSymmetryPlane: {case!r} gets no symmetry plane: its root lies off the cap's "
+                    f"outline (on-plane vertices up to {verdict['max_vertex_distance']}, open edges' "
+                    f"midpoints up to {verdict['max_edge_distance']}; tolerance {cap.tau})"
+                )
+            return domain
+        plane = self.plane(cap.outline)
+        like = wing.points
+        return DomainMesh(
+            interior=domain.interior,
+            boundaries={
+                **{n: domain.boundaries[n] for n in domain.boundary_names},
+                self.name: Mesh(
+                    points=plane.points.to(device=like.device, dtype=like.dtype),
+                    cells=plane.cells.to(device=like.device),
+                ),
+            },
+            global_data=domain.global_data,
+        )
+
+    def extra_repr(self) -> str:
+        return (
+            f"radius={self.radius}, n_theta={self.n_theta}, n_phi={self.n_phi}, "
+            f"cap_root={self.cap_root!r}, cap_md5={self.cap_md5}, "
+            f"check_record={self.check_record!r}, surface={self.surface!r}, "
+            f"y_eps={self.y_eps}, name={self.name!r}"
         )
 
 
