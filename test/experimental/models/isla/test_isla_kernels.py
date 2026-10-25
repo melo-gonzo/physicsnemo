@@ -193,6 +193,52 @@ def test_fused_geo_region_matches_eager_region(dtype, K, P, monkeypatch):
 
 @pytest.mark.cuda
 @requires_cuda
+@pytest.mark.slow
+def test_fused_geo_region_offsets_past_int32():
+    """Points x slices >= 2**31: the last rows, whose (point, slice) offsets pass int32,
+    get the forward outputs and the per-point gradients of the same rows run alone
+    (every row is computed from its own inputs). With int32 offsets the kernel read and
+    wrote the wrong rows or faulted. Needs about 100 GiB of device memory: three (N, S)
+    float32 tensors each way and the backward's per-tile slice partials."""
+    from physicsnemo.experimental.models.isla.geo_kernel import fused_geo_region
+
+    s, tail = 512, 64
+    n = 2**31 // s + tail
+    if torch.cuda.mem_get_info()[0] < 128 * 2**30:
+        pytest.skip("needs about 100 GiB of free device memory")
+    dev = torch.Generator(device="cuda").manual_seed(0)
+
+    def unit(*shape):
+        return torch.nn.functional.normalize(
+            torch.randn(*shape, device="cuda", generator=dev), dim=-1
+        )
+
+    r = torch.randn(1, n, 3, device="cuda", generator=dev) * 0.1
+    nh, d = unit(1, n, 3), unit(1, 1, 1, 3).expand(1, n, 1, 3)
+    z, ms = torch.randn(1, s, 3, device="cuda", generator=dev) * 0.1, unit(1, s, 3)
+    logits = torch.randn(1, n, s, device="cuda", generator=dev)
+    torch.manual_seed(0)
+    lin = torch.nn.Linear(6, 1).cuda()
+    w_bias, w_mix = torch.randn(2, tail, s, device="cuda", generator=dev)
+
+    def run(sl):
+        x, rr = logits[:, sl].requires_grad_(), r[:, sl].requires_grad_()
+        bias, mix, pooled = fused_geo_region(
+            lin, x, rr, nh[:, sl], d[:, sl], z, ms, 1e-12
+        )
+        loss = (bias[0, -tail:] * w_bias).sum() + (mix[0, -tail:] * w_mix).sum()
+        (loss + pooled[0, -tail:].sum()).backward()
+        rows = (bias, mix, pooled, x.grad, rr.grad)
+        return [t[0, -tail:].detach().clone() for t in rows]
+
+    whole = run(slice(None))
+    alone = run(slice(n - tail, None))
+    for a, b in zip(whole, alone):
+        assert _rel(a, b) < 1e-6, _rel(a, b)
+
+
+@pytest.mark.cuda
+@requires_cuda
 def test_fused_geo_region_bf16_autocast_forward_matches_eager():
     """Under bf16 autocast the fused forward makes the same dtype decisions as eager
     (bf16 Linear on bf16-rounded invariants, bf16 pre-logit sum, fp32 softmax), so the
