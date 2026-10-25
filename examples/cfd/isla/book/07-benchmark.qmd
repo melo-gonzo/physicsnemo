@@ -281,7 +281,8 @@ print(f": The input-scale control at 35 HiLiftAeroML training cases (256 wide, 1
 #| label: para-hilift-drive-cost
 #| output: asis
 HLU = {b: S.unit_drive("hilift", b)["pressure_l2"] for b in S.BASELINES}
-print("At the reference configurations on HiLiftAeroML, where the vector varies per case, the physical vector in inch/s "
+print("At the reference configurations on HiLiftAeroML, where the vector varies per case, trained and scored on the wing as stored, "
+      "the physical vector in inch/s "
       f"multiplies GeoTransolver's native pressure error by {1 / HLU['GeoTransolver']:.2f} and Transolver's by "
       f"{1 / HLU['Transolver']:.2f} over their unit-direction twins (@tbl-hilift-unit-drive).")
 ```
@@ -672,20 +673,21 @@ dataset chapter gives its splits in full.
 ## The scoring protocol {#sec-protocol}
 
 **Every standing scores the final checkpoint of each seed in float32 on 200,000 sampled cells per case, as the area-weighted
-relative L2 error averaged over cases, and scores it three ways; AeroZoo is scored on the native mesh only.** @tbl-protocol
+relative L2 error averaged over cases, and scores it three ways; AeroZoo is scored on the native mesh only, and HiLiftAeroML on
+the native mesh and rotated and translated, over the distinct cells of its 200,000 drawn.** @tbl-protocol
 gives the settings. The metric is the
 area-weighted relative L2 error of @sec-metrics, computed per case and averaged over the cases with equal weight.
 
 | item | setting |
 |---|---|
-| cells per case at scoring | 200,000 sampled cells, the same for every architecture; a mesh smaller than that is scored whole (the lug, Tensile2d, DeepJEB++, the AirfRANS airfoil); 100,000 interior points on AirfRANS |
+| cells per case at scoring | 200,000 sampled cells, the same for every architecture; a mesh smaller than that is scored whole (the lug, Tensile2d, DeepJEB++, the AirfRANS airfoil); 100,000 interior points on AirfRANS; on HiLiftAeroML the 200,000 drawn less the extra copies of the wing's root cells (@sec-data-hilift) |
 | cells per case in training | ISLA and GeoTransolver 200,000 and Transolver 100,000 (its reference configuration) on the DrivAerML tasks, HiLiftAeroML and SHIFT-SUV; every architecture alike on the other tasks: 200,000 on DeepJEB++, 100,000 on AirfRANS, 20,000 on the lug and Tensile2d |
 | precision | bfloat16 autocast in training, float32 at scoring |
 | ISLA's compiled path | in training, each slice block compiled on its own (`model.compile_blocks=true`) on every dataset but Tensile2d, AirfRANS and the lug, whose ISLA standings train eagerly. On AirfRANS and the lug the compiled blocks compute another function unless Inductor's mix-order reduction is off (@sec-using-cost), and ISLA-DTT on AirfRANS trained with it off (@sec-interior-airfrans); on the other datasets the geometry runs in the fused kernel, which that fault does not reach. Scoring runs fully eager (`compile=false model.compile_blocks=false`) on AirfRANS, Tensile2d and the lug and keeps the compiled blocks elsewhere |
 | checkpoint | the final epoch of each seed; no selection on validation error |
 | seeds | 42 and 43, both reported (42 to 45 for ISLA on Tensile2d); the standing quotes the seed mean and applies the seed rule of @sec-fair-comparison |
 | metric | area-weighted relative L2 per case, averaged over the scored cases (@sec-metrics) |
-| scorings | the *native mesh*; the *uniform point cloud*, the area-proportional law with exact Horvitz–Thompson weights; *rotated and translated*, a random rotation and a translation of one RMS radius per case (the root-mean-square distance of the case's points from their centroid; in-plane on the planar datasets) |
+| scorings | the *native mesh*; the *uniform point cloud*, the area-proportional law with exact Horvitz–Thompson weights (not scored on HiLiftAeroML's deduplicated wing); *rotated and translated*, a random rotation and a translation of one RMS radius per case (the root-mean-square distance of the case's points from their centroid; in-plane on the planar datasets) |
 | AeroZoo | the native mesh only, 200,000 interior points of each split's test cases, the relative L2 error per field and case in physical units averaged over cases, the checkpoint of epoch 250 (@sec-aerozoo-allowed) |
 
 : The scoring protocol of every standing. How to read this: the three scorings rescore one checkpoint and train nothing; a
@@ -704,7 +706,8 @@ things:
   to ISLA is measured in @sec-interior-boundary-law;
 - on AirfRANS, Tensile2d, the lug and DeepJEB++ it returns the native mesh, and the column repeats the native error.
 
-Only the first group appears as a point-cloud standing (@fig-contract-shifts).
+Of the first group, the DrivAerML Surface task and SHIFT-SUV appear as point-cloud standings (@fig-contract-shifts); the
+HiLiftAeroML standing, on the deduplicated wing, was not scored on the point cloud.
 
 ::: {.callout-warning title="What the validation set is used for"}
 The DrivAerML and HiLiftAeroML accuracy figures are validation-set figures with no checkpoint selection behind them. The

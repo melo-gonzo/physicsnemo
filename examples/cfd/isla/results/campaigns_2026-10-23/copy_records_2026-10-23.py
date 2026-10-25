@@ -498,6 +498,18 @@ RECORDS = {
         "DTT-FAST, pass 2's table with its pass-3 columns added, as it now stands",
         ["TABLE.md"],
     ),
+    "hl_dup_stage2_scores": (
+        "isla-hl-dup-2026-10-24",
+        "HL-DUP, stage 2: the scorer's per-case rows of the six deduplicated-wing runs (native and posed), and the stage-1 "
+        "scores of the stored-wing checkpoints that its rule and its like-for-like figures read",
+        [
+            "scores_stage2/*/*/*/metrics.jsonl",
+            "scores_stage2/*/*/DATASET_USED",
+            "score_summary.json",
+            "score_table.md",
+            "stage2_summary.json",
+        ],
+    ),
 }
 
 

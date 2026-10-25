@@ -22,7 +22,10 @@ HL = S.Standing("hilift")
 HL_F = tuple(HL.fields)              # pressure_l2, tau_wall_l2
 CL = HL.raw["case_level"]   # the per-case readouts of the standing
 POSED_DEV = [p / n - 1 for f in HL_F for p, n in zip(HL.seeds("ISLA", f, "posed"), HL.seeds("ISLA", f))]   # ISLA's posed ÷ native - 1, per field and seed
-RAWD = {b: HL.raw[f"raw_drive_{b.lower()}"] for b in S.BASELINES}   # the same baselines reading the physical freestream vector
+HLUDC = HL.raw["unit_drive_control"]   # the input-scale control, on the wing as stored: unit-direction and physical-vector baselines, ISLA
+BANDS = CL["bands"]   # pressure by angle band: 4-12 and 14-22 degrees, and all cases
+SWB = HL.raw["stored_wing_b"]   # the stored-wing checkpoints scored over the same distinct cells (b), and as the old standing scored them (a)
+REG = HL.raw["registered"]["HL-DUP stage 2"]   # the registered rule of the deduplicated retrain
 KEY = {"ISLA": "isla_ref", "GeoTransolver": "gt", "Transolver": "t"}
 seeds_txt = lambda a, f, p="native": " and ".join(f"{v:.4f}" for v in HL.seeds(a, f, p))
 SEALED = J("hilift_sealed_test_2026-09-04.json")["per_arch_axis"]   # test ÷ validation pressure error of the sealed-test runs
@@ -125,11 +128,14 @@ RATIO = {k: mean(v[3]) / mean(v[2]) for k, v in RUNGS.items()}
 ```{python}
 #| label: para-hilift-lede
 #| output: asis
+_pre, _post = BANDS["4-12"], BANDS["14-22"]
+assert _pre["Transolver"] < _pre["ISLA"] < _pre["GeoTransolver"] and _post["GeoTransolver"] < min(_post["ISLA"], _post["Transolver"])
 print(f"The three architectures are {S.CONFIG['ISLA']}, {S.CONFIG['GeoTransolver']} and {S.CONFIG['Transolver']}, each at its reference configuration (@sec-selection). "
-      + f"In one paragraph: at the 510-case rung on the native mesh {both(HL, HL_F)}; GeoTransolver's pressure lead sits mostly in a few "
-        "cases at stall, and the rest is an offset spread over the cases (@sec-hilift-deficit). "
-      + "Only ISLA keeps its error on a uniform point cloud of the aircraft and under rotation and translation, so under those two scorings ISLA leads "
-      f"both baselines by a factor of {S.fmt_ratio(min(HL.ratio(b, f, 'area') for b in S.BASELINES for f in HL_F))} or more (@sec-de-result). On the data-efficiency "
+      + f"In one paragraph: at the 510-case rung of the deduplicated wing, on the native mesh, {both(HL, HL_F)}; on pressure "
+        f"before stall ISLA's error lies between Transolver's, the lowest, and GeoTransolver's, and past stall GeoTransolver's "
+        "is the lowest (@sec-hilift-deficit). "
+      + "Only ISLA keeps its error under rotation and translation, so under that scoring ISLA leads "
+      f"both baselines by a factor of {S.fmt_ratio(min(HL.ratio(b, f, 'posed') for b in S.BASELINES for f in HL_F))} or more (@sec-de-result). On the data-efficiency "
       "ladders, run on a smaller ISLA against unit-direction baselines, GeoTransolver is ahead or level on every rung, its lead largest "
       "where the training set is small (@sec-hilift-ladders).")
 ```
@@ -315,8 +321,9 @@ print(f"**Nearly every wing stores copies of its root.** On {CEN[0]} of the {CEN
       "principle, that the canonical HiLiftAeroML configuration drop the copies in the recipe and leave the dataset as it "
       "is: a reader option draws over the stored cells and drops the extra copies it draws, keeping each kept cell's "
       "Horvitz–Thompson factor, from a per-case mask that stores a fingerprint of its source file and is refused on a "
-      "mismatch. The recipe of this book reads the copies, and the standing below is of checkpoints trained and scored "
-      "with them (@sec-de-result). The mask caches the result of a recipe correction and no model reads it, which the supervisor reads as "
+      "mismatch. The recipe's HiLiftAeroML dataset file sets this option (`drop_duplicate_cells`) for every architecture, "
+      "and the standing below is of ISLA, GeoTransolver and Transolver trained and scored with the copies dropped "
+      "(@sec-de-result). The mask caches the result of a recipe correction and no model reads it, which the supervisor reads as "
       "allowed under Peter's boundary-only input ruling; Peter may veto that reading. "
       f"Data: {R.source('hl_dup', 'RESULTS.md')} (sections 1 and 2), {R.source('hl_dup', 'PREREG.md')} (the amendment).")
 ```
@@ -327,17 +334,21 @@ print(f"**Nearly every wing stores copies of its root.** On {CEN[0]} of the {CEN
 #| label: para-hilift-measured
 #| output: asis
 n_val = HL.cell("ISLA", "pressure_l2")["n_cases"]; n_seeds = HL.cell("ISLA", "pressure_l2")["n_seeds"]
-print(f"**The Surface task of @sec-surface on the 510-case rung: 510 training cases, {n_val} validation cases, 500 epochs, {n_seeds} seeds, "
-      "scored at 200,000 sampled cells per case in float32 as the area-weighted relative L2 of surface pressure and of the wall-shear "
-      "vector (@sec-metrics).** ISLA receives the sampled surface cells with positions, outward normals and areas, and the unit "
+# the copies' share of the drawn cells on the scored cases (stage 1, the same draw), mean over cases
+KEPT = 200_000 * (1 - R.load("hl_dup_stage2_scores", "score_summary.json")["checks"]["exposure_scored_tokens"]["extra_token_share"]["mean"])
+print(f"**The Surface task of @sec-surface on the 510-case rung of the deduplicated wing: 510 training cases, {n_val} validation cases, "
+      f"500 epochs, {n_seeds} seeds, scored in float32 as the area-weighted relative L2 of surface pressure and of the wall-shear "
+      "vector (@sec-metrics) over the distinct cells of a 200,000-cell draw per case.** Training and scoring draw cells as "
+      f"stored and drop the extra copies of the root cells (@sec-data-hilift), which leaves about {round(KEPT, -3):,.0f} of the 200,000 "
+      "drawn cells to be scored on the mean case. ISLA receives the sampled surface cells with positions, outward normals and areas, and the unit "
       "far-field direction $\\hat g_1$, which carries the angle of attack. GeoTransolver and Transolver receive the cells' centered "
       "coordinates and normals and the same unit direction (@tbl-model-inputs). The three "
       "architectures run at their reference configurations "
       f"({S.CONFIG['ISLA']} at 3.75e-4 and 200,000 cells; {S.CONFIG['GeoTransolver']} at 1e-3 and 200,000 cells; "
       f"{S.CONFIG['Transolver']} at 1e-3 and 100,000 cells; sizes in @tbl-drivaerml-configs), with no rotation or translation "
-      "augmentation. This rung is one of the two datasets on which the reference configurations were chosen (@sec-selection). Each "
-      "checkpoint is scored three ways, as on DrivAerML (@sec-drivaerml-scorings): on the native mesh, on a uniform point cloud of the "
-      "surface, and rotated and translated with $\\hat g_1$ rotated alike.")
+      "augmentation. This rung is one of the two datasets on which the reference configurations were chosen (@sec-selection), on the "
+      "wing as stored. Each checkpoint is scored two ways, as on DrivAerML (@sec-drivaerml-scorings): on the native mesh, and rotated "
+      "and translated with $\\hat g_1$ rotated alike. The uniform point cloud was not scored on the deduplicated wing.")
 ```
 
 ### Splits {#sec-data-hilift-splits}
@@ -413,38 +424,44 @@ The dataset's volume files carry interior coordinates for 31 of the 1,800 cases 
 span = lambda p: (S.fmt_ratio(min(HL.ratio(b, f, p) for b in S.BASELINES for f in HL_F)),
                   S.fmt_ratio(max(HL.ratio(b, f, p) for b in S.BASELINES for f in HL_F)))
 gain = lambda f: " to ".join(S.fmt_pct(r) for r in sorted((HL.ratio(b, f) for b in S.BASELINES), key=lambda r: abs(r - 1)))
-print(f"**At the 510-case rung, on the native mesh, {both(HL, HL_F)}; on the uniform point cloud and rotated and translated, ISLA "
+print(f"**At the 510-case rung of the deduplicated wing, on the native mesh, {both(HL, HL_F)}; rotated and translated, ISLA "
       "leads both by a wide margin.** Every model reads the unit far-field direction. On the native mesh the baselines' errors are "
-      f"{gain('pressure_l2')} lower than ISLA's on pressure and {gain('tau_wall_l2')} lower on wall shear. On the uniform point cloud baseline ÷ ISLA is "
-      f"{span('area')[0]} to {span('area')[1]} on the two fields, and rotated and translated {span('posed')[0]} to {span('posed')[1]}. "
+      f"{gain('pressure_l2')} lower than ISLA's on pressure and {gain('tau_wall_l2')} lower on wall shear. Rotated and translated, "
+      f"baseline ÷ ISLA is {span('posed')[0]} to {span('posed')[1]} on the two fields. "
       "@tbl-hilift-protocols is the standing and @fig-hilift-shifts draws it.")
 ```
-
-::: {.callout-note title="In flight"}
-These numbers come from checkpoints trained and scored on the wing meshes as stored, with their duplicated root cells
-(@sec-data-hilift). The standing of ISLA, GeoTransolver and Transolver trained and scored with the copies dropped replaces
-them once its per-case scores are read into the standing's file, and the ledger (@sec-ledger) tracks it.
-:::
 
 ```{python}
 #| label: make-tbl-hilift-protocols
 #| output: asis
-print(HL.table("tbl-hilift-protocols", "HiLiftAeroML at the 510-case rung, 180 validation cases, 200,000 cells per case"))
+print(HL.table("tbl-hilift-protocols", "HiLiftAeroML at the 510-case rung of the deduplicated wing, 180 validation cases, the distinct "
+               "cells of 200,000 drawn per case"))
+```
+
+```{python}
+#| label: para-hilift-not-comparable
+#| output: asis
+_a, _b = SWB["ISLA"]["a"]["pressure_l2"]["mean"], SWB["ISLA"]["b"]["pressure_l2"]["mean"]
+print(f"These numbers are not comparable with a standing scored on the wing as stored, such as ISLA's {_a:.4f} on pressure, because "
+      f"that metric puts {DUP_SHARE:.0f}% of its weight, on the mean case, on copies of the root cells, where every model's error is low "
+      "(@sec-data-hilift). Scored over the same distinct cells as @tbl-hilift-protocols, ISLA's checkpoints trained on the "
+      f"stored wing give {_b:.4f} on pressure, and that is the figure to set beside {HL.err('ISLA', 'pressure_l2'):.4f} "
+      f"(@sec-hilift-deficit). Data: {HL.source} (`stored_wing_b`).")
 ```
 
 ```{python}
 #| label: fig-hilift-shifts
 #| fig-cap: >
-#|   HiLiftAeroML at the 510-case rung under the three scorings of one
-#|   checkpoint: the error of each architecture on surface pressure (top) and
+#|   HiLiftAeroML at the 510-case rung of the deduplicated wing under the two
+#|   scorings of one checkpoint: the error of each architecture on surface pressure (top) and
 #|   wall shear (bottom), seed mean (marker, printed) and the two seeds (black
 #|   dots), logarithmic axis; ISLA blue squares, GeoTransolver red circles,
 #|   Transolver amber triangles; the dashed line at one is the error of
 #|   predicting zero everywhere; every model reads the unit far-field direction.
 #|   How to read this: on the native row the baselines sit left of ISLA;
-#|   down the rows ISLA's marker stays put and the baselines' move right, so
-#|   the order reverses; the figure does not show where on the aircraft the
-#|   error sits (@sec-de-strata). Data: results/char/hilift_surface_090.json.
+#|   on the rotated row ISLA's marker stays put and the baselines' move right,
+#|   so the order reverses; the figure does not show where on the aircraft the
+#|   error sits (@sec-de-strata). Data: results/char/hilift_surface_090_dedup.json.
 protocol_dots(HL, HL_F); plt.show()
 ```
 
@@ -452,22 +469,21 @@ protocol_dots(HL, HL_F); plt.show()
 #| label: para-hilift-protocols-reading
 #| output: asis
 posed_floor = min(HL.err(a, f, "posed") for a in S.BASELINES for f in HL_F)
-below = all(max(HL.seeds(b, "pressure_l2")) < min(HL.seeds("ISLA", "pressure_l2")) for b in S.BASELINES)
 dev = [p / n - 1 for f in HL_F for p, n in zip(HL.seeds("ISLA", f, "posed"), HL.seeds("ISLA", f))]
-print(f"Three readings. **First, the native verdicts are firm by the seed rule:** ISLA's pressure seeds are {seeds_txt('ISLA', 'pressure_l2')}, "
-      f"GeoTransolver's {seeds_txt('GeoTransolver', 'pressure_l2')} and Transolver's {seeds_txt('Transolver', 'pressure_l2')}"
-      f"{', so every baseline seed sits below every ISLA seed' if below else ''}, and the wall-shear ordering follows pressure. "
-      f"**Second, the uniform point cloud costs the baselines {S.fmt_ratio(HL.shift('GeoTransolver', 'pressure_l2', 'area'))} "
-      f"(GeoTransolver) and {S.fmt_ratio(HL.shift('Transolver', 'pressure_l2', 'area'))} (Transolver) times their native pressure error, "
-      f"and ISLA {HL.shift('ISLA', 'pressure_l2', 'area'):.3f}.** A 290-million-cell surface is meshed far more finely in some places than in "
-      "others, so the native draw and the area-proportional one present very different samples of the same aircraft. "
-      f"**Third, rotated and translated, ISLA's error is {100 * min(dev):.1f}% to {100 * max(dev):.1f}% above its native error** on each field and "
+spread = lambda a, f="pressure_l2": max(HL.seeds(a, f)) / min(HL.seeds(a, f)) - 1
+lvl = [f"{b} on {HL.fields[f]}" for b in S.BASELINES for f in HL_F if HL.verdict(b, f) == "is level with"]
+print(f"Two readings. **First, the seeds of ISLA and Transolver are {100 * spread('ISLA'):.1f}% and {100 * spread('Transolver'):.1f}% apart "
+      f"on pressure, GeoTransolver's {100 * spread('GeoTransolver'):.1f}%, so the native ratios carry a few percent of seed noise.** ISLA's "
+      f"pressure seeds are {seeds_txt('ISLA', 'pressure_l2')}, GeoTransolver's {seeds_txt('GeoTransolver', 'pressure_l2')} and "
+      f"Transolver's {seeds_txt('Transolver', 'pressure_l2')}"
+      + (f"; the seed rule reads ISLA level with {' and '.join(lvl)}, where the seeds overlap, and trailing elsewhere. " if lvl else ". ")
+      + f"**Second, rotated and translated, ISLA's error is {100 * min(dev):.1f}% to {100 * max(dev):.1f}% above its native error** on each field and "
       f"seed, while every baseline error is at least {posed_floor:.2f}, near or above the score of predicting zero, even though the far-field "
       "direction is rotated with the case. On the DrivAerML Surface task and SHIFT-SUV ISLA's posed error is within "
       f"{100 * max(abs(S.Standing(k).shift('ISLA', f, 'posed') - 1) for k in ('drivaerml_surface', 'shift_suv') for f in S.DATASETS[k].headline):.3f}% "
       "of its native error. A check registered on the checkpoints of the nearest-token form required ISLA's posed error to be within 0.2% of "
-      "its native error on this dataset (the registered threshold) and failed by the same offset; at the reference configuration the offset persists on both seeds, as the "
-      "prediction registered before scoring expected. What produces it on this dataset is not located (@sec-de-limits).")
+      "its native error on this dataset (the registered threshold) and failed by the same offset, which persists at the reference "
+      "configuration on both seeds. What produces it on this dataset is not located (@sec-de-limits).")
 ```
 
 ```{python}
@@ -478,11 +494,12 @@ print(f"Three readings. **First, the native verdicts are firm by the seed rule:*
 #|   each angle, for ISLA (squares), GeoTransolver (circles) and Transolver
 #|   (triangles) at their reference configurations, every model reading the
 #|   unit far-field direction; the number of validation cases at each angle
-#|   below the axis. How to read this: below 14° the flow is attached
-#|   and ISLA and GeoTransolver are close while Transolver is lower; from 14°
-#|   up the errors of all three rise, and GeoTransolver's is the lowest at
-#|   16°, 18° and 22°; a mean per angle does not show the spread of the cases within
-#|   it. Data: results/char/hilift_surface_090.json (`case_level`).
+#|   below the axis. How to read this: below 14° the flow is attached,
+#|   Transolver's error is the lowest and ISLA's sits just below
+#|   GeoTransolver's at every angle; from 14° up the errors of all three rise,
+#|   and GeoTransolver's is the lowest at 16°, 18° and 22°; a mean per angle
+#|   does not show the spread of the cases within it. Data:
+#|   results/char/hilift_surface_090_dedup.json (`case_level`).
 BA = CL["by_aoa"]; aoas_ = sorted(int(a) for a in BA)
 fig, ax = plt.subplots(figsize=(7.6, 3.8))
 for a, k in (("ISLA", "isla_ref"), ("GeoTransolver", "gt"), ("Transolver", "t")):
@@ -502,14 +519,16 @@ plt.show()
 #| output: asis
 PB, W = CL["per_baseline"], CL["geotransolver_lead_in_isla_worst"]
 low = lambda b, f: f"{PB[b][f]['lower_on']} of {CL['n_cases']}, median per-case ratio {b} ÷ ISLA {PB[b][f]['median_ratio']:.2f}"
-print(f"**Against GeoTransolver on pressure the lead sits mostly in ISLA's worst cases, at the high angles; against Transolver, and on "
-      f"wall shear against both, it is spread over the cases.** Paired case by case on the {CL['n_cases']} validation cases, seed means, "
+print(f"**Against GeoTransolver on pressure the lead sits in ISLA's worst cases, at the high angles; Transolver's lower pressure "
+      f"error, and on wall shear both baselines' leads, are spread over the cases.** Paired case by case on the {CL['n_cases']} validation cases, seed means, "
       f"Transolver's pressure error is below ISLA's on {low('Transolver', 'pressure_l2')}, and GeoTransolver's on "
-      f"{low('GeoTransolver', 'pressure_l2')}, so on the typical case GeoTransolver and ISLA are close. ISLA's {W['n_worst']} worst cases, a tenth "
-      f"of the set, all sit at {min(W['aoa_deg'])}° to {max(W['aoa_deg'])}° (@fig-hilift-aoa), and they carry "
-      f"{100 * W['share_of_mean_lead']:.0f}% of GeoTransolver's pressure lead in the mean: on them ISLA's mean pressure error is "
-      f"{W['isla_mean']:.3f} and GeoTransolver's {W['geotransolver_mean']:.3f}. On wall shear GeoTransolver's error is below ISLA's on "
-      f"{low('GeoTransolver', 'tau_wall_l2')} and Transolver's on {low('Transolver', 'tau_wall_l2')} (@sec-hilift-deficit).")
+      f"{low('GeoTransolver', 'pressure_l2')}, so on the typical case ISLA's pressure error is below GeoTransolver's. ISLA's {W['n_worst']} "
+      f"worst cases, a tenth of the set, all sit at {min(W['aoa_deg'])}° to {max(W['aoa_deg'])}° (@fig-hilift-aoa), and they carry "
+      + (f"all of GeoTransolver's pressure lead in the mean ({100 * W['share_of_mean_lead']:.0f}%: on the other cases ISLA's error is the lower "
+         "on average)" if W["share_of_mean_lead"] > 1 else f"{100 * W['share_of_mean_lead']:.0f}% of GeoTransolver's pressure lead in the mean")
+      + f": on them ISLA's mean pressure error is {W['isla_mean']:.3f} and GeoTransolver's {W['geotransolver_mean']:.3f}. On wall shear "
+      f"GeoTransolver's error is below ISLA's on {low('GeoTransolver', 'tau_wall_l2')} and Transolver's on {low('Transolver', 'tau_wall_l2')} "
+      "(@sec-hilift-deficit).")
 ```
 
 ```{python}
@@ -517,23 +536,24 @@ print(f"**Against GeoTransolver on pressure the lead sits mostly in ISLA's worst
 #| output: asis
 UD = {b: S.unit_drive("hilift", b)["pressure_l2"] for b in S.BASELINES}
 U_MAG = float(np.linalg.norm(H["U_inf"]))   # |U_inf| of the case of @fig-problem-hilift, inch/s; the same on every case
-print("**Reading the freestream as the physical velocity vector in inch/s costs both baselines on this dataset.** The same reference "
-      f"configurations trained with `U_inf`, magnitude {U_MAG:,.0f} in/s and turning with the angle of attack, in place of its unit "
-      f"direction, nothing else changed, score {1 / UD['GeoTransolver']:.2f} (GeoTransolver) and "
+print("**Reading the freestream as the physical velocity vector in inch/s costs both baselines on this dataset.** On the wing as stored, "
+      f"the same reference configurations trained with `U_inf`, magnitude {U_MAG:,.0f} in/s and turning with the angle of attack, in place "
+      f"of its unit direction, nothing else changed, score {1 / UD['GeoTransolver']:.2f} (GeoTransolver) and "
       f"{1 / UD['Transolver']:.2f} (Transolver) times the native pressure error of their unit-direction twins "
-      "(@tbl-hilift-unit-drive).")
+      "(@tbl-hilift-unit-drive). The control was not repeated on the deduplicated wing.")
 print()
 print("| model and input | surface pressure | wall shear | uniform point cloud, pressure | ÷ ISLA, pressure |\n|---|--:|--:|--:|--:|")
 for b in S.BASELINES:
-    for lab, arm in (("unit direction", HL.arms[b]), ("physical vector", RAWD[b])):
+    for lab, arm in (("unit direction", HLUDC[b]["unit"]), ("physical vector", HLUDC[b]["physical"])):
         print(f"| {b}, {lab} | {arm['native']['pressure_l2']['mean']:.4f} | {arm['native']['tau_wall_l2']['mean']:.4f} | "
-              f"{arm['area']['pressure_l2']['mean']:.4f} | {arm['native']['pressure_l2']['mean'] / HL.err('ISLA', 'pressure_l2'):.2f} |")
+              f"{arm['area']['pressure_l2']['mean']:.4f} | {arm['native']['pressure_l2']['mean'] / HLUDC['ISLA']['native']['pressure_l2']['mean']:.2f} |")
 print()
-print(": The baselines of @tbl-hilift-protocols with the freestream as its unit direction (the standing's checkpoints) and as the physical vector in "
-      "inch/s, at their reference configurations on the HiLiftAeroML 510-case rung: area-weighted relative L2 on the 180 validation cases, "
-      "seed means over two seeds, float32, every model scored on the same 200,000 cells per case as ISLA. How to read this: the two rows of "
-      "a baseline differ only in that one input; ÷ ISLA divides by the native pressure error of the standing's ISLA. "
-      f"Data: {HL.source} (`raw_drive_geotransolver`, `raw_drive_transolver`). {{#tbl-hilift-unit-drive}}")
+print(": The input-scale control on the HiLiftAeroML 510-case rung of the wing as stored, with its duplicated root cells: GeoTransolver "
+      "and Transolver at their reference configurations with the freestream as its unit direction and as the physical vector in inch/s, "
+      "area-weighted relative L2 on the 180 validation cases, seed means over two seeds, float32, every model scored on the same "
+      "200,000 cells per case as ISLA, copies included. How to read this: the two rows of a baseline differ only in that one input; "
+      "÷ ISLA divides by the native pressure error of ISLA trained and scored on the same stored wing; these errors are not comparable "
+      f"with @tbl-hilift-protocols, which is scored over distinct cells. Data: {HL.source} (`unit_drive_control`). {{#tbl-hilift-unit-drive}}")
 ```
 
 ### Where ISLA trails {#sec-hilift-deficit}
@@ -541,49 +561,45 @@ print(": The baselines of @tbl-hilift-protocols with the freestream as its unit 
 ```{python}
 #| label: para-hilift-deficit
 #| output: asis
-import re as _re
-import records as R
-HLR = " ".join(R.load("hilift090", "RESULTS_HL090.md").split())
-wo = {"GeoTransolver pressure": _re.search(r"Without the 10 largest-gap cases, ISLA's mean error is ([0-9.]+) times GeoTransolver's", HLR).group(1),
-      "Transolver pressure": _re.search(r"and ([0-9.]+) without the 10 largest-gap cases;", HLR).group(1)}
-_m = _re.search(r"and ([0-9.]+) and ([0-9.]+) without the 10 largest-gap cases\.", HLR)
-wo["GeoTransolver wall shear"], wo["Transolver wall shear"] = _m.group(1), _m.group(2)
-flips = _re.search(r"The post-stall cases flip between seeds: (.*?\d)\.\s", HLR).group(1)
-print("**ISLA's pressure deficit to GeoTransolver is a few cases at stall; its deficit to Transolver, and on wall shear to both, is an "
-      "offset spread over the set.** Remove the ten cases with the largest gap, and GeoTransolver ÷ ISLA on pressure is "
-      f"{1 / float(wo['GeoTransolver pressure']):.3f}, within the level band, against Transolver ÷ ISLA {1 / float(wo['Transolver pressure']):.3f}; "
-      f"on wall shear the two ratios are {1 / float(wo['GeoTransolver wall shear']):.3f} and {1 / float(wo['Transolver wall shear']):.3f}. On a case "
-      "at stall the error is close to all or nothing, and which of ISLA's seeds gets it right changes from case to case (seed 42 / seed "
-      f"43 pressure error: {flips.replace(' / ', ' and ')}), so with two seeds a side any one of these cases moves the mean ratio by a few "
-      "percent, and the deficit is read for its concentration, not for its size to the percent. Every number here is the native "
-      f"pressure or wall-shear error per case, seed means, against the unit-direction baselines. Data: {HL.source} (`case_level`); "
-      f"{R.source('hilift090', 'RESULTS_HL090.md')} (the analyses beside its registered rule).")
-```
-
-```{python}
-#| label: para-hilift-duplicates-standing
-#| output: asis
-SC = {(r["field"], r["protocol"].split()[0]): r for r in R.md_table("hl_dup", "RESULTS.md", "3. Effect")}
-ARCH3 = ("ISLA", "GeoTransolver", "Transolver")
-up = lambda f, a, x, y: R.num(SC[(f, x)][a]) / R.num(SC[(f, y)][a]) - 1
-RC = ("GT / ISLA (s42, s43)", "T / ISLA (s42, s43)")
-rb = {(f, c): R.num(SC[(f, "b")][c]) for f in ("pressure", "wall shear") for c in RC}
-moved = max(abs(R.num(SC[(f, "b")][c]) - R.num(SC[(f, "a")][c])) for f, c in rb)
-pb = [up("pressure", a, "b", "a") for a in ARCH3]
-print("**Taken out of the metric, the copies leave the ranking as it is; taken out of the input as well, they raise ISLA's "
-      "error far more than the baselines'.** Scored on the same predictions with the copies excluded from the metric, "
-      "the native pressure error of ISLA, GeoTransolver and Transolver rises "
-      + (f"{100 * min(pb):.0f}%" if f"{100 * min(pb):.0f}" == f"{100 * max(pb):.0f}" else f"{100 * min(pb):.0f} to {100 * max(pb):.0f}%")
-      + f" alike (ISLA's from "
-      f"{R.num(SC[('pressure', 'a')]['ISLA']):.4f} to {R.num(SC[('pressure', 'b')]['ISLA']):.4f}), and baseline ÷ ISLA moves by "
-      f"at most {moved:.3f} on pressure and wall shear: GeoTransolver ÷ ISLA is {rb[('pressure', RC[0])]:.3f} on pressure and "
-      f"{rb[('wall shear', RC[0])]:.3f} on wall shear, Transolver ÷ ISLA {rb[('pressure', RC[1])]:.3f} and "
-      f"{rb[('wall shear', RC[1])]:.3f} (seed means, 180 validation cases, float32). With the copies removed from the input "
-      "too, a shift from the data these checkpoints trained on, ISLA's pressure error rises a further "
-      f"{100 * up('pressure', 'ISLA', 'c', 'b'):.0f}%, GeoTransolver's {100 * up('pressure', 'GeoTransolver', 'c', 'b'):.0f}% and "
-      f"Transolver's {100 * up('pressure', 'Transolver', 'c', 'b'):.0f}%: ISLA reads the cell measures the copies distort, and "
-      "the baselines do not. That measures the trained checkpoints' sensitivity to the copies, not the accuracy of models "
-      f"trained without them. Data: {R.source('hl_dup', 'RESULTS.md')} (section 3).")
+def band_verdict(b, k):
+    """ISLA against one baseline on pressure within one angle band, by the seed rule (standing.Standing.verdict)."""
+    bs, i = BANDS[k]["per_seed"][b].values(), BANDS[k]["per_seed"]["ISLA"].values()
+    if abs(BANDS[k]["ratio"][b] - 1) < S.TIE_BAND:
+        return "is level with"
+    return "leads" if min(bs) > max(i) else "trails" if max(bs) < min(i) else "is level with"
+pre, post = BANDS["4-12"], BANDS["14-22"]
+rs = lambda k, b: " and ".join(f"{v:.3f}" for v in BANDS[k]["ratio_per_seed"][b].values())
+cut = lambda a, f: sorted(1 - HL.seeds(a, f)[j] / list(SWB[a]["b"][f]["per_seed"].values())[j] for j in range(2))
+rng = lambda xs: f"{100 * min(xs):.0f}" + ("%" if f"{100 * min(xs):.0f}" == f"{100 * max(xs):.0f}" else f" to {100 * max(xs):.0f}%")
+basecut = lambda f: rng([x for b in S.BASELINES for x in cut(b, f)])
+moves = [c["change"] for c in REG["cells"].values()]
+CELL = lambda b, f: REG["cells"][f"{b}/{f}"]
+print(f"**On the deduplicated wing ISLA {band_verdict('GeoTransolver', '4-12')} GeoTransolver before stall and "
+      f"{band_verdict('GeoTransolver', '14-22')} it past stall on pressure; it {band_verdict('Transolver', '4-12')} Transolver before stall "
+      f"and {band_verdict('Transolver', '14-22')} it past stall.** At 4° to 12° "
+      f"({pre['n']} validation cases) GeoTransolver ÷ ISLA on pressure is {pre['ratio']['GeoTransolver']:.3f} (seeds {rs('4-12', 'GeoTransolver')}), "
+      f"and ISLA's error is below GeoTransolver's on {pre['isla_lower_on']['GeoTransolver']} of the {pre['n']} cases; Transolver ÷ ISLA is "
+      f"{pre['ratio']['Transolver']:.3f} (seeds {rs('4-12', 'Transolver')}). At 14° to 22° ({post['n']} cases) GeoTransolver ÷ ISLA is "
+      f"{post['ratio']['GeoTransolver']:.3f} (seeds {rs('14-22', 'GeoTransolver')}) and Transolver ÷ ISLA {post['ratio']['Transolver']:.3f}, "
+      f"its seeds on either side of one ({rs('14-22', 'Transolver')}). Over all {BANDS['all']['n']} cases ISLA's pressure error is below "
+      f"GeoTransolver's on {BANDS['all']['isla_lower_on']['GeoTransolver']} and below Transolver's on {BANDS['all']['isla_lower_on']['Transolver']}; "
+      f"for the three architectures' checkpoints trained on the stored wing, scored over the same distinct cells, the counts are "
+      f"{BANDS['all']['isla_lower_on_stored_wing_b']['GeoTransolver']} and {BANDS['all']['isla_lower_on_stored_wing_b']['Transolver']}. "
+      "Every number here is the native pressure error per case, seed means within the band, against the unit-direction baselines.")
+print()
+seedcut = lambda a, s: 1 - HL.cell(a, "pressure_l2")["per_seed"][s] / SWB[a]["b"]["pressure_l2"]["per_seed"][s]
+print("**Training without the copies lowered every model's error, ISLA's the most on each seed, though on seed 43 barely more than "
+      f"GeoTransolver's on pressure ({100 * seedcut('ISLA', '43'):.1f}% against {100 * seedcut('GeoTransolver', '43'):.1f}%).** Against the "
+      "checkpoints trained on the stored wing, scored over the same distinct cells, the deduplicated training lowers ISLA's pressure error by "
+      f"{rng(cut('ISLA', 'pressure_l2'))} per seed "
+      f"and the baselines' by {basecut('pressure_l2')}; on wall shear ISLA's by {rng(cut('ISLA', 'tau_wall_l2'))} and the baselines' by "
+      f"{basecut('tau_wall_l2')}. Every baseline ÷ ISLA moved toward one, by {min(moves):.3f} to {max(moves):.3f}, and both baselines' seed-mean "
+      "errors stay below ISLA's on both fields. The test registered before scoring, whether the deficit narrows, reads "
+      f"*{REG['verdict']}*: on wall shear the gap narrows for both baselines, each seed's ratio above the reference; on pressure "
+      f"GeoTransolver's ratio moved {CELL('GeoTransolver', 'pressure_l2')['change']:.3f}, within the registered 0.03 band, and Transolver's "
+      f"seeds disagree ({' and '.join(f'{v:.2f}' for v in CELL('Transolver', 'pressure_l2')['per_seed'].values())}), so the test draws no "
+      "verdict on the deficit as a whole. "
+      f"Data: {HL.source} (`case_level`, `stored_wing_b`, `registered`); {R.source('hl_dup_stage2', 'RESULTS_STAGE2.md')}.")
 ```
 
 ## Studies on this dataset {#sec-data-efficiency}
@@ -628,8 +644,8 @@ print(f"**GeoTransolver is ahead of ISLA or level with it on every rung of the l
 #| fig-cap: >
 #|   The HiLiftAeroML data-efficiency ladders: GeoTransolver's surface-pressure
 #|   error divided by ISLA's against the number of training cases,
-#|   logarithmic axis, 200,000 cells per case at scoring, float32, two seeds
-#|   each; a value below one means GeoTransolver is the more accurate. Joined
+#|   logarithmic axis, 200,000 cells per case at scoring on the wing as
+#|   stored, float32, two seeds each; a value below one means GeoTransolver is the more accurate. Joined
 #|   circles: the nested case rungs against GeoTransolver width 512 (validation
 #|   geometries recur in training at other angles). Open markers: the geometry
 #|   rungs against GeoTransolver width 256 (4 and 21 training geometries at
@@ -681,7 +697,7 @@ for k, (n, g, i, gt, glab, kind) in RUNGS.items():
     print(f"| {k} | {n:,}{f' ({g})' if g else ''} | {cell(i)} | {cell(gt)}: {glab} | {RATIO[k]:.2f} |")
 print()
 print(": The HiLiftAeroML ladders: seed mean (seed range) of surface-pressure area-weighted relative L2, 200,000 cells per case at "
-      "scoring, float32, on the 180 shared validation cases (18 on the fixed-angle rung). How to read this: rows differ in validation "
+      "scoring on the wing as stored, float32, on the 180 shared validation cases (18 on the fixed-angle rung). How to read this: rows differ in validation "
       "population as well as training set, so absolute errors compare within a row only, and no row is the reference standing "
       "(@tbl-hilift-protocols). Instrument: ISLA at 384 wide, 256 slices, 5e-4, raw slice reads (@sec-study-configurations). Data: as "
       "@fig-hilift-data-efficiency. {#tbl-hilift-ladder}")
@@ -774,8 +790,9 @@ print(f"The slat and the flap together are {100 * sum(area(c) for c in thin):.0f
 #|   validation cases above each bar. How to read this: both models' errors
 #|   rise steeply above 14°, where the flow separates; that part is the
 #|   physics. At 35 cases the ratio also falls at the high angles, but at 210
-#|   cases the ratio is nearly flat across angles, so the location of the
-#|   deficit is a small-data observation, not a property of either model.
+#|   cases of this instrument the ratio is nearly flat across angles, so on
+#|   this instrument the location of the deficit is a small-data observation;
+#|   the standing's own location is in @sec-hilift-deficit.
 #|   Instrument: ISLA at 384 wide, 256 slices, 5e-4, raw slice reads
 #|   (@sec-study-configurations). Data: results/hl35_percase_2026-09-23.json;
 #|   results/hl210_percase_2026-09-27.json (the 210-case reading).
@@ -828,10 +845,10 @@ print("**Across a boundary in the geometry parameters ISLA does not generalize b
 
 ## What this dataset does not say {#sec-de-limits}
 
-**The standing is one rung of one aircraft family in one far-field condition, scored on a validation set; the ladders measure sample complexity on a smaller ISLA.** The reference configurations were chosen under one memory budget, each by the smallest joint score of its architecture on two selection datasets (@sec-selection), and are not matched in parameters or step time, so a native comparison at 510 training cases with unit-direction baselines is a statement about what that budget buys each architecture on this family (@sec-limits). The three architectures' runs trained on different GPU clusters and with different snapshots of the training code, which the registration of the baseline runs accepted; the baselines' model sources are identical across the snapshots, and every model is scored by the same protocol on the same 200,000 cells per case.
+**The standing is one rung of one aircraft family in one far-field condition, scored on a validation set; the ladders measure sample complexity on a smaller ISLA.** The reference configurations were chosen under one memory budget, each by the smallest joint score of its architecture on two selection datasets (@sec-selection), and are not matched in parameters or step time, so a native comparison at 510 training cases with unit-direction baselines is a statement about what that budget buys each architecture on this family (@sec-limits). ISLA and the baselines trained from different snapshots of the training code and recipe, each holding its own architecture's source, and every model is scored by the same scorer on the same distinct cells per case.
 
 Questions this dataset raises and leaves open:
 
 - **What moves ISLA's error under rotation and translation on this dataset?** On the DrivAerML Surface task and SHIFT-SUV ISLA's rotated-and-translated error equals its native error to float32 roundoff; here it is `{python} f"{100 * min(POSED_DEV):.1f}"`% to `{python} f"{100 * max(POSED_DEV):.1f}"`% above it on every field and seed (@sec-de-result). Candidates are float32 arithmetic on coordinates in inches after the translation and how the far-field direction follows the rotation; scoring the standing's checkpoints rotated only, translated only, and in float64 settles which.
 - **How does ISLA's reference configuration extrapolate in flow regime?** The angle-of-attack and stall test sets of @tbl-hilift-splits hold out the high angles and the post-stall flow. No checkpoint of the reference configuration is scored on them; a smaller ISLA and a GeoTransolver reading the physical freestream vector, scored once on them, have a pressure error `{python} f"{min(v['d_min'] for v in SEALED.values()):.1f}"` to `{python} f"{max(v['d_max'] for v in SEALED.values()):.1f}"` times their validation error on every seed and test set (results/hilift_sealed_test_2026-09-04.json).
-- **Why does ISLA take the wrong flow state on a few cases at stall, and what sets the broad offset?** The pressure deficit to GeoTransolver is a few post-stall cases, where the seed that gets the flow state right changes from case to case; the deficit to Transolver, and on wall shear to both, is an offset spread over the cases (@sec-hilift-deficit); the fitted law gives ISLA and GeoTransolver the same exponent for the reducible error (@sec-scaling-law). What would settle the first: the sign of the error at the suction peaks and the lift of each case, from saved predictions, and more seeds on the cases at stall, which separate the cases a model gets wrong every time from those that change with the seed. What sets the second is open (@sec-open-questions).
+- **Why does ISLA trail GeoTransolver past stall, and Transolver in the attached flow?** ISLA's pressure error is below GeoTransolver's before stall and above it at and past stall, where its worst cases sit; Transolver's lead is in the attached flow, and on wall shear both baselines' leads are spread over the cases (@sec-hilift-deficit); the fitted law gives ISLA and GeoTransolver the same exponent for the reducible error (@sec-scaling-law). What would settle the first: the sign of the error at the suction peaks and the lift of each case, from saved predictions, and more seeds on the cases at stall, which separate the cases a model gets wrong every time from those that change with the seed. What sets the second is open (@sec-open-questions).

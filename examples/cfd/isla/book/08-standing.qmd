@@ -84,7 +84,8 @@ native surface mesh by points drawn uniformly by area, at the same count,
 with exact quadrature weights; it changes the scored set itself on the
 three surface tasks whose meshes exceed the cell budget (DrivAerML
 Surface, HiLiftAeroML, SHIFT-SUV), and changes no model's input anywhere
-else. @fig-standing-shifts shows both, each as an architecture's error
+else; the HiLiftAeroML standing, on the deduplicated wing, is not scored
+on it. @fig-standing-shifts shows both, each as an architecture's error
 under the scoring over its own native error.
 
 ```{python}
@@ -93,8 +94,8 @@ under the scoring over its own native error.
 #|   Each architecture's own error under a changed presentation of the same
 #|   test cases, over its native error, on a log scale. Top: every case
 #|   rotated and translated, on every dataset. Bottom: the surface redrawn as
-#|   a uniform point cloud, on the three surface tasks where that changes the
-#|   scored set. ISLA blue squares, ISLA-DTT light open squares (AirfRANS),
+#|   a uniform point cloud, on the surface tasks where that changes the
+#|   scored set and the standing scores it. ISLA blue squares, ISLA-DTT light open squares (AirfRANS),
 #|   GeoTransolver red circles, Transolver amber triangles; the vertical line
 #|   is no change. How to read this: these are changes of each model's own
 #|   error, not comparisons between models; a baseline mark at 20 means its
@@ -132,7 +133,7 @@ ia = max(abs(x - 1) for x in sh(SURF, ["ISLA"], "area"))
 ba = sh(SURF, S.BASELINES, "area")
 print(f"Over every headline field of the {len(FLOW)} flow tasks, the rigid motion leaves ISLA's error within {100 * ip:.1f}% of its native value and "
       f"multiplies the baselines' by {min(bp):.0f} to {max(bp):.0f}: rotated, a model that reads coordinates is asked about a "
-      f"pose it has never seen, and it answers with something worse than the mean field. {S.tally_note()} On the three surface tasks, every field, the uniform "
+      f"pose it has never seen, and it answers with something worse than the mean field. {S.tally_note()} On the {['', 'one', 'two', 'three', 'four'][len(SURF)]} surface tasks whose standing scores it, every field, the uniform "
       f"point cloud moves ISLA's error by at most {100 * ia:.1f}% and multiplies the baselines' by {min(ba):.1f} to {max(ba):.1f}: "
       "a model that averages over points rather than over area answers a different question when the points move. "
       f"On the DrivAerML Volume task the uniform point cloud is left out: {VOL.degenerate['area']}. What exact re-meshing "
@@ -310,6 +311,8 @@ print(": The resources of the reference configurations on each task, from the tr
       "trainable parameters, the training peak device memory per GPU (the maximum over the ranks) and the median training step, "
       "leaving out the compile steps, seed means; AeroZoo's lanes are those of its `full` split, and its Transolver is AeroZoo's "
       f"own configuration, {ARM['Transolver']}. {COST_NOTE} "
+      f"The {S.DATASETS['hilift'].short} lanes priced are the same configurations trained on the wing as stored; its standing is "
+      "of the deduplicated wing, whose lanes drop the copies from each draw and are not priced here. "
       f"On {and_(FIXED)} the ISLA rows are the lanes trained on the compiled path with the mix-order setting, not the "
       "eagerly trained lanes behind the standing. "
       f"ISLA's lanes on {and_(BEFORE)} trained before the mix-order setting; where both were "
