@@ -35,6 +35,7 @@ sys.path.insert(0, str(_RECIPE_ROOT / "src"))
 
 from collate import build_collate_fn  # noqa: E402
 from datasets import (  # noqa: E402
+    _apply_dataset_transform_appends,
     _apply_dataset_transform_drops,
     build_dataset,
     load_dataset_config,
@@ -288,7 +289,8 @@ ISLA_CONDITIONS = {
 
 
 def _chain(dataset: str, model_cfg=None) -> list:
-    """The dataset file's transforms (with ``model_cfg``'s drops), instantiated; the reader's draw is left out."""
+    """The dataset file's transforms (with ``model_cfg``'s drops and appends), instantiated; the reader's draw is
+    left out."""
     ds = OmegaConf.merge(
         load_dataset_config(_RECIPE_ROOT / "datasets" / f"{dataset}.yaml"),
         {
@@ -297,7 +299,9 @@ def _chain(dataset: str, model_cfg=None) -> list:
         },
     )
     if model_cfg is not None:
-        ds = _apply_dataset_transform_drops(ds, model_cfg)
+        ds = _apply_dataset_transform_appends(
+            _apply_dataset_transform_drops(ds, model_cfg), model_cfg
+        )
     return [hydra.utils.instantiate(t, _convert_="all") for t in ds.pipeline.transforms]
 
 
@@ -730,19 +734,21 @@ def test_scale_only_standardization_makes_the_metric_physical():
 
 
 def test_isla_config_brings_its_own_scales_and_runs():
-    """ISLA declares the four conditions by name with the values each prescribes (in SI units, with their
-    units), drops the steps only the baselines read, consumes rho and nu by their roles and derives its own
-    scales: U and the direction g from the inlet's velocity (K = 1, no label-derived global), L from the four
-    boundaries. Its outputs are standardized by the dataset's own NormalizeMeshFields stats (injected as
-    output_stats), so the per-case relative loss with velocity weighed 3 (the baselines') compares them with
-    the same targets."""
+    """ISLA declares the four conditions by name with the values each prescribes (in SI units, with their units),
+    drops the steps only the baselines read, consumes rho as the scale it defines and derives its own scales:
+    U and the direction g from the inlet's velocity (K = 1, no label-derived global), L from the four
+    boundaries. Its Reynolds number re_z is the recipe's, appended to the chain with the dataset file's
+    isla_constants.reynolds, and is bitwise the one the model computed up to 0.12.0 from the same U and L (its
+    arithmetic copied here); a dataset file without the constants is refused. Its outputs are standardized by
+    the dataset's own NormalizeMeshFields stats (injected as output_stats), so the per-case relative loss with
+    velocity weighed 3 (the baselines') compares them with the same targets."""
     cfg = _compose(
         "isla_volume_aerozoo",
         "model.hidden=16",
         "model.n_layers=1",
         "model.n_slices=4",
         "model.compile_blocks=false",
-        "model.boundary_tokens=64",
+        "model.n_boundary_tokens=64",
     )
     assert {
         name: {k: v["rank"] for k, v in schema.items()}
@@ -775,7 +781,15 @@ def test_isla_config_brings_its_own_scales_and_runs():
         **model_dataset_constants(cfg.model, ds),
     )
     check_model_output_stats(model, normalizer)
-    assert model.n_global_vectors == 1 and model.n_global_scalars == 1  # g; z
+    assert model.n_global_vectors == 1 and model.n_global_scalars == 1  # g; re_z
+    assert "reynolds" not in model._args["__args__"]
+    (log_re,) = [t for t in chain if type(t).__name__ == "ComputeLogReynolds"]
+    re = OmegaConf.to_container(ds.isla_constants.reynolds)
+    assert (log_re.mean, log_re.std) == (re["mean"], re["std"])
+    no_constants = ds.copy()
+    del no_constants["isla_constants"]
+    with pytest.raises(ValueError, match="isla_constants.reynolds"):
+        _apply_dataset_transform_appends(no_constants, cfg)
     assert model.output_stats["pressure"] == {
         "mean": 0.0,
         "std": pytest.approx(1129.26),
@@ -786,6 +800,9 @@ def test_isla_config_brings_its_own_scales_and_runs():
     with torch.no_grad():
         out = model(**batch["forward_kwargs"])
     torch.testing.assert_close(seen[0]["U"], torch.tensor(U_INF, dtype=torch.float64))
+    nu = d.global_data["physics", "kinematic_viscosity"].float().double()
+    z = (torch.log10(seen[0]["U"] * seen[0]["L"] / nu) - re["mean"]) / re["std"]
+    assert torch.equal(d.global_data["re_z"], z)
     torch.testing.assert_close(
         seen[0]["g"][0, 0], torch.tensor([1.0, 0.0, 0.0], dtype=torch.float64)
     )

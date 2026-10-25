@@ -113,7 +113,7 @@ def test_non_planar_input_is_refused_and_missing_fields_are_skipped():
 
 
 def test_isla_runs_natively_in_two_dimensions_on_the_restricted_domain():
-    """ISLA with dim=2 runs a forward pass on the restricted domain."""
+    """ISLA with n_spatial_dims=2 runs a forward pass on the restricted domain."""
     from physicsnemo.experimental.models.isla import ISLA
 
     d2 = RestrictToPlane(vector_fields=VEC).apply_to_domain(_square_domain())
@@ -126,7 +126,7 @@ def test_isla_runs_natively_in_two_dimensions_on_the_restricted_domain():
         hidden=32,
         n_layers=1,
         n_slices=8,
-        dim=2,
+        n_spatial_dims=2,
     )
     ### The restricted boundary is a Mesh[1, 2] (a polyline): its cells carry the normals
     ### and lengths ISLA reads; of the interior Mesh it reads the points.

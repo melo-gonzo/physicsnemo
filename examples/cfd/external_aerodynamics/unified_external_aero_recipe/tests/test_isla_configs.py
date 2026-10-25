@@ -436,8 +436,8 @@ def test_the_interior_configs_build_their_model(model):
     cfg = _compose(model, dataset, *SMALL)
     ds = load_dataset_config(_RECIPE_ROOT / "datasets" / f"{dataset}.yaml")
     built = hydra.utils.instantiate(cfg.model, **model_dataset_constants(cfg.model, ds))
-    assert built.interior is True
-    assert built.query_independent is True  # ISLA-DTT
+    assert built.interior is True  # ISLA-DTT
+    assert built.kernel_reads is not None  # its boundary read
 
 
 def test_isla_volume_composes_with_the_corrected_measure_dataset():
@@ -529,11 +529,11 @@ def test_interior_isla_configs_use_the_class_default_boundary_budget(model):
     from physicsnemo.experimental.models.isla import ISLA
 
     cfg = _compose(model, "drivaer_ml_volume_reference")
-    default = inspect.signature(ISLA.__init__).parameters["boundary_tokens"].default
+    default = inspect.signature(ISLA.__init__).parameters["n_boundary_tokens"].default
     if cfg.model.get("interior", False):
-        assert cfg.model.boundary_tokens == default == 200_000
+        assert cfg.model.n_boundary_tokens == default == 200_000
     else:
-        assert "boundary_tokens" not in cfg.model
+        assert "n_boundary_tokens" not in cfg.model
 
 
 @pytest.mark.parametrize(
@@ -542,24 +542,22 @@ def test_interior_isla_configs_use_the_class_default_boundary_budget(model):
 )
 def test_interior_isla_configs_run_isla_dtt_compiled_per_block(model):
     """Every interior ISLA config (found by its `interior: true`, so a new one is covered)
-    states `model.query_independent: true`, ISLA-DTT, the interior task's reference form
-    and the class default, and compiles it per block (`compile: false`,
+    is ISLA-DTT, the interior task's one form, and compiles it per block (`compile: false`,
     `model.compile_blocks: true`), since its boundary read breaks the whole-model
-    fullgraph trace; it keeps its `compile_options`, interacting ISLA's whole-model
-    compile. No surface config sets `query_independent: true`."""
+    fullgraph trace; it keeps its `compile_options`, the whole-model compile's. No config
+    names `query_independent`, which is no constructor argument."""
     path = _RECIPE_ROOT / "conf" / "model" / f"{model}.yaml"
     raw = OmegaConf.load(path)
     cfg = _compose(model, "drivaer_ml_volume_reference")
     if raw.model.get("interior", False):
-        assert raw.model.get("query_independent") is True  # stated in the file
-        assert cfg.model.query_independent is True
+        assert raw.model.interior is True  # stated in the file
+        assert cfg.model.interior is True
         assert cfg.model.compile_blocks is True
         assert cfg.compile is False
         assert raw.compile is False and raw.model.compile_blocks is True
         assert raw.compile_options.fullgraph is True
-    else:
-        assert raw.model.get("query_independent") is not True
-        assert cfg.model.get("query_independent") is not True
+    assert "query_independent" not in raw.model
+    assert "query_independent" not in cfg.model
 
 
 def test_corrected_measure_sees_the_surface_area():
@@ -671,13 +669,26 @@ def test_isla_airfrans_scales_follow_the_dataset_s_nondimensionalization():
     on a mesh whose global_data hold only ISLA's declared velocity source (and the dataset's freestream
     density and pressure), divides the velocity target by that source's magnitude and the pressure target by
     its square, so the two outputs ISLA declares dimensionless are dimensionless in ISLA's own U; nut, which
-    the dataset leaves physical, has the units U L, and nu is the constant the config sets."""
+    the dataset leaves physical, has the units U L; the one rank-0 global is the recipe's re_z, computed from
+    the same source and the constant nu the config sets."""
     cfg = _compose("isla_volume_airfrans", "airfrans_volume_2d")
     gs = OmegaConf.to_container(cfg.model.global_schema)
-    (source,) = [k for k, v in gs.items() if v.get("velocity_scale")]
-    assert gs["nu"]["role"] == "viscosity" and not any(
-        v["rank"] == 0 and "role" not in v for v in gs.values()
+    (source,) = [k for k, v in gs.items() if v.get("defines")]
+    assert [k for k, v in gs.items() if v["rank"] == 0] == ["re_z"] and gs["re_z"] == {
+        "rank": 0
+    }
+    appended = OmegaConf.to_container(cfg.dataset_append_transforms, resolve=False)
+    assert [t["_target_"] for t in appended] == [
+        "${dp:SetGlobalField}",
+        "${dp:ComputeBoundaryScales}",
+        "${dp:ComputeLogReynolds}",
+    ]
+    assert appended[1]["global_source"] == source
+    assert sorted(appended[1]["boundaries"]) == sorted(
+        cfg.forward_kwargs.boundary_meshes
     )
+    assert appended[2]["viscosity_field"] in appended[0]["fields"]
+    assert appended[2]["standardized_field"] == "re_z"
     ds = OmegaConf.load(_RECIPE_ROOT / "datasets" / "airfrans_volume_2d.yaml")
     raw = OmegaConf.to_container(ds.pipeline.transforms, resolve=False)
     (nondim_cfg,) = [t for t in raw if "NonDimensionalizeByMetadata" in t["_target_"]]
@@ -712,8 +723,9 @@ def test_isla_airfrans_scales_follow_the_dataset_s_nondimensionalization():
 
 def test_isla_airfrans_similarity_end_to_end():
     """One synthetic AirfRANS case through the dataset's chain and ISLA: x -> s x, U_inf -> c U_inf and
-    nu -> s c nu leave the dataset's velocity and Cp targets and ISLA's velocity and pressure outputs
-    unchanged, and scale nut (the target and the output, in physical units) by s c."""
+    nu -> s c nu (set before the recipe's Reynolds number, which is then unchanged) leave the dataset's
+    velocity and Cp targets and ISLA's velocity and pressure outputs unchanged, and scale nut (the target and
+    the output, in physical units) by s c."""
     from datasets import load_dataset_config
     from output_normalize import (
         check_model_output_stats,
@@ -737,14 +749,18 @@ def test_isla_airfrans_similarity_end_to_end():
     check_model_output_stats(model, normalizer)
     model.eval()
     s, c = 0.3, 2.5
-    runs = []
+    runs, re_z = [], []
     for k, (si, ci) in enumerate(((1.0, 1.0), (s, c))):
         d = _airfrans_case(si, ci)
         for t in chain:
             d = t.apply_to_domain(d)
-        gd = d.global_data.clone()
-        gd["nu"] = gd["nu"] * (si * ci)
-        d = DomainMesh(interior=d.interior, boundaries=d.boundaries, global_data=gd)
+            if type(t).__name__ == "SetGlobalField":
+                gd = d.global_data.clone()
+                gd["nu"] = gd["nu"] * (si * ci)
+                d = DomainMesh(
+                    interior=d.interior, boundaries=d.boundaries, global_data=gd
+                )
+        re_z.append(d.global_data["re_z"])
         batch = build_collate_fn(cfg.input_type, spec, targets)([(d, {})])
         with torch.no_grad():
             out = model(**batch["forward_kwargs"])
@@ -755,6 +771,7 @@ def test_isla_airfrans_similarity_end_to_end():
             )
         )
     (t0, y0), (t1, y1) = runs
+    torch.testing.assert_close(re_z[1], re_z[0], atol=1e-5, rtol=0)
     stats = normalizer.stats["nut"]
     for name in ("velocity", "pressure"):
         torch.testing.assert_close(t1[name], t0[name], atol=1e-5, rtol=1e-5)
@@ -773,7 +790,8 @@ def test_isla_airfrans_reads_the_airfoil_and_the_far_field(dataset, tmp_path):
     and the far field by name (no fields on either) and predicts at the interior points; its length unit is the
     whole boundary's, which the far field sets (the synthetic far field is a 16-gon in a circle of radius 20,
     whose RMS pairwise distance is 20 sqrt(2) for the exact circle, less a few percent for the polygon and the
-    airfoil's share of the measure)."""
+    airfoil's share of the measure). The chain's re_z is bitwise the standardized log Reynolds number the
+    model computed up to 0.12.0 from its own U and L (that arithmetic copied here)."""
     from datasets import (
         _apply_dataset_transform_appends,
         _apply_dataset_transform_drops,
@@ -842,8 +860,15 @@ def test_isla_airfrans_reads_the_airfoil_and_the_far_field(dataset, tmp_path):
     assert gauge > 50 * float(
         model._gauge([meshes["airfoil"].to(torch.float64)], measures[:1])
     )
+    seen = []
+    scales = model._case_scales
+    model._case_scales = lambda *a: seen.append(scales(*a)) or seen[-1]
     with torch.no_grad():
         out = model(**batch["forward_kwargs"])
+    re = OmegaConf.to_container(ds_yaml.isla_constants.reynolds)
+    nu = sample.global_data["nu"].float().double()
+    z = (torch.log10(seen[0]["U"] * seen[0]["L"] / nu) - re["mean"]) / re["std"]
+    assert torch.equal(sample.global_data["re_z"], z)
     torch.testing.assert_close(out.points, sample.interior.points)
     pred = normalize_output_to_tensordict(out, targets, cfg.output_type)
     assert pred["velocity"].shape == (64, 2) and pred["pressure"].shape == (64,)
@@ -879,21 +904,35 @@ def test_isla_airfrans_reads_the_airfoil_and_the_far_field(dataset, tmp_path):
     ],
 )
 def test_isla_takes_its_split_s_constants_from_the_dataset_file(model, dataset):
-    """ISLA's AeroZoo and AirfRANS configs leave reynolds and each output's scale to the dataset file, whose
-    isla_constants are fitted on its split's training side; the model is built with them, a dataset file
-    without them is refused, and the config's own null values refuse to build alone."""
-    from datasets import load_dataset_config
+    """ISLA's AeroZoo and AirfRANS configs leave each output's scale, and the standardization of the
+    Reynolds number their chain appends (ComputeLogReynolds, writing re_z), to the dataset file, whose
+    isla_constants are fitted on its split's training side; the model (without a reynolds argument) and the
+    chain are built with them, a dataset file without them is refused, and the config's own null values
+    refuse to build alone."""
+    from datasets import _apply_dataset_transform_appends, load_dataset_config
     from output_normalize import model_dataset_constants
 
     cfg = _compose(model, dataset, *SMALL)
     ds = load_dataset_config(_RECIPE_ROOT / "datasets" / f"{dataset}.yaml")
     block = OmegaConf.to_container(ds.isla_constants)
     m = hydra.utils.instantiate(cfg.model, **model_dataset_constants(cfg.model, ds))
-    assert m.reynolds == pytest.approx(block["reynolds"])
+    assert "reynolds" not in m._args["__args__"] and m.global_scalar_names == ["re_z"]
+    (log_re,) = [
+        hydra.utils.instantiate(t)
+        for t in _apply_dataset_transform_appends(ds, cfg).pipeline.transforms
+        if str(t["_target_"]).endswith("ComputeLogReynolds")
+    ]
+    assert log_re.standardized_field == "re_z"
+    assert (log_re.mean, log_re.std) == (
+        block["reynolds"]["mean"],
+        block["reynolds"]["std"],
+    )
+    with pytest.raises(ValueError, match="isla_constants.reynolds"):
+        _apply_dataset_transform_appends(OmegaConf.create({}), cfg)
     assert m._output_scale == pytest.approx(block["output_scale"])
     for cond, scales in block.get("input_scale", {}).items():
         assert m._boundary_scale[cond] == pytest.approx(scales)
     with pytest.raises(ValueError, match="isla_constants"):
         model_dataset_constants(cfg.model, OmegaConf.create({}))
-    with pytest.raises(Exception, match="positive finite number; got None|reynolds"):
+    with pytest.raises(Exception, match="positive finite number; got None"):
         hydra.utils.instantiate(cfg.model)

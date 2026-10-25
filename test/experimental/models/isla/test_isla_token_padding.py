@@ -30,7 +30,7 @@ G = {"g": {"rank": 1}}
 D = torch.float64
 
 
-@pytest.mark.parametrize("task", ["surface", "interior", "interior_dtt"])
+@pytest.mark.parametrize("task", ["surface", "interior_dtt"])
 def test_token_padding_leaves_outputs_and_gradients_unchanged(task, monkeypatch):
     """At token counts that are not multiples of TOKEN_ALIGNMENT, the outputs and every parameter
     gradient equal those of the unpadded network (alignment 1) to float64 roundoff,
@@ -39,11 +39,7 @@ def test_token_padding_leaves_outputs_and_gradients_unchanged(task, monkeypatch)
     pts, nrm, w, drv = cloud(203)
     mesh = soup(pts, nrm, w)
     q = None if task == "surface" else torch.randn(30, 3, dtype=D) * 2.0
-    kw = (
-        {}
-        if task == "surface"
-        else {"interior": True, "query_independent": task == "interior_dtt"}
-    )
+    kw = {} if task == "surface" else {"interior": True}
     m = ISLA(
         output_schema=PV,
         boundary_schemas={"wall": {}},
@@ -110,7 +106,6 @@ def test_an_aligned_token_count_runs_no_padding(task):
         n_layers=2,
         n_slices=8,
         interior=task == "interior",
-        query_independent=False,
     ).double()
 
     def ops(n_boundary):
@@ -129,5 +124,20 @@ def test_an_aligned_token_count_runs_no_padding(task):
         return mode.names
 
     aligned = 4 * isla_model.TOKEN_ALIGNMENT
-    assert "constant_pad_nd" in ops(aligned - nq + 1)
-    assert "constant_pad_nd" not in ops(aligned - nq)
+    if task == "surface":
+        assert "constant_pad_nd" in ops(aligned - nq + 1)
+        assert "constant_pad_nd" not in ops(aligned - nq)
+        return
+    ### ISLA-DTT's forest build runs constant_pad_nd ops of its own, so the interior
+    ### task is checked by the token count its blocks see: no padding token at an
+    ### aligned count, a padded axis at an unaligned one.
+    seen = []
+    hook = m.blocks[0].register_forward_pre_hook(
+        lambda mod, args, kwargs: seen.append(args[0].shape[1]), with_kwargs=True
+    )
+    try:
+        ops(aligned - nq + 1)
+        ops(aligned - nq)
+    finally:
+        hook.remove()
+    assert seen == [aligned + isla_model.TOKEN_ALIGNMENT, aligned]

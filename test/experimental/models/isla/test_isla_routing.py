@@ -25,6 +25,7 @@ from physicsnemo.experimental.models.isla.blocks import (
 )
 from test.experimental.models.isla._meshes import (
     cloud,
+    live,
     orthogonal,
     outputs,
     rescale_measures,
@@ -68,11 +69,11 @@ def test_cosine_routing_keeps_the_contracts_and_all_parameters_train():
             n_layers=2,
             n_slices=8,
             interior=True,
-            query_independent=False,
         )
         .double()
         .eval()
     )
+    live(m)
     pts, nrm, w, drv = cloud(300)
     mesh = soup(pts, nrm, w)
     q = orthogonal(3, 0)

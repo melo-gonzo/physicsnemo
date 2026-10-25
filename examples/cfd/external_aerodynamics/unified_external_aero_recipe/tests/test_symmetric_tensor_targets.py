@@ -299,7 +299,7 @@ def test_isla_end_to_end_through_collate_and_loss():
 
 
 def test_select_tensor_components_accepts_a_planar_2x2_tensor():
-    """A planar problem restricted to its plane (ISLA dim=2) predicts a (N, 2, 2) tensor; the in-plane
+    """A planar problem restricted to its plane (ISLA n_spatial_dims=2) predicts a (N, 2, 2) tensor; the in-plane
     labels read off it, out-of-plane labels are refused (2026-10-03)."""
     import pytest
     import torch

@@ -300,7 +300,7 @@ def test_query_independent_interior_fused_and_compiled_blocks_match_eager():
     """The training configuration of ISLA-DTT (fused geometry kernel, compiled blocks)
     reproduces the eager model in float64, and its predictions stay
     query-independent on CUDA: a request's prefix gives the prefix of the predictions."""
-    spec = {**REF, "interior": True, "query_independent": True}
+    spec = {**REF, "interior": True}
     torch.manual_seed(0)
     ref = ISLA(**spec).to("cuda", torch.float64)
     ref.geo_kernel = "eager"
@@ -372,7 +372,7 @@ def test_compile_blocks_see_an_aligned_token_count(task, device):
     token count that is not one."""
     from physicsnemo.experimental.models.isla import model
 
-    kw = {} if task == "surface" else {"interior": True, "query_independent": True}
+    kw = {} if task == "surface" else {"interior": True}
     torch.manual_seed(0)
     opt = ISLA(**{**REF, "n_layers": 1, **kw}, compile_blocks=True).to(device)
     inputs, _ = _boundary(301, device=device)
@@ -472,9 +472,9 @@ def test_compile_blocks_query_independent_float32_at_every_token_count(nq, monke
             o_ref = _flat(outputs(ref(**inputs, prediction_points=q)))
             return _rel(_flat(outputs(opt(**inputs, prediction_points=q))), o_ref)
 
-    err = _forced_on_error(forced_on, interior=True, query_independent=True)
+    err = _forced_on_error(forced_on, interior=True)
     assert err > 5e-6, err  # forced on, the bug shows at this size
-    ref, opt = _mix_pair(interior=True, query_independent=True)
+    ref, opt = _mix_pair(interior=True)
     seen = _record_block_tokens(opt)
     with torch.no_grad():
         o_ref = _flat(outputs(ref(**inputs, prediction_points=q)))
