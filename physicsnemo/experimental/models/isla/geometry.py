@@ -1063,7 +1063,8 @@ def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.T
     for p0, p1 in ((a, b), (b, c), (c, a)):
         m = torch.nn.functional.normalize(torch.linalg.cross(p1 - p0, n, dim=-1), dim=-1, eps=0.0)
         rows_.append(torch.cat([m, (m * p0).sum(-1, keepdim=True)], -1))
-    planes = torch.stack(rows_, 1).float().reshape(-1, 4)
+    planes = torch.stack([r.float() for r in rows_], 1).reshape(-1, 4)
+    del rows_, n
     delta, kappa, longest = _thin_bounds(simplex)
     ### (NaN fails every rejection test of the kernel)
     unsure = delta > torch.finfo(torch.float32).eps / 2
@@ -1536,7 +1537,9 @@ def _winding_moments(simplex: torch.Tensor, parity: torch.Tensor, area: torch.Te
     weight, centre, dipole = simplex.new_zeros(n), simplex.new_zeros(n, 3), simplex.new_zeros(n, 3)
     spread, radius = simplex.new_zeros(n, 3, 3), simplex.new_zeros(n)
     weight[leaf], centre[leaf], dipole[leaf] = area[cell].norm(dim=-1), centroid[cell], area[cell]
-    radius[leaf] = (simplex[cell] - centroid[cell, None]).norm(dim=-1).amax(-1)
+    ### (one vertex at a time: the same norms and maximum, without an (F, 3, 3)
+    ### temporary)
+    radius[leaf] = torch.stack([(simplex[cell, k] - centroid[cell]).norm(dim=-1) for k in range(simplex.shape[1])], -1).amax(-1)
     _bottom_up(
         _node_moments_kernel,
         levels,
@@ -1550,11 +1553,17 @@ def _winding_moments(simplex: torch.Tensor, parity: torch.Tensor, area: torch.Te
         ],
         simplex,
     )
+    ### (each float64 moment freed as it is rounded)
+    del weight, centroid
+    far2 = (WINDING_NUMBER_BETA * radius).square().float().contiguous()
+    del radius
+    dipole = dipole.float().contiguous()
+    spread = spread.float().contiguous()
     return [
         wp.from_torch(centre.contiguous(), dtype=wp.vec3d),
-        wp.from_torch((WINDING_NUMBER_BETA * radius).square().float().contiguous(), dtype=wp.float32),
-        wp.from_torch(dipole.float().contiguous(), dtype=wp.vec3f),
-        wp.from_torch(spread.float().contiguous(), dtype=wp.mat33f),
+        wp.from_torch(far2, dtype=wp.float32),
+        wp.from_torch(dipole, dtype=wp.vec3f),
+        wp.from_torch(spread, dtype=wp.mat33f),
         wp.from_torch(simplex.reshape(-1, 3).contiguous(), dtype=wp.vec3d),
         wp.from_torch(parity.contiguous(), dtype=wp.float64),
     ]
@@ -1930,6 +1939,7 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
         order = order[torch.argsort(high[order], stable=True)]
         low, high = low[order], high[order]
         new = (low[1:] != low[:-1]) | (high[1:] != high[:-1])
+        del low, high
     else:
         rows = torch.cat([cells, parity[:, None]], 1)
         order = torch.arange(rows.shape[0], device=dev)
@@ -1937,7 +1947,9 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
             order = order[torch.argsort(rows[order, k], stable=True)]
         rows = rows[order]
         new = (rows[1:] != rows[:-1]).any(-1)
+        del rows
     rep = order[torch.cat([new.new_ones(1), new])]
+    del new
     ### The band: the storage term on the magnitudes as given, the arithmetic's on
     ### the centred ones. The float32 copies the BVH and the 2-D brute force read are
     ### the centred coordinates cast once.
@@ -1967,6 +1979,9 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
         winding = None
         if fast:
             tree, leaf_order, s_leaf = _preorder_cell_tree(s_ord)
+            if once:
+                ### (the leaves hold the cells; the winding number reads them there)
+                s_ord = s_rep = None
             seed = order[leaf_order[_nearest_cells(query_c, s_leaf, tree)]]
         else:
             tree = _cell_tree(s_ord)
@@ -1981,6 +1996,8 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
                 q64, radius, s_leaf, tree, reach=reach.max(), flat=None if f_ord is None else f_ord[leaf_order]
             )
             pk = order[leaf_order[pk]]
+            ### (the winding number reads the tree's links and leaves, not its boxes)
+            tree = (*tree[:5], None, None)
             if not once:
                 tree, leaf_order, s_leaf = _preorder_cell_tree(s_rep)
             w_sum = _packed_winding_sum(q64, s_leaf, p_rep[leaf_order], oriented[0][leaf_order], tree)
@@ -1989,6 +2006,7 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
                 winding = _winding_moments(s_rep, p_rep, oriented[0], tree)
             li, pk, w_sum = _ball_candidates(q64, radius, s_ord, tree, winding, flat=f_ord)
             pk = order[pk]
+            tree = (*tree[:5], None, None)
             if winding is None:
                 tree = _cell_tree(s_rep)
     else:
@@ -2191,6 +2209,7 @@ def _closest_features(
     ### their rounding, so they must not depend on the queries' precision.
     cell64 = cell_points.double()
     n64 = parity[:, None].double() * compute_cell_normals(cell64[:, 1:] - cell64[:, :1])
+    del cell_points, cell64
     with torch.no_grad():
         q, y = query_points, points
         if q.dtype in (torch.float16, torch.bfloat16):
