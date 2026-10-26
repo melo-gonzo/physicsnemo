@@ -764,6 +764,82 @@ RECORDS = {
             "results/read/read_all.json",
         ],
     ),
+    "dtt_knobs_final": (
+        "isla-dtt-knobs-2026-10-23",
+        "DTT-KNOBS, closed: the results of stage 2 with R2's scope against the knob-rule credit, the final report, the "
+        "stage-3 proposal and the two notebook drafts",
+        [
+            "RESULTS.md",
+            "FINAL_REPORT.md",
+            "STAGE3_PROPOSAL.md",
+            "NOTEBOOK_DRAFT_STAGE1.md",
+            "NOTEBOOK_DRAFT_STAGE2.md",
+        ],
+    ),
+    "slices_all": (
+        "isla-slices-all-2026-10-24",
+        "SLICES-ALL: 128 slices against 512 for ISLA-DTT on AirfRANS and the lug and for interacting ISLA on the DrivAerML "
+        "Surface task, read for harm, with its cost",
+        [
+            "RESULTS.md",
+            "FINAL_REPORT.md",
+            "NOTEBOOK_DRAFT.md",
+            "PREREG.md",
+            "reading_DR.md",
+            "reading_DR.json",
+            "reading_AF.md",
+            "reading_AF.json",
+            "reading_LUG.md",
+            "reading_LUG.json",
+        ],
+    ),
+    "slice_normal_dras": (
+        "isla-slice-normal-exp-2026-10-24",
+        "SLICE-NORMAL-EXP, the DrivAerML Surface read of (a)+(s), the unnormalized mean normal with the slice-spread "
+        "distance, against the control and against (a)",
+        [
+            "RESULTS.md",
+            "reading_DRAS.md",
+            "reading_DRAS.json",
+            "reading_MDRA.md",
+            "reading_MDRA.json",
+        ],
+    ),
+    "rerun_env": (
+        "isla-rerun-env-2026-10-26",
+        "RERUN-ENV: torch 2.13 against 2.12 for the final rerun: tests, smokes, the HiLift fault and its re-smoke after "
+        "the fix",
+        ["FINAL_REPORT.md", "HILIFT_213.md"],
+    ),
+    "compile_flag": (
+        "compile-flag-2026-10-26",
+        "COMPILE-FLAG: torch 2.13's process-wide is_compiling() during a compile, every call site the final rerun reaches, "
+        "and the thread-correct guard",
+        ["FINDINGS.md"],
+    ),
+    "golden_213": (
+        "isla-golden-213-2026-10-26",
+        "GOLDEN-213: the goldens' icosphere from correctly rounded operations, and ISLA's test tiers on torch 2.12 and 2.13",
+        ["FINAL_REPORT.md"],
+    ),
+    "final_rerun_plan": (
+        "isla-final-rerun-2026-10-26",
+        "The final rerun's plan as decided: the supervisor's decisions with Peter's answers, and the price with AeroZoo's "
+        "canonical task",
+        ["SUPERVISOR_DECISIONS.md", "price/PRICE.md", "price/price_canonical.tsv"],
+    ),
+    "az_canonical": (
+        "isla-az-canonical-2026-10-26",
+        "AZ-CANONICAL: AeroZoo's canonical task, the mean_stable cases only, in every model's configuration, with the "
+        "constants refit on them",
+        ["FINAL_REPORT.md", "CONSTANT_CHANGES.md"],
+    ),
+    "assembly_014": (
+        "isla-assembly-014-2026-10-26",
+        "ASSEMBLY-014: ISLA 0.14.0 staged: the boundary-only forest ported, the dead biases removed, name-keyed test fills, "
+        "its tiers and smokes",
+        ["FINAL_REPORT.md"],
+    ),
 }
 
 
@@ -778,6 +854,8 @@ KEPT = {
     ("dtt_knobs_r5", "RESULTS.md"): "3b462f0df18edf0463d90a5cd9495a5c",
     ("dtt_knobs_a14", "RESULTS.md"): "32da0774cb5ac07aa9490b0f97063fce",
     ("dtt_knobs_exact", "RESULTS.md"): "ad1ec340c726ec0891c50640b23c6b3c",
+    ("rerun_configs", "SUPERVISOR_DECISIONS.md"): "ac7fd5a4719af78c839d464b83d8ef25",
+    ("rerun_configs", "price/PRICE.md"): "adeb2a6b8cc18ff40b3a075ba6f8f716",
 }
 
 

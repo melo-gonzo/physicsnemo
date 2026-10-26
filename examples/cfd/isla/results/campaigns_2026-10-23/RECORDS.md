@@ -92,6 +92,15 @@ source. Do not edit by hand.
 | `dtt_knobs_a14/` | DTT-KNOBS stage 2, arms 1-4: ISLA-DTT retrained on AirfRANS at theta 2 and 0.5, with a read after every second block and with a basis of 8, against its standing | `scratch/isla-dtt-knobs-2026-10-23/` |
 | `dtt_knobs_exact/` | DTT-KNOBS stage 2, K-EXACT: ISLA-DTT retrained on AirfRANS with the exact read, the ladder (R2) and the far-field gap (Q3) | `scratch/isla-dtt-knobs-2026-10-23/` |
 | `dtt_pose_exp_read/` | DTT-POSE-EXP, the read: ISLA-DTT retrained with DTT-POSE's forest on the lug and AirfRANS against the standings' pairs, native, posed and the bf16 forest | `scratch/isla-dtt-pose-exp-2026-10-24/` |
+| `dtt_knobs_final/` | DTT-KNOBS, closed: the results of stage 2 with R2's scope against the knob-rule credit, the final report, the stage-3 proposal and the two notebook drafts | `scratch/isla-dtt-knobs-2026-10-23/` |
+| `slices_all/` | SLICES-ALL: 128 slices against 512 for ISLA-DTT on AirfRANS and the lug and for interacting ISLA on the DrivAerML Surface task, read for harm, with its cost | `scratch/isla-slices-all-2026-10-24/` |
+| `slice_normal_dras/` | SLICE-NORMAL-EXP, the DrivAerML Surface read of (a)+(s), the unnormalized mean normal with the slice-spread distance, against the control and against (a) | `scratch/isla-slice-normal-exp-2026-10-24/` |
+| `rerun_env/` | RERUN-ENV: torch 2.13 against 2.12 for the final rerun: tests, smokes, the HiLift fault and its re-smoke after the fix | `scratch/isla-rerun-env-2026-10-26/` |
+| `compile_flag/` | COMPILE-FLAG: torch 2.13's process-wide is_compiling() during a compile, every call site the final rerun reaches, and the thread-correct guard | `scratch/compile-flag-2026-10-26/` |
+| `golden_213/` | GOLDEN-213: the goldens' icosphere from correctly rounded operations, and ISLA's test tiers on torch 2.12 and 2.13 | `scratch/isla-golden-213-2026-10-26/` |
+| `final_rerun_plan/` | The final rerun's plan as decided: the supervisor's decisions with Peter's answers, and the price with AeroZoo's canonical task | `scratch/isla-final-rerun-2026-10-26/` |
+| `az_canonical/` | AZ-CANONICAL: AeroZoo's canonical task, the mean_stable cases only, in every model's configuration, with the constants refit on them | `scratch/isla-az-canonical-2026-10-26/` |
+| `assembly_014/` | ASSEMBLY-014: ISLA 0.14.0 staged: the boundary-only forest ported, the dead biases removed, name-keyed test fills, its tiers and smokes | `scratch/isla-assembly-014-2026-10-26/` |
 
 | topic | file | source | md5 |
 | --- | --- | --- | --- |
@@ -487,3 +496,33 @@ source. Do not edit by hand.
 | dtt_pose_exp_read | FINAL_REPORT.md | scratch/isla-dtt-pose-exp-2026-10-24/FINAL_REPORT.md | 49b6aa857cb9c0b6b37160797448e36b |
 | dtt_pose_exp_read | results/read/read_all.md | scratch/isla-dtt-pose-exp-2026-10-24/results/read/read_all.md | a73345ec2e5ccc2b4aca0a2ccd2e83ca |
 | dtt_pose_exp_read | results/read/read_all.json | scratch/isla-dtt-pose-exp-2026-10-24/results/read/read_all.json | 889cac97207be3bc8cdb397c7a70fb21 |
+| dtt_knobs_final | RESULTS.md | scratch/isla-dtt-knobs-2026-10-23/RESULTS.md | e47571dad0ff0e4ec8010c3c9543c2e3 |
+| dtt_knobs_final | FINAL_REPORT.md | scratch/isla-dtt-knobs-2026-10-23/FINAL_REPORT.md | e5af6dd591762d22eac2f681e32fa60f |
+| dtt_knobs_final | STAGE3_PROPOSAL.md | scratch/isla-dtt-knobs-2026-10-23/STAGE3_PROPOSAL.md | 67304a2c8628217eba5139b0abf8e7b1 |
+| dtt_knobs_final | NOTEBOOK_DRAFT_STAGE1.md | scratch/isla-dtt-knobs-2026-10-23/NOTEBOOK_DRAFT_STAGE1.md | 293fbd0b12dde4686fadf0f0b30414a6 |
+| dtt_knobs_final | NOTEBOOK_DRAFT_STAGE2.md | scratch/isla-dtt-knobs-2026-10-23/NOTEBOOK_DRAFT_STAGE2.md | d1ff8d1a83f44abd4751c27265d69194 |
+| slices_all | RESULTS.md | scratch/isla-slices-all-2026-10-24/RESULTS.md | 5ccc668f06b9d245673c1bfc929c9f2e |
+| slices_all | FINAL_REPORT.md | scratch/isla-slices-all-2026-10-24/FINAL_REPORT.md | 0a0123d550b96b69bde4e746cbc812a3 |
+| slices_all | NOTEBOOK_DRAFT.md | scratch/isla-slices-all-2026-10-24/NOTEBOOK_DRAFT.md | 74d359f113c3cd5b59099da171742b16 |
+| slices_all | PREREG.md | scratch/isla-slices-all-2026-10-24/PREREG.md | 982bf4562760b8ad96b0ed05a2c51e84 |
+| slices_all | reading_DR.md | scratch/isla-slices-all-2026-10-24/reading_DR.md | be4d50625fabaa1227a65c31ed4e05f9 |
+| slices_all | reading_DR.json | scratch/isla-slices-all-2026-10-24/reading_DR.json | 4e002ce77c035002e53771fcd7da42d3 |
+| slices_all | reading_AF.md | scratch/isla-slices-all-2026-10-24/reading_AF.md | 5a8d1785d300b105a8b211eec820d8f9 |
+| slices_all | reading_AF.json | scratch/isla-slices-all-2026-10-24/reading_AF.json | 35c9fab5b5fdeb1cfe9e86861514c9e4 |
+| slices_all | reading_LUG.md | scratch/isla-slices-all-2026-10-24/reading_LUG.md | 1879e2c0061c87d80516c38cdd8e34b5 |
+| slices_all | reading_LUG.json | scratch/isla-slices-all-2026-10-24/reading_LUG.json | bfe3e133ebb63ae098fbe7ee6ae7b37d |
+| slice_normal_dras | RESULTS.md | scratch/isla-slice-normal-exp-2026-10-24/RESULTS.md | aaa467d4e56a6ffad16cc5fde44e8c90 |
+| slice_normal_dras | reading_DRAS.md | scratch/isla-slice-normal-exp-2026-10-24/reading_DRAS.md | 2185f713216572121a436d2efb8053c6 |
+| slice_normal_dras | reading_DRAS.json | scratch/isla-slice-normal-exp-2026-10-24/reading_DRAS.json | f298a6a973a609f2dd715cbaadb1f769 |
+| slice_normal_dras | reading_MDRA.md | scratch/isla-slice-normal-exp-2026-10-24/reading_MDRA.md | fdedf6ca91dc58a6a4a894fb89366e03 |
+| slice_normal_dras | reading_MDRA.json | scratch/isla-slice-normal-exp-2026-10-24/reading_MDRA.json | 78052e0f89d4614f79d5e0d0d27d1db0 |
+| rerun_env | FINAL_REPORT.md | scratch/isla-rerun-env-2026-10-26/FINAL_REPORT.md | fa161f7af86c5f66dd24b928a44d22ae |
+| rerun_env | HILIFT_213.md | scratch/isla-rerun-env-2026-10-26/HILIFT_213.md | c05321ef974c70e5dfb277c87fbbf2e8 |
+| compile_flag | FINDINGS.md | scratch/compile-flag-2026-10-26/FINDINGS.md | ab8c1b707e5e7a6ee9f47fd3c6805d4b |
+| golden_213 | FINAL_REPORT.md | scratch/isla-golden-213-2026-10-26/FINAL_REPORT.md | 27728a411f91eb9f79161acf04401217 |
+| final_rerun_plan | SUPERVISOR_DECISIONS.md | scratch/isla-final-rerun-2026-10-26/SUPERVISOR_DECISIONS.md | 122e3aab89edba597d3aebd00bd1f88d |
+| final_rerun_plan | price/PRICE.md | scratch/isla-final-rerun-2026-10-26/price/PRICE.md | 9685bea96fc48d6d2621d7cec42ac0c8 |
+| final_rerun_plan | price/price_canonical.tsv | scratch/isla-final-rerun-2026-10-26/price/price_canonical.tsv | b33cfcf5bfe316c2ae0a2007f904289b |
+| az_canonical | FINAL_REPORT.md | scratch/isla-az-canonical-2026-10-26/FINAL_REPORT.md | 84d635987ca88b395bff052850d7f6d0 |
+| az_canonical | CONSTANT_CHANGES.md | scratch/isla-az-canonical-2026-10-26/CONSTANT_CHANGES.md | 7c8e70b6980139cc48f941389730f00e |
+| assembly_014 | FINAL_REPORT.md | scratch/isla-assembly-014-2026-10-26/FINAL_REPORT.md | 60d7c0e2935740a8062626fc5dc5b645 |
