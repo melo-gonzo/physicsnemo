@@ -12,16 +12,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Strata depthwise conditioning convolutions automatically size vmap chunks
   to the 32-bit indexing limit via `DepthwiseConv(chunk_size="auto")`.
-- `MeshDataset` gains `cache_host` / `cache_host_views` to serve repeated
-  indices from a host-memory cache; `DomainMeshReader` gains
-  `interior_n_points_range` to draw the interior point count per sample;
-  `CenterMesh` gains `store_center_as` to record the subtracted center in
-  `global_data` and `use_measure_weighting` to center by effective cell measure,
-  so a weighted subsample is centered where the full mesh would be.
+- `MeshDataset(cache_host=True)` reads each sample once and serves repeats from
+  memory, for fitting runs on a few samples. `DomainMeshReader` gains
+  `interior_n_points_range` to draw the interior point count for each sample,
+  and `CenterMesh` gains `store_center_as` to keep the subtracted center in
+  `global_data`.
 - Adds a Rotor37 compressor blade example with GeoTransolver
   (`examples/cfd/rotor37_geotransolver`)
 - Adds an experimental, independently implemented SMART operator with sampled
   geometry encoding, reusable latent contexts, and chunked field decoding.
+
 - Adds standalone FLARE++ attention and model APIs, with input-conditioned
   dynamic routing, plus a ``GALE_FPP`` backend for using the same mixer inside
   GeoTransolver.
@@ -84,10 +84,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   geometry region is selected automatically on CUDA. The unified
   external-aerodynamics recipe gains ISLA model configs (`isla_surface`,
   `isla_volume`).
-- Mesh readers load saved meshes with `tensordict` memory maps opened
-  read-only (`physicsnemo.datapipes.readers.mesh.read_only_memory_maps`), so
-  page faults on a networked file system no longer take write extent locks
-  (observed as a training hang on a Lustre-hosted dataset).
 - Adds `ExponentialEulerSolver`, `EDMStochasticExponentialEulerSolver`,
   `DPMPlusPlus2M`, and `DPMPlusPlus2MUniC2` to
   `physicsnemo.diffusion.samplers`. `ExponentialEulerSolver` supports
@@ -380,6 +376,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `weighted_multinomial` with `replacement=True` accepts more than 2^24
   weights, instead of raising `torch.multinomial`'s category-limit error. So
   DoMINO's `sample_points_on_mesh` now works on meshes with over 2^24 faces.
+- `MeshDataset.close()` no longer raises `AttributeError` with a `MeshReader`
+  or `DomainMeshReader`. Both readers now have a `close()` method.
 - `GLOBE` accepts `boundary_meshes` as a TensorDict, as the DrivAerML example
   passes them. Before, every forward pass of that example failed.
 - Under `torch.compile`, GLOBE no longer recompiles on its second training

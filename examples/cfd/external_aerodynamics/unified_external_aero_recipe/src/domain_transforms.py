@@ -692,8 +692,13 @@ class CaseKeyDomainMeshReader(DomainMeshReader):
         name = _case_directory(self._root, self._paths[index])
         return torch.tensor(zlib.crc32(name.encode()) & 0x7FFFFFFF, dtype=torch.int64)
 
-    def _load_sample(self, index: int) -> DomainMesh:
-        dm = super()._load_sample(index)
+    def _load_sample(
+        self,
+        index: int,
+        generator: torch.Generator | None = None,
+        interior_n_points: int | None = None,
+    ) -> DomainMesh:
+        dm = super()._load_sample(index, generator, interior_n_points)
         if "case_key" in dm.global_data.keys():
             raise ValueError("global_data already has a 'case_key' field")
         gd = dm.global_data.clone()
@@ -739,8 +744,13 @@ class _VtkBoundaries:
         }
         self._vtk_plane_axis = None if vtk_plane_axis is None else int(vtk_plane_axis)
 
-    def _load_sample(self, index: int) -> DomainMesh:
-        dm = super()._load_sample(index)
+    def _load_sample(
+        self,
+        index: int,
+        generator: torch.Generator | None = None,
+        interior_n_points: int | None = None,
+    ) -> DomainMesh:
+        dm = super()._load_sample(index, generator, interior_n_points)
         if not self._vtk_boundaries:
             return dm
         case = _case_directory(self._root, self._paths[index])
