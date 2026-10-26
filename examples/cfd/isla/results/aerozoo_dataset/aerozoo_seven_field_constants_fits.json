@@ -1,0 +1,395 @@
+{
+ "_meta": {
+  "what": "AZ7 (2026-10-26): per split, fitted on its train part, the constants of the interior task's two added fields (intermittency = solution.intermittency, retheta = solution.momentum_thickness_reynolds_number), and the five other fields' NormalizeMeshFields stds as refitted (equal at 6 digits to the dataset files)",
+  "normalize_std": "aerozoo_pstats.py targets (LHR cpu-short job 397199, script md5 b0e21707) + reduce: the RMS about 0 of aerozoo_stats.py's seeded 20,000-row sample per case, pooled over the train cases (mean_measured: the pooled mean)",
+  "isla_output_scale": "isla_constants_fit.py aerozoo_rms (LHR cpu-short job 397200, script md5 ced18dfc) + aerozoo_rms_fit: the median over the train cases of the per-case RMS on the isla_constants fit's seeded sample (dimensionless fields: scale factor 1)",
+  "checks": "job 397199's five-field sums equal the 2026-10-09 sample lines bitwise on 3,792 of 3,815 cases (max rel diff 8.3e-15); job 397200's five-field RMS over the AZ-DECIDE rows' U^a L^b rho^e equals those rows' per-case values to 4.3e-16 (3,332 cases); fill on each dataset file with the refit reproduces it byte for byte"
+ },
+ "fits": {
+  "full": {
+   "n_cases": 2713,
+   "n_points": 54260000,
+   "normalize_std": {
+    "velocity": {
+     "std": 11.604472490349927,
+     "mean_measured": [
+      -0.08493487667576884,
+      0.07369900529003255,
+      0.08340989190768784
+     ]
+    },
+    "pressure": {
+     "std": 1129.2584551081068,
+     "mean_measured": 201.22201206372853
+    },
+    "nut": {
+     "std": 0.6149935278528135,
+     "mean_measured": 0.07786272207940416
+    },
+    "tke": {
+     "std": 21.727582828150624,
+     "mean_measured": 2.3358384728791255
+    },
+    "omega": {
+     "std": 373993.6688927054,
+     "mean_measured": 8129.621449583974
+    },
+    "intermittency": {
+     "std": 0.960101841281703,
+     "mean_measured": 0.9374035966504487
+    },
+    "retheta": {
+     "std": 403.9229924696512,
+     "mean_measured": 311.5775748376862
+    }
+   },
+   "isla_output_scale": {
+    "intermittency": 0.9990501895921161,
+    "retheta": 225.85943083921708
+   },
+   "isla_output_scale_quartiles": {
+    "intermittency": [
+     0.9759999297225491,
+     0.9990501895921161,
+     0.9999686629160722
+    ],
+    "retheta": [
+     133.02092826791176,
+     225.85943083921708,
+     508.7848509480798
+    ]
+   },
+   "isla_n_cases": 2713
+  },
+  "family_non_box": {
+   "n_cases": 2390,
+   "n_points": 47800000,
+   "normalize_std": {
+    "velocity": {
+     "std": 12.716678763168177,
+     "mean_measured": [
+      -0.044571392978255735,
+      0.14296536080368286,
+      -0.09413499731555608
+     ]
+    },
+    "pressure": {
+     "std": 1465.1631735039696,
+     "mean_measured": 277.07643304284574
+    },
+    "nut": {
+     "std": 0.36511221602026345,
+     "mean_measured": 0.053423558893339496
+    },
+    "tke": {
+     "std": 18.840324604951856,
+     "mean_measured": 1.8703554781714726
+    },
+    "omega": {
+     "std": 433124.789712077,
+     "mean_measured": 8634.764252888262
+    },
+    "intermittency": {
+     "std": 0.9636264984345435,
+     "mean_measured": 0.9454291478217727
+    },
+    "retheta": {
+     "std": 415.95989413853647,
+     "mean_measured": 323.54510716019337
+    }
+   },
+   "isla_output_scale": {
+    "intermittency": 0.998886901898332,
+    "retheta": 237.92996449672185
+   },
+   "isla_output_scale_quartiles": {
+    "intermittency": [
+     0.9711104458252288,
+     0.998886901898332,
+     0.9999548376835234
+    ],
+    "retheta": [
+     136.05847835035348,
+     237.92996449672185,
+     544.4256438603031
+    ]
+   },
+   "isla_n_cases": 2390
+  },
+  "reynolds": {
+   "n_cases": 2119,
+   "n_points": 42380000,
+   "normalize_std": {
+    "velocity": {
+     "std": 12.330044414471423,
+     "mean_measured": [
+      -0.11613013884222814,
+      0.3114182233383974,
+      -0.28650036131861567
+     ]
+    },
+    "pressure": {
+     "std": 1442.5094994959297,
+     "mean_measured": 247.83607008986098
+    },
+    "nut": {
+     "std": 0.7543021474866122,
+     "mean_measured": 0.099464635657151
+    },
+    "tke": {
+     "std": 24.363905966684772,
+     "mean_measured": 2.851164029271657
+    },
+    "omega": {
+     "std": 346555.30016261345,
+     "mean_measured": 6403.188354118416
+    },
+    "intermittency": {
+     "std": 0.9374424612293432,
+     "mean_measured": 0.9034648635422012
+    },
+    "retheta": {
+     "std": 412.6255796273974,
+     "mean_measured": 321.9444199754139
+    }
+   },
+   "isla_output_scale": {
+    "intermittency": 0.9889515915045225,
+    "retheta": 228.01289979875224
+   },
+   "isla_output_scale_quartiles": {
+    "intermittency": [
+     0.934421966453996,
+     0.9889515915045225,
+     0.9992923402642582
+    ],
+    "retheta": [
+     129.7279678170999,
+     228.01289979875224,
+     518.064962160448
+    ]
+   },
+   "isla_n_cases": 2119
+  },
+  "bank_blobs": {
+   "n_cases": 2156,
+   "n_points": 43120000,
+   "normalize_std": {
+    "velocity": {
+     "std": 12.118544005590966,
+     "mean_measured": [
+      0.28876938982824535,
+      -0.014738146019729894,
+      -0.21032295199899956
+     ]
+    },
+    "pressure": {
+     "std": 1445.7109770127943,
+     "mean_measured": 241.1340893735441
+    },
+    "nut": {
+     "std": 0.6609708353965226,
+     "mean_measured": 0.08376370054538056
+    },
+    "tke": {
+     "std": 22.737268543144257,
+     "mean_measured": 2.463470994568064
+    },
+    "omega": {
+     "std": 408300.2686678539,
+     "mean_measured": 9489.137058580975
+    },
+    "intermittency": {
+     "std": 0.9607768856092374,
+     "mean_measured": 0.9385917943910148
+    },
+    "retheta": {
+     "std": 407.8765345399216,
+     "mean_measured": 314.92681322215225
+    }
+   },
+   "isla_output_scale": {
+    "intermittency": 0.9989755633257287,
+    "retheta": 229.81206484158122
+   },
+   "isla_output_scale_quartiles": {
+    "intermittency": [
+     0.9746224776573509,
+     0.9989755633257287,
+     0.9999735610811308
+    ],
+    "retheta": [
+     134.185547646484,
+     229.81206484158122,
+     514.6243131125389
+    ]
+   },
+   "isla_n_cases": 2156
+  },
+  "bank_zero_to_cad": {
+   "n_cases": 3040,
+   "n_points": 60800000,
+   "normalize_std": {
+    "velocity": {
+     "std": 11.753671055333886,
+     "mean_measured": [
+      -0.15113280772689006,
+      0.20295478427580727,
+      -0.0608136201020554
+     ]
+    },
+    "pressure": {
+     "std": 1273.238246403876,
+     "mean_measured": 212.13672149483318
+    },
+    "nut": {
+     "std": 0.6418377034586269,
+     "mean_measured": 0.08441275894432555
+    },
+    "tke": {
+     "std": 18.012823974682544,
+     "mean_measured": 2.3585704134599603
+    },
+    "omega": {
+     "std": 426869.3988195855,
+     "mean_measured": 9509.236307962512
+    },
+    "intermittency": {
+     "std": 0.9607385270663177,
+     "mean_measured": 0.9386494130975707
+    },
+    "retheta": {
+     "std": 409.24426782746997,
+     "mean_measured": 316.21799340780365
+    }
+   },
+   "isla_output_scale": {
+    "intermittency": 0.9992353485976051,
+    "retheta": 228.82282911913194
+   },
+   "isla_output_scale_quartiles": {
+    "intermittency": [
+     0.9767575935453162,
+     0.9992353485976051,
+     0.9999733770597288
+    ],
+    "retheta": [
+     134.76265960484233,
+     228.82282911913194,
+     518.6080798240453
+    ]
+   },
+   "isla_n_cases": 3040
+  },
+  "profile_crossflow": {
+   "n_cases": 2820,
+   "n_points": 56400000,
+   "normalize_std": {
+    "velocity": {
+     "std": 11.85765839833407,
+     "mean_measured": [
+      -0.13482415125835429,
+      0.05722023641829989,
+      -0.11630365294192417
+     ]
+    },
+    "pressure": {
+     "std": 1235.5374038908392,
+     "mean_measured": 177.37501275772377
+    },
+    "nut": {
+     "std": 0.666721631650113,
+     "mean_measured": 0.08980467899270712
+    },
+    "tke": {
+     "std": 22.08209561510457,
+     "mean_measured": 2.516575878132025
+    },
+    "omega": {
+     "std": 439653.51562778547,
+     "mean_measured": 9789.017725317894
+    },
+    "intermittency": {
+     "std": 0.9612050400577624,
+     "mean_measured": 0.9387138036865976
+    },
+    "retheta": {
+     "std": 414.56057992107617,
+     "mean_measured": 320.5191740293889
+    }
+   },
+   "isla_output_scale": {
+    "intermittency": 0.9995359550746818,
+    "retheta": 233.41497569896345
+   },
+   "isla_output_scale_quartiles": {
+    "intermittency": [
+     0.9796931644535416,
+     0.9995359550746818,
+     0.9999822535505587
+    ],
+    "retheta": [
+     136.83138772902683,
+     233.41497569896345,
+     529.4840883811057
+    ]
+   },
+   "isla_n_cases": 2820
+  },
+  "profile_dual_inlet": {
+   "n_cases": 2875,
+   "n_points": 57500000,
+   "normalize_std": {
+    "velocity": {
+     "std": 9.200298947587683,
+     "mean_measured": [
+      0.025643272357188857,
+      0.07243277023454535,
+      0.025477349343494837
+     ]
+    },
+    "pressure": {
+     "std": 623.1955252609341,
+     "mean_measured": 84.03524886631314
+    },
+    "nut": {
+     "std": 0.6618651500021814,
+     "mean_measured": 0.08883773518885653
+    },
+    "tke": {
+     "std": 15.610569873049577,
+     "mean_measured": 2.0635286654594838
+    },
+    "omega": {
+     "std": 388608.21187635505,
+     "mean_measured": 8590.454694369682
+    },
+    "intermittency": {
+     "std": 0.9606468156981889,
+     "mean_measured": 0.9378866152685847
+    },
+    "retheta": {
+     "std": 390.67396898290247,
+     "mean_measured": 301.46096336143836
+    }
+   },
+   "isla_output_scale": {
+    "intermittency": 0.9990147503226178,
+    "retheta": 217.80139608482295
+   },
+   "isla_output_scale_quartiles": {
+    "intermittency": [
+     0.9761696324770663,
+     0.9990147503226178,
+     0.9999564045752718
+    ],
+    "retheta": [
+     127.65083649652661,
+     217.80139608482295,
+     485.8326566379258
+    ]
+   },
+   "isla_n_cases": 2875
+  }
+ }
+}

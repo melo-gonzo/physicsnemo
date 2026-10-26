@@ -62,6 +62,8 @@ TARGETS = {
     "nut": "scalar",
     "tke": "scalar",
     "omega": "scalar",
+    "intermittency": "scalar",
+    "retheta": "scalar",
 }
 ### Every dataset file and the split part aerozoo_pstats.py filled its statistics from.
 DATASET_FILES = {
@@ -432,7 +434,6 @@ def test_dataset_files_read_no_label_and_derive_no_case_scale(dataset):
         "StandardizeGlobalLeaf",
         "FlipBoundaryOrientation",
         "RenameMeshFields",
-        "DropMeshFields",
         "NormalizeMeshFields",
         "ComposeQuadratureMeasure",
         "MergeBoundaries",
@@ -452,9 +453,11 @@ def test_dataset_files_read_no_label_and_derive_no_case_scale(dataset):
     )
     ### scale-only standardization of the targets and of the token values (an offset would put a small
     ### case below the float32 / bf16 step of the offset)
-    for stats in [*chain[8]["fields"].values(), *chain[-1]["standardize"].values()]:
+    for stats in [*chain[7]["fields"].values(), *chain[-1]["standardize"].values()]:
         assert stats["mean"] in (0, [0, 0, 0])
+    ### the interior task's seven fields, each standardized by the split's constants
     assert OmegaConf.to_container(ds.targets) == TARGETS
+    assert set(chain[7]["fields"]) == set(TARGETS)
     for t in chain:
         hydra.utils.instantiate(t, _convert_="all")
 
@@ -557,7 +560,7 @@ def test_geotransolver_option_b_and_transolver_configs_run():
         assert cfg.training.loss_type == "case_relative_l2"
         ### velocity weighs 3: one term per field, the per-component losses' channel balance
         assert OmegaConf.to_container(cfg.training.field_weights) == {"velocity": 3}
-        assert cfg.input_type == "tensors" and cfg.model.out_dim == 7
+        assert cfg.input_type == "tensors" and cfg.model.out_dim == 9
         if model.startswith("geo"):
             assert cfg.model.include_local_features is False
             assert (
@@ -677,10 +680,19 @@ def test_the_reader_and_the_chain_end_to_end(tmp_path):
         torch.testing.assert_close(bnd.cell_normals, -src.cell_normals[index])
     assert d.boundaries["merged"].n_cells == 4 + 4 + 5 + 4
     assert d.interior.n_points == SAMPLING and extract_target_measure(d) is None
-    std = OmegaConf.to_container(cfg.pipeline.transforms[8].fields)["pressure"]["std"]
+    stats = OmegaConf.to_container(cfg.pipeline.transforms[7].fields)
     raw = stored.interior.point_data["solution", "gauge_pressure"]
-    p = d.interior.point_data["pressure"] * std
+    p = d.interior.point_data["pressure"] * stats["pressure"]["std"]
     assert all(bool(torch.isclose(x, raw, rtol=1e-5).any()) for x in p[:5])
+    ### the two dimensionless fields are targets too (the case stores intermittency 1 and Re_theta_t 300)
+    assert "solution" not in d.interior.point_data.keys()
+    for name, value in (("intermittency", 1.0), ("retheta", 300.0)):
+        torch.testing.assert_close(
+            d.interior.point_data[name] * stats[name]["std"],
+            torch.full((SAMPLING,), value),
+            rtol=1e-5,
+            atol=0.0,
+        )
 
 
 def test_scale_only_standardization_makes_the_metric_physical():
@@ -700,6 +712,8 @@ def test_scale_only_standardization_makes_the_metric_physical():
         "nut": torch.rand(1, 200, generator=g) * 1e-3,
         "tke": torch.rand(1, 200, generator=g) * 0.4,
         "omega": torch.rand(1, 200, generator=g) * 900,
+        "intermittency": torch.rand(1, 200, generator=g),
+        "retheta": torch.rand(1, 200, generator=g) * 400 + 20,
     }
     phys_p = {
         k: v * (1 + 0.1 * torch.randn(v.shape, generator=g)) for k, v in phys_t.items()
