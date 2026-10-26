@@ -92,6 +92,7 @@ from physicsnemo.mesh.calculus.measure import (
 from physicsnemo.mesh.primitives.planar import structured_grid
 from physicsnemo.mesh.projections import project
 from physicsnemo.mesh.spatial.bvh import _compute_morton_codes
+from physicsnemo.utils.weighted_multinomial import _devices_match
 
 logger = logging.getLogger(__name__)
 
@@ -208,7 +209,7 @@ class PrefixPlusRandomSubsampleMesh(SubsampleMesh):
         if n_rest > 0:
             pool = n - self.n_prefix
             generator = self._generator
-            if generator is not None and generator.device != device:
+            if generator is not None and not _devices_match(generator.device, device):
                 generator = None
             perm = torch.randperm(pool, device=device, generator=generator)
             rest = self.n_prefix + perm[:n_rest]
@@ -309,7 +310,7 @@ class PoissonBiasedSubsampleMesh(MeshTransform):
             free = pi < 1.0
             pi[free] = (pi[free] * (1 + deficit / pi[free].sum())).clamp(max=1.0)
         generator = self._generator
-        if generator is not None and generator.device != pi.device:
+        if generator is not None and not _devices_match(generator.device, pi.device):
             generator = None
         keep = torch.rand(n, device=pi.device, generator=generator) < pi
         indices = keep.nonzero(as_tuple=True)[0]
@@ -359,7 +360,7 @@ class StratifiedSubsampleMesh(MeshTransform):
         order = self._morton_order(mesh.cell_centroids)
         step = n_before / self.n_cells
         generator = self._generator
-        if generator is not None and generator.device != order.device:
+        if generator is not None and not _devices_match(generator.device, order.device):
             generator = None
         offset = torch.rand((), device=order.device, generator=generator) * step
         ### floor(offset + k * step), k = 0..n-1: n distinct positions in [0, N)
@@ -1010,7 +1011,7 @@ class SdfBiasedSubsampleInteriorPoints(MeshTransform):
         sdf = interior.point_data[self.sdf_field].reshape(n).to(torch.float32)
         pi = self._inclusion(sdf)
         generator = self._generator
-        if generator is not None and generator.device != pi.device:
+        if generator is not None and not _devices_match(generator.device, pi.device):
             generator = None
         keep = torch.rand(n, device=pi.device, generator=generator) < pi
         idx = keep.nonzero(as_tuple=True)[0]
