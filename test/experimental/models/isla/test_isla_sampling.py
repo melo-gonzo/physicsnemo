@@ -19,9 +19,10 @@
 The budget is water-filled over the named conditions, each condition's cells are
 drawn proportional to their measure (capped at one) by systematic sampling along
 the Morton order of their centroids, and the kept cells carry Horvitz-Thompson
-weights. These tests pin the exact counts, the inclusion probabilities, the
-unbiasedness of the measure sums, the conditions kept whole, the spatial spread,
-and one compiled graph for every cell count.
+weights. These tests pin the exact counts, the unbiasedness of the measure sums,
+the conditions kept whole, the zero-measure fill, the spatial spread, and one
+compiled graph for every cell count. The inclusion probabilities, the line and its
+scan are the library's, tested in test/mesh/sampling/test_systematic_sampling.py.
 """
 
 import pytest
@@ -31,8 +32,7 @@ from physicsnemo.experimental.models.isla.sampling import (
     sample_boundary_cells,
     water_fill,
 )
-from physicsnemo.mesh.sampling import pps_inclusion_probabilities, systematic_sample
-from physicsnemo.mesh.sampling.systematic_sampling import _cumsum
+from physicsnemo.mesh.sampling import pps_inclusion_probabilities
 
 D = torch.float64
 DEVICES = [
@@ -84,51 +84,6 @@ def test_water_fill_shares_the_budget():
     assert float(shares.sum()) == pytest.approx(1_000) and torch.equal(
         shares[:2], c(3, 7)
     )
-
-
-def test_inclusion_probabilities_are_capped_proportional_to_size():
-    """pi = min(1, c a) with sum pi equal to the share: the largest cells are capped
-    at one, the rest proportional to their measure; a share of at least the count
-    keeps every cell."""
-    g = torch.Generator().manual_seed(0)
-    a = torch.rand(1000, generator=g, dtype=D) ** 4
-    a[:5] = 50.0
-    pi = pps_inclusion_probabilities(a, torch.tensor(100.0, dtype=D))
-    assert float(pi.sum()) == pytest.approx(100.0, rel=1e-12)
-    capped = pi == 1
-    assert bool(capped[:5].all()) and int(capped.sum()) == 5
-    ratio = pi[~capped] / a[~capped]
-    assert torch.allclose(ratio, ratio[0].expand_as(ratio), rtol=1e-12)
-    assert bool((ratio[0] * a[capped] >= 1).all())
-    assert torch.equal(
-        pps_inclusion_probabilities(a, torch.tensor(1000.0, dtype=D)),
-        torch.ones_like(a),
-    )
-
-
-def test_a_share_of_the_count_caps_every_cell():
-    """A share of at least the cell count gives every pi = 1 on full-precision float64
-    measures."""
-    for seed in range(4):
-        g = torch.Generator().manual_seed(seed)
-        for n in (2, 40, 3000, 52_119):
-            a = torch.rand(n, generator=g, dtype=D) ** 3 + 1e-3
-            for share in (n, n + 0.5):
-                pi = pps_inclusion_probabilities(a, torch.tensor(float(share), dtype=D))
-                assert torch.equal(pi, torch.ones_like(a)), (seed, n, share)
-
-
-def test_equal_measures_with_a_share_of_the_count_are_kept_whole():
-    """Equal measures (a uniform mesh) with a share of at least the count give every
-    pi exactly 1, though the float tail sums of equal values can exceed their count
-    times the value, which leaves a rank uncapped with a level below 1 / a (a = 0.1,
-    n = 100: rank 9, and 91 cells a rounding below 1 from the tails alone)."""
-    for value in (0.1, 0.3, 0.7, 3.3):
-        for n in (7, 100, 3000, 300_001):
-            a = torch.full((n,), value, dtype=D)
-            for share in (n, n + 0.5):
-                pi = pps_inclusion_probabilities(a, torch.tensor(float(share), dtype=D))
-                assert torch.equal(pi, torch.ones_like(a)), (value, n, share)
 
 
 @pytest.mark.parametrize("budget", [1, 77, 300, 3539, 3540, 10**6])
@@ -318,62 +273,6 @@ def test_zero_measures_fill_a_condition_past_its_positive_cells():
         )
         for s, m in zip(sums, measures):
             assert float(s) == pytest.approx(float(m.sum()), rel=1e-12)
-
-
-def test_the_integer_search_is_the_search_for_the_hits():
-    """The search for the hit counts, (line - U - 1) >> Q, finds for every hit
-    U + m 2**Q the first interval past it, as a direct search would; U the start on the
-    grid, clamped by the line's residual. On random probabilities with some 0 and 1
-    and on the half-integer construction, at starts 0, 0.5 and the largest below 1."""
-    g = torch.Generator().manual_seed(1)
-    pi = torch.rand(2000, generator=g, dtype=D) * 0.3
-    pi[::7], pi[3::11] = 1.0, 0.0
-    exact = torch.cat(
-        [torch.full((1024,), 300.5 / 1024, dtype=D), torch.ones(50, dtype=D), pi[:1000]]
-    )
-    for p in (pi, exact):
-        budget = int(p.sum())
-        k, Q = budget, 62 - budget.bit_length()
-        line = (p * 2.0**Q).round().long().cumsum(0)
-        residual = int(line[-1]) - k * 2**Q
-        for u in (0.0, 0.5, 1.0 - 2.0**-53):
-            U = min(max(int(u * 2**Q), residual, 0), 2**Q - 1, 2**Q - 1 + residual)
-            hits = U + torch.arange(k, dtype=torch.int64) * 2**Q
-            direct = torch.searchsorted(line, hits, right=True)
-            assert int(direct.max()) < p.shape[0]
-            position = systematic_sample(
-                p, k, torch.tensor(u, dtype=D), max_n_samples=budget
-            )
-            assert torch.equal(position, direct)
-
-
-def test_the_float_scan_is_the_doubling_scan_bitwise():
-    """The draw's float scan is the doubling (Kogge-Stone) scan, bitwise, which the
-    sequential ``cumsum`` is not on 100 copies of 0.1; its integer scan is ``cumsum``."""
-
-    def doubling(x):
-        y, n, s = x.clone(), x.shape[0], 1
-        while s < n:
-            y = torch.cat([y[:s], y[s:] + y[: n - s]])
-            s *= 2
-        return y
-
-    tenths = torch.full((100,), 0.1, dtype=D)
-    assert not torch.equal(tenths.cumsum(0), doubling(tenths))
-    g = torch.Generator().manual_seed(0)
-    for x in (tenths, torch.rand(1000, generator=g, dtype=D) ** 3):
-        assert torch.equal(_cumsum(x), doubling(x))
-    k = torch.randint(0, 2**40, (1000,), generator=g)
-    assert torch.equal(_cumsum(k), k.cumsum(0))
-
-
-@pytest.mark.parametrize("device", DEVICES)
-@pytest.mark.parametrize("dtype", [torch.float64, torch.int64])
-def test_the_cumsum_op_passes_opcheck(device, dtype):
-    """The draw's opaque scan (``physicsnemo::mesh_cumsum``) is a well-formed custom
-    op, for the float64 and int64 scans."""
-    x = torch.arange(1000, device=device).to(dtype) * 3 + 1
-    torch.library.opcheck(_cumsum, (x,))
 
 
 def _half_integer_case(device):
