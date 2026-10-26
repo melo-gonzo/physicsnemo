@@ -19,21 +19,33 @@
 The budget is water-filled over the named conditions, each condition's cells are
 drawn proportional to their measure (capped at one) by systematic sampling along
 the Morton order of their centroids, and the kept cells carry Horvitz-Thompson
-weights. These tests pin the exact counts, the inclusion probabilities, the
-unbiasedness of the measure sums, the conditions kept whole, the spatial spread,
-and one compiled graph for every cell count.
+weights. These tests pin the exact counts, the unbiasedness of the measure sums,
+the conditions kept whole, the zero-measure fill, the spatial spread, and one
+compiled graph for every cell count. The inclusion probabilities, the line and its
+scan are the library's, tested in test/mesh/sampling/test_systematic_sampling.py.
 """
 
 import pytest
 import torch
 
 from physicsnemo.experimental.models.isla.sampling import (
-    pps_inclusion_probabilities,
     sample_boundary_cells,
     water_fill,
 )
+from physicsnemo.mesh.sampling import pps_inclusion_probabilities
 
 D = torch.float64
+DEVICES = [
+    "cpu",
+    pytest.param(
+        "cuda", marks=pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA")
+    ),
+]
+cuda = pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA")
+#: Cell counts of AeroZoo case 0, whose water fill under a budget of 200,000 gives
+#: shares 31250, 58315.5, 52119, 58315.5: at the start 0.5 every cell boundary of
+#: the third condition (kept whole, after a half-integer offset) is on a hit.
+HALF_SIZES = [31_250, 113_946, 52_119, 151_699]
 
 
 def _conditions(sizes, seed=0):
@@ -71,26 +83,6 @@ def test_water_fill_shares_the_budget():
     shares = water_fill(c(3, 7, 400, 401, 9_000), 1_000)
     assert float(shares.sum()) == pytest.approx(1_000) and torch.equal(
         shares[:2], c(3, 7)
-    )
-
-
-def test_inclusion_probabilities_are_capped_proportional_to_size():
-    """pi = min(1, c a) with sum pi equal to the share: the largest cells are capped
-    at one, the rest proportional to their measure; a share of at least the count
-    keeps every cell."""
-    g = torch.Generator().manual_seed(0)
-    a = torch.rand(1000, generator=g, dtype=D) ** 4
-    a[:5] = 50.0
-    pi = pps_inclusion_probabilities(a, torch.tensor(100.0, dtype=D))
-    assert float(pi.sum()) == pytest.approx(100.0, rel=1e-12)
-    capped = pi == 1
-    assert bool(capped[:5].all()) and int(capped.sum()) == 5
-    ratio = pi[~capped] / a[~capped]
-    assert torch.allclose(ratio, ratio[0].expand_as(ratio), rtol=1e-12)
-    assert bool((ratio[0] * a[capped] >= 1).all())
-    assert torch.equal(
-        pps_inclusion_probabilities(a, torch.tensor(1000.0, dtype=D)),
-        torch.ones_like(a),
     )
 
 
@@ -166,6 +158,186 @@ def test_an_empty_condition_takes_no_tokens():
     assert counts.tolist() == [0, 30, 30]
 
 
+def _whole_kept_once(kept, measures, budget):
+    """Asserts the draw keeps distinct cells and every cell with pi = 1 exactly once."""
+    shares = water_fill(torch.tensor([a.shape[0] for a in measures], dtype=D), budget)
+    pi = torch.cat(
+        [pps_inclusion_probabilities(a, s) for a, s in zip(measures, shares)]
+    )
+    assert torch.equal(kept, kept.unique())
+    assert bool(torch.isin((pi.cpu() == 1).nonzero()[:, 0], kept.cpu()).all())
+
+
+def test_a_hit_on_a_cell_boundary_takes_the_later_cell():
+    """With a half-integer share before a condition kept whole, every eval hit (start
+    0.5) lands exactly on a boundary of the whole condition's cells, and on the
+    boundary between the conditions: each hit takes the later cell (half-open
+    intervals), so the first condition gets 300 of its share 300.5, the whole one
+    every cell once, and the last 301."""
+    g = torch.Generator().manual_seed(0)
+    sizes = [1024, 50, 1024]
+    ### equal measures: pi = 300.5 / 1024, on the line's grid, so the line is exact
+    measures = [torch.ones(1024, dtype=D), torch.rand(50, generator=g, dtype=D) ** 3]
+    measures.append(torch.rand(1024, generator=g, dtype=D) ** 3 + 1e-3)
+    centroids = [torch.randn(n, 3, generator=g, dtype=D) for n in sizes]
+    assert water_fill(torch.tensor(sizes, dtype=D), 651).tolist() == [300.5, 50, 300.5]
+    kept, w = sample_boundary_cells(
+        measures, centroids, 651, torch.tensor(0.5, dtype=D)
+    )
+    counts, _ = _per_condition(kept, w, sizes)
+    assert counts.tolist() == [300, 50, 301]
+    _whole_kept_once(kept, measures, 651)
+
+
+@pytest.mark.parametrize(
+    "u",
+    [
+        0.0,
+        1e-12,
+        0.5,
+        float(torch.nextafter(torch.tensor(1.0, dtype=D), torch.tensor(0.0, dtype=D))),
+    ],
+)
+def test_a_condition_kept_whole_last_is_kept_at_every_start(u):
+    """The line's end differs from k units by the rounding of the intervals; the start
+    is clamped by that residual, so a condition kept whole at the end of the line keeps
+    every cell once at any start, including the ends of [0, 1). On full-precision
+    float64 measures and on float32 stored ones, whose line (seed 1) is shorter than k
+    units, so the start's upper clamp is needed."""
+    sizes = [5000, 40]
+    full, centroids = _conditions(sizes, seed=3)
+    g = torch.Generator().manual_seed(1)
+    stored = [
+        (torch.rand(n, generator=g, dtype=D) + 1e-3).float().double() for n in sizes
+    ]
+    for measures in (full, stored):
+        kept, w = sample_boundary_cells(
+            measures, centroids, 300, torch.tensor(u, dtype=D)
+        )
+        counts, _ = _per_condition(kept, w, sizes)
+        assert counts.tolist() == [260, 40]
+        _whole_kept_once(kept, measures, 300)
+
+
+def test_tiny_measures_keep_their_share():
+    """100 cells of ordinary measure and 4,900 of 1e-17 in one condition of share 260:
+    the large cells are capped and the tiny ones share the rest, so the probabilities
+    are nonnegative and sum to the share, the 300 kept cells are distinct, the second
+    condition is whole, and the first's Horvitz-Thompson sum is its measure."""
+    g = torch.Generator().manual_seed(0)
+    a = torch.cat(
+        [
+            torch.rand(100, generator=g, dtype=D) + 0.5,
+            torch.full((4900,), 1e-17, dtype=D),
+        ]
+    )
+    measures = [a, torch.rand(40, generator=g, dtype=D)]
+    centroids = [torch.randn(n, 3, generator=g, dtype=D) for n in (5000, 40)]
+    pi = pps_inclusion_probabilities(a, torch.tensor(260.0, dtype=D))
+    assert bool((pi >= 0).all())
+    assert abs(float(pi.sum()) - 260) < 1e-9
+    kept, w = sample_boundary_cells(
+        measures, centroids, 300, torch.tensor(0.5, dtype=D)
+    )
+    counts, sums = _per_condition(kept, w, [5000, 40])
+    assert kept.unique().shape[0] == 300
+    assert counts.tolist() == [260, 40]
+    assert abs(float(sums[0] / a.sum()) - 1) < 1e-12
+
+
+def test_zero_measures_fill_a_condition_past_its_positive_cells():
+    """A condition of 200 cells, 150 of them of measure exactly 0, and one of 1,000
+    equal measures under a budget of 300 (shares 150, 150): the first condition's 50
+    positive cells are all kept and its zero-measure cells fill the rest of its share
+    at weight 0, so each condition keeps its share, no cell twice, every weight is
+    finite, and each condition's Horvitz-Thompson sum is its measure."""
+    g = torch.Generator().manual_seed(0)
+    sizes = [200, 1000]
+    a = torch.zeros(200, dtype=D)
+    positive = torch.randperm(200, generator=g)[:50]
+    a[positive] = torch.rand(50, generator=g, dtype=D) + 0.5
+    measures = [a, torch.full((1000,), 0.3, dtype=D)]
+    centroids = [torch.randn(n, 3, generator=g, dtype=D) for n in sizes]
+    assert water_fill(torch.tensor(sizes, dtype=D), 300).tolist() == [150, 150]
+    measure = torch.cat(measures)
+    for u in (0.0, 0.5, 0.999):
+        kept, w = sample_boundary_cells(
+            measures, centroids, 300, torch.tensor(u, dtype=D)
+        )
+        counts, sums = _per_condition(kept, w, sizes)
+        assert counts.tolist() == [150, 150], u
+        assert torch.equal(kept, kept.unique())
+        assert bool(torch.isin(positive, kept).all())
+        assert bool(torch.isfinite(w).all()) and bool(
+            (w[measure[kept] == 0] == 0).all()
+        )
+        for s, m in zip(sums, measures):
+            assert float(s) == pytest.approx(float(m.sum()), rel=1e-12)
+
+
+def _half_integer_case(device):
+    g = torch.Generator().manual_seed(0)
+    measures = [torch.rand(n, generator=g, dtype=D) ** 3 + 1e-3 for n in HALF_SIZES]
+    centroids = [torch.randn(n, 3, generator=g, dtype=D) for n in HALF_SIZES]
+    return [a.to(device) for a in measures], [x.to(device) for x in centroids]
+
+
+@cuda
+def test_the_draw_is_bitwise_reproducible_on_cuda():
+    """Six draws on CUDA of 349,014 cells with full-precision float64 measures at the
+    eval start, with half-integer shares before a condition kept whole (hits exactly on
+    its cell boundaries): bitwise the same kept cells and weights, no duplicate, every
+    pi = 1 cell kept once. The float64 scans of the line varied run to run here."""
+    assert water_fill(torch.tensor(HALF_SIZES, dtype=D), 200_000).tolist() == [
+        31_250,
+        58_315.5,
+        52_119,
+        58_315.5,
+    ]
+    measures, centroids = _half_integer_case("cuda")
+    start = torch.tensor(0.5, dtype=D, device="cuda")
+    runs = [
+        sample_boundary_cells(measures, centroids, 200_000, start) for _ in range(6)
+    ]
+    for kept, w in runs:
+        assert torch.equal(kept, runs[0][0])
+        assert torch.equal(w.view(torch.int64), runs[0][1].view(torch.int64))
+        _whole_kept_once(kept, measures, 200_000)
+
+
+@cuda
+def test_the_draw_is_bitwise_the_same_on_cpu_and_cuda():
+    """The same float64 inputs on CPU and on CUDA keep the same cells with bitwise the
+    same weights."""
+    start = torch.tensor(0.5, dtype=D)
+    k0, w0 = sample_boundary_cells(*_half_integer_case("cpu"), 200_000, start)
+    k1, w1 = sample_boundary_cells(*_half_integer_case("cuda"), 200_000, start.cuda())
+    assert torch.equal(k1.cpu(), k0)
+    assert torch.equal(w1.cpu().view(torch.int64), w0.view(torch.int64))
+
+
+@pytest.mark.parametrize("device", DEVICES)
+def test_the_compiled_draw_is_the_eager_one_bitwise(device):
+    """torch.compile(fullgraph=True, dynamic=True) of the draw gives bitwise the eager
+    kept cells and weights at two cell counts, the second without a recompile (every
+    condition below the stable sort's 32,767 size guard in both)."""
+
+    def draw(a1, a2, a3, x1, x2, x3, u):
+        return sample_boundary_cells([a1, a2, a3], [x1, x2, x3], 2_001, u)
+
+    torch._dynamo.reset()
+    compiled = torch.compile(draw, fullgraph=True, dynamic=True)
+    for i, sizes in enumerate([(9_000, 400, 7_000), (12_000, 300, 6_500)]):
+        measures, centroids = _conditions(sizes, seed=i)
+        args = [t.to(device) for t in (*measures, *centroids)]
+        args.append(torch.tensor(0.5, dtype=D, device=device))
+        with torch._dynamo.config.patch(error_on_recompile=i > 0):
+            kept, w = compiled(*args)
+        ref_kept, ref_w = draw(*args)
+        assert torch.equal(kept, ref_kept)
+        assert torch.equal(w.view(torch.int64), ref_w.view(torch.int64))
+
+
 @pytest.mark.slow  # 5 s on LHR CPU: a compile over every cell count
 def test_one_compiled_graph_for_every_cell_count():
     """Under torch.compile(fullgraph=True, dynamic=True) the draw is one graph whether
@@ -199,7 +371,8 @@ def test_one_compiled_graph_for_every_cell_count():
 
 def test_the_compiled_draw_runs_its_sums_as_the_opaque_scan():
     """The draw traced with one graph (the graph Dynamo hands the backend, before
-    Inductor) runs its sums as the custom op ``physicsnemo::isla_cumsum`` and has no
+    Inductor) runs its sums as the custom op ``physicsnemo::mesh_cumsum`` (the
+    library's systematic sampling, which the draw calls) and has no
     cumsum of its own: the op keeps Inductor's split scan, whose kernel failed on
     GB300 at full resolution under the recipe's max-autotune compile, out of the
     compiled draw. This guards that fix on any device; test_isla_compile's
@@ -222,7 +395,7 @@ def test_the_compiled_draw_runs_its_sums_as_the_opaque_scan():
     assert kept.shape == (60,) and len(graphs) == 1
     nodes = graphs[0].graph.nodes
     scans = [n.target for n in nodes if "cumsum" in str(n.target)]
-    assert scans and set(scans) == {torch.ops.physicsnemo.isla_cumsum.default}, scans
+    assert scans and set(scans) == {torch.ops.physicsnemo.mesh_cumsum.default}, scans
 
 
 def test_the_length_unit_is_the_full_boundary_s_for_every_draw():

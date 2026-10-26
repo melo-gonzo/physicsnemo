@@ -55,6 +55,7 @@ def sci(x):
 import ast, textwrap
 import physicsnemo
 ISLA_SRC = Path(physicsnemo.__file__).parent / "experimental" / "models" / "isla"
+REPO_SRC = Path(physicsnemo.__file__).parent.parent
 
 def _symbol(tree, qualname):
     body, node = tree.body, None
@@ -76,10 +77,11 @@ def _drop_history_comments(block):
         out.append(l)
     return out[:-1]
 
-def listing(filename, qualname, start=None, end=None, docstring=False):
-    """Print the source of `qualname` in `filename` as a fenced block; with `start`/`end`, only the lines of the
-    function between the first line containing `start` and the next line containing `end` (end=None: to the end)."""
-    src = (ISLA_SRC / filename).read_text(); lines = src.splitlines(); tree = ast.parse(src)
+def listing(filename, qualname, start=None, end=None, docstring=False, root=None):
+    """Print the source of `qualname` in `filename` (under ISLA's folder, or under `root`) as a fenced block; with
+    `start`/`end`, only the lines of the function between the first line containing `start` and the next line
+    containing `end` (end=None: to the end)."""
+    src = ((ISLA_SRC if root is None else root) / filename).read_text(); lines = src.splitlines(); tree = ast.parse(src)
     node = _symbol(tree, qualname); a, b = node.lineno, node.end_lineno
     first = node.body[0]
     if not docstring and isinstance(first, ast.Expr) and isinstance(getattr(first, "value", None), ast.Constant) and isinstance(first.value.value, str):
@@ -373,7 +375,8 @@ runs the class's own draw on the airfoil.
 #|   dots move from step to step. It does not show the water filling over several conditions (the airfoil is one).
 #| fig-height: 5.0
 #| code-fold: true
-from physicsnemo.experimental.models.isla.sampling import sample_boundary_cells, pps_inclusion_probabilities
+from physicsnemo.experimental.models.isla.sampling import sample_boundary_cells
+from physicsnemo.mesh.sampling import pps_inclusion_probabilities
 from physicsnemo.experimental.models.isla.model import EVAL_START
 from physicsnemo.mesh.spatial.bvh import _compute_morton_codes
 frac_d = np.concatenate([[0.0], np.cumsum(1.0 - 0.75 * np.sin(np.linspace(0, np.pi, 160)) ** 6)]); frac_d /= frac_d[-1]
@@ -414,7 +417,7 @@ plt.show()
 In symbols, with $N_\beta$ the cell count of condition $\beta$, $B$ the
 budget, $\lambda$ the water level (`water_fill`), $c_\beta$ the
 proportionality constant of condition $\beta$
-(`pps_inclusion_probabilities`) and $u$ the start:
+(`pps_inclusion_probabilities` in `physicsnemo.mesh.sampling`) and $u$ the start:
 
 $$
 b_\beta = \min(N_\beta, \lambda), \quad \sum_\beta b_\beta = \min\Big(\sum_\beta N_\beta,\ B\Big);
@@ -468,7 +471,8 @@ The water filling, the capped inclusion probabilities found exactly from the sor
 #| label: code-boundary-draw
 #| output: asis
 listing("sampling.py", "water_fill")
-listing("sampling.py", "pps_inclusion_probabilities")
+listing("physicsnemo/mesh/sampling/systematic_sampling.py", "pps_inclusion_probabilities", root=REPO_SRC)
+listing("physicsnemo/mesh/sampling/systematic_sampling.py", "systematic_sample", root=REPO_SRC)
 listing("sampling.py", "sample_boundary_cells")
 listing("model.py", "ISLA._case_inputs", start="### The boundary tokens: the sample", end="query = query[None]")
 ```

@@ -30,10 +30,10 @@ from jaxtyping import Float, Int
 
 from physicsnemo.core.function_spec import FunctionSpec
 from physicsnemo.experimental.models.isla import geometry_fast
-from physicsnemo.experimental.models.isla.tree_read import canonical_frame, frame_coordinates
 from physicsnemo.experimental.models.isla.tree_walk import WARP_MAX_ELEMENTS
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.geometry._cell_normals import compute_cell_normals
+from physicsnemo.mesh.spatial._frame import canonical_frame, frame_coordinates
 from physicsnemo.mesh.spatial._lbvh import build_lbvh_topology
 from physicsnemo.mesh.spatial.bvh import _compute_morton_codes
 from physicsnemo.nn.functional.geometry.sdf import _closest_point_weights
@@ -878,10 +878,10 @@ def _cell_tree(simplex: torch.Tensor):
     node after its subtree, -1 at the end), the inner nodes of each level, root
     first, each node's cell (-1 inside), and each node's box ``(N, 3)`` twice (least
     and greatest corner), in float32 rounded outward for the traversals' pruning. The
-    cells are put in Morton order in the boundary's
-    canonical frame (:func:`canonical_frame`), so the tree, and the far field of
-    :func:`_tree_winding_numbers` on it, is the same in every pose of the case; the
-    boxes are in the queries' frame. The topology depends on ``F`` alone, so it is
+    cells are put in Morton order in the boundary's canonical frame
+    (:func:`~physicsnemo.mesh.spatial._frame.canonical_frame`), so the tree, and the
+    far field of :func:`_tree_winding_numbers` on it, is the same in every pose of the
+    case; the boxes are in the queries' frame. The topology depends on ``F`` alone, so it is
     built without reading the device."""
     f, dev = simplex.shape[0], simplex.device
     order = _morton_order(simplex)
@@ -902,7 +902,8 @@ def _cell_tree(simplex: torch.Tensor):
 
 def _morton_order(simplex: torch.Tensor) -> torch.Tensor:
     """The cells ``simplex`` ``(F, 3, 3)`` in the Morton order of their centroids in the
-    boundary's canonical frame (:func:`canonical_frame`), stable at equal codes."""
+    boundary's canonical frame (:func:`~physicsnemo.mesh.spatial._frame.canonical_frame`),
+    stable at equal codes."""
     f = simplex.shape[0]
     e = simplex[:, 1:] - simplex[:, :1]
     frame = canonical_frame(simplex.mean(1), torch.linalg.cross(e[:, 0], e[:, 1], dim=-1).norm(dim=-1))

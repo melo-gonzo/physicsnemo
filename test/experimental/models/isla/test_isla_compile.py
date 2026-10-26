@@ -312,7 +312,7 @@ def test_a_warm_compile_cache_reuses_the_graph_across_the_budget():
 def test_the_compiled_case_inputs_run_every_sum_as_the_opaque_scan():
     """The interior model's case inputs (the graph the recipe compiles) traced with
     one graph, before Inductor, run every sum as the custom op
-    ``physicsnemo::isla_cumsum`` and have no cumsum of their own: a cumsum added
+    ``physicsnemo::mesh_cumsum`` and have no cumsum of their own: a cumsum added
     anywhere in them, not only in the draw (test_isla_sampling's guard), would
     bring back Inductor's split scan, whose kernel failed on GB300 at full
     resolution under max-autotune (the slow test below runs that on CUDA)."""
@@ -332,20 +332,18 @@ def test_the_compiled_case_inputs_run_every_sum_as_the_opaque_scan():
         _drawn(compiled, _case("interior", s, "cpu", seed=0, nq=nq))
     assert len(graphs) == 1
     scans = [n.target for n in graphs[0].graph.nodes if "cumsum" in str(n.target)]
-    assert scans and set(scans) == {torch.ops.physicsnemo.isla_cumsum.default}, scans
+    assert scans and set(scans) == {torch.ops.physicsnemo.mesh_cumsum.default}, scans
 
 
-### DRAW-EXACT: the 0.14.0 draw replaces isla_cumsum's body (a fixed-order float scan
-### in place of ATen's) and edits this docstring; the test stays.
 @pytest.mark.slow
 @pytest.mark.cuda
 @requires_cuda
 def test_the_in_model_draw_compiles_under_max_autotune_at_full_resolution():
     """The recipe's compile options (``max-autotune-no-cudagraphs``) on an interior
-    model's case inputs at 1.4 million boundary cells: the draw's float64 sums over
-    every cell are long enough for Inductor's split scan, whose kernel failed on GB300
-    in this compile; the draw runs them through ATen (``sampling._cumsum``). The
-    compiled draw gives the eager one."""
+    model's case inputs at 1.4 million boundary cells: the draw's sums over every
+    cell are long enough for Inductor's split scan, whose kernel failed on GB300 in
+    this compile; the draw runs them eagerly (the library's
+    ``physicsnemo::mesh_cumsum``). The compiled draw gives the eager one."""
     torch._dynamo.reset()
     torch.manual_seed(0)
     model = (

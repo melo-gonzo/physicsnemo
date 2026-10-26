@@ -1143,7 +1143,7 @@ print("**The open question is how large ISLA-DTT's tree error is at $\\theta = 1
       "no frame and no center: every position enters as a difference from a slice anchor (@sec-isla-frame). ISLA-DTT's Barnes–Hut "
       "forest groups its clusters, for speed alone, in a canonical frame the boundary carries: the measure-weighted centroid of the "
       "sampled cells and the principal axes of their measure-weighted covariance, each signed so that the third moment along it is "
-      "positive (`tree_read.canonical_frame`). That frame moves with a rigid motion, so in exact arithmetic the forest, and with it "
+      "positive (`canonical_frame` in `physicsnemo.mesh.spatial._frame`). That frame moves with a rigid motion, so in exact arithmetic the forest, and with it "
       "every point's list of far clusters at a finite opening angle $\\theta$, is the same in every pose. Where two principal "
       "variances are equal the axis is decided by rounding, and where the normalized third moment along an axis falls below "
       "`CANONICAL_SKEW_TIE` its sign follows the dataset's axes rather than the body (@sec-oq-frame-sign); either way a "
@@ -1182,7 +1182,7 @@ with a forest built outside autocast, in centered float64 canonical coordinates 
 ```{python}
 #| label: para-oq-frame-sign
 #| output: asis
-from physicsnemo.experimental.models.isla.tree_read import CANONICAL_SKEW_TIE
+from physicsnemo.mesh.spatial._frame import CANONICAL_SKEW_TIE
 MEC = " ".join(R.load("dtt_pose", "MECHANISMS.md").split())
 SK = re.search(r"skews ([\d.e-]+) and ([\d.e-]+) \(median\), reproduced under pose to ([\d.e-]+) \(max ([\d.e-]+)", MEC).groups()
 SKB = re.search(r"is ([\d.e-]+) / ([\d.e-]+), above the skew in (\d+) / (\d+) of 24 cases", MEC).groups()

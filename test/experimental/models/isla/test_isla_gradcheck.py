@@ -49,7 +49,6 @@ from physicsnemo.experimental.models.isla import (
     fused_read,
     geo_kernel,
     geometry,
-    sampling,
     tree_read,
 )
 from physicsnemo.experimental.models.isla.geometry import exact_boundary_geometry
@@ -229,16 +228,6 @@ def test_closest_candidates_ops_pass_opcheck(name, dim, dtype, device):
     against the real outputs, and AOT dispatch with dynamic shapes."""
     op = getattr(torch.ops.physicsnemo, name).default
     torch.library.opcheck(op, _search_args(dim, dtype, device))
-
-
-@pytest.mark.parametrize("device", _DEVICES)
-def test_cumsum_op_passes_opcheck(device):
-    """The draw's opaque float64 scan, ``isla_cumsum``; on CPU it is ``cumsum``
-    bitwise (not compared on CUDA, whose float64 scan does not repeat bitwise)."""
-    x = torch.rand(3000, dtype=D, generator=torch.Generator().manual_seed(0)).to(device)
-    torch.library.opcheck(torch.ops.physicsnemo.isla_cumsum.default, (x,))
-    if device == "cpu":
-        assert torch.equal(sampling._cumsum(x), x.cumsum(0))
 
 
 def _region_inputs(dtype, k, p, b=1, n=6, s=5, seed=0, device="cuda"):
