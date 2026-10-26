@@ -321,16 +321,26 @@ They are not matched in parameters, memory or time; @tbl-drivaerml-configs state
 ```{python}
 #| label: para-drivaerml-slices
 #| output: asis
+import re
 import records as R
 # ISLA with 128 slices against the Volume standing's 512 (SLICES-DRV, registered reading)
 _SLD = {r_["field"]: r_ for r_ in R.md_table("slices_drv", "reading.md") if r_["protocol"] == "native"}
 assert all(r_["label"] == "no change" and r_["sub-bar flag"] == "none" for r_ in _SLD.values())
 _SLDC = {r_["measure"].split(",")[0]: R.num(r_["S ÷ B"]) for r_ in R.md_table("slices_drv", "RESULTS.md", "R3, cost")}
+# SLICES-ALL: interacting ISLA with 128 slices against the Surface standing's 512, native, and the whole-run step and memory
+_SLS = {r_["field"]: r_ for r_ in R.md_table("slices_all", "reading_DR.md") if r_["protocol"] == "native"}
+assert all(r_["label"] == "no change" and r_["flag"] == "none" for r_ in _SLS.values())
+_sls_cost = re.search(r"the control's 0\.241 / 0\.245 s \((0\.\d+)\), and peak `mem_gb` was [\d.]+ against [\d.]+ \((0\.\d+)\)",
+                      " ".join(R.load("slices_all", "RESULTS.md").split())).groups()
 print("With 128 slices in place of 512, ISLA's Volume-task errors are " + " / ".join(_SLD[f]["S ÷ B"] for f in ("pressure_l2", "velocity_l2", "nut_l2"))
       + " of this configuration's on pressure / velocity / eddy viscosity (ratios of arithmetic seed means, two seeds each; no field "
       f"moves by the rule registered for the test) at {_SLDC['smoke 363505']:.3f} of the training step and "
-      f"{_SLDC['smoke: peak allocated per rank']:.3f} of the peak memory; this is interacting ISLA, the reference keeps 512 slices, and 128 "
-      f"slices is untested on ISLA-DTT, the surface task and the solids (@sec-oq-slices). Data: {R.source('slices_drv', 'reading.md')}.")
+      f"{_SLDC['smoke: peak allocated per rank']:.3f} of the peak memory; this is interacting ISLA, and the reference keeps 512 slices. "
+      "On the Surface task, interacting ISLA reading the vehicle alone, 128 slices reads "
+      + " / ".join(_SLS[f]["arm ÷ control"] for f in ("pressure_l2", "wss_l2")) + " on pressure / wall shear, no change by the same "
+      f"rule, at {_sls_cost[0]} of the training step and {_sls_cost[1]} of the peak memory over the whole run, and ISLA-DTT reads no "
+      f"change on AirfRANS and the lug (@sec-oq-slices). Data: {R.source('slices_drv', 'reading.md')}; "
+      f"{R.source('slices_all', 'reading_DR.md')}; {R.source('slices_all', 'RESULTS.md')}.")
 ```
 
 ```{python}

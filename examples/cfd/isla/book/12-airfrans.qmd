@@ -216,10 +216,19 @@ print(f"- **ISLA**: width 512, 12 layers, 512 slices, learning rate 3.75e-4, {PA
       + " (ratios of arithmetic seed means, two seeds each; no field moves by the rule registered for the test) at "
       f"{SLC['smoke 354977']:.2f} of the training step and {SLC['smoke: peak allocated per rank']:.2f} of the peak memory, "
       "so the reference keeps 512 and 128 is a cheaper setting that costs interacting ISLA nothing measurable here or on the "
-      "DrivAerML Volume task, and is untested on ISLA-DTT (@sec-oq-slices). "
+      "DrivAerML Volume task, and costs ISLA-DTT nothing measurable either (@sec-oq-slices). "
       f"Data: {R.source('slices_af', 'RESULTS.md')}.")
+# SLICES-ALL: ISLA-DTT with 128 slices against the standing's eager-trained ISLA-DTT pair, native, and the whole-run step and memory
+_SLA = {r_["field"]: r_ for r_ in R.md_table("slices_all", "reading_AF.md") if r_["protocol"] == "native"}
+assert all(r_["label"] == "no change" and r_["flag"] == "none" for r_ in _SLA.values())
+_sla_cost = re.search(r"against 0\.931 / 0\.937 s \((0\.\d+)\), and peak `mem_gb` [\d.]+ against [\d.]+ \((0\.\d+)\)",
+                      " ".join(R.load("slices_all", "RESULTS.md").split())).groups()
 print(f"- **ISLA-DTT**: the same configuration with read-only prediction points, {PARAMS['ISLA-DTT'] / 1e6:.1f}M parameters "
-      "(@sec-airfrans-dtt-reference).")
+      "(@sec-airfrans-dtt-reference). With 128 slices in place of 512, eager-trained, its test errors are "
+      + " / ".join(_SLA[f_]["arm ÷ control"] for f_ in ("pressure_l2", "velocity_l2", "nut_l2"))
+      + " of this configuration's (ratios of arithmetic seed means, two seeds each; no field moves by the rule registered for "
+      f"the test) at {_sla_cost[0]} of the training step and {_sla_cost[1]} of the peak memory over the whole run. "
+      f"Data: {R.source('slices_all', 'reading_AF.md')}; {R.source('slices_all', 'RESULTS.md')}.")
 print(f"- **GeoTransolver**: width 256, learning rate 1e-3, {PARAMS['GeoTransolver'] / 1e6:.1f}M parameters.")
 print(f"- **Transolver**: width 512, 16 layers, learning rate 1e-3, {PARAMS['Transolver'] / 1e6:.1f}M parameters.")
 print()
@@ -572,8 +581,9 @@ print(f"**At the reference configuration interacting ISLA leads ISLA-DTT on Airf
       "the cost, as far as two seeds can show; there is no sign that it comes from the raw speed. The velocity reading is flagged: it "
       f"rests on one seed ({r5_v[0]} and {r5_v[1]}), and its geometric form does not resolve. Interacting ISLA's mirror arm, without "
       f"the scales and with the inlet speed standardized, reads {' / '.join(r5_isla)} (geometric seed means), no measurable effect "
-      "(@sec-airfrans-attribution). So on AirfRANS ISLA-DTT uses the scales where interacting ISLA does not; the difference between "
-      f"the two forms is resolved on pressure ({r5_d[0]} against two standard errors of {r5_d[1]}), and on velocity and eddy "
+      "(@sec-airfrans-attribution). So on AirfRANS, on pressure, two seeds show that ISLA-DTT uses the scales where "
+      f"interacting ISLA does not: the difference between the two forms is resolved there ({r5_d[0]} against two standard "
+      f"errors of {r5_d[1]}), and on velocity and eddy "
       "viscosity it is within two seeds' noise. A reading of why, not a test: ISLA-DTT's prediction points never share state, and "
       "the scales may give them a frame that interacting ISLA rebuilds from its interacting points. "
       "Every model in this comparison trained on the compiled training path after its "
@@ -626,7 +636,7 @@ own_far = re.search(r"ISLA-DTT's own seeds differ by ([\d.]+) beyond one chord",
 _w05 = re.search(r"K-THETA05's velocity-wake error ÷ ISLA's \(DK-GAP's case-normalized form\) is ([\d.]+) / ([\d.]+) against the control's (\d+\.\d+) / (\d+\.\d+)",
                  " ".join(R.load("dtt_knobs_a14", "RESULTS.md").split())).groups()
 _f0 = re.search(r"ISLA-DTT ÷ ISLA there falls from ([\d.]+) / ([\d.]+) to (\d+\.\d+) / (\d+\.\d+)",
-                " ".join(R.load("dtt_knobs_exact", "RESULTS.md").split())).groups()
+                " ".join(R.load("dtt_knobs_final", "RESULTS.md").split())).groups()
 lowre = re.search(r"low-Re quartile \(Re ([\d.]+-[\d.]+e6)\) reads ([\d.]+ / [\d.]+ / [\d.]+)", GPT).groups()
 print("**ISLA-DTT's gap to interacting ISLA on AirfRANS is one of fit, and it sits in the wake and beyond one chord.** For the "
       f"standing's eager-trained pairs, ISLA-DTT ÷ ISLA on the first 200 training cases is {gfield('train fp32')} (pressure / "
@@ -642,7 +652,7 @@ print("**ISLA-DTT's gap to interacting ISLA on AirfRANS is one of fit, and it si
       f"the error normalized per case), and trained with the exact read its eddy-viscosity error beyond one chord is {_f0[2]} / "
       f"{_f0[3]} times ISLA's against {_f0[0]} / {_f0[1]}: a finer read narrows the far-field gap (@sec-oq-dtt-theta). Data: "
       f"{R.source('dtt_knobs', 'gap/gap_table.md')}; {R.source('dtt_knobs', 'gap/rough.md')}; "
-      f"{R.source('dtt_knobs_a14', 'RESULTS.md')} (R4); {R.source('dtt_knobs_exact', 'RESULTS.md')} (Q3).")
+      f"{R.source('dtt_knobs_a14', 'RESULTS.md')} (R4); {R.source('dtt_knobs_final', 'RESULTS.md')} (Q3).")
 ```
 
 ::: {.callout-note title="In flight"}
