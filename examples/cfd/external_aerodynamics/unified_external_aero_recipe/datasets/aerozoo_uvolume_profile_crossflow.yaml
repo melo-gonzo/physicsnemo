@@ -17,7 +17,8 @@
 #   (log10 nu - a) / b with per-dataset constants (StandardizeGlobalLeaf), the reorientation, the targets, and the
 #   boundary faces as one token set (MergeBoundaries), GeoTransolver's geometry.
 # Every constant below is fitted once per split on its training side (aerozoo_pstats.py); nothing is computed per
-# case. The targets are physical (m/s, Pa, m^2/s, m^2/s^2, 1/s) with one scale-only standardization per dataset,
+# case. The targets, the interior task's seven fields, are physical (m/s, Pa, m^2/s, m^2/s^2, 1/s; intermittency and
+# Re_theta_t dimensionless) with one scale-only standardization per dataset,
 # the same for every model (means 0), so the recipe's training-space relative L2 is the physical relative L2 of
 # each field and case.
 #
@@ -122,14 +123,16 @@ pipeline:
         solution.turbulent_kinematic_viscosity: nut
         solution.turbulent_kinetic_energy: tke
         solution.specific_dissipation_rate: omega
-    - _target_: ${dp:DropMeshFields}
-      point_data: [solution.intermittency, solution.momentum_thickness_reynolds_number]
+        solution.intermittency: intermittency
+        solution.momentum_thickness_reynolds_number: retheta
     # Physical targets, one standardization per dataset, scale only: mean 0 and the RMS about 0 of a seeded
     # 20,000-point interior sample per training case as the std (velocity: the isotropic one), the same for
     # every model. Not the pooled mean (2026-10-19): the targets span decades across cases, and on
     # full.train the pooled pressure mean is 201 Pa against a std of 1,129 Pa, so a case whose RMS pressure is
     # ~0.03 Pa would read -0.18 plus a signal of ~3e-5, below bf16's step near 0.18 (~7e-4, the baselines'
     # head under autocast) and at ~5e-4 relative in float32; nut, tke and omega have mean / std 0.02-0.13.
+    # intermittency and retheta (Re_theta_t), both dimensionless: the same rule, from aerozoo_pstats.py targets
+    # (LHR cpu-short job 397199, 2026-10-26; the five other fields' sample lines reproduce those of 2026-10-09).
     # Scale only, every value keeps its own floating-point relative precision.
     - _target_: ${dp:NormalizeMeshFields}
       association: point_data
@@ -139,6 +142,8 @@ pipeline:
         nut: {type: scalar, mean: 0, std: 0.666722}
         tke: {type: scalar, mean: 0, std: 22.0821}
         omega: {type: scalar, mean: 0, std: 439654}
+        intermittency: {type: scalar, mean: 0, std: 0.961205}
+        retheta: {type: scalar, mean: 0, std: 414.561}
     - _target_: ${dp:ComposeQuadratureMeasure}
     # Last: every boundary face as one token set (boundaries.merged), each with its condition type (one-hot)
     # and its prescribed values: GeoTransolver's geometry. The values are standardized here only, by
@@ -173,6 +178,8 @@ targets:
   nut: scalar
   tke: scalar
   omega: scalar
+  intermittency: scalar
+  retheta: scalar
 
 # ISLA's own constants for this split: conf/model/isla_volume_aerozoo.yaml leaves them null and train.py / infer.py
 # inject them. Fitted on profile_crossflow.train (2,820 of its 2,820 cases) with the implemented scale functions
@@ -182,9 +189,11 @@ targets:
 # isotropic RMS), and input_scale, per boundary input, the median over the train cases of the per-case area-weighted
 # RMS of the input made dimensionless by its units (a vector's of its magnitude): robust typical sizes, where the
 # pooled RMS is set by the few largest cases. LHR cpu-short jobs 295774-295776 (examples/cfd/isla/results/aerozoo_dataset/isla_constants_fit.py, code 6c3aac5a8), 2026-10-20.
+# intermittency and retheta are dimensionless, so their scale is the median per-case RMS itself, on the same
+# seeded sample: LHR cpu-short job 397200 (isla_constants_fit.py aerozoo_rms), 2026-10-26.
 isla_constants:
   reynolds: {mean: 5.969, std: 1.408}
-  output_scale: {velocity: 0.5746, pressure: 0.08286, nut: 0.0004706, tke: 0.009683, omega: 604.6}
+  output_scale: {velocity: 0.5746, pressure: 0.08286, nut: 0.0004706, tke: 0.009683, omega: 604.6, intermittency: 0.9995, retheta: 233.4}
   input_scale:
     inlet: {bc_intermittency: 1, bc_omega: 1.82, bc_retheta: 235.6, bc_tke: 0.0007466}
     outlet: {bc_intermittency_reverse: 1, bc_omega_reverse: 1.725, bc_retheta_reverse: 235.6, bc_tke_reverse: 0.0006647, bc_velocity_reverse: 1}
