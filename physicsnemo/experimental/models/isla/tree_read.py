@@ -69,8 +69,8 @@ the boundary and the point, never on the other prediction points). At
 :math:`\theta = 0` every contract of the exact read holds exactly: Euclidean
 equivariance, the similarity gauge, boundary-refinement and measure-scale invariance.
 At finite :math:`\theta` the forest is built in a frame the boundary carries with it
-(:func:`canonical_frame`: the principal axes of the cells' measure-weighted
-covariance, signed by their third moments), so a rotation, reflection, translation
+(:func:`~physicsnemo.mesh.spatial._frame.canonical_frame`: the principal axes of the
+cells' measure-weighted covariance, signed by their third moments), so a rotation, reflection, translation
 or rescale of the case gives the same clusters and the same far-field list for every
 point, up to ties of that frame (equal variances, a symmetric axis); the read is then
 the same approximation in every pose, and the posed protocol equals the native one.
@@ -110,6 +110,7 @@ from physicsnemo.experimental.models.isla.segment_softmax import (
 )
 from physicsnemo.experimental.models.isla.tree_build import forest_tables, resolve_tree_build
 from physicsnemo.experimental.models.isla.tree_walk import walk_fits, walk_pairs
+from physicsnemo.mesh.spatial._frame import canonical_frame
 from physicsnemo.mesh.spatial._ragged import _ragged_arange
 from physicsnemo.mesh.spatial.cluster_tree import ClusterTree
 
@@ -140,56 +141,6 @@ TREE_READ_LEAF_SIZE = 4
 #: Pairs per chunk of the kernel-basis evaluation (memory only; each chunk's
 #: invariants are built once, its MLP activations are rebuilt in backward).
 TREE_READ_PAIR_CHUNK = 1 << 22
-
-
-#: Below this measure-weighted normalized third moment along a principal axis, the
-#: axis's sign is a tie (a symmetric body) and is fixed by the lab axis it most
-#: overlaps instead. Computed in float64, so a body's skewness is reproduced under a
-#: rigid motion to 1e-12 and only a genuinely symmetric axis falls back.
-CANONICAL_SKEW_TIE = 1e-9
-
-
-def canonical_frame(points: torch.Tensor, measure: torch.Tensor) -> torch.Tensor:
-    r"""A frame the boundary carries with it, ``(d, d)`` with the axes as columns: the
-    principal axes of the measure-weighted covariance of the cell positions, in
-    ascending variance, each signed so that the measure-weighted third moment of the
-    positions along it is positive. Under a rotation, reflection, translation or
-    rescale of the boundary the frame moves with it (up to ties: equal variances, or a
-    symmetric axis whose third moment vanishes, where the sign follows the lab axis
-    of largest overlap), so coordinates ``points @ frame`` are invariant. The Morton
-    trees and the normal octants are built in these coordinates, which makes the
-    forest, and so every point's far-field list at finite ``theta``, the same in
-    every pose of the case; a tree built on lab coordinates changes its clusters with
-    the pose (on AirfRANS at theta 1, errors 1.9x / 1.25x / 3.3x on pressure /
-    velocity / viscosity under the posed protocol against the native one)."""
-    d = points.shape[1]
-    x = points.detach().double()
-    w = measure.detach().double().clamp_min(0)
-    w = w / w.sum().clamp_min(torch.finfo(torch.float64).tiny)
-    x = x - (w[:, None] * x).sum(0)
-    wx = w[:, None] * x
-    ### Column sums, not a GEMM (see frame_coordinates).
-    cov = torch.stack([(wx * x[:, j, None]).sum(0) for j in range(d)], 1)
-    _, axes = torch.linalg.eigh(cov)
-    proj = frame_coordinates(x, axes)
-    m2 = (w[:, None] * proj.square()).sum(0)
-    m3 = (w[:, None] * proj.pow(3)).sum(0)
-    skew = m3 / m2.clamp_min(torch.finfo(torch.float64).tiny).pow(1.5)
-    lab = axes[axes.abs().argmax(dim=0), torch.arange(d, device=points.device)]
-    sign = torch.where(skew.abs() > CANONICAL_SKEW_TIE, torch.sign(skew), torch.sign(lab))
-    sign = torch.where(sign == 0, torch.ones_like(sign), sign)
-    return (axes * sign[None, :]).to(points.dtype)
-
-
-def frame_coordinates(points: torch.Tensor, frame: torch.Tensor) -> torch.Tensor:
-    """``points @ frame`` ``(N, d)`` as ``d`` column products. A float64 GEMM this thin
-    (or the ``(d, N) @ (N, d)`` of a covariance) runs far below memory bandwidth on
-    GPUs with few float64 units: on GB300 at 17.7M cells, 17.8 ms (34 ms) against
-    0.9 ms (1.3 ms) as columns."""
-    out = points[:, :1] * frame[0]
-    for k in range(1, points.shape[1]):
-        out = out + points[:, k : k + 1] * frame[k]
-    return out
 
 
 def normal_octants(normals: torch.Tensor) -> torch.Tensor:

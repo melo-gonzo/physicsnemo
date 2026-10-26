@@ -21,8 +21,9 @@ A/B record (one process per version; custom ops register process-wide)::
     python -m test.experimental.models.isla.goldens.record --device cpu --out DIR [--groups G-GEO ...]
 
 writes ``DIR/record.json`` (the platform fingerprint, which file and md5 of every
-ISLA module ran, the registered ``physicsnemo::isla_*`` ops, and per case, variant
-and run the int-view SHA-256, dtype and shape of every input, output and gradient)
+ISLA module ran, the registered ``physicsnemo::isla_*`` and ``physicsnemo::mesh_*``
+ops, and per case, variant and run the int-view SHA-256, dtype and shape of every
+input, output and gradient)
 and ``DIR/tensors.pt`` (the tensors of the first run, and of any later run that
 differs from it). CPU records run on one thread. On CUDA every case runs
 ``--repeats`` times in-process (5 by default), so that compare.py can judge the
@@ -114,7 +115,8 @@ def fingerprint(device: str) -> dict:
 
 def module_versions() -> dict:
     """File and md5 of every imported ISLA module and every module :data:`cases.TARGETS`
-    names, and the ``physicsnemo::isla_*`` custom ops registered in this process."""
+    names, and the ``physicsnemo::isla_*`` and ``physicsnemo::mesh_*`` custom ops
+    registered in this process."""
     names = {C.TARGETS[k].partition(":")[0] for k in C.TARGETS}
     names |= {n for n in sys.modules if n.startswith(C.ISLA)}
     mods = {}
@@ -130,7 +132,7 @@ def module_versions() -> dict:
     ops = sorted(
         n
         for n in torch._C._dispatch_get_all_op_names()
-        if n.startswith("physicsnemo::isla_")
+        if n.startswith(("physicsnemo::isla_", "physicsnemo::mesh_"))
     )
     return {"modules": mods, "ops": ops}
 
