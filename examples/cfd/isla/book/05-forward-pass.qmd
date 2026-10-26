@@ -2674,7 +2674,8 @@ print("**The supervisor's policy certifies a compiled region against eager's own
       "AirfRANS, because the casts Inductor leaves out move a few small groups while the region as a whole is more accurate "
       "than eager. A fixed bound would fail an ill-conditioned block however accurate its compiled path, as AeroZoo's first "
       "block, whose eager float32 output is itself $8.5 \\times 10^{-4}$ from float64. With the fused geometry kernel for "
-      "planar models and models without a global direction, on trained ISLA-DTT checkpoints, AirfRANS's and the lug's "
+      "planar models and models without a global direction, on trained checkpoints (ISLA-DTT on AirfRANS and the lug, ISLA "
+      "on Tensile2d), AirfRANS's and the lug's "
       f"compiled blocks pass every pooled group, and Tensile2d's fail {t2d_br} of {t2d_n} ({t2d_base} without the kernel), so "
       f"Tensile2d's ISLA trains eagerly. Data: {R.source('fused_pad', 'FINAL_REPORT.md')}.")
 ```

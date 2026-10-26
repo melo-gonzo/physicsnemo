@@ -611,8 +611,8 @@ print(f"**GLOBE (@sec-landscape-globe), the learned boundary integral on a Barne
       + "; ".join(f"{a} {' / '.join(f'{over(a, f):.2f}' for f in SURF_F)}" for a in S.ARCHS)
       + f", every seed above one. It is less accurate than ISLA on {cars[0]} of {cars[1]} cars on both fields. Its training loss "
       f"ends near its validation loss and {loss_x} times ISLA's under the same loss, so it underfits the training set. Rotated "
-      f"and translated, its error is {min(pn):.2f} to {max(pn):.2f} times its native error, where the baselines' errors rise to "
-      f"{min(b_pos):.2f} to {max(b_pos):.2f}. GLOBE is rotation-equivariant; its tree sums distant clusters at $\\theta = {theta}$, "
+      f"and translated, its error is {min(pn):.2f} to {max(pn):.2f} times its native error, while the baselines' relative errors "
+      f"posed are {min(b_pos):.2f} to {max(b_pos):.2f}, above the score of predicting zero. GLOBE is rotation-equivariant; its tree sums distant clusters at $\\theta = {theta}$, "
       "an approximation that vanishes as $\\theta \\to 0$ and that a rotation regroups, the likely cause of that change, which "
       f"was not isolated. Data: {R.source('globe_dr', 'scores_dr/globe_dr_scores.json')}; {R.source('globe_dr', 'RESULTS_DR.md')}.")
 ```
