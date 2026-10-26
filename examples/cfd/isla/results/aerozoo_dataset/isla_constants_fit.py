@@ -225,7 +225,8 @@ def aerozoo_rms_case(path):
         }
         for f, (_, key) in AZ_FIELDS.items():
             shape = tuple(meta[key]["shape"])
-            assert meta[key]["dtype"] == "torch.float32", meta[key]
+            if meta[key]["dtype"] != "torch.float32":
+                raise ValueError(f"{key}: expected torch.float32, got {meta[key]}")
             mm = np.memmap(
                 os.path.join(sol, f"{key}.memmap"),
                 dtype=np.float32,
