@@ -2222,6 +2222,19 @@ def _(query_points, points, cells, parity, face_normals):
     )
 
 
+class _StraightThrough(torch.autograd.Function):
+    """``value`` in the forward pass, bitwise; the backward pass sends the whole
+    gradient to ``surrogate``, and none to ``value``."""
+
+    @staticmethod
+    def forward(ctx, value, surrogate):
+        return value.clone()
+
+    @staticmethod
+    def backward(ctx, grad):
+        return None, grad
+
+
 def _closest_features(
     query_points: Float[torch.Tensor, "queries dim"],
     points: Float[torch.Tensor, "vertices dim"],
@@ -2236,7 +2249,13 @@ def _closest_features(
     whether there is one ``(Q,)`` and the direction ``(Q, d)``, the sign of the
     distance ``(Q,)``, at a tie the distance ``(Q,)``, and whether the query is on the
     surface ``(Q,)``; see
-    :func:`exact_boundary_geometry`. ``kernel`` names the search's implementation."""
+    :func:`exact_boundary_geometry`. Last, whether the point lies inside an edge of
+    a triangle (off the surface, untied) ``(Q,)``, and there the direction from the
+    edge's closest point ``(Q, d)``, in float64 from the query and the edge's
+    vertices: the offset is rebuilt from frozen weights, which hold the point
+    fixed, while on an edge it slides with the query and the vertices, so the
+    direction takes its gradient from this one (:class:`_StraightThrough`).
+    ``kernel`` names the search's implementation."""
     search = {"reference": _closest_candidates, "fast": _closest_candidates_fast}[kernel]
     points = points.to(query_points.dtype)
     if kernel == "fast":
@@ -2268,7 +2287,19 @@ def _closest_features(
     ### surface too the normal comes from float64)
     off_n = n64 if dtype in (torch.float16, torch.bfloat16) else all_n
     face_n = torch.where(on_wall[:, None], n64[idx].to(dtype), off_n[idx].to(dtype))
-    return diff, on_cell, face_n, tied, tie_u.to(dtype), sign.to(dtype), tie_dist, on_wall
+    slide = (weights > 0).sum(-1) == 2
+    slide = slide & ~on_wall & ~tied & (query_points.shape[-1] == 3)
+    ### (on every row, finite with a finite gradient: the rows torch.where leaves out
+    ### still receive a zero gradient)
+    k = (~(weights > 0)).to(torch.int8).argmax(-1)  # the vertex off the edge
+    a, b = (s64.take_along_dim(((k + i) % s64.shape[1])[:, None, None], 1)[:, 0] for i in (1, 2))
+    x, ab = query_points.double(), b - a
+    ab2 = (ab * ab).sum(-1)
+    t = ((x - a) * ab).sum(-1) / torch.where(ab2 > 0, ab2, 1.0)
+    off = x - (a + t[:, None] * ab)
+    r = off.norm(dim=-1, keepdim=True)
+    slide_u = (off / torch.where(r > 0, r, 1.0)).to(dtype)
+    return diff, on_cell, face_n, tied, tie_u.to(dtype), sign.to(dtype), tie_dist, on_wall, slide, slide_u
 
 
 def exact_boundary_geometry(
@@ -2356,8 +2387,11 @@ def exact_boundary_geometry(
     from the query and its cell's vertices with the barycentric weights of its
     Voronoi region (computed in float64, Ericson 2005, Sec. 5.1.5), in float64,
     and rounded once to the queries' precision, so :math:`d` and :math:`u` are
-    differentiable in the query and the vertex positions, with the gradient of
-    the envelope theorem (at a tie, :math:`u` carries none).
+    differentiable in the query and the vertex positions: :math:`d` with the
+    gradient of the envelope theorem (the closest point held fixed), :math:`u`
+    with the derivative of the direction to the closest point as it moves (fixed
+    at a vertex, sliding along a triangle's edge, the normal inside a cell; at a
+    tie, :math:`u` carries none).
 
     ``kernel`` names the implementation of the search, not what it computes:
     ``"reference"`` defines it, and ``"fast"`` gives the same outputs bitwise
@@ -2370,7 +2404,7 @@ def exact_boundary_geometry(
         )
     if cells.shape[0] == 0:
         raise ValueError("the boundary has no cells; there is no surface to measure distance to")
-    diff, on_cell, face_n, tied, tie_u, sign, tie_dist, on_wall = _closest_features(
+    diff, on_cell, face_n, tied, tie_u, sign, tie_dist, on_wall, slide, slide_u = _closest_features(
         query_points, points, cells, kernel
     )
     dist = diff.norm(dim=-1)
@@ -2380,6 +2414,9 @@ def exact_boundary_geometry(
         torch.where((plane >= 0)[:, None], face_n, -face_n),
         diff / dist.clamp_min(torch.finfo(dist.dtype).tiny)[:, None],
     )
+    ### (inside an edge the point slides: u keeps its value, with the sliding
+    ### point's gradient)
+    u = torch.where(slide[:, None], _StraightThrough.apply(u, slide_u), u)
     u = torch.where(on_wall[:, None], face_n, u)
     u = torch.where(tied[:, None], tie_u, u)
     d = torch.where(

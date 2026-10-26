@@ -1830,7 +1830,9 @@ def test_query_chunks_equal_the_forward_pass_and_its_gradients(theta, vectors, c
             p.add_(0.05 * torch.randn_like(p))
     mesh, drv, q = _case() if case == "cloud" else _far_sphere_case()
     if case == "far_sphere":
-        _, _, _, tied, _, _, _, on_wall = _closest_features(q, mesh.points, mesh.cells)
+        _, _, _, tied, _, _, _, on_wall, _, _ = _closest_features(
+            q, mesh.points, mesh.cells
+        )
         assert bool(tied[0]) and bool(on_wall[1:13].all())
     assert (mesh.n_cells + q.shape[0]) % isla_model.TOKEN_ALIGNMENT
     assert mesh.n_cells % isla_model.TOKEN_ALIGNMENT

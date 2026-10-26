@@ -1,14 +1,14 @@
 {
  "format": 1,
- "commit": "14518b280306b4b8d92491936fa53e3cd0c2758d",
+ "commit": "6d6409e3faa4ac954e45670818e7cefc2535ec76",
  "code_modified": true,
  "harness": {
   "__init__.py": "0a7ef7faa425a61c89987fff234f7169",
-  "cases.py": "67432512d91bd8fbf5579a0dd83077c6",
+  "cases.py": "c291a79ca45de2e4f79ae0cb4c11f097",
   "compare.py": "7a3507ec13ed802e56dd08597468ae58",
-  "record.py": "7bfd6fc3675d047722388b25fa5b87c4"
+  "record.py": "bd4001d5e9a550e6b398bec54940d5e6"
  },
- "date": "2026-10-25T09:14:25-04:00",
+ "date": "2026-10-26T01:37:07-04:00",
  "platform": {
   "python": "3.13.8",
   "torch": "2.13.0+cu130",
@@ -24,20 +24,22 @@
  },
  "versions": {
   "physicsnemo.experimental.models.isla": "178546cdd26fc5a010e26ac102086b66",
-  "physicsnemo.experimental.models.isla.blocks": "89d53b4b63e6f7c5d635af148593f16b",
+  "physicsnemo.experimental.models.isla.blocks": "4f39b2bb2ff28de3b85eac7779cdf8c7",
   "physicsnemo.experimental.models.isla.fused_basis": "189eb1e6096e0bb4a7c67bd5c12f8bc3",
-  "physicsnemo.experimental.models.isla.fused_read": "3dd03e639c1da188e8c284b33946fc21",
-  "physicsnemo.experimental.models.isla.geometry": "e02fea5affa758475a9c6690b394d34f",
+  "physicsnemo.experimental.models.isla.fused_read": "866ad10d8622509e0df2ba7abfb688b5",
+  "physicsnemo.experimental.models.isla.geometry": "d00091b9cf672e0491fb1987775bed1b",
   "physicsnemo.experimental.models.isla.geometry_fast": "8516d69bf3dd3f4696c2472dd76513f9",
   "physicsnemo.experimental.models.isla.heads": "9373a25d4e58168fce8d0acad8931725",
   "physicsnemo.experimental.models.isla.inputs": "3ce86bc1d666200a38be17c08939bb61",
-  "physicsnemo.experimental.models.isla.model": "4b3efc6a209eff23be0286f43f9561ef",
-  "physicsnemo.experimental.models.isla.sampling": "deb9f915adb9ec265e5a8411ea4a776e",
+  "physicsnemo.experimental.models.isla.model": "6749140b37bed8c5144ea130834f130e",
+  "physicsnemo.experimental.models.isla.sampling": "a35695775d1dcdaa8b219edd0a925b1d",
   "physicsnemo.experimental.models.isla.scales": "c6ae7036d8b0bfbfcc06530fcc6bab7d",
-  "physicsnemo.experimental.models.isla.segment_softmax": "14782abf98d02a51739b7d6a99a67678",
+  "physicsnemo.experimental.models.isla.segment_softmax": "a00b1d5cc85a3c18d9eaaa10b25e0b18",
   "physicsnemo.experimental.models.isla.tree_build": "c818f50e3b1cb8b920fdeb57161b46d1",
-  "physicsnemo.experimental.models.isla.tree_read": "c85e555fee0480a05f0c80334b03a525",
-  "physicsnemo.experimental.models.isla.tree_walk": "b52839a5d9becc4a0b9513637f08dbcc"
+  "physicsnemo.experimental.models.isla.tree_read": "718d4acc6079efc46f9c129ff4183e94",
+  "physicsnemo.experimental.models.isla.tree_walk": "b52839a5d9becc4a0b9513637f08dbcc",
+  "physicsnemo.mesh.sampling.systematic_sampling": "82ad653c4369be3d6a157ca0e17162e2",
+  "physicsnemo.mesh.spatial._frame": "d0a7cc93f87f14dfbeabd04b87d14922"
  },
  "samples": 16,
  "cases": 90,
