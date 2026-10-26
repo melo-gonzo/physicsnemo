@@ -59,7 +59,7 @@ from physicsnemo.experimental.models.isla.tree_read import (
     _TreeKernelRead,
     kernel_geo_width,
 )
-from physicsnemo.mesh.sampling.systematic_sampling import _cumsum
+from physicsnemo.mesh.sampling.systematic_sampling import _cumsum, systematic_sample
 from test.experimental.models.isla._forced import ran
 from test.experimental.models.isla._geometry_cases import (
     _near_wall,
@@ -117,10 +117,10 @@ BUDGET = 100_000
 @pytest.mark.cuda
 @requires_cuda
 def test_the_draw_twice_on_cuda_keeps_the_same_cells():
-    """The draw run twice on CUDA keeps the same cells bitwise; its float64
-    Horvitz-Thompson weights agree to 1e-15 relative but not always bitwise (CUDA's
-    float64 cumsum sums in no fixed order: a few ulps, 2.2e-19 absolute in job 377000).
-    Tightens to bitwise weights once the draw's sums are exact."""
+    """The draw run twice on CUDA keeps the same cells and bitwise the same float64
+    Horvitz-Thompson weights: its tail sums are a fixed-order scan and its line exact
+    int64 arithmetic (DRAW-EXACT), so nothing in it depends on CUDA's summation
+    order."""
     measures, centroids = _draw_case()
     start = torch.tensor(0.4137, dtype=D, device="cuda")
     runs = [
@@ -129,61 +129,69 @@ def test_the_draw_twice_on_cuda_keeps_the_same_cells():
     ]
     (kept0, w0), (kept1, w1) = runs
     assert kept0.shape == (BUDGET,) and torch.equal(kept0, kept1)
-    spread = float(((w1 - w0).abs() / w0.abs()).max())
-    print(f"the draw's weights, run-to-run: {spread:.2e} relative (bound 1e-15)")
-    ### DRAW-EXACT (0.14.0 candidate, int64 sums): make this torch.equal(w1, w0).
-    assert torch.allclose(w1, w0, rtol=1e-15, atol=0)
+    assert torch.equal(w1.view(torch.int64), w0.view(torch.int64))
+
+
+def _planted_hits(measures, centroids):
+    """Starts that plant a hit exactly on a cell boundary of the CPU draw's line, in
+    its first condition (cells of pi < 1). The line is int64 in units of 2**-Q; for
+    the boundary ``line[i]`` (the end of the line's ``i``-th cell),
+    ``U = line[i] mod 2**Q`` and the start ``U / 2**Q`` (exact in float64, so the
+    draw's ``floor(start 2**Q)`` is ``U``) put the hit ``j = line[i] >> Q`` exactly
+    on it, when ``U`` and ``U - 1`` lie inside the start's clamp by the line's
+    residual ``D = line[-1] - k 2**Q``. Returns ``Q`` and ``(start, earlier, later)``
+    per boundary: the start and the cells at the line's positions ``i`` and
+    ``i + 1``, each shorter than one unit, so each holds at most one hit."""
+    with ran(_cumsum, systematic_sample) as r:
+        sampling.sample_boundary_cells(
+            measures, centroids, BUDGET, torch.tensor(0.5, dtype=D)
+        )
+    line = r.returns(_cumsum)[-1]  # the draw's last scan is the line
+    order = r.calls(systematic_sample)[-1]["order"]
+    assert line.dtype == torch.int64
+    assert line.shape == order.shape == (sum(m.shape[0] for m in measures),)
+    Q = 62 - BUDGET.bit_length()
+    unit = 1 << Q
+    residual = int(line[-1]) - BUDGET * unit
+    planted = []
+    for i in torch.linspace(1000, measures[0].shape[0] - 1000, 8).long().tolist():
+        end = int(line[i])
+        U, j = end % unit, end >> Q
+        if not max(0, residual) + 1 <= U <= min(unit, unit + residual) - 1:
+            continue
+        assert j < BUDGET  # one of the k hits
+        assert 0 < end - int(line[i - 1]) < unit and 0 < int(line[i + 1]) - end < unit
+        planted.append(
+            (torch.tensor(U / unit, dtype=D), int(order[i]), int(order[i + 1]))
+        )
+    assert len(planted) >= 6, planted
+    return Q, planted
 
 
 @pytest.mark.cuda
 @requires_cuda
 def test_hits_planted_on_line_boundaries_keep_one_of_the_two_cells_there():
-    """Hits planted on cell boundaries of the systematic line (the start chosen so
-    that ``start + j`` is a boundary ``line[i]`` as the CPU draw computes it): every
-    CUDA run, and the CPU run, keeps the same cells except, at most, which of the two
-    cells beside the planted boundary (found by moving the CPU's start a few ulps
-    either way) takes that hit (the line's ulp-level wobble
-    decides it on CUDA today: DETERMINISM.md (a)). Once the draw's sums are exact this
-    tightens to: every run keeps the CPU's cells bitwise."""
+    """Hits planted exactly on cell boundaries of the systematic line
+    (:func:`_planted_hits`): the hit takes the later of the two cells beside the
+    boundary (half-open intervals), and one unit of the line's grid earlier the
+    earlier one; and every CUDA run keeps the CPU's cells, with bitwise the same
+    weights, since the line is exact int64 arithmetic on every device."""
     measures, centroids = _draw_case(seed=1)
     cpu_m, cpu_x = [m.cpu() for m in measures], [x.cpu() for x in centroids]
-    with ran(_cumsum) as r:
-        sampling.sample_boundary_cells(cpu_m, cpu_x, BUDGET, torch.tensor(0.5, dtype=D))
-    line = r.returns(_cumsum)[-1]  # the draw's last scan is the line
-    assert line.shape[0] == sum(m.shape[0] for m in cpu_m)
-    for i in torch.linspace(1000, line.shape[0] - 1000, 6).long().tolist():
-        j = torch.floor(line[i])
-        start = line[i] - j
-        ### (the hit start + j lands on line[i] to within two ulps, and is one of the k hits)
-        assert (start + j - line[i]).abs() <= 2 * torch.finfo(D).eps * line[
-            i
-        ] and j < BUDGET
-        kept_cpu, _ = sampling.sample_boundary_cells(cpu_m, cpu_x, BUDGET, start)
-        ### The two cells beside the planted boundary: those the CPU draw swaps when
-        ### the start moves 8 ulps of line[i] either way (no other hit is that close
-        ### to a boundary).
-        delta = 8 * torch.finfo(D).eps * line[i]
-        lo, hi = (
-            sampling.sample_boundary_cells(cpu_m, cpu_x, BUDGET, start + e)[0]
-            for e in (-delta, delta)
-        )
-        beside = torch.cat([lo[~torch.isin(lo, hi)], hi[~torch.isin(hi, lo)]])
-        assert beside.numel() == 2, (i, beside)
+    Q, planted = _planted_hits(cpu_m, cpu_x)
+    for start, earlier, later in planted:
+        kept_cpu, w_cpu = sampling.sample_boundary_cells(cpu_m, cpu_x, BUDGET, start)
+        kept = set(kept_cpu.tolist())
+        assert later in kept and earlier not in kept, (start, earlier, later)
+        below = sampling.sample_boundary_cells(cpu_m, cpu_x, BUDGET, start - 2.0**-Q)
+        below = set(below[0].tolist())
+        assert earlier in below and later not in below, (start, earlier, later)
         for _ in range(3):
-            kept, _ = sampling.sample_boundary_cells(
+            kept, w = sampling.sample_boundary_cells(
                 measures, centroids, BUDGET, start.cuda()
             )
-            kept = kept.cpu()
-            assert kept.shape == kept_cpu.shape
-            differ = torch.cat(
-                [
-                    kept[~torch.isin(kept, kept_cpu)],
-                    kept_cpu[~torch.isin(kept_cpu, kept)],
-                ]
-            )
-            ### DRAW-EXACT (0.14.0 candidate): make this torch.equal(kept, kept_cpu).
-            assert differ.numel() in (0, 2), (i, differ)
-            assert bool(torch.isin(differ, beside).all()), (i, differ, beside)
+            assert torch.equal(kept.cpu(), kept_cpu)
+            assert torch.equal(w.cpu().view(torch.int64), w_cpu.view(torch.int64))
 
 
 # --------------------------------------------------------------------------- module level
