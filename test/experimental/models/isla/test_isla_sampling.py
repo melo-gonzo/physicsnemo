@@ -27,12 +27,12 @@ and one compiled graph for every cell count.
 import pytest
 import torch
 
-from physicsnemo.experimental.models.isla import sampling
 from physicsnemo.experimental.models.isla.sampling import (
-    pps_inclusion_probabilities,
     sample_boundary_cells,
     water_fill,
 )
+from physicsnemo.mesh.sampling import pps_inclusion_probabilities, systematic_sample
+from physicsnemo.mesh.sampling.systematic_sampling import _cumsum
 
 D = torch.float64
 DEVICES = [
@@ -290,6 +290,36 @@ def test_tiny_measures_keep_their_share():
     assert abs(float(sums[0] / a.sum()) - 1) < 1e-12
 
 
+def test_zero_measures_fill_a_condition_past_its_positive_cells():
+    """A condition of 200 cells, 150 of them of measure exactly 0, and one of 1,000
+    equal measures under a budget of 300 (shares 150, 150): the first condition's 50
+    positive cells are all kept and its zero-measure cells fill the rest of its share
+    at weight 0, so each condition keeps its share, no cell twice, every weight is
+    finite, and each condition's Horvitz-Thompson sum is its measure."""
+    g = torch.Generator().manual_seed(0)
+    sizes = [200, 1000]
+    a = torch.zeros(200, dtype=D)
+    positive = torch.randperm(200, generator=g)[:50]
+    a[positive] = torch.rand(50, generator=g, dtype=D) + 0.5
+    measures = [a, torch.full((1000,), 0.3, dtype=D)]
+    centroids = [torch.randn(n, 3, generator=g, dtype=D) for n in sizes]
+    assert water_fill(torch.tensor(sizes, dtype=D), 300).tolist() == [150, 150]
+    measure = torch.cat(measures)
+    for u in (0.0, 0.5, 0.999):
+        kept, w = sample_boundary_cells(
+            measures, centroids, 300, torch.tensor(u, dtype=D)
+        )
+        counts, sums = _per_condition(kept, w, sizes)
+        assert counts.tolist() == [150, 150], u
+        assert torch.equal(kept, kept.unique())
+        assert bool(torch.isin(positive, kept).all())
+        assert bool(torch.isfinite(w).all()) and bool(
+            (w[measure[kept] == 0] == 0).all()
+        )
+        for s, m in zip(sums, measures):
+            assert float(s) == pytest.approx(float(m.sum()), rel=1e-12)
+
+
 def test_the_integer_search_is_the_search_for_the_hits():
     """The search for the hit counts, (line - U - 1) >> Q, finds for every hit
     U + m 2**Q the first interval past it, as a direct search would; U the start on the
@@ -311,8 +341,8 @@ def test_the_integer_search_is_the_search_for_the_hits():
             hits = U + torch.arange(k, dtype=torch.int64) * 2**Q
             direct = torch.searchsorted(line, hits, right=True)
             assert int(direct.max()) < p.shape[0]
-            position = sampling._systematic_positions(
-                p, k, torch.tensor(u, dtype=D), budget
+            position = systematic_sample(
+                p, k, torch.tensor(u, dtype=D), max_n_samples=budget
             )
             assert torch.equal(position, direct)
 
@@ -332,18 +362,18 @@ def test_the_float_scan_is_the_doubling_scan_bitwise():
     assert not torch.equal(tenths.cumsum(0), doubling(tenths))
     g = torch.Generator().manual_seed(0)
     for x in (tenths, torch.rand(1000, generator=g, dtype=D) ** 3):
-        assert torch.equal(sampling._cumsum(x), doubling(x))
+        assert torch.equal(_cumsum(x), doubling(x))
     k = torch.randint(0, 2**40, (1000,), generator=g)
-    assert torch.equal(sampling._cumsum(k), k.cumsum(0))
+    assert torch.equal(_cumsum(k), k.cumsum(0))
 
 
 @pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("dtype", [torch.float64, torch.int64])
 def test_the_cumsum_op_passes_opcheck(device, dtype):
-    """The draw's opaque scan (``physicsnemo::isla_cumsum``) is a well-formed custom
+    """The draw's opaque scan (``physicsnemo::mesh_cumsum``) is a well-formed custom
     op, for the float64 and int64 scans."""
     x = torch.arange(1000, device=device).to(dtype) * 3 + 1
-    torch.library.opcheck(sampling._cumsum, (x,))
+    torch.library.opcheck(_cumsum, (x,))
 
 
 def _half_integer_case(device):
@@ -442,7 +472,8 @@ def test_one_compiled_graph_for_every_cell_count():
 
 def test_the_compiled_draw_runs_its_sums_as_the_opaque_scan():
     """The draw traced with one graph (the graph Dynamo hands the backend, before
-    Inductor) runs its sums as the custom op ``physicsnemo::isla_cumsum`` and has no
+    Inductor) runs its sums as the custom op ``physicsnemo::mesh_cumsum`` (the
+    library's systematic sampling, which the draw calls) and has no
     cumsum of its own: the op keeps Inductor's split scan, whose kernel failed on
     GB300 at full resolution under the recipe's max-autotune compile, out of the
     compiled draw. This guards that fix on any device; test_isla_compile's
@@ -465,7 +496,7 @@ def test_the_compiled_draw_runs_its_sums_as_the_opaque_scan():
     assert kept.shape == (60,) and len(graphs) == 1
     nodes = graphs[0].graph.nodes
     scans = [n.target for n in nodes if "cumsum" in str(n.target)]
-    assert scans and set(scans) == {torch.ops.physicsnemo.isla_cumsum.default}, scans
+    assert scans and set(scans) == {torch.ops.physicsnemo.mesh_cumsum.default}, scans
 
 
 def test_the_length_unit_is_the_full_boundary_s_for_every_draw():

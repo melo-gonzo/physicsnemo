@@ -59,6 +59,7 @@ from physicsnemo.experimental.models.isla.tree_read import (
     _TreeKernelRead,
     kernel_geo_width,
 )
+from physicsnemo.mesh.sampling.systematic_sampling import _cumsum
 from test.experimental.models.isla._forced import ran
 from test.experimental.models.isla._geometry_cases import (
     _near_wall,
@@ -146,9 +147,9 @@ def test_hits_planted_on_line_boundaries_keep_one_of_the_two_cells_there():
     tightens to: every run keeps the CPU's cells bitwise."""
     measures, centroids = _draw_case(seed=1)
     cpu_m, cpu_x = [m.cpu() for m in measures], [x.cpu() for x in centroids]
-    with ran(sampling._cumsum) as r:
+    with ran(_cumsum) as r:
         sampling.sample_boundary_cells(cpu_m, cpu_x, BUDGET, torch.tensor(0.5, dtype=D))
-    line = r.returns(sampling._cumsum)[-1]  # the draw's last scan is the line
+    line = r.returns(_cumsum)[-1]  # the draw's last scan is the line
     assert line.shape[0] == sum(m.shape[0] for m in cpu_m)
     for i in torch.linspace(1000, line.shape[0] - 1000, 6).long().tolist():
         j = torch.floor(line[i])

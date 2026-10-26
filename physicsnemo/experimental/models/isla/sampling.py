@@ -27,12 +27,18 @@ the forward pass from the full-resolution surfaces (:func:`sample_boundary_cells
   :math:`i` of measure :math:`a_i` is drawn with probability
   :math:`\pi_i = \min(1, c\,a_i)`, :math:`c` the one constant with
   :math:`\sum_i \pi_i = b` (the capped fixed point of the iterative adjustment,
-  found exactly from the sorted measures: :func:`pps_inclusion_probabilities`);
-  a condition kept whole has every :math:`\pi_i = 1`.
-- **Draw.** Systematic sampling: the cells are laid along a line, each
-  condition's cells in the Morton (Z-order) order of their centroids in the
-  boundary's canonical frame (:func:`~physicsnemo.mesh.spatial._frame.canonical_frame`
-  over every cell), each
+  found exactly from the sorted measures: the library's
+  ``pps_inclusion_probabilities`` in :mod:`physicsnemo.mesh.sampling`); a
+  condition kept whole has every :math:`\pi_i = 1`. A share past the count of
+  positive measures keeps every positive cell, and the cells of zero measure fill
+  the rest of the share equally (as
+  :func:`~physicsnemo.mesh.sampling.sample_cells_systematic` does), at
+  Horvitz-Thompson weight 0.
+- **Draw.** Systematic sampling
+  (:func:`~physicsnemo.mesh.sampling.systematic_sample`): the
+  cells are laid along a line, each condition's cells in the Morton (Z-order) order
+  of their centroids in the boundary's canonical frame
+  (:func:`~physicsnemo.mesh.spatial._frame.canonical_frame` over every cell), each
   cell an interval of length :math:`\pi_i`, and the cells hit by the points
   :math:`u + m`, :math:`m = 0, \dots, k - 1`, are kept. The intervals are
   half-open, so a hit exactly on a boundary takes the later cell. The count is exactly
@@ -49,18 +55,18 @@ the forward pass from the full-resolution surfaces (:func:`sample_boundary_cells
   float64 from the mesh's coordinates as given (:func:`draw_inputs`), whatever
   the model's precision, so the draw is a function of the input mesh only: a
   float32 and a float64 run on the same inputs keep the same cells. The tail
-  sums of the measures are a fixed-order float64 scan (:func:`_cumsum`), the
-  same bits on every device. The line is exact int64 arithmetic in units of
-  :math:`2^{-Q}`, :math:`Q = 62 - b`, :math:`b` the bit length of the budget (a
-  Python int), each cell an interval of :math:`\operatorname{round}(\pi_i 2^Q)`
-  units; a cell with :math:`\pi_i = 1` is exactly :math:`2^Q` units, and the
-  start is clamped by the line's rounding residual, so such a cell holds exactly
-  one hit. The drawn inclusion probability is that length over :math:`2^Q`,
-  within :math:`2^{-(Q+1)}` of :math:`\pi_i` (about 3e-14 at a budget of
-  200,000). So the draw is bitwise the same run to run, and on CPU and CUDA
-  given the same float64 inputs. (The Morton order reads the canonical frame,
-  which devices compute to roundoff, so a centroid on a grid line could still
-  order differently.)
+  sums of the measures are a fixed-order float64 scan (the library's
+  ``physicsnemo::mesh_cumsum``), the same bits on every device. The line is exact
+  int64 arithmetic in units of :math:`2^{-Q}`, :math:`Q = 62 - b`, :math:`b` the
+  bit length of the budget (a Python int), each cell an interval of
+  :math:`\operatorname{round}(\pi_i 2^Q)` units; a cell with :math:`\pi_i = 1` is
+  exactly :math:`2^Q` units, and the start is clamped by the line's rounding
+  residual, so such a cell holds exactly one hit. The drawn inclusion probability
+  is that length over :math:`2^Q`, within :math:`2^{-(Q+1)}` of :math:`\pi_i`
+  (about 3e-14 at a budget of 200,000). So the draw is bitwise the same run to
+  run, and on CPU and CUDA given the same float64 inputs. (The Morton order reads
+  the canonical frame, which devices compute to roundoff, so a centroid on a grid
+  line could still order differently.)
 
 Everything is tensor arithmetic without a data-dependent shape, so the draw
 traces into one graph under ``torch.compile(fullgraph=True, dynamic=True)``.
@@ -74,75 +80,10 @@ from jaxtyping import Float, Int
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
 from physicsnemo.mesh.geometry._cell_areas import compute_cell_areas
+from physicsnemo.mesh.sampling import pps_inclusion_probabilities, systematic_sample
 from physicsnemo.mesh.spatial._frame import canonical_frame, frame_coordinates
 from physicsnemo.mesh.spatial.bvh import _compute_morton_codes
 from physicsnemo.mesh.utilities._gather import gather_rows
-
-
-@torch.library.custom_op("physicsnemo::isla_cumsum", mutates_args=())
-def _cumsum(x: torch.Tensor) -> torch.Tensor:
-    r"""``x.cumsum(0)``, run under torch.compile as in eager: ATen's for integers, a
-    doubling (Kogge-Stone) scan of elementwise adds for floats.
-
-    The draw's sums run over every full-resolution cell, an axis long enough for
-    Inductor to emit a split scan; under the whole-model compile with
-    ``mode="max-autotune-no-cudagraphs"`` that kernel failed on GB300 (an illegal
-    memory access, or "operation not supported on global/shared address space";
-    torch 2.12 and 2.14.1). As an opaque op the scan runs eagerly, so the compiled
-    draw is the eager one, bitwise. Integer sums are exact in any order. A float sum
-    depends on its order, and ATen's CUDA float scan is not run-to-run deterministic;
-    in the doubling scan every partial sum is a fixed binary tree of correctly rounded
-    adds, so its bits are the same run to run and on every device, within about
-    :math:`\log_2 n` roundings of the exact sum for nonnegative ``x``."""
-    if not x.is_floating_point():
-        return x.cumsum(0)
-    n = x.shape[0]
-    y, z = x.clone(), torch.empty_like(x)
-    s = 1
-    while s < n:
-        z[:s] = y[:s]
-        torch.add(y[s:], y[: n - s], out=z[s:])
-        y, z = z, y
-        s *= 2
-    return y
-
-
-@_cumsum.register_fake
-def _(x):
-    return torch.empty_like(x)
-
-
-def _systematic_positions(
-    pi: Float[torch.Tensor, " n"], k: int, start: Float[torch.Tensor, ""], budget: int
-) -> Int[torch.Tensor, " k"]:
-    r"""The interval hit by each point :math:`u + m`, :math:`m < k`, of the line of
-    intervals of lengths ``pi`` laid end to end, in exact int64 fixed point.
-
-    The line is in units of :math:`2^{-Q}`, :math:`Q = 62 -` ``budget.bit_length()``,
-    ``budget`` a Python int at least the sum of ``pi`` (so the line fits in int64):
-    each interval :math:`\operatorname{round}(\pi_i 2^Q)` units, hit :math:`m` the
-    integer :math:`U + m 2^Q`, :math:`U = \lfloor u 2^Q \rfloor`. The intervals are
-    half-open: a hit on a boundary takes the later one. The line's end :math:`T`
-    differs from :math:`k 2^Q` by the rounding residual :math:`D`; :math:`U` is
-    clamped to :math:`[\max(0, D), \min(2^Q, 2^Q + D) - 1]`, so every hit lies on the
-    line and every window of :math:`2^Q` units on it (an interval with
-    :math:`\pi_i = 1`) holds exactly one hit, whenever :math:`|D| < 2^Q`.
-    """
-    Q = 62 - budget.bit_length()
-    line = _cumsum((pi * 2.0**Q).round().to(torch.int64))
-    ### D = T - k 2**Q in shifts by Q and small integers only: Inductor folds an
-    ### int64 constant times an index or size into an int32 Triton expression, which
-    ### Triton rejects.
-    T = line[-1]
-    D = (((T >> Q) - k) << Q) + (T - ((T >> Q) << Q))
-    U = torch.floor(start * 2.0**Q).to(torch.int64)
-    U = torch.maximum(torch.minimum(U, D.clamp_max(0) + ((1 << Q) - 1)), D.clamp_min(0))
-    ### line_j > U + m 2**Q  <=>  (line_j - U - 1) >> Q >= m, so the first interval
-    ### past hit m is a search for m among these hit counts (nondecreasing), without
-    ### the product m 2**Q.
-    count = (line - U - 1) >> Q
-    hit = torch.arange(k, device=pi.device, dtype=torch.int64)
-    return torch.searchsorted(count, hit).clamp_max(pi.shape[0] - 1)
 
 
 def water_fill(
@@ -167,35 +108,6 @@ def water_fill(
             level,
         )
     return torch.minimum(counts, level)
-
-
-def pps_inclusion_probabilities(
-    measures: Float[torch.Tensor, " cells"], share: Float[torch.Tensor, ""]
-) -> Float[torch.Tensor, " cells"]:
-    r"""Inclusion probabilities proportional to size, capped at one, summing to ``share``.
-
-    :math:`\pi_i = 1` for the :math:`m` largest measures and :math:`\pi_i = c\,a_i`
-    for the rest, with :math:`c = (b - m) / \sum_{\text{rest}} a_i`; :math:`m` is the
-    smallest count with :math:`c\,a_{(m+1)} < 1` (measures sorted in decreasing
-    order), which is the fixed point of the iterative adjustment (cap, rescale the
-    rest, repeat). ``share`` at least the cell count gives every :math:`\pi_i = 1`.
-    In float64. The sort is stable, so ties resolve the same on every device, and the
-    tail sums of the sorted measures are a fixed-order scan (:func:`_cumsum`), so the
-    probabilities are bitwise the same on every device.
-    """
-    n = measures.shape[0]
-    a, order = measures.sort(descending=True, stable=True)
-    tail = _cumsum(a.flip(0)).flip(0)  # sum of the measures from rank m on
-    rank = torch.arange(n, device=a.device, dtype=a.dtype)
-    uncapped = (share - rank) * a < tail
-    m = torch.where(uncapped.any(), uncapped.to(torch.int8).argmax(), n)
-    ### (a gather, not tail[m]: indexing by a 0-d tensor would read it on the host)
-    tail_m = tail.gather(0, m.clamp_max(n - 1).reshape(1))[0]
-    c = (share - m) / tail_m.clamp_min(torch.finfo(a.dtype).tiny)
-    pi = torch.where(rank < m, 1.0, (c * a).clamp(max=1.0))
-    ### share >= n keeps every cell: float tails can leave one a rounding below 1.
-    pi = torch.where(share >= n, 1.0, pi)
-    return torch.empty_like(pi).scatter_(0, order, pi)
 
 
 def draw_inputs(mesh: Mesh) -> tuple[Float[torch.Tensor, " cells"], Float[torch.Tensor, "cells dim"]]:
@@ -228,8 +140,8 @@ def sample_boundary_cells(
     :math:`)`, and their Horvitz-Thompson measure weights :math:`a_i / \pi_i`
     ``(k,)``, in the dtype of the measures, with the float64 :math:`\pi_i`. The tail
     sums are a fixed-order float64 scan and the line and its hits exact int64 fixed
-    point (:func:`_systematic_positions`), so the draw is bitwise the same run to run
-    and on every device for the same order.
+    point (:func:`~physicsnemo.mesh.sampling.systematic_sample`), so the draw is
+    bitwise the same run to run and on every device for the same order.
     See the module docstring.
     """
     with torch.no_grad():
@@ -244,7 +156,18 @@ def sample_boundary_cells(
             n_i = a.shape[0]
             if n_i == 0:
                 continue
-            pis.append(pps_inclusion_probabilities(a.detach().double(), shares[i]))
+            a = a.detach().double()
+            pi_i = pps_inclusion_probabilities(a, shares[i])
+            ### A share past the positive measures keeps every positive cell, and the
+            ### zero-measure cells fill the rest of it equally, at weight 0 (as
+            ### sample_cells_systematic does); without a zero measure pi_i is as is.
+            zero = a == 0
+            n_pos = n_i - zero.sum()
+            pis.append(
+                torch.where(
+                    zero, ((shares[i] - n_pos) / (n_i - n_pos).clamp_min(1)).clamp_min(0), pi_i
+                )
+            )
             ### Morton order of the centroids on cubic cells, ties broken by index.
             code = _compute_morton_codes(frame_coordinates(x.detach(), frame), isotropic=True)
             orders.append(code.argsort(stable=True) + offset)
@@ -257,9 +180,8 @@ def sample_boundary_cells(
         ### one side of the budget when Inductor's FX-graph cache replays the guards
         ### that hold it (evaluated with the builtin min), a recompile on the other.
         k = budget + (total - budget) * (1 // (total // budget + 1))
-        position = _systematic_positions(pi[order], k, start, budget)
         ### In the cells' own order, so a condition kept whole is its mesh as given.
-        kept = order[position].sort().values
+        kept = systematic_sample(pi, k, start, order=order, max_n_samples=budget)
         pi_kept = pi[kept]
     measure = torch.cat(measures)
     return kept, measure[kept] / pi_kept.to(measure.dtype)
