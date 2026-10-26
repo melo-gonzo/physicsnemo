@@ -15,6 +15,9 @@
 # limitations under the License.
 
 # SHIFT-SUV surface dataset -- CROSS-FAMILY ZERO-SHOT TRANSFER EVAL ONLY
+# RERUN-CONFIGS (2026-10-26): reads the CFD box (inlet, outlet, floor, side_walls, roof) exactly as
+# shift_suv_surface.yaml builds it (the box is the same on all 1,991 estate and fastback files, BC-SIDECAR's
+# census) and ends in SurfaceMeshToDomainMesh; otherwise shift_suv_surface.yaml with the fastback root.
 # (pre-registered @sec-nb-crossfamily-prereg, 2026-07-19).
 # Derived from drivaer_ml_surface.yaml with the transform pipeline FROZEN
 # (same nondim, same wss normalization std, same subsampling);
@@ -59,6 +62,22 @@ pipeline:
           _target_: torch.tensor
           data: [1.0, 1.0, 0.0]
   transforms:
+    # The other boundaries of the PDE domain, which the case files do not store: the CFD box,
+    # x -40..80 m, y -20..20 m, z -0.024..19.976 m. It is the interior's exact bounding box,
+    # the same on all 1,991 case files, with CFD nodes on each of its six planes; the ground lies
+    # 1.14 mm below the vehicle's lowest point. Built first, in the files' raw metres, so every
+    # transform and pose below moves it with the vehicle. The inflow (uniform, 30 m/s) and the
+    # floor (a translating road) are documented; the side walls', roof's and outlet's
+    # conditions are not, so each piece is named by what it is. Models that read only `interior`
+    # and `boundaries.vehicle` see what they saw before.
+    - _target_: ${dp:AddBoxBoundaries}
+      bounds: [[-40.0, 80.0], [-20.0, 20.0], [-0.024, 19.976]]
+      faces:
+        inlet: [x_min]
+        outlet: [x_max]
+        floor: [z_min]
+        side_walls: [y_min, y_max]
+        roof: [z_max]
     - _target_: ${dp:DropMeshFields}
       global_data: [TimeValue]
     # Unit freestream direction as a NEW global leaf `U_inf_dir` (`U_inf`
@@ -98,11 +117,11 @@ pipeline:
     # the original triangulated surface, with non-target cell features
     # (normals) preserved on the boundary's cell_data. The dataset builder
     # auto-injects `cell_data_targets` from the `targets:` block below.
-    - _target_: ${dp:MeshToDomainMesh}
+    - _target_: ${dp:SurfaceMeshToDomainMesh}
       interior_points: cell_centroids
 
 # Single source of truth for prediction field names + types. Read by both the
-# dataset builder (auto-injected into MeshToDomainMesh above) and the train
+# dataset builder (auto-injected into SurfaceMeshToDomainMesh above) and the train
 # loop (used to build LossCalculator and MetricCalculator).
 targets:
   pressure: scalar
