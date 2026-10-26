@@ -110,6 +110,15 @@ FOLDER = {
     "af_campaign": "campaigns_2026-10-23",
     "pr_2170": "campaigns_2026-10-23",
     "perf_survey": "campaigns_2026-10-23",
+    "floor_drv_read": "campaigns_2026-10-23",
+    "globe_dr": "campaigns_2026-10-23",
+    "fused_pad": "campaigns_2026-10-23",
+    "int64_offsets": "campaigns_2026-10-23",
+    "lib_sampling": "campaigns_2026-10-23",
+    "premerge": "campaigns_2026-10-23",
+    "rerun_configs": "campaigns_2026-10-23",
+    "geo_port": "campaigns_2026-10-23",
+    "dtt_knobs_a14": "campaigns_2026-10-23",
 }
 
 

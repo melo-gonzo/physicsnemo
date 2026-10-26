@@ -678,6 +678,70 @@ RECORDS = {
         "with its inference child's details (the read path's memory against points, the fused geometry kernel past 2^31)",
         ["FINAL_REPORT.md", "OPPORTUNITIES.md", "infer/RESULTS.md"],
     ),
+    "floor_drv_read": (
+        "isla-floor-drv-2026-10-23",
+        "FLOOR-DRV, the read: ISLA on one DrivAerML Volume car with the domain's four boundary meshes against the same run "
+        "without them, the registered readings, the floors by field and wall-distance band, and the cost",
+        [
+            "RESULTS.md",
+            "NOTEBOOK_DRAFT.md",
+            "tables/reduce_fd.md",
+            "tables/resid_fd.md",
+        ],
+    ),
+    "globe_dr": (
+        "isla-globe-2026-10-19",
+        "GLOBE-SCORE on the DrivAerML Surface task: GLOBE at its authors' configuration under the recipe protocol, scored "
+        "native, on the uniform point cloud and posed, against ISLA and the baselines",
+        ["RESULTS_DR.md", "NOTEBOOK_DRAFT_DR.md", "scores_dr/globe_dr_scores.json"],
+    ),
+    "fused_pad": (
+        "isla-fused-pad-2026-10-25",
+        "FUSED-PAD: the fused geometry kernel for 2-D models and models without a global direction, with exact zero padding; "
+        "its speed, its bitwise 3-D check and its eager and compiled certification",
+        ["FINAL_REPORT.md", "RESULTS.md"],
+    ),
+    "int64_offsets": (
+        "isla-int64-offsets-2026-10-25",
+        "INT64-OFFSETS: 64-bit offsets where ISLA's kernels passed 2^31 at full resolution, the audit of every kernel and the "
+        "tests past the limit",
+        ["FINAL_REPORT.md", "AUDIT.md"],
+    ),
+    "lib_sampling": (
+        "isla-lib-sampling-2026-10-25",
+        "ISLA-LIB-SAMPLING: ISLA's token draw and canonical frame from physicsnemo.mesh, bitwise outside the zero-measure "
+        "edge, with DRAW-EXACT",
+        ["FINAL_REPORT.md", "RESULTS.md", "BOOK_LIST.md"],
+    ),
+    "premerge": (
+        "isla-premerge-2026-10-26",
+        "ISLA-PREMERGE: upstream main and five open pull requests merged ahead of their merges; every training config's "
+        "inputs bitwise",
+        ["FINAL_REPORT.md", "LEAF_AB.md"],
+    ),
+    "rerun_configs": (
+        "isla-final-rerun-2026-10-26",
+        "RERUN-CONFIGS: every dataset file the final rerun reads committed with its whole boundary, AeroZoo's seven fields, "
+        "the area draws, the re-pricing and the supervisor's decisions",
+        ["FINAL_REPORT.md", "SUPERVISOR_DECISIONS.md", "price/PRICE.md"],
+    ),
+    "geo_port": (
+        "isla-geo-port-2026-10-26",
+        "ISLA-GEO-PORT: the geometry speedups and fixes of the closed library pull request, in ISLA's own geometry; the "
+        "edge gradient of the on-wall direction fixed",
+        ["FINAL_REPORT.md", "RESULTS.md"],
+    ),
+    "dtt_knobs_a14": (
+        "isla-dtt-knobs-2026-10-23",
+        "DTT-KNOBS stage 2, arms 1-4: ISLA-DTT retrained on AirfRANS at theta 2 and 0.5, with a read after every second "
+        "block and with a basis of 8, against its standing",
+        [
+            "RESULTS.md",
+            "RESULTS_A14_REVIEW.md",
+            "reduce/out_r14/reduce_s2.md",
+            "reduce/out_r14/reduce_s2.json",
+        ],
+    ),
 }
 
 
