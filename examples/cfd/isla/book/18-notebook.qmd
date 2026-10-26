@@ -43250,7 +43250,7 @@ with 99fcc75fb. No GPU.
   dedup one; AeroZoo's scorer patched for seven fields before scoring; the HiLift baselines dropped from training (-140
   GPU-h), HL-DUP stage 2's retrained baselines being HiLift's baseline standing; DeepJEB++ on train_clean / test_clean.
 - **Open, pending Peter's answer.** Whether the AeroZoo baselines retrain on seven fields, about +2,500 GPU-h, above the
-  2,500-4,000 GPU-h of the estimate he had; the supervisor asked him at 02:47 EDT 2026-10-26. Until he answers, LANES.tsv
+  earlier estimate of 2,500-4,000 GPU-h; the supervisor asked him at 02:47 EDT 2026-10-26. Until he answers, LANES.tsv
   keeps those lanes, which launch after the ISLA lanes.
 
 **For the book.** 13 says the standing's models predict five of the seven fields and the configurations all seven; 20 gains

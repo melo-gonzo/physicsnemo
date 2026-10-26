@@ -712,7 +712,7 @@ v_f, v_c, v_t = two(fd_v["F s42 / s43"]), two(fd_v["C s42 / s43"]), two(fd_v["Tr
 rr = lambda a, b: [x / y for x, y in zip(a, b)]
 fd_L = re.search(r"the length unit L rises from ([\d.]+) m \(vehicle\) to ([\d.]+) m \(all five\), so every s = d / L is (\d+) times smaller", FDR).groups()
 assert "F's e_R is below C's in every band, on every field and both seeds (36 of 36)" in FDR
-fd_smoke = re.search(r"make ISLA 0\.9\.0's DrivAerML Volume step ([\d.]+) to ([\d.]+) times as long\*\*: ([\d.]+) s against ([\d.]+) s in the smoke", FDR).groups()
+fd_step = re.search(r"F ([\d.]+) s/step, C ([\d.]+) s/step, \*\*([\d.]+)x\*\*", " ".join(R.load("floor_drv", "PREREG.md").split())).groups()
 fd_full = re.search(r"the ratio was larger, \*\*([\d.]+)-([\d.]+)x\*\* \(median step F ([\d.]+) s, C ([\d.]+) s", FDR).groups()
 fd_cost = re.search(r"\*\*Total ([\d.]+) GPU-h\*\*", FDR).group(1)
 # the domain's stored pieces: their tunnel box (SETUP-RESEARCH), their ground offset (DRV-GROUND), the cost of reading them (BOUNDARY-AUDIT)
@@ -771,9 +771,10 @@ print(f"With the four meshes ISLA's length unit is {fd_L[1]} m in place of {fd_L
       "to beyond 5 m, on every field and both seeds: the smaller $s$ costs nothing near the wall here. On this car the missing "
       "boundary was a cause of the far-field eddy-viscosity miss. It explains a part of the velocity factor, not most of it. "
       "The eddy-viscosity effect is far larger than the spread of the five ISLA runs on the vehicle alone. "
-      f"Cost: with the four meshes ISLA's step took {fd_smoke[0]} to {fd_smoke[1]} times as long in short trial runs "
-      f"({fd_smoke[2]} against {fd_smoke[3]} s) and {fd_full[0]} to {fd_full[1]} times over the full runs ({fd_full[2]} against "
-      f"{fd_full[3]} s), {fd_cost} GPU-hours for the four runs with their checks. In the geometry the standings trained with, "
+      f"Cost: with the four meshes ISLA's step took {fd_step[2]} times as long in the short trial run the registration read "
+      f"({fd_step[0]} against {fd_step[1]} s) and {fd_full[0]} to {fd_full[1]} times over the full runs ({fd_full[2]} against "
+      f"{fd_full[3]} s), since the run without them settled to a shorter step after its first thousand steps; {fd_cost} GPU-hours for the four "
+      "runs with their checks. In the geometry the standings trained with, "
       "almost all of the added time is one query, the one that seeded the closest-cell search, and not the 5,054 added cells: "
       f"in training on a GB300 in bfloat16 it takes {SEEDQ[0]} s of the whole-boundary geometry call, against {SEEDQ[2]} ms with "
       f"the vehicle alone, and without it ISLA's step with the whole boundary is {WB_STEP[1]} times its step with the vehicle "
@@ -781,7 +782,8 @@ print(f"With the four meshes ISLA's length unit is {fd_L[1]} m in place of {fd_L
       f"GB300, bfloat16, eager, each cell the mean of its passes' medians), its geometry call with the whole boundary takes "
       f"{WBT['auto']:.0f} ms under the default fast search and {WBT['reference']:.0f} ms under the reference search, against "
       f"{WBT['base']:,.0f} ms in the standings' geometry (@sec-using-cost). "
-      f"Data: {R.source('floor_drv_read', 'RESULTS.md')}, {R.source('cap_audit', 'tables/resid_drv_partB.md')}, "
+      f"Data: {R.source('floor_drv_read', 'RESULTS.md')}, {R.source('floor_drv', 'PREREG.md')} (section 8), "
+      f"{R.source('cap_audit', 'tables/resid_drv_partB.md')}, "
       f"{R.source('cap_audit', 'tables/probes/probe_a.json')}, {R.source('boundary_audit', 'REPORT.md')} (section 4), "
       f"{R.source('setup_research', 'SETUP.md')} (section 0), {R.source('drv_ground', 'classify_summary.txt')}, "
       f"{R.source('geo_thinfast', 'lhr/timing_table.md')}, {R.source('geo_band_phase0', 'PHASE0.md')} (The book's 06 cost table).")
