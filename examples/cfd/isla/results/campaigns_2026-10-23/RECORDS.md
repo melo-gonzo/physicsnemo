@@ -81,6 +81,17 @@ source. Do not edit by hand.
 | `af_campaign/` | AF-CAMPAIGN: the frozen pre-registration of ISLA-DTT on AirfRANS with its far field, arms F, FN, FNC and FNOmega | `scratch/isla-af-campaign-2026-10-25/` |
 | `pr_2170/` | NVIDIA/physicsnemo#2170 (LIB-TREE's library branch): its CI, the one bot comment and its fix | `scratch/pr-2170-2026-10-25/` |
 | `perf_survey/` | PERF-SURVEY: a profile of ISLA 0.13.0's training step on GB300 and the ranked performance opportunities, measured, with its inference child's details (the read path's memory against points, the fused geometry kernel past 2^31) | `scratch/isla-perf-survey-2026-10-25/` |
+| `floor_drv_read/` | FLOOR-DRV, the read: ISLA on one DrivAerML Volume car with the domain's four boundary meshes against the same run without them, the registered readings, the floors by field and wall-distance band, and the cost | `scratch/isla-floor-drv-2026-10-23/` |
+| `globe_dr/` | GLOBE-SCORE on the DrivAerML Surface task: GLOBE at its authors' configuration under the recipe protocol, scored native, on the uniform point cloud and posed, against ISLA and the baselines | `scratch/isla-globe-2026-10-19/` |
+| `fused_pad/` | FUSED-PAD: the fused geometry kernel for 2-D models and models without a global direction, with exact zero padding; its speed, its bitwise 3-D check and its eager and compiled certification | `scratch/isla-fused-pad-2026-10-25/` |
+| `int64_offsets/` | INT64-OFFSETS: 64-bit offsets where ISLA's kernels passed 2^31 at full resolution, the audit of every kernel and the tests past the limit | `scratch/isla-int64-offsets-2026-10-25/` |
+| `lib_sampling/` | ISLA-LIB-SAMPLING: ISLA's token draw and canonical frame from physicsnemo.mesh, bitwise outside the zero-measure edge, with DRAW-EXACT | `scratch/isla-lib-sampling-2026-10-25/` |
+| `premerge/` | ISLA-PREMERGE: upstream main and five open pull requests merged ahead of their merges; every training config's inputs bitwise | `scratch/isla-premerge-2026-10-26/` |
+| `rerun_configs/` | RERUN-CONFIGS: every dataset file the final rerun reads committed with its whole boundary, AeroZoo's seven fields, the area draws, the re-pricing and the supervisor's decisions | `scratch/isla-final-rerun-2026-10-26/` |
+| `geo_port/` | ISLA-GEO-PORT: the geometry speedups and fixes of the closed library pull request, in ISLA's own geometry; the edge gradient of the on-wall direction fixed | `scratch/isla-geo-port-2026-10-26/` |
+| `dtt_knobs_a14/` | DTT-KNOBS stage 2, arms 1-4: ISLA-DTT retrained on AirfRANS at theta 2 and 0.5, with a read after every second block and with a basis of 8, against its standing | `scratch/isla-dtt-knobs-2026-10-23/` |
+| `dtt_knobs_exact/` | DTT-KNOBS stage 2, K-EXACT: ISLA-DTT retrained on AirfRANS with the exact read, the ladder (R2) and the far-field gap (Q3) | `scratch/isla-dtt-knobs-2026-10-23/` |
+| `dtt_pose_exp_read/` | DTT-POSE-EXP, the read: ISLA-DTT retrained with DTT-POSE's forest on the lug and AirfRANS against the standings' pairs, native, posed and the bf16 forest | `scratch/isla-dtt-pose-exp-2026-10-24/` |
 
 | topic | file | source | md5 |
 | --- | --- | --- | --- |
@@ -443,3 +454,36 @@ source. Do not edit by hand.
 | perf_survey | FINAL_REPORT.md | scratch/isla-perf-survey-2026-10-25/FINAL_REPORT.md | a8d88b8509954a501514c926d0a5e119 |
 | perf_survey | OPPORTUNITIES.md | scratch/isla-perf-survey-2026-10-25/OPPORTUNITIES.md | f85d83b754f804ac2feb55c9117be624 |
 | perf_survey | infer/RESULTS.md | scratch/isla-perf-survey-2026-10-25/infer/RESULTS.md | e476ea414b2a2fc9caa345af85dab41e |
+| floor_drv_read | RESULTS.md | scratch/isla-floor-drv-2026-10-23/RESULTS.md | 539d7c2e6605dc4bd49f5c8b548d7f4d |
+| floor_drv_read | NOTEBOOK_DRAFT.md | scratch/isla-floor-drv-2026-10-23/NOTEBOOK_DRAFT.md | ff0c56f1d0a188b1f702f37389c23b9f |
+| floor_drv_read | tables/reduce_fd.md | scratch/isla-floor-drv-2026-10-23/tables/reduce_fd.md | eea5db7ce336356a2b6c68dbe47362e1 |
+| floor_drv_read | tables/resid_fd.md | scratch/isla-floor-drv-2026-10-23/tables/resid_fd.md | 560eba9810b02404ec681e4ea04b6f0a |
+| globe_dr | RESULTS_DR.md | scratch/isla-globe-2026-10-19/RESULTS_DR.md | 869c667061f772fc3a96c27ebfaf30e8 |
+| globe_dr | NOTEBOOK_DRAFT_DR.md | scratch/isla-globe-2026-10-19/NOTEBOOK_DRAFT_DR.md | 86248b7c999726c5e2ac164956fa775d |
+| globe_dr | scores_dr/globe_dr_scores.json | scratch/isla-globe-2026-10-19/scores_dr/globe_dr_scores.json | 2527dbc87c337ff0dbe4e04da8fbe265 |
+| fused_pad | FINAL_REPORT.md | scratch/isla-fused-pad-2026-10-25/FINAL_REPORT.md | 4812137d688504cc25a3379fa6007dd1 |
+| fused_pad | RESULTS.md | scratch/isla-fused-pad-2026-10-25/RESULTS.md | 2a8c7a0032c015a9a7a1bc8dcfd37647 |
+| int64_offsets | FINAL_REPORT.md | scratch/isla-int64-offsets-2026-10-25/FINAL_REPORT.md | 8bdb261694f967a739a73f5a13bd9481 |
+| int64_offsets | AUDIT.md | scratch/isla-int64-offsets-2026-10-25/AUDIT.md | 49cdb18eefab51a7b36cd7fbefa85ed4 |
+| lib_sampling | FINAL_REPORT.md | scratch/isla-lib-sampling-2026-10-25/FINAL_REPORT.md | 26fce30261b4538259a625fd663d6f38 |
+| lib_sampling | RESULTS.md | scratch/isla-lib-sampling-2026-10-25/RESULTS.md | cb56b8256c575cc60ef17c76e8a65634 |
+| lib_sampling | BOOK_LIST.md | scratch/isla-lib-sampling-2026-10-25/BOOK_LIST.md | 0ffd92826743778a13a0d7fe5e00b1b6 |
+| premerge | FINAL_REPORT.md | scratch/isla-premerge-2026-10-26/FINAL_REPORT.md | 22e9490f78276322300325eba8e4b2b1 |
+| premerge | LEAF_AB.md | scratch/isla-premerge-2026-10-26/LEAF_AB.md | d1fabda1e54d989347f1ec5989a9d7e6 |
+| rerun_configs | FINAL_REPORT.md | scratch/isla-final-rerun-2026-10-26/FINAL_REPORT.md | 6eea74cd2265191311ce5a7d6c1921e5 |
+| rerun_configs | SUPERVISOR_DECISIONS.md | scratch/isla-final-rerun-2026-10-26/SUPERVISOR_DECISIONS.md | ac7fd5a4719af78c839d464b83d8ef25 |
+| rerun_configs | price/PRICE.md | scratch/isla-final-rerun-2026-10-26/price/PRICE.md | adeb2a6b8cc18ff40b3a075ba6f8f716 |
+| geo_port | FINAL_REPORT.md | scratch/isla-geo-port-2026-10-26/FINAL_REPORT.md | d4d42d2db60236221441968e9d23029b |
+| geo_port | RESULTS.md | scratch/isla-geo-port-2026-10-26/RESULTS.md | ab93c586a31e3630c1b9241f5f135e44 |
+| dtt_knobs_a14 | RESULTS.md | scratch/isla-dtt-knobs-2026-10-23/RESULTS.md | 32da0774cb5ac07aa9490b0f97063fce |
+| dtt_knobs_a14 | RESULTS_A14_REVIEW.md | scratch/isla-dtt-knobs-2026-10-23/RESULTS_A14_REVIEW.md | 87862fc699cd07b4f033bfc24273ff67 |
+| dtt_knobs_a14 | reduce/out_r14/reduce_s2.md | scratch/isla-dtt-knobs-2026-10-23/reduce/out_r14/reduce_s2.md | 3219ad59e0280b7f30a0baef474be0f4 |
+| dtt_knobs_a14 | reduce/out_r14/reduce_s2.json | scratch/isla-dtt-knobs-2026-10-23/reduce/out_r14/reduce_s2.json | 914f6c90ee8479b29fe9b4c8e049cd6e |
+| dtt_knobs_exact | RESULTS.md | scratch/isla-dtt-knobs-2026-10-23/RESULTS.md | ad1ec340c726ec0891c50640b23c6b3c |
+| dtt_knobs_exact | RESULTS_EXACT_REVIEW.md | scratch/isla-dtt-knobs-2026-10-23/RESULTS_EXACT_REVIEW.md | 1621789b02fbb8109eafe3771d528b4a |
+| dtt_knobs_exact | reduce/out_final/reduce_s2.md | scratch/isla-dtt-knobs-2026-10-23/reduce/out_final/reduce_s2.md | adfd6f8a4b341c7c2943f2b00e1a252c |
+| dtt_knobs_exact | reduce/out_final/reduce_s2.json | scratch/isla-dtt-knobs-2026-10-23/reduce/out_final/reduce_s2.json | e289de96b1de8f69902a1a1bc22cebcd |
+| dtt_pose_exp_read | RESULTS.md | scratch/isla-dtt-pose-exp-2026-10-24/RESULTS.md | 6eb97cb89900ac4ac46ad370920ce61f |
+| dtt_pose_exp_read | FINAL_REPORT.md | scratch/isla-dtt-pose-exp-2026-10-24/FINAL_REPORT.md | 49b6aa857cb9c0b6b37160797448e36b |
+| dtt_pose_exp_read | results/read/read_all.md | scratch/isla-dtt-pose-exp-2026-10-24/results/read/read_all.md | a73345ec2e5ccc2b4aca0a2ccd2e83ca |
+| dtt_pose_exp_read | results/read/read_all.json | scratch/isla-dtt-pose-exp-2026-10-24/results/read/read_all.json | 889cac97207be3bc8cdb397c7a70fb21 |

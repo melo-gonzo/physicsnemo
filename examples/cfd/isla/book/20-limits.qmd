@@ -453,7 +453,7 @@ print("**On the wall, where the normals of the cells that hold a point agree onl
       f"{R.source('geo_tieorder', 'FINAL_REPORT.md')}.")
 ```
 
-### The token draw on a GPU at exact ties {#sec-limits-draw-ties}
+### The token draw at exact ties {#sec-limits-draw-ties}
 
 ```{python}
 #| label: para-limits-draw-ties
@@ -467,21 +467,21 @@ ulp = re.search(r"pi comes out at 1 minus a few ulps \((\d+) of (\d+) cases\)", 
 tok = re.search(r"one changed token moved AeroZoo case 0's outputs by ([\d.e-]+) to ([\d.e-]+)", DF).groups()
 fix = re.search(r"1 kept cell of 200,000 in (\d+) of (\d+) eval draws", DF).groups()
 assert "6 runs bitwise on all 6 real boundaries checked, 0 duplicates, every pi = 1 cell kept, CPU = GPU bitwise" in DF
-print("**On a GPU the evaluation draw is not repeatable where a share is a half integer, and there it can keep a cell twice and drop "
-      "a cell it must keep.** In evaluation the systematic draw starts at $u = 1/2$ (@sec-arch-boundary-draw). AeroZoo's water "
-      f"filling often gives a condition a half-integer share (one case's shares: {', '.join(f'{float(x):,g}' for x in shares[:3])} and "
-      f"{float(shares[3]):,g}), so hits land "
-      "exactly on the boundaries between conditions and, in a condition kept whole that starts at a half-integer offset, on every "
-      "boundary between its cells. Which side a hit falls on is then set by the rounding of the float64 prefix sum, which on CUDA "
+print("**The class lays its draw's line in exact integer arithmetic, so the draw keeps the same cells on every run and on the "
+      "CPU and the GPU alike; the standings were scored with a float64 line that on a GPU did not repeat at exact ties, which "
+      "moves their AeroZoo scores immaterially.** In evaluation the systematic draw starts at $u = 1/2$ "
+      "(@sec-arch-boundary-draw). AeroZoo's water filling often gives a condition a half-integer share (one case's shares: "
+      f"{', '.join(f'{float(x):,g}' for x in shares[:3])} and {float(shares[3]):,g}), so hits land exactly on the boundaries "
+      "between conditions and, in a condition kept whole that starts at a half-integer offset, on every boundary between its "
+      "cells. With the line laid as a float64 prefix sum, which side a hit falls on is set by that sum's rounding, which on CUDA "
       f"varies from run to run: over six runs one case's kept cells changed by up to {runs[0]} and another's by up to {runs[1]}, and "
       f"the runs kept 0 to {dup[0]} and {dup[1]} to {dup[2]} cells twice, dropping as many cells of a condition the draw must keep "
-      "whole. On the CPU the draw repeats. One changed token moves an AeroZoo case's outputs by "
-      f"{sci(float(tok[0]))} to {sci(float(tok[1]))}, so the AeroZoo scores, computed on GPUs, are not materially affected. With "
-      "equal measures and a share equal to the cell count, the keep probability also comes out one minus a few ulps "
-      f"({ulp[0]} of {ulp[1]} cases), so a condition kept whole is whole only to rounding. A line in exact integer arithmetic, with a "
-      "fixed-order scan for the tail sums, removes all of it: six runs bitwise on six real boundaries, no cell twice, every cell of "
-      f"probability one kept, and the CPU equal to the GPU; against today's CPU draw it changes one kept cell of 200,000 in {fix[0]} "
-      f"of {fix[1]} evaluation draws, the size of today's own CPU-to-GPU difference. Whether the class takes it is open. Data: "
+      "whole; with equal measures and a share equal to the cell count the keep probability came out one minus a few ulps "
+      f"({ulp[0]} of {ulp[1]} cases). The class's line is exact 64-bit fixed point over a fixed-order scan of the tail sums: six "
+      "runs bitwise on six real boundaries, no cell twice, every cell of probability one kept, and the CPU equal to the GPU. "
+      f"Against the float64 line on the CPU it changes one kept cell of 200,000 in {fix[0]} of {fix[1]} evaluation draws, and one "
+      f"changed token moves an AeroZoo case's outputs by {sci(float(tok[0]))} to {sci(float(tok[1]))}, so the standings' AeroZoo "
+      "scores, computed on GPUs, are not materially affected. Data: "
       f"{R.source('draw_exact', 'FINAL_REPORT.md')}; {R.source('draw_exact', 'DESIGN.md')}.")
 ```
 
@@ -584,57 +584,12 @@ print("**On a surface task the requested cells are also ISLA's view of the body,
       f"{R.source('surfqpop', 'results/out/reduced.json')}, {R.source('surfqpop', 'RESULTS.md')}.")
 ```
 
-### The fused geometry kernel past $2^{31}$ elements {#sec-limits-int32}
-
-```{python}
-#| label: para-limits-int32
-#| output: asis
-OPP = {r_["#"]: r_ for r_ in R.md_table("perf_survey", "OPPORTUNITIES.md", "Ranked table", 0)}
-o2 = OPP["2"]
-assert "int64 offsets in geo_kernel" in o2["candidate (where)"] and "tokens x slices >= 2^31" in o2["share today (measured)"]
-n_az = float(re.search(r"full AeroZoo case, ([\d.]+)M points", o2["share today (measured)"]).group(1))
-m_f = int(re.search(r"base faults at 2\^31/(\d+) \+ (\d+) points", o2["gain"]).group(1))
-extra = int(re.search(r"base faults at 2\^31/(\d+) \+ (\d+) points", o2["gain"]).group(2))
-kt = re.search(r"kernel time x([\d.]+)-([\d.]+)", o2["gain"]).groups()
-assert "bitwise equal to a run of them alone" in o2["gain"] and o2["class"].startswith("B below the limit")
-PSF = " ".join(R.load("perf_survey", "FINAL_REPORT.md").split())
-INF = {r_["tokens N (S = 512)"].split(" (")[0]: r_ for r_ in R.md_table("perf_survey", "infer/RESULTS.md", "5. The int32 overflow", 0)}
-n_ok, n_bad = (k_ for k_, r_ in INF.items() if r_["N*S >= 2^31"] == "no"), (k_ for k_, r_ in INF.items() if r_["N*S >= 2^31"] == "yes")
-n_ok, n_bad = next(n_ok), next(n_bad)
-assert int(n_bad.replace(',', '')) == 2**31 // m_f + extra and INF[n_bad]["result"] == "CUDA illegal memory access"
-MP = {r_["points"].split(" (")[0]: r_ for r_ in R.md_table("perf_survey", "infer/RESULTS.md", "4. Memory and time", 0)}
-full = MP[f"{n_az:g}M"]
-assert full["AeroZoo today"].startswith("crash: illegal memory access")
-ch_s, ch_g = R.num(full["read path, 100k chunks"], 0), R.num(full["read path, 100k chunks"], 1)
-assert "Not yet checked: whether fused_read, fused_basis and segment_softmax have the same int32 issue" in PSF
-print("**The fused geometry kernel addresses its arrays with 32-bit offsets, so a forward faults once the tokens it "
-      "processes times the slices reach $2^{31}$.** The kernel computes every token's relational invariants to every slice "
-      f"(@sec-arch-layer), boundary tokens and prediction points alike. With {m_f} slices the limit is "
-      f"{2**31 // m_f:,} tokens, boundary tokens and prediction points together: on a GB300 a forward of {n_ok} tokens "
-      f"runs and one of {n_bad} stops with an illegal memory access, and so does a full AeroZoo case at inference, "
-      f"{n_az:g} million points with 200,000 boundary tokens. The scoring protocol's 200,000 points per case stay far below it. With 64-bit offsets every output below the limit is bitwise unchanged, the rows past it equal bitwise "
-      f"those of a forward of those rows alone, and the kernel's time changes by a factor of {kt[0]} to {kt[1]}. Whether the read kernels "
-      "and the segment softmax share the limit is not checked. The training step's chunked read, `query_chunks`, sends the "
-      "boundary tokens and each chunk of points through separate calls, so it stays below the limit: in chunks of 100,000 "
-      f"points it runs the full AeroZoo case in {ch_s:g} s and {ch_g:g} GiB on one GB300 (float32, untrained weights). "
-      f"Data: {R.source('perf_survey', 'infer/RESULTS.md')} (sections 4 and 5); {R.source('perf_survey', 'OPPORTUNITIES.md')} "
-      f"(row 2); {R.source('perf_survey', 'FINAL_REPORT.md')}.")
-```
-
-::: {.callout-note title="In flight"}
-This limit is that of the fused geometry kernel as merged. The kernel with 64-bit offsets is being
-built and tested, and the ledger (@sec-ledger) tracks it.
-:::
-
 ### Defects the tests record {#sec-limits-xfail}
 
 ```{python}
 #| label: para-limits-xfail
 #| output: asis
-KBF = " ".join(R.load("kernel_bugs", "FINAL_REPORT.md").split())
-assert "The 5 remaining xfails are all out of scope: W3-B1 ×2, the GEO-TIEORDER quad diagonals ×2, and the core `Module.load` gap" in KBF
-TBB = " ".join(R.load("test_build", "BUGS.md").split())
-assert "so du/dx = (I-uu^T)/r instead of (I-uu^T-ee^T)/r" in TBB and "No effect on training today (no gradient through boundary or points)" in TBB
+assert "1 xfailed (Module.load), 0 failed" in " ".join(R.load("geo_port", "FINAL_REPORT.md").split())
 import physicsnemo
 _T = Path(physicsnemo.__file__).parent.parent / "test" / "experimental" / "models" / "isla"
 _xf = sorted(p.name for p in _T.glob("test_*.py") if "strict=True" in p.read_text() and "xfail(" in p.read_text())
@@ -642,15 +597,8 @@ assert _xf == ["test_isla_release.py"], _xf
 print("**One test of the class is a strict expected failure: it records a known defect and fails the suite if the "
       "defect goes away unnoticed** (@sec-using-tests). It records that the core library's `Module.load` accepts a "
       "checkpoint whose metadata alone names an earlier version, which `Module.from_checkpoint` refuses; weights of an "
-      "earlier version are refused on every loading path (@sec-using-checkpoint). Four more were strict expected failures "
-      "until the fixes made for 0.14.0. Two recorded that in three dimensions, where a point's closest feature is an edge, "
-      "the gradient of the on-wall direction $u$ with respect to the points and to the vertices was wrong: the "
-      "closest-feature weights were detached, so $\\partial u / \\partial x$ came out $(I - u u^\\top) / r$ instead of "
-      "$(I - u u^\\top - e e^\\top) / r$, with $e$ the edge's direction. The closest point now slides along the edge in the "
-      "backward pass, so both pass. The distance's gradient was right everywhere, and no training run takes a gradient "
-      "through the boundary or the points, so no number in this book changed. The other two recorded the on-wall direction "
-      "at the diagonals of planar quads, and pass since the tie-order fix (@sec-limits-tie-order). "
-      f"Data: {R.source('kernel_bugs', 'FINAL_REPORT.md')}; {R.source('test_build', 'BUGS.md')}.")
+      "earlier version are refused on every loading path (@sec-using-checkpoint). "
+      f"Data: {R.source('geo_port', 'FINAL_REPORT.md')}; {R.source('test_build', 'FINAL_REPORT.md')}.")
 ```
 
 ### Cross-family transfer {#sec-limits-transfer}
@@ -718,6 +666,8 @@ lst = lambda names: ", ".join(names[:-1]) + " and " + names[-1] if len(names) > 
 NUMW = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine"}
 # ISLA's length unit with the body alone and with the whole stored boundary (BOUNDARY-AUDIT section 4; AF-WHOLE section 3)
 BA = " ".join(R.load("boundary_audit", "REPORT.md").split())
+_wbt = next(r_ for r_ in R.md_table("floor_drv_read", "RESULTS.md", "Registered readings", 0) if r_["reading"].startswith("nu_t far-field"))
+_wb_nf = [R.num(_wbt["F s42 / s43"], k) / R.num(_wbt["Transolver s42 / s43"], k) for k in (0, 1)]
 AFW = {r_["quantity"]: r_ for r_ in R.md_table("af_whole", "PREREG.md", "3. Facts before training")}
 _afl = AFW["ISLA's L (`ISLA._gauge`, float64)"]
 WB_L = {"drv": re.search(r"full resolution\) \| ([\d.]+-[\d.]+) m \(median [\d.]+\) \| ([\d.]+)-[\d.]+ m", BA).groups(),
@@ -738,13 +688,109 @@ print("**ISLA's input is the whole boundary of the PDE domain, every piece a dat
       "and HiLiftAeroML's reader builds its symmetry plane (`AddSymmetryPlane`); `isla_surface_shift_suv` and "
       "`isla_surface_highlift` read them (@sec-oq-whole-boundary). The standings' checkpoints were trained with the body alone on the "
       "DrivAerML tasks, SHIFT-SUV, HiLiftAeroML and AirfRANS (@sec-standing-geometry), so those standings are of ISLA reading "
-      "part of its boundary. On the DrivAerML Volume task ISLA's far-field eddy-viscosity error follows the height above the "
-      "floor (@sec-oq-far-field). Because ISLA's length unit $L$ is the RMS pairwise distance of the whole given boundary "
+      "part of its boundary. On one DrivAerML Volume car, reading the domain's four other pieces brings ISLA's far-field "
+      f"eddy-viscosity error to {min(_wb_nf):.2f} to {max(_wb_nf):.2f} times Transolver's (@sec-oq-far-field). Because ISLA's length unit $L$ is the RMS pairwise distance of the whole given boundary "
       f"(@sec-isla-frame), reading the domain's walls changes $L$ too: on the DrivAerML Volume task it is {WB_L['drv'][0]} m with the "
       f"vehicle alone and {WB_L['drv'][1]} m with the whole boundary, and on AirfRANS {WB_L['af'][0]} chords with the airfoil alone "
       f"and {WB_L['af'][1]} chords with the far field, on every case. Data: the recipe's "
       f"`conf/model/isla_*.yaml` (`forward_kwargs`), {R.source('boundary_audit', 'REPORT.md')} (section 4), "
       f"{R.source('af_whole', 'PREREG.md')} (section 3).")
+```
+
+### What the whole boundary changes on the DrivAerML Volume task {#sec-oq-far-field}
+
+```{python}
+#| label: para-limits-drv-whole
+#| output: asis
+L_REF = float(re.search(r"`global_data\.L_ref` = ([\d.]+) m", " ".join(R.load("cap_audit", "RESULTS.md").split())).group(1))
+FAR = next(r for r in R.md_table("cap_audit", "tables/resid_drv_partB.md", "drv heldout nut (rd) - wall") if r["region"] == "[1,inf)")
+FDR = " ".join(R.load("floor_drv_read", "RESULTS.md").split())
+FDT = {r_["reading"].split(" (")[0]: r_ for r_ in R.md_table("floor_drv_read", "RESULTS.md", "Registered readings", 0)}
+fd_nf, fd_v = FDT["nu_t far-field e_R"], FDT["velocity F_ho"]
+assert fd_nf["label"].startswith("closes") and fd_v["label"].startswith("helps")
+two = lambda c: [R.num(c, 0), R.num(c, 1)]
+nf_f, nf_c, nf_t = two(fd_nf["F s42 / s43"]), two(fd_nf["C s42 / s43"]), two(fd_nf["Transolver s42 / s43"])
+v_f, v_c, v_t = two(fd_v["F s42 / s43"]), two(fd_v["C s42 / s43"]), two(fd_v["Transolver s42 / s43"])
+rr = lambda a, b: [x / y for x, y in zip(a, b)]
+from decimal import Decimal, ROUND_HALF_UP
+q4 = lambda xs: " / ".join(str(Decimal(repr(x)).quantize(Decimal("0.0001"), ROUND_HALF_UP)) for x in xs)   # as the records round
+fd_L = re.search(r"the length unit L rises from ([\d.]+) m \(vehicle\) to ([\d.]+) m \(all five\), so every s = d / L is (\d+) times smaller", FDR).groups()
+assert "F's e_R is below C's in every band, on every field and both seeds (36 of 36)" in FDR
+fd_step = re.search(r"F ([\d.]+) s/step, C ([\d.]+) s/step, \*\*([\d.]+)x\*\*", " ".join(R.load("floor_drv", "PREREG.md").split())).groups()
+fd_full = re.search(r"the ratio was larger, \*\*([\d.]+)-([\d.]+)x\*\* \(median step F ([\d.]+) s, C ([\d.]+) s", FDR).groups()
+fd_cost = re.search(r"\*\*Total ([\d.]+) GPU-h\*\*", FDR).group(1)
+# the domain's stored pieces: their tunnel box (SETUP-RESEARCH), their ground offset (DRV-GROUND), the cost of reading them (BOUNDARY-AUDIT)
+SU = " ".join(R.load("setup_research", "SETUP.md").split())
+TUN = re.search(r"BoxTunnelBoundaries\(x_min=(-?\d+), x_max=(\d+), y_min=(-?\d+), y_max=(\d+), z_height=(\d+)", SU).groups()
+TUN = tuple(t.replace("-", "−") for t in TUN)
+CS = R.load("drv_ground", "classify_summary.txt")
+GR = {"match": int(re.search(r"group match: (\d+) files", CS).group(1)), "off": int(re.search(r"group offset: (\d+) files", CS).group(1)),
+      "mm": 1e3 * float(re.search(r"rule tz: \{([\d.]+): \d+\}", CS.split("group offset")[1]).group(1))}
+assert GR["match"] + GR["off"] == 484
+SEEDQ = re.search(r"takes ([\d.]+-[\d.]+) s of the ([\d.]+-[\d.]+) s whole-boundary call \((\d+) ms body only\)", BA).groups()
+SEEDQ = (SEEDQ[0].replace("-", " to "),) + SEEDQ[1:]
+WB_STEP = re.search(r"\| 0\.9\.0 \| ISLA \| [^|]+\| [^|]+\| \*\*([\d.]+)x\*\* \| [^|]+\| [^|]+\| [^|]+\| \*\*([\d.]+)x\*\*", BA).groups()
+PA = R.load("cap_audit", "tables/probes/probe_a.json")
+# the whole-boundary geometry call as 06's cost table times it, in a training step: the class's from GEO-THINFAST (job 370584,
+# the mean of each arm's passes), 0.9.0's from GEO-BAND's phase 0 (job 368333)
+_tf = next(r for r in R.md_table("geo_thinfast", "lhr/timing_table.md", "Mean over passes") if r["case (Q / F)"].startswith("DrivAerML whole boundary"))
+_p0 = next(r for r in R.md_table("geo_band_phase0", "PHASE0.md", "The book's 06 cost table") if r["case (Q / F)"].startswith("DrivAerML Volume, whole boundary"))
+_g = [float(x) for x in _tf["geometry call: base fast / head fast / reference [ms]"].replace(",", "").split(" / ")]
+WBT = {"auto": _g[1], "reference": _g[2], "base": float(_p0["geometry call: base / reference / fast [ms]"].replace(",", "").split(" / ")[0])}
+pc = lambda k: f"{100 * min(c[k] for c in PA):.0f} to {100 * max(c[k] for c in PA):.0f}%"
+print("**Given the domain's whole boundary, ISLA's far-field eddy-viscosity error on one DrivAerML Volume car falls to "
+      f"{min(rr(nf_f, nf_t)):.2f} to {max(rr(nf_f, nf_t)):.2f} times Transolver's, and its velocity error falls by "
+      f"{100 * (1 - max(rr(v_f, v_c))):.0f} to {100 * (1 - min(rr(v_f, v_c))):.0f}% but stays {min(rr(v_f, v_t)):.2f} to "
+      f"{max(rr(v_f, v_t)):.2f} times Transolver's.** Every case file stores, beside the vehicle, the four other pieces of the "
+      "domain's boundary as meshes without fields: `no_slip`, the ground under and behind the car; `slip`, the sides, the roof and "
+      "the ground upstream; `inlet` and `outlet`. They are the faces of a box the dataset's curation pipeline built from the "
+      f"documented wind tunnel ($x$ from {TUN[0]} to {TUN[1]} m, $y$ from {TUN[2]} to {TUN[3]} m, {TUN[4]} m high), its floor at "
+      f"the vehicle's lowest point. On {GR['off']} of the 484 files the four sit {GR['mm']:.1f} mm below the CFD mesh, whose lowest "
+      "nodes meet the vehicle's lowest point on every file; the configurations that read them first translate them so that the "
+      f"ground meets that point, which moves the other {GR['match']} by nothing. ISLA's configuration reads them, its standing's "
+      "checkpoints were trained with the vehicle alone, and GeoTransolver and Transolver read each point's coordinates "
+      "(@tbl-model-inputs), so a point's height above the ground reaches them through its $z$ coordinate. Trained on one car "
+      "with a fresh draw of points every step and the vehicle alone, ISLA's relative eddy-viscosity error more than "
+      f"{L_REF:g} m from the car is {R.num(FAR['isla share % (e_R)'], 1):.3f}, against Transolver's "
+      f"{R.num(FAR['t share % (e_R)'], 1):.3f}; those {R.num(FAR['weight %']):.1f}% of the points hold "
+      f"{R.num(FAR['ISLA excess %']):.0f}% of the amount by which its squared error exceeds Transolver's, and on that car and "
+      f"{len(PA) - 1} validation cars the height above the floor explains {pc('r2_z')} of the far-field variance "
+      "(@sec-single-case-floor). The same run with the four meshes added to ISLA's boundary as named conditions, two seeds against "
+      "two seeds without them, reads as @tbl-limits-drv-whole shows.")
+print()
+print("| quantity | with the whole boundary | vehicle alone | Transolver | registered reading |\n|---|---|---|---|---|")
+print(f"| eddy-viscosity error more than {L_REF:g} m from the car | {q4(nf_f)} | {q4(nf_c)} | {q4(nf_t)} | the four meshes close the gap: at most 1.5 times Transolver's |")
+print(f"| velocity error | {q4(v_f)} | {q4(v_c)} | {q4(v_t)} | the four meshes help: at most the vehicle-alone error ÷ 1.2, below every vehicle-alone ISLA run |")
+print()
+print(": ISLA trained on one DrivAerML Volume car (a fresh draw of 200,000 points every step, 20,000 steps, float32, eager), "
+      "with the domain's four other boundary meshes and with the vehicle alone, against Transolver trained alike; held-out "
+      "relative L2, seeds 42 / 43: the far-field error from the final model's held-out residuals, the velocity error the median "
+      "over the last 400 steps. How to read this: one car and two "
+      "seeds per arm, and the readings are those registered before the runs; the table does not say whether the effect holds "
+      f"on other cars. Data: {R.source('floor_drv_read', 'RESULTS.md')}; {R.source('floor_drv_read', 'tables/reduce_fd.md')}. "
+      "{#tbl-limits-drv-whole}")
+print()
+print(f"With the four meshes ISLA's length unit is {fd_L[1]} m in place of {fd_L[0]} m, so every scaled wall distance "
+      f"$s = d / L$ is {fd_L[2]} times smaller, and the error falls in every wall-distance band, from within 0.5 mm of the car "
+      "to beyond 5 m, on every field and both seeds: the smaller $s$ costs nothing near the wall here. On this car the missing "
+      "boundary was a cause of the far-field eddy-viscosity miss. It explains a part of the velocity factor, not most of it. "
+      "The eddy-viscosity effect is far larger than the spread of the five ISLA runs on the vehicle alone. "
+      f"Cost: with the four meshes ISLA's step took {fd_step[2]} times as long in the short trial run the registration read "
+      f"({fd_step[0]} against {fd_step[1]} s) and {fd_full[0]} to {fd_full[1]} times over the full runs ({fd_full[2]} against "
+      f"{fd_full[3]} s), since the run without them settled to a shorter step after its first thousand steps; {fd_cost} GPU-hours for the four "
+      "runs with their checks. In the geometry the standings trained with, "
+      "almost all of the added time is one query, the one that seeded the closest-cell search, and not the 5,054 added cells: "
+      f"in training on a GB300 in bfloat16 it takes {SEEDQ[0]} s of the whole-boundary geometry call, against {SEEDQ[2]} ms with "
+      f"the vehicle alone, and without it ISLA's step with the whole boundary is {WB_STEP[1]} times its step with the vehicle "
+      "alone. The class seeds that search on its own cell tree: timed in a training step as in @tbl-using-geometry-cost (one "
+      f"GB300, bfloat16, eager, each cell the mean of its passes' medians), its geometry call with the whole boundary takes "
+      f"{WBT['auto']:.0f} ms under the default fast search and {WBT['reference']:.0f} ms under the reference search, against "
+      f"{WBT['base']:,.0f} ms in the standings' geometry (@sec-using-cost). "
+      f"Data: {R.source('floor_drv_read', 'RESULTS.md')}, {R.source('floor_drv', 'PREREG.md')} (section 8), "
+      f"{R.source('cap_audit', 'tables/resid_drv_partB.md')}, "
+      f"{R.source('cap_audit', 'tables/probes/probe_a.json')}, {R.source('boundary_audit', 'REPORT.md')} (section 4), "
+      f"{R.source('setup_research', 'SETUP.md')} (section 0), {R.source('drv_ground', 'classify_summary.txt')}, "
+      f"{R.source('geo_thinfast', 'lhr/timing_table.md')}, {R.source('geo_band_phase0', 'PHASE0.md')} (The book's 06 cost table).")
 ```
 
 ### What the whole boundary costs on AirfRANS {#sec-limits-af-whole}
@@ -876,16 +922,9 @@ q5_cells = SEEDS * sum(ref_lane * c / 200 for c in CELLS)
 q5 = q5_ladder + q5_cells
 # Tensile2d: GeoTransolver + ISLA's measure-weighted pooling, priced at the GeoTransolver lane
 q6 = SEEDS * lane_gpuh("tensile2d", "GeoTransolver")
-# the domain's four boundary meshes on one DrivAerML Volume car: two seeds with them and two without, on one 4-GPU node,
-# at the cost FLOOR-DRV's smoke measured; L_ref converts the datapipe's band edges to metres
-FD = " ".join(R.load("floor_drv", "PREREG.md").split())
-fd_gpus, fd_hours, q_floor = map(int, re.search(r"the full job about (\d+) x (\d+) = (\d+) GPU-h allocated", FD).groups())
-fd_step = re.search(r"F ([\d.]+) s/step, C ([\d.]+) s/step, \*\*([\d.]+)x\*\*", FD).groups()
-L_REF = float(re.search(r"`global_data\.L_ref` = ([\d.]+) m", " ".join(R.load("cap_audit", "RESULTS.md").split())).group(1))
-# ISLA-DTT's read retrained on AirfRANS (theta 2, 0.5 and 0, every second read, a basis of 8), as its registration prices the pairs
-KN = re.findall(r"\| (K-[A-Z0-9]+)(?:, eager)? \| [^|]+\| about (\d+)(?:-(\d+))? \|", " ".join(R.load("dtt_knobs", "PREREG.md").split()))
-assert sorted(k for k, *_ in KN) == ["K-B1", "K-BASIS8", "K-EXACT", "K-THETA05", "K-THETA2"]
-q_knobs = (sum(int(a) for _, a, _ in KN), sum(int(b or a) for _, a, b in KN))
+# GeoTransolver-volume on AeroZoo's seven splits and Transolver on `full`, retrained on all seven fields, as RERUN-CONFIGS' PRICE prices them
+_PR = " ".join(R.load("rerun_configs", "price/PRICE.md").split())
+q_az7 = sum(int(x.replace(",", "")) for x in re.search(r"AeroZoo GeoTransolver takes ([\d,]+) \(7 splits x 2 seeds\) and Transolver full ([\d,]+)", _PR).groups())
 # ISLA-DTT's far-field encoding on AirfRANS, four nested steps, two seeds each, at its registration's approved cap
 q_afenc = int(re.search(r"\*\*Cap approved: (\d+) GPU-h\*\*", " ".join(R.load("af_campaign", "PREREG.frozen_e0739632.md").split())).group(1))
 ```
@@ -898,17 +937,14 @@ rows = [
     ("Which scale of ISLA's Reynolds input serves AirfRANS and AeroZoo alike? (@sec-oq-reynolds)", "a single program-wide fixed scale, trained on both `reynolds` splits, read against the fitted scale", "not priced"),
     ("Are ISLA's crossflow and non-box failures on AeroZoo limits of the architecture? (@sec-oq-aerozoo)", "for the non-box family, a training set whose velocity scales cover the ducts'", "not priced"),
     ("What sets ISLA's pressure level next to the outlet on the crossflow layout? (@sec-oq-outlet)", "more seeds of ISLA with and without the outlet's level held, on `profile_crossflow`, the outlet read through a bounded number of probe points; the predicted pressure along the path from the outlet into the interior, for both forms", "not priced"),
+    ("Does training on all seven of AeroZoo's fields move its standing? (@sec-oq-aerozoo-fields)", "GeoTransolver-volume on the seven splits and Transolver on `full` retrained on the seven fields ISLA's configuration predicts, two seeds each, and every model scored by AeroZoo's metrics", f"about {fmt_h(q_az7)} for the baselines"),
     ("Does what rounding still decides in the class's geometry move a trained model? (@sec-oq-precision)", "the standings "
      "retrained with the class's geometry, scored rotated and translated, and in float32 against float64 on the AeroZoo cases of "
      "the float32 comparison", "the standings' training with the class's geometry, then scoring"),
     ("How large is ISLA-DTT's tree error at $\\theta = 1$ where its forest's frame ties? (@sec-oq-dtt-frame)", "ISLA-DTT scored rotated and translated, and under boundary redraws, on cases whose boundary has near-equal principal variances", "scoring only"),
     ("Which rule should sign the canonical frame of a nearly mirror-symmetric boundary? (@sec-oq-frame-sign)", "a sign rule that is a function of the boundary alone where an axis's third moment lies within its rounding, or a draw and a forest that do not depend on the sign, checked on mirror-symmetric boundaries and on the lug in every pose", "none for the check; a change of the draw changes every interior model's input"),
-    ("Does a cheaper or a finer read pay once ISLA-DTT is trained with it? (@sec-oq-dtt-theta)", "ISLA-DTT trained on AirfRANS at $\\theta$ = 2, 0.5 and 0, with a read after every second layer, and with 8 basis functions, against the $\\theta = 1$ model, two seeds each, under its standing's protocol", f"about {fmt_h(q_knobs[0])} to {fmt_h(q_knobs[1])}"),
+    ("Does a finer read narrow ISLA-DTT's far-field gap at car scale? (@sec-oq-dtt-theta)", "ISLA-DTT trained on the DrivAerML Volume task at $\\theta = 0.5$ against $\\theta = 1$, two seeds each, read on the error far from the car", "not priced"),
     ("Does ISLA transfer better on SHIFT-SUV from fastbacks to estates? (@sec-oq-transfer)", "two more seeds of each of the three fastback-trained models, scored on both families and read by the same registered rules", f"{fmt_h(q_transfer)}"),
-    ("Does ISLA's far-field eddy-viscosity error on the DrivAerML Volume task come from the ground and domain walls it is not given? (@sec-oq-far-field)",
-     "ISLA trained on one car with fresh draws, with the domain's whole boundary (the floor strip, the slip walls, the inlet and the outlet) added as named boundary meshes, against the same run without them, two seeds each, read on the error more than "
-     f"{L_REF:g} m from the car",
-     f"{fmt_h(q_floor)} (single-case runs)"),
     ("Do the SHIFT-SUV and HiLiftAeroML standings move when ISLA reads the pieces of their domains' boundaries that their files do not store? (@sec-oq-whole-boundary)",
      "the missing pieces built in the recipe, SHIFT-SUV's box from constants and HiLiftAeroML's inlet and outlet at the stored far-field radius and its symmetry plane from the source STL's root cap, the datasets unchanged; then each standing retrained with ISLA reading them, two seeds",
      "not priced (the supply sets the runs)"),
@@ -941,9 +977,9 @@ print(": The open questions, the measurement that would settle each, and its cos
       "needs, two seeds per configuration, each run priced from the training log of the standing's lane of the same configuration on the "
       "same dataset (mean epoch time × the protocol's epochs × four GB300 GPUs); a run at a smaller training set is priced in proportion "
       "to its cases, and *at most* marks a run priced at a larger set than it trains on; *scoring only* means the measurement reads "
-      "checkpoints that exist; the far-field question is priced at the step time measured in short trial runs of its two arms. How to read this: the "
+      "checkpoints that exist. How to read this: the "
       "costs are training only, not scoring; they price the experiment's design, not a "
-      f"schedule. Data: {LIM_SRC}, from results/campaigns_2026-10-22/cost_090/extract.jsonl; the far-field question's is {R.source('floor_drv', 'PREREG.md')} (section 8); the far-field encoding's is the cap approved in "
+      f"schedule. Data: {LIM_SRC}, from results/campaigns_2026-10-22/cost_090/extract.jsonl; the far-field encoding's is the cap approved in "
       f"{R.source('af_campaign', 'PREREG.frozen_e0739632.md')} (section 8).")
 ```
 
@@ -1097,6 +1133,23 @@ print("**The open question is what sets ISLA's pressure level next to the outlet
       f"{R.source('az_diag', 'pdiag/pdiag.tsv')}; {R.source('outlet_exp', 'RESULTS.md')}.")
 ```
 
+### AeroZoo's seven fields {#sec-oq-aerozoo-fields}
+
+```{python}
+#| label: para-oq-aerozoo-fields
+#| output: asis
+print("**The open question is whether training on all seven of AeroZoo's fields moves its standing.** The standing's models "
+      "predict five of the release's seven fields; the recipe's AeroZoo configurations add the intermittency $\\gamma$ and the "
+      "transition Reynolds number $Re_\\theta$ as targets for every model, each standardized per split by its scale alone "
+      "(@sec-dataset-aerozoo). AeroZoo's interior metrics read only velocity and pressure, so the two added fields change a "
+      "model's score only through what training on them does to the other five, and that is not measured for any architecture. "
+      "Comparing ISLA trained on seven fields with baselines trained on five would mix that effect into the standing. What would "
+      "settle it: GeoTransolver-volume on the seven splits and Transolver on `full`, the standing's baseline lanes, retrained "
+      "on the seven fields, two seeds each, beside ISLA trained alike, every model scored by AeroZoo's metrics and by the "
+      f"relative L2 of all seven fields. Cost: about {fmt_h(q_az7)} GPU-hours for the baselines' training. Data: "
+      f"{R.source('rerun_configs', 'FINAL_REPORT.md')}; {R.source('rerun_configs', 'price/PRICE.md')}.")
+```
+
 ### What rounding still decides in the geometry {#sec-oq-precision}
 
 ```{python}
@@ -1143,6 +1196,13 @@ EXACT = {f: [R.num(SENS(f"r090eag_af_dtt_seed{s} native")["t0"][f"{f}_l2 (/ref)"
          for f in ("pressure", "velocity", "nut")}
 LPN = {k: [R.num(SENS(f"r090fix_lug_dtt_seed{s}: posed / native")[k]["von_mises_l2"]) for s in (42, 43)] for k in ("ref", "t0")}
 LPP = R.num(SENS("r090fix_lug_dtt_seed42: posed / native")["ref"]["pairs ratio"])
+RDX = R.load("dtt_pose_exp_read", "results/read/read_all.md")
+_lug = R.md_table("dtt_pose_exp_read", "results/read/read_all.md", "lug", 0)[0]
+_af = {r_["field"]: r_ for r_ in R.md_table("dtt_pose_exp_read", "results/read/read_all.md", "af", 0)}
+assert _lug["N"] == "no change" and all(r_["N"] == "no change" for r_ in _af.values())
+pn_arm = re.search(r"posed / native arm \[([\d.]+), ([\d.]+)\], control \[([\d.]+), ([\d.]+)\]", RDX).groups()
+lug_win = re.search(r"arm better in ([\d.]+)% of cases", RDX).group(1)
+assert "no paired label" in RDX and "P pass" in RDX and RDX.count("bitwise") >= 8
 print("**The open question is how large ISLA-DTT's tree error is at $\\theta = 1$ where its forest's frame ties.** ISLA uses "
       "no frame and no center: every position enters as a difference from a slice anchor (@sec-isla-frame). ISLA-DTT's Barnes–Hut "
       "forest groups its clusters, for speed alone, in a canonical frame the boundary carries: the measure-weighted centroid of the "
@@ -1170,15 +1230,25 @@ print("**The open question is how large ISLA-DTT's tree error is at $\\theta = 1
       "with near-equal principal variances the error at $\\theta = 1$ is not measured. What would settle it: ISLA-DTT's "
       "checkpoints scored rotated and translated and under boundary redraws on cases whose principal variances are nearly "
       "equal, such as AeroZoo's sphere bodies and spherical enclosures, against the same scorings on cases with a "
-      f"well-separated frame. Cost: scoring only. Data: {LIM_SRC}, from {R.source('probes090', 'RESULTS.md')} (section 4b); "
-      f"{R.source('dtt_knobs', 'sens/sens_table.md')}; {R.source('dtt_pose', 'MECHANISMS.md')} (sections 1 and 3).")
+      "well-separated frame. Cost: scoring only. "
+      "Retrained with a forest that depends on the boundary alone (@sec-arch-tree-read), on the lug and the AirfRANS "
+      f"interior task, two seeds each, ISLA-DTT's posed error on the lug is "
+      f"{pn_arm[0]} and {pn_arm[1]} times its native error (seeds 42 and 43), against {float(pn_arm[2]):.2f} and "
+      f"{float(pn_arm[3]):.2f} for the octant forest, and the bfloat16 forest is bitwise the float32 one on every scored case. By "
+      "the rule registered for the retrain no field of either dataset reads a cost; below its resolution the lug's von Mises "
+      f"error is {R.num(_lug['arm / control']):.2f} times the octant forest's (seeds {R.num(_lug['seed-matched'], 0):.3f} and {R.num(_lug['seed-matched'], 1):.3f}; "
+      f"the retrained form is better on {float(lug_win):.0f}% of the cases), and AirfRANS pressure and eddy viscosity are "
+      f"{R.num(_af['pressure_l2']['arm / control']):.2f} and {R.num(_af['nut_l2']['arm / control']):.2f} times, every seed of "
+      f"one form beyond every seed of the other, velocity {R.num(_af['velocity_l2']['arm / control']):.2f}. "
+      f"Data: {LIM_SRC}, from {R.source('probes090', 'RESULTS.md')} (section 4b); "
+      f"{R.source('dtt_knobs', 'sens/sens_table.md')}; {R.source('dtt_pose', 'MECHANISMS.md')} (sections 1 and 3); "
+      f"{R.source('dtt_pose_exp_read', 'RESULTS.md')}.")
 ```
 
 ::: {.callout-note title="In flight"}
-The lug's posed ÷ native here comes from ISLA-DTT's forest as the code builds it. ISLA-DTT retrained
-with a forest built outside autocast, in centered float64 canonical coordinates with cube-face classes
-(@sec-arch-tree-read), on the lug and the AirfRANS interior task is being measured, and the ledger
-(@sec-ledger) tracks it.
+These numbers come from the octant forest the class builds under the caller's autocast. ISLA-DTT trained with
+the forest that depends on the boundary alone (@sec-arch-tree-read) is to be measured at the reference
+configuration on the 0.14.0 code, and the ledger (@sec-ledger) tracks it.
 :::
 
 ### The sign of the canonical frame on a nearly mirror-symmetric boundary {#sec-oq-frame-sign}
@@ -1219,29 +1289,81 @@ NAT = {**{f"af{s}": SENS(f"r090eag_af_dtt_seed{s} native") for s in (42, 43)},
        **{f"lug{s}": SENS(f"r090fix_lug_dtt_seed{s} native") for s in (42, 43)}}
 inf_ratio = lambda st: [R.num(row[c], 1) for row in (t[st] for t in NAT.values()) for c in row if c.endswith("(/ref)")]
 x0, x2 = inf_ratio("t0"), inf_ratio("t2")
-print("**The open question is whether a cheaper or a finer read pays once ISLA-DTT is trained with it.** ISLA-DTT trains and is "
-      "scored at $\\theta = 1$, with a kernel basis of 16 functions and a read after every layer (@sec-arch-tree-read). Read at "
-      "other settings, a model trained there is less accurate: on the AirfRANS interior task and the lug the exact read has "
-      f"{min(x0):.1f} to {max(x0):.1f} times its error at $\\theta = 1$, and $\\theta = 2$ {min(x2):.1f} to {max(x2):.1f} times, "
-      "so no setting of the read can be priced on these checkpoints. Not measured: whether a model trained at $\\theta = 2$, with "
-      "a read after every second layer, or with 8 basis functions predicts as well as the $\\theta = 1$ model, so that the read "
-      "could cost less at no loss; and whether one trained at $\\theta = 0.5$ or with the exact read is more accurate. The second "
-      "also tests Peter's knob rule, by which the book credits ISLA-DTT with its pose invariance, a property exact as "
-      "$\\theta \\to 0$: if the error falls toward the exact-trained model's as $\\theta$ tightens, the tree read is a convergent "
-      "approximation; if the exact-trained model is no better, $\\theta$ is a cost setting on AirfRANS. A finer trained read may "
-      "also narrow ISLA-DTT's gap to interacting ISLA in the wake and beyond one chord (@sec-airfrans-dtt-reference). The cost "
-      "side is measured at car scale: on the DrivAerML Volume task with the whole boundary, 400,000 prediction points fit one "
-      "GB300 at $\\theta \\geq 1.5$ and not at $\\theta = 1$ (@sec-cost-sweep). What would settle it: ISLA-DTT trained on "
-      "AirfRANS at $\\theta = 2$, 0.5 and 0, with a read after every second layer, and with 8 basis functions, two seeds each, "
-      f"against the $\\theta = 1$ model under its standing's protocol. Cost: about {fmt_h(q_knobs[0])} to {fmt_h(q_knobs[1])} "
-      f"GPU-hours. Data: {R.source('dtt_knobs', 'sens/sens_table.md')}; {R.source('dtt_knobs', 'PREREG.md')} (section 8).")
+# the retrained arms (DTT-KNOBS stage 2, R1 on the native scores; arm ÷ control, arithmetic seed means), their steps, R2 and Q3
+KA = {r_["arm"]: r_ for r_ in R.md_table("dtt_knobs_a14", "RESULTS.md", "R1 (native decides", 0)}
+KC = {r_["arm"]: r_ for r_ in R.md_table("dtt_knobs_a14", "RESULTS.md", "Beside the rules", 0)}
+KX = " ".join(R.load("dtt_knobs_a14", "RESULTS.md").split())
+KE = {r_["field"]: r_ for r_ in R.md_table("dtt_knobs_exact", "RESULTS.md", "R1 and R3 for K-EXACT", 0)}
+KEX = " ".join(R.load("dtt_knobs_exact", "RESULTS.md").split())
+KF = ("pressure", "in-plane velocity", "nut")
+k_r = lambda a: [R.num(KA[a][f]) for f in KF] if a != "K-EXACT" else [R.num(KE[f]["K-EXACT ÷ control [s42, s43]"]) for f in KF]
+def lab(a, f):
+    if a == "K-EXACT":
+        return KE[f]["label"] + (f", flag {KE[f]['flag']}" if KE[f]["flag"] in ("up", "down") else "")
+    return ("harms" if "harms" in KA[a][f] else "helps" if "helps" in KA[a][f] else "no change") + (
+        ", flag up" if "flag up" in KA[a][f] else ", flag down" if "flag down" in KA[a][f] else "")
+ex_step = re.search(r"K-EXACT steps ([\d.]+) s against the control's ([\d.]+) s", KEX).groups()
+k_step = lambda a: float(ex_step[0]) if a == "K-EXACT" else R.num(KC[a]["median step"])
+assert set(KA) == {"K-THETA2", "K-THETA05", "K-B1", "K-BASIS8"} and set(KE) == set(KF)
+assert all(lab("K-B1", f) == "no change" for f in KF) and lab("K-BASIS8", "nut").startswith("harms")
+assert all(lab("K-THETA05", f) == "no change, flag down" for f in KF) and lab("K-THETA2", "pressure") == "no change, flag up"
+assert all(KE[f]["label"] == "no change" for f in KF) and R.num(ex_step[1]) == R.num(KC["control"]["median step"])
+assert "**Overall: pure cost knob, free to theta 2.**" in KEX and "**Q3, a finer read narrows the far-field gap**" in KEX
+assert "On pressure it is a pure cost knob up to 1." in KEX
+wake05 = re.search(r"K-THETA05's velocity-wake error ÷ ISLA's \(DK-GAP's case-normalized form\) is ([\d.]+) / ([\d.]+) against the control's (\d+\.\d+) / (\d+\.\d+)", KX).groups()
+far0 = re.search(r"ISLA-DTT ÷ ISLA there falls from ([\d.]+) / ([\d.]+) to (\d+\.\d+) / (\d+\.\d+)", KEX).groups()
+b1_far = re.search(r"nut beyond one chord is worse in both seeds \(([\d.]+) / ([\d.]+); D_R", KX).groups()
+win05 = re.search(r"it wins (\d+-\d+) % of cases", KX).group(1).replace("-", " to ")
+ex_gpuh = re.search(r"It used ([\d.]+) GPU-h for two seeds against the control's ([\d.]+)", KEX).groups()
+ARMS = [("K-THETA2", "$\\theta = 2$"), ("K-THETA05", "$\\theta = 0.5$"), ("K-EXACT", "the exact read ($\\theta = 0$)"),
+        ("K-B1", "a read after every second block"), ("K-BASIS8", "a basis of 8 functions")]
+print("**Retrained at each setting, ISLA-DTT's read is a pure cost knob on the AirfRANS interior task: no setting from the "
+      "exact read to $\\theta = 2$ moves a field past the registered bar, and a finer read narrows ISLA-DTT's far-field gap "
+      "to interacting ISLA; whether that far-field gain carries to the car, where the exact read is out of reach, is open.** "
+      "ISLA-DTT trains and is scored at $\\theta = 1$, with a kernel basis of 16 functions and a read after every block "
+      "(@sec-arch-tree-read). Read at other settings, a model trained there is less accurate: on the AirfRANS interior task and "
+      f"the lug the exact read has {min(x0):.1f} to {max(x0):.1f} times its error at $\\theta = 1$, and $\\theta = 2$ "
+      f"{min(x2):.1f} to {max(x2):.1f} times. Trained at each setting instead, two seeds each, eager, under its standing's "
+      "protocol, @tbl-oq-dtt-theta reads against the $\\theta = 1$ pair by the rule registered for it: a field *helps* or "
+      "*harms* only past a 10% change and two standard errors, and a *flag* marks a shift of more than 3% with every seed of "
+      "one arm beyond every seed of the other.")
+print()
+print("| retrained with | pressure | velocity | eddy viscosity | median step [s] |\n|---|---|---|---|---|")
+print(f"| $\\theta = 1$, every block, basis 16 (the standing's pair) | 1 | 1 | 1 | {k_step('control'):.3f} |")
+for a, name in ARMS:
+    print(f"| {name} | " + " | ".join(f"{x:.3f} ({lab(a, f)})" for x, f in zip(k_r(a), KF)) + f" | {k_step(a):.3f} |")
+print()
+print(": ISLA-DTT retrained on the AirfRANS interior task with one setting of its read changed, ÷ the standing's eager-trained "
+      "ISLA-DTT pair: ratios of arithmetic seed means of relative L2 on the 200 test airfoils (native, float32, eager), seeds 42 "
+      "and 43, with the registered reading; the median training step on one node. How to read this: below one is more "
+      "accurate; *no change* means inside the registered bar, which a flagged arm can still miss by a seed-separated few "
+      f"percent; the table does not test car scale. Data: {R.source('dtt_knobs_a14', 'RESULTS.md')} (Arms 1-4); "
+      f"{R.source('dtt_knobs_exact', 'RESULTS.md')} (K-EXACT); {R.source('dtt_knobs_exact', 'reduce/out_final/reduce_s2.md')}. "
+      "{#tbl-oq-dtt-theta}")
+print()
+print("Read as the registered ladder ($\\theta$ = 2, 1, 0.5, 0), the opening angle is a pure cost knob, free up to "
+      "$\\theta = 2$ on velocity and eddy viscosity and up to $\\theta = 1$ on pressure, which pays a seed-separated "
+      f"{100 * (k_r('K-THETA2')[0] - 1):.0f}% at $\\theta = 2$. On pressure the most accurate rung is $\\theta = 0.5$, "
+      f"{100 * (1 - k_r('K-THETA05')[0]):.0f}% below the pair, and the exact read sits between them. At $\\theta = 0.5$ every "
+      f"field's mean falls on both seeds, by {100 * (1 - max(k_r('K-THETA05'))):.0f} to {100 * (1 - min(k_r('K-THETA05'))):.0f}%, "
+      f"below the registered bar; the finer read wins {win05}% of the test cases, not all. The far field, where ISLA-DTT's gap "
+      "to interacting ISLA sits (@sec-airfrans-dtt-reference), is where the finer reads help, each in a different region: at "
+      f"$\\theta = 0.5$ the in-plane velocity error in the wake is {wake05[0]} / {wake05[1]} times interacting ISLA's against "
+      f"the pair's {wake05[2]} / {wake05[3]}, and with the exact read the eddy-viscosity error beyond one chord is "
+      f"{far0[2]} / {far0[3]} times interacting ISLA's against {far0[0]} / {far0[1]} (seeds 42 / 43, the error normalized per "
+      "case); the registered rule reads both as narrowed, and no setting widens either cell. So ISLA-DTT's far-field error "
+      "shrinks as its read tightens, while "
+      "over the whole domain no rung passes the registered bar. A read after every "
+      f"second block changes no field measurably and takes {100 * (1 - k_step('K-B1') / k_step('control')):.0f}% less of the "
+      f"step; beside the rule, its eddy viscosity beyond one chord is {b1_far[0]} and {b1_far[1]} times the pair's, within the "
+      "regional rule's two standard errors. A basis of 8 harms eddy viscosity. The exact read takes "
+      f"{k_step('K-EXACT') / k_step('control'):.2f} times the step of $\\theta = 1$ on AirfRANS and {ex_gpuh[0]} GPU-hours "
+      f"for its two seeds against {ex_gpuh[1]}. The open question is whether a finer read narrows the far-field gap at car "
+      "scale: on the DrivAerML Volume task with the whole boundary, 400,000 prediction points fit one GB300 at $\\theta = 1$ "
+      "(@sec-using-dtt-cost), and neither the step nor the fit at $\\theta = 0.5$ is measured. What would settle it: ISLA-DTT "
+      "trained on the DrivAerML Volume task at $\\theta = 0.5$ against $\\theta = 1$, two seeds each, read on the error far "
+      f"from the car. Data: {R.source('dtt_knobs', 'sens/sens_table.md')}; {R.source('dtt_knobs_exact', 'RESULTS.md')}.")
 ```
-
-::: {.callout-note title="In flight"}
-These numbers come from models trained at $\theta = 1$ and read at other settings. ISLA-DTT trained on AirfRANS
-at $\theta = 2$, 0.5 and 0, with a read after every second layer and with 8 basis functions, is being measured,
-and the ledger (@sec-ledger) tracks it.
-:::
 
 ### The direction of the SHIFT-SUV transfer {#sec-oq-transfer}
 
@@ -1264,70 +1386,6 @@ print("**The open question is whether ISLA also transfers better on SHIFT-SUV fr
       "three fastback-trained models, read by the same registered rules, which narrow the standard error of every reverse "
       f"comparison. Cost: {fmt_h(q_transfer)} GPU-hours, at the training cost the first two seeds measured.")
 ```
-
-### The ground and the domain walls on the DrivAerML Volume task {#sec-oq-far-field}
-
-```{python}
-#| label: para-oq-far-field
-#| output: asis
-FAR = next(r for r in R.md_table("cap_audit", "tables/resid_drv_partB.md", "drv heldout nut (rd) - wall") if r["region"] == "[1,inf)")
-# the domain's stored pieces: their tunnel box (SETUP-RESEARCH), their ground offset (DRV-GROUND), the cost of reading them (BOUNDARY-AUDIT)
-SU = " ".join(R.load("setup_research", "SETUP.md").split())
-TUN = re.search(r"BoxTunnelBoundaries\(x_min=(-?\d+), x_max=(\d+), y_min=(-?\d+), y_max=(\d+), z_height=(\d+)", SU).groups()
-TUN = tuple(t.replace("-", "−") for t in TUN)
-CS = R.load("drv_ground", "classify_summary.txt")
-GR = {"match": int(re.search(r"group match: (\d+) files", CS).group(1)), "off": int(re.search(r"group offset: (\d+) files", CS).group(1)),
-      "mm": 1e3 * float(re.search(r"rule tz: \{([\d.]+): \d+\}", CS.split("group offset")[1]).group(1))}
-assert GR["match"] + GR["off"] == 484
-SEEDQ = re.search(r"takes ([\d.]+-[\d.]+) s of the ([\d.]+-[\d.]+) s whole-boundary call \((\d+) ms body only\)", BA).groups()
-SEEDQ = (SEEDQ[0].replace("-", " to "),) + SEEDQ[1:]
-WB_STEP = re.search(r"\| 0\.9\.0 \| ISLA \| [^|]+\| [^|]+\| \*\*([\d.]+)x\*\* \| [^|]+\| [^|]+\| [^|]+\| \*\*([\d.]+)x\*\*", BA).groups()
-PA = R.load("cap_audit", "tables/probes/probe_a.json")
-# the whole-boundary geometry call as 06's cost table times it, in a training step: the class's from GEO-THINFAST (job 370584,
-# the mean of each arm's passes), 0.9.0's from GEO-BAND's phase 0 (job 368333)
-_tf = next(r for r in R.md_table("geo_thinfast", "lhr/timing_table.md", "Mean over passes") if r["case (Q / F)"].startswith("DrivAerML whole boundary"))
-_p0 = next(r for r in R.md_table("geo_band_phase0", "PHASE0.md", "The book's 06 cost table") if r["case (Q / F)"].startswith("DrivAerML Volume, whole boundary"))
-_g = [float(x) for x in _tf["geometry call: base fast / head fast / reference [ms]"].replace(",", "").split(" / ")]
-WBT = {"auto": _g[1], "reference": _g[2], "base": float(_p0["geometry call: base / reference / fast [ms]"].replace(",", "").split(" / ")[0])}
-pc = lambda k: f"{100 * min(c[k] for c in PA):.0f} to {100 * max(c[k] for c in PA):.0f}%"
-print("**The open question is whether ISLA's far-field eddy-viscosity error on the DrivAerML Volume task comes from the boundaries "
-      "it is not given.** Trained on one car with a fresh draw of points every step, ISLA's relative eddy-viscosity error more than "
-      f"{L_REF:g} m from the car is {R.num(FAR['isla share % (e_R)'], 1):.3f}, against Transolver's {R.num(FAR['t share % (e_R)'], 1):.3f}, and "
-      f"those {R.num(FAR['weight %']):.1f}% of the points hold {R.num(FAR['ISLA excess %']):.0f}% of the amount by which its squared "
-      f"error exceeds Transolver's; neither halving its width or depth nor quartering its slices moves it (@sec-single-case-floor). On that car and "
-      f"{len(PA) - 1} validation cars the height above the floor explains {pc('r2_z')} of the far-field variance, the streamwise "
-      f"distance from the inlet {pc('r2_x')}. Every case file stores, beside the vehicle, the four other pieces of the domain's "
-      "boundary as meshes without fields: `no_slip`, the ground under and behind the car; `slip`, the sides, the roof and the "
-      "ground upstream; `inlet` and `outlet`. They are the faces of a box the dataset's curation pipeline built from the documented "
-      f"wind tunnel ($x$ from {TUN[0]} to {TUN[1]} m, $y$ from {TUN[2]} to {TUN[3]} m, {TUN[4]} m high), its floor at the vehicle's "
-      f"lowest point. On {GR['off']} of the 484 files the four sit {GR['mm']:.1f} mm below the CFD mesh, whose lowest nodes meet the "
-      "vehicle's lowest point on every file; the configurations that read them first translate them so that the ground meets that "
-      f"point, which moves the other {GR['match']} by nothing. ISLA's configuration reads them, its standing's checkpoints were "
-      "trained with the vehicle alone, and GeoTransolver and "
-      "Transolver read each point's coordinates (@tbl-model-inputs). What would settle it: the single-case run repeated with all four of those meshes, the domain's whole "
-      "boundary as on AeroZoo, added to ISLA's boundary as named meshes, two seeds, beside two seeds of the same run without them, "
-      "read on the far-field eddy-viscosity error and on the velocity error. The readout measures the effect of the four meshes and "
-      "decides nothing about the input, which is the domain's whole boundary on every dataset (@sec-limits-whole-boundary). Cost: "
-      "with the four meshes ISLA's step takes "
-      f"{fd_step[2]} times as long ({fd_step[0]} against {fd_step[1]} s), so the {('two', 'three', 'four')[SEEDS * 2 - 2]} "
-      f"single-case runs take one {fd_gpus}-GPU node for about {fd_hours} hours, {fmt_h(q_floor)} GPU-hours. In the geometry the "
-      "standings trained with, almost all of the added time is one query, the one that seeded the closest-cell search, and not "
-      f"the 5,054 added cells: in training on a GB300 in bfloat16 it takes {SEEDQ[0]} s of the whole-boundary geometry call, "
-      f"against {SEEDQ[2]} ms with the vehicle alone, and without it ISLA's step with the whole boundary is {WB_STEP[1]} times its "
-      "step with the vehicle alone. The class seeds that search on its own cell tree: timed in a training step as in "
-      "@tbl-using-geometry-cost (one GB300, bfloat16, eager, each cell the mean of its passes' medians), its geometry call "
-      f"with the whole boundary takes {WBT['auto']:.0f} ms under the default fast search and {WBT['reference']:.0f} ms under "
-      f"the reference search, against {WBT['base']:,.0f} ms in the standings' geometry (@sec-using-cost). "
-      f"Data: {R.source('cap_audit', 'tables/resid_drv_partB.md')}, {R.source('cap_audit', 'tables/probes/probe_a.json')}, "
-      f"{R.source('floor_drv', 'PREREG.md')} (section 8), {R.source('boundary_audit', 'REPORT.md')} (section 4), "
-      f"{R.source('setup_research', 'SETUP.md')} (section 0), {R.source('drv_ground', 'classify_summary.txt')}, "
-      f"{R.source('geo_thinfast', 'lhr/timing_table.md')}, {R.source('geo_band_phase0', 'PHASE0.md')} (The book's 06 cost table).")
-```
-
-::: {.callout-note title="In flight"}
-This question rests on the single-car runs with the vehicle alone. ISLA trained on the same car with the
-domain's four other boundary meshes is being measured, and the ledger (@sec-ledger) tracks it.
-:::
 
 ### The rest of the boundary on the other datasets {#sec-oq-whole-boundary}
 
@@ -1784,10 +1842,9 @@ lo, hi = min(min(v) for v in small.values()), max(max(v) for v in small.values()
 # PERF-SURVEY's profile of the lug's step and its prototype of the fused geometry kernel for 2-D and direction-free models
 PROF = {r_["case"].split(",")[0]: r_ for r_ in R.md_table("perf_survey", "FINAL_REPORT.md", None, 0)}
 busy = re.search(r"GPU busy (\d+) % / (\d+) %", PROF["lug"]["biggest regions (share of step)"]).groups()
-FP = {r_["#"]: r_ for r_ in R.md_table("perf_survey", "OPPORTUNITIES.md", "Ranked table", 0)}["1"]["gain"]
-fp_af = re.search(r"af compiled [\d,]+ -> [\d,]+ ms \(([\d.]+)x\), af eager [\d,]+ -> [\d,]+ ms \(([\d.]+)x\)", FP).groups()
-fp_lug = re.search(r"lug eager ([\d.]+)-([\d.]+)x, lug compiled neutral", FP).groups()
-fp_noise = re.search(r"lug compiled neutral \(([+\d-]+ %), inside host noise\)", FP).group(1).replace(" %", "%")
+# FUSED-PAD: the fused geometry kernel for planar and direction-free models, step per iteration against the code without it
+FPS = {r_["case"].split(" (")[0]: r_ for r_ in R.md_table("fused_pad", "FINAL_REPORT.md", None, 1)}
+fpx = lambda case, col: R.num(FPS[case][col], 2)
 print("**Four directions are engineering rather than research: each has a measured starting point and a stated remainder.**")
 print()
 print("| direction | what is in place | what remains |\n|---|---|---|")
@@ -1797,13 +1854,14 @@ print("| Problems outside external aerodynamics | the interface accepts zero or 
       "(@sec-limits-datasets) |")
 print("| Cost on small meshes | from 100,000 tokens up a training step's memory is linear in tokens for every reference configuration and "
       "its time on the surface task (@sec-cost-sweep). A profile on one GB300 finds the lug's step bound by the host: the GPU is "
-      f"busy {busy[0]}% of the compiled step and {busy[1]}% of the eager one. Run through the fused geometry kernel with exact zero "
-      "padding, which the class keeps for 3-D models with a global direction, a prototype takes the AirfRANS step to "
-      f"{fp_af[0]} times compiled and {fp_af[1]} times eager and the lug's eager step to {fp_lug[0]} to {fp_lug[1]} times, the "
-      f"lug's compiled step within the host's noise ({fp_noise.replace('-', ' to ')}) | on the small finite-element meshes of Tensile2d and the lug ISLA's median training step is "
-      f"{lo:.1f} to {hi:.1f} times the baselines' (@tbl-ref-cost); the padded kernel's compiled path certified on trained "
-      "checkpoints (Peter approved building it with five of the profile's other speedups) "
-      f"({R.source('perf_survey', 'OPPORTUNITIES.md')}) |")
+      f"busy {busy[0]}% of the compiled step and {busy[1]}% of the eager one. The fused geometry kernel runs planar models and "
+      "models without a global direction with exact zero padding, which takes the AirfRANS step to "
+      f"{fpx('AirfRANS', 'compiled ms'):.2f} times compiled and {fpx('AirfRANS', 'eager ms'):.2f} times eager, the lug's eager "
+      f"step to {fpx('lug', 'eager ms'):.2f} times and Tensile2d's to {fpx('Tensile2d', 'eager ms'):.2f} times; the lug's compiled "
+      f"step, bound by the host, is {fpx('lug', 'compiled ms'):.2f} times as long | on the small finite-element meshes of Tensile2d and "
+      f"the lug ISLA's median training step is {lo:.1f} to {hi:.1f} times the baselines' (@tbl-ref-cost), measured without that "
+      f"kernel, and the lug's step stays bound by the host ({R.source('perf_survey', 'FINAL_REPORT.md')}; "
+      f"{R.source('fused_pad', 'FINAL_REPORT.md')}) |")
 print("| Inference on a small budget | the stratified sampler removes most of the quadrature variance at 10,000 cells "
       "(@sec-deficit-anatomy, @sec-using-sampler) | a default that picks the sampler from the requested count |")
 print("| Query-count consistency of the interacting form | the prediction points' routing mass is a learned fraction of the boundary "

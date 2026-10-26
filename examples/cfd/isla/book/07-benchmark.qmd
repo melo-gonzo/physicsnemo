@@ -713,7 +713,10 @@ things:
 - on AirfRANS, Tensile2d, the lug and DeepJEB++ it returns the native mesh, and the column repeats the native error.
 
 Of the first group, the DrivAerML Surface task, HiLiftAeroML and SHIFT-SUV appear as point-cloud standings
-(@fig-contract-shifts).
+(@fig-contract-shifts). The draw is a function of the dataset file as well as of the seed: the pipeline gives each
+transform its own random generator by its position in the file's list, so a transform added ahead of the
+area-proportional draw, such as the one that builds SHIFT-SUV's CFD box or HiLiftAeroML's far field, changes the cells
+it keeps. A comparison across architectures therefore scores every model on one draw of the same file.
 
 ::: {.callout-warning title="What the validation set is used for"}
 The DrivAerML and HiLiftAeroML accuracy figures are validation-set figures with no checkpoint selection behind them. The
