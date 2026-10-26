@@ -1,4 +1,4 @@
-# Statistics filled by aerozoo_pstats.py fill from pstats_reynolds.train.json: split part reynolds.train, 2119 cases, 42,380,000 interior points, 325,513,270 expected boundary tokens (log10 nu mean -4.162, std 1.405).
+# Statistics filled by aerozoo_pstats.py fill from pstats_reynolds.train.json: split part reynolds.train, 1577 cases, 31,540,000 interior points, 238,617,552 expected boundary tokens (log10 nu mean -4.111, std 1.389).
 # AeroZoo v1.2 (2026-10-09; inputs corrected 2026-10-19), interior task: the four grouped boundaries with their
 # boundary conditions -> the RANS fields at the interior cell centroids, with the PDE data only, in physical units,
 # the same for every model. Under the rulings of 2026-10-15 (a model reads only the boundary meshes with their
@@ -16,9 +16,10 @@
 #   1/s), the signed distance and normal to no_slip in metres (both baselines' published body-SDF input), nu_std =
 #   (log10 nu - a) / b with per-dataset constants (StandardizeGlobalLeaf), the reorientation, the targets, and the
 #   boundary faces as one token set (MergeBoundaries), GeoTransolver's geometry.
-# Every constant below is fitted once per split on its training side (aerozoo_pstats.py); nothing is computed per
-# case. The targets, the interior task's seven fields, are physical (m/s, Pa, m^2/s, m^2/s^2, 1/s; intermittency and
-# Re_theta_t dimensionless) with one scale-only standardization per dataset,
+# Every constant below is fitted once per split on its training side (aerozoo_pstats.py), the split's mean_stable
+# train cases (see sample_filter below); nothing is computed per case. The targets, the interior task's seven
+# fields, are physical (m/s, Pa, m^2/s, m^2/s^2, 1/s; intermittency and Re_theta_t dimensionless) with one
+# scale-only standardization per dataset,
 # the same for every model (means 0), so the recipe's training-space relative L2 is the physical relative L2 of
 # each field and case.
 #
@@ -28,6 +29,16 @@
 # global_data holds physics.{density, kinematic_viscosity, ...} and the labels reference.*, identity.*,
 # solution_definition.*, diagnostics.*. The recipe reads the row-shuffled copy (datasets/aerozoo_v1.2_shuf_pdmsh),
 # so the reader's contiguous interior block is a uniform sample. Splits: manifest.json, keys `<split>.<part>`.
+#
+# The canonical benchmark (AeroZoo docs/book/06-splits.qmd @sec-canonical, aerozoo ba5b38e8; Peter's ruling of
+# 2026-10-26) trains, validates and tests on the mean_stable samples of every split part only. sample_filter keeps,
+# in every manifest part the recipe reads, the cases whose stored stability label global_data
+# diagnostics.solve.solution_quality_id is 4 (mean_stable; 5 is mean_unstable, aerozoo docs/book/B-reference.qmd).
+# The label equals the release manifest's solution_quality on all 3,815 complete cases
+# (examples/cfd/isla/results/aerozoo_dataset/aerozoo_mean_stable_manifest.py --release, 2026-10-26). It selects
+# samples and never reaches a model. The constants below are fitted on the same mean_stable train cases (refit
+# 2026-10-26: aerozoo_mean_stable_constants_fits.json). `++apply_sample_filter=false` reads every complete case,
+# for the labelled score over all of them beside the canonical one.
 # SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
 # SPDX-FileCopyrightText: All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
@@ -46,6 +57,9 @@
 
 train_datadir: ${dataset_paths.aerozoo}
 manifest: ${dataset_paths.aerozoo_manifest}
+sample_filter:
+  global_data: diagnostics.solve.solution_quality_id
+  keep: [4]
 
 pipeline:
   reader:
@@ -108,8 +122,8 @@ pipeline:
       field: physics.kinematic_viscosity
       output_field: nu_std
       log10: true
-      mean: -4.16159
-      std: 1.40493
+      mean: -4.11055
+      std: 1.38852
     # The four boundaries are stored with their normals out of the fluid (OpenFOAM's convention); reversed so
     # they point into the fluid, as AirfRANS's airfoil and the reoriented DrivAerML vehicle do (ISLA's signed
     # distance is positive on the side the normals point to). After the SDF pass, so the stored distances are
@@ -126,24 +140,25 @@ pipeline:
         solution.intermittency: intermittency
         solution.momentum_thickness_reynolds_number: retheta
     # Physical targets, one standardization per dataset, scale only: mean 0 and the RMS about 0 of a seeded
-    # 20,000-point interior sample per training case as the std (velocity: the isotropic one), the same for
-    # every model. Not the pooled mean (2026-10-19): the targets span decades across cases, and on
+    # 20,000-point interior sample per mean_stable training case as the std (velocity: the isotropic one), the
+    # same for every model. Not the pooled mean (2026-10-19): the targets span decades across cases, and on
     # full.train the pooled pressure mean is 201 Pa against a std of 1,129 Pa, so a case whose RMS pressure is
     # ~0.03 Pa would read -0.18 plus a signal of ~3e-5, below bf16's step near 0.18 (~7e-4, the baselines'
     # head under autocast) and at ~5e-4 relative in float32; nut, tke and omega have mean / std 0.02-0.13.
     # intermittency and retheta (Re_theta_t), both dimensionless: the same rule, from aerozoo_pstats.py targets
     # (LHR cpu-short job 397199, 2026-10-26; the five other fields' sample lines reproduce those of 2026-10-09).
+    # Refit on the mean_stable train cases from the same sample lines (aerozoo_pstats.py reduce, 2026-10-26).
     # Scale only, every value keeps its own floating-point relative precision.
     - _target_: ${dp:NormalizeMeshFields}
       association: point_data
       fields:
-        velocity: {type: vector, mean: [0, 0, 0], std: 12.33}
-        pressure: {type: scalar, mean: 0, std: 1442.51}
-        nut: {type: scalar, mean: 0, std: 0.754302}
-        tke: {type: scalar, mean: 0, std: 24.3639}
-        omega: {type: scalar, mean: 0, std: 346555}
-        intermittency: {type: scalar, mean: 0, std: 0.937442}
-        retheta: {type: scalar, mean: 0, std: 412.626}
+        velocity: {type: vector, mean: [0, 0, 0], std: 13.0675}
+        pressure: {type: scalar, mean: 0, std: 1588.82}
+        nut: {type: scalar, mean: 0, std: 0.564915}
+        tke: {type: scalar, mean: 0, std: 22.547}
+        omega: {type: scalar, mean: 0, std: 396116}
+        intermittency: {type: scalar, mean: 0, std: 0.935504}
+        retheta: {type: scalar, mean: 0, std: 417.494}
     - _target_: ${dp:ComposeQuadratureMeasure}
     # Last: every boundary face as one token set (boundaries.merged), each with its condition type (one-hot)
     # and its prescribed values: GeoTransolver's geometry. The values are standardized here only, by
@@ -160,17 +175,17 @@ pipeline:
                bc_omega, bc_intermittency, bc_retheta, bc_tke_reverse, bc_omega_reverse, bc_intermittency_reverse,
                bc_retheta_reverse]
       standardize:
-        bc_velocity: {type: vector, mean: [0, 0, 0], std: 4.40685}
-        bc_velocity_reverse: {type: vector, mean: [0, 0, 0], std: 4.74776}
+        bc_velocity: {type: vector, mean: [0, 0, 0], std: 4.39845}
+        bc_velocity_reverse: {type: vector, mean: [0, 0, 0], std: 4.7128}
         bc_pressure: {type: scalar, mean: 0, std: 1}
-        bc_tke: {type: scalar, mean: 0, std: 1.13245}
-        bc_omega: {type: scalar, mean: 0, std: 407.11}
-        bc_intermittency: {type: scalar, mean: 0, std: 0.470792}
-        bc_retheta: {type: scalar, mean: 0, std: 203.017}
-        bc_tke_reverse: {type: scalar, mean: 0, std: 1.20478}
-        bc_omega_reverse: {type: scalar, mean: 0, std: 437.524}
-        bc_intermittency_reverse: {type: scalar, mean: 0, std: 0.524182}
-        bc_retheta_reverse: {type: scalar, mean: 0, std: 224.689}
+        bc_tke: {type: scalar, mean: 0, std: 1.25361}
+        bc_omega: {type: scalar, mean: 0, std: 449.973}
+        bc_intermittency: {type: scalar, mean: 0, std: 0.470426}
+        bc_retheta: {type: scalar, mean: 0, std: 199.773}
+        bc_tke_reverse: {type: scalar, mean: 0, std: 1.30721}
+        bc_omega_reverse: {type: scalar, mean: 0, std: 476.417}
+        bc_intermittency_reverse: {type: scalar, mean: 0, std: 0.522561}
+        bc_retheta_reverse: {type: scalar, mean: 0, std: 220.558}
 
 targets:
   velocity: vector
@@ -182,18 +197,21 @@ targets:
   retheta: scalar
 
 # ISLA's own constants for this split: conf/model/isla_volume_aerozoo.yaml leaves them null and train.py / infer.py
-# inject them. Fitted on reynolds.train (2,119 of its 2,119 cases) with the implemented scale functions
+# inject them. Fitted on reynolds.train's 1,577 mean_stable cases (of 2,119) with the implemented scale functions
 # (ISLA._gauge and ISLA._case_scales on the full-resolution boundaries): reynolds is the mean and the population std
 # over the train cases of log10(U L / nu); output_scale is, per output, the median over the train cases of the per-case
 # RMS of the target made dimensionless by its units (a seeded 20,000-point interior sample per case; velocity's the
 # isotropic RMS), and input_scale, per boundary input, the median over the train cases of the per-case area-weighted
 # RMS of the input made dimensionless by its units (a vector's of its magnitude): robust typical sizes, where the
-# pooled RMS is set by the few largest cases. LHR cpu-short jobs 295774-295776 (examples/cfd/isla/results/aerozoo_dataset/isla_constants_fit.py, code 6c3aac5a8), 2026-10-20.
+# pooled RMS is set by the few largest cases. Per-case rows: LHR cpu-short jobs 407910-407911, 2026-10-26
+# (examples/cfd/isla/results/aerozoo_dataset/isla_constants_fit.py aerozoo on ISLA 0.9.0, code 92d9d7800, as the
+# 2026-10-20 fit, jobs 295774-295776, whose constants they reproduce on every train case), fitted by its summarize
+# on the mean_stable train cases (aerozoo_mean_stable_constants_fits.json).
 # intermittency and retheta are dimensionless, so their scale is the median per-case RMS itself, on the same
-# seeded sample: LHR cpu-short job 397200 (isla_constants_fit.py aerozoo_rms), 2026-10-26.
+# seeded sample: LHR cpu-short job 397200 (isla_constants_fit.py aerozoo_rms), 2026-10-26, fitted the same way.
 isla_constants:
-  reynolds: {mean: 5.062, std: 0.8985}
-  output_scale: {velocity: 0.5758, pressure: 0.1003, nut: 0.000528, tke: 0.01048, omega: 313, intermittency: 0.989, retheta: 228}
+  reynolds: {mean: 5.009, std: 0.9116}
+  output_scale: {velocity: 0.5769, pressure: 0.07416, nut: 0.0004749, tke: 0.009404, omega: 340.1, intermittency: 0.9886, retheta: 228.7}
   input_scale:
-    inlet: {bc_intermittency: 1, bc_omega: 1.812, bc_retheta: 234.4, bc_tke: 0.0007644}
-    outlet: {bc_intermittency_reverse: 1, bc_omega_reverse: 1.732, bc_retheta_reverse: 234.4, bc_tke_reverse: 0.000697, bc_velocity_reverse: 1}
+    inlet: {bc_intermittency: 1, bc_omega: 1.806, bc_retheta: 226.6, bc_tke: 0.0008151}
+    outlet: {bc_intermittency_reverse: 1, bc_omega_reverse: 1.718, bc_retheta_reverse: 226.6, bc_tke_reverse: 0.0007385, bc_velocity_reverse: 1}

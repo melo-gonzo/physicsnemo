@@ -40,12 +40,14 @@ import logging
 import math
 import sys
 from collections.abc import Callable, Iterator
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, cast
 
 import hydra
 import torch
 from omegaconf import DictConfig, OmegaConf
+from tensordict import MemoryMappedTensor
 from torch.utils.data import Sampler
 
 import physicsnemo.datapipes  # noqa: F401  (registers ${dp:...} resolvers)
@@ -726,6 +728,99 @@ def _resolve_manifest_indices_from_spec(
     return train_indices, val_indices
 
 
+def read_global_data_leaf(path: str | Path, key: str) -> torch.Tensor:
+    """One ``global_data`` leaf of a stored sample, read without the rest of it.
+
+    ``path`` is a memory-mapped mesh archive (``.pdmsh``), ``key`` a dotted
+    leaf name (``diagnostics.solve.solution_quality_id``). Only the leaf's
+    group ``meta.json`` and its own memmap file are opened: two small reads
+    per sample, so selecting thousands of samples at start-up stays cheap on
+    a network file system.
+    """
+    *group, leaf = key.split(".")
+    group_dir = Path(path).joinpath("_tensordict", "global_data", *group)
+    meta = json.loads((group_dir / "meta.json").read_text())[leaf]
+    return MemoryMappedTensor.from_filename(
+        group_dir / f"{leaf}.memmap",
+        dtype=getattr(torch, meta["dtype"].removeprefix("torch.")),
+        shape=torch.Size(meta["shape"]),
+    )
+
+
+def _dataset_sample_filter(
+    ds_yaml: DictConfig, recipe_cfg: DictConfig
+) -> dict[str, Any] | None:
+    """The dataset file's ``sample_filter`` block, unless ``apply_sample_filter=false``.
+
+    The block selects a dataset's samples by a label stored in each sample,
+    ``global_data: <dotted leaf>`` and ``keep: [<values>]``, in every manifest
+    split part. AeroZoo's canonical benchmark keeps its ``mean_stable``
+    samples this way. The recipe override ``apply_sample_filter=false`` (added
+    with ``++``) switches it off, for a score over every sample beside the
+    canonical one.
+    """
+    block = OmegaConf.select(ds_yaml, "sample_filter", default=None)
+    if block is None or not recipe_cfg.get("apply_sample_filter", True):
+        return None
+    block = OmegaConf.to_container(block, resolve=True)
+    if set(block) != {"global_data", "keep"} or not block["keep"]:
+        raise ValueError(
+            "sample_filter needs exactly 'global_data' (a dotted leaf name) and a "
+            f"non-empty 'keep' list; got {block!r}"
+        )
+    return block
+
+
+def filter_indices_by_global_data(
+    reader: Any, indices: list[int], *, global_data: str, keep: list
+) -> list[int]:
+    """The reader indices whose sample stores a ``global_data`` leaf value in ``keep``.
+
+    The leaf is read from each file apart from the transform chain, so a label
+    that selects samples never reaches a model. Order is kept.
+    """
+    paths = [reader._paths[i] for i in indices]
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        values = list(pool.map(lambda p: read_global_data_leaf(p, global_data), paths))
+    kept = []
+    for index, path, value in zip(indices, paths, values):
+        if value.numel() != 1:
+            raise ValueError(
+                f"sample_filter: {global_data} of {path} has shape "
+                f"{tuple(value.shape)}, not a scalar"
+            )
+        if value.item() in keep:
+            kept.append(index)
+    return kept
+
+
+def _apply_sample_filter(
+    reader: Any,
+    indices: list[int],
+    sample_filter: dict[str, Any],
+    *,
+    ds_name: str,
+    part: str,
+) -> list[int]:
+    """``filter_indices_by_global_data`` on one split part, logged and never empty."""
+    kept = filter_indices_by_global_data(reader, indices, **sample_filter)
+    _LOGGER.info(
+        "Dataset %r, %s split: sample_filter %s in %s keeps %d of %d samples",
+        ds_name,
+        part,
+        sample_filter["global_data"],
+        sample_filter["keep"],
+        len(kept),
+        len(indices),
+    )
+    if not kept:
+        raise ValueError(
+            f"sample_filter {sample_filter!r} keeps none of the {len(indices)} "
+            f"{part} samples of dataset {ds_name!r}"
+        )
+    return kept
+
+
 def _build_manifest_val_dataset(
     ds_yaml: DictConfig,
     *,
@@ -1007,6 +1102,13 @@ def build_dataloaders(
             }
         )
         manifest_spec = resolve_manifest_spec(ds_yaml, ds_cfg_block)
+        sample_filter = _dataset_sample_filter(ds_yaml, cfg)
+        if sample_filter is not None and manifest_spec is None:
+            raise ValueError(
+                f"Dataset {ds_name!r} declares a sample_filter, which applies to "
+                "manifest splits only; set 'train_split' / 'val_split', or "
+                "'++apply_sample_filter=false'."
+            )
         dataset = build_dataset(
             ds_yaml,
             augment=augment,
@@ -1022,6 +1124,22 @@ def build_dataloaders(
             local_train_indices, local_val_indices = (
                 _resolve_manifest_indices_from_spec(dataset.reader, manifest_spec)
             )
+            if sample_filter is not None:
+                local_train_indices = _apply_sample_filter(
+                    dataset.reader,
+                    local_train_indices,
+                    sample_filter,
+                    ds_name=ds_name,
+                    part="train",
+                )
+                if local_val_indices is not None:
+                    local_val_indices = _apply_sample_filter(
+                        dataset.reader,
+                        local_val_indices,
+                        sample_filter,
+                        ds_name=ds_name,
+                        part="val",
+                    )
             combined_train_indices.extend(
                 train_offset + index for index in local_train_indices
             )

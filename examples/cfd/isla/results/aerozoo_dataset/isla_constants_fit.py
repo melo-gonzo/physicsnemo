@@ -23,7 +23,7 @@ Per split: reynolds = {mean, std (population)} of log10 Re over the train cases;
 cases of the per-case RMS.
 usage: isla_constants_fit.py aerozoo <data> <model yaml> <out.jsonl> <shard> <n_shards> <workers>
        isla_constants_fit.py airfrans <dataset yaml> <model yaml> <out.jsonl> <workers> [<split>...]
-       isla_constants_fit.py summarize <aerozoo manifest> <airfrans manifest> <out.json> <jsonl...>
+       isla_constants_fit.py summarize <aerozoo manifest> <airfrans manifest | -> <out.json> <jsonl...>
        isla_constants_fit.py airfrans_fit <airfrans manifest> <out.json> <split,...> <jsonl...>
        isla_constants_fit.py aerozoo_rms <data> <out.jsonl> <shard> <n_shards> <workers>
        isla_constants_fit.py aerozoo_rms_fit <aerozoo manifest> <model yaml> <out.json> <jsonl...>
@@ -43,7 +43,11 @@ AZ7 (2026-10-26): the interior task's seven fields. AZ_FIELDS adds intermittency
 scan fits all seven. A dimensionless output's scale factor is 1, so its per-case RMS needs no case scale:
 aerozoo_rms reads only the seeded 20,000-point interior sample of the scan above (the same torch permutation of the
 same rows) and writes each field's RMS in SI units (rms_si); aerozoo_rms_fit fits, per split, the median over the
-train cases for the outputs the model config declares without units."""
+train cases for the outputs the model config declares without units.
+
+AZ-CANONICAL (2026-10-26): AeroZoo's canonical benchmark trains on the mean_stable cases of every split part only, so
+its constants are fitted on the mean_stable train cases: the fits take the manifest of aerozoo_mean_stable_manifest.py,
+and summarize takes "-" for the AirfRANS manifest to fit AeroZoo alone."""
 
 import glob
 import json
@@ -493,7 +497,7 @@ if __name__ == "__main__":
     else:
         az_man, af_man, out = (
             json.load(open(sys.argv[2])),
-            json.load(open(sys.argv[3])),
+            None if sys.argv[3] == "-" else json.load(open(sys.argv[3])),
             sys.argv[4],
         )
         rows = [json.loads(line) for f in sys.argv[5:] for line in open(f)]
@@ -507,11 +511,16 @@ if __name__ == "__main__":
                 if c in good and "omega" in good[c]
             ]
             fits[s] = {**_fit(have, AZ_FIELDS), "n_train": len(az_man[f"{s}.train"])}
-        af = [good[c] for c in af_man[AF_SPLIT] if c in good and "omega" not in good[c]]
-        fits["airfrans." + AF_SPLIT] = {
-            **_fit(af, AF_FIELDS),
-            "n_train": len(af_man[AF_SPLIT]),
-        }
+        if af_man is not None:
+            af = [
+                good[c]
+                for c in af_man[AF_SPLIT]
+                if c in good and "omega" not in good[c]
+            ]
+            fits["airfrans." + AF_SPLIT] = {
+                **_fit(af, AF_FIELDS),
+                "n_train": len(af_man[AF_SPLIT]),
+            }
         json.dump(
             {"fits": fits, "n_errors": len(errors), "errors": errors[:5]},
             open(out, "w"),

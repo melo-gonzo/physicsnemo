@@ -1,0 +1,1095 @@
+{
+ "about": "AeroZoo's canonical benchmark (aerozoo docs/book/06-splits.qmd @sec-canonical, ba5b38e8; Peter's ruling of 2026-10-26) trains on each split's mean_stable train cases only, so every fixed constant of datasets/aerozoo_uvolume*.yaml is fitted on them: NormalizeMeshFields stds, nu_std, MergeBoundaries token stds (aerozoo_pstats.py reduce on the 2026-10-26 sample lines of job 397199 and the boundary lines of 2026-10-19), and ISLA's isla_constants (isla_constants_fit.py summarize on the scale rows of LHR cpu-short jobs 407910-407911, ISLA 0.9.0 code 92d9d7800 as the 2026-10-20 fit; intermittency and retheta by aerozoo_rms_fit on job 397200's rows). The same tools on every train case reproduce the files' previous constants (pstats JSONs bitwise; isla_constants text at its 4 digits), given here as 'all_train'. 'relative_change' = (mean_stable - all_train) / |all_train|.",
+ "manifest_mean_stable": {
+  "script": "aerozoo_mean_stable_manifest.py",
+  "md5": "6aaef1e8a49c499115c8de31a524d9a4",
+  "job": 407928,
+  "release_checked": "release-v1.2.json md5 72b9868ad76f41942f982f7d54997082"
+ },
+ "mean_stable": {
+  "full": {
+   "n_cases": 2011,
+   "NormalizeMeshFields_std": {
+    "velocity": 12.0207026653421,
+    "pressure": 1197.5501580147359,
+    "nut": 0.45667545951821287,
+    "tke": 20.33597116684069,
+    "omega": 422996.5569564531,
+    "intermittency": 0.9587965232945366,
+    "retheta": 406.07402763987466
+   },
+   "MergeBoundaries_std": {
+    "bc_velocity": 4.256530005357618,
+    "bc_velocity_reverse": 4.577570913141837,
+    "bc_pressure": 1.0,
+    "bc_tke": 1.196212331856527,
+    "bc_omega": 398.93594348514233,
+    "bc_intermittency": 0.4755213402268386,
+    "bc_retheta": 196.98766767477244,
+    "bc_tke_reverse": 1.277568339242675,
+    "bc_omega_reverse": 416.5048409790655,
+    "bc_intermittency_reverse": 0.5267475427597086,
+    "bc_retheta_reverse": 218.71909186331237
+   },
+   "nu_std": {
+    "mean": -4.96354955590673,
+    "std": 1.8066860574379513
+   },
+   "isla_constants": {
+    "reynolds": {
+     "mean": 5.848527024209373,
+     "std": 1.4439813603100502
+    },
+    "output_scale": {
+     "velocity": 0.5762819384346161,
+     "pressure": 0.07811424454825465,
+     "nut": 0.0004471111657798398,
+     "tke": 0.008530454550222824,
+     "omega": 608.3054146632526,
+     "intermittency": 0.9993495268351111,
+     "retheta": 222.7611933248282
+    },
+    "input_scale": {
+     "inlet.bc_intermittency": 1.0,
+     "inlet.bc_omega": 1.6768813050472575,
+     "inlet.bc_retheta": 219.60017395019528,
+     "inlet.bc_tke": 0.0008784289157357372,
+     "outlet.bc_intermittency_reverse": 1.0,
+     "outlet.bc_omega_reverse": 1.6312340042815787,
+     "outlet.bc_retheta_reverse": 219.60017395019534,
+     "outlet.bc_tke_reverse": 0.0007741448331482733,
+     "outlet.bc_velocity_reverse": 1.0
+    }
+   }
+  },
+  "family_non_box": {
+   "n_cases": 1850,
+   "NormalizeMeshFields_std": {
+    "velocity": 13.071554775519179,
+    "pressure": 1558.026844432473,
+    "nut": 0.4097104729167039,
+    "tke": 20.93272139362243,
+    "omega": 479697.0141585525,
+    "intermittency": 0.9617898148656365,
+    "retheta": 421.5939099861758
+   },
+   "MergeBoundaries_std": {
+    "bc_velocity": 4.041800698403608,
+    "bc_velocity_reverse": 4.381274984750849,
+    "bc_pressure": 1.0,
+    "bc_tke": 1.0055401097915968,
+    "bc_omega": 320.96993171166633,
+    "bc_intermittency": 0.4491247351386297,
+    "bc_retheta": 192.91749356272965,
+    "bc_tke_reverse": 1.1055255247585565,
+    "bc_omega_reverse": 340.29951252735356,
+    "bc_intermittency_reverse": 0.5139289921995992,
+    "bc_retheta_reverse": 220.2203423125386
+   },
+   "nu_std": {
+    "mean": -4.9368503379264075,
+    "std": 1.770574921611674
+   },
+   "isla_constants": {
+    "reynolds": {
+     "mean": 5.761168192014693,
+     "std": 1.3921055459054685
+    },
+    "output_scale": {
+     "velocity": 0.5761065586595433,
+     "pressure": 0.08652707517231768,
+     "nut": 0.0004934779983132751,
+     "tke": 0.009858751827009168,
+     "omega": 666.3421544982123,
+     "intermittency": 0.9990021928181378,
+     "retheta": 237.2387480804929
+    },
+    "input_scale": {
+     "inlet.bc_intermittency": 1.0,
+     "inlet.bc_omega": 1.4389367216167428,
+     "inlet.bc_retheta": 231.1373062133789,
+     "inlet.bc_tke": 0.0007875843836711171,
+     "outlet.bc_intermittency_reverse": 1.0,
+     "outlet.bc_omega_reverse": 1.363516125635348,
+     "outlet.bc_retheta_reverse": 231.1373062133789,
+     "outlet.bc_tke_reverse": 0.0006951469077255671,
+     "outlet.bc_velocity_reverse": 1.0
+    }
+   }
+  },
+  "reynolds": {
+   "n_cases": 1577,
+   "NormalizeMeshFields_std": {
+    "velocity": 13.067487059225293,
+    "pressure": 1588.8239146268356,
+    "nut": 0.5649145643712369,
+    "tke": 22.547011306915483,
+    "omega": 396116.2503891303,
+    "intermittency": 0.9355044284742133,
+    "retheta": 417.494118089741
+   },
+   "MergeBoundaries_std": {
+    "bc_velocity": 4.398453056731653,
+    "bc_velocity_reverse": 4.71279894279429,
+    "bc_pressure": 1.0,
+    "bc_tke": 1.253614193398957,
+    "bc_omega": 449.9728483225784,
+    "bc_intermittency": 0.47042610444061767,
+    "bc_retheta": 199.7732549325037,
+    "bc_tke_reverse": 1.3072095685571379,
+    "bc_omega_reverse": 476.41695784442516,
+    "bc_intermittency_reverse": 0.5225608250915208,
+    "bc_retheta_reverse": 220.55819278434058
+   },
+   "nu_std": {
+    "mean": -4.110550812883475,
+    "std": 1.3885240244924153
+   },
+   "isla_constants": {
+    "reynolds": {
+     "mean": 5.0092956456769935,
+     "std": 0.9115635780090408
+    },
+    "output_scale": {
+     "velocity": 0.5768680224413917,
+     "pressure": 0.07415670057167127,
+     "nut": 0.00047494030377044383,
+     "tke": 0.009404153488015108,
+     "omega": 340.11364230103214,
+     "intermittency": 0.9885874507841691,
+     "retheta": 228.65186826015088
+    },
+    "input_scale": {
+     "inlet.bc_intermittency": 1.0,
+     "inlet.bc_omega": 1.8055953932109727,
+     "inlet.bc_retheta": 226.6438446044922,
+     "inlet.bc_tke": 0.0008150633708939864,
+     "outlet.bc_intermittency_reverse": 1.0,
+     "outlet.bc_omega_reverse": 1.717878461547984,
+     "outlet.bc_retheta_reverse": 226.6438446044922,
+     "outlet.bc_tke_reverse": 0.0007384820434495238,
+     "outlet.bc_velocity_reverse": 1.0
+    }
+   }
+  },
+  "bank_blobs": {
+   "n_cases": 1662,
+   "NormalizeMeshFields_std": {
+    "velocity": 12.807264063917943,
+    "pressure": 1576.2967007095992,
+    "nut": 0.5128350933535302,
+    "tke": 22.21817311229409,
+    "omega": 457422.1540701296,
+    "intermittency": 0.9603870554392715,
+    "retheta": 415.3773072350222
+   },
+   "MergeBoundaries_std": {
+    "bc_velocity": 4.404764274537595,
+    "bc_velocity_reverse": 4.627593018501233,
+    "bc_pressure": 1.0,
+    "bc_tke": 1.1797282895445274,
+    "bc_omega": 468.772468111101,
+    "bc_intermittency": 0.4782560133990868,
+    "bc_retheta": 202.90587588315773,
+    "bc_tke_reverse": 1.2422095486156737,
+    "bc_omega_reverse": 481.1718983090853,
+    "bc_intermittency_reverse": 0.5222979001038082,
+    "bc_retheta_reverse": 220.93444646046515
+   },
+   "nu_std": {
+    "mean": -5.033093678145,
+    "std": 1.7944075010360037
+   },
+   "isla_constants": {
+    "reynolds": {
+     "mean": 5.915027342881682,
+     "std": 1.4356465997887478
+    },
+    "output_scale": {
+     "velocity": 0.5758553274481812,
+     "pressure": 0.07166371464062092,
+     "nut": 0.0004450977288125114,
+     "tke": 0.00833221975770244,
+     "omega": 568.3799122649667,
+     "intermittency": 0.9995002932222925,
+     "retheta": 228.80074174276692
+    },
+    "input_scale": {
+     "inlet.bc_intermittency": 1.0,
+     "inlet.bc_omega": 1.7473646224948807,
+     "inlet.bc_retheta": 225.15042877197266,
+     "inlet.bc_tke": 0.0008346698328944925,
+     "outlet.bc_intermittency_reverse": 1.0,
+     "outlet.bc_omega_reverse": 1.6558368418035498,
+     "outlet.bc_retheta_reverse": 225.15042877197266,
+     "outlet.bc_tke_reverse": 0.0007558244227624646,
+     "outlet.bc_velocity_reverse": 1.0
+    }
+   }
+  },
+  "bank_zero_to_cad": {
+   "n_cases": 2250,
+   "NormalizeMeshFields_std": {
+    "velocity": 12.245825207632823,
+    "pressure": 1382.8804134682975,
+    "nut": 0.48988785839505394,
+    "tke": 14.585924784957232,
+    "omega": 485720.3261116215,
+    "intermittency": 0.9593932145620435,
+    "retheta": 414.5296688218098
+   },
+   "MergeBoundaries_std": {
+    "bc_velocity": 4.274922010675351,
+    "bc_velocity_reverse": 4.5572331154452845,
+    "bc_pressure": 1.0,
+    "bc_tke": 1.1570299633036722,
+    "bc_omega": 413.6906773322963,
+    "bc_intermittency": 0.476444453875954,
+    "bc_retheta": 202.94125434276083,
+    "bc_tke_reverse": 1.2412528832680603,
+    "bc_omega_reverse": 426.5821346912273,
+    "bc_intermittency_reverse": 0.5252222696023564,
+    "bc_retheta_reverse": 223.7334543590648
+   },
+   "nu_std": {
+    "mean": -5.0028299105380505,
+    "std": 1.7963232743558415
+   },
+   "isla_constants": {
+    "reynolds": {
+     "mean": 5.892660777698324,
+     "std": 1.4356990078242877
+    },
+    "output_scale": {
+     "velocity": 0.5763323565152931,
+     "pressure": 0.07619200642763778,
+     "nut": 0.0004264673594404438,
+     "tke": 0.00839598894137504,
+     "omega": 610.9846787257009,
+     "intermittency": 0.9994933232668135,
+     "retheta": 229.5821803632091
+    },
+    "input_scale": {
+     "inlet.bc_intermittency": 1.0,
+     "inlet.bc_omega": 1.7247140463743706,
+     "inlet.bc_retheta": 230.16697692871094,
+     "inlet.bc_tke": 0.0007893235870223364,
+     "outlet.bc_intermittency_reverse": 1.0,
+     "outlet.bc_omega_reverse": 1.6490414561525477,
+     "outlet.bc_retheta_reverse": 230.16697692871094,
+     "outlet.bc_tke_reverse": 0.0007237825333437992,
+     "outlet.bc_velocity_reverse": 1.0
+    }
+   }
+  },
+  "profile_crossflow": {
+   "n_cases": 2298,
+   "NormalizeMeshFields_std": {
+    "velocity": 12.309613865660921,
+    "pressure": 1330.775179374402,
+    "nut": 0.4830355732058742,
+    "tke": 19.544877425656985,
+    "omega": 483179.0096559269,
+    "intermittency": 0.9596419953938728,
+    "retheta": 416.88198694368015
+   },
+   "MergeBoundaries_std": {
+    "bc_velocity": 4.289968542898071,
+    "bc_velocity_reverse": 4.580530499823495,
+    "bc_pressure": 1.0,
+    "bc_tke": 1.1437784709294827,
+    "bc_omega": 411.59521236543804,
+    "bc_intermittency": 0.47739147780213775,
+    "bc_retheta": 204.20982105155994,
+    "bc_tke_reverse": 1.1971304632985564,
+    "bc_omega_reverse": 422.6990183299241,
+    "bc_intermittency_reverse": 0.5261219202078635,
+    "bc_retheta_reverse": 225.08955969575473
+   },
+   "nu_std": {
+    "mean": -5.0173569442113335,
+    "std": 1.778145728790424
+   },
+   "isla_constants": {
+    "reynolds": {
+     "mean": 5.908991296674608,
+     "std": 1.4256644057563872
+    },
+    "output_scale": {
+     "velocity": 0.5759095694601618,
+     "pressure": 0.07323405714552099,
+     "nut": 0.0004326541676522624,
+     "tke": 0.008535263973962908,
+     "omega": 605.3825154457919,
+     "intermittency": 0.9995330391855846,
+     "retheta": 232.71958175700252
+    },
+    "input_scale": {
+     "inlet.bc_intermittency": 1.0,
+     "inlet.bc_omega": 1.741764020173104,
+     "inlet.bc_retheta": 231.47046661376953,
+     "inlet.bc_tke": 0.0007872433717668679,
+     "outlet.bc_intermittency_reverse": 1.0,
+     "outlet.bc_omega_reverse": 1.6558368418035498,
+     "outlet.bc_retheta_reverse": 231.47046661376953,
+     "outlet.bc_tke_reverse": 0.0007017413301400966,
+     "outlet.bc_velocity_reverse": 1.0
+    }
+   }
+  },
+  "profile_dual_inlet": {
+   "n_cases": 2044,
+   "NormalizeMeshFields_std": {
+    "velocity": 9.331161108356907,
+    "pressure": 585.4654123882372,
+    "nut": 0.5122498119539656,
+    "tke": 9.655680938909391,
+    "omega": 448404.9296935915,
+    "intermittency": 0.9596364845194011,
+    "retheta": 392.3936866472186
+   },
+   "MergeBoundaries_std": {
+    "bc_velocity": 4.174632922281216,
+    "bc_velocity_reverse": 4.8826613856653225,
+    "bc_pressure": 1.0,
+    "bc_tke": 1.1797128330666296,
+    "bc_omega": 398.68677556701647,
+    "bc_intermittency": 0.4642429395240706,
+    "bc_retheta": 195.26840562133364,
+    "bc_tke_reverse": 1.332840590926778,
+    "bc_omega_reverse": 442.10952437861016,
+    "bc_intermittency_reverse": 0.5305320329271578,
+    "bc_retheta_reverse": 223.36354055446847
+   },
+   "nu_std": {
+    "mean": -5.0007980296728105,
+    "std": 1.7948479806679711
+   },
+   "isla_constants": {
+    "reynolds": {
+     "mean": 5.915105792286321,
+     "std": 1.4437516500102872
+    },
+    "output_scale": {
+     "velocity": 0.5736422389494483,
+     "pressure": 0.06463875627486866,
+     "nut": 0.00041087129980700023,
+     "tke": 0.007063900892793346,
+     "omega": 565.1250792863659,
+     "intermittency": 0.9993921462419494,
+     "retheta": 213.80466655168206
+    },
+    "input_scale": {
+     "inlet.bc_intermittency": 1.0,
+     "inlet.bc_omega": 1.822249402480652,
+     "inlet.bc_retheta": 222.73853302001953,
+     "inlet.bc_tke": 0.0008457558679820981,
+     "outlet.bc_intermittency_reverse": 1.0,
+     "outlet.bc_omega_reverse": 1.8222494024806517,
+     "outlet.bc_retheta_reverse": 222.73853302001953,
+     "outlet.bc_tke_reverse": 0.000845755867982098,
+     "outlet.bc_velocity_reverse": 1.0
+    }
+   }
+  }
+ },
+ "all_train": {
+  "full": {
+   "n_cases": 2713,
+   "NormalizeMeshFields_std": {
+    "velocity": 11.604472490349927,
+    "pressure": 1129.2584551081068,
+    "nut": 0.6149935278528135,
+    "tke": 21.727582828150624,
+    "omega": 373993.6688927054,
+    "intermittency": 0.960101841281703,
+    "retheta": 403.9229924696512
+   },
+   "MergeBoundaries_std": {
+    "bc_velocity": 4.2878013296175,
+    "bc_velocity_reverse": 4.618801103310858,
+    "bc_pressure": 1.0,
+    "bc_tke": 1.1084333862496807,
+    "bc_omega": 358.6109384512201,
+    "bc_intermittency": 0.4739063192501598,
+    "bc_retheta": 202.3472525774341,
+    "bc_tke_reverse": 1.2041917717169435,
+    "bc_omega_reverse": 380.47691068227226,
+    "bc_intermittency_reverse": 0.5265689401626036,
+    "bc_retheta_reverse": 224.45911183007937
+   },
+   "nu_std": {
+    "mean": -5.031963661771176,
+    "std": 1.7907282492193795
+   },
+   "isla_constants": {
+    "reynolds": {
+     "mean": 5.908983348810414,
+     "std": 1.4150141170010748
+    },
+    "output_scale": {
+     "velocity": 0.5749167029306574,
+     "pressure": 0.09714582678564106,
+     "nut": 0.0004650664419029885,
+     "tke": 0.009357520585095317,
+     "omega": 614.3682233180863,
+     "intermittency": 0.9990501895921161,
+     "retheta": 225.85943083921708
+    },
+    "input_scale": {
+     "inlet.bc_intermittency": 1.0,
+     "inlet.bc_omega": 1.6608467457060931,
+     "inlet.bc_retheta": 231.46971130371094,
+     "inlet.bc_tke": 0.0007774879150908524,
+     "outlet.bc_intermittency_reverse": 1.0,
+     "outlet.bc_omega_reverse": 1.5903437112140675,
+     "outlet.bc_retheta_reverse": 231.46971130371094,
+     "outlet.bc_tke_reverse": 0.000699811494942188,
+     "outlet.bc_velocity_reverse": 1.0
+    }
+   }
+  },
+  "family_non_box": {
+   "n_cases": 2390,
+   "NormalizeMeshFields_std": {
+    "velocity": 12.716678763168177,
+    "pressure": 1465.1631735039696,
+    "nut": 0.36511221602026345,
+    "tke": 18.840324604951856,
+    "omega": 433124.789712077,
+    "intermittency": 0.9636264984345435,
+    "retheta": 415.95989413853647
+   },
+   "MergeBoundaries_std": {
+    "bc_velocity": 4.059935195668151,
+    "bc_velocity_reverse": 4.464868832271605,
+    "bc_pressure": 1.0,
+    "bc_tke": 0.9847925024800114,
+    "bc_omega": 303.7174288425566,
+    "bc_intermittency": 0.4468162368559955,
+    "bc_retheta": 193.39679092735767,
+    "bc_tke_reverse": 1.1104556859308852,
+    "bc_omega_reverse": 330.40010755100883,
+    "bc_intermittency_reverse": 0.5154213132424247,
+    "bc_retheta_reverse": 222.79197705207662
+   },
+   "nu_std": {
+    "mean": -5.046530741645687,
+    "std": 1.766177391343682
+   },
+   "isla_constants": {
+    "reynolds": {
+     "mean": 5.846123747452362,
+     "std": 1.3832511523483748
+    },
+    "output_scale": {
+     "velocity": 0.5761897807068133,
+     "pressure": 0.11485514500691647,
+     "nut": 0.0004735741052108364,
+     "tke": 0.009989797056732015,
+     "omega": 670.2165970791964,
+     "intermittency": 0.998886901898332,
+     "retheta": 237.92996449672185
+    },
+    "input_scale": {
+     "inlet.bc_intermittency": 1.0,
+     "inlet.bc_omega": 1.3894444716695191,
+     "inlet.bc_retheta": 235.63867950439453,
+     "inlet.bc_tke": 0.0007465942235953074,
+     "outlet.bc_intermittency_reverse": 1.0,
+     "outlet.bc_omega_reverse": 1.3142398238557345,
+     "outlet.bc_retheta_reverse": 235.63867950439453,
+     "outlet.bc_tke_reverse": 0.0006425296913338664,
+     "outlet.bc_velocity_reverse": 1.0
+    }
+   }
+  },
+  "reynolds": {
+   "n_cases": 2119,
+   "NormalizeMeshFields_std": {
+    "velocity": 12.330044414471423,
+    "pressure": 1442.5094994959297,
+    "nut": 0.7543021474866122,
+    "tke": 24.363905966684772,
+    "omega": 346555.30016261345,
+    "intermittency": 0.9374424612293432,
+    "retheta": 412.6255796273974
+   },
+   "MergeBoundaries_std": {
+    "bc_velocity": 4.406848470131876,
+    "bc_velocity_reverse": 4.747764313751641,
+    "bc_pressure": 1.0,
+    "bc_tke": 1.132445584766247,
+    "bc_omega": 407.1101651349211,
+    "bc_intermittency": 0.4707923535257105,
+    "bc_retheta": 203.0167938149385,
+    "bc_tke_reverse": 1.2047839323243408,
+    "bc_omega_reverse": 437.5238331577324,
+    "bc_intermittency_reverse": 0.5241820424757203,
+    "bc_retheta_reverse": 224.6886952329237
+   },
+   "nu_std": {
+    "mean": -4.161585340704787,
+    "std": 1.404925920138346
+   },
+   "isla_constants": {
+    "reynolds": {
+     "mean": 5.061904274062797,
+     "std": 0.8984660637558649
+    },
+    "output_scale": {
+     "velocity": 0.5757629965587195,
+     "pressure": 0.10028149648043222,
+     "nut": 0.0005279651325705274,
+     "tke": 0.010480705669187185,
+     "omega": 312.9557004573694,
+     "intermittency": 0.9889515915045225,
+     "retheta": 228.01289979875224
+    },
+    "input_scale": {
+     "inlet.bc_intermittency": 1.0,
+     "inlet.bc_omega": 1.8122243606502564,
+     "inlet.bc_retheta": 234.43684387207028,
+     "inlet.bc_tke": 0.000764428259233321,
+     "outlet.bc_intermittency_reverse": 1.0,
+     "outlet.bc_omega_reverse": 1.7320505822505388,
+     "outlet.bc_retheta_reverse": 234.43684387207028,
+     "outlet.bc_tke_reverse": 0.0006970499260232837,
+     "outlet.bc_velocity_reverse": 1.0
+    }
+   }
+  },
+  "bank_blobs": {
+   "n_cases": 2156,
+   "NormalizeMeshFields_std": {
+    "velocity": 12.118544005590966,
+    "pressure": 1445.7109770127943,
+    "nut": 0.6609708353965226,
+    "tke": 22.737268543144257,
+    "omega": 408300.2686678539,
+    "intermittency": 0.9607768856092374,
+    "retheta": 407.8765345399216
+   },
+   "MergeBoundaries_std": {
+    "bc_velocity": 4.356681679987766,
+    "bc_velocity_reverse": 4.610251074693847,
+    "bc_pressure": 1.0,
+    "bc_tke": 1.0881547059852457,
+    "bc_omega": 421.8539265281768,
+    "bc_intermittency": 0.47631796582678315,
+    "bc_retheta": 205.70779175991626,
+    "bc_tke_reverse": 1.1565199149951049,
+    "bc_omega_reverse": 436.92931622573656,
+    "bc_intermittency_reverse": 0.5233733715655945,
+    "bc_retheta_reverse": 224.9561120661491
+   },
+   "nu_std": {
+    "mean": -5.0320468165387355,
+    "std": 1.7917357547231318
+   },
+   "isla_constants": {
+    "reynolds": {
+     "mean": 5.909486898613651,
+     "std": 1.4022215250999561
+    },
+    "output_scale": {
+     "velocity": 0.5741226856226935,
+     "pressure": 0.0925857293731574,
+     "nut": 0.0004802747805702491,
+     "tke": 0.009453283456020489,
+     "omega": 556.3354936665398,
+     "intermittency": 0.9989755633257287,
+     "retheta": 229.81206484158122
+    },
+    "input_scale": {
+     "inlet.bc_intermittency": 1.0,
+     "inlet.bc_omega": 1.714854161438283,
+     "inlet.bc_retheta": 233.26978302001953,
+     "inlet.bc_tke": 0.0007671750740789144,
+     "outlet.bc_intermittency_reverse": 1.0,
+     "outlet.bc_omega_reverse": 1.6483768536378287,
+     "outlet.bc_retheta_reverse": 233.26978302001953,
+     "outlet.bc_tke_reverse": 0.0006971092651650533,
+     "outlet.bc_velocity_reverse": 1.0
+    }
+   }
+  },
+  "bank_zero_to_cad": {
+   "n_cases": 3040,
+   "NormalizeMeshFields_std": {
+    "velocity": 11.753671055333886,
+    "pressure": 1273.238246403876,
+    "nut": 0.6418377034586269,
+    "tke": 18.012823974682544,
+    "omega": 426869.3988195855,
+    "intermittency": 0.9607385270663177,
+    "retheta": 409.24426782746997
+   },
+   "MergeBoundaries_std": {
+    "bc_velocity": 4.2929787771445245,
+    "bc_velocity_reverse": 4.600141582281482,
+    "bc_pressure": 1.0,
+    "bc_tke": 1.0914271055138856,
+    "bc_omega": 370.86629076633864,
+    "bc_intermittency": 0.4761061399563253,
+    "bc_retheta": 206.26645836102816,
+    "bc_tke_reverse": 1.1923014562925813,
+    "bc_omega_reverse": 388.76139218938357,
+    "bc_intermittency_reverse": 0.5261449321131015,
+    "bc_retheta_reverse": 227.6920214866244
+   },
+   "nu_std": {
+    "mean": -5.03985751517486,
+    "std": 1.7832077628672114
+   },
+   "isla_constants": {
+    "reynolds": {
+     "mean": 5.931172984254797,
+     "std": 1.4016623582056955
+    },
+    "output_scale": {
+     "velocity": 0.5750455910923524,
+     "pressure": 0.09784405638644142,
+     "nut": 0.0004552544985634457,
+     "tke": 0.009303722009737817,
+     "omega": 589.0123693214402,
+     "intermittency": 0.9992353485976051,
+     "retheta": 228.82282911913194
+    },
+    "input_scale": {
+     "inlet.bc_intermittency": 1.0,
+     "inlet.bc_omega": 1.7248663817762224,
+     "inlet.bc_retheta": 235.63867950439453,
+     "inlet.bc_tke": 0.0007465942235953074,
+     "outlet.bc_intermittency_reverse": 1.0,
+     "outlet.bc_omega_reverse": 1.6536334523277176,
+     "outlet.bc_retheta_reverse": 235.63867950439453,
+     "outlet.bc_tke_reverse": 0.0006788383999844252,
+     "outlet.bc_velocity_reverse": 1.0
+    }
+   }
+  },
+  "profile_crossflow": {
+   "n_cases": 2820,
+   "NormalizeMeshFields_std": {
+    "velocity": 11.85765839833407,
+    "pressure": 1235.5374038908392,
+    "nut": 0.666721631650113,
+    "tke": 22.08209561510457,
+    "omega": 439653.51562778547,
+    "intermittency": 0.9612050400577624,
+    "retheta": 414.56057992107617
+   },
+   "MergeBoundaries_std": {
+    "bc_velocity": 4.276275383338359,
+    "bc_velocity_reverse": 4.515789378974011,
+    "bc_pressure": 1.0,
+    "bc_tke": 1.0916257907531397,
+    "bc_omega": 380.0001137422937,
+    "bc_intermittency": 0.4815944233352811,
+    "bc_retheta": 209.21913413854708,
+    "bc_tke_reverse": 1.151390228581328,
+    "bc_omega_reverse": 391.72195969166467,
+    "bc_intermittency_reverse": 0.5277098385328941,
+    "bc_retheta_reverse": 229.18870312517726
+   },
+   "nu_std": {
+    "mean": -5.051869262530922,
+    "std": 1.7734722807865893
+   },
+   "isla_constants": {
+    "reynolds": {
+     "mean": 5.9689897449788445,
+     "std": 1.407642216403422
+    },
+    "output_scale": {
+     "velocity": 0.5745966174731381,
+     "pressure": 0.08286252045777334,
+     "nut": 0.0004706025135816815,
+     "tke": 0.009682611575389504,
+     "omega": 604.5636930811295,
+     "intermittency": 0.9995359550746818,
+     "retheta": 233.41497569896345
+    },
+    "input_scale": {
+     "inlet.bc_intermittency": 1.0,
+     "inlet.bc_omega": 1.8195730748902932,
+     "inlet.bc_retheta": 235.63867950439453,
+     "inlet.bc_tke": 0.0007465942235953074,
+     "outlet.bc_intermittency_reverse": 1.0,
+     "outlet.bc_omega_reverse": 1.7246244891548237,
+     "outlet.bc_retheta_reverse": 235.63867950439453,
+     "outlet.bc_tke_reverse": 0.0006646984262836152,
+     "outlet.bc_velocity_reverse": 1.0
+    }
+   }
+  },
+  "profile_dual_inlet": {
+   "n_cases": 2875,
+   "NormalizeMeshFields_std": {
+    "velocity": 9.200298947587683,
+    "pressure": 623.1955252609341,
+    "nut": 0.6618651500021814,
+    "tke": 15.610569873049577,
+    "omega": 388608.21187635505,
+    "intermittency": 0.9606468156981889,
+    "retheta": 390.67396898290247
+   },
+   "MergeBoundaries_std": {
+    "bc_velocity": 4.183565263614686,
+    "bc_velocity_reverse": 4.829250175643186,
+    "bc_pressure": 1.0,
+    "bc_tke": 1.0991679192964028,
+    "bc_omega": 354.7399949475901,
+    "bc_intermittency": 0.46587816567479295,
+    "bc_retheta": 201.49414165901885,
+    "bc_tke_reverse": 1.2548162218043042,
+    "bc_omega_reverse": 397.4973482240221,
+    "bc_intermittency_reverse": 0.5301580997300882,
+    "bc_retheta_reverse": 228.7716201220864
+   },
+   "nu_std": {
+    "mean": -5.0329198331164475,
+    "std": 1.7798379098994501
+   },
+   "isla_constants": {
+    "reynolds": {
+     "mean": 5.940531282577103,
+     "std": 1.4034112222010615
+    },
+    "output_scale": {
+     "velocity": 0.571670264317274,
+     "pressure": 0.08495820837363594,
+     "nut": 0.0004476115772134751,
+     "tke": 0.00827628328180353,
+     "omega": 555.7563588563587,
+     "intermittency": 0.9990147503226178,
+     "retheta": 217.80139608482295
+    },
+    "input_scale": {
+     "inlet.bc_intermittency": 1.0,
+     "inlet.bc_omega": 1.796978311946818,
+     "inlet.bc_retheta": 233.19631958007812,
+     "inlet.bc_tke": 0.0007627061167038084,
+     "outlet.bc_intermittency_reverse": 1.0,
+     "outlet.bc_omega_reverse": 1.7969783119468175,
+     "outlet.bc_retheta_reverse": 233.19631958007812,
+     "outlet.bc_tke_reverse": 0.0007627061167038085,
+     "outlet.bc_velocity_reverse": 1.0
+    }
+   }
+  }
+ },
+ "relative_change": {
+  "full": {
+   "NormalizeMeshFields_std.velocity": 0.03586808235689317,
+   "NormalizeMeshFields_std.pressure": 0.06047482097452293,
+   "NormalizeMeshFields_std.nut": -0.2574304625405601,
+   "NormalizeMeshFields_std.tke": -0.06404815815530748,
+   "NormalizeMeshFields_std.omega": 0.13102598289653414,
+   "NormalizeMeshFields_std.intermittency": -0.001359562007946805,
+   "NormalizeMeshFields_std.retheta": 0.005325359561909737,
+   "MergeBoundaries_std.bc_velocity": -0.007293090760497509,
+   "MergeBoundaries_std.bc_velocity_reverse": -0.00892660005200612,
+   "MergeBoundaries_std.bc_pressure": 0.0,
+   "MergeBoundaries_std.bc_tke": 0.07919189975307511,
+   "MergeBoundaries_std.bc_omega": 0.11244778312697075,
+   "MergeBoundaries_std.bc_intermittency": 0.003407890781524478,
+   "MergeBoundaries_std.bc_retheta": -0.026487065351236485,
+   "MergeBoundaries_std.bc_tke_reverse": 0.06093428741927949,
+   "MergeBoundaries_std.bc_omega_reverse": 0.09469150238890404,
+   "MergeBoundaries_std.bc_intermittency_reverse": 0.0003391817927009749,
+   "MergeBoundaries_std.bc_retheta_reverse": -0.025572675218960676,
+   "nu_std.mean": 0.01359590618354448,
+   "nu_std.std": 0.008911351136348148,
+   "isla_constants.reynolds.mean": -0.010231256551638854,
+   "isla_constants.reynolds.std": 0.02047134580562872,
+   "isla_constants.output_scale.velocity": 0.002374666620397847,
+   "isla_constants.output_scale.pressure": -0.19590735770236328,
+   "isla_constants.output_scale.nut": -0.038607980506351225,
+   "isla_constants.output_scale.tke": -0.08838516863001576,
+   "isla_constants.output_scale.omega": -0.009868363018662688,
+   "isla_constants.output_scale.intermittency": 0.00029962182692466586,
+   "isla_constants.output_scale.retheta": -0.013717547692725825,
+   "isla_constants.input_scale.inlet.bc_intermittency": 0.0,
+   "isla_constants.input_scale.inlet.bc_omega": 0.009654448480944844,
+   "isla_constants.input_scale.inlet.bc_retheta": -0.05127900875955929,
+   "isla_constants.input_scale.inlet.bc_tke": 0.12982967154298408,
+   "isla_constants.input_scale.outlet.bc_intermittency_reverse": 0.0,
+   "isla_constants.input_scale.outlet.bc_omega_reverse": 0.02571160735832106,
+   "isla_constants.input_scale.outlet.bc_retheta_reverse": -0.05127900875955905,
+   "isla_constants.input_scale.outlet.bc_tke_reverse": 0.10621908720179861,
+   "isla_constants.input_scale.outlet.bc_velocity_reverse": 0.0
+  },
+  "family_non_box": {
+   "NormalizeMeshFields_std.velocity": 0.02790634401954405,
+   "NormalizeMeshFields_std.pressure": 0.06338111181597463,
+   "NormalizeMeshFields_std.nut": 0.1221494514277367,
+   "NormalizeMeshFields_std.tke": 0.11105948716619365,
+   "NormalizeMeshFields_std.omega": 0.107526111533433,
+   "NormalizeMeshFields_std.intermittency": -0.0019060118955744382,
+   "NormalizeMeshFields_std.retheta": 0.013544613139465065,
+   "MergeBoundaries_std.bc_velocity": -0.004466696237883857,
+   "MergeBoundaries_std.bc_velocity_reverse": -0.018722576331145005,
+   "MergeBoundaries_std.bc_pressure": 0.0,
+   "MergeBoundaries_std.bc_tke": 0.02106799885187646,
+   "MergeBoundaries_std.bc_omega": 0.0568044545051552,
+   "MergeBoundaries_std.bc_intermittency": 0.0051665496734807515,
+   "MergeBoundaries_std.bc_retheta": -0.0024783108464713605,
+   "MergeBoundaries_std.bc_tke_reverse": -0.004439763994900692,
+   "MergeBoundaries_std.bc_omega_reverse": 0.02996186971524035,
+   "MergeBoundaries_std.bc_intermittency_reverse": -0.0028953421297958273,
+   "MergeBoundaries_std.bc_retheta_reverse": -0.011542761878435616,
+   "nu_std.mean": 0.021733822567285555,
+   "nu_std.std": 0.002489857638052069,
+   "isla_constants.reynolds.mean": -0.014531946142038342,
+   "isla_constants.reynolds.std": 0.006401146705760142,
+   "isla_constants.output_scale.velocity": -0.00014443513241048977,
+   "isla_constants.output_scale.pressure": -0.24664171407291244,
+   "isla_constants.output_scale.nut": 0.04202909931821011,
+   "isla_constants.output_scale.tke": -0.013117907098476688,
+   "isla_constants.output_scale.omega": -0.005780881282064548,
+   "isla_constants.output_scale.intermittency": 0.00011541939291303541,
+   "isla_constants.output_scale.retheta": -0.002905125538479469,
+   "isla_constants.input_scale.inlet.bc_intermittency": 0.0,
+   "isla_constants.input_scale.inlet.bc_omega": 0.03562017119529442,
+   "isla_constants.input_scale.inlet.bc_retheta": -0.01910286248625696,
+   "isla_constants.input_scale.inlet.bc_tke": 0.05490286259973606,
+   "isla_constants.input_scale.outlet.bc_intermittency_reverse": 0.0,
+   "isla_constants.input_scale.outlet.bc_omega_reverse": 0.03749414747990678,
+   "isla_constants.input_scale.outlet.bc_retheta_reverse": -0.01910286248625696,
+   "isla_constants.input_scale.outlet.bc_tke_reverse": 0.08189071587099644,
+   "isla_constants.input_scale.outlet.bc_velocity_reverse": 0.0
+  },
+  "reynolds": {
+   "NormalizeMeshFields_std.velocity": 0.059808595976211895,
+   "NormalizeMeshFields_std.pressure": 0.10143046904164858,
+   "NormalizeMeshFields_std.nut": -0.2510765530052222,
+   "NormalizeMeshFields_std.tke": -0.07457320933079092,
+   "NormalizeMeshFields_std.omega": 0.14301022146613104,
+   "NormalizeMeshFields_std.intermittency": -0.0020673618224934347,
+   "NormalizeMeshFields_std.retheta": 0.011798925473161104,
+   "MergeBoundaries_std.bc_velocity": -0.001905083294132738,
+   "MergeBoundaries_std.bc_velocity_reverse": -0.007364597028558359,
+   "MergeBoundaries_std.bc_pressure": 0.0,
+   "MergeBoundaries_std.bc_tke": 0.10699728999139603,
+   "MergeBoundaries_std.bc_omega": 0.10528521972290251,
+   "MergeBoundaries_std.bc_intermittency": -0.000777941872568797,
+   "MergeBoundaries_std.bc_retheta": -0.01597670232833774,
+   "MergeBoundaries_std.bc_tke_reverse": 0.08501577211043268,
+   "MergeBoundaries_std.bc_omega_reverse": 0.08889372815645302,
+   "MergeBoundaries_std.bc_intermittency_reverse": -0.003092851820223519,
+   "MergeBoundaries_std.bc_retheta_reverse": -0.01838322326052598,
+   "nu_std.mean": 0.01226324192421069,
+   "nu_std.std": -0.011674562630544616,
+   "isla_constants.reynolds.mean": -0.010393050823850983,
+   "isla_constants.reynolds.std": 0.01457763935837955,
+   "isla_constants.output_scale.velocity": 0.0019192374106651062,
+   "isla_constants.output_scale.pressure": -0.2605146196024173,
+   "isla_constants.output_scale.nut": -0.10043244435843558,
+   "isla_constants.output_scale.tke": -0.1027175282993676,
+   "isla_constants.output_scale.omega": 0.08677886935426561,
+   "isla_constants.output_scale.intermittency": -0.0003682088420520385,
+   "isla_constants.output_scale.retheta": 0.0028023347010743553,
+   "isla_constants.input_scale.inlet.bc_intermittency": 0.0,
+   "isla_constants.input_scale.inlet.bc_omega": -0.0036579176305217894,
+   "isla_constants.input_scale.inlet.bc_retheta": -0.03324135890445042,
+   "isla_constants.input_scale.inlet.bc_tke": 0.0662391938668642,
+   "isla_constants.input_scale.outlet.bc_intermittency_reverse": 0.0,
+   "isla_constants.input_scale.outlet.bc_omega_reverse": -0.008182278767020854,
+   "isla_constants.input_scale.outlet.bc_retheta_reverse": -0.03324135890445042,
+   "isla_constants.input_scale.outlet.bc_tke_reverse": 0.05943923939941153,
+   "isla_constants.input_scale.outlet.bc_velocity_reverse": 0.0
+  },
+  "bank_blobs": {
+   "NormalizeMeshFields_std.velocity": 0.05683191462680927,
+   "NormalizeMeshFields_std.pressure": 0.09032630018942528,
+   "NormalizeMeshFields_std.nut": -0.2241184241572843,
+   "NormalizeMeshFields_std.tke": -0.022830157891005152,
+   "NormalizeMeshFields_std.omega": 0.12030823678501085,
+   "NormalizeMeshFields_std.intermittency": -0.00040574474241088736,
+   "NormalizeMeshFields_std.retheta": 0.018389811768802517,
+   "MergeBoundaries_std.bc_velocity": 0.01103651771730174,
+   "MergeBoundaries_std.bc_velocity_reverse": 0.0037616050680139607,
+   "MergeBoundaries_std.bc_pressure": 0.0,
+   "MergeBoundaries_std.bc_tke": 0.08415493041163519,
+   "MergeBoundaries_std.bc_omega": 0.11121987643699299,
+   "MergeBoundaries_std.bc_intermittency": 0.004068810566361114,
+   "MergeBoundaries_std.bc_retheta": -0.013620854381776038,
+   "MergeBoundaries_std.bc_tke_reverse": 0.07409265721198714,
+   "MergeBoundaries_std.bc_omega_reverse": 0.10125798485101217,
+   "MergeBoundaries_std.bc_intermittency_reverse": -0.0020548837984806357,
+   "MergeBoundaries_std.bc_retheta_reverse": -0.017877556509784297,
+   "nu_std.mean": -0.00020803892420545746,
+   "nu_std.std": 0.0014911497445027357,
+   "isla_constants.reynolds.mean": 0.0009375508166928846,
+   "isla_constants.reynolds.std": 0.023837228348358837,
+   "isla_constants.output_scale.velocity": 0.003017894726818693,
+   "isla_constants.output_scale.pressure": -0.22597450896792548,
+   "isla_constants.output_scale.nut": -0.07324359550166386,
+   "isla_constants.output_scale.tke": -0.11858987446357369,
+   "isla_constants.output_scale.omega": 0.02164955990682513,
+   "isla_constants.output_scale.intermittency": 0.000525268000367222,
+   "isla_constants.output_scale.retheta": -0.004400652766039275,
+   "isla_constants.input_scale.inlet.bc_intermittency": 0.0,
+   "isla_constants.input_scale.inlet.bc_omega": 0.018958149204554176,
+   "isla_constants.input_scale.inlet.bc_retheta": -0.03480671239510717,
+   "isla_constants.input_scale.inlet.bc_tke": 0.08797829999444874,
+   "isla_constants.input_scale.outlet.bc_intermittency_reverse": 0.0,
+   "isla_constants.input_scale.outlet.bc_omega_reverse": 0.004525656951113798,
+   "isla_constants.input_scale.outlet.bc_retheta_reverse": -0.03480671239510717,
+   "isla_constants.input_scale.outlet.bc_tke_reverse": 0.0842266206051778,
+   "isla_constants.input_scale.outlet.bc_velocity_reverse": 0.0
+  },
+  "bank_zero_to_cad": {
+   "NormalizeMeshFields_std.velocity": 0.0418723775730983,
+   "NormalizeMeshFields_std.pressure": 0.08611284445318383,
+   "NormalizeMeshFields_std.nut": -0.2367418496058602,
+   "NormalizeMeshFields_std.tke": -0.19024774763479066,
+   "NormalizeMeshFields_std.omega": 0.13786635316275997,
+   "NormalizeMeshFields_std.intermittency": -0.001400289950255426,
+   "NormalizeMeshFields_std.retheta": 0.012915027551633497,
+   "MergeBoundaries_std.bc_velocity": -0.0042061159410584255,
+   "MergeBoundaries_std.bc_velocity_reverse": -0.009327640479908233,
+   "MergeBoundaries_std.bc_pressure": 0.0,
+   "MergeBoundaries_std.bc_tke": 0.06010741116686704,
+   "MergeBoundaries_std.bc_omega": 0.11547122947590512,
+   "MergeBoundaries_std.bc_intermittency": 0.0007105850801667369,
+   "MergeBoundaries_std.bc_retheta": -0.016120914882085308,
+   "MergeBoundaries_std.bc_tke_reverse": 0.041056250260476615,
+   "MergeBoundaries_std.bc_omega_reverse": 0.09728523269465886,
+   "MergeBoundaries_std.bc_intermittency_reverse": -0.0017536280489095224,
+   "MergeBoundaries_std.bc_retheta_reverse": -0.01738562072449318,
+   "nu_std.mean": 0.007346954656023549,
+   "nu_std.std": 0.007355010314413243,
+   "isla_constants.reynolds.mean": -0.00649318552311822,
+   "isla_constants.reynolds.std": 0.024283058911679277,
+   "isla_constants.output_scale.velocity": 0.002237675486732061,
+   "isla_constants.output_scale.pressure": -0.22129141777695183,
+   "isla_constants.output_scale.nut": -0.06323306900610462,
+   "isla_constants.output_scale.tke": -0.09756665852791926,
+   "isla_constants.output_scale.omega": 0.037303646831005205,
+   "isla_constants.output_scale.intermittency": 0.0002581720808520878,
+   "isla_constants.output_scale.retheta": 0.0033185117367892135,
+   "isla_constants.input_scale.inlet.bc_intermittency": 0.0,
+   "isla_constants.input_scale.inlet.bc_omega": -8.831721892272403e-05,
+   "isla_constants.input_scale.inlet.bc_retheta": -0.023220731788142403,
+   "isla_constants.input_scale.inlet.bc_tke": 0.05723237881651571,
+   "isla_constants.input_scale.outlet.bc_intermittency_reverse": 0.0,
+   "isla_constants.input_scale.outlet.bc_omega_reverse": -0.0027769129662356864,
+   "isla_constants.input_scale.outlet.bc_retheta_reverse": -0.023220731788142403,
+   "isla_constants.input_scale.outlet.bc_tke_reverse": 0.06620741160253332,
+   "isla_constants.input_scale.outlet.bc_velocity_reverse": 0.0
+  },
+  "profile_crossflow": {
+   "NormalizeMeshFields_std.velocity": 0.0381150689406222,
+   "NormalizeMeshFields_std.pressure": 0.07708206581496341,
+   "NormalizeMeshFields_std.nut": -0.27550637286152263,
+   "NormalizeMeshFields_std.tke": -0.11489933897904511,
+   "NormalizeMeshFields_std.omega": 0.0989995359550144,
+   "NormalizeMeshFields_std.intermittency": -0.0016261303246970476,
+   "NormalizeMeshFields_std.retheta": 0.005599681047932552,
+   "MergeBoundaries_std.bc_velocity": 0.003202122953321642,
+   "MergeBoundaries_std.bc_velocity_reverse": 0.01433661214380931,
+   "MergeBoundaries_std.bc_pressure": 0.0,
+   "MergeBoundaries_std.bc_tke": 0.04777523636589932,
+   "MergeBoundaries_std.bc_omega": 0.08314497148959098,
+   "MergeBoundaries_std.bc_intermittency": -0.008727147428402162,
+   "MergeBoundaries_std.bc_retheta": -0.023942901339367533,
+   "MergeBoundaries_std.bc_tke_reverse": 0.03972609249392947,
+   "MergeBoundaries_std.bc_omega_reverse": 0.07907919857912066,
+   "MergeBoundaries_std.bc_intermittency_reverse": -0.0030090747018194897,
+   "MergeBoundaries_std.bc_retheta_reverse": -0.01788545147962059,
+   "nu_std.mean": 0.006831593718301917,
+   "nu_std.std": 0.0026351965319480657,
+   "isla_constants.reynolds.mean": -0.010051692307682004,
+   "isla_constants.reynolds.std": 0.012803103759570847,
+   "isla_constants.output_scale.velocity": 0.002284997765558769,
+   "isla_constants.output_scale.pressure": -0.11619805020484512,
+   "isla_constants.output_scale.nut": -0.08063778843976042,
+   "isla_constants.output_scale.tke": -0.11849567572687035,
+   "isla_constants.output_scale.omega": 0.0013544021482489882,
+   "isla_constants.output_scale.intermittency": -2.9172428290187428e-06,
+   "isla_constants.output_scale.retheta": -0.002979217335471153,
+   "isla_constants.input_scale.inlet.bc_intermittency": 0.0,
+   "isla_constants.input_scale.inlet.bc_omega": -0.042762258790777365,
+   "isla_constants.input_scale.inlet.bc_retheta": -0.017689001225909794,
+   "isla_constants.input_scale.inlet.bc_tke": 0.05444610591253983,
+   "isla_constants.input_scale.outlet.bc_intermittency_reverse": 0.0,
+   "isla_constants.input_scale.outlet.bc_omega_reverse": -0.03988557960520681,
+   "isla_constants.input_scale.outlet.bc_retheta_reverse": -0.017689001225909794,
+   "isla_constants.input_scale.outlet.bc_tke_reverse": 0.05572888755520505,
+   "isla_constants.input_scale.outlet.bc_velocity_reverse": 0.0
+  },
+  "profile_dual_inlet": {
+   "NormalizeMeshFields_std.velocity": 0.014223685720944559,
+   "NormalizeMeshFields_std.pressure": -0.060542977834924655,
+   "NormalizeMeshFields_std.nut": -0.22605108917990727,
+   "NormalizeMeshFields_std.tke": -0.38146518561252746,
+   "NormalizeMeshFields_std.omega": 0.15387404586360667,
+   "NormalizeMeshFields_std.intermittency": -0.0010517196978928143,
+   "NormalizeMeshFields_std.retheta": 0.004401925392657522,
+   "MergeBoundaries_std.bc_velocity": -0.0021351026625918614,
+   "MergeBoundaries_std.bc_velocity_reverse": 0.01105993851623614,
+   "MergeBoundaries_std.bc_pressure": 0.0,
+   "MergeBoundaries_std.bc_tke": 0.0732780791326088,
+   "MergeBoundaries_std.bc_omega": 0.12388448228376148,
+   "MergeBoundaries_std.bc_intermittency": -0.0035099866686258076,
+   "MergeBoundaries_std.bc_retheta": -0.030897851354015016,
+   "MergeBoundaries_std.bc_tke_reverse": 0.06217991747849921,
+   "MergeBoundaries_std.bc_omega_reverse": 0.11223263841610699,
+   "MergeBoundaries_std.bc_intermittency_reverse": 0.0007053239349921298,
+   "MergeBoundaries_std.bc_retheta_reverse": -0.02363964360934216,
+   "nu_std.mean": 0.006382339577967566,
+   "nu_std.std": 0.008433391987570928,
+   "isla_constants.reynolds.mean": -0.0042800027609235045,
+   "isla_constants.reynolds.std": 0.02874455268068693,
+   "isla_constants.output_scale.velocity": 0.0034494965984096042,
+   "isla_constants.output_scale.pressure": -0.23916996942078603,
+   "isla_constants.output_scale.nut": -0.08208071300388343,
+   "isla_constants.output_scale.tke": -0.14648874956657934,
+   "isla_constants.output_scale.omega": 0.016857603661587006,
+   "isla_constants.output_scale.intermittency": 0.00037776811524528413,
+   "isla_constants.output_scale.retheta": -0.01835033936873556,
+   "isla_constants.input_scale.inlet.bc_intermittency": 0.0,
+   "isla_constants.input_scale.inlet.bc_omega": 0.014063102690680628,
+   "isla_constants.input_scale.inlet.bc_retheta": -0.04484541856788377,
+   "isla_constants.input_scale.inlet.bc_tke": 0.10888827224463107,
+   "isla_constants.input_scale.outlet.bc_intermittency_reverse": 0.0,
+   "isla_constants.input_scale.outlet.bc_omega_reverse": 0.014063102690680755,
+   "isla_constants.input_scale.outlet.bc_retheta_reverse": -0.04484541856788377,
+   "isla_constants.input_scale.outlet.bc_tke_reverse": 0.10888827224463078,
+   "isla_constants.input_scale.outlet.bc_velocity_reverse": 0.0
+  }
+ },
+ "max_abs_relative_change": {
+  "full": [
+   "NormalizeMeshFields_std.nut",
+   -0.2574304625405601
+  ],
+  "family_non_box": [
+   "isla_constants.output_scale.pressure",
+   -0.24664171407291244
+  ],
+  "reynolds": [
+   "isla_constants.output_scale.pressure",
+   -0.2605146196024173
+  ],
+  "bank_blobs": [
+   "isla_constants.output_scale.pressure",
+   -0.22597450896792548
+  ],
+  "bank_zero_to_cad": [
+   "NormalizeMeshFields_std.nut",
+   -0.2367418496058602
+  ],
+  "profile_crossflow": [
+   "NormalizeMeshFields_std.nut",
+   -0.27550637286152263
+  ],
+  "profile_dual_inlet": [
+   "NormalizeMeshFields_std.tke",
+   -0.38146518561252746
+  ]
+ }
+}
