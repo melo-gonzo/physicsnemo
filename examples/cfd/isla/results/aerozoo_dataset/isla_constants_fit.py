@@ -25,6 +25,8 @@ usage: isla_constants_fit.py aerozoo <data> <model yaml> <out.jsonl> <shard> <n_
        isla_constants_fit.py airfrans <dataset yaml> <model yaml> <out.jsonl> <workers> [<split>...]
        isla_constants_fit.py summarize <aerozoo manifest> <airfrans manifest> <out.json> <jsonl...>
        isla_constants_fit.py airfrans_fit <airfrans manifest> <out.json> <split,...> <jsonl...>
+       isla_constants_fit.py aerozoo_rms <data> <out.jsonl> <shard> <n_shards> <workers>
+       isla_constants_fit.py aerozoo_rms_fit <aerozoo manifest> <model yaml> <out.json> <jsonl...>
 
 AF-EXTRAP (2026-10-21): the airfrans scan takes the splits whose cases it reads (default full_train) and also records
 each case's freestream speed, angle of attack and Reynolds number and the mean and population std of nut over every
@@ -35,7 +37,13 @@ std of U_inf_mag (the baselines' SplitGlobalVector).
 
 AF-WHOLE (2026-10-23): the airfrans scan reads the case files and the far field where the dataset yaml's reader does
 (train_datadir, and vtk_boundaries through the recipe's own read_vtk_boundary), so L is that of every boundary the
-model config declares."""
+model config declares.
+
+AZ7 (2026-10-26): the interior task's seven fields. AZ_FIELDS adds intermittency and retheta (dimensionless), so the
+scan fits all seven. A dimensionless output's scale factor is 1, so its per-case RMS needs no case scale:
+aerozoo_rms reads only the seeded 20,000-point interior sample of the scan above (the same torch permutation of the
+same rows) and writes each field's RMS in SI units (rms_si); aerozoo_rms_fit fits, per split, the median over the
+train cases for the outputs the model config declares without units."""
 
 import glob
 import json
@@ -53,6 +61,8 @@ AZ_FIELDS = {
     "nut": ("solution", "turbulent_kinematic_viscosity"),
     "tke": ("solution", "turbulent_kinetic_energy"),
     "omega": ("solution", "specific_dissipation_rate"),
+    "intermittency": ("solution", "intermittency"),
+    "retheta": ("solution", "momentum_thickness_reynolds_number"),
 }
 AF_FIELDS = {"nut": "nut"}
 #: The boundary inputs by condition, under their raw names (the pipeline's RenameMeshFields).
@@ -186,6 +196,50 @@ def aerozoo_case(arg):
                     x.square().sum(-1) if x.ndim == 2 else x.square()
                 )  # a vector's magnitude
                 row[f"{cond}.{f}"] = math.sqrt(float((a * sq).sum() / a.sum()))
+        return row
+    except Exception:  # noqa: BLE001
+        import traceback
+
+        return {"case": path, "error": traceback.format_exc()[-1200:]}
+
+
+def aerozoo_rms_case(path):
+    """Per AZ_FIELDS field, the RMS in SI units of aerozoo_case's interior sample (velocity the isotropic one)."""
+    import numpy as np
+
+    torch.set_num_threads(1)
+    try:
+        sol = os.path.join(
+            path, "_tensordict", "interior", "_tensordict", "point_data", "solution"
+        )
+        meta = json.load(open(os.path.join(sol, "meta.json")))
+        n = int(meta["shape"][0])
+        idx = torch.randperm(n, generator=torch.Generator().manual_seed(0))[
+            :20000
+        ].numpy()
+        order = idx.argsort()  # read in file order, keep the sample's order
+        row = {
+            "case": os.path.basename(os.path.dirname(path)),
+            "n_interior": n,
+            "rms_si": {},
+        }
+        for f, (_, key) in AZ_FIELDS.items():
+            shape = tuple(meta[key]["shape"])
+            assert meta[key]["dtype"] == "torch.float32", meta[key]
+            mm = np.memmap(
+                os.path.join(sol, f"{key}.memmap"),
+                dtype=np.float32,
+                mode="r",
+                shape=shape,
+            )
+            x = np.empty((len(idx), *shape[1:]), np.float32)
+            x[order] = mm[idx[order]]
+            y = torch.from_numpy(x).double() / 1.0
+            row["rms_si"][f] = math.sqrt(
+                float(y.square().sum(-1).mean() / y.shape[-1])
+                if y.ndim == 2
+                else float(y.square().mean())
+            )
         return row
     except Exception:  # noqa: BLE001
         import traceback
@@ -332,6 +386,63 @@ if __name__ == "__main__":
         paths = [p for c in cases for p in glob.glob(os.path.join(data, c, "*.pdmsh"))]
         print("cases", len(cases), "paths", len(paths), "vtk", vtk, flush=True)
         _run(airfrans_case, [(p, yaml, vtk) for p in paths], out, nw)
+    elif mode == "aerozoo_rms":
+        data, out, shard, nsh, nw = (
+            sys.argv[2],
+            sys.argv[3],
+            int(sys.argv[4]),
+            int(sys.argv[5]),
+            int(sys.argv[6]),
+        )
+        man = json.load(open(os.path.join(data, "manifest.json")))
+        cases = sorted(set().union(*(man[f"{s}.train"] for s in AZ_SPLITS)))[shard::nsh]
+        paths = [
+            p
+            for c in cases
+            for p in glob.glob(os.path.join(data, "shard-*", c, "domain.pdmsh"))
+        ]
+        print("cases", len(cases), "paths", len(paths), flush=True)
+        _run(aerozoo_rms_case, paths, out, nw)
+    elif mode == "aerozoo_rms_fit":
+        from omegaconf import OmegaConf
+
+        az_man, yaml, out = json.load(open(sys.argv[2])), sys.argv[3], sys.argv[4]
+        schema = OmegaConf.to_container(OmegaConf.load(yaml).model.output_schema)
+        fields = [f for f, v in schema.items() if not v.get("units")]  # scale factor 1
+        rows = [json.loads(line) for f in sys.argv[5:] for line in open(f)]
+        errors = [r for r in rows if "error" in r]
+        good = {r["case"]: r["rms_si"] for r in rows if "error" not in r}
+        fits = {}
+        for s in AZ_SPLITS:
+            have = [good[c] for c in az_man[f"{s}.train"] if c in good]
+            fits[s] = {
+                "n_cases": len(have),
+                "n_train": len(az_man[f"{s}.train"]),
+                "scale": {f: statistics.median(r[f] for r in have) for f in fields},
+                "scale_quartiles": {
+                    f: statistics.quantiles([r[f] for r in have], n=4) for f in fields
+                },
+            }
+        json.dump(
+            {
+                "fields": fields,
+                "fits": fits,
+                "n_errors": len(errors),
+                "errors": errors[:5],
+            },
+            open(out, "w"),
+            indent=1,
+        )
+        print(
+            json.dumps(
+                {
+                    k: {kk: v[kk] for kk in ("n_cases", "n_train", "scale")}
+                    for k, v in fits.items()
+                },
+                indent=1,
+            )
+        )
+        print("errors", len(errors), errors[:2])
     elif mode == "airfrans_fit":
         af_man, out, splits = json.load(open(sys.argv[2])), sys.argv[3], sys.argv[4]
         rows = [json.loads(line) for f in sys.argv[5:] for line in open(f)]
