@@ -937,6 +937,7 @@ rows = [
     ("Do ISLA's declared scales add accuracy where the Reynolds number varies widely? (@sec-oq-scales)", "ISLA with and without its scales, the latter reading a standardized global input, on a dataset whose Reynolds number varies widely, such as AeroZoo", "not priced"),
     ("Which scale of ISLA's Reynolds input serves AirfRANS and AeroZoo alike? (@sec-oq-reynolds)", "a single program-wide fixed scale, trained on both `reynolds` splits, read against the fitted scale", "not priced"),
     ("Are ISLA's crossflow and non-box failures on AeroZoo limits of the architecture? (@sec-oq-aerozoo)", "for the non-box family, a training set whose velocity scales cover the ducts'", "not priced"),
+    ("What does training on all seven of AeroZoo's fields do to the fields it is scored on? (@sec-oq-aerozoo-fields)", "one architecture trained on five fields against seven on AeroZoo's canonical benchmark, two seeds each, scored by AeroZoo's metrics", "not priced"),
     ("What sets ISLA's pressure level next to the outlet on the crossflow layout? (@sec-oq-outlet)", "more seeds of ISLA with and without the outlet's level held, on `profile_crossflow`, the outlet read through a bounded number of probe points; the predicted pressure along the path from the outlet into the interior, for both forms", "not priced"),
     ("Does what rounding still decides in the class's geometry move a trained model? (@sec-oq-precision)", "the standings "
      "retrained with the class's geometry, scored rotated and translated, and in float32 against float64 on the AeroZoo cases of "
@@ -1138,17 +1139,19 @@ print("**The open question is what sets ISLA's pressure level next to the outlet
 ```{python}
 #| label: para-oq-aerozoo-fields
 #| output: asis
-print("**Every architecture trains on all seven of AeroZoo's fields in the recipe's configurations, so a standing trained with "
-      "them compares the architectures trained alike.** The standing's models predict five of the release's seven fields; the "
-      "recipe's AeroZoo configurations add the intermittency $\\gamma$ and the transition Reynolds number $Re_\\theta$ as "
-      "targets for ISLA, GeoTransolver-volume and Transolver alike, each standardized per split by its scale alone, on AeroZoo's "
-      "canonical benchmark (@sec-data-aerozoo). AeroZoo's interior metrics read only velocity and pressure, so the two added fields "
-      "change a model's score only through what training on them does to the other five, and that is not measured for any "
-      "architecture. A standing trained with these configurations measures it, every model scored by AeroZoo's metrics with the "
-      "relative L2 of velocity and pressure beside them; its baselines, GeoTransolver-volume on the seven splits and Transolver "
-      f"on `full`, two seeds each, train in about {fmt_h(q_az7)} GPU-hours. Data: "
+print("**The open question is what training on all seven of AeroZoo's fields does to a model's accuracy on the fields it is "
+      "scored on; in the recipe's configurations every architecture trains on all seven.** The standing's models predict five "
+      "of the release's seven fields; the recipe's AeroZoo configurations add the intermittency $\\gamma$ and the transition "
+      "Reynolds number $Re_\\theta$ as targets for ISLA-DTT, GeoTransolver-volume and Transolver alike, each standardized per "
+      "split by its scale alone, on AeroZoo's canonical benchmark (@sec-data-aerozoo). AeroZoo's interior metrics read only "
+      "velocity and pressure, so the two added fields change a model's score only through what training on them does to the "
+      "other five, and that is not measured for any architecture. A standing trained with these configurations compares the "
+      "architectures trained alike; it does not measure that effect. Its baselines, GeoTransolver-volume on the seven splits and "
+      f"Transolver on `full`, two seeds each, train in about {fmt_h(q_az7)} GPU-hours. What would settle it: one architecture "
+      "trained on five fields against seven on AeroZoo's canonical benchmark, two seeds each, scored by AeroZoo's metrics with "
+      "the relative L2 of velocity and pressure beside them. Cost: not priced. Data: "
       f"{R.source('rerun_configs', 'FINAL_REPORT.md')}; {R.source('final_rerun_plan', 'price/PRICE.md')} (the AZ-CANONICAL "
-      "section).")
+      f"section); {R.source('az_canonical', 'FINAL_REPORT.md')}.")
 ```
 
 ### What rounding still decides in the geometry {#sec-oq-precision}
@@ -1699,8 +1702,8 @@ print("Softening each slice's anchor distance as well, by adding the slice's own
       f"{R.source('slice_normal_dras', 'RESULTS.md')} (section 4.2); {R.source('slice_normal_exp', 'PREREG.md')} (F2, A6).")
 print()
 print("::: {.callout-note title=\"In flight\"}\nThis question rests on the normalization with its clamp, as the code has it, and on "
-      "two replacements read on the DrivAerML Surface task. The same two replacements on ISLA-DTT on AirfRANS and the lug are "
-      "being measured, and the ledger (@sec-ledger) tracks it.\n:::")
+      "two replacements read on the DrivAerML Surface task. The same two replacements on ISLA-DTT on the lug, which the AirfRANS "
+      "reading waits on, are being measured, and the ledger (@sec-ledger) tracks it.\n:::")
 ```
 
 ### A quarter of the slices {#sec-oq-slices}
@@ -1727,8 +1730,8 @@ sla_step = dict(zip(("DR", "AF", "LUG"), (re.search(p_, SLAX).group(1) for p_ in
 assert "**candidate for every form**" in SLAX and "DR moves +0.5-0.6 % on both fields and AF nu_t +2.4 %" in SLAX
 assert "from the arm's own 12-17 % seed spread" in SLAX and "The arm's seeds sit 11 % apart, the control's 21 %." in SLAX
 print("**The open question is whether a quarter of the slices costs nothing on AeroZoo and the other datasets not run with it; "
-      "on AirfRANS, the DrivAerML tasks and the lug it costs no measured accuracy in any form measured, at a saving that depends "
-      "on the form.** On the AirfRANS "
+      "on AirfRANS, the DrivAerML tasks and the lug it reads no change by the registered rule in any form measured, with two "
+      "seed-separated shifts under the flag, at a saving that depends on the form.** On the AirfRANS "
       "interior task, ISLA with 128 slices in place of the reference's 512, trained and scored as the standing, has "
       + " / ".join(f"{SL[f]['ratio']:.3f}" for f in FW) + " times the standing's test error on " + " / ".join(FW.values())
       + " (ratios of arithmetic seed means, two seeds each), and no field moves by the rule registered for the test, which needed "

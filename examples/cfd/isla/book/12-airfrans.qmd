@@ -216,7 +216,7 @@ print(f"- **ISLA**: width 512, 12 layers, 512 slices, learning rate 3.75e-4, {PA
       + " (ratios of arithmetic seed means, two seeds each; no field moves by the rule registered for the test) at "
       f"{SLC['smoke 354977']:.2f} of the training step and {SLC['smoke: peak allocated per rank']:.2f} of the peak memory, "
       "so the reference keeps 512 and 128 is a cheaper setting that costs interacting ISLA nothing measurable here or on the "
-      "DrivAerML Volume task, and costs ISLA-DTT nothing measurable either (@sec-oq-slices). "
+      "DrivAerML Volume task, and ISLA-DTT reads no change by the same rule either (@sec-oq-slices). "
       f"Data: {R.source('slices_af', 'RESULTS.md')}.")
 # SLICES-ALL: ISLA-DTT with 128 slices against the standing's eager-trained ISLA-DTT pair, native, and the whole-run step and memory
 _SLA = {r_["field"]: r_ for r_ in R.md_table("slices_all", "reading_AF.md") if r_["protocol"] == "native"}

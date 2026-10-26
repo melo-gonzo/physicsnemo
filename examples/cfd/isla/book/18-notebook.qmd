@@ -43478,8 +43478,8 @@ in bfloat16, 1e-5 in float32), far below the effects.
 |---|---|---|---|---|---|---|
 | registered: against the control | pressure | 0.054298, 0.050429 | 0.075845, 0.073091 | 1.422 | 0.083 | harms, flag up |
 | registered: against the control | wall shear | 0.082253, 0.078253 | 0.110592, 0.097596 | 1.297 | 0.135 | harms, flag up |
-| beside: against (a), the marginal effect of (s) | pressure | 0.064113, 0.058077 | 0.075845, 0.073091 | 1.219 | 0.106 | harms-sized, flag up |
-| beside: against (a), the marginal effect of (s) | wall shear | 0.092831, 0.087052 | 0.110592, 0.097596 | 1.157 | 0.141 | harms-sized, flag up |
+| beside: against (a), the marginal effect of (s) | pressure | 0.064113, 0.058077 | 0.075845, 0.073091 | 1.219 | 0.106 | harms (beside, not a verdict), flag up |
+| beside: against (a), the marginal effect of (s) | wall shear | 0.092831, 0.087052 | 0.110592, 0.097596 | 1.157 | 0.141 | harms (beside, not a verdict), flag up |
 
 - (a)+(s) is worse than the control and than (a) on every one of the 48 cases, both fields; posed equals native to 1e-4.
 - **Under A6 a harm blocks: (a)+(s) is not a candidate**, and (a) was not either. Neither slice fix is a candidate.
@@ -43487,14 +43487,15 @@ in bfloat16, 1e-5 in float32), far below the effects.
   AirfRANS arms are scored in the lane's RESULTS.md (sections 4.3 and 4.4); the lug arms are training, and the lane's notebook
   draft for both waits on them.
 
-**For the book.** 20's @sec-oq-slice-normal gives the (a)+(s) reading; its In-flight callout names the interior arms.
+**For the book.** 20's @sec-oq-slice-normal gives the (a)+(s) reading; its In-flight callout names the lug arms, which the
+AirfRANS reading waits on.
 
 *Applied for the supervisor by the book lane BOOK-AFTERNOON on 2026-10-26.*
 
 ## 2026-10-26 — Torch 2.13 for the final rerun: one fault, a cache bypass in physicsnemo.mesh from torch's process-wide is_compiling(), fixed in #2172; the goldens hold on both torches; two issues filed upstream {#sec-nb-torch-213}
 
 **RERUN-ENV** (06:40 EDT, re-smoke 07:10; records results/campaigns_2026-10-23/rerun_env/: FINAL_REPORT.md md5 fa161f7a,
-HILIFT_213.md, GOLDENS_213.md). A torch 2.13 venv on LHR (torch 2.13.0+cu130, triton 3.7.1, warp-lang 1.17.0) for code at or
+HILIFT_213.md; GOLDENS_213.md stays in the lane's scratch folder). A torch 2.13 venv on LHR (torch 2.13.0+cu130, triton 3.7.1, warp-lang 1.17.0) for code at or
 after bf71190af. Recipe tests on a GB300: 655 passed, 6 skipped, as on 2.12. The ISLA tiers failed 36 GPU and 13 CPU tests,
 all goldens and release tests on fixture drift: torch.norm on the CPU moves by one ulp between 2.12 and 2.13, and the
 goldens' icosphere is built with it; with the sphere pinned to its 2.12 bits every test passes on 2.13. Smokes: 10 of 11
@@ -43531,8 +43532,8 @@ of pytorch#195845, whose mix-order kernel Inductor 2.13 does not build) and CPU 
 returns True in every thread while any thread compiles (regression in 2.13 from #184614)") and NVIDIA/warp#2161 ("CUDA LBVH
 builds deep trees on mixed-scale meshes because many primitives share one 30-bit Morton code"); both open at 15:44 EDT.
 
-**Consequence.** Torch 2.13 is the final rerun's environment, with #2172's fix and the goldens' fixture in psharpe/isla
-(@sec-nb-final-rerun-plan).
+**Consequence.** Torch 2.13 is the final rerun's environment (the supervisor's decision, on RERUN-ENV's recommendation), with
+#2172's fix and the goldens' fixture in psharpe/isla (@sec-nb-final-rerun-plan).
 
 **For the book.** 06 gives the test tiers on both torches and the goldens' size from the directory.
 
@@ -43566,12 +43567,12 @@ RERUN-CONFIGS' decisions are @sec-nb-rerun-configs.
   against LHR's list, read-only; JHB smokes put JHB's own ISLA-DTT penalty at about 4 percent. The supervisor's decision:
   AeroZoo's 30 lanes, ISLA and baselines together, on JHB, the other 18 on LHR; speed and cost figures in the book come from
   LHR runs only.
-- **Torch 2.13** is the rerun's environment (@sec-nb-torch-213).
+- **Torch 2.13** is the rerun's environment (the supervisor's decision, on RERUN-ENV's recommendation; @sec-nb-torch-213).
 - **128 slices** is not adopted (the supervisor's decision; @sec-nb-slices-all).
 
 **For the book.** 07 and 13 state that the recipe's AeroZoo files keep the `mean_stable` cases with their constants fitted
 there, and that the standing's models trained on five fields and every complete case; 20's @sec-oq-aerozoo-fields states the
-decided protocol and leaves the open-questions table.
+decided protocol and asks what the two added fields do to the scored ones, which no planned run measures.
 
 *Applied for the supervisor by the book lane BOOK-AFTERNOON on 2026-10-26.*
 
