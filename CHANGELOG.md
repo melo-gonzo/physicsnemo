@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `physicsnemo.optim.Muon` takes an optional `cuda_graph` flag that replays
+  its step as one CUDA graph, with the same result bit for bit, saving host
+  time when the step is launch-bound. The unified external-aero recipe exposes
+  it as `training.optimizer.muon_cuda_graph` (default off).
 - `physicsnemo.mesh.sampling.sample_cells_systematic` draws a fixed number of
   a mesh's cells with probability proportional to their measure, with
   Horvitz-Thompson weights for unbiased sums. The sample is spread over the
@@ -17,16 +21,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   on CUDA, and compiles to one graph.
 - Strata depthwise conditioning convolutions automatically size vmap chunks
   to the 32-bit indexing limit via `DepthwiseConv(chunk_size="auto")`.
-- `MeshDataset` gains `cache_host` / `cache_host_views` to serve repeated
-  indices from a host-memory cache; `DomainMeshReader` gains
-  `interior_n_points_range` to draw the interior point count per sample;
-  `CenterMesh` gains `store_center_as` to record the subtracted center in
-  `global_data` and `use_measure_weighting` to center by effective cell measure,
-  so a weighted subsample is centered where the full mesh would be.
+- `MeshDataset(cache_host=True)` reads each sample once and serves repeats from
+  memory, for fitting runs on a few samples. `DomainMeshReader` gains
+  `interior_n_points_range` to draw the interior point count for each sample,
+  and `CenterMesh` gains `store_center_as` to keep the subtracted center in
+  `global_data`.
 - Adds a Rotor37 compressor blade example with GeoTransolver
   (`examples/cfd/rotor37_geotransolver`)
 - Adds an experimental, independently implemented SMART operator with sampled
   geometry encoding, reusable latent contexts, and chunked field decoding.
+
 - Adds standalone FLARE++ attention and model APIs, with input-conditioned
   dynamic routing, plus a ``GALE_FPP`` backend for using the same mixer inside
   GeoTransolver.
@@ -89,10 +93,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   geometry region is selected automatically on CUDA. The unified
   external-aerodynamics recipe gains ISLA model configs (`isla_surface`,
   `isla_volume`).
-- Mesh readers load saved meshes with `tensordict` memory maps opened
-  read-only (`physicsnemo.datapipes.readers.mesh.read_only_memory_maps`), so
-  page faults on a networked file system no longer take write extent locks
-  (observed as a training hang on a Lustre-hosted dataset).
 - Adds `ExponentialEulerSolver`, `EDMStochasticExponentialEulerSolver`,
   `DPMPlusPlus2M`, and `DPMPlusPlus2MUniC2` to
   `physicsnemo.diffusion.samplers`. `ExponentialEulerSolver` supports
@@ -334,6 +334,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `perturbed_grid` primitive takes `perturbation_scale` as a fraction of
   the grid spacing (was an absolute length), so its default no longer folds
   cells, even on fine grids.
+- Unified external aero recipe: each step also logs `iter_time_s`, the true
+  time per iteration, since `step_time_s` misses queued device work. Epoch
+  summaries record `epoch_seconds` and, on GPU, `peak_memory_gib`.
+- Unified external aero recipe: training loads the next batch while the GPU
+  runs the backward, instead of at the start of the next step, so the GPU no
+  longer waits for the loader's host-side work. Samples and order are unchanged.
 
 ### Deprecated
 
@@ -378,6 +384,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `get_boundary_mesh()` compile with `torch.compile(fullgraph=True, dynamic=True)`.
   Facet extraction now specializes on the cell width instead of passing a
   symbolic size to `itertools.combinations`.
+- Compiled code that reads `Mesh` geometric properties, such as `cell_areas`
+  or curvatures, no longer recompiles when the input mesh's cache differs, and
+  no longer writes into that cache. `set_cell_measures` stores a copy of the
+  cached `cell_areas`, so a measure never aliases it.
 - GraphCast and MeshGraphNet run on graphs partitioned across GPUs again
   (`partition_size > 1`, or a `DistributedGraph` in place of the PyG graph),
   so the distributed shallow-water example works. This broke when the DGL
@@ -385,6 +395,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `weighted_multinomial` with `replacement=True` accepts more than 2^24
   weights, instead of raising `torch.multinomial`'s category-limit error. So
   DoMINO's `sample_points_on_mesh` now works on meshes with over 2^24 faces.
+- `MeshDataset.close()` no longer raises `AttributeError` with a `MeshReader`
+  or `DomainMeshReader`. Both readers now have a `close()` method.
 - `GLOBE` accepts `boundary_meshes` as a TensorDict, as the DrivAerML example
   passes them. Before, every forward pass of that example failed.
 - Under `torch.compile`, GLOBE no longer recompiles on its second training
@@ -689,8 +701,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Dependencies
 
-- Requires TensorDict 0.15 (`tensordict[zarr]>=0.15.0,<0.16.0`). Building,
-  copying, and moving small meshes takes 20-50% less time on CPU.
+- Requires TensorDict 0.15.3 or later (`tensordict[zarr]>=0.15.3,<0.16.0`).
+  Building, copying, and moving small meshes takes 20-50% less time on CPU.
+  TensorDict's `torch.compile` fixes since 0.15.0 also stop compiled code from
+  recompiling when a `Mesh` holds the same fields in another order.
 - Drops `onnx`, `torchvision` and `pandas` from the required dependencies.
   `pandas` is now optional via `datapipes-extras` or `model-extras`.
 

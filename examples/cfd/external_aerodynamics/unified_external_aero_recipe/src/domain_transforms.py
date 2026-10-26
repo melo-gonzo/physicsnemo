@@ -92,6 +92,7 @@ from physicsnemo.mesh.calculus.measure import (
 from physicsnemo.mesh.primitives.planar import structured_grid
 from physicsnemo.mesh.projections import project
 from physicsnemo.mesh.spatial.bvh import _compute_morton_codes
+from physicsnemo.utils.weighted_multinomial import _devices_match
 
 logger = logging.getLogger(__name__)
 
@@ -208,7 +209,7 @@ class PrefixPlusRandomSubsampleMesh(SubsampleMesh):
         if n_rest > 0:
             pool = n - self.n_prefix
             generator = self._generator
-            if generator is not None and generator.device != device:
+            if generator is not None and not _devices_match(generator.device, device):
                 generator = None
             perm = torch.randperm(pool, device=device, generator=generator)
             rest = self.n_prefix + perm[:n_rest]
@@ -309,7 +310,7 @@ class PoissonBiasedSubsampleMesh(MeshTransform):
             free = pi < 1.0
             pi[free] = (pi[free] * (1 + deficit / pi[free].sum())).clamp(max=1.0)
         generator = self._generator
-        if generator is not None and generator.device != pi.device:
+        if generator is not None and not _devices_match(generator.device, pi.device):
             generator = None
         keep = torch.rand(n, device=pi.device, generator=generator) < pi
         indices = keep.nonzero(as_tuple=True)[0]
@@ -359,7 +360,7 @@ class StratifiedSubsampleMesh(MeshTransform):
         order = self._morton_order(mesh.cell_centroids)
         step = n_before / self.n_cells
         generator = self._generator
-        if generator is not None and generator.device != order.device:
+        if generator is not None and not _devices_match(generator.device, order.device):
             generator = None
         offset = torch.rand((), device=order.device, generator=generator) * step
         ### floor(offset + k * step), k = 0..n-1: n distinct positions in [0, N)
@@ -692,8 +693,13 @@ class CaseKeyDomainMeshReader(DomainMeshReader):
         name = _case_directory(self._root, self._paths[index])
         return torch.tensor(zlib.crc32(name.encode()) & 0x7FFFFFFF, dtype=torch.int64)
 
-    def _load_sample(self, index: int) -> DomainMesh:
-        dm = super()._load_sample(index)
+    def _load_sample(
+        self,
+        index: int,
+        generator: torch.Generator | None = None,
+        interior_n_points: int | None = None,
+    ) -> DomainMesh:
+        dm = super()._load_sample(index, generator, interior_n_points)
         if "case_key" in dm.global_data.keys():
             raise ValueError("global_data already has a 'case_key' field")
         gd = dm.global_data.clone()
@@ -739,8 +745,13 @@ class _VtkBoundaries:
         }
         self._vtk_plane_axis = None if vtk_plane_axis is None else int(vtk_plane_axis)
 
-    def _load_sample(self, index: int) -> DomainMesh:
-        dm = super()._load_sample(index)
+    def _load_sample(
+        self,
+        index: int,
+        generator: torch.Generator | None = None,
+        interior_n_points: int | None = None,
+    ) -> DomainMesh:
+        dm = super()._load_sample(index, generator, interior_n_points)
         if not self._vtk_boundaries:
             return dm
         case = _case_directory(self._root, self._paths[index])
@@ -1000,7 +1011,7 @@ class SdfBiasedSubsampleInteriorPoints(MeshTransform):
         sdf = interior.point_data[self.sdf_field].reshape(n).to(torch.float32)
         pi = self._inclusion(sdf)
         generator = self._generator
-        if generator is not None and generator.device != pi.device:
+        if generator is not None and not _devices_match(generator.device, pi.device):
             generator = None
         keep = torch.rand(n, device=pi.device, generator=generator) < pi
         idx = keep.nonzero(as_tuple=True)[0]
@@ -1043,10 +1054,7 @@ class ComposeQuadratureMeasure(MeshTransform):
             return mesh
         from physicsnemo.mesh.calculus.measure import cell_measures, set_cell_measures
 
-        ### A copy: without a stored measure cell_measures returns the cached
-        ### cell areas, and a field aliasing the cache recompiles a compiled model
-        ### whenever the aliasing differs between cases.
-        set_cell_measures(mesh, cell_measures(mesh).to(mesh.points.dtype, copy=True))
+        set_cell_measures(mesh, cell_measures(mesh).to(mesh.points.dtype))
         return mesh
 
 
