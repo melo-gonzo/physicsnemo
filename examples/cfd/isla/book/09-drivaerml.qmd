@@ -578,6 +578,45 @@ rendering_figure("fig-drivaerml-prediction", [("figures/renderings/drivaerml_sur
     "Data: results/renderings_2026-10-22/arrays/render_car.json.", nrow=2)
 ```
 
+### GLOBE on the Surface task {#sec-drivaerml-globe}
+
+```{python}
+#| label: para-drivaerml-globe
+#| output: asis
+import re
+import records as R
+GD = R.load("globe_dr", "scores_dr/globe_dr_scores.json")
+GDX = " ".join(R.load("globe_dr", "RESULTS_DR.md").split())
+g_nat = {f: GD["globe_200k"]["native"][f] for f in SURF_F}
+g_pos = {f: GD["globe_200k"]["posed"][f]["mean"] for f in SURF_F}
+over = lambda a, f: g_nat[f]["mean"] / SURF.err(a, f, "native")
+seed_over = lambda a, f: [v / e for v, e in zip(g_nat[f]["per_seed"].values(), [SURF.err(a, f, "native")] * 2)]
+assert all(min(seed_over(a, f)) > 1 for a in S.ARCHS for f in SURF_F)   # every seed of GLOBE above every arm's seed mean
+# the record's own ratio against the standing's ISLA (0.9.0) equals the one computed from the standing
+_r090 = next(v for k, v in GD["ratios_native_200k"].items() if k.startswith("ISLA 0.9.0"))
+assert all(abs(_r090[f]["mean"] - over("ISLA", f)) < 1e-3 for f in SURF_F)
+pn = [v for f in SURF_F for v in GD["posed_over_native"][f].values()]
+g_par = re.search(r"\(([\d.]+)M parameters, 80k faces per step, lr 1e-2\)", GDX).group(1)
+theta = re.search(r"\(θ = ([\d.]+) here, θ = 0 on AirfRANS\)", GDX).group(1)
+loss_x = re.search(r"and ([\d.]+)× ISLA 0\.9\.0's training loss", GDX).group(1)
+cars = re.search(r"(\d+) of (\d+) cars worse", GDX).groups()
+b_pos = [SURF.err(a, f, "posed") for a in S.BASELINES for f in SURF_F]
+print(f"**GLOBE (@sec-landscape-globe), the learned boundary integral on a Barnes–Hut tree, trails all three reference "
+      f"configurations on the DrivAerML Surface task, by {min(over(a, f) for a in S.ARCHS for f in SURF_F):.2f} to "
+      f"{max(over(a, f) for a in S.ARCHS for f in SURF_F):.2f} times, and rotated and translated it keeps its error within "
+      f"{100 * (max(pn) - 1):.0f}% of native.** GLOBE runs at its authors' configuration for this dataset, {g_par} million "
+      f"parameters against ISLA's {SURF_COST['ISLA']['n_parameters'] / 1e6:.0f} million, under the recipe's shared training "
+      "protocol rather than its example's own, and every arm is scored on the same 200,000 cells of the 48 validation cars. "
+      "Its errors are " + " / ".join(f"{g_nat[f]['mean']:.4f}" for f in SURF_F) + " on pressure / wall shear; GLOBE ÷ "
+      + "; ".join(f"{a} {' / '.join(f'{over(a, f):.2f}' for f in SURF_F)}" for a in S.ARCHS)
+      + f", every seed above one. It is less accurate than ISLA on {cars[0]} of {cars[1]} cars on both fields. Its training loss "
+      f"ends near its validation loss and {loss_x} times ISLA's under the same loss, so it underfits the training set. Rotated "
+      f"and translated, its error is {min(pn):.2f} to {max(pn):.2f} times its native error, where the baselines' errors rise to "
+      f"{min(b_pos):.2f} to {max(b_pos):.2f}. GLOBE is rotation-equivariant; its tree sums distant clusters at $\\theta = {theta}$, "
+      "an approximation that vanishes as $\\theta \\to 0$ and that a rotation regroups, the likely cause of that change, which "
+      f"was not isolated. Data: {R.source('globe_dr', 'scores_dr/globe_dr_scores.json')}; {R.source('globe_dr', 'RESULTS_DR.md')}.")
+```
+
 ### The Volume task {#sec-interior-results}
 
 ```{python}
@@ -631,6 +670,20 @@ print(f"**The lead is largest on velocity**, where GeoTransolver's error is {S.f
       f"{min(b_posed):.2f} to {max(b_posed):.2f}. The parameter counts differ by up to "
       f"{max(VOL_COST[a]['n_parameters'] for a in S.ARCHS) / min(VOL_COST[a]['n_parameters'] for a in S.ARCHS):.1f} times and the inputs "
       "differ by construction (@sec-interior-task), so the ratios are standings of the configurations as shipped.")
+```
+
+```{python}
+#| label: para-interior-whole-boundary
+#| output: asis
+import records as R
+_FDT = {r_["reading"].split(" (")[0]: r_ for r_ in R.md_table("floor_drv_read", "RESULTS.md", "Registered readings", 0)}
+_nf = _FDT["nu_t far-field e_R"]
+assert _nf["label"].startswith("closes")
+_two = lambda c: " / ".join(f"{R.num(c, k):.3f}" for k in (0, 1))
+print("The standing's ISLA checkpoints were trained with the vehicle alone. Trained on one car with the domain's four other "
+      f"boundary meshes, ISLA's eddy-viscosity error more than 5 m from the car falls from {_two(_nf['C s42 / s43'])} to "
+      f"{_two(_nf['F s42 / s43'])} (seeds 42 / 43; Transolver {_two(_nf['Transolver s42 / s43'])}), the reading registered as "
+      f"closing the gap (@sec-oq-far-field). Data: {R.source('floor_drv_read', 'RESULTS.md')}.")
 ```
 
 ```{python}
@@ -959,5 +1012,4 @@ print("The cause is that interacting ISLA's interior points carry routing mass: 
 Questions this dataset raises and leaves open:
 
 - **ISLA-DTT at the reference configuration.** ISLA's interior form is ISLA-DTT (@sec-aerozoo-form), but on this task it is measured only on a study configuration with the raw slice reads (@tbl-interior-read-only), where it trades some accuracy for exact query independence; how it compares at the reference configuration is unmeasured here.
-- **How much of ISLA's far-field error is the missing ground?** Trained on a single car, ISLA misses the eddy viscosity far from the car, whose level there follows the height above the floor, a boundary the standing's checkpoints were trained without (@sec-single-case-floor). ISLA's configuration reads the floor strip, the slip walls, the inlet and the outlet that the case files store as named boundary meshes (@sec-limits-whole-boundary); how much of that error they remove is @sec-oq-far-field.
 - **How precisely must the wall be given?** The watertight STL raises ISLA's error only near the wall, where it differs from the CFD wall by about the chord error of its tessellation (@sec-interior-boundary-law). Whether the on-wall nodes' distance channel causes that rise is untested; a probe that moves only those nodes' distance would settle it.
