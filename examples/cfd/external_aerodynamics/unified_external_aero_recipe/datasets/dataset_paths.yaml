@@ -27,6 +27,7 @@ highlift_aero_ml_duplicate_masks: ???
 # The record of the HiLift symmetry-plane check (tools/build_symmetry_check.py --merge ... --out <file>).
 highlift_aero_ml_symmetry_check: ???
 shift_suv: ???
+shift_suv_fastback_root: ???   # the fastback family's root (shift_suv_surface_fastback.yaml, the cross-family check)
 # AeroZoo v1.2: the row-shuffled derived copy of the release (same tree; interior memmaps row-permuted by
 # kernel/aerozoo/aerozoo_shuffle.py so the reader's contiguous block draw is a spatial sample, see
 # aerozoo_volume.yaml); the same path on AGA and LHR. The manifest is written by

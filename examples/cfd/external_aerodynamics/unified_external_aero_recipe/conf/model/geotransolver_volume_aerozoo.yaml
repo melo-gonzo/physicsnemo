@@ -44,7 +44,10 @@
 # magnitudes span decades. Velocity weighs 3: case_relative_l2 gives each
 # field one term (the vector's components jointly), so the weight keeps the
 # channel balance of the per-component losses, velocity's 3 components
-# against the 4 scalars (ISLA's AeroZoo config is to use the same weights).
+# against the 6 scalars (ISLA's AeroZoo config is to use the same weights).
+# The targets are the interior task's seven fields (out_dim 9 from the
+# dataset's `targets:`): velocity, pressure, nut, k, omega and the two
+# dimensionless transition fields, intermittency and Re_theta_t (retheta).
 # The targets are standardized by scale only, so the recipe's relative-L2
 # metric is the physical relative L2 of each field and case.
 dataset_reader_overrides:

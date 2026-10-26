@@ -120,6 +120,8 @@ model:
     nut: {rank: 0, units: {U: 1, L: 1}, scale: null}                # m^2/s
     tke: {rank: 0, units: {U: 2}, scale: null}                      # m^2/s^2
     omega: {rank: 0, units: {U: 1, L: -1}, scale: null}             # 1/s
+    intermittency: {rank: 0, scale: null}                          # dimensionless, gamma in [0, 1]
+    retheta: {rank: 0, scale: null}                                # dimensionless, Re_theta_t
   # The boundary conditions by name, each with the fields it prescribes (SI units). Each input is divided by its units'
   # scale and then by its `scale` c_in, the split's typical size of the dimensionless input (null here: the dataset
   # file's isla_constants.input_scale, the median over the train cases of the per-case area-weighted RMS; a vector's
