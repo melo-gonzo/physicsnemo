@@ -459,6 +459,32 @@ def test_exact_geometry_refuses_other_dimensions():
         exact_boundary_geometry(pts, mesh.points, mesh.cells)
 
 
+@pytest.mark.parametrize("kernel", ["reference", "fast"])
+@pytest.mark.parametrize("dim", [2, 3])
+def test_exact_geometry_refuses_a_boundary_with_no_cells(dim, kernel):
+    """No cells, no surface: a ValueError up front (before, an IndexError or a
+    division by zero deep in the search)."""
+    mesh = _circle(8) if dim == 2 else _sphere(0)
+    with pytest.raises(ValueError, match="no cells"):
+        exact_boundary_geometry(
+            torch.zeros(4, dim, dtype=D), mesh.points, mesh.cells[:0], kernel=kernel
+        )
+
+
+@pytest.mark.parametrize("kernel", ["reference", "fast"])
+@pytest.mark.parametrize("dim", [2, 3])
+def test_no_queries_give_empty_outputs(dim, kernel):
+    """Zero queries give empty d and u in the queries' dtype, with a gradient path
+    to the queries (before, the 2-D brute force had no chunk to concatenate)."""
+    mesh = _circle(8) if dim == 2 else _sphere(0)
+    q = torch.zeros(0, dim, dtype=torch.float32, requires_grad=True)
+    d, u = exact_boundary_geometry(q, mesh.points.float(), mesh.cells, kernel=kernel)
+    assert d.shape == (0,) and u.shape == (0, dim)
+    assert d.dtype == u.dtype == q.dtype
+    (d.sum() + u.sum()).backward()
+    assert q.grad.shape == q.shape
+
+
 # ---------------------------------------------------------------------------
 # The model reads the full-resolution surface and draws its tokens from it
 # ---------------------------------------------------------------------------

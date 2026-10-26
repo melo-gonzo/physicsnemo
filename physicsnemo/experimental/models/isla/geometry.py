@@ -1317,7 +1317,9 @@ def _segment_candidates(query: torch.Tensor, points: torch.Tensor, cells: torch.
     over the segments, chunked over the queries."""
     a, b = points[cells[:, 0]][None], points[cells[:, 1]][None]
     chunk = max(1, _SEARCH_PAIRS // cells.shape[0])
-    li, pk = [], []
+    ### (seeded empty, so that zero queries give zero pairs)
+    li = [torch.empty(0, dtype=torch.long, device=query.device)]
+    pk = [torch.empty(0, dtype=torch.long, device=query.device)]
     for s in range(0, query.shape[0], chunk):
         d2 = _segment_distance2(query[s : s + chunk, None], a, b)
         reach = (d2.amin(-1, keepdim=True).sqrt() + margin[s : s + chunk, None]).square()
@@ -2236,7 +2238,8 @@ def exact_boundary_geometry(
     r"""Signed distance and direction from a boundary surface to each query.
 
     The surface is the union of the cells ``cells`` (``(F, dim)`` vertex
-    indices into ``points``): segments in two dimensions, triangles in three.
+    indices into ``points``, at least one; none raises a ``ValueError``):
+    segments in two dimensions, triangles in three.
     For every query :math:`x` the closest point :math:`p` on the surface is
     found exactly (a Warp BVH in three dimensions, a brute force over the
     segments in two), and
@@ -2323,6 +2326,8 @@ def exact_boundary_geometry(
         raise NotImplementedError(
             f"the exact boundary geometry is implemented in two and three dimensions; got {query_points.shape[-1]}"
         )
+    if cells.shape[0] == 0:
+        raise ValueError("the boundary has no cells; there is no surface to measure distance to")
     diff, on_cell, face_n, tied, tie_u, sign, tie_dist, on_wall = _closest_features(
         query_points, points, cells, kernel
     )
