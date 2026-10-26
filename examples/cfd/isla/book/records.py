@@ -121,6 +121,15 @@ FOLDER = {
     "dtt_knobs_a14": "campaigns_2026-10-23",
     "dtt_knobs_exact": "campaigns_2026-10-23",
     "dtt_pose_exp_read": "campaigns_2026-10-23",
+    "dtt_knobs_final": "campaigns_2026-10-23",
+    "slices_all": "campaigns_2026-10-23",
+    "slice_normal_dras": "campaigns_2026-10-23",
+    "rerun_env": "campaigns_2026-10-23",
+    "compile_flag": "campaigns_2026-10-23",
+    "golden_213": "campaigns_2026-10-23",
+    "final_rerun_plan": "campaigns_2026-10-23",
+    "az_canonical": "campaigns_2026-10-23",
+    "assembly_014": "campaigns_2026-10-23",
 }
 
 

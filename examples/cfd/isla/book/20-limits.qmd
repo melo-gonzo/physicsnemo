@@ -922,9 +922,10 @@ q5_cells = SEEDS * sum(ref_lane * c / 200 for c in CELLS)
 q5 = q5_ladder + q5_cells
 # Tensile2d: GeoTransolver + ISLA's measure-weighted pooling, priced at the GeoTransolver lane
 q6 = SEEDS * lane_gpuh("tensile2d", "GeoTransolver")
-# GeoTransolver-volume on AeroZoo's seven splits and Transolver on `full`, retrained on all seven fields, as RERUN-CONFIGS' PRICE prices them
-_PR = " ".join(R.load("rerun_configs", "price/PRICE.md").split())
-q_az7 = sum(int(x.replace(",", "")) for x in re.search(r"AeroZoo GeoTransolver takes ([\d,]+) \(7 splits x 2 seeds\) and Transolver full ([\d,]+)", _PR).groups())
+# GeoTransolver-volume on AeroZoo's seven splits and Transolver on `full`, trained on all seven fields on AeroZoo's canonical
+# benchmark, as the final rerun's price prices them (PRICE.md, the AZ-CANONICAL section)
+_PR = " ".join(R.load("final_rerun_plan", "price/PRICE.md").split())
+q_az7 = int(re.search(r"\| baselines, 16 lanes \(AeroZoo\) \| \d+ \| (\d+) \|", _PR).group(1))
 # ISLA-DTT's far-field encoding on AirfRANS, four nested steps, two seeds each, at its registration's approved cap
 q_afenc = int(re.search(r"\*\*Cap approved: (\d+) GPU-h\*\*", " ".join(R.load("af_campaign", "PREREG.frozen_e0739632.md").split())).group(1))
 ```
@@ -936,8 +937,8 @@ rows = [
     ("Do ISLA's declared scales add accuracy where the Reynolds number varies widely? (@sec-oq-scales)", "ISLA with and without its scales, the latter reading a standardized global input, on a dataset whose Reynolds number varies widely, such as AeroZoo", "not priced"),
     ("Which scale of ISLA's Reynolds input serves AirfRANS and AeroZoo alike? (@sec-oq-reynolds)", "a single program-wide fixed scale, trained on both `reynolds` splits, read against the fitted scale", "not priced"),
     ("Are ISLA's crossflow and non-box failures on AeroZoo limits of the architecture? (@sec-oq-aerozoo)", "for the non-box family, a training set whose velocity scales cover the ducts'", "not priced"),
+    ("What does training on all seven of AeroZoo's fields do to the fields it is scored on? (@sec-oq-aerozoo-fields)", "one architecture trained on five fields against seven on AeroZoo's canonical benchmark, two seeds each, scored by AeroZoo's metrics", "not priced"),
     ("What sets ISLA's pressure level next to the outlet on the crossflow layout? (@sec-oq-outlet)", "more seeds of ISLA with and without the outlet's level held, on `profile_crossflow`, the outlet read through a bounded number of probe points; the predicted pressure along the path from the outlet into the interior, for both forms", "not priced"),
-    ("Does training on all seven of AeroZoo's fields move its standing? (@sec-oq-aerozoo-fields)", "GeoTransolver-volume on the seven splits and Transolver on `full` retrained on the seven fields ISLA's configuration predicts, two seeds each, and every model scored by AeroZoo's metrics", f"about {fmt_h(q_az7)} for the baselines"),
     ("Does what rounding still decides in the class's geometry move a trained model? (@sec-oq-precision)", "the standings "
      "retrained with the class's geometry, scored rotated and translated, and in float32 against float64 on the AeroZoo cases of "
      "the float32 comparison", "the standings' training with the class's geometry, then scoring"),
@@ -954,8 +955,8 @@ rows = [
     ("Which encoding of the far field gives ISLA-DTT back its accuracy on AirfRANS? (@sec-oq-af-encoding)",
      "ISLA-DTT trained on AirfRANS with its far field with, in turn, a forest of face trees per condition, the viscous near-wall length, and one quadrature per condition or a solid-angle read prior, two seeds each, each step read against its control",
      f"{fmt_h(q_afenc)} (its registration's cap for the whole campaign, scoring included)"),
-    ("Does a quarter of the slices cost nothing on ISLA-DTT and on the surface task? (@sec-oq-slices)",
-     "ISLA-DTT with 128 slices against 512 on AirfRANS and the lug, and interacting ISLA with 128 against 512 on the DrivAerML Surface task, two seeds each, read for harm by the same rule",
+    ("Does a quarter of the slices cost nothing on AeroZoo and the datasets not run with it? (@sec-oq-slices)",
+     "128 slices against 512 in the form each trains on AeroZoo, HiLiftAeroML, SHIFT-SUV, Tensile2d and DeepJEB++, AeroZoo first, two seeds each, read for harm by the same rule",
      "not priced"),
     ("Should a slice's mean normal be normalized by a smooth form with no constant? (@sec-oq-slice-normal)",
      "a smooth, constant-free form of the slice's mean-normal invariant, checked by a deterministic test on a closed boundary with uniform routing, where the mean normal is exactly zero, then trained and read for harm against the standings",
@@ -1138,16 +1139,19 @@ print("**The open question is what sets ISLA's pressure level next to the outlet
 ```{python}
 #| label: para-oq-aerozoo-fields
 #| output: asis
-print("**The open question is whether training on all seven of AeroZoo's fields moves its standing.** The standing's models "
-      "predict five of the release's seven fields; the recipe's AeroZoo configurations add the intermittency $\\gamma$ and the "
-      "transition Reynolds number $Re_\\theta$ as targets for every model, each standardized per split by its scale alone "
-      "(@sec-dataset-aerozoo). AeroZoo's interior metrics read only velocity and pressure, so the two added fields change a "
-      "model's score only through what training on them does to the other five, and that is not measured for any architecture. "
-      "Comparing ISLA trained on seven fields with baselines trained on five would mix that effect into the standing. What would "
-      "settle it: GeoTransolver-volume on the seven splits and Transolver on `full`, the standing's baseline lanes, retrained "
-      "on the seven fields, two seeds each, beside ISLA trained alike, every model scored by AeroZoo's metrics and by the "
-      f"relative L2 of all seven fields. Cost: about {fmt_h(q_az7)} GPU-hours for the baselines' training. Data: "
-      f"{R.source('rerun_configs', 'FINAL_REPORT.md')}; {R.source('rerun_configs', 'price/PRICE.md')}.")
+print("**The open question is what training on all seven of AeroZoo's fields does to a model's accuracy on the fields it is "
+      "scored on; in the recipe's configurations every architecture trains on all seven.** The standing's models predict five "
+      "of the release's seven fields; the recipe's AeroZoo configurations add the intermittency $\\gamma$ and the transition "
+      "Reynolds number $Re_\\theta$ as targets for ISLA-DTT, GeoTransolver-volume and Transolver alike, each standardized per "
+      "split by its scale alone, on AeroZoo's canonical benchmark (@sec-data-aerozoo). AeroZoo's interior metrics read only "
+      "velocity and pressure, so the two added fields change a model's score only through what training on them does to the "
+      "other five, and that is not measured for any architecture. A standing trained with these configurations compares the "
+      "architectures trained alike; it does not measure that effect. Its baselines, GeoTransolver-volume on the seven splits and "
+      f"Transolver on `full`, two seeds each, train in about {fmt_h(q_az7)} GPU-hours. What would settle it: one architecture "
+      "trained on five fields against seven on AeroZoo's canonical benchmark, two seeds each, scored by AeroZoo's metrics with "
+      "the relative L2 of velocity and pressure beside them. Cost: not priced. Data: "
+      f"{R.source('rerun_configs', 'FINAL_REPORT.md')}; {R.source('final_rerun_plan', 'price/PRICE.md')} (the AZ-CANONICAL "
+      f"section); {R.source('az_canonical', 'FINAL_REPORT.md')}.")
 ```
 
 ### What rounding still decides in the geometry {#sec-oq-precision}
@@ -1293,8 +1297,8 @@ x0, x2 = inf_ratio("t0"), inf_ratio("t2")
 KA = {r_["arm"]: r_ for r_ in R.md_table("dtt_knobs_a14", "RESULTS.md", "R1 (native decides", 0)}
 KC = {r_["arm"]: r_ for r_ in R.md_table("dtt_knobs_a14", "RESULTS.md", "Beside the rules", 0)}
 KX = " ".join(R.load("dtt_knobs_a14", "RESULTS.md").split())
-KE = {r_["field"]: r_ for r_ in R.md_table("dtt_knobs_exact", "RESULTS.md", "R1 and R3 for K-EXACT", 0)}
-KEX = " ".join(R.load("dtt_knobs_exact", "RESULTS.md").split())
+KE = {r_["field"]: r_ for r_ in R.md_table("dtt_knobs_final", "RESULTS.md", "R1 and R3 for K-EXACT", 0)}
+KEX = " ".join(R.load("dtt_knobs_final", "RESULTS.md").split())
 KF = ("pressure", "in-plane velocity", "nut")
 k_r = lambda a: [R.num(KA[a][f]) for f in KF] if a != "K-EXACT" else [R.num(KE[f]["K-EXACT ÷ control [s42, s43]"]) for f in KF]
 def lab(a, f):
@@ -1309,7 +1313,7 @@ assert all(lab("K-B1", f) == "no change" for f in KF) and lab("K-BASIS8", "nut")
 assert all(lab("K-THETA05", f) == "no change, flag down" for f in KF) and lab("K-THETA2", "pressure") == "no change, flag up"
 assert all(KE[f]["label"] == "no change" for f in KF) and R.num(ex_step[1]) == R.num(KC["control"]["median step"])
 assert "**Overall: pure cost knob, free to theta 2.**" in KEX and "**Q3, a finer read narrows the far-field gap**" in KEX
-assert "On pressure it is a pure cost knob up to 1." in KEX
+assert "On pressure it is a pure cost knob up to 1." in KEX and "R2 is a retrained-ladder test: it does not test the book's knob-rule credit" in KEX
 wake05 = re.search(r"K-THETA05's velocity-wake error ÷ ISLA's \(DK-GAP's case-normalized form\) is ([\d.]+) / ([\d.]+) against the control's (\d+\.\d+) / (\d+\.\d+)", KX).groups()
 far0 = re.search(r"ISLA-DTT ÷ ISLA there falls from ([\d.]+) / ([\d.]+) to (\d+\.\d+) / (\d+\.\d+)", KEX).groups()
 b1_far = re.search(r"nut beyond one chord is worse in both seeds \(([\d.]+) / ([\d.]+); D_R", KX).groups()
@@ -1338,7 +1342,7 @@ print(": ISLA-DTT retrained on the AirfRANS interior task with one setting of it
       "and 43, with the registered reading; the median training step on one node. How to read this: below one is more "
       "accurate; *no change* means inside the registered bar, which a flagged arm can still miss by a seed-separated few "
       f"percent; the table does not test car scale. Data: {R.source('dtt_knobs_a14', 'RESULTS.md')} (Arms 1-4); "
-      f"{R.source('dtt_knobs_exact', 'RESULTS.md')} (K-EXACT); {R.source('dtt_knobs_exact', 'reduce/out_final/reduce_s2.md')}. "
+      f"{R.source('dtt_knobs_final', 'RESULTS.md')} (K-EXACT); {R.source('dtt_knobs_exact', 'reduce/out_final/reduce_s2.md')}. "
       "{#tbl-oq-dtt-theta}")
 print()
 print("Read as the registered ladder ($\\theta$ = 2, 1, 0.5, 0), the opening angle is a pure cost knob, free up to "
@@ -1351,9 +1355,11 @@ print("Read as the registered ladder ($\\theta$ = 2, 1, 0.5, 0), the opening ang
       f"$\\theta = 0.5$ the in-plane velocity error in the wake is {wake05[0]} / {wake05[1]} times interacting ISLA's against "
       f"the pair's {wake05[2]} / {wake05[3]}, and with the exact read the eddy-viscosity error beyond one chord is "
       f"{far0[2]} / {far0[3]} times interacting ISLA's against {far0[0]} / {far0[1]} (seeds 42 / 43, the error normalized per "
-      "case); the registered rule reads both as narrowed, and no setting widens either cell. So ISLA-DTT's far-field error "
-      "shrinks as its read tightens, while "
-      "over the whole domain no rung passes the registered bar. A read after every "
+      "case); the registered rule reads both as narrowed, and no setting widens either cell. So, trained at each setting, "
+      "ISLA-DTT's error in those two far-field cells falls as its read tightens, while over the whole domain no rung passes "
+      "the registered bar. The ladder prices what each trained setting costs in accuracy. It does not test ISLA-DTT's pose "
+      "invariance, which rests on the read's error at fixed weights, measured to fall as $\\theta \\to 0$ "
+      "(@sec-arch-tree-read). A read after every "
       f"second block changes no field measurably and takes {100 * (1 - k_step('K-B1') / k_step('control')):.0f}% less of the "
       f"step; beside the rule, its eddy viscosity beyond one chord is {b1_far[0]} and {b1_far[1]} times the pair's, within the "
       "regional rule's two standard errors. A basis of 8 harms eddy viscosity. The exact read takes "
@@ -1362,7 +1368,7 @@ print("Read as the registered ladder ($\\theta$ = 2, 1, 0.5, 0), the opening ang
       "scale: on the DrivAerML Volume task with the whole boundary, 400,000 prediction points fit one GB300 at $\\theta = 1$ "
       "(@sec-using-dtt-cost), and neither the step nor the fit at $\\theta = 0.5$ is measured. What would settle it: ISLA-DTT "
       "trained on the DrivAerML Volume task at $\\theta = 0.5$ against $\\theta = 1$, two seeds each, read on the error far "
-      f"from the car. Data: {R.source('dtt_knobs', 'sens/sens_table.md')}; {R.source('dtt_knobs_exact', 'RESULTS.md')}.")
+      f"from the car. Data: {R.source('dtt_knobs', 'sens/sens_table.md')}; {R.source('dtt_knobs_final', 'RESULTS.md')}.")
 ```
 
 ### The direction of the SHIFT-SUV transfer {#sec-oq-transfer}
@@ -1678,10 +1684,26 @@ print("Leaving the mean normal unnormalized, which removes the constant and the 
       f"{dra[0]:.3f} times on pressure and {dra[1]:.3f} times on wall shear, worse on every one of the {n_dra} validation cases, which the "
       "rule registered for it reads as harms; so that form is not a candidate, whatever the interior datasets read. "
       f"Data: {R.source('slice_normal_exp', 'reading_DRA.md')}; {R.source('slice_normal_exp', 'PREREG.md')} (A section 5, A3 and A5).")
+# SLICE-NORMAL-EXP, (a)+(s): against the control (registered) and against (a) (the marginal effect of (s), beside)
+DRS = {r_["field"]: r_ for r_ in R.md_table("slice_normal_dras", "reading_DRAS.md", None, 0) if r_["protocol"] == "native"}
+DRM = {r_["field"]: r_ for r_ in R.md_table("slice_normal_dras", "reading_MDRA.md", None, 0) if r_["protocol"] == "native"}
+assert all(DRS[f_]["label"] == "harms" for f_ in DRS) and len(DRS) == 2
+assert " ".join(R.load("slice_normal_dras", "reading_DRAS.md").split()).count("arm better on 0 % of cases") == 2
+assert " ".join(R.load("slice_normal_dras", "reading_MDRA.md").split()).count("arm better on 0 % of cases") == 2
+drs = [R.num(DRS[f_]["arm ÷ control"]) for f_ in ("pressure_l2", "wss_l2")]
+drm = [R.num(DRM[f_]["arm ÷ control"]) for f_ in ("pressure_l2", "wss_l2")]
 print()
-print("::: {.callout-note title=\"In flight\"}\nThis question rests on the normalization with its clamp, as the code has it. ISLA "
-      "with the mean normal unnormalized and each slice's distances softened by the slice's own spread is being measured on AirfRANS, "
-      "the lug and the DrivAerML Surface task, and the ledger (@sec-ledger) tracks it.\n:::")
+print("Softening each slice's anchor distance as well, by adding the slice's own RMS spread in quadrature to the distance "
+      "$\\lvert r - z_s \\rvert$, harms more. On the same task and protocol it raises the "
+      f"error {drs[0]:.3f} times on pressure and {drs[1]:.3f} times on wall shear against the control, which the registered rule "
+      f"reads as harms, and {drm[0]:.3f} and {drm[1]:.3f} times against the unnormalized mean normal alone, worse on every one of the "
+      f"{n_dra} cases in both comparisons; so neither form is a candidate. "
+      f"Data: {R.source('slice_normal_dras', 'reading_DRAS.md')}; {R.source('slice_normal_dras', 'reading_MDRA.md')}; "
+      f"{R.source('slice_normal_dras', 'RESULTS.md')} (section 4.2); {R.source('slice_normal_exp', 'PREREG.md')} (F2, A6).")
+print()
+print("::: {.callout-note title=\"In flight\"}\nThis question rests on the normalization with its clamp, as the code has it, and on "
+      "two replacements read on the DrivAerML Surface task. The same two replacements on ISLA-DTT on the lug, which the AirfRANS "
+      "reading waits on, are being measured, and the ledger (@sec-ledger) tracks it.\n:::")
 ```
 
 ### A quarter of the slices {#sec-oq-slices}
@@ -1697,8 +1719,19 @@ SLD = {r_["field"]: r_ for r_ in R.md_table("slices_drv", "reading.md") if r_["p
 assert all(SLD[f]["label"] == "no change" and SLD[f]["sub-bar flag"] == "none" for f in ("pressure_l2", "velocity_l2", "nut_l2"))
 SLDC = {r_["measure"].split(",")[0]: R.num(r_["S ÷ B"]) for r_ in R.md_table("slices_drv", "RESULTS.md", "R3, cost")}
 SLDF = [c.strip().replace("**", "") for c in next(ln for ln in R.load("slices_drv", "RESULTS.md").splitlines() if ln.startswith("| **> 5 m")).strip("|").split("|")][4]
-print("**The open question is whether ISLA with a quarter of its slices costs nothing in accuracy on ISLA-DTT and on the surface "
-      "task; for interacting ISLA on the two interior datasets measured it costs nothing.** On the AirfRANS "
+# SLICES-ALL: ISLA-DTT on AirfRANS and the lug and interacting ISLA on the DrivAerML Surface task, the native readings and the whole-run steps
+SLA = {a_: {r_["field"]: r_ for r_ in R.md_table("slices_all", f"reading_{a_}.md") if r_["protocol"] == "native"} for a_ in ("DR", "AF", "LUG")}
+assert all(r_["label"] == "no change" and r_["flag"] == "none" for d_ in SLA.values() for r_ in d_.values())
+sla = lambda a_, fs: " / ".join(SLA[a_][f_]["arm ÷ control"] for f_ in fs)
+SLAX = " ".join(R.load("slices_all", "RESULTS.md").split())
+sla_step = dict(zip(("DR", "AF", "LUG"), (re.search(p_, SLAX).group(1) for p_ in (
+    r"the control's 0\.241 / 0\.245 s \((0\.\d+)\)", r"against 0\.931 / 0\.937 s \((0\.\d+)\)",
+    r"the control's 0\.425 / 0\.420 s \(\*\*(0\.\d+)\*\*\)"))))
+assert "**candidate for every form**" in SLAX and "DR moves +0.5-0.6 % on both fields and AF nu_t +2.4 %" in SLAX
+assert "from the arm's own 12-17 % seed spread" in SLAX and "The arm's seeds sit 11 % apart, the control's 21 %." in SLAX
+print("**The open question is whether a quarter of the slices costs nothing on AeroZoo and the other datasets not run with it; "
+      "on AirfRANS, the DrivAerML tasks and the lug it reads no change by the registered rule in any form measured, with two "
+      "seed-separated shifts under the flag, at a saving that depends on the form.** On the AirfRANS "
       "interior task, ISLA with 128 slices in place of the reference's 512, trained and scored as the standing, has "
       + " / ".join(f"{SL[f]['ratio']:.3f}" for f in FW) + " times the standing's test error on " + " / ".join(FW.values())
       + " (ratios of arithmetic seed means, two seeds each), and no field moves by the rule registered for the test, which needed "
@@ -1711,15 +1744,22 @@ print("**The open question is whether ISLA with a quarter of its slices costs no
       "by the same rule and no shift above 3% with both of its seeds above both of the standing's, at "
       f"{SLDC['smoke 363505']:.3f} of the training step and {SLDC['smoke: peak allocated per rank']:.3f} of the peak memory; beyond "
       "5 m from the car its eddy-viscosity error is " + " / ".join(x.strip() for x in SLDF.split(",")) + " times the "
-      "standing's, seed-matched. These two datasets do not decide whether the reference configuration takes 128 slices. One check "
-      "decides it for every form: ISLA-DTT with 128 slices against 512 on AirfRANS and on the GINOT bracket lug, and interacting "
-      "ISLA with 128 against 512 on the DrivAerML Surface task, two seeds each, read for harm by the same rule. Cost: not priced. "
+      "standing's, seed-matched. On ISLA-DTT, 128 slices against 512 reads " + sla("AF", ("pressure_l2", "velocity_l2", "nut_l2"))
+      + " on AirfRANS pressure / velocity / eddy viscosity and " + sla("LUG", ("von_mises_l2",)) + " on the GINOT bracket lug's von "
+      "Mises stress, and interacting ISLA on the DrivAerML Surface task, reading the vehicle alone, " + sla("DR", ("pressure_l2", "wss_l2"))
+      + " on pressure / wall shear, two seeds each. No field moves by the same rule, and no shift above 3% has both 128-slice seeds "
+      "above both 512-slice seeds. Two shifts below that threshold have the seeds separated: 0.5 to 0.6% on both fields of the "
+      "surface task and 2.4% on AirfRANS eddy viscosity. The test resolves only large effects on AirfRANS pressure and velocity, "
+      "where the 128-slice seeds spread 12 to 17%, and on the lug, where the 512-slice seeds sit 21% apart. Over the whole run the "
+      f"training step is {sla_step['AF']} of the reference's for ISLA-DTT on AirfRANS, {sla_step['DR']} on the surface task and "
+      f"{sla_step['LUG']} for ISLA-DTT on the lug, whose step barely depends on the slice count. Every one of these models is ISLA "
+      "0.9.0, and the reference configuration keeps 512 slices. AeroZoo, HiLiftAeroML, SHIFT-SUV, Tensile2d and DeepJEB++ have not "
+      "been run at 128 slices. What would settle it: each of them with 128 slices against 512 in the form it trains, AeroZoo "
+      "first, two seeds each, read for harm by the same rule. Cost: not priced. "
       f"Data: {R.source('slices_af', 'RESULTS.md')}, {R.source('slices_af', 'reading.json')}, "
-      f"{R.source('slices_drv', 'reading.md')}, {R.source('slices_drv', 'RESULTS.md')} (R2 and R3).")
-print()
-print(S.in_flight_callout({"what": "interacting ISLA on two interior datasets",
-                           "replacement": "ISLA-DTT with 128 slices on AirfRANS and the lug, and interacting ISLA with 128 slices on the "
-                                          "DrivAerML Surface task,"}).replace("is being measured", "are being measured"))
+      f"{R.source('slices_drv', 'reading.md')}, {R.source('slices_drv', 'RESULTS.md')} (R2 and R3); "
+      f"{R.source('slices_all', 'RESULTS.md')}, {R.source('slices_all', 'reading_AF.md')}, {R.source('slices_all', 'reading_LUG.md')}, "
+      f"{R.source('slices_all', 'reading_DR.md')}.")
 ```
 
 ```{python}
