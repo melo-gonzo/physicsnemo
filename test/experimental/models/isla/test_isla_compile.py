@@ -342,10 +342,10 @@ def test_the_compiled_case_inputs_run_every_sum_as_the_opaque_scan():
 @requires_cuda
 def test_the_in_model_draw_compiles_under_max_autotune_at_full_resolution():
     """The recipe's compile options (``max-autotune-no-cudagraphs``) on an interior
-    model's case inputs at 1.4 million boundary cells: the draw's float64 sums over
-    every cell are long enough for Inductor's split scan, whose kernel failed on GB300
-    in this compile; the draw runs them through ATen (``sampling._cumsum``). The
-    compiled draw gives the eager one."""
+    model's case inputs at 1.4 million boundary cells: the draw's sums over every
+    cell are long enough for Inductor's split scan, whose kernel failed on GB300 in
+    this compile; the draw runs them eagerly (``sampling._cumsum``). The compiled
+    draw gives the eager one."""
     torch._dynamo.reset()
     torch.manual_seed(0)
     model = (
