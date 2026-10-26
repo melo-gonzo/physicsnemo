@@ -439,8 +439,11 @@ $$
 \mathbb{E}_u \Big[ \sum_{i \text{ kept}} w_i\, f_i \Big] = \sum_{\text{all cells}} \lvert C_i \rvert\, f_i ,
 $$
 
-and the sum is exact on a condition kept whole, to the rounding of its keep
-probabilities (@sec-limits-draw-ties). Every measure-weighted
+and the sum is exact on a condition kept whole. A cell of zero measure has
+probability zero, except where a condition's share reaches its count of cells
+of positive measure: then every positive cell is kept with probability one
+and the cells of zero measure fill the rest of the share at weight zero, so
+the count stays $k$ and the sum is unchanged. Every measure-weighted
 sum over the tokens (the slice states, the anchors) is therefore a quadrature of the full surface; the length unit
 and the declared scales are computed from the full surface itself, before
 the draw. The kept cells are spaced evenly in cumulative probability along
@@ -448,14 +451,15 @@ the space-filling curve, so the sample is spread over the surface rather
 than clumped. In training $u$ is drawn uniform on $[0, 1)$ from the global
 torch random-number generator at every step (`torch.manual_seed` reproduces
 a run), so the model sees a new quadrature of the same surface each time;
-in evaluation (`model.eval()`) $u = 1/2$ (`EVAL_START`), so inference is
-deterministic on the CPU; on a GPU, where a share is a half integer, hits land
-exactly on cell boundaries and the rounding of the prefix sum decides them
-(@sec-limits-draw-ties). The selection runs without gradient, in float64 and outside
+in evaluation (`model.eval()`) $u = 1/2$ (`EVAL_START`). The line is laid in
+exact 64-bit integer arithmetic over a fixed-order scan of the measures, so a
+hit that lands exactly on a cell boundary, as at a half-integer share, falls
+on the same side on every run, on the CPU and the GPU alike, and inference
+keeps the same cells (@sec-limits-draw-ties). The selection runs without gradient, in float64 and outside
 autocast, and the kept cells' measures keep their gradient. It selects rows
 of the token set whose seeds stage 2 has already computed for every cell,
 and returns them in the cells' own order, so a condition kept whole is its
-mesh as given, except at those exact ties on a GPU.
+mesh as given.
 
 ::: {.column-margin}
 Why proportional to measure: an uncapped kept cell then stands for
@@ -1391,7 +1395,11 @@ three dimensions. The search runs without gradient;
 the offset $x_q - p_q$ is then formed in float64 from the point and its
 cell's vertices, with the barycentric weights of its region of the cell,
 and rounded once to the points' precision, so $\delta_q$ and $u_q$ are
-differentiable in the points and the vertex positions.
+differentiable in the points and the vertex positions: $u_q$ takes the
+derivative of the direction to the closest point as that point moves, held
+fixed at a vertex, sliding along a triangle's edge as the point and the
+edge's vertices move, and the normal inside a cell; at a tie it carries
+none.
 
 A cell of zero area, whose vertices coincide or lie on one line, is read as
 the segment or the point its vertices span. Such a cell never supplies a
@@ -2008,10 +2016,9 @@ most $2.6 \times 10^{-7}$ of its extent, and no axis changes sign
 results/campaigns_2026-10-23/dtt_pose/MECHANISMS.md, sections 1 and 2).
 
 ::: {.callout-note title="In flight"}
-This limit is that of the code as it is. The forest built outside autocast
-(below) removes it and changes ISLA-DTT's function; ISLA-DTT retrained with
-it on the lug and the AirfRANS interior task is being measured, and the
-ledger (@sec-ledger) tracks it.
+These numbers come from the octant forest the class builds under the caller's autocast. ISLA-DTT trained with
+the forest that depends on the boundary alone (@sec-arch-tree-read) is to be measured at the reference
+configuration on the 0.14.0 code, and the ledger (@sec-ledger) tracks it.
 :::
 
 Three properties hold by construction. At $\theta = 0$, a setting of the
@@ -2096,12 +2103,27 @@ native match, most of them in the airfoil's trees, which sit 27.8 chords from
 the forest's origin
 (results/campaigns_2026-10-23/af_fix/DESIGN.md, section 1).
 
-::: {.callout-note title="In flight"}
-This limit is that of the code as it is. The forest above removes it and
-changes ISLA-DTT's function; ISLA-DTT retrained with it on the lug and the
-AirfRANS interior task, read for native accuracy by a registered rule, is
-being measured, and the ledger (@sec-ledger) tracks it.
-:::
+```{python}
+#| label: para-arch-pose-forest-retrain
+#| output: asis
+RDX = R.load("dtt_pose_exp_read", "results/read/read_all.md")
+_lug = R.md_table("dtt_pose_exp_read", "results/read/read_all.md", "lug", 0)[0]
+_af = {r_["field"]: r_ for r_ in R.md_table("dtt_pose_exp_read", "results/read/read_all.md", "af", 0)}
+assert _lug["N"] == "no change" and all(r_["N"] == "no change" for r_ in _af.values())
+pn_arm = re.search(r"posed / native arm \[([\d.]+), ([\d.]+)\], control \[([\d.]+), ([\d.]+)\]", RDX).groups()
+lug_win = re.search(r"arm better in ([\d.]+)% of cases", RDX).group(1)
+assert "no paired label" in RDX and "P pass" in RDX and RDX.count("bitwise") >= 8
+print("**Retrained with the forest that depends on the boundary alone, ISLA-DTT is pose-invariant on the lug.** "
+      f"Trained with it on the lug and the AirfRANS interior task, two seeds each, ISLA-DTT's posed error on the lug is "
+      f"{pn_arm[0]} and {pn_arm[1]} times its native error (seeds 42 and 43), against {float(pn_arm[2]):.2f} and "
+      f"{float(pn_arm[3]):.2f} for the octant forest, and the bfloat16 forest is bitwise the float32 one on every scored case. By "
+      "the rule registered for the retrain no field of either dataset reads a cost; below its resolution the lug's von Mises "
+      f"error is {R.num(_lug['arm / control']):.2f} times the octant forest's (seeds {R.num(_lug['seed-matched'], 0):.3f} and {R.num(_lug['seed-matched'], 1):.3f}; "
+      f"the retrained form is better on {float(lug_win):.0f}% of the cases), and AirfRANS pressure and eddy viscosity are "
+      f"{R.num(_af['pressure_l2']['arm / control']):.2f} and {R.num(_af['nut_l2']['arm / control']):.2f} times, every seed of "
+      f"one form beyond every seed of the other, velocity {R.num(_af['velocity_l2']['arm / control']):.2f}. "
+      f"Data: {R.source('dtt_pose_exp_read', 'RESULTS.md')}; {R.source('dtt_pose_exp_read', 'results/read/read_all.md')}.")
+```
 
 $\theta$ is a constant of the class (`TREE_READ_THETA`), not
 an argument: ISLA-DTT trains and is scored at $\theta = 1$, so its kernel,
@@ -2118,8 +2140,10 @@ $\theta = 2$ to 0.5. The leaf size matters less: leaves of 2 or 8 cells
 change the AirfRANS error by at most 0.1%; on the lug leaf 2 costs 2% and
 33% (seeds 42 and 43) and leaf 8 at most 0.8%
 (results/campaigns_2026-10-23/dtt_knobs/sens/sens_table.md;
-results/campaigns_2026-10-23/dtt_knobs/order/order_table.md). Whether a
-model trained at a smaller $\theta$ is more accurate is open
+results/campaigns_2026-10-23/dtt_knobs/order/order_table.md). Retrained
+at each setting instead, from the exact read to $\theta = 2$, no setting
+moves a field of the AirfRANS interior task past the registered 10% bar,
+and a finer read narrows ISLA-DTT's far-field gap to interacting ISLA
 (@sec-oq-dtt-theta). The tree's error
 is also what moves ISLA-DTT under an exact refinement of the boundary: on
 the AirfRANS interior task, with the standing's pair, trained without
@@ -2642,26 +2666,38 @@ is no larger than eager's on the block outputs, and on the gradients it is
 1.0 to 1.4 times eager's in every group of parameters
 (results/campaigns_2026-10-23/dtt_fast_compile/RESULTS.md, section 2).
 
-**The supervisor's policy certifies a compiled region against eager's own
-sensitivity, tensor group by tensor group.** It holds for every compiled
-ISLA region: Inductor's default casts, certified block by block on real
-checkpoints against float64 eager on the same inputs, per tensor group (the
-block outputs and each group of parameter gradients). In each precision a
-compiled region's distance to float64 may exceed eager's by at most eager's
-own change under a one-ulp perturbation of the region's inputs, measured; in
-float64 the two agree at roundoff; a scalar loss is reported beside and
-never gated, since its eager error can sit near zero by chance. A fixed
-bound fails an ill-conditioned block however accurate its compiled path,
-as AeroZoo's first block, whose eager float32 output is itself
-$8.5 \times 10^{-4}$ from float64, and a bare ratio to eager's distance
-fails where eager happens to sit within an ulp of float64, as on the
-AirfRANS checkpoint of seed 42.
+```{python}
+#| label: para-arch-cert-policy
+#| output: asis
+FPR = " ".join(R.load("fused_pad", "FINAL_REPORT.md").split())
+PT = {r_["dataset"]: r_ for r_ in R.md_table("fused_pad", "FINAL_REPORT.md", None, 2)}
+assert set(PT) == {"AirfRANS", "lug", "Tensile2d"}
+t2d_br, t2d_n, t2d_base, t2d_bn = re.search(r"Tensile2d fails (\d+) / (\d+) groups on the branch and (\d+) / (\d+) on the base", FPR).groups()
+assert "AirfRANS and the lug pass in every group for both codes" in FPR
+af_pt = PT["AirfRANS"]["base"].split(" / ")
+print("**The supervisor's policy certifies a compiled region against eager's own sensitivity, on tensor groups pooled by "
+      "role.** It holds for every compiled ISLA region: Inductor's default casts, certified block by block on real checkpoints "
+      "against float64 eager on the same inputs. The tensors are pooled by their role (each block's outputs, each block's "
+      "parameter gradients, the routing gradients, the heads), and each pooled group's distance to float64 must lie inside "
+      "the range of a family of eager runs of the same code (in bfloat16 at least 14 runs from at least two fresh processes); "
+      "in float64 the two agree at roundoff, and a scalar loss is reported beside and never gated, since its eager error can "
+      "sit near zero by chance. A compiled path that calls a Triton kernel, whose roundings follow eager's by design, is "
+      "judged against the eager family, with the compiled family of the code without it beside. Counts per single tensor are "
+      "reported beside and do not gate: the compiled region without the fused geometry kernel fails them on every dataset "
+      f"read, {af_pt[0].replace('-', ' to ')} float32 and {af_pt[1].replace('-', ' to ')} bfloat16 groups per process on "
+      "AirfRANS, because the casts Inductor leaves out move a few small groups while the region as a whole is more accurate "
+      "than eager. A fixed bound would fail an ill-conditioned block however accurate its compiled path, as AeroZoo's first "
+      "block, whose eager float32 output is itself $8.5 \\times 10^{-4}$ from float64. With the fused geometry kernel for "
+      "planar models and models without a global direction, on trained checkpoints (ISLA-DTT on AirfRANS and the lug, ISLA "
+      "on Tensile2d), AirfRANS's and the lug's "
+      f"compiled blocks pass every pooled group, and Tensile2d's fail {t2d_br} of {t2d_n} ({t2d_base} of {t2d_bn} without the kernel), so "
+      f"Tensile2d's ISLA trains eagerly. Data: {R.source('fused_pad', 'FINAL_REPORT.md')}.")
+```
 
 ::: {.callout-note title="In flight"}
-These numbers compare the compiled blocks with eager. Whether the compiled
-blocks meet the supervisor's policy, per tensor group against eager's own
-one-ulp change, is measured first in the reference rerun, on every
-dataset, and the ledger (@sec-ledger) tracks it.
+These readings come from three planar and no-direction checkpoints read on the fused kernel's code. The
+certification of the compiled blocks on every dataset is to be measured on the 0.14.0 code, and the ledger
+(@sec-ledger) tracks it.
 :::
 
 **Where a training step's time goes.** @fig-arch-step-breakdown takes one
@@ -2825,9 +2861,10 @@ assert set(WHAT) == set(sig) - {"self"}
 import physicsnemo.experimental.models.isla.geo_kernel as GK
 out += (f"| `geo_kernel` attribute (`{REF.geo_kernel!r}`) | 3 | not an argument and not stored in a checkpoint: how the geometry region "
         f"runs, never what it computes. `\"auto\"` resolves at the first forward pass to the fused kernel when the inputs are on "
-        f"CUDA, Triton is importable, `n_spatial_dims == 3`, there is at least one global direction, the global directions and the shared "
+        f"CUDA, Triton is importable, `n_spatial_dims <= 3`, the global directions (none counts as one) and the shared "
         f"vector channels number at most {GK.MAX_DIRECTIONS} together, there are at most {GK.MAX_SLICES:,} slices and no shared "
-        f"tensor channel, and to the eager region otherwise (`resolve_geo_kernel`); set `\"eager\"` or `\"fused\"` to force one |\n")
+        f"tensor channel, and to the eager region otherwise (`resolve_geo_kernel`); a planar model or one with no global "
+        f"direction runs the fused kernel padded with exact zeros; set `\"eager\"` or `\"fused\"` to force one |\n")
 out += (f"| `geometry_kernel` attribute (`{REF.geometry_kernel!r}`) | interior | not stored in a checkpoint: the implementation of "
         "the prediction points' exact geometry search; `\"auto\"` takes the fast search on CUDA where Triton imports, which "
         "returns the same geometry bitwise, and the reference search otherwise (`resolve_geometry_kernel`); set "

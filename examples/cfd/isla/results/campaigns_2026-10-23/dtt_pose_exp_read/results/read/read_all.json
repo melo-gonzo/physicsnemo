@@ -1,0 +1,482 @@
+{
+ "lug": {
+  "checks": {
+   "dttposex_lug_dtt_seed42/native": {
+    "epoch_500": true,
+    "n_cases": 600,
+    "n_ok": true,
+    "ids_equal_control": true,
+    "snapshot": true,
+    "dataset": true,
+    "extra": true,
+    "proof_md5": true,
+    "proof_origin": true,
+    "class_space": 6,
+    "class_ok": true,
+    "valid": true
+   },
+   "dttposex_lug_dtt_seed42/posed": {
+    "epoch_500": true,
+    "n_cases": 600,
+    "n_ok": true,
+    "ids_equal_control": null,
+    "snapshot": true,
+    "dataset": true,
+    "extra": true,
+    "proof_md5": true,
+    "proof_origin": true,
+    "class_space": 6,
+    "class_ok": true,
+    "valid": true
+   },
+   "dttposex_lug_dtt_seed43/native": {
+    "epoch_500": true,
+    "n_cases": 600,
+    "n_ok": true,
+    "ids_equal_control": true,
+    "snapshot": true,
+    "dataset": true,
+    "extra": true,
+    "proof_md5": true,
+    "proof_origin": true,
+    "class_space": 6,
+    "class_ok": true,
+    "valid": true
+   },
+   "dttposex_lug_dtt_seed43/posed": {
+    "epoch_500": true,
+    "n_cases": 600,
+    "n_ok": true,
+    "ids_equal_control": null,
+    "snapshot": true,
+    "dataset": true,
+    "extra": true,
+    "proof_md5": true,
+    "proof_origin": true,
+    "class_space": 6,
+    "class_ok": true,
+    "valid": true
+   }
+  },
+  "proof_lines": {
+   "dttposex_lug_dtt_seed42/native": [
+    "SCOREPROOF tree_read=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_dttposex/physicsnemo/experimental/models/isla/tree_read.py md5=00d83cb940152c58265b3cbf21841b55 model=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_dttposex/physicsnemo/experimental/models/isla/model.py model_md5=fc8d0fa9523f61e9b85ebfd54b919b1d normal_faces=True normal_octants=False",
+    "SCOREPROOF forests builds=600 with_origin=600 frame_dtypes=['torch.float64'] label_fn=normal_faces labels_seen=[0, 1, 2, 3, 4, 5] class_space=6 nonempty_trees_min=6 nonempty_trees_max=6"
+   ],
+   "dttposex_lug_dtt_seed42/posed": [
+    "SCOREPROOF tree_read=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_dttposex/physicsnemo/experimental/models/isla/tree_read.py md5=00d83cb940152c58265b3cbf21841b55 model=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_dttposex/physicsnemo/experimental/models/isla/model.py model_md5=fc8d0fa9523f61e9b85ebfd54b919b1d normal_faces=True normal_octants=False",
+    "SCOREPROOF forests builds=600 with_origin=600 frame_dtypes=['torch.float64'] label_fn=normal_faces labels_seen=[0, 1, 2, 3, 4, 5] class_space=6 nonempty_trees_min=6 nonempty_trees_max=6"
+   ],
+   "dttposex_lug_dtt_seed43/native": [
+    "SCOREPROOF tree_read=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_dttposex/physicsnemo/experimental/models/isla/tree_read.py md5=00d83cb940152c58265b3cbf21841b55 model=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_dttposex/physicsnemo/experimental/models/isla/model.py model_md5=fc8d0fa9523f61e9b85ebfd54b919b1d normal_faces=True normal_octants=False",
+    "SCOREPROOF forests builds=600 with_origin=600 frame_dtypes=['torch.float64'] label_fn=normal_faces labels_seen=[0, 1, 2, 3, 4, 5] class_space=6 nonempty_trees_min=6 nonempty_trees_max=6"
+   ],
+   "dttposex_lug_dtt_seed43/posed": [
+    "SCOREPROOF tree_read=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_dttposex/physicsnemo/experimental/models/isla/tree_read.py md5=00d83cb940152c58265b3cbf21841b55 model=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_dttposex/physicsnemo/experimental/models/isla/model.py model_md5=fc8d0fa9523f61e9b85ebfd54b919b1d normal_faces=True normal_octants=False",
+    "SCOREPROOF forests builds=600 with_origin=600 frame_dtypes=['torch.float64'] label_fn=normal_faces labels_seen=[0, 1, 2, 3, 4, 5] class_space=6 nonempty_trees_min=6 nonempty_trees_max=6"
+   ]
+  },
+  "valid": true,
+  "fields": {
+   "von_mises_l2": {
+    "N": {
+     "D": 0.10733492153828486,
+     "SE": 0.11718276777753503,
+     "twoSE": 0.23436553555507006,
+     "ratio": 1.1133070625590886,
+     "label": "no change",
+     "flag": "none",
+     "seed_ratios": [
+      1.086007357763601,
+      1.1463368428919658
+     ],
+     "s_arm": 0.09649899842720815,
+     "s_ctl": 0.13472767136172542
+    },
+    "arm": [
+     0.002410206198692322,
+     0.002102741797765096
+    ],
+    "ctl": [
+     0.002219327688217163,
+     0.0018343140681584677
+    ],
+    "isla": [
+     0.0014624581734339395,
+     0.0014448897043863932
+    ],
+    "arm_over_isla": 1.552255934312484,
+    "ctl_over_isla": 1.3942747571765253,
+    "arm_over_isla_seed": [
+     1.6480513716388983,
+     1.4552957166084006
+    ],
+    "posed_over_native_arm": [
+     1.0000799606626511,
+     1.001391890694203
+    ],
+    "posed_over_native_ctl": [
+     1.5280977797974298,
+     1.977453112163082
+    ],
+    "N_posed": {
+     "D": -0.4409249914563987,
+     "SE": 0.07548326364107556,
+     "twoSE": 0.15096652728215113,
+     "ratio": 0.6434409683328395,
+     "label": "gain",
+     "flag": "down",
+     "seed_ratios": [
+      0.7107491483794633,
+      0.5805105625085175
+     ],
+     "s_arm": 0.09557200587022067,
+     "s_ctl": 0.04755457784229342
+    },
+    "case_median_arm": 0.002069351903628558,
+    "case_median_ctl": 0.0018664248345885426,
+    "share_cases_arm_better": 0.19166666666666668,
+    "paired": "no paired label",
+    "P": {
+     "posed_over_native": [
+      1.0000799606626511,
+      1.001391890694203
+     ],
+     "pass": true
+    }
+   }
+  },
+  "Q": {
+   "pass": true,
+   "runs": {
+    "dttposex_lug_dtt_seed42/native": {
+     "epoch": 500,
+     "tree_read_md5": "00d83cb940152c58265b3cbf21841b55",
+     "phase": "summary",
+     "cases": 600,
+     "bitwise": 600,
+     "pairs_per_point_mean": 114.94778671831072
+    },
+    "dttposex_lug_dtt_seed42/posed": {
+     "epoch": 500,
+     "tree_read_md5": "00d83cb940152c58265b3cbf21841b55",
+     "phase": "summary",
+     "cases": 600,
+     "bitwise": 600,
+     "pairs_per_point_mean": 114.94630989077505
+    },
+    "dttposex_lug_dtt_seed43/native": {
+     "epoch": 500,
+     "tree_read_md5": "00d83cb940152c58265b3cbf21841b55",
+     "phase": "summary",
+     "cases": 600,
+     "bitwise": 600,
+     "pairs_per_point_mean": 114.94778671831072
+    },
+    "dttposex_lug_dtt_seed43/posed": {
+     "epoch": 500,
+     "tree_read_md5": "00d83cb940152c58265b3cbf21841b55",
+     "phase": "summary",
+     "cases": 600,
+     "bitwise": 600,
+     "pairs_per_point_mean": 114.94630989077505
+    }
+   }
+  }
+ },
+ "af": {
+  "checks": {
+   "dttposex_af_dtt_seed42/native": {
+    "epoch_500": true,
+    "n_cases": 200,
+    "n_ok": true,
+    "ids_equal_control": true,
+    "snapshot": true,
+    "dataset": true,
+    "extra": true,
+    "proof_md5": true,
+    "proof_origin": true,
+    "class_space": 4,
+    "class_ok": true,
+    "valid": true
+   },
+   "dttposex_af_dtt_seed42/posed": {
+    "epoch_500": true,
+    "n_cases": 200,
+    "n_ok": true,
+    "ids_equal_control": null,
+    "snapshot": true,
+    "dataset": true,
+    "extra": true,
+    "proof_md5": true,
+    "proof_origin": true,
+    "class_space": 4,
+    "class_ok": true,
+    "valid": true
+   },
+   "dttposex_af_dtt_seed43/native": {
+    "epoch_500": true,
+    "n_cases": 200,
+    "n_ok": true,
+    "ids_equal_control": true,
+    "snapshot": true,
+    "dataset": true,
+    "extra": true,
+    "proof_md5": true,
+    "proof_origin": true,
+    "class_space": 4,
+    "class_ok": true,
+    "valid": true
+   },
+   "dttposex_af_dtt_seed43/posed": {
+    "epoch_500": true,
+    "n_cases": 200,
+    "n_ok": true,
+    "ids_equal_control": null,
+    "snapshot": true,
+    "dataset": true,
+    "extra": true,
+    "proof_md5": true,
+    "proof_origin": true,
+    "class_space": 4,
+    "class_ok": true,
+    "valid": true
+   }
+  },
+  "proof_lines": {
+   "dttposex_af_dtt_seed42/native": [
+    "SCOREPROOF tree_read=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_dttposex/physicsnemo/experimental/models/isla/tree_read.py md5=00d83cb940152c58265b3cbf21841b55 model=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_dttposex/physicsnemo/experimental/models/isla/model.py model_md5=fc8d0fa9523f61e9b85ebfd54b919b1d normal_faces=True normal_octants=False",
+    "SCOREPROOF forests builds=200 with_origin=200 frame_dtypes=['torch.float64'] label_fn=normal_faces labels_seen=[0, 1, 2, 3] class_space=4 nonempty_trees_min=3 nonempty_trees_max=3"
+   ],
+   "dttposex_af_dtt_seed42/posed": [
+    "SCOREPROOF tree_read=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_dttposex/physicsnemo/experimental/models/isla/tree_read.py md5=00d83cb940152c58265b3cbf21841b55 model=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_dttposex/physicsnemo/experimental/models/isla/model.py model_md5=fc8d0fa9523f61e9b85ebfd54b919b1d normal_faces=True normal_octants=False",
+    "SCOREPROOF forests builds=200 with_origin=200 frame_dtypes=['torch.float64'] label_fn=normal_faces labels_seen=[0, 1, 2, 3] class_space=4 nonempty_trees_min=3 nonempty_trees_max=3"
+   ],
+   "dttposex_af_dtt_seed43/native": [
+    "SCOREPROOF tree_read=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_dttposex/physicsnemo/experimental/models/isla/tree_read.py md5=00d83cb940152c58265b3cbf21841b55 model=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_dttposex/physicsnemo/experimental/models/isla/model.py model_md5=fc8d0fa9523f61e9b85ebfd54b919b1d normal_faces=True normal_octants=False",
+    "SCOREPROOF forests builds=200 with_origin=200 frame_dtypes=['torch.float64'] label_fn=normal_faces labels_seen=[0, 1, 2, 3] class_space=4 nonempty_trees_min=3 nonempty_trees_max=3"
+   ],
+   "dttposex_af_dtt_seed43/posed": [
+    "SCOREPROOF tree_read=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_dttposex/physicsnemo/experimental/models/isla/tree_read.py md5=00d83cb940152c58265b3cbf21841b55 model=/scratch/fsw/portfolios/coreai/projects/coreai_modulus_cae/users/psharpe/agents/2026-08-09-mt2-stage0/code_dttposex/physicsnemo/experimental/models/isla/model.py model_md5=fc8d0fa9523f61e9b85ebfd54b919b1d normal_faces=True normal_octants=False",
+    "SCOREPROOF forests builds=200 with_origin=200 frame_dtypes=['torch.float64'] label_fn=normal_faces labels_seen=[0, 1, 2, 3] class_space=4 nonempty_trees_min=3 nonempty_trees_max=3"
+   ]
+  },
+  "valid": true,
+  "fields": {
+   "pressure_l2": {
+    "N": {
+     "D": 0.05676041616962796,
+     "SE": 0.025271489551996828,
+     "twoSE": 0.050542979103993656,
+     "ratio": 1.0584022039626133,
+     "label": "no change",
+     "flag": "up",
+     "seed_ratios": [
+      1.0300809150284291,
+      1.0868133861347649
+     ],
+     "s_arm": 0.035668964215810214,
+     "s_ctl": 0.002240839156347455
+    },
+    "arm": [
+     0.012801868915557861,
+     0.013464205265045166
+    ],
+    "ctl": [
+     0.012428022623062134,
+     0.012388700246810913
+    ],
+    "isla": [
+     0.0131630539894104,
+     0.011794040203094483
+    ],
+    "arm_over_isla": 1.052449214560053,
+    "ctl_over_isla": 0.9943754941360925,
+    "arm_over_isla_seed": [
+     0.9725606934269881,
+     1.141610935115557
+    ],
+    "posed_over_native_arm": [
+     1.0015235144174692,
+     1.002229385137704
+    ],
+    "posed_over_native_ctl": [
+     1.001685501949521,
+     1.0021856367083815
+    ],
+    "N_posed": {
+     "D": 0.05671068761351852,
+     "SE": 0.025608857795075265,
+     "twoSE": 0.05121771559015053,
+     "ratio": 1.0583495724578824,
+     "label": "no change",
+     "flag": "up",
+     "seed_ratios": [
+      1.0299143355332538,
+      1.0868608288208987
+     ],
+     "s_arm": 0.03616715537867979,
+     "s_ctl": 0.001887873658698652
+    },
+    "case_median_arm": 0.009080226765945554,
+    "case_median_ctl": 0.009588029468432069,
+    "share_cases_arm_better": 0.505
+   },
+   "velocity_l2": {
+    "N": {
+     "D": 0.015660033480453715,
+     "SE": 0.0301142442738118,
+     "twoSE": 0.0602284885476236,
+     "ratio": 1.015783294387524,
+     "label": "no change",
+     "flag": "none",
+     "seed_ratios": [
+      0.9992416657808251,
+      1.033275998506063
+     ],
+     "s_arm": 0.015846813900347357,
+     "s_ctl": 0.03952991153004736
+    },
+    "arm": [
+     0.007367821931838989,
+     0.007204539775848388
+    ],
+    "ctl": [
+     0.007373413443565369,
+     0.006972522139549255
+    ],
+    "isla": [
+     0.006440699100494385,
+     0.006270082592964172
+    ],
+    "arm_over_isla": 1.146456768680628,
+    "ctl_over_isla": 1.1286430629595012,
+    "arm_over_isla_seed": [
+     1.143947546202467,
+     1.149034270127924
+    ],
+    "posed_over_native_arm": [
+     1.0011237623930582,
+     1.0012794513738983
+    ],
+    "posed_over_native_ctl": [
+     1.0009526669622615,
+     1.0011509707982194
+    ],
+    "N_posed": {
+     "D": 0.015811549563317283,
+     "SE": 0.02999339866098336,
+     "twoSE": 0.05998679732196672,
+     "ratio": 1.015937213553648,
+     "label": "no change",
+     "flag": "none",
+     "seed_ratios": [
+      0.9994124687457601,
+      1.033408601778692
+     ],
+     "s_arm": 0.015736857290636532,
+     "s_ctl": 0.039389836875614204
+    },
+    "case_median_arm": 0.005420001805759966,
+    "case_median_ctl": 0.005609462503343821,
+    "share_cases_arm_better": 0.605
+   },
+   "nut_l2": {
+    "N": {
+     "D": 0.07102071425759109,
+     "SE": 0.03493904170641501,
+     "twoSE": 0.06987808341283001,
+     "ratio": 1.073603464536743,
+     "label": "no change",
+     "flag": "up",
+     "seed_ratios": [
+      1.1045430732214894,
+      1.042320965853203
+     ],
+     "s_arm": 0.04879278102093659,
+     "s_ctl": 0.007793445384946536
+    },
+    "arm": [
+     0.02287643909454346,
+     0.021351118087768555
+    ],
+    "ctl": [
+     0.02071122407913208,
+     0.020484206676483156
+    ],
+    "isla": [
+     0.01573822259902954,
+     0.014967538118362426
+    ],
+    "arm_over_isla": 1.4403667634021913,
+    "ctl_over_isla": 1.3416189598677437,
+    "arm_over_isla_seed": [
+     1.4535592536322417,
+     1.4264949866120364
+    ],
+    "posed_over_native_arm": [
+     1.000104637025207,
+     1.0002004397838689
+    ],
+    "posed_over_native_ctl": [
+     1.0000886390419064,
+     1.0001466531823333
+    ],
+    "N_posed": {
+     "D": 0.07105410989539389,
+     "SE": 0.034887178866745465,
+     "twoSE": 0.06977435773349093,
+     "ratio": 1.0736393188078732,
+     "label": "no change",
+     "flag": "up",
+     "seed_ratios": [
+      1.1045607421169754,
+      1.0423770205350684
+     ],
+     "s_arm": 0.04872504857237806,
+     "s_ctl": 0.007752428018368255
+    },
+    "case_median_arm": 0.014369882526807487,
+    "case_median_ctl": 0.014422248583287,
+    "share_cases_arm_better": 0.465
+   }
+  },
+  "Q": {
+   "pass": true,
+   "runs": {
+    "dttposex_af_dtt_seed42/native": {
+     "epoch": 500,
+     "tree_read_md5": "00d83cb940152c58265b3cbf21841b55",
+     "phase": "summary",
+     "cases": 200,
+     "bitwise": 200,
+     "pairs_per_point_mean": 21.031932849999997
+    },
+    "dttposex_af_dtt_seed42/posed": {
+     "epoch": 500,
+     "tree_read_md5": "00d83cb940152c58265b3cbf21841b55",
+     "phase": "summary",
+     "cases": 200,
+     "bitwise": 200,
+     "pairs_per_point_mean": 21.03196265
+    },
+    "dttposex_af_dtt_seed43/native": {
+     "epoch": 500,
+     "tree_read_md5": "00d83cb940152c58265b3cbf21841b55",
+     "phase": "summary",
+     "cases": 200,
+     "bitwise": 200,
+     "pairs_per_point_mean": 21.031932849999997
+    },
+    "dttposex_af_dtt_seed43/posed": {
+     "epoch": 500,
+     "tree_read_md5": "00d83cb940152c58265b3cbf21841b55",
+     "phase": "summary",
+     "cases": 200,
+     "bitwise": 200,
+     "pairs_per_point_mean": 21.03196265
+    }
+   }
+  }
+ }
+}

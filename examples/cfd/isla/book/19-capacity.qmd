@@ -377,6 +377,14 @@ print(": The capacity readings on the 510-wing HiLiftAeroML rung of the wing as 
 # every step; both score a held-out draw of the same case. Ratios in the record are ISLA ÷ the better baseline.
 import records as R
 P1 = R.load("cap_audit", "tables/phase1_floors.json"); P1B = R.load("cap_audit", "tables/phase1b_floors.json")
+# FLOOR-DRV: the same single-case run on DrivAerML Volume with the domain's four other boundary meshes (F) and without (C)
+_FDT = {r_["reading"].split(" (")[0]: r_ for r_ in R.md_table("floor_drv_read", "RESULTS.md", "Registered readings", 0)}
+assert _FDT["nu_t far-field e_R"]["label"].startswith("closes") and _FDT["velocity F_ho"]["label"].startswith("helps")
+_fd = lambda row, col: [R.num(_FDT[row][col], k) for k in (0, 1)]
+FD_NF = [f / t for f, t in zip(_fd("nu_t far-field e_R", "F s42 / s43"), _fd("nu_t far-field e_R", "Transolver s42 / s43"))]
+FD_VC = [f / c for f, c in zip(_fd("velocity F_ho", "F s42 / s43"), _fd("velocity F_ho", "C s42 / s43"))]
+FD_VT = [f / t for f, t in zip(_fd("velocity F_ho", "F s42 / s43"), _fd("velocity F_ho", "Transolver s42 / s43"))]
+FD_NFV = _fd("nu_t far-field e_R", "F s42 / s43")
 V1 = P1["verdicts"]
 CASE = {"drs": "DrivAerML Surface, one car", "hl18": "HiLiftAeroML, one post-stall case", "af": "AirfRANS, one airfoil"}
 FNAME = {"pressure_l2": "pressure", "wss_l2": "wall shear stress", "tau_wall_l2": "wall shear stress", "velocity_l2": "velocity",
@@ -442,7 +450,10 @@ print(f"**Trained on one case with a fresh draw of points every step, ISLA fits 
       + " and ".join(FNAME[f] for c, f in isla_cells if c == "af")
       + "; the registered rules call AirfRANS pressure and DrivAerML Volume " + " and ".join(pb_def) + " deficits of "
       "representation. More width, depth or slices leaves the AirfRANS excess where it is, next to the wall, and on DrivAerML Volume "
-      "ISLA misses the eddy viscosity far from the car, whose level there follows the height above a floor ISLA is not given. On the "
+      "ISLA misses the eddy viscosity far from the car, whose level there follows the height above a floor ISLA is not given; "
+      f"given the floor and the domain's other walls, that miss closes to {min(FD_NF):.2f} to {max(FD_NF):.2f} times "
+      f"Transolver's, and ISLA's velocity error falls by {100 * (1 - max(FD_VC)):.0f} to {100 * (1 - min(FD_VC)):.0f}% but stays "
+      f"{min(FD_VT):.2f} to {max(FD_VT):.2f} times Transolver's, so most of the velocity factor has another cause. On the "
       "first three datasets the single-case floor lies far below ISLA's error across cases.** The capacity audit trains each reference "
       f"configuration on a single case for {n_steps:,} steps, until its error stops falling, and scores a held-out draw of points of the "
       "same case. It asks whether an architecture can represent one field at all, apart from generalizing across cases. Outside the ladder below, every model is ISLA, "
@@ -623,8 +634,9 @@ print(f"Three probes without training point to an input ISLA lacks, the ground. 
       f"hold most of the mass of {min(maj)} to {max(maj)} slices in every block, so they are not starved of slices. Every case file "
       "stores the floor strip, the slip walls, the inlet and the outlet as meshes beside the vehicle; ISLA's configuration "
       "on this task reads all five pieces, and the standing's checkpoints were trained with the vehicle alone "
-      "(@tbl-model-inputs, @sec-limits-whole-boundary). Whether "
-      f"those four meshes, the domain's whole boundary, remove the far-field miss when given as boundary inputs is @sec-oq-far-field. Data: {R.source('cap_audit', 'tables/resid_drv_partB.md')}, "
+      "(@tbl-model-inputs, @sec-limits-whole-boundary). Given as boundary inputs, those four meshes, the domain's whole "
+      f"boundary, bring the far-field error to {' / '.join(f'{x:.3f}' for x in FD_NFV)}, {min(FD_NF):.2f} to {max(FD_NF):.2f} "
+      f"times Transolver's (@sec-oq-far-field). Data: {R.source('floor_drv_read', 'RESULTS.md')}, {R.source('cap_audit', 'tables/resid_drv_partB.md')}, "
       f"{R.source('cap_audit', 'tables/resid_drv_ladder.md')}, {R.source('cap_audit', 'RESULTS.md')} (15.10), "
       f"{R.source('cap_audit', 'tables/probes/probe_a.json')}, {R.source('cap_audit', 'tables/probes/probe_bc_cap_drv_isla_rd_s42.json')} "
       "and its seed-43 twin.")

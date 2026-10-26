@@ -362,6 +362,13 @@ GL2 = next(r for r in R.md_table("dtt_knobs", "gap/gap_table.md", "2. Per case")
 import re
 GL_BF_WORSE = re.search(r"At bf16 ISLA-DTT is still worse in (\d+) %", " ".join(R.load("dtt_knobs", "gap/gap_table.md").split())).group(1)
 GL3 = next(r for r in R.md_table("dtt_knobs", "gap/gap_table.md", "3. Per region", 1) if r["lug"].startswith("on the surface"))
+RDX = R.load("dtt_pose_exp_read", "results/read/read_all.md")
+_lug = R.md_table("dtt_pose_exp_read", "results/read/read_all.md", "lug", 0)[0]
+_af = {r_["field"]: r_ for r_ in R.md_table("dtt_pose_exp_read", "results/read/read_all.md", "af", 0)}
+assert _lug["N"] == "no change" and all(r_["N"] == "no change" for r_ in _af.values())
+pn_arm = re.search(r"posed / native arm \[([\d.]+), ([\d.]+)\], control \[([\d.]+), ([\d.]+)\]", RDX).groups()
+lug_win = re.search(r"arm better in ([\d.]+)% of cases", RDX).group(1)
+assert "no paired label" in RDX and "P pass" in RDX and RDX.count("bitwise") >= 8
 assert min(ld_d["per_seed"].values()) > max(ld_i["per_seed"].values()) and ld_d["mean"] / ld_i["mean"] >= 1 + S.TIE_BAND
 print("- **The standing is of the interacting form.** ISLA-DTT, whose prediction points read the boundary and write nothing into "
       f"the slices, trails it on the lug: on the native mesh ISLA-DTT ÷ ISLA is {ld_d['mean'] / ld_i['mean']:.2f} on the von Mises "
@@ -375,8 +382,17 @@ print("- **The standing is of the interacting form.** ISLA-DTT, whose prediction
       f"({R.num(GL3['bf16']):.2f}; {R.source('dtt_knobs', 'gap/gap_table.md')}). Rotated and translated, ISLA-DTT's error on "
       "the lug is 1.53 and 1.98 times its native error (seeds 42 and 43): rounding decides the sign octant of most of "
       "its cells' normals and many exact ties of the forest's box test, so the posed lug gets another forest "
-      f"(@sec-arch-tree-read; {R.source('dtt_knobs', 'sens/sens_table.md')}; {R.source('dtt_pose', 'MECHANISMS.md')}). ISLA-DTT "
-      "is ISLA's interior form all the same, on principle (@sec-aerozoo-form).")
+      f"(@sec-arch-tree-read; {R.source('dtt_knobs', 'sens/sens_table.md')}; {R.source('dtt_pose', 'MECHANISMS.md')}). "
+      "Retrained with a forest that depends on the boundary alone (@sec-arch-tree-read), on the lug and the AirfRANS "
+      f"interior task, two seeds each, ISLA-DTT's posed error on the lug is "
+      f"{pn_arm[0]} and {pn_arm[1]} times its native error (seeds 42 and 43), against {float(pn_arm[2]):.2f} and "
+      f"{float(pn_arm[3]):.2f} for the octant forest, and the bfloat16 forest is bitwise the float32 one on every scored case. By "
+      "the rule registered for the retrain no field of either dataset reads a cost; below its resolution the lug's von Mises "
+      f"error is {R.num(_lug['arm / control']):.2f} times the octant forest's (seeds {R.num(_lug['seed-matched'], 0):.3f} and {R.num(_lug['seed-matched'], 1):.3f}; "
+      f"the retrained form is better on {float(lug_win):.0f}% of the cases), and AirfRANS pressure and eddy viscosity are "
+      f"{R.num(_af['pressure_l2']['arm / control']):.2f} and {R.num(_af['nut_l2']['arm / control']):.2f} times, every seed of "
+      f"one form beyond every seed of the other, velocity {R.num(_af['velocity_l2']['arm / control']):.2f} "
+      f"({R.source('dtt_pose_exp_read', 'RESULTS.md')}). ISLA-DTT is ISLA's interior form all the same, on principle (@sec-aerozoo-form).")
 ```
 
 - **No tensor target and no geometry class change.** Tensile2d measures a tensor target (@sec-interior-tensile2d); the lug's shapes are one topology.
@@ -384,7 +400,7 @@ print("- **The standing is of the interacting form.** ISLA-DTT, whose prediction
 - **Not matched in cost**, and the published GINOT, Transolver and GNOT numbers are on the authors' split: comparable in kind, not in value.
 
 ::: {.callout-note title="In flight"}
-ISLA-DTT's posed ÷ native on the lug comes from its forest as the code builds it. ISLA-DTT retrained with a
-forest that depends on the boundary alone (@sec-arch-tree-read) is being measured, and the ledger
-(@sec-ledger) tracks it.
+These numbers come from the octant forest the class builds under the caller's autocast. ISLA-DTT trained with
+the forest that depends on the boundary alone (@sec-arch-tree-read) is to be measured at the reference
+configuration on the 0.14.0 code, and the ledger (@sec-ledger) tracks it.
 :::

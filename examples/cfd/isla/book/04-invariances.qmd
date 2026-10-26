@@ -206,7 +206,9 @@ canonical frame of the boundary (measure-weighted centroid, principal axes signe
 $O(1)$ jump of a network fed canonical coordinates. The forest also splits the cells by the sign octant of their normals
 in that frame, and where a normal's component there is zero but for rounding, rounding decides the octant: on the lug,
 where most cells are such, 11% of the cells change octant under a rigid motion, ISLA-DTT's posed forest is another
-forest, and its posed error is not its native error (@sec-arch-tree-read). In these
+forest, and its posed error is not its native error (@sec-arch-tree-read). A forest that classes each normal by a face
+of the cube, built outside autocast about the boundary's centroid, depends on the boundary alone: ISLA-DTT retrained with
+it is pose-invariant on the lug, its posed error within a fraction of a percent of its native one (@sec-arch-tree-read). In these
 settings the contract separates a working surrogate from one whose error a random orientation multiplies by the factors
 of @fig-contract-shifts.
 

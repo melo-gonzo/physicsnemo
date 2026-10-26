@@ -567,14 +567,14 @@ forward pass (`sampling.sample_boundary_cells`):
   the surface rather than clumped.
 - **Weights.** Each kept cell carries its Horvitz–Thompson measure $a_i /
   \pi_i$, so every measure-weighted sum over the tokens is an unbiased
-  quadrature of the full surface, exact on a condition kept whole up to
-  rounding.
+  quadrature of the full surface, exact on a condition kept whole.
 - **Start.** In training $u$ is uniform from the global torch RNG, a new
   quadrature of the same surface at every step (`torch.manual_seed`
   reproduces a run); in evaluation (`model.eval()`) $u = 0.5$
-  (`EVAL_START` in `model.py`), so inference is deterministic on the CPU;
-  on a GPU a half-integer share puts hits exactly on cell boundaries, and the
-  rounding of the prefix sum decides them (@sec-limits-draw-ties).
+  (`EVAL_START` in `model.py`), so inference is deterministic, on the CPU
+  and the GPU alike: the draw's line is exact integer arithmetic, so a hit
+  exactly on a cell boundary falls on the same side every time
+  (@sec-limits-draw-ties).
 
 A surface model reads every cell it is given and samples none: it predicts
 at the cells of its prediction boundaries, and its constructor raises a
@@ -1102,8 +1102,7 @@ pieces, whole; the outputs come back at the vehicle's cells. For an interior mod
 condition's mesh at full resolution, oriented as in training, and
 `prediction_points`, and read the outputs at those points; in evaluation
 mode the boundary draw has its fixed start, so the prediction is
-deterministic on the CPU, and on a GPU up to the draw's exact ties
-(@sec-limits-draw-ties). The interior model, ISLA-DTT, is queried at any count,
+deterministic, on the CPU and the GPU alike (@sec-limits-draw-ties). The interior model, ISLA-DTT, is queried at any count,
 alone or in chunks. The interior standings' interacting ISLA holds its
 numbers at its training point count (200,000 at the reporting protocol on
 DrivAerML), because an interacting point's prediction depends on the joint
@@ -1337,9 +1336,9 @@ print(": The cost of ISLA's interior geometry in training: the geometry call and
 ```
 
 ::: {.callout-note title="In flight"}
-The 0.14.0 geometry search takes a crowded query's ball in one traversal and frees its buffers as soon as they are
-read. That makes the whole-boundary call faster and lowers its peak memory, so the times in @tbl-using-geometry-cost
-are being measured again on the 0.14.0 code.
+These numbers come from a geometry search that frees its buffers late and searches a crowded query's ball in
+a second pass. The class's search, which takes that ball in one traversal and frees each buffer as soon as it is
+read, is to be measured on the same cases on the 0.14.0 code, and the ledger (@sec-ledger) tracks it.
 :::
 
 ```{python}
@@ -1467,13 +1466,14 @@ vol = ISLA_CFGS["isla_volume"]
 opts = vol["compile_options"]
 print(f"- **The geometry kernel is chosen for you.** At the first forward pass the model selects the fused Triton kernel "
       f"when the inputs are on CUDA, Triton is importable, CUDA autocast is off or in bfloat16 (the kernel's one autocast "
-      f"type; under float16 autocast it runs the eager region), the problem is three-dimensional, there is at least one global "
-      f"direction, the global directions and the shared boundary vector channels number at most {GK.MAX_DIRECTIONS}, there are at most "
+      f"type; under float16 autocast it runs the eager region), the problem has at most three dimensions, the global "
+      f"directions (none counts as one) and the shared boundary vector channels number at most {GK.MAX_DIRECTIONS}, there are at most "
       f"{GK.MAX_SLICES:,} slices and no rank-2 per-token input; otherwise it runs the eager region, which computes the same "
-      "function. It logs the choice once. A planar model, a model with no global direction (the lug) and a model with "
-      "rank-2 inputs run eager. To force one path, set the model's `geo_kernel` attribute to `\"eager\"` or `\"fused\"` "
-      "before the first forward pass. The fused kernel faults once the tokens it processes times the slices reach $2^{31}$ "
-      "(@sec-limits-int32).")
+      "function. It logs the choice once. A planar model and a model with no global direction (the lug) run the fused kernel "
+      "with the missing coordinate and direction padded by exact zeros; a model with rank-2 inputs runs eager. To force one "
+      "path, set the model's `geo_kernel` attribute to `\"eager\"` or `\"fused\"` before the first forward pass. The fused kernel "
+      "indexes with 64-bit offsets, so a forward whose tokens times slices pass $2^{31}$ runs, as an unchunked full AeroZoo "
+      f"case's does ({R.source('int64_offsets', 'FINAL_REPORT.md')}).")
 print("- **So are ISLA-DTT's tree-read kernels.** Under the default `tree_read_kernel=\"auto\"` the forest build and the walk "
       "run their Warp kernels on CUDA (Warp, like Triton, is a Python framework for writing GPU kernels) and the read its fused "
       "Triton kernel on CUDA outside float64, each where its own requirements hold, and each logs its choice once; on the CPU "
@@ -1524,9 +1524,8 @@ print(f"- **Compile block by block where the whole graph breaks.** `compile_bloc
       "checkpoints, the compiled blocks agree to 1.5e-5 relative in float32 and at roundoff in float64; in bfloat16 they "
       "round fewer intermediates than eager does: each block's output is no farther from float64 than eager's, and the "
       "model's outputs and parameter gradients are 1.0 to 1.4 times eager's distance to float64 "
-      f"({R.source('dtt_fast_compile', 'RESULTS.md')}). Whether they meet the supervisor's certification policy for "
-      "compiled regions, which compares each tensor group with eager's own change under a one-ulp perturbation of its "
-      "inputs, is not measured (@sec-arch-cost).")
+      f"({R.source('dtt_fast_compile', 'RESULTS.md')}). Whether the final code's compiled blocks meet the supervisor's "
+      "certification policy on every dataset is @sec-arch-cost's question.")
 ```
 
 ## Contracts you can check on your own data {#sec-using-contracts}
@@ -1611,15 +1610,15 @@ with the full request.
 #| output: asis
 import re
 import records as RC   # R is the rotation of the contracts demo above
-KBT = {r_["tier"]: r_ for r_ in RC.md_table("kernel_bugs", "FINAL_REPORT.md", None, 0)}
-cpu_t = [int(RC.num(KBT["full CPU"]["passed / skipped / xfailed"], k)) for k in range(3)]
-gpu_t = [int(RC.num(KBT["GB300 GPU"]["passed / skipped / xfailed"], k)) for k in range(3)]
-assert cpu_t[2] == gpu_t[2] == 5 and all(r_["rc"] == "0" for r_ in KBT.values())
+GPF_ = " ".join(RC.load("geo_port", "FINAL_REPORT.md").split())
+cpu_t = [int(x.replace(",", "")) for x in re.search(r"full CPU tier \d+: ([\d,]+) passed, ([\d,]+) skipped, (\d+) xfailed", GPF_).groups()]
+gpu_t = [int(x.replace(",", "")) for x in re.search(r"GB300 tier \d+: ([\d,]+) passed, (\d+) xfailed, 0 failed", GPF_).groups()]
+assert cpu_t[2] == gpu_t[1] == 1 and "(Module.load), 0 failed" in GPF_
 TBT = {r_["run"]: r_ for r_ in RC.md_table("test_build", "FINAL_REPORT.md", None, 1)}
 fast = next(r_ for k_, r_ in TBT.items() if "fast tier" in k_)
 fast_s = RC.num(fast["wall"])
-KBF_ = " ".join(RC.load("kernel_bugs", "FINAL_REPORT.md").split())
-data_b = int(RC.num(re.search(r"`data/` is ([\d,]+) B, under 1 MB", KBF_).group(1)))
+data_b = int(RC.num(re.search(r"goldens_v1\.pt [\d,]+ → [\d,]+ B, data/ ([\d,]+) B", GPF_).group(1)))
+assert data_b < 2**20
 _T = Path(physicsnemo.__file__).parent.parent / "test" / "experimental" / "models" / "isla"
 _xf = sorted(p.name for p in _T.glob("test_*.py") if "strict=True" in p.read_text() and "xfail(" in p.read_text())
 print("**The class's tests run in three tiers: a CI tier on the CPU of about "
@@ -1640,8 +1639,8 @@ print("- **Properties and gradients.** The contracts of @sec-isla-contracts, chu
 print("- **Determinism.** Two runs on the same inputs are bitwise equal for the fast exact geometry, the fused kernels and the whole "
       "model (the surface task and ISLA-DTT with its draw, in 3-D and 2-D, in float32 and under bfloat16 autocast, forward "
       "and backward), on the CPU with one thread and on CUDA with the kernels on `auto`; they agree to a stated tolerance where CUDA does not fix the "
-      "order of a sum: the draw's float64 weights (@sec-limits-draw-ties), the key and value gradients of the segment-softmax "
-      "read, and the reference tree read. No test sets a global deterministic mode, so each states what a user meets by "
+      "order of a sum: the key and value gradients of the segment-softmax read, and the reference tree read. The draw keeps "
+      "the same cells with bitwise the same float64 weights on every run and on the CPU and CUDA alike (@sec-limits-draw-ties). No test sets a global deterministic mode, so each states what a user meets by "
       "default (`test_isla_determinism.py`).")
 print("- **Forced paths.** A test meant for one kernel or branch fails if the forward takes another, so no test passes by "
       "skipping the code it names.")
@@ -1655,5 +1654,5 @@ assert _xf == ["test_isla_release.py"], _xf
 print(f"One test is a strict expected failure, in `{_xf[0]}`: it records a known defect "
       "and fails the suite if the defect goes away unnoticed (@sec-limits-xfail). Run the CPU tier with "
       "`pytest test/experimental/models/isla -m \"not slow\"`. Data: "
-      f"{RC.source('kernel_bugs', 'FINAL_REPORT.md')}; {RC.source('test_build', 'FINAL_REPORT.md')}.")
+      f"{RC.source('geo_port', 'FINAL_REPORT.md')}; {RC.source('test_build', 'FINAL_REPORT.md')}.")
 ```
