@@ -43249,8 +43249,8 @@ with 99fcc75fb. No GPU.
 - **The supervisor's decisions** (SUPERVISOR_DECISIONS.md): the area rescoring above; the HiLift ISLA training file the
   dedup one; AeroZoo's scorer patched for seven fields before scoring; the HiLift baselines dropped from training (-140
   GPU-h), HL-DUP stage 2's retrained baselines being HiLift's baseline standing; DeepJEB++ on train_clean / test_clean.
-- **Open, pending Peter's answer.** Whether the AeroZoo baselines retrain on seven fields, about +2,500 GPU-h, above the
-  earlier estimate of 2,500-4,000 GPU-h; the supervisor asked him at 02:47 EDT 2026-10-26. Until he answers, LANES.tsv
+- **Open, pending Peter's answer.** Whether the AeroZoo baselines retrain on seven fields, about +2,500 GPU-h, which takes the
+  total of about 5,660 above the earlier estimate of 2,500-4,000 GPU-h (ISLA's 3,160 is inside it); the supervisor asked him at 02:47 EDT 2026-10-26. Until he answers, LANES.tsv
   keeps those lanes, which launch after the ISLA lanes.
 
 **For the book.** 13 says the standing's models predict five of the seven fields and the configurations all seven; 20 gains
@@ -43312,10 +43312,74 @@ R1, native, arm ÷ control as ratios of arithmetic seed means.
 - **The supervisor's reading of K-B1** (2026-10-26): not adopted for the final rerun. It is an architecture change that
   saves 5 percent of the step with no DrivAerML check, and close calls go to the principled form, which reads the boundary at
   every block.
-- **In flight.** K-EXACT still trains, so R2 and Q3 wait.
+- **Later (2026-10-26).** K-EXACT read; R2 and Q3 in @sec-nb-dtt-knobs-exact.
 
-**For the book.** 20's @sec-oq-dtt-theta gives the four arms' readings, its open question narrows to the exact read and its
-In-flight callout stays for K-EXACT; 12 and 05 state the finer read's measured effect.
+**For the book.** 20's @sec-oq-dtt-theta gives the four arms' readings with K-EXACT's (@sec-nb-dtt-knobs-exact); 12 and 05
+state the finer read's measured effect.
+
+*Applied for the supervisor by the book lane BOOK-MORNING on 2026-10-26.*
+
+## 2026-10-26 — DTT-KNOBS stage 2, K-EXACT: the exact read, retrained, reads no change; the ladder reads θ as a pure cost knob, free to θ = 2; a finer read narrows the far-field gap {#sec-nb-dtt-knobs-exact}
+
+Read by the coordinator 06:27 EDT 2026-10-26, second-read and corrected 06:34 (RESULTS_EXACT_REVIEW.md); records
+results/campaigns_2026-10-23/dtt_knobs_exact/ (RESULTS.md md5 ad1ec340, section "K-EXACT, R2 (the ladder) and Q3";
+reduce/out_final/reduce_s2.md md5 adfd6f8a). K-EXACT retrains ISLA-DTT on AirfRANS with the exact read (every point reads
+every boundary cell, θ = 0), eager, 500 epochs, against the standing r090eag_af_dtt; arms 1-4's and arm 6's rows reproduce
+unchanged. Every section-4 check passes.
+
+- **R1, K-EXACT ÷ control** (arithmetic seed means): pressure 0.957 (seeds 0.956 / 0.957), no change, flag down; velocity
+  0.976 (0.933 / 1.022), no change; eddy viscosity 0.879 (0.756 / 1.003), no change. R3: not a candidate.
+- **R2, the ladder** (θ = 2, 1, 0.5, 0): pressure *pure cost knob* (its 0.5-to-0 step rises), velocity and eddy viscosity
+  *pure cost knob, free to θ = 2*; overall **pure cost knob, free to θ = 2**. On pressure θ is free only up to 1: θ = 2
+  pays a seed-separated 7 percent. Retrained at θ = 0.5 and at the exact read, no field gains past the registered 10
+  percent bar.
+- **Q3**: **a finer read narrows the far-field gap**. K-THETA05 narrows wake velocity; K-EXACT narrows eddy viscosity beyond
+  one chord (D_R -0.248 against 2 SE 0.213; ISLA-DTT ÷ ISLA there 1.15 / 1.10 against 1.48 / 2.47) and leaves wake velocity
+  level; no arm widens a cell.
+- **Predictions.** P6 (K-EXACT helps on a field, 0.25) failed; P7 did not occur; P8 (R2 pure cost knob, 0.45) and P9 (a
+  finer read narrows the gap, 0.25) held; P11 held (the smoke projected 310 GPU-h).
+- **Beside the rules.** On pressure the most accurate rung is θ = 0.5, and the exact read sits 2 percent above it. Cost:
+  K-EXACT steps 1.354 s against 0.934 s (1.45 times; 1,007 pairs per point against 21.6), 317.6 GPU-h for two seeds at 85.3
+  GB peak. Stage 2 used 1,311.4 of 1,450 GPU-h; the campaign about 1,333.
+- **The supervisor's reading for the scope freeze:** θ stays 1 everywhere. No rung passes the registered bar, and one
+  reference configuration serves every dataset.
+
+**For the book.** 20's @sec-oq-dtt-theta gives the five retrained settings, the ladder and Q3, its In-flight callout closed
+and its open question moved to car scale; 12 and 05 state the far-field narrowing.
+
+*Applied for the supervisor by the book lane BOOK-MORNING on 2026-10-26.*
+
+## 2026-10-26 — DTT-POSE-EXP: ISLA-DTT retrained with DTT-POSE's forest meets the registered adoption condition and is pose-invariant on the lug; the supervisor adopts the forest into 0.14.0 {#sec-nb-dtt-pose-exp}
+
+Read 06:36 EDT 2026-10-26 by the lane (records results/campaigns_2026-10-23/dtt_pose_exp_read/: RESULTS.md, FINAL_REPORT.md,
+results/read/read_all.md), registered in PREREG.md md5 2f46a10c with amendment A1 (@sec-nb-dtt-pose-design). Arms:
+ISLA-DTT on the lug (fix-trained, compiled blocks) and on the AirfRANS interior task (eager), two seeds each, with DTT-POSE's
+forest ported to 0.9.0, against the standings' pairs r090fix_lug_dtt and r090eag_af_dtt. About 508 of 650 GPU-h.
+
+| rule | dataset / field | arm ÷ control | seeds | verdict |
+|---|---|---|---|---|
+| N | lug von Mises | 1.113 | 1.086 / 1.146 | no change; no flag |
+| N, paired | lug von Mises | | 1.086 / 1.146 | no paired label (a cost needs both above 1.10) |
+| N | AirfRANS pressure | 1.058 | 1.030 / 1.087 | no change; flag up |
+| N | AirfRANS velocity | 1.016 | 0.999 / 1.033 | no change |
+| N | AirfRANS eddy viscosity | 1.074 | 1.105 / 1.042 | no change; flag up |
+| P | lug posed ÷ native | 1.0001 / 1.0014 (control 1.528 / 1.977) | | pass |
+| Q | bf16 forest = float32 forest | lug 600 of 600, AirfRANS 200 of 200, native and posed | | pass |
+
+**Adoption rule (A1): met.** No field of either dataset reads cost under N, the lug reads no paired cost, and P and Q pass.
+
+- **Below the rule's resolution:** on the lug the arm beats the control in only 19 percent of cases (case median ratio
+  1.109), so a native loss of about 10 percent is probable; AirfRANS pressure and eddy viscosity carry up flags. The lane's
+  candidate cause, untested: six face trees in place of eight octant trees, together with the banded box test.
+- **The pose defect is gone in trained models:** the arm's posed lug error is 0.643 of the control's; pairs per point are 3
+  percent lower and the step the same (lug 0.420 against 0.425 s).
+- **The supervisor's decision:** adopt DTT-POSE's forest into 0.14.0, since it restores the pose invariance of ISLA's
+  contract and close calls go to the principled form. AF-CAMPAIGN's rule 1 is decided separately at its read (about
+  2026-10-27). Peter may veto.
+
+**For the book.** 05, 16 and 20 give the retrain's readings beside the octant forest's limit; their In-flight callouts name
+the forest's training at the reference configuration on the 0.14.0 code; 04 states that the forest makes ISLA-DTT
+pose-invariant on the lug.
 
 *Applied for the supervisor by the book lane BOOK-MORNING on 2026-10-26.*
 

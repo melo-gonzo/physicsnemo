@@ -625,6 +625,8 @@ GPT = " ".join(R.load("dtt_knobs", "gap/gap_table.md").split())
 own_far = re.search(r"ISLA-DTT's own seeds differ by ([\d.]+) beyond one chord", GPT).group(1)
 _w05 = re.search(r"K-THETA05's velocity-wake error ÷ ISLA's \(DK-GAP's case-normalized form\) is ([\d.]+) / ([\d.]+) against the control's (\d+\.\d+) / (\d+\.\d+)",
                  " ".join(R.load("dtt_knobs_a14", "RESULTS.md").split())).groups()
+_f0 = re.search(r"ISLA-DTT ÷ ISLA there falls from ([\d.]+) / ([\d.]+) to (\d+\.\d+) / (\d+\.\d+)",
+                " ".join(R.load("dtt_knobs_exact", "RESULTS.md").split())).groups()
 lowre = re.search(r"low-Re quartile \(Re ([\d.]+-[\d.]+e6)\) reads ([\d.]+ / [\d.]+ / [\d.]+)", GPT).groups()
 print("**ISLA-DTT's gap to interacting ISLA on AirfRANS is one of fit, and it sits in the wake and beyond one chord.** For the "
       f"standing's eager-trained pairs, ISLA-DTT ÷ ISLA on the first 200 training cases is {gfield('train fp32')} (pressure / "
@@ -637,9 +639,10 @@ print("**ISLA-DTT's gap to interacting ISLA on AirfRANS is one of fit, and it si
       "viscosity beyond 0.1 chord, where its gap sits. No opening angle read at inference narrows it (@sec-arch-tree-read), and "
       "the forest that bfloat16 training builds widens it slightly. Trained at $\\theta = 0.5$, ISLA-DTT's in-plane velocity "
       f"error in the wake is {_w05[0]} / {_w05[1]} times ISLA's against {_w05[2]} / {_w05[3]} at $\\theta = 1$ (seeds 42 / 43, "
-      "the error normalized per case), and beyond one chord no trained setting of the read moves the eddy-viscosity gap "
-      f"measurably (@sec-oq-dtt-theta). Data: {R.source('dtt_knobs', 'gap/gap_table.md')}; {R.source('dtt_knobs', 'gap/rough.md')}; "
-      f"{R.source('dtt_knobs_a14', 'RESULTS.md')} (R4).")
+      f"the error normalized per case), and trained with the exact read its eddy-viscosity error beyond one chord is {_f0[2]} / "
+      f"{_f0[3]} times ISLA's against {_f0[0]} / {_f0[1]}: a finer read narrows the far-field gap (@sec-oq-dtt-theta). Data: "
+      f"{R.source('dtt_knobs', 'gap/gap_table.md')}; {R.source('dtt_knobs', 'gap/rough.md')}; "
+      f"{R.source('dtt_knobs_a14', 'RESULTS.md')} (R4); {R.source('dtt_knobs_exact', 'RESULTS.md')} (Q3).")
 ```
 
 ::: {.callout-note title="In flight"}

@@ -2016,10 +2016,9 @@ most $2.6 \times 10^{-7}$ of its extent, and no axis changes sign
 results/campaigns_2026-10-23/dtt_pose/MECHANISMS.md, sections 1 and 2).
 
 ::: {.callout-note title="In flight"}
-This limit is that of the code as it is. The forest built outside autocast
-(below) removes it and changes ISLA-DTT's function; ISLA-DTT retrained with
-it on the lug and the AirfRANS interior task is being measured, and the
-ledger (@sec-ledger) tracks it.
+These numbers come from the octant forest the class builds under the caller's autocast. ISLA-DTT trained with
+the forest that depends on the boundary alone (@sec-arch-tree-read) is to be measured at the reference
+configuration on the 0.14.0 code, and the ledger (@sec-ledger) tracks it.
 :::
 
 Three properties hold by construction. At $\theta = 0$, a setting of the
@@ -2104,12 +2103,27 @@ native match, most of them in the airfoil's trees, which sit 27.8 chords from
 the forest's origin
 (results/campaigns_2026-10-23/af_fix/DESIGN.md, section 1).
 
-::: {.callout-note title="In flight"}
-This limit is that of the code as it is. The forest above removes it and
-changes ISLA-DTT's function; ISLA-DTT retrained with it on the lug and the
-AirfRANS interior task, read for native accuracy by a registered rule, is
-being measured, and the ledger (@sec-ledger) tracks it.
-:::
+```{python}
+#| label: para-arch-pose-forest-retrain
+#| output: asis
+RDX = R.load("dtt_pose_exp_read", "results/read/read_all.md")
+_lug = R.md_table("dtt_pose_exp_read", "results/read/read_all.md", "lug", 0)[0]
+_af = {r_["field"]: r_ for r_ in R.md_table("dtt_pose_exp_read", "results/read/read_all.md", "af", 0)}
+assert _lug["N"] == "no change" and all(r_["N"] == "no change" for r_ in _af.values())
+pn_arm = re.search(r"posed / native arm \[([\d.]+), ([\d.]+)\], control \[([\d.]+), ([\d.]+)\]", RDX).groups()
+lug_win = re.search(r"arm better in ([\d.]+)% of cases", RDX).group(1)
+assert "no paired label" in RDX and "P pass" in RDX and RDX.count("bitwise") >= 8
+print("**Retrained with the forest that depends on the boundary alone, ISLA-DTT is pose-invariant on the lug.** "
+      f"Trained with it on the lug and the AirfRANS interior task, two seeds each, ISLA-DTT's posed error on the lug is "
+      f"{pn_arm[0]} and {pn_arm[1]} times its native error (seeds 42 and 43), against {float(pn_arm[2]):.2f} and "
+      f"{float(pn_arm[3]):.2f} for the octant forest, and the bfloat16 forest is bitwise the float32 one on every scored case. By "
+      "the rule registered for the retrain no field of either dataset reads a cost; below its resolution the lug's von Mises "
+      f"error is {R.num(_lug['arm / control']):.2f} times the octant forest's (seeds {R.num(_lug['seed-matched'], 0):.3f} and {R.num(_lug['seed-matched'], 1):.3f}; "
+      f"the retrained form is better on {float(lug_win):.0f}% of the cases), and AirfRANS pressure and eddy viscosity are "
+      f"{R.num(_af['pressure_l2']['arm / control']):.2f} and {R.num(_af['nut_l2']['arm / control']):.2f} times, every seed of "
+      f"one form beyond every seed of the other, velocity {R.num(_af['velocity_l2']['arm / control']):.2f}. "
+      f"Data: {R.source('dtt_pose_exp_read', 'RESULTS.md')}; {R.source('dtt_pose_exp_read', 'results/read/read_all.md')}.")
+```
 
 $\theta$ is a constant of the class (`TREE_READ_THETA`), not
 an argument: ISLA-DTT trains and is scored at $\theta = 1$, so its kernel,
@@ -2126,10 +2140,11 @@ $\theta = 2$ to 0.5. The leaf size matters less: leaves of 2 or 8 cells
 change the AirfRANS error by at most 0.1%; on the lug leaf 2 costs 2% and
 33% (seeds 42 and 43) and leaf 8 at most 0.8%
 (results/campaigns_2026-10-23/dtt_knobs/sens/sens_table.md;
-results/campaigns_2026-10-23/dtt_knobs/order/order_table.md). A model
-trained at $\theta = 0.5$ is a few percent more accurate on every field of
-the AirfRANS interior task, on both seeds; whether one trained with the
-exact read is more accurate still is open (@sec-oq-dtt-theta). The tree's error
+results/campaigns_2026-10-23/dtt_knobs/order/order_table.md). Retrained
+at each setting instead, from the exact read to $\theta = 2$, no setting
+moves a field of the AirfRANS interior task past the registered 10% bar,
+and a finer read narrows ISLA-DTT's far-field gap to interacting ISLA
+(@sec-oq-dtt-theta). The tree's error
 is also what moves ISLA-DTT under an exact refinement of the boundary: on
 the AirfRANS interior task, with the standing's pair, trained without
 compilation, splitting the airfoil's panels raises its
@@ -2657,8 +2672,7 @@ is no larger than eager's on the block outputs, and on the gradients it is
 FPR = " ".join(R.load("fused_pad", "FINAL_REPORT.md").split())
 PT = {r_["dataset"]: r_ for r_ in R.md_table("fused_pad", "FINAL_REPORT.md", None, 2)}
 assert set(PT) == {"AirfRANS", "lug", "Tensile2d"}
-t2d_br, t2d_base = re.search(r"Tensile2d fails (\d+) / (\d+) groups on the branch and (\d+) / (\d+) on the base", FPR).group(1, 3)
-t2d_n = re.search(r"Tensile2d fails \d+ / (\d+) groups on the branch", FPR).group(1)
+t2d_br, t2d_n, t2d_base, t2d_bn = re.search(r"Tensile2d fails (\d+) / (\d+) groups on the branch and (\d+) / (\d+) on the base", FPR).groups()
 assert "AirfRANS and the lug pass in every group for both codes" in FPR
 af_pt = PT["AirfRANS"]["base"].split(" / ")
 print("**The supervisor's policy certifies a compiled region against eager's own sensitivity, on tensor groups pooled by "
@@ -2676,14 +2690,14 @@ print("**The supervisor's policy certifies a compiled region against eager's own
       "block, whose eager float32 output is itself $8.5 \\times 10^{-4}$ from float64. With the fused geometry kernel for "
       "planar models and models without a global direction, on trained checkpoints (ISLA-DTT on AirfRANS and the lug, ISLA "
       "on Tensile2d), AirfRANS's and the lug's "
-      f"compiled blocks pass every pooled group, and Tensile2d's fail {t2d_br} of {t2d_n} ({t2d_base} without the kernel), so "
+      f"compiled blocks pass every pooled group, and Tensile2d's fail {t2d_br} of {t2d_n} ({t2d_base} of {t2d_bn} without the kernel), so "
       f"Tensile2d's ISLA trains eagerly. Data: {R.source('fused_pad', 'FINAL_REPORT.md')}.")
 ```
 
 ::: {.callout-note title="In flight"}
 These readings come from three planar and no-direction checkpoints read on the fused kernel's code. The
-certification of the final code's compiled blocks on every dataset is being measured, and the ledger (@sec-ledger)
-tracks it.
+certification of the compiled blocks on every dataset is to be measured on the 0.14.0 code, and the ledger
+(@sec-ledger) tracks it.
 :::
 
 **Where a training step's time goes.** @fig-arch-step-breakdown takes one

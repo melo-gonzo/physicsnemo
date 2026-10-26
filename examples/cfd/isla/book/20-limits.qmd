@@ -666,6 +666,8 @@ lst = lambda names: ", ".join(names[:-1]) + " and " + names[-1] if len(names) > 
 NUMW = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine"}
 # ISLA's length unit with the body alone and with the whole stored boundary (BOUNDARY-AUDIT section 4; AF-WHOLE section 3)
 BA = " ".join(R.load("boundary_audit", "REPORT.md").split())
+_wbt = next(r_ for r_ in R.md_table("floor_drv_read", "RESULTS.md", "Registered readings", 0) if r_["reading"].startswith("nu_t far-field"))
+_wb_nf = [R.num(_wbt["F s42 / s43"], k) / R.num(_wbt["Transolver s42 / s43"], k) for k in (0, 1)]
 AFW = {r_["quantity"]: r_ for r_ in R.md_table("af_whole", "PREREG.md", "3. Facts before training")}
 _afl = AFW["ISLA's L (`ISLA._gauge`, float64)"]
 WB_L = {"drv": re.search(r"full resolution\) \| ([\d.]+-[\d.]+) m \(median [\d.]+\) \| ([\d.]+)-[\d.]+ m", BA).groups(),
@@ -687,7 +689,7 @@ print("**ISLA's input is the whole boundary of the PDE domain, every piece a dat
       "`isla_surface_highlift` read them (@sec-oq-whole-boundary). The standings' checkpoints were trained with the body alone on the "
       "DrivAerML tasks, SHIFT-SUV, HiLiftAeroML and AirfRANS (@sec-standing-geometry), so those standings are of ISLA reading "
       "part of its boundary. On one DrivAerML Volume car, reading the domain's four other pieces brings ISLA's far-field "
-      "eddy-viscosity error to within about Transolver's (@sec-oq-far-field). Because ISLA's length unit $L$ is the RMS pairwise distance of the whole given boundary "
+      f"eddy-viscosity error to {min(_wb_nf):.2f} to {max(_wb_nf):.2f} times Transolver's (@sec-oq-far-field). Because ISLA's length unit $L$ is the RMS pairwise distance of the whole given boundary "
       f"(@sec-isla-frame), reading the domain's walls changes $L$ too: on the DrivAerML Volume task it is {WB_L['drv'][0]} m with the "
       f"vehicle alone and {WB_L['drv'][1]} m with the whole boundary, and on AirfRANS {WB_L['af'][0]} chords with the airfoil alone "
       f"and {WB_L['af'][1]} chords with the far field, on every case. Data: the recipe's "
@@ -710,6 +712,8 @@ two = lambda c: [R.num(c, 0), R.num(c, 1)]
 nf_f, nf_c, nf_t = two(fd_nf["F s42 / s43"]), two(fd_nf["C s42 / s43"]), two(fd_nf["Transolver s42 / s43"])
 v_f, v_c, v_t = two(fd_v["F s42 / s43"]), two(fd_v["C s42 / s43"]), two(fd_v["Transolver s42 / s43"])
 rr = lambda a, b: [x / y for x, y in zip(a, b)]
+from decimal import Decimal, ROUND_HALF_UP
+q4 = lambda xs: " / ".join(str(Decimal(repr(x)).quantize(Decimal("0.0001"), ROUND_HALF_UP)) for x in xs)   # as the records round
 fd_L = re.search(r"the length unit L rises from ([\d.]+) m \(vehicle\) to ([\d.]+) m \(all five\), so every s = d / L is (\d+) times smaller", FDR).groups()
 assert "F's e_R is below C's in every band, on every field and both seeds (36 of 36)" in FDR
 fd_step = re.search(r"F ([\d.]+) s/step, C ([\d.]+) s/step, \*\*([\d.]+)x\*\*", " ".join(R.load("floor_drv", "PREREG.md").split())).groups()
@@ -755,8 +759,8 @@ print("**Given the domain's whole boundary, ISLA's far-field eddy-viscosity erro
       "two seeds without them, reads as @tbl-limits-drv-whole shows.")
 print()
 print("| quantity | with the whole boundary | vehicle alone | Transolver | registered reading |\n|---|---|---|---|---|")
-print(f"| eddy-viscosity error more than {L_REF:g} m from the car | {f3(nf_f, 4)} | {f3(nf_c, 4)} | {f3(nf_t, 4)} | the four meshes close the gap: at most 1.5 times Transolver's |")
-print(f"| velocity error | {f3(v_f, 4)} | {f3(v_c, 4)} | {f3(v_t, 4)} | the four meshes help: at most the vehicle-alone error ÷ 1.2, below every vehicle-alone ISLA run |")
+print(f"| eddy-viscosity error more than {L_REF:g} m from the car | {q4(nf_f)} | {q4(nf_c)} | {q4(nf_t)} | the four meshes close the gap: at most 1.5 times Transolver's |")
+print(f"| velocity error | {q4(v_f)} | {q4(v_c)} | {q4(v_t)} | the four meshes help: at most the vehicle-alone error ÷ 1.2, below every vehicle-alone ISLA run |")
 print()
 print(": ISLA trained on one DrivAerML Volume car (a fresh draw of 200,000 points every step, 20,000 steps, float32, eager), "
       "with the domain's four other boundary meshes and with the vehicle alone, against Transolver trained alike; held-out "
@@ -918,10 +922,6 @@ q5_cells = SEEDS * sum(ref_lane * c / 200 for c in CELLS)
 q5 = q5_ladder + q5_cells
 # Tensile2d: GeoTransolver + ISLA's measure-weighted pooling, priced at the GeoTransolver lane
 q6 = SEEDS * lane_gpuh("tensile2d", "GeoTransolver")
-# ISLA-DTT's read retrained on AirfRANS (theta 2, 0.5 and 0, every second read, a basis of 8), as its registration prices the pairs
-KN = re.findall(r"\| (K-[A-Z0-9]+)(?:, eager)? \| [^|]+\| about (\d+)(?:-(\d+))? \|", " ".join(R.load("dtt_knobs", "PREREG.md").split()))
-assert sorted(k for k, *_ in KN) == ["K-B1", "K-BASIS8", "K-EXACT", "K-THETA05", "K-THETA2"]
-q_kexact = next((int(a), int(b or a)) for k, a, b in KN if k == "K-EXACT")
 # GeoTransolver-volume on AeroZoo's seven splits and Transolver on `full`, retrained on all seven fields, as RERUN-CONFIGS' PRICE prices them
 _PR = " ".join(R.load("rerun_configs", "price/PRICE.md").split())
 q_az7 = sum(int(x.replace(",", "")) for x in re.search(r"AeroZoo GeoTransolver takes ([\d,]+) \(7 splits x 2 seeds\) and Transolver full ([\d,]+)", _PR).groups())
@@ -943,7 +943,7 @@ rows = [
      "the float32 comparison", "the standings' training with the class's geometry, then scoring"),
     ("How large is ISLA-DTT's tree error at $\\theta = 1$ where its forest's frame ties? (@sec-oq-dtt-frame)", "ISLA-DTT scored rotated and translated, and under boundary redraws, on cases whose boundary has near-equal principal variances", "scoring only"),
     ("Which rule should sign the canonical frame of a nearly mirror-symmetric boundary? (@sec-oq-frame-sign)", "a sign rule that is a function of the boundary alone where an axis's third moment lies within its rounding, or a draw and a forest that do not depend on the sign, checked on mirror-symmetric boundaries and on the lug in every pose", "none for the check; a change of the draw changes every interior model's input"),
-    ("Is ISLA-DTT more accurate trained with the exact read than at $\\theta = 0.5$? (@sec-oq-dtt-theta)", "ISLA-DTT trained on AirfRANS with the exact read against the $\\theta = 1$ model, two seeds, under its standing's protocol", f"about {fmt_h(q_kexact[0])} to {fmt_h(q_kexact[1])}"),
+    ("Does a finer read narrow ISLA-DTT's far-field gap at car scale? (@sec-oq-dtt-theta)", "ISLA-DTT trained on the DrivAerML Volume task at $\\theta = 0.5$ against $\\theta = 1$, two seeds each, read on the error far from the car", "not priced"),
     ("Does ISLA transfer better on SHIFT-SUV from fastbacks to estates? (@sec-oq-transfer)", "two more seeds of each of the three fastback-trained models, scored on both families and read by the same registered rules", f"{fmt_h(q_transfer)}"),
     ("Do the SHIFT-SUV and HiLiftAeroML standings move when ISLA reads the pieces of their domains' boundaries that their files do not store? (@sec-oq-whole-boundary)",
      "the missing pieces built in the recipe, SHIFT-SUV's box from constants and HiLiftAeroML's inlet and outlet at the stored far-field radius and its symmetry plane from the source STL's root cap, the datasets unchanged; then each standing retrained with ISLA reading them, two seeds",
@@ -977,7 +977,7 @@ print(": The open questions, the measurement that would settle each, and its cos
       "needs, two seeds per configuration, each run priced from the training log of the standing's lane of the same configuration on the "
       "same dataset (mean epoch time × the protocol's epochs × four GB300 GPUs); a run at a smaller training set is priced in proportion "
       "to its cases, and *at most* marks a run priced at a larger set than it trains on; *scoring only* means the measurement reads "
-      "checkpoints that exist; How to read this: the "
+      "checkpoints that exist. How to read this: the "
       "costs are training only, not scoring; they price the experiment's design, not a "
       f"schedule. Data: {LIM_SRC}, from results/campaigns_2026-10-22/cost_090/extract.jsonl; the far-field encoding's is the cap approved in "
       f"{R.source('af_campaign', 'PREREG.frozen_e0739632.md')} (section 8).")
@@ -1196,6 +1196,13 @@ EXACT = {f: [R.num(SENS(f"r090eag_af_dtt_seed{s} native")["t0"][f"{f}_l2 (/ref)"
          for f in ("pressure", "velocity", "nut")}
 LPN = {k: [R.num(SENS(f"r090fix_lug_dtt_seed{s}: posed / native")[k]["von_mises_l2"]) for s in (42, 43)] for k in ("ref", "t0")}
 LPP = R.num(SENS("r090fix_lug_dtt_seed42: posed / native")["ref"]["pairs ratio"])
+RDX = R.load("dtt_pose_exp_read", "results/read/read_all.md")
+_lug = R.md_table("dtt_pose_exp_read", "results/read/read_all.md", "lug", 0)[0]
+_af = {r_["field"]: r_ for r_ in R.md_table("dtt_pose_exp_read", "results/read/read_all.md", "af", 0)}
+assert _lug["N"] == "no change" and all(r_["N"] == "no change" for r_ in _af.values())
+pn_arm = re.search(r"posed / native arm \[([\d.]+), ([\d.]+)\], control \[([\d.]+), ([\d.]+)\]", RDX).groups()
+lug_win = re.search(r"arm better in ([\d.]+)% of cases", RDX).group(1)
+assert "no paired label" in RDX and "P pass" in RDX and RDX.count("bitwise") >= 8
 print("**The open question is how large ISLA-DTT's tree error is at $\\theta = 1$ where its forest's frame ties.** ISLA uses "
       "no frame and no center: every position enters as a difference from a slice anchor (@sec-isla-frame). ISLA-DTT's Barnes–Hut "
       "forest groups its clusters, for speed alone, in a canonical frame the boundary carries: the measure-weighted centroid of the "
@@ -1223,15 +1230,25 @@ print("**The open question is how large ISLA-DTT's tree error is at $\\theta = 1
       "with near-equal principal variances the error at $\\theta = 1$ is not measured. What would settle it: ISLA-DTT's "
       "checkpoints scored rotated and translated and under boundary redraws on cases whose principal variances are nearly "
       "equal, such as AeroZoo's sphere bodies and spherical enclosures, against the same scorings on cases with a "
-      f"well-separated frame. Cost: scoring only. Data: {LIM_SRC}, from {R.source('probes090', 'RESULTS.md')} (section 4b); "
-      f"{R.source('dtt_knobs', 'sens/sens_table.md')}; {R.source('dtt_pose', 'MECHANISMS.md')} (sections 1 and 3).")
+      "well-separated frame. Cost: scoring only. "
+      "Retrained with a forest that depends on the boundary alone (@sec-arch-tree-read), on the lug and the AirfRANS "
+      f"interior task, two seeds each, ISLA-DTT's posed error on the lug is "
+      f"{pn_arm[0]} and {pn_arm[1]} times its native error (seeds 42 and 43), against {float(pn_arm[2]):.2f} and "
+      f"{float(pn_arm[3]):.2f} for the octant forest, and the bfloat16 forest is bitwise the float32 one on every scored case. By "
+      "the rule registered for the retrain no field of either dataset reads a cost; below its resolution the lug's von Mises "
+      f"error is {R.num(_lug['arm / control']):.2f} times the octant forest's (seeds {R.num(_lug['seed-matched'], 0):.3f} and {R.num(_lug['seed-matched'], 1):.3f}; "
+      f"the retrained form is better on {float(lug_win):.0f}% of the cases), and AirfRANS pressure and eddy viscosity are "
+      f"{R.num(_af['pressure_l2']['arm / control']):.2f} and {R.num(_af['nut_l2']['arm / control']):.2f} times, every seed of "
+      f"one form beyond every seed of the other, velocity {R.num(_af['velocity_l2']['arm / control']):.2f}. "
+      f"Data: {LIM_SRC}, from {R.source('probes090', 'RESULTS.md')} (section 4b); "
+      f"{R.source('dtt_knobs', 'sens/sens_table.md')}; {R.source('dtt_pose', 'MECHANISMS.md')} (sections 1 and 3); "
+      f"{R.source('dtt_pose_exp_read', 'RESULTS.md')}.")
 ```
 
 ::: {.callout-note title="In flight"}
-The lug's posed ÷ native here comes from ISLA-DTT's forest as the code builds it. ISLA-DTT retrained
-with a forest built outside autocast, in centered float64 canonical coordinates with cube-face classes
-(@sec-arch-tree-read), on the lug and the AirfRANS interior task is being measured, and the ledger
-(@sec-ledger) tracks it.
+These numbers come from the octant forest the class builds under the caller's autocast. ISLA-DTT trained with
+the forest that depends on the boundary alone (@sec-arch-tree-read) is to be measured at the reference
+configuration on the 0.14.0 code, and the ledger (@sec-ledger) tracks it.
 :::
 
 ### The sign of the canonical frame on a nearly mirror-symmetric boundary {#sec-oq-frame-sign}
@@ -1272,32 +1289,44 @@ NAT = {**{f"af{s}": SENS(f"r090eag_af_dtt_seed{s} native") for s in (42, 43)},
        **{f"lug{s}": SENS(f"r090fix_lug_dtt_seed{s} native") for s in (42, 43)}}
 inf_ratio = lambda st: [R.num(row[c], 1) for row in (t[st] for t in NAT.values()) for c in row if c.endswith("(/ref)")]
 x0, x2 = inf_ratio("t0"), inf_ratio("t2")
-# the retrained arms 1-4 (DTT-KNOBS stage 2, R1 on the native scores; arm ÷ control, arithmetic seed means), their steps and R4
+# the retrained arms (DTT-KNOBS stage 2, R1 on the native scores; arm ÷ control, arithmetic seed means), their steps, R2 and Q3
 KA = {r_["arm"]: r_ for r_ in R.md_table("dtt_knobs_a14", "RESULTS.md", "R1 (native decides", 0)}
 KC = {r_["arm"]: r_ for r_ in R.md_table("dtt_knobs_a14", "RESULTS.md", "Beside the rules", 0)}
 KX = " ".join(R.load("dtt_knobs_a14", "RESULTS.md").split())
+KE = {r_["field"]: r_ for r_ in R.md_table("dtt_knobs_exact", "RESULTS.md", "R1 and R3 for K-EXACT", 0)}
+KEX = " ".join(R.load("dtt_knobs_exact", "RESULTS.md").split())
 KF = ("pressure", "in-plane velocity", "nut")
-k_r = lambda a: [R.num(KA[a][f]) for f in KF]
-lab = lambda a, f: ("harms" if "harms" in KA[a][f] else "helps" if "helps" in KA[a][f] else "no change") + (
-    ", flag up" if "flag up" in KA[a][f] else ", flag down" if "flag down" in KA[a][f] else "")
-k_step = lambda a: R.num(KC[a]["median step"])
-assert set(KA) == {"K-THETA2", "K-THETA05", "K-B1", "K-BASIS8"}
+k_r = lambda a: [R.num(KA[a][f]) for f in KF] if a != "K-EXACT" else [R.num(KE[f]["K-EXACT ÷ control [s42, s43]"]) for f in KF]
+def lab(a, f):
+    if a == "K-EXACT":
+        return KE[f]["label"] + (f", flag {KE[f]['flag']}" if KE[f]["flag"] in ("up", "down") else "")
+    return ("harms" if "harms" in KA[a][f] else "helps" if "helps" in KA[a][f] else "no change") + (
+        ", flag up" if "flag up" in KA[a][f] else ", flag down" if "flag down" in KA[a][f] else "")
+ex_step = re.search(r"K-EXACT steps ([\d.]+) s against the control's ([\d.]+) s", KEX).groups()
+k_step = lambda a: float(ex_step[0]) if a == "K-EXACT" else R.num(KC[a]["median step"])
+assert set(KA) == {"K-THETA2", "K-THETA05", "K-B1", "K-BASIS8"} and set(KE) == set(KF)
 assert all(lab("K-B1", f) == "no change" for f in KF) and lab("K-BASIS8", "nut").startswith("harms")
 assert all(lab("K-THETA05", f) == "no change, flag down" for f in KF) and lab("K-THETA2", "pressure") == "no change, flag up"
+assert all(KE[f]["label"] == "no change" for f in KF) and R.num(ex_step[1]) == R.num(KC["control"]["median step"])
+assert "**Overall: pure cost knob, free to theta 2.**" in KEX and "**Q3, a finer read narrows the far-field gap**" in KEX
+assert "On pressure it is a pure cost knob up to 1." in KEX
 wake05 = re.search(r"K-THETA05's velocity-wake error ÷ ISLA's \(DK-GAP's case-normalized form\) is ([\d.]+) / ([\d.]+) against the control's (\d+\.\d+) / (\d+\.\d+)", KX).groups()
+far0 = re.search(r"ISLA-DTT ÷ ISLA there falls from ([\d.]+) / ([\d.]+) to (\d+\.\d+) / (\d+\.\d+)", KEX).groups()
 b1_far = re.search(r"nut beyond one chord is worse in both seeds \(([\d.]+) / ([\d.]+); D_R", KX).groups()
 win05 = re.search(r"it wins (\d+-\d+) % of cases", KX).group(1).replace("-", " to ")
-ARMS = [("K-THETA2", "$\\theta = 2$"), ("K-THETA05", "$\\theta = 0.5$"), ("K-B1", "a read after every second block"),
-        ("K-BASIS8", "a basis of 8 functions")]
-print("**Retrained, a finer read lowers ISLA-DTT's error on the AirfRANS interior task on every field and narrows its velocity "
-      "gap in the wake, a read after every second block costs no field measurably, and a coarser read or a narrower basis "
-      "costs accuracy; whether the exact read, trained, is more accurate still is open.** ISLA-DTT trains and is scored at "
-      "$\\theta = 1$, with a kernel basis of 16 functions and a read after every block (@sec-arch-tree-read). Read at other "
-      "settings, a model trained there is less accurate: on the AirfRANS interior task and the lug the exact read has "
-      f"{min(x0):.1f} to {max(x0):.1f} times its error at $\\theta = 1$, and $\\theta = 2$ {min(x2):.1f} to {max(x2):.1f} times. "
-      "Trained at each setting instead, two seeds each, eager, under its standing's protocol, @tbl-oq-dtt-theta reads against "
-      "the $\\theta = 1$ pair by the rule registered for it: a field *helps* or *harms* only past a 10% change and two standard "
-      "errors, and a *flag* marks a shift of more than 3% with every seed of one arm beyond every seed of the other.")
+ex_gpuh = re.search(r"It used ([\d.]+) GPU-h for two seeds against the control's ([\d.]+)", KEX).groups()
+ARMS = [("K-THETA2", "$\\theta = 2$"), ("K-THETA05", "$\\theta = 0.5$"), ("K-EXACT", "the exact read ($\\theta = 0$)"),
+        ("K-B1", "a read after every second block"), ("K-BASIS8", "a basis of 8 functions")]
+print("**Retrained at each setting, ISLA-DTT's read is a pure cost knob on the AirfRANS interior task: no setting from the "
+      "exact read to $\\theta = 2$ moves a field past the registered bar, and a finer read narrows ISLA-DTT's far-field gap "
+      "to interacting ISLA; whether that far-field gain carries to the car, where the exact read is out of reach, is open.** "
+      "ISLA-DTT trains and is scored at $\\theta = 1$, with a kernel basis of 16 functions and a read after every block "
+      "(@sec-arch-tree-read). Read at other settings, a model trained there is less accurate: on the AirfRANS interior task and "
+      f"the lug the exact read has {min(x0):.1f} to {max(x0):.1f} times its error at $\\theta = 1$, and $\\theta = 2$ "
+      f"{min(x2):.1f} to {max(x2):.1f} times. Trained at each setting instead, two seeds each, eager, under its standing's "
+      "protocol, @tbl-oq-dtt-theta reads against the $\\theta = 1$ pair by the rule registered for it: a field *helps* or "
+      "*harms* only past a 10% change and two standard errors, and a *flag* marks a shift of more than 3% with every seed of "
+      "one arm beyond every seed of the other.")
 print()
 print("| retrained with | pressure | velocity | eddy viscosity | median step [s] |\n|---|---|---|---|---|")
 print(f"| $\\theta = 1$, every block, basis 16 (the standing's pair) | 1 | 1 | 1 | {k_step('control'):.3f} |")
@@ -1309,31 +1338,32 @@ print(": ISLA-DTT retrained on the AirfRANS interior task with one setting of it
       "and 43, with the registered reading; the median training step on one node. How to read this: below one is more "
       "accurate; *no change* means inside the registered bar, which a flagged arm can still miss by a seed-separated few "
       f"percent; the table does not test car scale. Data: {R.source('dtt_knobs_a14', 'RESULTS.md')} (Arms 1-4); "
-      f"{R.source('dtt_knobs_a14', 'reduce/out_r14/reduce_s2.md')}. {{#tbl-oq-dtt-theta}}")
+      f"{R.source('dtt_knobs_exact', 'RESULTS.md')} (K-EXACT); {R.source('dtt_knobs_exact', 'reduce/out_final/reduce_s2.md')}. "
+      "{#tbl-oq-dtt-theta}")
 print()
-print(f"At $\\theta = 0.5$ every field's mean falls on both seeds, by {100 * (1 - max(k_r('K-THETA05'))):.0f} to "
-      f"{100 * (1 - min(k_r('K-THETA05'))):.0f}%, below the registered bar; the finer read wins {win05}% of the test cases, not all, "
-      "and its eddy viscosity is worse in the outer zone. In the wake its in-plane velocity error is "
-      f"{wake05[0]} / {wake05[1]} times interacting ISLA's against the $\\theta = 1$ pair's {wake05[2]} / {wake05[3]} (seeds 42 / "
-      "43), the one regional gap that the registered rule reads as narrowed; beyond one chord no setting moves the eddy-viscosity "
-      "gap measurably (@sec-airfrans-dtt-reference). A read after every second block changes no field measurably and takes "
-      f"{100 * (1 - k_step('K-B1') / k_step('control')):.0f}% less of the step; beside the rule, its eddy viscosity beyond one "
-      f"chord is {b1_far[0]} and {b1_far[1]} times the pair's, within the regional rule's two standard errors. Its saving at car "
-      "scale is not measured. $\\theta = 2$ moves no field past the bar but raises pressure on both seeds, and a basis of 8 "
-      "harms eddy viscosity. The open question is whether the exact read, trained, is more accurate than $\\theta = 0.5$. That "
-      "also tests Peter's knob rule, by which the book credits ISLA-DTT with its pose invariance, a property exact as "
-      "$\\theta \\to 0$: if the error keeps falling toward the exact-trained model's as $\\theta$ tightens, the tree read is a "
-      "convergent approximation. The cost side is measured at car scale: on the DrivAerML Volume task with the whole boundary, "
-      "400,000 prediction points fit one GB300 at $\\theta = 1$ (@sec-using-dtt-cost); whether they fit at $\\theta = 0.5$ is not "
-      "measured. What would settle it: ISLA-DTT trained on AirfRANS with the exact read, two seeds, against the $\\theta = 1$ "
-      f"pair under the same rule. Cost: about {fmt_h(q_kexact[0])} to {fmt_h(q_kexact[1])} GPU-hours. Data: "
-      f"{R.source('dtt_knobs', 'sens/sens_table.md')}; {R.source('dtt_knobs', 'PREREG.md')} (section 8).")
+print("Read as the registered ladder ($\\theta$ = 2, 1, 0.5, 0), the opening angle is a pure cost knob, free up to "
+      "$\\theta = 2$ on velocity and eddy viscosity and up to $\\theta = 1$ on pressure, which pays a seed-separated "
+      f"{100 * (k_r('K-THETA2')[0] - 1):.0f}% at $\\theta = 2$. On pressure the most accurate rung is $\\theta = 0.5$, "
+      f"{100 * (1 - k_r('K-THETA05')[0]):.0f}% below the pair, and the exact read sits between them. At $\\theta = 0.5$ every "
+      f"field's mean falls on both seeds, by {100 * (1 - max(k_r('K-THETA05'))):.0f} to {100 * (1 - min(k_r('K-THETA05'))):.0f}%, "
+      f"below the registered bar; the finer read wins {win05}% of the test cases, not all. The far field, where ISLA-DTT's gap "
+      "to interacting ISLA sits (@sec-airfrans-dtt-reference), is where the finer reads help, each in a different region: at "
+      f"$\\theta = 0.5$ the in-plane velocity error in the wake is {wake05[0]} / {wake05[1]} times interacting ISLA's against "
+      f"the pair's {wake05[2]} / {wake05[3]}, and with the exact read the eddy-viscosity error beyond one chord is "
+      f"{far0[2]} / {far0[3]} times interacting ISLA's against {far0[0]} / {far0[1]} (seeds 42 / 43, the error normalized per "
+      "case); the registered rule reads both as narrowed, and no setting widens a region. So ISLA-DTT's far-field error "
+      "shrinks as its read tightens, as Peter's knob rule expects of an approximation that vanishes as $\\theta \\to 0$, while "
+      "over the whole domain no rung passes the registered bar. A read after every "
+      f"second block changes no field measurably and takes {100 * (1 - k_step('K-B1') / k_step('control')):.0f}% less of the "
+      f"step; beside the rule, its eddy viscosity beyond one chord is {b1_far[0]} and {b1_far[1]} times the pair's, within the "
+      "regional rule's two standard errors. A basis of 8 harms eddy viscosity. The exact read takes "
+      f"{k_step('K-EXACT') / k_step('control'):.2f} times the step of $\\theta = 1$ on AirfRANS and {ex_gpuh[0]} GPU-hours "
+      f"for its two seeds against {ex_gpuh[1]}. The open question is whether a finer read narrows the far-field gap at car "
+      "scale: on the DrivAerML Volume task with the whole boundary, 400,000 prediction points fit one GB300 at $\\theta = 1$ "
+      "(@sec-using-dtt-cost), and neither the step nor the fit at $\\theta = 0.5$ is measured. What would settle it: ISLA-DTT "
+      "trained on the DrivAerML Volume task at $\\theta = 0.5$ against $\\theta = 1$, two seeds each, read on the error far "
+      f"from the car. Data: {R.source('dtt_knobs', 'sens/sens_table.md')}; {R.source('dtt_knobs_exact', 'RESULTS.md')}.")
 ```
-
-::: {.callout-note title="In flight"}
-These numbers come from ISLA-DTT trained at $\theta$ = 2, 1 and 0.5, with a read after every second block and with
-8 basis functions. ISLA-DTT trained with the exact read is being measured, and the ledger (@sec-ledger) tracks it.
-:::
 
 ### The direction of the SHIFT-SUV transfer {#sec-oq-transfer}
 
@@ -1828,7 +1858,7 @@ print("| Cost on small meshes | from 100,000 tokens up a training step's memory 
       "models without a global direction with exact zero padding, which takes the AirfRANS step to "
       f"{fpx('AirfRANS', 'compiled ms'):.2f} times compiled and {fpx('AirfRANS', 'eager ms'):.2f} times eager, the lug's eager "
       f"step to {fpx('lug', 'eager ms'):.2f} times and Tensile2d's to {fpx('Tensile2d', 'eager ms'):.2f} times; the lug's compiled "
-      f"step, bound by the host, moves {fpx('lug', 'compiled ms'):.2f} times | on the small finite-element meshes of Tensile2d and "
+      f"step, bound by the host, is {fpx('lug', 'compiled ms'):.2f} times as long | on the small finite-element meshes of Tensile2d and "
       f"the lug ISLA's median training step is {lo:.1f} to {hi:.1f} times the baselines' (@tbl-ref-cost), measured without that "
       f"kernel, and the lug's step stays bound by the host ({R.source('perf_survey', 'FINAL_REPORT.md')}; "
       f"{R.source('fused_pad', 'FINAL_REPORT.md')}) |")

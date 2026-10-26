@@ -1338,7 +1338,7 @@ print(": The cost of ISLA's interior geometry in training: the geometry call and
 ::: {.callout-note title="In flight"}
 These numbers come from a geometry search that frees its buffers late and searches a crowded query's ball in
 a second pass. The class's search, which takes that ball in one traversal and frees each buffer as soon as it is
-read, is being measured on the same cases, and the ledger (@sec-ledger) tracks it.
+read, is to be measured on the same cases on the 0.14.0 code, and the ledger (@sec-ledger) tracks it.
 :::
 
 ```{python}

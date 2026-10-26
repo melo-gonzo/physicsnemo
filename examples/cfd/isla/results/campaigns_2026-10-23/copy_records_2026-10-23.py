@@ -742,6 +742,28 @@ RECORDS = {
             "reduce/out_r14/reduce_s2.json",
         ],
     ),
+    "dtt_knobs_exact": (
+        "isla-dtt-knobs-2026-10-23",
+        "DTT-KNOBS stage 2, K-EXACT: ISLA-DTT retrained on AirfRANS with the exact read, the ladder (R2) and the far-field "
+        "gap (Q3)",
+        [
+            "RESULTS.md",
+            "RESULTS_EXACT_REVIEW.md",
+            "reduce/out_final/reduce_s2.md",
+            "reduce/out_final/reduce_s2.json",
+        ],
+    ),
+    "dtt_pose_exp_read": (
+        "isla-dtt-pose-exp-2026-10-24",
+        "DTT-POSE-EXP, the read: ISLA-DTT retrained with DTT-POSE's forest on the lug and AirfRANS against the standings' "
+        "pairs, native, posed and the bf16 forest",
+        [
+            "RESULTS.md",
+            "FINAL_REPORT.md",
+            "results/read/read_all.md",
+            "results/read/read_all.json",
+        ],
+    ),
 }
 
 
@@ -754,6 +776,7 @@ KEPT = {
     ("dtt_knobs", "PREREG.md"): "e601d4af9ff793a7570af7acd9929f43",
     ("hl_dup", "FINAL_REPORT.md"): "74bc30896f511fcd9513fb01eb935e9f",
     ("dtt_knobs_r5", "RESULTS.md"): "3b462f0df18edf0463d90a5cd9495a5c",
+    ("dtt_knobs_a14", "RESULTS.md"): "32da0774cb5ac07aa9490b0f97063fce",
 }
 
 

@@ -90,6 +90,8 @@ source. Do not edit by hand.
 | `rerun_configs/` | RERUN-CONFIGS: every dataset file the final rerun reads committed with its whole boundary, AeroZoo's seven fields, the area draws, the re-pricing and the supervisor's decisions | `scratch/isla-final-rerun-2026-10-26/` |
 | `geo_port/` | ISLA-GEO-PORT: the geometry speedups and fixes of the closed library pull request, in ISLA's own geometry; the edge gradient of the on-wall direction fixed | `scratch/isla-geo-port-2026-10-26/` |
 | `dtt_knobs_a14/` | DTT-KNOBS stage 2, arms 1-4: ISLA-DTT retrained on AirfRANS at theta 2 and 0.5, with a read after every second block and with a basis of 8, against its standing | `scratch/isla-dtt-knobs-2026-10-23/` |
+| `dtt_knobs_exact/` | DTT-KNOBS stage 2, K-EXACT: ISLA-DTT retrained on AirfRANS with the exact read, the ladder (R2) and the far-field gap (Q3) | `scratch/isla-dtt-knobs-2026-10-23/` |
+| `dtt_pose_exp_read/` | DTT-POSE-EXP, the read: ISLA-DTT retrained with DTT-POSE's forest on the lug and AirfRANS against the standings' pairs, native, posed and the bf16 forest | `scratch/isla-dtt-pose-exp-2026-10-24/` |
 
 | topic | file | source | md5 |
 | --- | --- | --- | --- |
@@ -477,3 +479,11 @@ source. Do not edit by hand.
 | dtt_knobs_a14 | RESULTS_A14_REVIEW.md | scratch/isla-dtt-knobs-2026-10-23/RESULTS_A14_REVIEW.md | 87862fc699cd07b4f033bfc24273ff67 |
 | dtt_knobs_a14 | reduce/out_r14/reduce_s2.md | scratch/isla-dtt-knobs-2026-10-23/reduce/out_r14/reduce_s2.md | 3219ad59e0280b7f30a0baef474be0f4 |
 | dtt_knobs_a14 | reduce/out_r14/reduce_s2.json | scratch/isla-dtt-knobs-2026-10-23/reduce/out_r14/reduce_s2.json | 914f6c90ee8479b29fe9b4c8e049cd6e |
+| dtt_knobs_exact | RESULTS.md | scratch/isla-dtt-knobs-2026-10-23/RESULTS.md | ad1ec340c726ec0891c50640b23c6b3c |
+| dtt_knobs_exact | RESULTS_EXACT_REVIEW.md | scratch/isla-dtt-knobs-2026-10-23/RESULTS_EXACT_REVIEW.md | 1621789b02fbb8109eafe3771d528b4a |
+| dtt_knobs_exact | reduce/out_final/reduce_s2.md | scratch/isla-dtt-knobs-2026-10-23/reduce/out_final/reduce_s2.md | adfd6f8a4b341c7c2943f2b00e1a252c |
+| dtt_knobs_exact | reduce/out_final/reduce_s2.json | scratch/isla-dtt-knobs-2026-10-23/reduce/out_final/reduce_s2.json | e289de96b1de8f69902a1a1bc22cebcd |
+| dtt_pose_exp_read | RESULTS.md | scratch/isla-dtt-pose-exp-2026-10-24/RESULTS.md | 6eb97cb89900ac4ac46ad370920ce61f |
+| dtt_pose_exp_read | FINAL_REPORT.md | scratch/isla-dtt-pose-exp-2026-10-24/FINAL_REPORT.md | 49b6aa857cb9c0b6b37160797448e36b |
+| dtt_pose_exp_read | results/read/read_all.md | scratch/isla-dtt-pose-exp-2026-10-24/results/read/read_all.md | a73345ec2e5ccc2b4aca0a2ccd2e83ca |
+| dtt_pose_exp_read | results/read/read_all.json | scratch/isla-dtt-pose-exp-2026-10-24/results/read/read_all.json | 889cac97207be3bc8cdb397c7a70fb21 |

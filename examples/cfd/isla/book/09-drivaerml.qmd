@@ -598,15 +598,18 @@ assert all(abs(_r090[f]["mean"] - over("ISLA", f)) < 1e-3 for f in SURF_F)
 pn = [v for f in SURF_F for v in GD["posed_over_native"][f].values()]
 g_par = re.search(r"\(([\d.]+)M parameters, 80k faces per step, lr 1e-2\)", GDX).group(1)
 theta = re.search(r"\(θ = ([\d.]+) here, θ = 0 on AirfRANS\)", GDX).group(1)
+g_faces = 1000 * int(re.search(r"parameters, (\d+)k faces per step, lr 1e-2\)", GDX).group(1))
 loss_x = re.search(r"and ([\d.]+)× ISLA 0\.9\.0's training loss", GDX).group(1)
 cars = re.search(r"(\d+) of (\d+) cars worse", GDX).groups()
 b_pos = [SURF.err(a, f, "posed") for a in S.BASELINES for f in SURF_F]
-print(f"**GLOBE (@sec-landscape-globe), the learned boundary integral on a Barnes–Hut tree, trails all three reference "
-      f"configurations on the DrivAerML Surface task, by {min(over(a, f) for a in S.ARCHS for f in SURF_F):.2f} to "
+print(f"**GLOBE (@sec-landscape-globe), the learned boundary integral on a Barnes–Hut tree, trails ISLA, GeoTransolver and "
+      f"Transolver at their reference configurations on the DrivAerML Surface task, by {min(over(a, f) for a in S.ARCHS for f in SURF_F):.2f} to "
       f"{max(over(a, f) for a in S.ARCHS for f in SURF_F):.2f} times, and rotated and translated it keeps its error within "
-      f"{100 * (max(pn) - 1):.0f}% of native.** GLOBE runs at its authors' configuration for this dataset, {g_par} million "
-      f"parameters against ISLA's {SURF_COST['ISLA']['n_parameters'] / 1e6:.0f} million, under the recipe's shared training "
-      "protocol rather than its example's own, and every arm is scored on the same 200,000 cells of the 48 validation cars. "
+      f"{100 * (max(pn) - 1):.0f}% of native.** GLOBE runs at its authors' configuration for this dataset, under the recipe's "
+      "shared training protocol rather than its example's own, so the resources differ: GLOBE has "
+      f"{g_par} million parameters and trains on {g_faces:,} faces per step, ISLA {SURF_COST['ISLA']['n_parameters'] / 1e6:.0f} "
+      "million parameters and 200,000 cells per step, and the records give no memory for GLOBE. Every arm is scored on the same "
+      "200,000 cells of the 48 validation cars. "
       "Its errors are " + " / ".join(f"{g_nat[f]['mean']:.4f}" for f in SURF_F) + " on pressure / wall shear; GLOBE ÷ "
       + "; ".join(f"{a} {' / '.join(f'{over(a, f):.2f}' for f in SURF_F)}" for a in S.ARCHS)
       + f", every seed above one. It is less accurate than ISLA on {cars[0]} of {cars[1]} cars on both fields. Its training loss "

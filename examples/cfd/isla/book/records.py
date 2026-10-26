@@ -119,6 +119,8 @@ FOLDER = {
     "rerun_configs": "campaigns_2026-10-23",
     "geo_port": "campaigns_2026-10-23",
     "dtt_knobs_a14": "campaigns_2026-10-23",
+    "dtt_knobs_exact": "campaigns_2026-10-23",
+    "dtt_pose_exp_read": "campaigns_2026-10-23",
 }
 
 
