@@ -17,6 +17,8 @@
 """The release configurations and inputs that test_isla_release.py's goldens were
 recorded with, shared with the tests that compare against those goldens."""
 
+import hashlib
+
 import torch
 
 from physicsnemo.experimental.models import ISLA
@@ -38,15 +40,34 @@ CONFIGS = {
 }
 
 
-def _instantiate_model(seed: int = 0, **kwargs) -> ISLA:
-    """Build an ISLA with reproducible random parameters (MOD-008b pattern), forced to
-    the eager geometry region (the one the goldens were recorded with)."""
-    model = ISLA(**kwargs)
-    model.geo_kernel = "eager"
-    gen = torch.Generator(device="cpu").manual_seed(seed)
+def param_generator(seed: int, name: str) -> torch.Generator:
+    """The CPU generator of one parameter's seeded fill, seeded by the base ``seed``
+    and the parameter's qualified ``name`` (a SHA-256 of both, stable across processes),
+    so that adding, removing or reordering other parameters leaves its values bitwise."""
+    key = hashlib.sha256(f"{seed}:{name}".encode()).digest()
+    return torch.Generator(device="cpu").manual_seed(
+        int.from_bytes(key[:8], "little") >> 1
+    )
+
+
+def _fill(model: torch.nn.Module, seed: int) -> torch.nn.Module:
+    """Every parameter of ``model`` set to ``randn * 0.1`` from its own generator
+    (:func:`param_generator`); returns the model."""
     with torch.no_grad():
-        for p in model.parameters():
-            p.copy_(torch.randn(p.shape, generator=gen, dtype=p.dtype) * 0.1)
+        for n, p in model.named_parameters():
+            p.copy_(
+                torch.randn(p.shape, generator=param_generator(seed, n), dtype=p.dtype)
+                * 0.1
+            )
+    return model
+
+
+def _instantiate_model(seed: int = 0, **kwargs) -> ISLA:
+    """Build an ISLA with reproducible random parameters (MOD-008b pattern; each
+    parameter from its own name-keyed generator, :func:`_fill`), forced to the eager
+    geometry region (the one the goldens were recorded with)."""
+    model = _fill(ISLA(**kwargs), seed)
+    model.geo_kernel = "eager"
     return model.eval()
 
 

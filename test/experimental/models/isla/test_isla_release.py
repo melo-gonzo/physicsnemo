@@ -66,6 +66,7 @@ from test.experimental.models.isla._meshes import outputs
 from test.experimental.models.isla._release_cases import (
     CONFIGS,
     IO,
+    _fill,
     _instantiate_model,
     _make_inputs,
 )
@@ -617,6 +618,24 @@ def _checkpoint_output(file_name: str, device) -> dict:
     model = Module.from_checkpoint(str(DATA_DIR / file_name)).to(device).eval()
     with torch.no_grad():
         return outputs(model(**_make_inputs(device, query=model.interior)))
+
+
+def test_seeded_fills_leave_other_parameters_bitwise_when_one_is_removed():
+    """The release writer's fill (:func:`_fill`) and the golden harness's
+    (``cases._params``) draw each parameter from a generator keyed by the seed and the
+    parameter's name: a model with one parameter fewer (here an early one, the token
+    embedding's bias) gets every other parameter bitwise the same values, so a
+    state-dict change moves only the parameters it changes."""
+    full = ISLA(**CONFIGS["dtt"])
+    cut = ISLA(**CONFIGS["dtt"])
+    cut.embed[1].register_parameter("bias", None)
+    a = dict(_fill(full, 7).named_parameters())
+    b = dict(_fill(cut, 7).named_parameters())
+    assert set(a) - set(b) == {"embed.1.bias"}
+    assert all(torch.equal(a[k], b[k]) for k in b)
+    ga, gb = C._params(full, 7), C._params(cut, 7)
+    assert set(ga) - set(gb) == {"param.embed.1.bias"}
+    assert all(torch.equal(ga[k], gb[k]) for k in gb)
 
 
 @pytest.mark.parametrize("file_name", list(CHECKPOINTS))

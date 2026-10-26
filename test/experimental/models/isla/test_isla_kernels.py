@@ -104,7 +104,7 @@ def _assert_same(ref, opt, dtype, out_tol, grad_tol, n=700):
     total = torch.cat([g.flatten() for g in g_ref.values()]).norm()
     for k, g in g_ref.items():
         if g.norm() < 1e-6 * total:
-            continue  # geo_logit.bias: a constant over slices cancels in both softmaxes; its gradient is roundoff
+            continue  # a gradient zero in exact arithmetic (a constant cancelling in a softmax) is roundoff
         # relative to the parameter's own gradient, floored at 1e-3 of the whole gradient: a
         # scalar such as a block's prototype gain is a reduction over every token and slice
         # whose gradient can nearly cancel, and its own norm is then a roundoff-sized yardstick

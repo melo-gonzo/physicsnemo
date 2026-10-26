@@ -274,10 +274,14 @@ def _cotangent(t: torch.Tensor, seed: int) -> torch.Tensor:
 
 
 def _params(module: torch.nn.Module, seed: int, std: float = 0.3) -> dict:
-    """Random values for every parameter of ``module`` (``param.<name>``), float64."""
-    g = _gen(seed)
+    """Random values for every parameter of ``module`` (``param.<name>``), float64,
+    each from its own generator keyed by ``seed`` and the parameter's name, so that a
+    change to one parameter leaves every other one's values bitwise."""
+    from test.experimental.models.isla._release_cases import param_generator
+
     return {
-        f"param.{n}": torch.randn(p.shape, generator=g, dtype=D) * std
+        f"param.{n}": torch.randn(p.shape, generator=param_generator(seed, n), dtype=D)
+        * std
         for n, p in module.named_parameters()
     }
 
@@ -1488,10 +1492,8 @@ def _slice_block_run(n_vecs, n_tens):
                 for k, t in zip(("protos", "z_pos", "m_s", "z"), slices)
             }
         )
-        ### (geo_logit's bias is a constant over the slices, which cancels in both
-        ### softmaxes: its gradient is roundoff)
         out.update({"grad.h": h.grad, "grad.r": r.grad, "grad.h_read": hq.grad})
-        out.update(_param_grads(block, zero=("geo_logit.bias",)))
+        out.update(_param_grads(block))
         return out
 
     return run
@@ -1959,13 +1961,10 @@ def _cotangent_loss(fields: dict, seed: int) -> torch.Tensor:
     )
 
 
-#: Parameters whose gradient is zero in exact arithmetic (constants that cancel in a
-#: softmax: each slice block's geo_logit bias, a constant over the slices, and the
-#: boundary read's basis MLP's last bias, a per-head constant on every pair's logit),
-#: so that what is computed is roundoff alone.
-_MODEL_ZERO_GRADS = tuple(f"blocks.{i}.geo_logit.bias" for i in range(2)) + (
-    "kernel_basis.net.4.bias",
-)
+#: Parameters whose gradient is zero in exact arithmetic (a constant that cancels in a
+#: softmax: the boundary read's basis MLP's last bias, a per-head constant on every
+#: pair's logit), so that what is computed is roundoff alone.
+_MODEL_ZERO_GRADS = ("kernel_basis.net.4.bias",)
 
 
 def _model_run(spec: _ModelSpec):
@@ -2146,13 +2145,21 @@ _MODEL_VARIANTS = {"cpu": ("reference",), "cuda": ("auto", "reference")}
 #: Four elements of each parameter's gradient in the committed golden (beside its
 #: summaries over every element), to keep the models' goldens within their budget.
 _MODEL_SAMPLES = {"grad.param.*": 4}
-#: The routings' gains and value projections (each slice block's ``assign`` and the
-#: head frame's) reach the loss through softmaxes over the slices whose terms nearly
+#: The routings' gains, key and value projections (each slice block's ``assign`` and
+#: the head frame's) reach the loss through softmaxes over the slices whose terms nearly
 #: cancel: their gradients are 1e-5 to 1e-11 of the largest, and carry the rounding of
 #: the terms. Measured between one, three and four threads (largest relative to their
-#: own largest element): 1.1e-10 in float64, 4.2e-2 in float32. Bounds: 1e-8 in
-#: float64; not compared in float32, where they are mostly roundoff.
-_ROUTING_GRADS = ("grad.param.*assign.gain", "grad.param.*assign.v_proj.*")
+#: own largest element): 1.1e-10 in float64, 4.2e-2 in float32. The key projections,
+#: measured on six draws of the name-keyed parameters (seed + 1000 k, k = 0..5), at
+#: 2, 3, 4, 8 and 16 threads against one, with and without geo_logit's bias, need
+#: 3.8e-12 in float64 and 5.5e-3 in float32 (every other model output stays within
+#: CPU_RTOL there: 5.5e-13 and 2.8e-4 at most). Bounds: 1e-8 in float64; not compared
+#: in float32, where they are mostly roundoff.
+_ROUTING_GRADS = (
+    "grad.param.*assign.gain",
+    "grad.param.*assign.k_proj.*",
+    "grad.param.*assign.v_proj.*",
+)
 #: Their run-to-run spread on CUDA in float32 (atomics upstream, then the
 #: cancellation): measured up to 2.2e-3 of their largest element (job 379129).
 _ROUTING_FAMILY = dict.fromkeys(_ROUTING_GRADS, 1e-2)

@@ -990,7 +990,8 @@ def fused_geo_region(
     the eager region's (the K direction dots right after log distance, the
     token-vector dots after n.m), so the routing Linear's weights mean the same on
     both paths. ``n_global`` defaults to T (every vector a global direction).
-    ``lin`` is the routing-bias head, ``nn.Linear(n_geo, 1)``.
+    ``lin`` is the routing-bias head, ``nn.Linear(n_geo, 1)``, with or without its
+    bias (a missing bias enters as an exact zero).
 
     The kernels are written for three components and at least one direction. A
     problem in fewer dimensions enters with zero trailing components, and K = 0 as
@@ -1001,7 +1002,8 @@ def fused_geo_region(
         raise RuntimeError("fused geo region requires triton")
     if not isinstance(lin, torch.nn.Linear):
         raise ValueError("fused geo region takes the linear routing-bias head, nn.Linear(n_geo, 1)")
-    weight, bias = lin.weight, lin.bias
+    weight = lin.weight
+    bias = lin.bias if lin.bias is not None else weight.new_zeros(1)
     lin_bf16 = (
         torch.is_autocast_enabled("cuda")
         and torch.get_autocast_dtype("cuda") == torch.bfloat16
