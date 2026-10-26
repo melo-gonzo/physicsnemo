@@ -251,7 +251,7 @@ def test_dimension_mismatch_is_refused_and_two_d_is_not_embedded_three_d():
     ### The 3-D model with a K = 1 direction keeps its parameter count (the head has
     ### m = 5 true and p = 3 pseudo vectors in both dimensions for K = 1, so the
     ### 2-D model of the same spec has the same count too). A surface model has the
-    ### 41364 backbone-and-head parameters (the wall's input layer 2 x 32 over the
+    ### 41362 backbone-and-head parameters (the wall's input layer 2 x 32 over the
     ### constant and n.g, the shared embedding layer 32 x 32 + 32, ...) plus 2 x 32^2
     ### + 1 = 2049 for each of its three prototype synthesizers (two blocks and the
     ### head frame: the key and value maps and the gain); the interior model (ISLA-DTT)
@@ -261,7 +261,7 @@ def test_dimension_mismatch_is_refused_and_two_d_is_not_embedded_three_d():
     ### invariants, and per block 6464 (two LayerNorms 2 x 64, the value map 32 x 64
     ### + 64, the key and query maps 2 x 32 x 32, the kernel 16 x 8, the output map
     ### 64 x 32).
-    n_surface = 41364 + 3 * (2 * 32**2 + 1)
+    n_surface = 41362 + 3 * (2 * 32**2 + 1)
     m3 = _model(3, {"p": {"rank": 0}, "v": {"rank": 1}})
     assert sum(p.numel() for p in m3.parameters()) == n_surface
     assert (
