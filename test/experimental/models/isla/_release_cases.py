@@ -17,12 +17,11 @@
 """The release configurations and inputs that test_isla_release.py's goldens were
 recorded with, shared with the tests that compare against those goldens."""
 
-import hashlib
-
 import torch
 
 from physicsnemo.experimental.models import ISLA
 from test.experimental.models.isla._meshes import soup
+from test.experimental.models.isla.goldens.cases import param_generator
 
 #: Every configuration declares one scalar and one vector output, one boundary condition
 #: without fields and one global direction.
@@ -38,16 +37,6 @@ CONFIGS = {
     "default": dict(hidden=32, n_layers=2, n_slices=8, **IO),
     "dtt": dict(hidden=32, n_layers=2, n_slices=8, interior=True, **IO),
 }
-
-
-def param_generator(seed: int, name: str) -> torch.Generator:
-    """The CPU generator of one parameter's seeded fill, seeded by the base ``seed``
-    and the parameter's qualified ``name`` (a SHA-256 of both, stable across processes),
-    so that adding, removing or reordering other parameters leaves its values bitwise."""
-    key = hashlib.sha256(f"{seed}:{name}".encode()).digest()
-    return torch.Generator(device="cpu").manual_seed(
-        int.from_bytes(key[:8], "little") >> 1
-    )
 
 
 def _fill(model: torch.nn.Module, seed: int) -> torch.nn.Module:

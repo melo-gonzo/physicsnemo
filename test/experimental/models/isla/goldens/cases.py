@@ -32,6 +32,7 @@ one-line change here (its golden must then still pass, bitwise in the A/B harnes
 
 import fnmatch
 import functools
+import hashlib
 import importlib
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -186,6 +187,17 @@ def _gen(seed: int) -> torch.Generator:
     return torch.Generator().manual_seed(seed)
 
 
+def param_generator(seed: int, name: str) -> torch.Generator:
+    """The CPU generator of one parameter's seeded fill, seeded by the base ``seed``
+    and the parameter's qualified ``name`` (a SHA-256 of both, stable across processes),
+    so that adding, removing or reordering other parameters leaves its values bitwise.
+    Shared with the release writer (``_release_cases._fill``)."""
+    key = hashlib.sha256(f"{seed}:{name}".encode()).digest()
+    return torch.Generator(device="cpu").manual_seed(
+        int.from_bytes(key[:8], "little") >> 1
+    )
+
+
 def _to(inputs: dict, device, keys=None) -> dict:
     return {k: v.to(device) for k, v in inputs.items() if keys is None or k in keys}
 
@@ -277,8 +289,6 @@ def _params(module: torch.nn.Module, seed: int, std: float = 0.3) -> dict:
     """Random values for every parameter of ``module`` (``param.<name>``), float64,
     each from its own generator keyed by ``seed`` and the parameter's name, so that a
     change to one parameter leaves every other one's values bitwise."""
-    from test.experimental.models.isla._release_cases import param_generator
-
     return {
         f"param.{n}": torch.randn(p.shape, generator=param_generator(seed, n), dtype=D)
         * std
@@ -2151,21 +2161,24 @@ _MODEL_SAMPLES = {"grad.param.*": 4}
 #: the terms. Measured between one, three and four threads (largest relative to their
 #: own largest element): 1.1e-10 in float64, 4.2e-2 in float32. The key projections,
 #: measured on six draws of the name-keyed parameters (seed + 1000 k, k = 0..5), at
-#: 2, 3, 4, 8 and 16 threads against one, with and without geo_logit's bias, need
-#: 3.8e-12 in float64 and 5.5e-3 in float32 (every other model output stays within
-#: CPU_RTOL there: 5.5e-13 and 2.8e-4 at most). Bounds: 1e-8 in float64; not compared
-#: in float32, where they are mostly roundoff.
+#: 2, 3, 4, 8 and 16 threads against one, with the slice blocks' geo_logit bias (since
+#: removed) and without, need 3.8e-12 in float64 and 5.5e-3 in float32 (every other
+#: model output stays within CPU_RTOL there: 5.5e-13 and 2.8e-4 at most). Bounds: 1e-8
+#: in float64; in float32 the gains and value projections are not compared (mostly
+#: roundoff), the key projections at 5e-2, nine times their measured need.
 _ROUTING_GRADS = (
     "grad.param.*assign.gain",
     "grad.param.*assign.k_proj.*",
     "grad.param.*assign.v_proj.*",
 )
 #: Their run-to-run spread on CUDA in float32 (atomics upstream, then the
-#: cancellation): measured up to 2.2e-3 of their largest element (job 379129).
+#: cancellation): measured up to 2.2e-3 of their largest element on the gains and
+#: value projections (job 379129); the key projections, of the same mechanism, take
+#: the same family bound unmeasured.
 _ROUTING_FAMILY = dict.fromkeys(_ROUTING_GRADS, 1e-2)
 _MODEL_TOL = {
     D: dict.fromkeys(_ROUTING_GRADS, 1e-8),
-    F: dict.fromkeys(_ROUTING_GRADS, None),
+    F: {**dict.fromkeys(_ROUTING_GRADS, None), "grad.param.*assign.k_proj.*": 5e-2},
 }
 #: The scales' moments and factors are float64 sums of a float32 model's cell
 #: measures and fields, so they carry float32 rounding. Measured against the x86
