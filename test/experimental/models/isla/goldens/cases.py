@@ -210,11 +210,26 @@ def _directions(g: torch.Generator, *shape: int) -> torch.Tensor:
 
 
 def _unit(x: torch.Tensor) -> torch.Tensor:
-    """``x`` normalized along its last axis (only for orientation decisions)."""
+    """``x`` normalized along its last axis (orientation decisions, the icosphere)."""
     sq = x[..., 0] * x[..., 0]
     for k in range(1, x.shape[-1]):
         sq = sq + x[..., k] * x[..., k]
     return x / sq.sqrt()[..., None]
+
+
+def _icosphere(radius: float, subdivisions: int):
+    """``sphere_icosahedral.load(radius, subdivisions)``: its cells, its float32 points
+    to an ulp, projected by :func:`_unit` (its ``torch.norm`` is not correctly rounded:
+    torch 2.13's moved the points by an ulp from 2.12's on Grace)."""
+    from physicsnemo.mesh.primitives.surfaces import icosahedron_surface
+
+    ico = icosahedron_surface.load()
+    ### Its vertices before the norm, (0, +-1, +-phi) cyclically (1 / |v| = 0.53,
+    ### phi / |v| = 0.85).
+    phi = (1.0 + 5.0**0.5) / 2.0
+    raw = ico.points.sign() * torch.where(ico.points.abs() > 0.7, phi, 1.0)
+    m = ico.with_points(_unit(raw)).subdivide(levels=subdivisions, filter="linear")
+    return m.with_points(_unit(m.points) * radius)
 
 
 def _apply(R: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
@@ -461,9 +476,7 @@ def _draw_inputs_build():
     corners = 0.1 * torch.randn(900, 3, 3, generator=_gen(1), dtype=D)
     corners = corners - corners.mean(1, keepdim=True)
     verts = (pts[:, None] + corners).reshape(-1, 3)
-    from physicsnemo.mesh.primitives.surfaces import sphere_icosahedral
-
-    sph = sphere_icosahedral.load(radius=1.5, subdivisions=2)
+    sph = _icosphere(1.5, 2)
     return {
         "in.soup_points": verts,
         "in.soup_cells": torch.arange(2700).reshape(900, 3),
@@ -855,9 +868,7 @@ def _near_wall(dim, n, seed, band, radius=1.0):
 
 
 def _geo_sphere():
-    from physicsnemo.mesh.primitives.surfaces import sphere_icosahedral
-
-    m = sphere_icosahedral.load(radius=1.0, subdivisions=2)
+    m = _icosphere(1.0, 2)
     p, c = _oriented(m.points.double(), m.cells, lambda x: x)
     q = torch.cat([_near_wall(3, 200, 1, band=0.5), p, p[c[:64, :2]].mean(1)])
     return p, c, q
@@ -1812,9 +1823,7 @@ def _body(x: torch.Tensor) -> torch.Tensor:
 
 def _sphere_cells(subdivisions):
     """An icosphere deformed by :func:`_body`, outward."""
-    from physicsnemo.mesh.primitives.surfaces import sphere_icosahedral
-
-    m = sphere_icosahedral.load(radius=1.0, subdivisions=subdivisions)
+    m = _icosphere(1.0, subdivisions)
     p, c = _oriented(m.points.double(), m.cells, lambda x: x)
     return _body(p), c
 
