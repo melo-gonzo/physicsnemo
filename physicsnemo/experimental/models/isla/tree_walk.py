@@ -30,12 +30,12 @@ output; a breadth-first fill pass writes the entries in that order, each level a
 buffer of the opened nodes' (left, right) pairs read even entries first, so no sort
 follows. The opening test is the reference's arithmetic, operation by operation in
 the boxes' dtype, in a module compiled without contracted multiply-adds, so every
-decision is the reference's. Under autocast the forest's coordinates are bfloat16
-(``points @ frame`` is an autocast matmul), and which steps of the test run in
-bfloat16 depends on the device's autocast lists (CUDA's runs ``pow`` and ``sum`` in
-float32): the dtype of each step is read from torch's dispatch, and the kernels
-compute in float32 and round to bfloat16 where torch's bfloat16 kernels do (each
-elementwise result; a sum once, after accumulating in float32).
+decision is the reference's. The forest is built and walked outside autocast, in its
+inputs' precision (:meth:`~.tree_read.BoundaryForest.build`); for a forest of
+reduced-precision inputs the dtype of each step of the test is read from torch's
+dispatch, and the kernels compute in float32 and round to bfloat16 or float16 where
+torch's kernels do (each elementwise result; a sum once, after accumulating in
+float32).
 """
 
 from typing import Any

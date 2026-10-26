@@ -19,7 +19,7 @@
 Passive prediction points read every boundary cell after every block: a softmax over
 the cells with the log measure fraction as bias, a learned kernel of the pair
 invariants and a query-key match, evaluated through a forest of Barnes-Hut cluster
-trees over the boundary cells (GLOBE's ``ClusterTree``, one tree per normal octant),
+trees over the boundary cells (GLOBE's ``ClusterTree``, one tree per normal cube face),
 walked once per prediction point at the opening angle ``TREE_READ_THETA``. At
 ``theta = 0`` (the model's private ``_tree_read_theta``, set by these tests) it reads
 every cell pair for pair, so every contract must hold exactly there: equality with a
@@ -29,8 +29,11 @@ independence holds exactly at every ``theta`` (a point's walk depends on the for
 and the point alone). At a finite ``theta`` the read is an approximation whose error
 falls with ``theta``; the tests measure that on a smooth boundary and check that the
 pair list still covers the whole boundary measure exactly once per point and admits
-only well-separated, orientation-coherent clusters. The read's output projection
-starts at zero, so most tests give every read parameter a random value first.
+only well-separated, orientation-coherent clusters. The forest itself is a function of
+the boundary alone: the same in float32 poses of a mesh aligned with its own frame
+(where sign octants and the box test's ties were decided by rounding), bitwise the same
+under bf16 autocast, and the same under a renumbering of the cells. The read's output
+projection starts at zero, so most tests give every read parameter a random value first.
 """
 
 import copy
@@ -42,6 +45,7 @@ import types
 import pytest
 import torch
 
+import physicsnemo.experimental.models.isla.model as model_mod
 import physicsnemo.experimental.models.isla.tree_build as tree_build
 import physicsnemo.experimental.models.isla.tree_read as tree_read
 import physicsnemo.experimental.models.isla.tree_walk as tree_walk
@@ -54,8 +58,10 @@ from physicsnemo.experimental.models.isla.tree_read import (
     BoundaryForest,
     _KernelBasis,
     _TreeKernelRead,
+    frame_coordinates,
     kernel_geo_width,
-    normal_octants,
+    normal_error_bound,
+    normal_faces,
     tree_pair_invariants,
     tree_read_pairs,
 )
@@ -110,7 +116,7 @@ def _tree(dim=3, theta=0.0, **kw):
     return _model(dim, theta, **kw).double().eval()
 
 
-def _exact_pairs(bnd, qry, q_wall, g_unit):
+def _exact_pairs(bnd, qry, q_wall, g_unit, normal_tol=None):
     """What the brute-force read needs of the tokens (one case)."""
     return {"bnd": bnd, "qry": qry, "q_wall": q_wall, "g_unit": g_unit}
 
@@ -298,9 +304,9 @@ def _node_cells(f, i):
 
 
 @pytest.mark.parametrize("dim", [3, 2])
-def test_boundary_forest_splits_by_normal_octant_and_its_nodes_are_tight(dim):
-    """One cluster tree per normal octant: the trees' cells partition the cells and
-    each tree's cells share an octant; every node's box holds its cells; its virtual
+def test_boundary_forest_splits_by_normal_face_and_its_nodes_are_tight(dim):
+    """One cluster tree per normal cube face: the trees' cells partition the cells and
+    each tree's cells share a face; every node's box holds its cells; its virtual
     cell is their measure-weighted centroid, renormalized mean normal, mean rank-1
     input and total measure; its coherence is the RMS-chord test; the children split
     their parent's range; the leaves tile the cells with at most the leaf size each."""
@@ -313,20 +319,22 @@ def test_boundary_forest_splits_by_normal_octant_and_its_nodes_are_tight(dim):
         n == 1000
         and len(f.trees) == len(f.tree_cells) == int(f.node_offset.shape[0]) - 1
     )
-    assert len(f.trees) == 2**dim
+    assert len(f.trees) == 2 * dim
     assert sum(t.n_nodes for t in f.trees) == m
     assert torch.equal(torch.sort(torch.cat(f.tree_cells)).values, torch.arange(n))
     assert torch.equal(torch.sort(f.cells).values, torch.arange(n))
-    ### Octants and boxes live in the boundary's own frame.
+    ### Faces and boxes live in the boundary's own frame about its centroid.
     assert torch.allclose(f.frame.t() @ f.frame, torch.eye(dim, dtype=D), atol=1e-12)
-    pts_f = pts @ f.frame
-    octant = normal_octants(nrm @ f.frame)
+    assert torch.allclose(f.origin, (w[:, None] * pts).sum(0) / w.sum())
+    pts_f = frame_coordinates(pts - f.origin, f.frame)
+    face = normal_faces(frame_coordinates(nrm, f.frame), torch.zeros(1000, dtype=D))
     for sel in f.tree_cells:
-        assert len(set(octant[sel].tolist())) == 1
+        assert len(set(face[sel].tolist())) == 1
     for i in range(m):
         cells = _node_cells(f, i)
         assert bool((pts_f[cells] >= f.aabb_min[i] - 1e-9).all())
         assert bool((pts_f[cells] <= f.aabb_max[i] + 1e-9).all())
+        assert f.diameter_sq[i] >= (f.aabb_max[i] - f.aabb_min[i]).square().sum()
         assert torch.allclose(f.measure[i], w[cells].sum())
         assert torch.allclose(
             f.center[i], (pts[cells] * w[cells, None]).sum(0) / w[cells].sum()
@@ -382,19 +390,30 @@ def test_boundary_forest_never_mixes_opposite_normals():
 
 
 @pytest.mark.parametrize("dim", [2, 3])
-def test_normal_octants_are_antipodal_at_zero_components(dim):
-    """Every normal with components in {-1, 0, 1}: -n lands in the octant antipodal
-    to n's (a zero component takes the sign of the next nonzero one, so it is not
-    coded negative for n and -n alike)."""
+def test_normal_faces_are_antipodal_and_ties_take_the_lowest_axis(dim):
+    """Every normal with components in {-1, 0, 1}: -n lands on the face opposite n's;
+    a normal whose largest components are equal (or within twice their error bound)
+    takes the lowest of those axes, and one outside the bound its largest axis."""
     grid = torch.tensor(list(itertools.product((-1.0, 0.0, 1.0), repeat=dim)), dtype=D)
     nrm = torch.nn.functional.normalize(grid[grid.abs().sum(-1) > 0], dim=-1)
-    assert torch.equal(normal_octants(-nrm), 2**dim - 1 - normal_octants(nrm))
+    for tol in (0.0, 1e-3):
+        t = torch.full((nrm.shape[0],), tol, dtype=D)
+        faces = normal_faces(nrm, t)
+        assert torch.equal(normal_faces(-nrm, t), faces ^ 1)
+        lowest = (nrm.abs() >= nrm.abs().amax(1, keepdim=True)).to(torch.int8).argmax(1)
+        assert torch.equal(faces // 2, lowest)
+    if dim == 3:
+        ### Components 1 and 1 + 4e-4: tied within twice a bound of 1e-3 (the lower axis,
+        ### 1), not within twice 1e-4 (the larger, 2).
+        n = torch.tensor([[0.0, 1.0, 1.0 + 4e-4]], dtype=D)
+        assert int(normal_faces(n, torch.full((1,), 1e-3, dtype=D))) == 3
+        assert int(normal_faces(n, torch.full((1,), 1e-4, dtype=D))) == 5
 
 
 def test_boundary_forest_partition_is_the_same_under_a_winding_flip():
     """A 2 x 1 rectangle, symmetric about both axes, so its own frame is exact and
     its normals there have zero components: reversing every normal maps each tree's
-    cells to the antipodal octant, so the forest partitions the cells the same way."""
+    cells to the opposite face, so the forest partitions the cells the same way."""
     s = (torch.arange(8, dtype=D) + 0.5) / 8
     bottom = torch.stack([2 * s - 1, torch.full_like(s, -0.5)], -1)
     left = torch.stack([torch.full_like(s, -1.0), s - 0.5], -1)
@@ -406,7 +425,7 @@ def test_boundary_forest_partition_is_the_same_under_a_winding_flip():
         BoundaryForest.build(pts, w, n, None, theta=0.5, leaf_size=4, eps=1e-12)
         for n in (nrm, -nrm)
     ]
-    assert bool(((nrm @ forests[0].frame) == 0).any())
+    assert bool((frame_coordinates(nrm, forests[0].frame) == 0).any())
     blocks = [{frozenset(c.tolist()) for c in f.tree_cells} for f in forests]
     assert blocks[0] == blocks[1]
 
@@ -447,7 +466,7 @@ def test_point_pairs_admit_only_separated_coherent_nodes_and_cover_every_cell(th
     is_node = si >= n
     assert int(is_node.sum()) == n_node
     node = si[is_node] - n
-    p = (q @ f.frame)[qi[is_node]]  # the boxes live in the boundary's own frame
+    p = frame_coordinates(q - f.origin, f.frame)[qi[is_node]]  # the boxes' frame
     gap = torch.clamp(torch.maximum(p - f.aabb_max[node], f.aabb_min[node] - p), min=0)
     assert bool((gap.square().sum(-1) * theta**2 > f.diameter_sq[node]).all())
     assert bool(f.coherent[node].all())
@@ -617,8 +636,14 @@ def test_fast_walk_falls_back_to_the_reference_past_its_limits(monkeypatch):
     assert torch.equal(qi_a, qi) and torch.equal(si_a, si) and n_node_a == n_node
 
 
+_KERNELS = pytest.mark.parametrize("kernel", ["reference", "fast"])
+
+
+@_KERNELS
 @pytest.mark.parametrize("improper", [False, True], ids=["rotation", "reflection"])
-def test_forest_and_every_list_are_the_same_in_every_pose_at_finite_theta(improper):
+def test_forest_and_every_list_are_the_same_in_every_pose_at_finite_theta(
+    improper, kernel
+):
     """The trees live in the boundary's own frame (principal axes signed by the third
     moments), so a rotated, reflected, translated and rescaled copy of a generic case
     gives the same frame (moved with the case), the same cells in the same order, the
@@ -628,8 +653,10 @@ def test_forest_and_every_list_are_the_same_in_every_pose_at_finite_theta(improp
     R = orthogonal(3, 4, improper)
     t = torch.arange(1.0, 4.0, dtype=D)
     k = 2.5
-    f0 = BoundaryForest.build(pts, w, nrm, None, theta=1.0)
-    f1 = BoundaryForest.build(k * pts @ R.T + t, 3.0 * w, nrm @ R.T, None, theta=1.0)
+    f0 = BoundaryForest.build(pts, w, nrm, None, theta=1.0, build=kernel)
+    f1 = BoundaryForest.build(
+        k * pts @ R.T + t, 3.0 * w, nrm @ R.T, None, theta=1.0, build=kernel
+    )
     assert torch.allclose(f1.frame, R @ f0.frame, atol=1e-9)
     assert torch.equal(f1.cells, f0.cells)
     assert torch.equal(f1.range_start, f0.range_start) and torch.equal(
@@ -638,9 +665,276 @@ def test_forest_and_every_list_are_the_same_in_every_pose_at_finite_theta(improp
     assert torch.equal(f1.coherent, f0.coherent)
     assert torch.allclose(f1.center, k * f0.center @ R.T + t, atol=1e-9)
     assert torch.allclose(f1.normal, f0.normal @ R.T, atol=1e-9)
-    qi0, si0, n0 = f0.point_pairs(q)
-    qi1, si1, n1 = f1.point_pairs(k * q @ R.T + t)
+    qi0, si0, n0 = f0.point_pairs(q, walk=kernel)
+    qi1, si1, n1 = f1.point_pairs(k * q @ R.T + t, walk=kernel)
     assert n0 == n1 and torch.equal(qi0, qi1) and torch.equal(si0, si1)
+
+
+def _lattice_cells():
+    """Cells on a product lattice with unit measures, ``(points, normals)`` in float64:
+    the coordinates take uneven values per axis, so the cells' covariance is diagonal
+    (to float64 roundoff, in any precision of the coordinates) with distinct variances
+    and every third moment nonzero: the canonical frame is the coordinate axes, with no
+    tie of its own. The normals are the six axis directions and the twelve directions
+    at exactly 45 degrees between two axes, so in their own frame they have zero
+    components and equal largest components: the orientation split has exact ties. The
+    values are generic (no dyadic fractions of the extent, which would sit on lines of
+    the trees' Morton grid; the box test's ties have their own test)."""
+    axes = [
+        torch.tensor(v, dtype=D)
+        for v in (
+            [0.0, 0.29, 0.61, 1.07, 1.73, 2.03],
+            [0.0, 0.37, 0.83, 1.01, 1.39],
+            [0.0, 0.53, 0.79, 1.61],
+        )
+    ]
+    pts = torch.cartesian_prod(*axes)
+    eye = torch.eye(3, dtype=D)
+    dirs = [s * eye[i] for i in range(3) for s in (1.0, -1.0)]
+    dirs += [
+        (s * eye[i] + t * eye[j]) / math.sqrt(2.0)
+        for i, j in ((0, 1), (0, 2), (1, 2))
+        for s in (1.0, -1.0)
+        for t in (1.0, -1.0)
+    ]
+    nrm = torch.stack(dirs)[torch.arange(pts.shape[0]) % len(dirs)]
+    return pts, nrm
+
+
+def _lattice_queries():
+    g = [
+        torch.arange(-4, 13, dtype=D),
+        torch.arange(-4, 10, dtype=D),
+        torch.arange(-4, 11, dtype=D),
+    ]
+    return torch.cartesian_prod(*g) * 0.2713 + 0.0917
+
+
+def _lattice_forest(R=None, t=None, kernel="reference"):
+    """The lattice case posed by ``R``, ``t`` in float64 and rounded to float32, its
+    forest at the model's angle and every query's list, built and walked by
+    ``kernel``."""
+    pts, nrm = _lattice_cells()
+    q = _lattice_queries()
+    if R is not None:
+        pts, nrm, q = pts @ R.T + t, nrm @ R.T, q @ R.T + t
+    f = BoundaryForest.build(
+        pts.float(),
+        torch.ones(pts.shape[0]),
+        nrm.float(),
+        None,
+        theta=TREE_READ_THETA,
+        build=kernel,
+    )
+    return f, f.point_pairs(q.float(), walk=kernel)
+
+
+def _float32_cells(simplex):
+    """A float32 mesh's cells as ISLA reads them: centroids, unit normals and areas
+    computed in float32, and the bound on each normal's rounding."""
+    e1, e2 = simplex[:, 1] - simplex[:, 0], simplex[:, 2] - simplex[:, 0]
+    cr = torch.linalg.cross(e1, e2, dim=-1)
+    area = 0.5 * cr.norm(dim=-1)
+    centroid = simplex.mean(1)
+    centre = (area.double()[:, None] * centroid.double()).sum(0) / area.double().sum()
+    return (
+        centroid,
+        cr / cr.norm(dim=-1, keepdim=True),
+        area,
+        normal_error_bound(simplex, centre),
+    )
+
+
+@_KERNELS
+def test_forest_is_the_same_in_float32_poses_of_a_frame_aligned_case(kernel):
+    """Posing in float32 a case whose normals lie along its own frame or at exactly 45
+    degrees to it (``_lattice_cells``) rounds every input differently; the faces take
+    the normals' error bounds, so the posed forest holds the same cells in the same
+    trees and nodes and gives every query the same list. Sign octants, decided by the
+    sign of the rounding of the zero components, gave different lists."""
+    f0, (qi0, si0, n0) = _lattice_forest(kernel=kernel)
+    assert len(f0.trees) == 6 and n0 > 0
+    assert torch.allclose(
+        f0.frame.abs().amax(0), torch.ones(3, dtype=D)
+    )  # the axes, in ascending variance
+    for seed in range(4):
+        R = orthogonal(3, 20 + seed, seed % 2 == 1)
+        t = torch.tensor([0.37, -1.21, 2.03], dtype=D) * (seed + 1)
+        f1, (qi1, si1, n1) = _lattice_forest(R, t, kernel)
+        assert torch.equal(f1.cells, f0.cells), seed
+        assert torch.equal(f1.range_start, f0.range_start) and torch.equal(
+            f1.range_count, f0.range_count
+        )
+        assert n1 == n0 and torch.equal(qi1, qi0) and torch.equal(si1, si0), seed
+
+
+@_KERNELS
+@pytest.mark.parametrize(
+    "device", ["cpu", pytest.param("cuda", marks=[pytest.mark.cuda, requires_cuda])]
+)
+def test_forest_is_bitwise_the_same_under_bf16_autocast(device, kernel):
+    """The forest is built and walked outside autocast in the inputs' precision: under
+    bf16 autocast its lists, boxes, diameters, measures and virtual cells are bitwise
+    those of the float32 build (a training forward reads the forest a float32 score
+    reads)."""
+    pts, nrm = _lattice_cells()
+    R, t = orthogonal(3, 7, False), torch.tensor([1.5, -0.5, 3.0], dtype=D)
+    pts, nrm = (pts @ R.T + t).float().to(device), (nrm @ R.T).float().to(device)
+    q32, w = (
+        (_lattice_queries() @ R.T + t).float().to(device),
+        torch.ones(pts.shape[0], device=device),
+    )
+
+    def forest():
+        f = BoundaryForest.build(pts, w, nrm, None, theta=TREE_READ_THETA, build=kernel)
+        return f, f.point_pairs(q32, walk=kernel)
+
+    f0, l0 = forest()
+    with torch.autocast(device, dtype=torch.bfloat16):
+        f1, l1 = forest()
+    assert l0[2] == l1[2] and torch.equal(l0[0], l1[0]) and torch.equal(l0[1], l1[1])
+    for name in (
+        "cells",
+        "aabb_min",
+        "aabb_max",
+        "diameter_sq",
+        "measure",
+        "center",
+        "normal",
+        "coherent",
+    ):
+        a, b = getattr(f0, name), getattr(f1, name)
+        assert a.dtype == b.dtype and torch.equal(a, b), name
+    assert f1.aabb_min.dtype == torch.float32 and f1.measure.dtype == torch.float32
+
+
+@_KERNELS
+def test_forest_is_the_same_under_renumbering_of_the_cells(kernel):
+    """The forest is a function of the cells' positions, normals and measures, not of
+    their order: a permutation of the cells permutes its cell indices and nothing else."""
+    pts, nrm = _lattice_cells()
+    R, t = orthogonal(3, 9, False), torch.full((3,), 0.5, dtype=D)
+    pts, nrm, q = (
+        (pts @ R.T + t).float(),
+        (nrm @ R.T).float(),
+        (_lattice_queries() @ R.T + t).float(),
+    )
+    w = torch.ones(pts.shape[0])
+    f0 = BoundaryForest.build(pts, w, nrm, None, theta=TREE_READ_THETA, build=kernel)
+    qi0, si0, _ = f0.point_pairs(q, walk=kernel)
+    perm = torch.randperm(pts.shape[0], generator=torch.Generator().manual_seed(4))
+    f1 = BoundaryForest.build(
+        pts[perm], w, nrm[perm], None, theta=TREE_READ_THETA, build=kernel
+    )
+    qi1, si1, _ = f1.point_pairs(q, walk=kernel)
+    assert torch.equal(perm[f1.cells], f0.cells)
+    n = pts.shape[0]
+    mapped = torch.where(si1 < n, perm[si1.clamp_max(n - 1)], si1)
+    order0, order1 = (
+        torch.argsort(qi0 * (2 * n + f0.n_nodes) + si0),
+        torch.argsort(qi1 * (2 * n + f1.n_nodes) + mapped),
+    )
+    assert torch.equal(qi0[order0], qi1[order1]) and torch.equal(
+        si0[order0], mapped[order1]
+    )
+
+
+def test_normal_error_bound_covers_the_rounding_of_rotated_float32_normals():
+    """Each component of a float32 cell normal, computed from its rotated and rounded
+    vertices, is within the bound of the exact normal of the exact rotated cell, for
+    cells from equilateral to thin."""
+    g = torch.Generator().manual_seed(5)
+    base = torch.rand(4000, 3, 3, generator=g, dtype=D) * 2 - 1
+    thin = base.clone()
+    thin[:2000, 2] = thin[:2000, 0] + 1e-3 * (thin[:2000, 2] - thin[:2000, 0])
+    for seed in range(3):
+        R = orthogonal(3, 30 + seed, False)
+        exact = thin @ R.T
+        n64 = torch.linalg.cross(
+            exact[:, 1] - exact[:, 0], exact[:, 2] - exact[:, 0], dim=-1
+        )
+        n64 = n64 / n64.norm(dim=-1, keepdim=True)
+        _, n32, _, tol = _float32_cells(exact.float())
+        assert bool(((n32.double() - n64).abs().amax(-1) <= tol).all())
+        assert (
+            float(((n32.double() - n64).abs().amax(-1) / tol).max()) > 1e-3
+        )  # not vacuous
+
+
+def _tie_queries(f, nodes, theta):
+    """For each node, the float32 lab point at exactly ``1 / theta`` times its box
+    diagonal from the box, beyond the middle of its upper face along the frame's first
+    axis (computed in float64, then rounded)."""
+    lo, hi = f.aabb_min[nodes].double(), f.aabb_max[nodes].double()
+    diam = (hi - lo).norm(dim=-1)
+    q_f = 0.5 * (lo + hi)
+    q_f[:, 0] = hi[:, 0] + diam / theta
+    return (f.origin + q_f @ f.frame.t()).float()
+
+
+@_KERNELS
+def test_box_test_ties_are_opened(kernel):
+    """A point at exactly theta times a node's box diagonal from its box is a tie of the
+    admission criterion, which rounding of the point would decide either way: the walk
+    never admits the node for it (it reads the node's children or cells instead)."""
+    pts, nrm, w, _ = cloud(2000, d=3, seed=12)
+    f = BoundaryForest.build(
+        pts.float(), w.float(), nrm.float(), None, theta=TREE_READ_THETA, build=kernel
+    )
+    inner = (f.left >= 0).nonzero().squeeze(-1)
+    nodes = inner[
+        torch.randperm(inner.numel(), generator=torch.Generator().manual_seed(1))[:400]
+    ]
+    q = _tie_queries(f, nodes, TREE_READ_THETA)
+    qi, si, _ = f.point_pairs(q, walk=kernel)
+    admitted = (si == f.n_cells + nodes[qi]).sum()
+    assert int(admitted) == 0
+    ### A point a little beyond the tie (1 % farther) reads the node whole.
+    far = _tie_queries(f, nodes, TREE_READ_THETA / 1.01)
+    qi, si, _ = f.point_pairs(far, walk=kernel)
+    assert float((si == f.n_cells + nodes[qi]).sum()) >= 0.9 * nodes.numel()
+
+
+def test_model_forward_is_the_same_in_float32_poses_of_a_frame_aligned_case(
+    monkeypatch,
+):
+    """ISLA-DTT on a float32 boundary whose normals lie along its own frame or at
+    exactly 45 degrees to it (``_lattice_cells`` as small triangles): the forest of a
+    posed copy, built from the posed mesh's normals with the bounds on their rounding,
+    gives every point the same pairs, so the outputs equal the native ones to float32
+    roundoff."""
+    pts, nrm = _lattice_cells()
+    mesh = soup(pts, nrm, torch.full((pts.shape[0],), 1e-3, dtype=D))
+    q = _lattice_queries()[::7] + 0.013
+    drv = torch.tensor([0.3, 1.0, 0.2], dtype=D)
+    m = _model().eval()
+    plans = []
+    inner = model_mod.walk_range_pairs
+
+    def recording(*a, **kw):
+        out = inner(*a, **kw)
+        plans.append((out.plan.qi.clone(), out.plan.bj.clone()))
+        return out
+
+    monkeypatch.setattr(model_mod, "walk_range_pairs", recording)
+    f = lambda t: t.float()  # noqa: E731
+
+    def f32(mm):
+        data = {k: f(v) for k, v in mm.cell_data.items()}
+        return Mesh(points=f(mm.points), cells=mm.cells, cell_data=data)
+
+    base = outputs(_run(m, f32(mesh), f(drv), f(q)))
+    for seed in range(2):
+        R = orthogonal(3, 40 + seed, False)
+        t = torch.tensor([0.37, -1.21, 2.03], dtype=D) * (seed + 1)
+        posed = f32(transform(mesh, R, t))
+        out = outputs(_run(m, posed, f(drv @ R.T), f(q @ R.T + t)))
+        assert torch.equal(plans[-1][0], plans[0][0]) and torch.equal(
+            plans[-1][1], plans[0][1]
+        ), seed
+        assert float((out["p"] - base["p"]).norm() / base["p"].norm()) < 1e-5
+        rot = base["v"] @ R.T.float()
+        assert float((out["v"] - rot).norm() / rot.norm()) < 1e-5
 
 
 @pytest.mark.parametrize("improper", [False, True], ids=["rotation", "reflection"])
@@ -1012,6 +1306,7 @@ _TREE_FIELDS = (
 )
 _FOREST_FIELDS = (
     "frame",
+    "origin",
     "node_offset",
     "cells",
     "range_start",
@@ -1107,7 +1402,7 @@ _PRECISIONS = pytest.mark.parametrize(
 @_PRECISIONS
 @pytest.mark.parametrize("dim", [3, 2])
 def test_fast_forest_build_is_the_reference_forest(dim, dtype, autocast):
-    """The fast build (one pass over all octants, Warp's CPU backend here) gives the
+    """The fast build (one pass over all faces, Warp's CPU backend here) gives the
     reference's forest in every bit, under bfloat16 autocast too: node table, levels,
     boxes, diameters, virtual cells, measures, coherence and every tree's own fields,
     so the reference walk makes the same pair lists on it."""
@@ -1203,6 +1498,60 @@ def test_fast_forest_build_is_the_reference_forest_on_cuda(dim, dtype, autocast)
 
     assert resolve_tree_build("auto", torch.zeros(1, dim, device="cuda")) == "fast"
     _check_fast_build(dim, dtype, "cuda", autocast)
+
+
+@pytest.mark.parametrize(
+    "device", ["cpu", pytest.param("cuda", marks=[pytest.mark.cuda, requires_cuda])]
+)
+def test_fast_forest_and_walk_are_the_reference_on_face_and_box_ties(device):
+    """On the cases where rounding would decide the forest (``_lattice_cells``: normals
+    along the frame or at exactly 45 degrees to it, native, posed in float32 and
+    renumbered, under bf16 autocast too; and points at a box-test tie), the fast build
+    and walk give the reference's forest in every bit and its lists entry for entry."""
+    pts0, nrm0 = _lattice_cells()
+    q0 = _lattice_queries()
+    perm = torch.randperm(pts0.shape[0], generator=torch.Generator().manual_seed(4))
+    cases = [(pts0, nrm0, q0)]
+    for seed in range(2):
+        R = orthogonal(3, 20 + seed, seed % 2 == 1)
+        t = torch.tensor([0.37, -1.21, 2.03], dtype=D) * (seed + 1)
+        cases.append((pts0 @ R.T + t, nrm0 @ R.T, q0 @ R.T + t))
+    cases.append((cases[1][0][perm], cases[1][1][perm], cases[1][2]))
+    for i, (pts, nrm, q) in enumerate(cases):
+        pts, nrm, q = (x.float().to(device) for x in (pts, nrm, q))
+        w = torch.ones(pts.shape[0], device=device)
+        for autocast in (False, True):
+            with torch.autocast(device, dtype=torch.bfloat16, enabled=autocast):
+                ref, fast = (
+                    BoundaryForest.build(
+                        pts, w, nrm, None, theta=TREE_READ_THETA, build=k
+                    )
+                    for k in ("reference", "fast")
+                )
+                lists = [
+                    ref.point_pairs(q, walk="reference"),
+                    fast.point_pairs(q, walk="fast"),
+                ]
+            assert not _forest_differences(ref, fast), (i, autocast)
+            (qa, sa, na), (qb, sb, nb) = lists
+            assert na == nb > 0 and torch.equal(qa, qb) and torch.equal(sa, sb), (
+                i,
+                autocast,
+            )
+    p, n, w, _ = cloud(2000, d=3, seed=12)
+    p, n, w = (x.float().to(device) for x in (p, n, w))
+    ref, fast = (
+        BoundaryForest.build(p, w, n, None, theta=TREE_READ_THETA, build=k)
+        for k in ("reference", "fast")
+    )
+    assert not _forest_differences(ref, fast)
+    inner = (ref.left >= 0).nonzero().squeeze(-1)[:400]
+    q = _tie_queries(ref, inner.cpu(), TREE_READ_THETA).to(device)
+    (qa, sa, na), (qb, sb, nb) = (
+        ref.point_pairs(q, walk="reference"),
+        fast.point_pairs(q, walk="fast"),
+    )
+    assert na == nb and torch.equal(qa, qb) and torch.equal(sa, sb)
 
 
 def _step_grads(m, mesh, drv, q, autocast=False):
@@ -1897,6 +2246,39 @@ def test_query_chunks_pad_the_boundary_side_to_the_token_alignment():
     assert seen == [mesh.n_cells + (-mesh.n_cells) % align]
 
 
+def test_query_chunks_read_the_forest_with_the_normals_error_bounds(monkeypatch):
+    """The forward and :meth:`ISLA.query_chunks` build the forest from the same drawn
+    tokens with the same bounds on their normals (``normal_tol``, from the meshes'
+    vertices), so the chunked step walks the forward's forest."""
+    import physicsnemo.experimental.models.isla.model as isla_model
+
+    seen = []
+    inner = isla_model.tree_read_walk
+
+    def recording(**kw):
+        out = inner(**kw)
+        seen.append((kw["normal_tol"], out))
+        return out
+
+    monkeypatch.setattr(isla_model, "tree_read_walk", recording)
+    m = _tree(3, TREE_READ_THETA)
+    mesh, drv, q = _case()
+    kw = {
+        "boundary_meshes": {"wall": mesh},
+        "prediction_points": points_mesh(q),
+        "global_data": {"g": drv},
+    }
+    with torch.no_grad():
+        m(**kw)
+        m.query_chunks(**kw)
+    (tol_f, walk_f), (tol_c, walk_c) = seen
+    assert tol_f is not None and tol_f.dtype == D and bool((tol_f > 0).all())
+    assert torch.equal(tol_c, tol_f)
+    assert not _forest_differences(walk_f.forests[0], walk_c.forests[0])
+    lists_c = tree_read.walk_points_range(walk_c, 0, walk_c.n_queries).lists[0]
+    assert all(torch.equal(a, b) for a, b in zip(walk_f.lists[0][:2], lists_c[:2]))
+
+
 def test_query_chunks_need_an_interior_model():
     """A surface model has no prediction points to chunk."""
     m = ISLA(
@@ -1954,6 +2336,9 @@ def test_walk_of_a_range_of_points_is_those_rows_of_the_walk_of_every_point(
         lazy = tree_read.tree_read_walk(walk_points=False, **kw)
     assert lazy.lists == [None]
     qi, si, n_node = full.lists[0]
+    with torch.autocast(device, dtype=torch.bfloat16, enabled=autocast):
+        ref = full.forests[0].point_pairs(q, walk=walk)  # the forest's own walk
+    assert torch.equal(ref[0], qi) and torch.equal(ref[1], si) and ref[2] == n_node
     assert 0 < n_node < qi.numel()
     counts = tree_read.walk_pair_counts(lazy)
     assert torch.equal(counts, tree_read.walk_pair_counts(full))

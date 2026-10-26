@@ -1,14 +1,14 @@
 {
  "format": 1,
- "commit": "fa1cab63d046ebea80a682f74daca69991a7885f",
+ "commit": "e89e77180b5193b76616bdb4dbb302df37fad130",
  "code_modified": true,
  "harness": {
   "__init__.py": "0a7ef7faa425a61c89987fff234f7169",
-  "cases.py": "a98dadc1ca5df54019aac674c61ae789",
+  "cases.py": "04794a8259077fb2febc92bf96c8ab6f",
   "compare.py": "7a3507ec13ed802e56dd08597468ae58",
   "record.py": "bd4001d5e9a550e6b398bec54940d5e6"
  },
- "date": "2026-10-26T06:44:03-04:00",
+ "date": "2026-10-26T08:57:27-04:00",
  "platform": {
   "python": "3.13.8",
   "torch": "2.13.0+cu130",
@@ -31,17 +31,17 @@
   "physicsnemo.experimental.models.isla.geometry_fast": "8516d69bf3dd3f4696c2472dd76513f9",
   "physicsnemo.experimental.models.isla.heads": "9373a25d4e58168fce8d0acad8931725",
   "physicsnemo.experimental.models.isla.inputs": "3ce86bc1d666200a38be17c08939bb61",
-  "physicsnemo.experimental.models.isla.model": "6749140b37bed8c5144ea130834f130e",
+  "physicsnemo.experimental.models.isla.model": "ba5f5f0bb9a56e0c98604cb47dc824b8",
   "physicsnemo.experimental.models.isla.sampling": "a35695775d1dcdaa8b219edd0a925b1d",
   "physicsnemo.experimental.models.isla.scales": "c6ae7036d8b0bfbfcc06530fcc6bab7d",
   "physicsnemo.experimental.models.isla.segment_softmax": "a00b1d5cc85a3c18d9eaaa10b25e0b18",
-  "physicsnemo.experimental.models.isla.tree_build": "c818f50e3b1cb8b920fdeb57161b46d1",
-  "physicsnemo.experimental.models.isla.tree_read": "718d4acc6079efc46f9c129ff4183e94",
-  "physicsnemo.experimental.models.isla.tree_walk": "b52839a5d9becc4a0b9513637f08dbcc",
+  "physicsnemo.experimental.models.isla.tree_build": "62fe2ee02619b6597e89fe21a640a30a",
+  "physicsnemo.experimental.models.isla.tree_read": "9008fb2c380d69435422da486af0fa8e",
+  "physicsnemo.experimental.models.isla.tree_walk": "03905bafd8ee29b8e2451b4e09d75520",
   "physicsnemo.mesh.sampling.systematic_sampling": "82ad653c4369be3d6a157ca0e17162e2",
   "physicsnemo.mesh.spatial._frame": "d0a7cc93f87f14dfbeabd04b87d14922"
  },
  "samples": 16,
  "cases": 90,
- "tensors": 3260
+ "tensors": 3178
 }

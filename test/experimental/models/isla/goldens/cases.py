@@ -511,6 +511,7 @@ _case("G-SAMP", "draw_inputs", _draw_inputs_build, _draw_inputs_run)
 
 _FOREST_FIELDS = (
     "frame",
+    "origin",
     "node_offset",
     "cells",
     "range_start",
@@ -675,7 +676,9 @@ def _walk_run(theta):
             x["in.points"], x["in.measure"], x["in.normals"], None, theta=theta
         )
         qi, si, n_node = f.point_pairs(x["in.queries"], walk=variant)
-        counts = f.frame_pairs(x["in.queries"] @ f.frame, walk=variant, count_only=True)
+        counts = f.frame_pairs(
+            f.frame_points(x["in.queries"]), walk=variant, count_only=True
+        )
         return {
             "out.qi": qi,
             "out.si": si,

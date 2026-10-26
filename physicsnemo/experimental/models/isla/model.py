@@ -342,6 +342,7 @@ from physicsnemo.experimental.models.isla.scales import (
     split_scale_keys,
 )
 from physicsnemo.experimental.models.isla.tree_read import (
+    normal_error_bound,
     TREE_READ_THETA,
     TreeReadWalk,
     _KernelBasis,
@@ -975,7 +976,7 @@ class ISLA(Module):
         ### every other model owns exactly the parameters it has without the read.
         self._tree_read_theta = TREE_READ_THETA
         ### tree_read_kernel names the implementation of the tree read, as geo_kernel
-        ### does the geometry region's: "reference" (the per-octant cluster trees,
+        ### does the geometry region's: "reference" (the per-face cluster trees,
         ### GLOBE's walk, the kernel term a matmul read by segment_softmax.py) or
         ### "auto", where the forest build (tree_build.py), the walk (tree_walk.py)
         ### and the read (fused_read.py: the kernel term computed inside the read,
@@ -1922,6 +1923,17 @@ class ISLA(Module):
                 )
             boundary = boundary.apply(lambda t: t[:, kept], batch_size=[1, kept.shape[0]])
             boundary["measure"] = weights[None].to(boundary["measure"].dtype)
+            if self.kernel_reads is not None:
+                ### The forest's orientation faces read each kept cell's normal with the
+                ### bound on its rounding (tree_read.normal_error_bound), from the meshes'
+                ### vertices as given, measured from the tokens' weighted centroid.
+                ### (cells: the union's, from the points' geometry above.)
+                with torch.no_grad(), torch.autocast(q_points.device.type, enabled=False):
+                    verts = torch.cat([m.points.to(q_points.device) for m in meshes])
+                    simplex = verts[cells[kept]]
+                    w = weights.double()
+                    centre = (w[:, None] * simplex.double().mean(1)).sum(0) / w.sum()
+                    boundary["normal_tol"] = normal_error_bound(simplex, centre)[None]
             query = query[None]
         return boundary, query, g_unit, g_scalars, gauge, scales, out_points, global_td, out_rows
 
@@ -1932,16 +1944,17 @@ class ISLA(Module):
         points = pts.points if isinstance(pts, Mesh) else pts
         return TensorDict(points=points, batch_size=points.shape[:1])
 
-    def _tree_read_pairs(self, bnd: TensorDict, qry: TensorDict, q_wall, g_unit):
+    def _tree_read_pairs(self, bnd: TensorDict, qry: TensorDict, q_wall, g_unit, normal_tol=None):
         """The boundary read's pairs (:mod:`tree_read`): each point's near cells and
         admitted clusters at the forest's opening angle, their kernel basis
         and log measures; ``bnd`` and ``qry`` are the boundary's and the points'
-        tokens and ``q_wall`` ``(B, Q)`` the points' built-in wall distance (frame
-        units)."""
-        return walk_range_pairs(self.kernel_basis, self._tree_read_walk(bnd, qry, q_wall, g_unit))
+        tokens, ``q_wall`` ``(B, Q)`` the points' built-in wall distance (frame
+        units) and ``normal_tol`` ``(B, N)`` the bound on the rounding of each
+        boundary token's normal (``None``: the normals as given are exact)."""
+        return walk_range_pairs(self.kernel_basis, self._tree_read_walk(bnd, qry, q_wall, g_unit, normal_tol))
 
     def _tree_read_walk(
-        self, bnd: TensorDict, qry: TensorDict, q_wall, g_unit, walk_points: bool = True
+        self, bnd: TensorDict, qry: TensorDict, q_wall, g_unit, normal_tol=None, walk_points: bool = True
     ) -> TreeReadWalk:
         """The forest and the points' lists of :meth:`_tree_read_pairs`, before the
         kernel basis
@@ -1960,6 +1973,7 @@ class ISLA(Module):
             g_unit=g_unit,
             theta=self._tree_read_theta,
             eps=EPS,
+            normal_tol=normal_tol,
             kernel=self.resolve_tree_read_kernel(q_r),
             walk=self.tree_read_kernel,
             build=self.tree_read_kernel,
@@ -2091,7 +2105,9 @@ class ISLA(Module):
         if query is not None:
             q_tokens, q_wall = self._query_tokens(query, tokens["log_w"], g_unit, g_scalars, gauge, boundary["points"])
             if self.kernel_reads is not None:
-                kernel_pairs = self._tree_read_pairs(tokens, q_tokens, q_wall, g_unit)
+                kernel_pairs = self._tree_read_pairs(
+                    tokens, q_tokens, q_wall, g_unit, boundary.get("normal_tol", None)
+                )
             tokens = torch.cat([tokens, q_tokens], dim=1)
             _hint_token_axis(n + q_tokens.shape[1], self._token_widths)
         padded = _pad_tokens(tokens, TOKEN_ALIGNMENT)
@@ -2310,7 +2326,12 @@ class _QueryChunks:
         ### The forest now, each chunk's points walked by the chunk: the lists held are
         ### one chunk's, and the fast walk's array limit applies to a chunk's pairs.
         self.walk = model._tree_read_walk(
-            tokens, {"r": query["points"] / self.gauge, "n_hat": q_nhat}, s[..., 0].abs(), g_unit, walk_points=False
+            tokens,
+            {"r": query["points"] / self.gauge, "n_hat": q_nhat},
+            s[..., 0].abs(),
+            g_unit,
+            boundary.get("normal_tol", None),
+            walk_points=False,
         )
         ### The boundary side's token axis completed as forward completes its own
         ### (_pad_tokens): at an unaligned count cuBLAS reduces some token-axis bf16
