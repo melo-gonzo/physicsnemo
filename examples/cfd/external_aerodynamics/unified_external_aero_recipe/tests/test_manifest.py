@@ -37,7 +37,9 @@ from datasets import (
     _build_manifest_val_dataset,
     build_dataloaders,
     build_dataset,
+    filter_indices_by_global_data,
     load_manifest,
+    read_global_data_leaf,
     resolve_manifest_indices,
     resolve_manifest_spec,
     validate_dataset_consistency,
@@ -829,3 +831,146 @@ class TestMultiDatasetManifestOffsets:
         assert sorted(train_loader.sampler) == [1, 3]
         assert list(val_loader.sampler) == [1, 4]
         assert any("drivaer_ml_surface" in record.message for record in caplog.records)
+
+
+### ---------------------------------------------------------------------------
+### sample_filter: selecting samples by a stored label
+### ---------------------------------------------------------------------------
+
+
+class TestSampleFilter:
+    """A dataset's ``sample_filter`` keeps the samples whose stored label is listed.
+
+    AeroZoo's canonical benchmark keeps its ``mean_stable`` samples
+    (``diagnostics.solve.solution_quality_id`` 4) in every split part.
+    """
+
+    LABELS = (4, 5, 4, 5, 4)  # run_i's stored label
+
+    @staticmethod
+    def _make_labelled_datadir(root: Path, labels) -> Path:
+        """Real DomainMesh archives, each storing its label in global_data."""
+        import torch
+
+        from physicsnemo.mesh import DomainMesh, Mesh
+
+        for i, label in enumerate(labels):
+            mesh = Mesh(points=torch.zeros(1, 3))
+            DomainMesh(
+                interior=mesh,
+                boundaries={},
+                global_data={
+                    "diagnostics": {
+                        "solve": {
+                            "solution_quality_id": torch.tensor(label),
+                            "iteration_count": torch.tensor(7),
+                        }
+                    }
+                },
+            ).save(root / f"run_{i}" / f"domain_{i}.pdmsh")
+        return root
+
+    @staticmethod
+    def _ds_yaml(datadir: Path, sample_filter: dict | None) -> DictConfig:
+        ds = TestManifestValDataset._augmented_ds_yaml(datadir)
+        if sample_filter is not None:
+            ds.sample_filter = sample_filter
+        return ds
+
+    FILTER = {"global_data": "diagnostics.solve.solution_quality_id", "keep": [4]}
+
+    def _loaders(self, tmp_path, monkeypatch, *, sample_filter=FILTER, **cfg_extra):
+        datadir = self._make_labelled_datadir(tmp_path, self.LABELS)
+        (datadir / "manifest.json").write_text(
+            json.dumps(
+                {"train": ["run_0", "run_1", "run_2"], "val": ["run_3", "run_4"]}
+            )
+        )
+        TestMultiDatasetManifestOffsets._patch_configs(
+            monkeypatch, {"drivaer_ml_surface": self._ds_yaml(datadir, sample_filter)}
+        )
+        cfg = TestMultiDatasetManifestOffsets._loader_cfg(
+            "drivaer_ml_surface", [], train_split="train", val_split="val"
+        )
+        for key, value in cfg_extra.items():
+            OmegaConf.update(cfg, key, value, force_add=True)
+        return build_dataloaders(cfg)
+
+    def test_read_global_data_leaf_reads_the_stored_label(self, tmp_path: Path):
+        """The leaf comes from the archive's own global_data group."""
+        datadir = self._make_labelled_datadir(tmp_path, self.LABELS)
+        for i, label in enumerate(self.LABELS):
+            value = read_global_data_leaf(
+                datadir / f"run_{i}" / f"domain_{i}.pdmsh",
+                "diagnostics.solve.solution_quality_id",
+            )
+            assert value.item() == label
+
+    def test_filter_keeps_the_listed_labels_in_order(self, tmp_path: Path):
+        """Only listed labels survive, in the given order."""
+        datadir = self._make_labelled_datadir(tmp_path, self.LABELS)
+        reader = SimpleNamespace(
+            _paths=[datadir / f"run_{i}" / f"domain_{i}.pdmsh" for i in range(5)]
+        )
+        kept = filter_indices_by_global_data(reader, [4, 0, 1, 3, 2], **self.FILTER)
+        assert kept == [4, 0, 2]
+
+    def test_every_manifest_part_keeps_only_listed_samples(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """Train and val each keep only their listed-label samples."""
+        train_loader, val_loader, _, _ = self._loaders(tmp_path, monkeypatch)
+        assert sorted(train_loader.sampler) == [0, 2]
+        assert list(val_loader.sampler) == [4]
+
+    def test_apply_sample_filter_false_keeps_every_sample(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """``apply_sample_filter=false`` reads every manifest sample."""
+        train_loader, val_loader, _, _ = self._loaders(
+            tmp_path, monkeypatch, apply_sample_filter=False
+        )
+        assert sorted(train_loader.sampler) == [0, 1, 2]
+        assert list(val_loader.sampler) == [3, 4]
+
+    def test_no_sample_filter_keeps_every_sample(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """A dataset file without the block is read whole."""
+        train_loader, val_loader, _, _ = self._loaders(
+            tmp_path, monkeypatch, sample_filter=None
+        )
+        assert sorted(train_loader.sampler) == [0, 1, 2]
+        assert list(val_loader.sampler) == [3, 4]
+
+    def test_a_filter_that_keeps_nothing_raises(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """An empty selection is refused, not trained on."""
+        with pytest.raises(ValueError, match="keeps none"):
+            self._loaders(
+                tmp_path,
+                monkeypatch,
+                sample_filter={**self.FILTER, "keep": [6]},
+            )
+
+    def test_a_malformed_filter_raises(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """A block without both keys is refused."""
+        with pytest.raises(ValueError, match="exactly 'global_data'"):
+            self._loaders(tmp_path, monkeypatch, sample_filter={"global_data": "x.y"})
+
+    def test_directory_mode_with_a_filter_raises(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """Directory mode cannot honour the block, so it raises."""
+        datadir = self._make_labelled_datadir(tmp_path, self.LABELS)
+        TestMultiDatasetManifestOffsets._patch_configs(
+            monkeypatch, {"drivaer_ml_surface": self._ds_yaml(datadir, self.FILTER)}
+        )
+        cfg = TestMultiDatasetManifestOffsets._loader_cfg(
+            "drivaer_ml_surface", [], train_split=None, val_split=None
+        )
+        with pytest.raises(ValueError, match="manifest splits only"):
+            build_dataloaders(cfg)

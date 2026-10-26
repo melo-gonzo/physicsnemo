@@ -416,9 +416,16 @@ def test_dataset_files_read_no_label_and_derive_no_case_scale(dataset):
     assert set(ds.keys()) == {
         "train_datadir",
         "manifest",
+        "sample_filter",
         "pipeline",
         "targets",
         "isla_constants",
+    }
+    ### the canonical benchmark's samples (AeroZoo 06-splits.qmd @sec-canonical): the mean_stable ones of every
+    ### split part, by the stored label, which selects samples and is never read by the chain
+    assert OmegaConf.to_container(ds.sample_filter) == {
+        "global_data": "diagnostics.solve.solution_quality_id",
+        "keep": [4],
     }
     reader = OmegaConf.to_container(ds.pipeline.reader, resolve=False)
     assert "subsample_n_cells" not in reader and reader["boundary_subsample"] == "cells"
@@ -806,7 +813,7 @@ def test_isla_config_brings_its_own_scales_and_runs():
         _apply_dataset_transform_appends(no_constants, cfg)
     assert model.output_stats["pressure"] == {
         "mean": 0.0,
-        "std": pytest.approx(1129.26),
+        "std": pytest.approx(1197.55),
     }
     seen = []
     scales = model._case_scales
