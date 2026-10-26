@@ -2292,7 +2292,12 @@ def _closest_features(
     ### (on every row, finite with a finite gradient: the rows torch.where leaves out
     ### still receive a zero gradient)
     k = (~(weights > 0)).to(torch.int8).argmax(-1)  # the vertex off the edge
-    a, b = (s64.take_along_dim(((k + i) % s64.shape[1])[:, None, None], 1)[:, 0] for i in (1, 2))
+    a, b = (
+        s64.gather(
+            1, ((k + i) % s64.shape[1])[:, None, None].expand(-1, 1, s64.shape[2])
+        )[:, 0]
+        for i in (1, 2)
+    )
     x, ab = query_points.double(), b - a
     ab2 = (ab * ab).sum(-1)
     t = ((x - a) * ab).sum(-1) / torch.where(ab2 > 0, ab2, 1.0)
