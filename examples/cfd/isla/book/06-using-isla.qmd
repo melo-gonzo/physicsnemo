@@ -1336,6 +1336,12 @@ print(": The cost of ISLA's interior geometry in training: the geometry call and
       "{#tbl-using-geometry-cost}")
 ```
 
+::: {.callout-note title="In flight"}
+The 0.14.0 geometry search takes a crowded query's ball in one traversal and frees its buffers as soon as they are
+read. That makes the whole-boundary call faster and lowers its peak memory, so the times in @tbl-using-geometry-cost
+are being measured again on the 0.14.0 code.
+:::
+
 ```{python}
 #| label: para-using-geometry-cost
 #| output: asis
@@ -1645,7 +1651,8 @@ print("- **Float16.** A forward under float16 autocast with padded tokens is fin
       "boundary, still divides by zero in float16 (@sec-oq-slice-normal). The recipe trains in bfloat16, and no number in "
       "this book is a float16 inference.")
 print()
-print(f"Five tests are strict expected failures, in {', '.join(f'`{n}`' for n in _xf[:-1])} and `{_xf[-1]}`: each records a known defect "
+assert _xf == ["test_isla_release.py"], _xf
+print(f"One test is a strict expected failure, in `{_xf[0]}`: it records a known defect "
       "and fails the suite if the defect goes away unnoticed (@sec-limits-xfail). Run the CPU tier with "
       "`pytest test/experimental/models/isla -m \"not slow\"`. Data: "
       f"{RC.source('kernel_bugs', 'FINAL_REPORT.md')}; {RC.source('test_build', 'FINAL_REPORT.md')}.")

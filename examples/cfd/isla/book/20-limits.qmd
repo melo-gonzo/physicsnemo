@@ -635,18 +635,22 @@ KBF = " ".join(R.load("kernel_bugs", "FINAL_REPORT.md").split())
 assert "The 5 remaining xfails are all out of scope: W3-B1 ×2, the GEO-TIEORDER quad diagonals ×2, and the core `Module.load` gap" in KBF
 TBB = " ".join(R.load("test_build", "BUGS.md").split())
 assert "so du/dx = (I-uu^T)/r instead of (I-uu^T-ee^T)/r" in TBB and "No effect on training today (no gradient through boundary or points)" in TBB
-print("**Five tests of the class are strict expected failures: each records a known defect and fails the suite if the "
-      "defect goes away unnoticed** (@sec-using-tests). Two record that in three dimensions, where a point's closest feature "
-      "is an edge, the gradient of the on-wall direction $u$ with respect to the points and to the vertices is wrong: the "
-      "closest-feature weights are detached, so "
-      "$\\partial u / \\partial x$ comes out $(I - u u^\\top) / r$ instead of $(I - u u^\\top - e e^\\top) / r$, with $e$ the "
-      "edge's direction. The distance's gradient is right everywhere, and so is $u$'s in two dimensions and at faces and "
-      "vertices; no training run takes a gradient through the boundary or the points, so no number in this book is affected. "
-      "Two record the on-wall direction at the diagonals of planar quads (@sec-limits-tie-order). One records that the core "
-      "library's `Module.load` accepts a checkpoint whose metadata alone names an earlier version, which "
-      "`Module.from_checkpoint` refuses; weights of an earlier version are refused on every loading path "
-      f"(@sec-using-checkpoint). Data: {R.source('kernel_bugs', 'FINAL_REPORT.md')}; "
-      f"{R.source('test_build', 'BUGS.md')}.")
+import physicsnemo
+_T = Path(physicsnemo.__file__).parent.parent / "test" / "experimental" / "models" / "isla"
+_xf = sorted(p.name for p in _T.glob("test_*.py") if "strict=True" in p.read_text() and "xfail(" in p.read_text())
+assert _xf == ["test_isla_release.py"], _xf
+print("**One test of the class is a strict expected failure: it records a known defect and fails the suite if the "
+      "defect goes away unnoticed** (@sec-using-tests). It records that the core library's `Module.load` accepts a "
+      "checkpoint whose metadata alone names an earlier version, which `Module.from_checkpoint` refuses; weights of an "
+      "earlier version are refused on every loading path (@sec-using-checkpoint). Four more were strict expected failures "
+      "until the fixes made for 0.14.0. Two recorded that in three dimensions, where a point's closest feature is an edge, "
+      "the gradient of the on-wall direction $u$ with respect to the points and to the vertices was wrong: the "
+      "closest-feature weights were detached, so $\\partial u / \\partial x$ came out $(I - u u^\\top) / r$ instead of "
+      "$(I - u u^\\top - e e^\\top) / r$, with $e$ the edge's direction. The closest point now slides along the edge in the "
+      "backward pass, so both pass. The distance's gradient was right everywhere, and no training run takes a gradient "
+      "through the boundary or the points, so no number in this book changed. The other two recorded the on-wall direction "
+      "at the diagonals of planar quads, and pass since the tie-order fix (@sec-limits-tie-order). "
+      f"Data: {R.source('kernel_bugs', 'FINAL_REPORT.md')}; {R.source('test_build', 'BUGS.md')}.")
 ```
 
 ### Cross-family transfer {#sec-limits-transfer}
