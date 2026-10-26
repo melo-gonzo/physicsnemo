@@ -47,8 +47,8 @@ ISLA = "physicsnemo.experimental.models.isla"
 #: to record their outputs). LIB-MOVE retargets these lines.
 TARGETS = {
     # G-FRAME, G-SAMP (LIB-MOVE P4)
-    "canonical_frame": f"{ISLA}.tree_read:canonical_frame",
-    "frame_coordinates": f"{ISLA}.tree_read:frame_coordinates",
+    "canonical_frame": "physicsnemo.mesh.spatial._frame:canonical_frame",
+    "frame_coordinates": "physicsnemo.mesh.spatial._frame:frame_coordinates",
     "water_fill": f"{ISLA}.sampling:water_fill",
     "pps_inclusion_probabilities": f"{ISLA}.sampling:pps_inclusion_probabilities",
     "draw_inputs": f"{ISLA}.sampling:draw_inputs",

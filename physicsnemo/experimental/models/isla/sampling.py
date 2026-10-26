@@ -31,7 +31,8 @@ the forward pass from the full-resolution surfaces (:func:`sample_boundary_cells
   a condition kept whole has every :math:`\pi_i = 1`.
 - **Draw.** Systematic sampling: the cells are laid along a line, each
   condition's cells in the Morton (Z-order) order of their centroids in the
-  boundary's canonical frame (``tree_read.canonical_frame`` over every cell), each
+  boundary's canonical frame (:func:`~physicsnemo.mesh.spatial._frame.canonical_frame`
+  over every cell), each
   cell an interval of length :math:`\pi_i`, and the cells hit by the points
   :math:`u + m`, :math:`m = 0, \dots, k - 1`, are kept. The intervals are
   half-open, so a hit exactly on a boundary takes the later cell. The count is exactly
@@ -64,19 +65,16 @@ the forward pass from the full-resolution surfaces (:func:`sample_boundary_cells
 Everything is tensor arithmetic without a data-dependent shape, so the draw
 traces into one graph under ``torch.compile(fullgraph=True, dynamic=True)``.
 It synchronizes with the host only in the canonical frame's 3 x 3 eigensolve
-(:func:`~physicsnemo.experimental.models.isla.tree_read.canonical_frame`).
+(:func:`~physicsnemo.mesh.spatial._frame.canonical_frame`).
 """
 
 import torch
 from jaxtyping import Float, Int
 
-from physicsnemo.experimental.models.isla.tree_read import (
-    canonical_frame,
-    frame_coordinates,
-)
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
 from physicsnemo.mesh.geometry._cell_areas import compute_cell_areas
+from physicsnemo.mesh.spatial._frame import canonical_frame, frame_coordinates
 from physicsnemo.mesh.spatial.bvh import _compute_morton_codes
 from physicsnemo.mesh.utilities._gather import gather_rows
 
