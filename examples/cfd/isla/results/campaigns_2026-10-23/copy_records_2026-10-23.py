@@ -777,6 +777,7 @@ KEPT = {
     ("hl_dup", "FINAL_REPORT.md"): "74bc30896f511fcd9513fb01eb935e9f",
     ("dtt_knobs_r5", "RESULTS.md"): "3b462f0df18edf0463d90a5cd9495a5c",
     ("dtt_knobs_a14", "RESULTS.md"): "32da0774cb5ac07aa9490b0f97063fce",
+    ("dtt_knobs_exact", "RESULTS.md"): "ad1ec340c726ec0891c50640b23c6b3c",
 }
 
 

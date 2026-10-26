@@ -391,7 +391,7 @@ print("- **The standing is of the interacting form.** ISLA-DTT, whose prediction
       f"error is {R.num(_lug['arm / control']):.2f} times the octant forest's (seeds {R.num(_lug['seed-matched'], 0):.3f} and {R.num(_lug['seed-matched'], 1):.3f}; "
       f"the retrained form is better on {float(lug_win):.0f}% of the cases), and AirfRANS pressure and eddy viscosity are "
       f"{R.num(_af['pressure_l2']['arm / control']):.2f} and {R.num(_af['nut_l2']['arm / control']):.2f} times, every seed of "
-      f"one form beyond every seed of the other, velocity {R.num(_af['velocity_l2']['arm / control']):.2f}. "
+      f"one form beyond every seed of the other, velocity {R.num(_af['velocity_l2']['arm / control']):.2f} "
       f"({R.source('dtt_pose_exp_read', 'RESULTS.md')}). ISLA-DTT is ISLA's interior form all the same, on principle (@sec-aerozoo-form).")
 ```
 
