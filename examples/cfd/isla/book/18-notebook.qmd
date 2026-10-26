@@ -43548,7 +43548,7 @@ RERUN-CONFIGS' decisions are @sec-nb-rerun-configs.
   7 splits and Transolver on `full`, two seeds each; about +2,500 GPU-h). Peter's answer at about 07:32 EDT, verbatim:
   "yes, do it". Their lanes launch after ISLA's, and their seven-field numbers go to the AeroZoo session without ISLA's.
 - **AeroZoo's canonical benchmark.** Peter's AeroZoo benchmark ruling, relayed by the AeroZoo session at about 13:49 EDT
-  (the spec at aerozoo ba5b38e8, docs/book/06-splits.qmd, @sec-canonical there): the canonical task trains, validates and
+  (the spec at aerozoo ba5b38e8, docs/book/06-splits.qmd, its section on the canonical benchmark): the canonical task trains, validates and
   tests on `mean_stable` samples only (`full` 2,011 / 290 / 515 of the released 2,713 / 386 / 716); the score over all
   complete samples is a second, labelled score; and the interior task also reports the relative L2 of velocity and pressure,
   per sample over every interior point in float64, mean and median. AZ-CANONICAL (merged 15:28 EDT as 87fb766cc) built it: a
