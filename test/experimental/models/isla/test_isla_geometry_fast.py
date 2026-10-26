@@ -251,7 +251,7 @@ def test_fast_search_equals_the_reference_bitwise(case, dtype, device, monkeypat
 
 def _fan(n: int = 96):
     """A fan of ``n`` triangles around a hub, 50 queries above the hub (``n``
-    candidates each, more than the 64 slots) and 400 elsewhere."""
+    candidates each, more than the 64 slots at the default 96) and 400 elsewhere."""
     t = torch.arange(n, dtype=D) * (2 * torch.pi / n)
     rim = torch.stack([torch.cos(t), torch.sin(t), 0 * t], -1)
     points = torch.cat([rim.new_zeros(1, 3), rim])
