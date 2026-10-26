@@ -422,6 +422,22 @@ def test_exact_near_a_translated_wall_in_float32(dim, shift):
     assert torch.allclose(u.norm(dim=-1), torch.ones_like(d), atol=1e-6)
 
 
+@pytest.mark.parametrize("kernel", ["reference", "fast"])
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+def test_half_precision_query_above_a_small_triangle(dtype, kernel):
+    """Above a triangle with edges of 1e-4, whose cross product underflows in
+    float16, the query keeps the float32 distance (to a unit of its dtype) and a unit
+    normal; before, float16 gave d = 0 and u = 0."""
+    points = torch.tensor([[0.0, 0.0, 0.0], [1e-4, 0.0, 0.0], [0.0, 1e-4, 0.0]])
+    points, cells = points.to(dtype), torch.tensor([[0, 1, 2]])
+    q = torch.tensor([[2.5e-5, 2.5e-5, 1e-3]], dtype=dtype)
+    d, u = exact_boundary_geometry(q, points, cells, kernel=kernel)
+    d32, u32 = exact_boundary_geometry(q.float(), points.float(), cells, kernel=kernel)
+    eps = torch.finfo(dtype).eps
+    assert torch.allclose(d.float(), d32, atol=0, rtol=eps)
+    assert torch.equal(u.float(), u32) and float(u.float().norm()) == 1
+
+
 @pytest.mark.parametrize("dim", [2, 3])
 def test_exact_geometry_is_differentiable(dim):
     """The gradient of d in the query is sign(d) u (the envelope theorem), and the
