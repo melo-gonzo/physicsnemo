@@ -415,6 +415,87 @@ def test_flip_boundary_orientation_does_not_sync_on_cuda():
     assert torch.equal(out.boundaries["wall"].cells, wall.cells[:, [0, 2, 1]])
 
 
+SEEDED_SUBSAMPLERS = (
+    "PrefixPlusRandomSubsampleMesh",
+    "PoissonBiasedSubsampleMesh",
+    "StratifiedSubsampleMesh",
+    "SdfBiasedSubsampleInteriorPoints",
+)
+
+
+def _seeded_draw(name: str, device: torch.device, generator) -> torch.Tensor:
+    """The points one of the recipe's seeded subsamplers keeps from a fixed input on
+    ``device``, drawn with ``generator`` (as MeshDataset.set_generator assigns it)."""
+    import domain_transforms
+
+    g = torch.Generator().manual_seed(0)
+    n = 401  # with 97 kept, the systematic draw's step is not a simple fraction
+    centers = torch.rand(n, 3, generator=g)
+    offsets = 0.01 * torch.randn(n, 3, 3, generator=g)
+    surface = Mesh(
+        points=(centers[:, None, :] + offsets).reshape(-1, 3),
+        cells=torch.arange(3 * n).reshape(n, 3),
+    ).to(device)
+    kwargs = {
+        "PrefixPlusRandomSubsampleMesh": {"n_prefix": 10, "n_cells": 97},
+        "PoissonBiasedSubsampleMesh": {
+            "n_cells_expected": 97,
+            "weight_mode": "uniform",
+        },
+        "StratifiedSubsampleMesh": {"n_cells": 97},
+        "SdfBiasedSubsampleInteriorPoints": {"n_points_expected": 97},
+    }[name]
+    transform = getattr(domain_transforms, name)(**kwargs)
+    transform._generator = generator
+    if name == "SdfBiasedSubsampleInteriorPoints":
+        interior = Mesh(
+            points=torch.rand(n, 3, generator=g),
+            point_data={"sdf": torch.rand(n, generator=g)},
+        )
+        domain = DomainMesh(interior=interior, boundaries={"vehicle": surface})
+        return transform.apply_to_domain(domain.to(device)).interior.points
+    return transform(surface).points
+
+
+@pytest.mark.parametrize("name", SEEDED_SUBSAMPLERS)
+def test_seeded_subsamplers_use_a_generator_on_their_device_and_drop_others(name):
+    """On the CPU a CPU generator drives the draw, whatever the global seed, and a
+    generator on another device (a stand-in for one on cuda:0) is dropped for the
+    global generator rather than passed to the draw."""
+    cpu = torch.device("cpu")
+    torch.manual_seed(1)
+    seeded = _seeded_draw(name, cpu, torch.Generator().manual_seed(0))
+    torch.manual_seed(2)
+    assert torch.equal(
+        seeded, _seeded_draw(name, cpu, torch.Generator().manual_seed(0))
+    )
+
+    class _OtherDeviceGenerator:
+        device = torch.device("cuda", 0)
+
+    torch.manual_seed(3)
+    dropped = _seeded_draw(name, cpu, _OtherDeviceGenerator())
+    torch.manual_seed(3)
+    assert torch.equal(dropped, _seeded_draw(name, cpu, None))
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+@pytest.mark.parametrize("name", SEEDED_SUBSAMPLERS)
+def test_seeded_subsamplers_use_an_index_less_cuda_generator(name):
+    """MeshDataset.set_generator gives these transforms torch.Generator(device="cuda"),
+    whose device has no index while the data's is cuda:N; the draw must still use it,
+    and so equal the draw of a generator on cuda:N with the same seed, not fall back
+    to the global CUDA generator."""
+    device = torch.device("cuda", torch.cuda.current_device())
+    torch.cuda.manual_seed(1)
+    index_less = _seeded_draw(
+        name, device, torch.Generator(device="cuda").manual_seed(0)
+    )
+    torch.cuda.manual_seed(2)
+    indexed = _seeded_draw(name, device, torch.Generator(device=device).manual_seed(0))
+    assert torch.equal(index_less, indexed)
+
+
 def _tunnel_case(ground: float, roof: float, lowest: float) -> DomainMesh:
     """A DrivAerML-like case: a body whose lowest point is at z = lowest, interior nodes
     from lowest to lowest + 20, and the four box meshes with their ground at z = ground

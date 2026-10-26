@@ -176,6 +176,41 @@ class TestDomainMeshReader:
         )
         dm.save(tmp_path / "dm.pdmsh")
 
+    def test_boundary_subsample_modes(self, tmp_path):
+        """``boundary_subsample`` selects which subsample(s) hit the boundaries."""
+        k = 500
+        self._save_point_cloud_with_triangulated_wall(tmp_path, 2000, 5000)
+
+        def load(mode):
+            reader = DomainMeshReader(
+                tmp_path,
+                pattern="*.pdmsh",
+                subsample_n_cells=k,
+                subsample_n_points=k,
+                boundary_subsample=mode,
+            )
+            reader.set_generator(torch.Generator().manual_seed(0))
+            return reader[0][0]
+
+        ### "both" (default): cells-then-points on a triangulated boundary keeps
+        ### only cells whose three vertices all survive the point cut, ~k/27.
+        both = load("both")
+        assert both.interior.n_points == k
+        assert both.boundaries["wall"].n_cells < 100
+
+        cells = load("cells")
+        assert cells.interior.n_points == k
+        assert cells.boundaries["wall"].n_cells == k
+
+        points = load("points")
+        assert points.interior.n_points == k
+        assert points.boundaries["wall"].n_points == k
+
+    def test_boundary_subsample_invalid(self, tmp_path):
+        self._make_domain_mesh().save(tmp_path / "dm.pdmsh")
+        with pytest.raises(ValueError, match="boundary_subsample"):
+            DomainMeshReader(tmp_path, pattern="*.pdmsh", boundary_subsample="neither")
+
     def test_interior_n_points_range(self, tmp_path):
         """Query-count augmentation: the interior count is drawn per sample
         from ``[lo, hi]``, reproducibly under ``set_epoch``; boundaries keep
@@ -218,41 +253,6 @@ class TestDomainMeshReader:
             DomainMeshReader(
                 tmp_path, pattern="*.pdmsh", interior_n_points_range=(900, 300)
             )
-
-    def test_boundary_subsample_modes(self, tmp_path):
-        """``boundary_subsample`` selects which subsample(s) hit the boundaries."""
-        k = 500
-        self._save_point_cloud_with_triangulated_wall(tmp_path, 2000, 5000)
-
-        def load(mode):
-            reader = DomainMeshReader(
-                tmp_path,
-                pattern="*.pdmsh",
-                subsample_n_cells=k,
-                subsample_n_points=k,
-                boundary_subsample=mode,
-            )
-            reader.set_generator(torch.Generator().manual_seed(0))
-            return reader[0][0]
-
-        ### "both" (default): cells-then-points on a triangulated boundary keeps
-        ### only cells whose three vertices all survive the point cut, ~k/27.
-        both = load("both")
-        assert both.interior.n_points == k
-        assert both.boundaries["wall"].n_cells < 100
-
-        cells = load("cells")
-        assert cells.interior.n_points == k
-        assert cells.boundaries["wall"].n_cells == k
-
-        points = load("points")
-        assert points.interior.n_points == k
-        assert points.boundaries["wall"].n_points == k
-
-    def test_boundary_subsample_invalid(self, tmp_path):
-        self._make_domain_mesh().save(tmp_path / "dm.pdmsh")
-        with pytest.raises(ValueError, match="boundary_subsample"):
-            DomainMeshReader(tmp_path, pattern="*.pdmsh", boundary_subsample="neither")
 
 
 class TestMeshDataset:
@@ -302,6 +302,18 @@ class TestMeshDataset:
             loaded.boundaries["wall"].points,
             torch.tensor([[2.0, 0.0, 0.0], [6.0, 0.0, 0.0]]),
         )
+
+    def test_close_closes_mesh_readers(self, tmp_path):
+        """MeshDataset.close() closes MeshReader and DomainMeshReader."""
+        two_triangles_2d.load().save(tmp_path / "m.pmsh")
+        DomainMesh(interior=Mesh(points=torch.randn(10, 3))).save(tmp_path / "dm.pdmsh")
+        for reader in (
+            MeshReader(tmp_path, pattern="*.pmsh"),
+            DomainMeshReader(tmp_path, pattern="*.pdmsh"),
+        ):
+            ds = MeshDataset(reader)
+            ds[0]
+            ds.close()
 
 
 class TestDomainMeshTransforms:

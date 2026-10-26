@@ -7428,7 +7428,7 @@ requires-dist = [
     { name = "scipy", marker = "extra == 'model-extras'", specifier = ">=1.17.1" },
     { name = "scipy", marker = "extra == 'nn-extras'", specifier = ">=1.17.1" },
     { name = "sympy", marker = "extra == 'sym'", specifier = ">=1.14.0" },
-    { name = "tensordict", extras = ["zarr"], specifier = ">=0.15.2,<0.16.0" },
+    { name = "tensordict", extras = ["zarr"], specifier = ">=0.15.3,<0.16.0" },
     { name = "termcolor", specifier = ">=3.3.0" },
     { name = "tfrecord", marker = "extra == 'datapipes-extras'", specifier = ">=1.14.6" },
     { name = "timm", specifier = ">=1.0.30" },
@@ -9626,7 +9626,7 @@ wheels = [
 
 [[package]]
 name = "tensordict"
-version = "0.15.2"
+version = "0.15.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cloudpickle" },
@@ -9637,7 +9637,7 @@ dependencies = [
     { name = "torch", version = "2.13.0+cu130", source = { registry = "https://download.pytorch.org/whl/cu130" }, marker = "extra == 'extra-18-nvidia-physicsnemo-cu13' or extra == 'extra-18-nvidia-physicsnemo-natten-cu13' or extra == 'extra-18-nvidia-physicsnemo-transformer-engine-cu13'" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d1/c7/f8d00c73aaeb3e9063aa77e15dda98665d2219d4a6001de6291f0b542f46/tensordict-0.15.2-py3-none-any.whl", hash = "sha256:de06ae274e3944fa09988810701fc7f18394bd6da30c2ecfb4d567ea2108b0d8", size = 787612, upload-time = "2026-10-19T18:34:09.992Z" },
+    { url = "https://files.pythonhosted.org/packages/48/a4/f59f44c7923ebd9a177ad9826bcf644cf06c4655cb0a798f6fdc33663c3f/tensordict-0.15.3-py3-none-any.whl", hash = "sha256:a437693bfc103d6ce1a76aa16b18c7324289986a9516c4592f15c0c86bd6ecfb", size = 852373, upload-time = "2026-10-24T15:44:35.415Z" },
 ]
 
 [package.optional-dependencies]
