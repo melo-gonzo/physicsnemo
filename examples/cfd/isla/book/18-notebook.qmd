@@ -43383,6 +43383,221 @@ pose-invariant on the lug.
 
 *Applied for the supervisor by the book lane BOOK-MORNING on 2026-10-26.*
 
+## 2026-10-26 — DTT-KNOBS closed: stage 3 declined, since the read after every second block is not adopted; R2 is a retrained-ladder test and does not test the knob-rule credit, which rests on stage 1's fixed-weight measurement (the supervisor's ruling) {#sec-nb-dtt-knobs-closed}
+
+DTT-KNOBS' final report (records results/campaigns_2026-10-23/dtt_knobs_final/: FINAL_REPORT.md, RESULTS.md md5 e47571da,
+STAGE3_PROPOSAL.md md5 67304a2c, NOTEBOOK_DRAFT_STAGE1.md md5 293fbd0b, NOTEBOOK_DRAFT_STAGE2.md md5 d1ff8d1a). Stage 1 is
+@sec-nb-dtt-knobs-stage1, the registration @sec-nb-dtt-knobs-prereg, R5 @sec-nb-dtt-knobs-r5, arms 1-4 @sec-nb-dtt-knobs-a14
+and K-EXACT with R2 and Q3 @sec-nb-dtt-knobs-exact; the stage-2 draft's results are those entries' and are not repeated here.
+
+- **The revised RESULTS.md.** It differs from the copy under dtt_knobs_exact (md5 ad1ec340, kept) only in R2's knob-rule
+  sentence (lines 168-173) and two "no rung of the theta ladder" wordings. Where ad1ec340 read that the tree read "does not
+  earn credit as a convergent approximation on AirfRANS", e47571da reads: R2 reads pure cost knob (registered gloss: the
+  approximation costs nothing at theta <= 1); its "converges" label does not apply, because retrained at theta 0.5 and at the
+  exact read no field gains past the registered 10 percent bar and pressure rises from theta 0.5 to 0; and R2, a
+  retrained-ladder test, does not test the book's knob-rule credit for pose invariance, which rests on the read's error at
+  fixed weights vanishing as theta -> 0 (stage 1: 3.9-27 percent per block at theta 1, falling with theta).
+- **The supervisor's ruling on the credit** (LANE_RULES "Knob-rule credit", 2026-10-26): ISLA-DTT's tree read earns the
+  knob-rule credit from stage 1's fixed-weight measurement; the retrained ladder does not test that credit, and the book must
+  not tie the two together.
+- **Stage 3 declined.** STAGE3_PROPOSAL.md proposed the read after every second block (K-B1) on the DrivAerML Volume task with
+  the whole boundary, two seeds against a fresh control pair, about 520 GPU-h. The supervisor declined it, since K-B1 is not
+  adopted (@sec-nb-dtt-knobs-a14).
+- **Cost.** Stage 1 21.76 GPU-h of 30, stage 2 1,311.4 of 1,450; the campaign about 1,333. Nothing is running.
+
+**For the book.** 20's @sec-oq-dtt-theta and 12's gap paragraph cite the revised RESULTS.md, and 20 states that the ladder
+prices each trained setting and does not test the pose invariance, which rests on the read's error at fixed weights
+(@sec-arch-tree-read). Two of the stage-2 draft's chapter changes not yet applied are applied: 12's scales sentence and 21's
+scales row scoped to pressure (R5, "Beside the rule"). Its other changes were superseded by BOOK-MORNING's K-EXACT text.
+
+*Applied for the supervisor by the book lane BOOK-AFTERNOON on 2026-10-26.*
+
+## 2026-10-26 — SLICES-ALL: 128 slices reads "no change" against 512 on every form tested, ISLA-DTT on AirfRANS (1.028 / 1.010 / 1.024) and the lug (0.966) and interacting ISLA on DrivAerML Surface (1.006 / 1.005), with no flag; a scope-freeze candidate by the registered rule, not adopted for the final rerun (the supervisor's decision) {#sec-nb-slices-all}
+
+**Question.** SLICES-AF and SLICES-DRV found that 128 slices cost interacting ISLA 0.9.0 nothing against 512 on AirfRANS and
+DrivAerML Volume (@sec-nb-slices-af, @sec-nb-slices-drv). ISLA-DTT, the default interior form since 2026-10-24, the
+interacting surface form and the solid-mechanics datasets had not run at 128 slices. Does 128 slices harm ISLA-DTT on AirfRANS
+or the lug, or the interacting surface form on DrivAerML Surface?
+
+**Design** (registered, PREREG md5 e0221626; amendment A1 before any AirfRANS job, md5 982bf456). Three arms, each its
+control's lane with only `n_slices` 512 -> 128 and the run name changed, on the control's 0.9.0 code, recipe, compile path,
+epochs, points, learning rate, bf16 and seeds 42 and 43: ISLA-DTT on AirfRANS, eager-trained, against r090eag_af_dtt;
+ISLA-DTT on the lug, on the fixed compiled path, against r090fix_lug_dtt; interacting ISLA on DrivAerML Surface against
+r090_dr_isla, which on 0.9.0 code reads only the vehicle. Each arm scored as its control (float32; 200 / 600 / 48 cases;
+native deciding, posed beside). Rule per field: harms if D = ln(arm ÷ control) > ln 1.10 and |D| > 2 SE; an up flag is a
+ratio above 1.03 with both arm seeds above both control seeds. Verdict: 128 slices is a candidate for every form only if
+every field of every arm reads "no change" and no up flag fires.
+
+**Result: no change on every field, no flag; candidate for every form** (records
+results/campaigns_2026-10-23/slices_all/: RESULTS.md, reading_DR.md, reading_AF.md, reading_LUG.md).
+
+| form, dataset | field | 512 slices (s42, s43) | 128 slices (s42, s43) | 128 ÷ 512 | 2 SE | label |
+|---|---|---|---|---|---|---|
+| ISLA-DTT, AirfRANS (eager) | pressure | 0.01241 (0.01243, 0.01239) | 0.01276 (0.01380, 0.01172) | 1.028 | 0.164 | no change |
+| | in-plane velocity | 0.00717 (0.00737, 0.00697) | 0.00724 (0.00806, 0.00643) | 1.010 | 0.233 | no change |
+| | eddy viscosity | 0.02060 (0.02071, 0.02048) | 0.02109 (0.02098, 0.02120) | 1.024 | 0.015 | no change |
+| ISLA-DTT, lug (fix-trained) | von Mises | 0.002027 (0.002219, 0.001834) | 0.001958 (0.002062, 0.001854) | 0.966 | 0.218 | no change |
+| interacting, DrivAerML Surface | pressure | 0.04113 (0.04116, 0.04111) | 0.04138 (0.04130, 0.04147) | 1.006 | 0.004 | no change |
+| | wall shear | 0.06622 (0.06619, 0.06625) | 0.06653 (0.06649, 0.06658) | 1.005 | 0.002 | no change |
+
+Posed reads the same labels, and so does DrivAerML Surface's area protocol. Two shifts are seed-separated but under the
+flag: DrivAerML Surface +0.5-0.6 percent on both fields and AirfRANS eddy viscosity +2.4 percent. Resolution is uneven: on
+AirfRANS pressure and velocity the 128-slice seeds spread 12-17 percent (2 SE 0.16 / 0.23), and the lug's 512-slice seeds sit
+21 percent apart (2 SE 0.22); only DrivAerML Surface and AirfRANS eddy viscosity resolve near the 10 percent bar. On the lug,
+posed ÷ native is 1.81 / 1.65 at 128 slices against 1.53 / 1.98 at 512: 0.9.0's forest is pose-dependent at either count.
+
+**Cost.** Whole-run training step, 128 ÷ 512: 0.53 for ISLA-DTT on AirfRANS, 0.63 for the surface form (0.49 in the smoke),
+0.95 for ISLA-DTT on the lug (1.04 in the smoke), whose step is dominated by work that does not scale with the slice count;
+peak memory 0.78-0.82. 429.1 of 500 GPU-h.
+
+**Predictions.** No change on every arm held; the joint verdict held; no up flag fired; the lug's step in [0.80, 0.97]
+failed in the smoke (1.04; 0.95 whole run); DrivAerML Surface's in [0.50, 0.75] failed narrowly (0.49); AirfRANS's in
+[0.40, 0.70] held.
+
+**Decision.** By the registered rule 128 slices is a scope-freeze candidate for every form tested. The supervisor's decision:
+not adopted for the final rerun, since AeroZoo is untested and accuracy comes before speed; 128 slices stays a speed setting
+for later, and the reference configuration keeps 512.
+
+**For the book.** 20's @sec-oq-slices: its In-flight callout closed, the question moved to AeroZoo and the datasets not run at
+128 slices; 09, 12 and 16 state the readings beside their configurations.
+
+*Applied for the supervisor by the book lane BOOK-AFTERNOON on 2026-10-26.*
+
+## 2026-10-26 — SLICE-NORMAL-EXP, the combined arm on DrivAerML Surface: the unnormalized mean normal with the slice-spread distance, (a)+(s), harms more than (a) alone (pressure 1.422, wall shear 1.297), so neither slice fix is a candidate {#sec-nb-slice-normal-dras}
+
+Read 07:23 EDT 2026-10-26 by the lane (records results/campaigns_2026-10-23/slice_normal_dras/: RESULTS.md section 4.2,
+reading_DRAS.md md5 2185f713, reading_MDRA.md md5 fdedf6ca; the registration, PREREG md5 4580615d, section F2, the
+supervisor's amendment A6). (a)+(s) deletes the normalization of the slice mean normal, as (a) does
+(@sec-nb-slice-normal-dra), and replaces the anchor distance |r - z_s| by sqrt(|r - z_s|^2 + sigma_s^2), sigma_s^2 the slice's
+own second moment under its first-pass routing weights. Scorer 401974, eager, native and posed, the 48 validation cases of
+the DrivAerML Surface task with the tunnel's pieces, against the same option-A control pair as (a). The arm runs the eager
+geometry region against fused controls; the measured execution difference is at the rounding level (whole model 1-2 percent
+in bfloat16, 1e-5 in float32), far below the effects.
+
+| reading | field | reference (s42, s43) | (a)+(s) (s42, s43) | ratio | 2 SE | label |
+|---|---|---|---|---|---|---|
+| registered: against the control | pressure | 0.054298, 0.050429 | 0.075845, 0.073091 | 1.422 | 0.083 | harms, flag up |
+| registered: against the control | wall shear | 0.082253, 0.078253 | 0.110592, 0.097596 | 1.297 | 0.135 | harms, flag up |
+| beside: against (a), the marginal effect of (s) | pressure | 0.064113, 0.058077 | 0.075845, 0.073091 | 1.219 | 0.106 | harms-sized, flag up |
+| beside: against (a), the marginal effect of (s) | wall shear | 0.092831, 0.087052 | 0.110592, 0.097596 | 1.157 | 0.141 | harms-sized, flag up |
+
+- (a)+(s) is worse than the control and than (a) on every one of the 48 cases, both fields; posed equals native to 1e-4.
+- **Under A6 a harm blocks: (a)+(s) is not a candidate**, and (a) was not either. Neither slice fix is a candidate.
+- The AirfRANS and lug arms run to the end for the interior reading of (s), at the supervisor's word (about 07:25 EDT). The
+  AirfRANS arms are scored in the lane's RESULTS.md (sections 4.3 and 4.4); the lug arms are training, and the lane's notebook
+  draft for both waits on them.
+
+**For the book.** 20's @sec-oq-slice-normal gives the (a)+(s) reading; its In-flight callout names the interior arms.
+
+*Applied for the supervisor by the book lane BOOK-AFTERNOON on 2026-10-26.*
+
+## 2026-10-26 — Torch 2.13 for the final rerun: one fault, a cache bypass in physicsnemo.mesh from torch's process-wide is_compiling(), fixed in #2172; the goldens hold on both torches; two issues filed upstream {#sec-nb-torch-213}
+
+**RERUN-ENV** (06:40 EDT, re-smoke 07:10; records results/campaigns_2026-10-23/rerun_env/: FINAL_REPORT.md md5 fa161f7a,
+HILIFT_213.md, GOLDENS_213.md). A torch 2.13 venv on LHR (torch 2.13.0+cu130, triton 3.7.1, warp-lang 1.17.0) for code at or
+after bf71190af. Recipe tests on a GB300: 655 passed, 6 skipped, as on 2.12. The ISLA tiers failed 36 GPU and 13 CPU tests,
+all goldens and release tests on fixture drift: torch.norm on the CPU moves by one ulp between 2.12 and 2.13, and the
+goldens' icosphere is built with it; with the sphere pinned to its 2.12 bits every test passes on 2.13. Smokes: 10 of 11
+families within the 5 percent rule (iter_time_s 2.13 ÷ 2.12 from 0.939 to 1.030, peak memory equal, first losses agreeing to
+3-4 digits). HiLift raised "Cannot transform nonzero effective measure on a zero-measure cell" at steps 15-17 on 2.13.
+Mechanism: torch 2.13 holds `torch.compiler._is_compiling_flag` for a whole compile session, so `is_compiling()` reads True
+in the datapipe's threads while training compiles, and #2172's `Mesh._cached` then drops the geometry cache; about 7,000
+sliver cells per rank and epoch whose float32 vertices collapse lose the cached area that 2.12 carries. The fix,
+`is_dynamo_compiling()` in `_cached` and `set_cell_measures` with two tests, went into #2172 (head 0d968ef46), merged into
+psharpe/isla as 9eb786e20. Re-smoked there: HiLift clean in 3 of 3 runs, iter_time_s 1.008 times 2.12's (0.985 to 1.054).
+17.40 of 17.7 GPU-h.
+
+**COMPILE-FLAG** (07:03 EDT, read-only; records results/campaigns_2026-10-23/compile_flag/FINDINGS.md md5 ab8c1b70). In the
+rerun only the training thread compiles; the datapipe's threads reach the 33 guards of physicsnemo.mesh, none in ISLA's
+geometry. The one P0 is `Mesh._cached` (the HiLift crash, and sliver measures silently zeroed by the zero-area check's skip
+where it does not crash), which #2172's fix removes; what is left in loader threads during compiles is skipped validation and
+tensordict details. Torch's session flag (pytorch/pytorch#184614) is intended; its reach into other threads looks
+unintended, and a compile overlapping a non-strict torch.export in another thread leaves it stuck for the process. The fix
+pattern: `is_dynamo_compiling()` in one helper, with `is_exporting()` where export must work.
+
+**#2176 and #2172.** The fork's thread-correct tracing check (`utils/_tracing.py`, `is_tracing()`) in physicsnemo.mesh's
+guards, #2176, merged into psharpe/isla ahead of its merge as e89e77180, then folded into #2172 at Peter's word, and #2176
+closed; #2172's folded head 2339be9e1 merged as d8a0ca6a0. Read with gh at 15:44 EDT: #2172 open and approved, head 8b9d7c77c
+(2339be9e1 plus a merge of upstream main); #2176 closed, not merged.
+
+**GOLDEN-213** (07:42 EDT, merged 07:45 as a5298092a; records results/campaigns_2026-10-23/golden_213/FINAL_REPORT.md md5
+27728a41). The goldens' icosphere from correctly rounded operations: the icosahedron's unnormalized vertices, a fixed-order
+norm, the library's linear subdivision and a fixed-order projection. 11 of 90 golden cases regenerated, exactly the
+sphere-wall cases that failed on 2.13; the other 79 bitwise; the .mdlus files md5-identical. Tiers, no failure on either
+torch: 2.12 GB300 1,304 passed and CPU 758 passed, 530 skipped; 2.13 GB300 1,298 passed and 6 skipped (the positive controls
+of pytorch#195845, whose mix-order kernel Inductor 2.13 does not build) and CPU 758 / 530; one strict xfail each.
+
+**Filed upstream at Peter's word**, from his account by the fork: pytorch/pytorch#202042 ("torch.compiler.is_compiling()
+returns True in every thread while any thread compiles (regression in 2.13 from #184614)") and NVIDIA/warp#2161 ("CUDA LBVH
+builds deep trees on mixed-scale meshes because many primitives share one 30-bit Morton code"); both open at 15:44 EDT.
+
+**Consequence.** Torch 2.13 is the final rerun's environment, with #2172's fix and the goldens' fixture in psharpe/isla
+(@sec-nb-final-rerun-plan).
+
+**For the book.** 06 gives the test tiers on both torches and the goldens' size from the directory.
+
+*Applied for the supervisor by the book lane BOOK-AFTERNOON on 2026-10-26.*
+
+## 2026-10-26 — The final rerun's plan, as decided: every AeroZoo model on seven fields and on AeroZoo's canonical benchmark, AeroZoo on JHB and the rest on LHR, torch 2.13, 512 slices; about 4,524 GPU-h {#sec-nb-final-rerun-plan}
+
+Records results/campaigns_2026-10-23/final_rerun_plan/ (SUPERVISOR_DECISIONS.md md5 122e3aab, price/PRICE.md md5 9685bea9,
+price/price_canonical.tsv) and results/campaigns_2026-10-23/az_canonical/ (FINAL_REPORT.md md5 84d63598, CONSTANT_CHANGES.md).
+RERUN-CONFIGS' decisions are @sec-nb-rerun-configs.
+
+- **Seven fields.** Asked at 02:47 EDT whether the AeroZoo baselines retrain on the spec's seven fields (GeoTransolver on the
+  7 splits and Transolver on `full`, two seeds each; about +2,500 GPU-h). Peter's answer at about 07:32 EDT, verbatim:
+  "yes, do it". Their lanes launch after ISLA's, and their seven-field numbers go to the AeroZoo session without ISLA's.
+- **AeroZoo's canonical benchmark.** Peter's AeroZoo benchmark ruling, relayed by the AeroZoo session at about 13:49 EDT
+  (the spec at aerozoo ba5b38e8, docs/book/06-splits.qmd, @sec-canonical there): the canonical task trains, validates and
+  tests on `mean_stable` samples only (`full` 2,011 / 290 / 515 of the released 2,713 / 386 / 716); the score over all
+  complete samples is a second, labelled score; and the interior task also reports the relative L2 of velocity and pressure,
+  per sample over every interior point in float64, mean and median. AZ-CANONICAL (merged 15:28 EDT as 87fb766cc) built it: a
+  dataset file's `sample_filter` keeps each split part's `mean_stable` cases, equal to the spec on all 21 split parts, the
+  label read outside the transform chain; every constant refit on the `mean_stable` training cases (the supervisor's
+  decision; the largest change, the turbulent kinetic energy scale, 38 percent); 250 epochs kept (the supervisor's); 3,434 of
+  3,434 leaves bitwise with the old constants, and every column the refit moves an exact affine map by its constant; the
+  scorer writes the canonical and the labelled all-complete score with r_U and r_p beside epsilon, and reproduces AZ-RESCORE
+  bitwise.
+- **Price.** Re-priced at 15:01 EDT for the canonical task: 4,524 GPU-h for the 48 lanes, against 5,658 before; AeroZoo's 30
+  lanes 3,598, ISLA's 32 lanes with certification and smokes 2,634, the 16 AeroZoo baseline lanes 1,890; longest lane 35 h; 10
+  nodes finish in 5.5 days.
+- **Placement C.** Peter's answer at about 09:33 EDT to copying the shuffled AeroZoo dataset (1.48 TB, 794,452 files) from
+  AGA to JHB before AGA closes on 2026-10-30, verbatim: "yes". AZ-COPY-JHB copied it in 2 h 30 min, every file sha256-checked
+  against LHR's list, read-only; JHB smokes put JHB's own ISLA-DTT penalty at about 4 percent. The supervisor's decision:
+  AeroZoo's 30 lanes, ISLA and baselines together, on JHB, the other 18 on LHR; speed and cost figures in the book come from
+  LHR runs only.
+- **Torch 2.13** is the rerun's environment (@sec-nb-torch-213).
+- **128 slices** is not adopted (the supervisor's decision; @sec-nb-slices-all).
+
+**For the book.** 07 and 13 state that the recipe's AeroZoo files keep the `mean_stable` cases with their constants fitted
+there, and that the standing's models trained on five fields and every complete case; 20's @sec-oq-aerozoo-fields states the
+decided protocol and leaves the open-questions table.
+
+*Applied for the supervisor by the book lane BOOK-AFTERNOON on 2026-10-26.*
+
+## 2026-10-26 — ASSEMBLY-014: ISLA 0.14.0 staged, with DTT-POSE's forest ported (A1.4 passes), the dead biases removed and seeded test fills keyed by name; the version commit waits on AF-CAMPAIGN's read and Peter {#sec-nb-assembly-014}
+
+Hand-over 11:15 EDT (records results/campaigns_2026-10-23/assembly_014/FINAL_REPORT.md md5 60d7c0e2). psharpe/isla-014, head
+121b78578 on psharpe/isla e89e77180, pushed, not merged.
+
+- **The forest.** DTT-POSE's D1-D5, the forest as a function of the boundary alone (@sec-nb-dtt-pose-exp), ported without its
+  version bump. A1.4 passes: the port is bitwise DTT-POSE on 23 fields of the 96 check captures (pair lists, boxes, measures,
+  separation diameters, face classes, frame, origin), fast Warp and reference paths, torch 2.12 and 2.13.
+- **Guards.** The fast build checks its node count, and the fast walk the node boxes' entries, against Warp's limits; both new
+  tests fail before and pass after.
+- **Cleanup.** The two dead `geo_logit` biases removed; seeded test fills keyed by parameter name, so a parameter change moves
+  only its own values (the supervisor's decision); `k_proj` joins the routing exemption by measurement.
+- **Tiers on 121b78578.** Torch 2.12: GB300 1,324 passed, CPU 775 passed, 533 skipped. Torch 2.13: GB300 1,318 passed, 6
+  skipped (the mix-order positive controls), CPU the same as 2.12. One strict xfail each. Smokes on 2.13, head ÷ base
+  iter_time_s, pass on all nine families. 12.00 of 40 GPU-h.
+- **The version commit** (0.14.0, `_version` 14, refusing 0.7.0 to 0.13.0) waits on AF-CAMPAIGN's read, now due about
+  2026-10-28, and Peter's word.
+
+**For the book.** No chapter changes: the chapters describe the merged class, and their In-flight callouts already name the
+forest's training at the reference configuration on the 0.14.0 code.
+
+*Applied for the supervisor by the book lane BOOK-AFTERNOON on 2026-10-26.*
+
 ## 2026-10-22 — MECH-090: on Tensile2d the fixed compiled path's float32 gradients sit at a one-ulp eager floor, and pytorch/pytorch#195845 added a unit-dependent sink to ISLA's slice-state softmax (registered emulations not confirmed; a post-smoke emulation matches) {#sec-nb-mech090}
 
 **Question.** REF-090's Tensile2d control (@sec-nb-ref090-t2d-control) read (b) by its registered weighing, in which A2
