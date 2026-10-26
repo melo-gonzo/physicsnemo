@@ -1,3 +1,19 @@
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """FORCEREF (2026-09-26): integrated force coefficients on the 200,000-cell DrivAerML Surface checkpoints.
 
 Runs on the cluster under the code_ref snapshot (PYTHONPATH=code_ref:recipe_globin/src). Two force references,
@@ -37,7 +53,9 @@ DATA_ROOT = Path("/home/psharpe/coreai_modulus_cae/datasets/PhysicsNeMo-DrivaerM
 UP = torch.tensor([0.0, 0.0, 1.0], dtype=torch.float64)
 
 
-def coefficients(mesh: Mesh, p: torch.Tensor, tau: torch.Tensor, gd: TensorDict) -> dict:
+def coefficients(
+    mesh: Mesh, p: torch.Tensor, tau: torch.Tensor, gd: TensorDict
+) -> dict:
     """Force coefficients (A_ref = 1) from per-cell physical pressure and wall shear stress."""
     U = gd["U_inf"].double().reshape(3)
     rho = gd["rho_inf"].double()
@@ -52,8 +70,11 @@ def coefficients(mesh: Mesh, p: torch.Tensor, tau: torch.Tensor, gd: TensorDict)
     F_p = (-cp[:, None] * n * mu[:, None]).sum(0)
     drag, lift, side = build_axis_frame(U, UP)
     out = {
-        "CD": float(F @ drag), "CL": float(F @ lift), "CS": float(F @ side),
-        "CD_pressure": float(F_p @ drag), "CL_pressure": float(F_p @ lift),
+        "CD": float(F @ drag),
+        "CL": float(F @ lift),
+        "CS": float(F @ side),
+        "CD_pressure": float(F_p @ drag),
+        "CL_pressure": float(F_p @ lift),
         "n_cells": int(mesh.n_cells),
         "area_represented": float(mu.sum()),
         "area_geometric": float(mesh.cell_areas.double().sum()),
@@ -64,12 +85,14 @@ def coefficients(mesh: Mesh, p: torch.Tensor, tau: torch.Tensor, gd: TensorDict)
 
 
 def case_of(sample_id: str) -> str:
+    """The DrivAerML case name (run_<n>) inside a sample id."""
     m = re.search(r"(run_\d+)", sample_id)
     assert m, sample_id
     return m.group(1)
 
 
 def truth_full(case: str) -> dict:
+    """Force coefficients of the ground truth on all vehicle cells of the full validation mesh."""
     root = DATA_ROOT / case / f"domain_{case}.pdmsh" / "_tensordict"
     with read_only_memory_maps():
         vehicle = Mesh.load(root / "boundaries" / "vehicle")
@@ -83,6 +106,7 @@ def truth_full(case: str) -> dict:
 
 
 def main() -> None:
+    """Integrate every run's predictions and the full-mesh truths; write forceref_cases.json."""
     T = Path(sys.argv[1])
     runs = sys.argv[2:]
     out_path = T / "forceref" / "forceref_cases.json"
@@ -108,21 +132,34 @@ def main() -> None:
             gd = domain.global_data
             entry = {
                 "sample_id": sample_id,
-                "pred": coefficients(vehicle, pdat["pred_pressure"], pdat["pred_wss"], gd),
-                "truth_sampled": coefficients(vehicle, pdat["true_pressure"], pdat["true_wss"], gd),
+                "pred": coefficients(
+                    vehicle, pdat["pred_pressure"], pdat["pred_wss"], gd
+                ),
+                "truth_sampled": coefficients(
+                    vehicle, pdat["true_pressure"], pdat["true_wss"], gd
+                ),
                 "recipe_forces": recipe.get(sample_id),
             }
             cases[case_of(sample_id)] = entry
-            print(f"[{run}] {sample_id}: CD pred {entry['pred']['CD']:.4f} true_sampled {entry['truth_sampled']['CD']:.4f}"
-                  f" recipe {recipe.get(sample_id, {}).get('true', {}).get('CD')} ({time.time() - t0:.1f}s)", flush=True)
+            print(
+                f"[{run}] {sample_id}: CD pred {entry['pred']['CD']:.4f} true_sampled {entry['truth_sampled']['CD']:.4f}"
+                f" recipe {recipe.get(sample_id, {}).get('true', {}).get('CD')} ({time.time() - t0:.1f}s)",
+                flush=True,
+            )
         result["runs"][run] = cases
 
-    all_cases = sorted({c for cases in result["runs"].values() for c in cases}, key=lambda s: int(s.split("_")[1]))
+    all_cases = sorted(
+        {c for cases in result["runs"].values() for c in cases},
+        key=lambda s: int(s.split("_")[1]),
+    )
     for case in all_cases:
         t0 = time.time()
         result["truth_full"][case] = truth_full(case)
         tf = result["truth_full"][case]
-        print(f"[full] {case}: CD {tf['CD']:.4f} CL {tf['CL']:.4f} n_cells {tf['n_cells']} area {tf['area_geometric']:.3f} ({time.time() - t0:.1f}s)", flush=True)
+        print(
+            f"[full] {case}: CD {tf['CD']:.4f} CL {tf['CL']:.4f} n_cells {tf['n_cells']} area {tf['area_geometric']:.3f} ({time.time() - t0:.1f}s)",
+            flush=True,
+        )
         out_path.write_text(json.dumps(result, indent=1))
     out_path.write_text(json.dumps(result, indent=1))
     print("wrote", out_path)
