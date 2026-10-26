@@ -249,13 +249,9 @@ def test_fast_search_equals_the_reference_bitwise(case, dtype, device, monkeypat
         ), name
 
 
-@pytest.mark.parametrize("kernel", ["reference", "fast"])
-def test_ball_search_in_blocks_of_rows_equals_one_launch(kernel, monkeypatch):
-    """The ball search launched over blocks of a few query rows, as it is from 2**25 =
-    33,554,432 queries on (Warp refuses 2**31 candidate slots), gives every output of
-    one launch bitwise, its second pass included: a fan of 96 cells, 50 queries above
-    its hub (96 candidates each, more than the 64 slots) and 400 elsewhere."""
-    n = 96
+def _fan(n: int = 96):
+    """A fan of ``n`` triangles around a hub, 50 queries above the hub (``n``
+    candidates each, more than the 64 slots at the default 96) and 400 elsewhere."""
     t = torch.arange(n, dtype=D) * (2 * torch.pi / n)
     rim = torch.stack([torch.cos(t), torch.sin(t), 0 * t], -1)
     points = torch.cat([rim.new_zeros(1, 3), rim])
@@ -264,6 +260,17 @@ def test_ball_search_in_blocks_of_rows_equals_one_launch(kernel, monkeypatch):
     g = torch.Generator().manual_seed(0)
     hub = torch.linspace(0.01, 0.5, 50, dtype=D)[:, None] * torch.tensor([0.0, 0, 1])
     q = torch.cat([hub, torch.rand(400, 3, dtype=D, generator=g) * 3 - 1.5])
+    return q, points, cells
+
+
+@pytest.mark.parametrize("kernel", ["reference", "fast"])
+def test_ball_search_in_blocks_of_rows_equals_one_launch(kernel, monkeypatch):
+    """The ball search launched over blocks of a few query rows, as it is from 2**25 =
+    33,554,432 queries on (Warp refuses 2**31 candidate slots), gives every output of
+    one launch bitwise, its second pass included: a fan of 96 cells, 50 queries above
+    its hub (96 candidates each, more than the 64 slots; 1,600 extra candidates fill
+    the overflow list of 450) and 400 elsewhere."""
+    q, points, cells = _fan()
     one = _run(kernel, q, points, cells, monkeypatch)
     caps, launch = [], geometry.wp.launch
 
@@ -280,6 +287,58 @@ def test_ball_search_in_blocks_of_rows_equals_one_launch(kernel, monkeypatch):
     assert caps == [(64, 64)] * 7 + [(64, 2), (96, 42), (96, 8)]
     for a, b in zip(one, blocks):
         assert torch.equal(a, b)
+
+
+@pytest.mark.parametrize("device", _DEVICES)
+@pytest.mark.parametrize("kernel", ["reference", "fast"])
+@pytest.mark.parametrize("case", ["list", "fallback"])
+def test_ball_search_overflow_list_and_its_fallback_equal_the_default_slots(
+    case, kernel, device, monkeypatch
+):
+    """With two candidate slots per query, the candidates past them go to the
+    overflow list (``list``: a sphere's queries, whose few extra candidates fit in
+    it, so one launch) or, when it is full, to a second pass (``fallback``: a fan's
+    hub queries, 94 extra candidates each, against a list of 450 entries); every
+    output is bitwise that of the default 64 slots, the winding number of the
+    reference's first pass (:func:`_ball_winding_kernel`) included."""
+    if case == "list":
+        q, sphere = _near_wall(3, 400, 15, band=0.5), _sphere(2)
+        points, cells = sphere.points, sphere.cells
+    else:
+        q, points, cells = _fan()
+    q, points, cells = q.to(device), points.to(device), cells.to(device)
+    default = _run(kernel, q, points, cells, monkeypatch)
+    caps, pairs = [], []
+    launch, ball = geometry.wp.launch, geometry._ball_candidates
+
+    def spy(k, dim, *args, **kwargs):
+        if k in (geometry._ball_candidates_kernel, geometry._ball_winding_kernel):
+            caps.append(kwargs["inputs"][14])
+        return launch(k, dim, *args, **kwargs)
+
+    def spy_ball(*args, **kwargs):
+        pairs.append(ball(*args, **kwargs))
+        return pairs[-1]
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(geometry, "_BALL_SLOTS", 2)
+        mp.setattr(geometry.wp, "launch", spy)
+        mp.setattr(geometry, "_ball_candidates", spy_ball)
+        two = _run(kernel, q, points, cells, monkeypatch)
+    per_query = torch.bincount(pairs[0][0], minlength=q.shape[0])
+    extra = int((per_query - 2).clamp_min(0).sum())
+    assert extra > 0
+    if case == "list":
+        assert extra <= q.shape[0] and caps == [2]
+    else:
+        assert extra > q.shape[0] and caps == [2, int(per_query.max())]
+    for a, b in zip(default, two):
+        assert a.dtype == b.dtype
+        assert (
+            torch.equal(a.view(torch.uint8), b.view(torch.uint8))
+            if a.is_floating_point()
+            else torch.equal(a, b)
+        )
 
 
 @pytest.mark.cuda

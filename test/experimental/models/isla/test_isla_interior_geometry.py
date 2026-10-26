@@ -422,6 +422,22 @@ def test_exact_near_a_translated_wall_in_float32(dim, shift):
     assert torch.allclose(u.norm(dim=-1), torch.ones_like(d), atol=1e-6)
 
 
+@pytest.mark.parametrize("kernel", ["reference", "fast"])
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
+def test_half_precision_query_above_a_small_triangle(dtype, kernel):
+    """Above a triangle with edges of 1e-4, whose cross product underflows in
+    float16, the query keeps the float32 distance (to a unit of its dtype) and a unit
+    normal; before, float16 gave d = 0 and u = 0."""
+    points = torch.tensor([[0.0, 0.0, 0.0], [1e-4, 0.0, 0.0], [0.0, 1e-4, 0.0]])
+    points, cells = points.to(dtype), torch.tensor([[0, 1, 2]])
+    q = torch.tensor([[2.5e-5, 2.5e-5, 1e-3]], dtype=dtype)
+    d, u = exact_boundary_geometry(q, points, cells, kernel=kernel)
+    d32, u32 = exact_boundary_geometry(q.float(), points.float(), cells, kernel=kernel)
+    eps = torch.finfo(dtype).eps
+    assert torch.allclose(d.float(), d32, atol=0, rtol=eps)
+    assert torch.equal(u.float(), u32) and float(u.float().norm()) == 1
+
+
 @pytest.mark.parametrize("dim", [2, 3])
 def test_exact_geometry_is_differentiable(dim):
     """The gradient of d in the query is sign(d) u (the envelope theorem), and the
@@ -457,6 +473,32 @@ def test_exact_geometry_refuses_other_dimensions():
     mesh = soup(pts, nrm)
     with pytest.raises(NotImplementedError, match="two and three dimensions"):
         exact_boundary_geometry(pts, mesh.points, mesh.cells)
+
+
+@pytest.mark.parametrize("kernel", ["reference", "fast"])
+@pytest.mark.parametrize("dim", [2, 3])
+def test_exact_geometry_refuses_a_boundary_with_no_cells(dim, kernel):
+    """No cells, no surface: a ValueError up front (before, an IndexError or a
+    division by zero deep in the search)."""
+    mesh = _circle(8) if dim == 2 else _sphere(0)
+    with pytest.raises(ValueError, match="no cells"):
+        exact_boundary_geometry(
+            torch.zeros(4, dim, dtype=D), mesh.points, mesh.cells[:0], kernel=kernel
+        )
+
+
+@pytest.mark.parametrize("kernel", ["reference", "fast"])
+@pytest.mark.parametrize("dim", [2, 3])
+def test_no_queries_give_empty_outputs(dim, kernel):
+    """Zero queries give empty d and u in the queries' dtype, with a gradient path
+    to the queries (before, the 2-D brute force had no chunk to concatenate)."""
+    mesh = _circle(8) if dim == 2 else _sphere(0)
+    q = torch.zeros(0, dim, dtype=torch.float32, requires_grad=True)
+    d, u = exact_boundary_geometry(q, mesh.points.float(), mesh.cells, kernel=kernel)
+    assert d.shape == (0,) and u.shape == (0, dim)
+    assert d.dtype == u.dtype == q.dtype
+    (d.sum() + u.sum()).backward()
+    assert q.grad.shape == q.shape
 
 
 # ---------------------------------------------------------------------------
@@ -1132,23 +1174,12 @@ def test_float32_points_within_the_bound_are_on_the_wall(surface):
     assert torch.equal(d3, d) and torch.equal(u3, u)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Known defect (found 2026-10-24 when #2148 changed torus.load's winding): at a "
-    "quad's diagonal, where its two triangles' normals agree to rounding (a torus quad is "
-    "planar), the on-wall u is not a function of the input mesh alone: renumbering moves it "
-    "at 51 of the 1152 diagonal midpoints of the 48 x 24 torus, by up to 1.79e-6, and on "
-    "the split torus u from float32 inputs differs from u from float64 copies at 5 of the 35 "
-    "on-wall diagonal midpoints, by up to 1.61e-6. Remove this marker once the geometry is fixed.",
-)
-@pytest.mark.parametrize("case", ["renumbering", "precision"])
-def test_on_wall_direction_at_quad_diagonals(case):
-    """At the midpoints of the torus's quad diagonals (the edge each quad's two
-    triangles share, which near-duplicate normals meet across) in a generic pose,
-    the on-wall u is bitwise invariant to renumbering the vertices and reordering
-    the cells (``renumbering``, the 48 x 24 torus), and from float32 inputs it is
-    bitwise u from float64 copies after the cast (``precision``, the split torus of
-    test_on_wall_direction_is_a_function_of_the_input_mesh)."""
+def _quad_diagonals(case: str):
+    """Float32 queries at the midpoints of a posed torus's quad diagonals (the edge
+    each quad's two triangles share, which near-duplicate normals meet across), the
+    torus's points and its cells: the 48 x 24 torus (``renumbering``), or the split
+    torus of test_on_wall_direction_is_a_function_of_the_input_mesh
+    (``precision``)."""
     if case == "renumbering":
         m = torus.load(n_major=48, n_minor=24)
         pts = (m.points.double() @ orthogonal(3, 7).T).float()
@@ -1163,18 +1194,32 @@ def test_on_wall_direction_at_quad_diagonals(case):
     n_quads = m.n_cells // 2
     a, b = m.cells[:n_quads], m.cells[n_quads:]
     shared = (a[:, :, None] == b[:, None, :]).any(-1)
-    q = pts[a[shared].view(n_quads, 2)].mean(1)
-    d, u = exact_boundary_geometry(q, pts, m.cells)
+    return pts[a[shared].view(n_quads, 2)].mean(1), pts, m.cells
+
+
+@pytest.mark.parametrize("case", ["renumbering", "precision"])
+def test_on_wall_direction_at_quad_diagonals(case):
+    """At the midpoints of the torus's quad diagonals in a generic pose
+    (:func:`_quad_diagonals`), the on-wall u is bitwise invariant to renumbering the
+    vertices and reordering the cells (``renumbering``), and from float32 inputs it
+    is bitwise u from float64 copies after the cast (``precision``). A quad is
+    planar, so its two triangles' normals agree to rounding and are not certified
+    distinct: taking one of them made u depend on the cells' order (at 51 of the
+    1152 midpoints, by up to 1.79e-6) and, through the certificate, on the queries'
+    precision (at 5 of the 35 on-wall midpoints of the split torus, by up to
+    1.61e-6)."""
+    q, pts, cells = _quad_diagonals(case)
+    d, u = exact_boundary_geometry(q, pts, cells)
     if case == "renumbering":
         g = torch.Generator().manual_seed(0)
         perm = torch.randperm(pts.shape[0], generator=g)
         inv = torch.empty_like(perm)
         inv[perm] = torch.arange(pts.shape[0])
-        cells = inv[m.cells][torch.randperm(m.n_cells, generator=g)].roll(1, -1)
+        cells = inv[cells][torch.randperm(cells.shape[0], generator=g)].roll(1, -1)
         d3, u3 = exact_boundary_geometry(q, pts[perm], cells)
         assert torch.equal(d3, d) and torch.equal(u3, u)
     else:
-        d64, u64 = exact_boundary_geometry(q.double(), pts.double(), m.cells)
+        d64, u64 = exact_boundary_geometry(q.double(), pts.double(), cells)
         wall = (d == 0) & (d64 == 0)
         assert wall.any()
         assert torch.equal(u[wall], u64[wall].float())
@@ -1303,6 +1348,43 @@ def test_least_norm_point_without_a_certified_candidate(k, dim):
     assert torch.equal(x.norm(dim=-1) == 0, exact.norm(dim=-1) == 0)
     gap = (x * x).sum(-1) - (c * x[:, None]).sum(-1).amin(-1)
     assert ((x - exact).norm(dim=-1) <= (2 * gap.clamp_min(0)).sqrt() + 1e-12).all()
+
+
+### (68 s on a shared, loaded CPU; the library's copy took 24 s: the single pass's
+### 166,650 subsets times 100 directions, and the chunked pass's 167 chunks per row)
+@pytest.mark.slow
+def test_least_norm_point_of_many_directions_in_chunks(monkeypatch):
+    """A hub vertex of hundreds of cells whose normals differ by rounding ties them
+    all: K directions give C(K, 3) triples, each compared with all K, more than one
+    pass holds. Rows of K = 100 unit directions (a cap, the same read from float32,
+    one spread by rounding only, and a sphere, around the origin) are taken one at a
+    time over chunks of their subsets, each chunk within the budget, and give
+    bitwise the single pass's result."""
+    g = torch.Generator().manual_seed(9)
+    rows = []
+    for spread, f32 in ((1e-3, False), (1e-3, True), (1e-7, False), (3.0, False)):
+        c = torch.tensor([0.0, 0.0, 1.0], dtype=D) + spread * torch.randn(
+            100, 3, dtype=D, generator=g
+        )
+        c = torch.nn.functional.normalize(c, dim=-1)
+        rows.append(torch.unique(c.float().double() if f32 else c, dim=0))
+    c = torch.stack(rows)
+    assert c.shape == (4, 100, 3)
+    monkeypatch.setattr(geometry, "_SEARCH_PAIRS", 2**40)
+    single = torch.cat([geometry._min_norm_points(row[None]) for row in c])
+    budget = 1000 * 100
+    monkeypatch.setattr(geometry, "_SEARCH_PAIRS", 8 * budget)
+    sizes, candidates = [], geometry._hull_candidates
+
+    def spy(cc, subsets):
+        sizes.append(cc.shape[0] * sum(s.shape[0] for s in subsets) * cc.shape[1])
+        return candidates(cc, subsets)
+
+    monkeypatch.setattr(geometry, "_hull_candidates", spy)
+    chunked = geometry._min_norm_points(c)
+    assert len(sizes) > 4 and max(sizes) <= budget
+    assert torch.equal(chunked.view(torch.int64), single.view(torch.int64))
+    assert (chunked[3] == 0).all() and (chunked[:3].norm(dim=-1) > 0.9).all()
 
 
 @pytest.mark.cuda

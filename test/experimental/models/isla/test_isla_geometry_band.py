@@ -18,9 +18,11 @@
 
 The bound's arithmetic share is a worst case of the float64 pair distance in the
 boundary's centred frame, and its storage share the rounding of the coordinates as
-given: far from the origin the distance keeps the queries' relative precision, a
-posed planar star is not a tie, the derived share holds against exact rational
-distances, the outputs do not depend on the numbering, and the fast search gives
+given: far from the origin the distance keeps the queries' relative precision, on
+a posed planar star u is the plane's normal, near-equal directions off the surface
+tie only where certified distinct, the derived share holds against exact rational
+distances, the outputs do not depend on the numbering (exact distance ties
+included) nor, on the surface, on the queries' precision, and the fast search gives
 the reference's outputs bitwise.
 """
 
@@ -36,6 +38,7 @@ from physicsnemo.mesh.primitives.surfaces import sphere_icosahedral
 from test.experimental.models.isla._geometry_cases import _exact_d2
 from test.experimental.models.isla._marks import requires_cuda
 from test.experimental.models.isla._meshes import orthogonal
+from test.experimental.models.isla.test_isla_interior_geometry import _quad_diagonals
 
 D = torch.float64
 U32, U64 = 2.0**-24, 2.0**-53
@@ -113,19 +116,45 @@ def _star(posed: bool):
 
 @pytest.mark.parametrize("device", _DEVICES)
 @pytest.mark.parametrize("posed", [False, True])
-def test_a_posed_planar_star_is_not_a_tie(posed, device):
+def test_on_a_planar_star_u_is_the_plane_s_normal(posed, device):
     """At the centre and on the spokes of a planar star stored in float32 the
-    query is on the surface and untied in either pose, u the plane's normal: the
-    cells' float64 normals differ there only by the rounding of the stored
-    vertices, which the certified test does not count as distinct directions."""
+    query is on the surface in either pose, d = 0 and u the plane's normal to
+    float32 rounding: the cells' float64 normals differ there only by the rounding
+    of the stored vertices, so their least-norm point is within it too."""
     q, p, c, n = _star(posed)
     q, p, c = q.to(device), p.to(device), c.to(device)
-    _, tied, _, _, on_wall, _ = _search(q, p, c)
+    _, _, _, _, on_wall, _ = _search(q, p, c)
     assert bool(on_wall.all())
-    assert not bool(tied.any()), f"{int(tied.sum())} of {q.shape[0]} queries tied"
     d, u = exact_boundary_geometry(q, p, c)
     assert bool((d == 0).all())
     assert float((u.cpu().double() - n).norm(dim=-1).max()) <= 4 * U32
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, D])
+def test_near_equal_directions_off_the_surface_tie_only_where_certified(dtype):
+    """A valley of two triangles folded by 2a (a = 2^-17) along the x axis, queried
+    1e-3 above its fold: each triangle's closest point is interior to it, at the
+    same distance, and the directions are their normals, 1.5e-5 apart. In float32
+    that is within their certified bounds (the storage rounding over the distance,
+    about 1e-4), so the query is not tied and u is one of the normals; in float64
+    they are certified distinct, so it is tied and u their least-norm point."""
+    a = 2.0**-17
+    p = torch.tensor(
+        [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.5, -1.0, a], [0.5, 1.0, a]], dtype=dtype
+    )
+    c = torch.tensor([[0, 2, 1], [0, 1, 3]])
+    x = torch.linspace(0.3, 0.7, 9, dtype=D)
+    q = torch.stack([x, 0 * x, 0 * x + 1e-3], -1).to(dtype)
+    _, tied, _, _, on_wall, _ = _search(q, p, c)
+    _, u = exact_boundary_geometry(q, p, c)
+    assert not bool(on_wall.any())
+    u = u.double()
+    if dtype == torch.float32:
+        assert not bool(tied.any())
+        assert torch.allclose(u[:, 1].abs(), torch.full_like(u[:, 1], a), rtol=1e-6)
+    else:
+        assert bool(tied.all())
+        assert float(u[:, 1].abs().max()) <= 1e-12
 
 
 def _thin(g, n, rho):
@@ -251,6 +280,80 @@ def test_the_outputs_do_not_depend_on_the_numbering(device):
     assert torch.equal(d, d2) and torch.equal(u, u2)
 
 
+def _renumbered(p, c, seed: int = 0):
+    """The surface with its vertices and its cells permuted, each triangle's vertex
+    list rotated (a segment's order is kept: reversing it flips its normal)."""
+    g = torch.Generator().manual_seed(seed)
+    perm = torch.randperm(p.shape[0], generator=g)
+    inv = torch.empty_like(perm)
+    inv[perm] = torch.arange(p.shape[0])
+    c2 = inv[c][torch.randperm(c.shape[0], generator=g)]
+    return p[perm], c2.roll(1, -1) if c.shape[1] == 3 else c2
+
+
+def _ellipse():
+    """A float32 polyline of 4000 segments on an ellipse of semi-axes 1 and 0.12,
+    posed, and its vertices: on its flat sides consecutive normals are about 2e-4
+    apart, segments about 1.6e-3 long against a storage rounding of about 5e-8,
+    so many are not certified distinct in float32 (taking one of them, renumbering moved u at
+    528 of the 4000 vertices, by up to 6e-4, and float32 u differed from float64's
+    at 1044, by up to 3e-4; with 3000 segments every pair is certified)."""
+    n = 4000
+    t = torch.arange(n, dtype=D) * 2 * torch.pi / n
+    p = torch.stack([torch.cos(t), 0.12 * torch.sin(t)], -1)
+    p = (p @ orthogonal(2, 7).T + torch.tensor([0.3, 0.7], dtype=D)).float()
+    return p, p, torch.stack([torch.arange(n), (torch.arange(n) + 1) % n], -1)
+
+
+def _off_the_wall():
+    """Float64 queries 1e-3 off the posed torus of :func:`_quad_diagonals` along the
+    normal at its quad diagonals' midpoints, on either side (closest points on edges,
+    where the cells sharing one tie exactly for the least distance), and at Gaussian
+    offsets (sigma 1e-3) from its vertices (taking the least cell index, renumbering
+    moved d and u at 35 of the 3456 queries, by rounding)."""
+    q, p, c = _quad_diagonals("renumbering")
+    q, p = q.double(), p.double()
+    tri = p[c[: q.shape[0]]]
+    n = torch.nn.functional.normalize(
+        torch.linalg.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0], dim=-1), dim=-1
+    )
+    g = torch.Generator().manual_seed(2)
+    near = p + 1e-3 * torch.randn(p.shape, dtype=D, generator=g)
+    return torch.cat([q + 1e-3 * n, q - 1e-3 * n, near]), p, c
+
+
+@pytest.mark.parametrize("kernel", ["reference", "fast"])
+@pytest.mark.parametrize("device", _DEVICES)
+@pytest.mark.parametrize("case", ["ellipse", "diagonals", "off the wall"])
+def test_exact_distance_ties_do_not_depend_on_the_numbering(case, device, kernel):
+    """Where cells tie exactly for the least distance (sharing the closest point)
+    and their directions are not certified distinct: on the surface at the fine
+    ellipse's vertices and the torus's quad diagonals, and off it at the torus's
+    edge and vertex closest points, renumbering the vertices and reordering the
+    cells leave d and u bitwise under either kernel (the closest cell is chosen by
+    the cells' positions, and on the surface u is the least-norm point of every
+    different normal)."""
+    build = {"ellipse": _ellipse, "off the wall": _off_the_wall}
+    q, p, c = build[case]() if case in build else _quad_diagonals("renumbering")
+    p2, c2 = _renumbered(p, c)
+    q, p, c, p2, c2 = (x.to(device) for x in (q, p, c, p2, c2))
+    d, u = exact_boundary_geometry(q, p, c, kernel=kernel)
+    d2, u2 = exact_boundary_geometry(q, p2, c2, kernel=kernel)
+    assert torch.equal(d, d2) and torch.equal(u, u2)
+
+
+def test_on_wall_direction_of_a_fine_polyline_in_float32_is_the_float64_one():
+    """At the fine ellipse's vertices, on the surface in both precisions, u from the
+    float32 inputs is bitwise u from float64 copies of them after the cast: both are
+    the least-norm point of the same two float64 normals, which float64 certifies
+    distinct where float32 does not."""
+    q, p, c = _ellipse()
+    d, u = exact_boundary_geometry(q, p, c)
+    d64, u64 = exact_boundary_geometry(q.double(), p.double(), c)
+    assert bool(((d == 0) & (d64 == 0)).all())
+    assert torch.equal(u, u64.float())
+
+
 def _band_cases():
     q, p, c, _ = _far()
     yield "far", q, p, c
@@ -263,6 +366,10 @@ def _band_cases():
     q, p, c, p2, c2 = _numbered()
     yield "numbered", q, p, c
     yield "renumbered", q, p2, c2
+    yield "ellipse", *_ellipse()
+    for case in ("renumbering", "precision"):
+        yield f"diagonals {case}", *_quad_diagonals(case)
+    yield "off the wall", *_off_the_wall()
 
 
 @pytest.mark.parametrize("device", _DEVICES)

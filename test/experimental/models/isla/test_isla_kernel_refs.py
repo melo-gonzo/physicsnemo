@@ -63,10 +63,7 @@ from physicsnemo.experimental.models.isla.geometry import exact_boundary_geometr
 from physicsnemo.experimental.models.isla.segment_softmax import PairPlan
 from physicsnemo.experimental.models.isla.tree_read import BoundaryForest
 from test.experimental.models.isla._forced import ran
-from test.experimental.models.isla._geometry_cases import (
-    _near_wall,
-    _sphere,
-)
+from test.experimental.models.isla._geometry_cases import _sphere
 from test.experimental.models.isla._kernel_cases import (
     _basis_case,
     _basis_step,
@@ -75,6 +72,7 @@ from test.experimental.models.isla._kernel_cases import (
 )
 from test.experimental.models.isla._marks import requires_cuda, requires_cuda_triton
 from test.experimental.models.isla._meshes import cloud
+from test.experimental.models.isla.test_isla_geometry_fast import _fan
 
 D = torch.float64
 _DEVICES = ["cpu", pytest.param("cuda", marks=[pytest.mark.cuda, requires_cuda])]
@@ -540,15 +538,13 @@ def test_the_draw_on_cuda_keeps_the_cpu_draws_cells():
 def test_the_ball_search_second_pass_finds_the_one_pass_candidates(
     device, kernel, monkeypatch
 ):
-    """With ``_BALL_SLOTS`` patched to 2, most queries' balls overflow the first pass
-    and are searched again with as many slots as they need (``geometry.py``'s second
-    pass): the search's outputs, d and u are bitwise those of the default slots, where
-    no query overflows."""
-    mesh = _sphere(2)
-    q = torch.cat([_near_wall(3, 300, 4, band=0.5), torch.zeros(1, 3, dtype=D)]).to(
-        device
-    )
-    pts, cells = mesh.points.to(device), mesh.cells.to(device)
+    """With ``_BALL_SLOTS`` patched to 2, the candidates past the slots must fill the
+    overflow list (one entry per query) for the overflowing queries to be searched
+    again with as many slots as they need (``geometry.py``'s second pass): a fan of 48
+    cells, whose 50 hub queries have 48 candidates each (2,300 extra against a list of
+    450). The search's outputs, d and u are bitwise those of the default 64 slots,
+    where no query overflows."""
+    q, pts, cells = (t.to(device) for t in _fan(48))
     search = next(
         c
         for c in geometry._ball_candidates.__code__.co_consts
