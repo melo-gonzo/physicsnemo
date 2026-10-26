@@ -25,10 +25,10 @@ the whole mesh:
   :math:`\pi_i = \min(1, c\,a_i)`, with :math:`c` the one constant such that
   :math:`\sum_i \pi_i = b`. It is the capped fixed point of the iterative
   adjustment, found exactly from the sorted measures
-  (:func:`pps_inclusion_probabilities`). A size :math:`b` of at least the count
+  (:func:`_pps_inclusion_probabilities`). A size :math:`b` of at least the count
   of positive measures gives each of them :math:`\pi_i = 1`; a zero measure gets
   :math:`\pi_i = 0`.
-- **Draw.** Systematic sampling (:func:`systematic_sample`): the cells are laid
+- **Draw.** Systematic sampling (:func:`_systematic_sample`): the cells are laid
   along a line, each cell an interval of length :math:`\pi_i`, and the cells hit
   by the points :math:`u + m`, :math:`m = 0, \dots, k - 1`, are kept. The
   intervals are half-open, so a hit exactly on a boundary takes the later cell.
@@ -53,14 +53,18 @@ the whole mesh:
   :math:`\operatorname{round}(\pi_i 2^Q)` units, so a cell with
   :math:`\pi_i = 1` is exactly :math:`2^Q` units. The start is clamped by the
   line's rounding residual, so such a cell holds exactly one hit. The drawn
-  inclusion probability is the interval's length over :math:`2^Q`, within
-  :math:`2^{-(Q+1)}` of :math:`\pi_i` (about 3e-14 for 200,000 samples). So the
-  draw is bitwise the same run to run, and on CPU and CUDA given the same float64
-  inputs. (The Morton order reads the canonical frame, which devices compute to
-  roundoff, so a centroid on a grid line could still order differently.)
+  inclusion probability is within :math:`(\lvert D \rvert + 1/2)\,2^{-Q}` of
+  :math:`\pi_i`, for the line's residual :math:`D` in units: at most half a unit
+  per cell plus the rounding of :math:`\sum_i \pi_i` (2.6e-11 measured for a
+  million cells and 200,000 samples). So the draw is bitwise the same run to
+  run, and on CPU and CUDA given the same float64 inputs. (The Morton order reads
+  the canonical frame, which devices compute to roundoff, so a centroid on a grid
+  line could still order differently.)
 
 Everything is tensor arithmetic without a data-dependent shape, so the draw
-traces into one graph under ``torch.compile(fullgraph=True, dynamic=True)``. It
+traces into one graph under ``torch.compile(fullgraph=True, dynamic=True)``.
+The graph serves every cell count, except that Inductor's stable sort recompiles
+once for large meshes, and it is specialized to the sample size. The draw
 synchronizes with the host only in the canonical frame's small eigensolve.
 """
 
@@ -69,7 +73,7 @@ from typing import TYPE_CHECKING
 import torch
 from jaxtyping import Float, Int
 
-from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
+from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY, cell_measures
 from physicsnemo.mesh.geometry._cell_areas import compute_cell_areas
 from physicsnemo.mesh.spatial._frame import canonical_frame, frame_coordinates
 from physicsnemo.mesh.spatial.bvh import _compute_morton_codes
@@ -113,7 +117,7 @@ def _(x):
     return torch.empty_like(x)
 
 
-def pps_inclusion_probabilities(
+def _pps_inclusion_probabilities(
     measures: Float[torch.Tensor, " n_cells"],
     n_samples: float | Float[torch.Tensor, ""],
 ) -> Float[torch.Tensor, " n_cells"]:
@@ -133,7 +137,8 @@ def pps_inclusion_probabilities(
     ----------
     measures : torch.Tensor
         Nonnegative cell measures, shape ``(n_cells,)``, ``n_cells >= 1``. Float64
-        is recommended.
+        is recommended. Their sums must stay in the dtype's normal range (in
+        float64, about 1e-308 to 1e308).
     n_samples : float | torch.Tensor
         The expected sample size :math:`b`, the sum of the probabilities. It may be
         fractional. At least the count of positive measures gives every cell of
@@ -149,7 +154,7 @@ def pps_inclusion_probabilities(
     --------
     >>> import torch
     >>> measures = torch.tensor([4.0, 1.0, 1.0, 2.0], dtype=torch.float64)
-    >>> pps_inclusion_probabilities(measures, 2.0)
+    >>> _pps_inclusion_probabilities(measures, 2.0)
     tensor([1.0000, 0.2500, 0.2500, 0.5000], dtype=torch.float64)
     """
     if measures.ndim != 1:
@@ -172,7 +177,7 @@ def pps_inclusion_probabilities(
     return torch.empty_like(pi).scatter_(0, order, pi)
 
 
-def systematic_sample(
+def _systematic_sample(
     inclusion_probabilities: Float[torch.Tensor, " n_cells"],
     n_samples: int,
     start: float | Float[torch.Tensor, ""],
@@ -202,7 +207,7 @@ def systematic_sample(
     inclusion_probabilities : torch.Tensor
         The probabilities :math:`\pi_i \in [0, 1]`, shape ``(n_cells,)``, in any
         floating dtype (scaled to the line in float64), summing to ``n_samples`` up
-        to the line's grid (:func:`pps_inclusion_probabilities`). Otherwise the hits
+        to the line's grid (:func:`_pps_inclusion_probabilities`). Otherwise the hits
         past the end of the line repeat the last cell.
     n_samples : int
         The number of hits :math:`k`. It may be a symbolic size under
@@ -233,7 +238,7 @@ def systematic_sample(
     --------
     >>> import torch
     >>> pi = torch.tensor([0.5, 0.5, 1.0, 0.25, 0.75], dtype=torch.float64)
-    >>> systematic_sample(pi, 3, 0.5)
+    >>> _systematic_sample(pi, 3, 0.5)
     tensor([1, 2, 4])
     """
     budget = n_samples if max_n_samples is None else max_n_samples
@@ -280,28 +285,35 @@ def sample_cells_systematic(
 
     Keeps :math:`\min(N, b)` distinct cells of the :math:`N` cells, for
     ``n_samples`` :math:`b`. The cell :math:`i` is kept with probability
-    :math:`\pi_i = \min(1, c\,a_i)` (:func:`pps_inclusion_probabilities`), with
-    :math:`a_i` its effective measure (``cell_data["_effective_measure"]``) when
-    stored, else its geometric measure. The cells are laid along the Morton order
-    of their centroids in the mesh's canonical frame, so the draw is the same in
-    every pose and numbering of the mesh, and drawn by :func:`systematic_sample`.
+    :math:`\pi_i = \min(1, c\,a_i)`, with :math:`c` chosen so the probabilities
+    sum to the sample size, and :math:`a_i` its effective measure
+    (``cell_data["_effective_measure"]``, which must be nonnegative) when stored,
+    else its geometric measure. The cells are laid along the Morton order of their
+    centroids in the mesh's canonical frame, so the draw is the same in every pose
+    and numbering of the mesh, and drawn by systematic sampling along that line.
     Each kept cell carries its Horvitz-Thompson weight :math:`a_i / \pi_i`, so a
     weighted sum over the kept cells is unbiased for the sum over all cells. See
     the module docstring.
 
     The measures and centroids are computed in float64 from the points as given,
-    so the draw is bitwise the same run to run, on CPU and CUDA, and for float32
-    and float64 copies of the mesh. No gradients flow through the draw.
+    so the kept cells and their weights are bitwise the same run to run and for
+    float32 and float64 copies of the mesh. Across devices, and between compiled
+    and eager code, they are bitwise the same given stored effective measures (up
+    to the frame's roundoff, see the module docstring). Measures computed from the
+    points round differently there, which moves the weights in their last bits. No
+    gradients flow through the draw.
 
     Parameters
     ----------
     mesh : Mesh
         The mesh whose cells are drawn.
     n_samples : int
-        The sample size :math:`b`, a Python int ``>= 1``. It fixes the line's grid.
+        The sample size :math:`b`, a Python int ``>= 1``. It fixes the line's grid,
+        so ``torch.compile`` compiles one graph per value.
     start : float | torch.Tensor, optional
         The systematic start :math:`u \in [0, 1)`. ``None`` draws it uniformly from
-        ``generator``.
+        ``generator``. Under ``torch.compile``, pass a tensor: a Python float is a
+        constant there, and each new value recompiles.
     generator : torch.Generator, optional
         The random generator for the start, on the mesh's device. Defaults to the
         global generator.
@@ -348,13 +360,19 @@ def sample_cells_systematic(
     device = mesh.points.device
     if start is None:
         start = torch.rand((), dtype=torch.float64, device=device, generator=generator)
+    elif not isinstance(start, torch.Tensor):
+        ### torch.full fills on the device; as_tensor would copy from the host and sync.
+        start = torch.full((), start, dtype=torch.float64, device=device)
     start = torch.as_tensor(start, dtype=torch.float64, device=device)
     with torch.no_grad():
         ### Measures and centroids in float64 from the points as given, never the
         ### mesh's cached geometry, which is in the mesh's precision.
         verts = gather_rows(mesh.points.detach().double(), mesh.cells)
-        if EFFECTIVE_MEASURE_KEY in mesh.cell_data:
-            measure = mesh.cell_data[EFFECTIVE_MEASURE_KEY]
+        if (
+            EFFECTIVE_MEASURE_KEY in mesh.cell_data
+            or "_measure_weights" in mesh.cell_data  # legacy: cell_measures raises
+        ):
+            measure = cell_measures(mesh)
         else:
             measure = compute_cell_areas(verts[:, 1:] - verts[:, :1])
         measure = measure.detach().double()
@@ -371,7 +389,7 @@ def sample_cells_systematic(
         ### mesh leaves the line, and the draw, unchanged (up to roundoff and the
         ### frame's ties).
         frame = canonical_frame(centroids, measure)
-        pi = pps_inclusion_probabilities(measure, share)
+        pi = _pps_inclusion_probabilities(measure, share)
         ### More samples than positive-measure cells keeps every positive cell, and
         ### the zero-measure cells fill the rest of the count equally, at
         ### Horvitz-Thompson weight 0.
@@ -391,6 +409,6 @@ def sample_cells_systematic(
         ### replays the guards that hold it (evaluated with the builtin min), a
         ### recompile on the other.
         k = n_samples + (n_cells - n_samples) * (1 // (n_cells // n_samples + 1))
-        kept = systematic_sample(pi, k, start, order=order, max_n_samples=n_samples)
+        kept = _systematic_sample(pi, k, start, order=order, max_n_samples=n_samples)
         weights = measure[kept] / pi[kept]
     return kept, weights.to(mesh.points.dtype)
