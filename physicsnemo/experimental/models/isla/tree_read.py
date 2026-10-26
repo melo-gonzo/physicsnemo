@@ -524,7 +524,8 @@ def resolve_walk(walk: str, points: torch.Tensor, theta: float, forest: Boundary
         return "reference"
     if walk == "fast" and not walk_fits(forest):
         raise ValueError(
-            f"the fast walk does not take this forest ({len(forest.levels)} levels, {forest.aabb_min.dtype} boxes)"
+            f"the fast walk does not take this forest ({len(forest.levels)} levels, "
+            f"{forest.n_nodes} {forest.aabb_min.shape[1]}-D {forest.aabb_min.dtype} boxes)"
         )
     if walk != "auto":
         return walk

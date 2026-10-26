@@ -61,8 +61,10 @@ _START_BITS = 40
 #: ``_DEPTH_BINS - 2`` is left to the reference build (one level short of what a
 #: node's 6-bit key depth and int64 path hold).
 _DEPTH_BINS = 64
-#: Cells the build takes: Warp's thread ids are int32.
-_MAX_CELLS = 2**31
+#: Warp refuses an array of this many elements or more, and its thread ids are int32.
+#: The build's Warp arrays hold one entry per cell (the count pass) or one per node
+#: (the fill pass), and a forest has up to 2 N - 1 nodes, so each is checked.
+_WARP_MAX_ELEMENTS = 2**31
 
 _LOGGED: set = set()
 
@@ -248,10 +250,10 @@ def forest_tables(
     nodes' raw mean normal as ``mean_n``, for the cells at lab ``points`` ``(N, d)``
     (``points_f`` in the boundary's frame, ``face`` their normals' faces,
     :func:`~.tree_read.normal_faces`), or
-    ``None`` where the reference build must make them (no cells, ``_MAX_CELLS`` or
-    more, or a tree too deep for a node path)."""
+    ``None`` where the reference build must make them (no cells, cells or nodes past
+    Warp's ``_WARP_MAX_ELEMENTS``, or a tree too deep for a node path)."""
     n, d = points_f.shape
-    if n == 0 or n >= _MAX_CELLS or leaf_size < 1:
+    if n == 0 or n >= _WARP_MAX_ELEMENTS or leaf_size < 1:
         return None
     device = points.device
     n_face = 2 * d
@@ -284,9 +286,9 @@ def forest_tables(
     cells_per_h = stats[:n_face]
     nodes_per_h = stats[n_face : 2 * n_face]
     internal_per_depth = stats[2 * n_face :]
-    if internal_per_depth[_DEPTH_BINS - 2]:
-        return None
     m_total = sum(nodes_per_h)
+    if internal_per_depth[_DEPTH_BINS - 2] or m_total >= _WARP_MAX_ELEMENTS:
+        return None
     n_internal = sum(internal_per_depth)
     n_levels = sum(1 for c in internal_per_depth if c)
 

@@ -636,6 +636,27 @@ def test_fast_walk_falls_back_to_the_reference_past_its_limits(monkeypatch):
     assert torch.equal(qi_a, qi) and torch.equal(si_a, si) and n_node_a == n_node
 
 
+def test_fast_walk_leaves_boxes_past_warps_limit_to_the_reference(monkeypatch):
+    """The walk hands each node table's boxes to Warp as one flat array of
+    ``n_nodes * d`` entries, up to ``2 N d`` for N cells: from Warp's element limit on
+    the forest does not fit, ``auto`` walks it by the reference and a forced
+    ``"fast"`` refuses it, though the points' arrays fit."""
+    pts, nrm, w, _ = cloud(300, d=3, seed=1)
+    q, _, _, _ = cloud(40, d=3, seed=2, scale=(3.0,) * 3)
+    f = BoundaryForest.build(pts, w, nrm, None, theta=1.0)
+    on_cuda = types.SimpleNamespace(is_cuda=True, device=torch.device("cuda"))
+    entries = f.aabb_min.numel()
+    assert entries == 3 * f.n_nodes and q.shape[0] * max(3, len(f.trees)) < entries
+    monkeypatch.setattr(tree_walk, "WARP_MAX_ELEMENTS", entries + 1)
+    assert tree_walk.walk_fits(f)
+    assert tree_read.resolve_walk("auto", on_cuda, 1.0, f) == "fast"
+    monkeypatch.setattr(tree_walk, "WARP_MAX_ELEMENTS", entries)
+    assert not tree_walk.walk_fits(f)
+    assert tree_read.resolve_walk("auto", on_cuda, 1.0, f) == "reference"
+    with pytest.raises(ValueError, match="does not take this forest"):
+        f.point_pairs(q, walk="fast")
+
+
 _KERNELS = pytest.mark.parametrize("kernel", ["reference", "fast"])
 
 
@@ -1478,13 +1499,38 @@ def test_fast_forest_build_refuses_what_it_cannot_build(monkeypatch):
     monkeypatch.setattr(tree_read, "forest_tables", spy)
     pts, nrm, w, _ = cloud(300, d=3, seed=5, dtype=torch.float32)
     for limit in (301, 300):
-        monkeypatch.setattr(tree_build, "_MAX_CELLS", limit)
+        monkeypatch.setattr(tree_build, "_WARP_MAX_ELEMENTS", limit)
         forests = [
             BoundaryForest.build(pts, w, nrm, None, theta=1.0, leaf_size=4, build=b)
             for b in ("reference", "fast")
         ]
         assert not _forest_differences(*forests)
     assert tables[0] is not None and tables[1] is None
+
+
+def test_fast_forest_build_leaves_nodes_past_warps_limit_to_the_reference(monkeypatch):
+    """The fill pass writes one entry per node into each of its Warp arrays, and a
+    forest of N cells has up to 2 N - 1 nodes (leaf size 1): where the nodes reach
+    Warp's element limit though the cells do not, the fast build declines and the
+    reference build makes the forest."""
+    import physicsnemo.experimental.models.isla.tree_build as tree_build
+
+    tables = []
+
+    def spy(*args, **kwargs):
+        tables.append(tree_build.forest_tables(*args, **kwargs))
+        return tables[-1]
+
+    monkeypatch.setattr(tree_read, "forest_tables", spy)
+    pts, nrm, w, _ = cloud(300, d=3, seed=5, dtype=torch.float32)
+    kw = dict(theta=1.0, leaf_size=1)
+    ref = BoundaryForest.build(pts, w, nrm, None, build="reference", **kw)
+    assert ref.n_nodes > 300 + 1
+    for limit, declines in ((ref.n_nodes + 1, False), (ref.n_nodes, True)):
+        monkeypatch.setattr(tree_build, "_WARP_MAX_ELEMENTS", limit)
+        fast = BoundaryForest.build(pts, w, nrm, None, build="fast", **kw)
+        assert not _forest_differences(ref, fast)
+        assert (tables[-1] is None) == declines, limit
 
 
 @pytest.mark.cuda
