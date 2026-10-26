@@ -45,7 +45,6 @@ import torch
 from tensordict import TensorDict
 
 from forces import build_axis_frame
-from physicsnemo.datapipes.readers.mesh import read_only_memory_maps
 from physicsnemo.mesh import DomainMesh, Mesh
 from physicsnemo.mesh.calculus.measure import MEASURE_WEIGHTS_KEY, cell_measures
 
@@ -94,9 +93,9 @@ def case_of(sample_id: str) -> str:
 def truth_full(case: str) -> dict:
     """Force coefficients of the ground truth on all vehicle cells of the full validation mesh."""
     root = DATA_ROOT / case / f"domain_{case}.pdmsh" / "_tensordict"
-    with read_only_memory_maps():
-        vehicle = Mesh.load(root / "boundaries" / "vehicle")
-        gd = TensorDict.load_memmap(root / "global_data")
+    # mode="r": read-only copy-on-write maps, so readers on Lustre take no write locks.
+    vehicle = Mesh.load(root / "boundaries" / "vehicle", mode="r")
+    gd = TensorDict.load_memmap(root / "global_data", mode="r")
     p = vehicle.cell_data["pMeanTrim"]
     tau = vehicle.cell_data["wallShearStressMeanTrim"]
     out = coefficients(vehicle, p, tau, gd)
@@ -124,8 +123,7 @@ def main() -> None:
         for pd_path in sorted((run_dir / "predictions").glob("*.pdmsh")):
             t0 = time.time()
             sample_id = pd_path.name[: -len(".pdmsh")]
-            with read_only_memory_maps():
-                domain = DomainMesh.load(pd_path)
+            domain = DomainMesh.load(pd_path, mode="r")
             vehicle = domain.boundaries["vehicle"]
             pdat = domain.interior.point_data
             assert domain.interior.points.shape[0] == vehicle.n_cells
