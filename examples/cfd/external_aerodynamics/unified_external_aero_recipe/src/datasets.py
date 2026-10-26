@@ -47,7 +47,7 @@ from typing import Any, cast
 import hydra
 import torch
 from omegaconf import DictConfig, OmegaConf
-from tensordict import TensorDict
+from tensordict import MemoryMappedTensor
 from torch.utils.data import Sampler
 
 import physicsnemo.datapipes  # noqa: F401  (registers ${dp:...} resolvers)
@@ -733,11 +733,18 @@ def read_global_data_leaf(path: str | Path, key: str) -> torch.Tensor:
 
     ``path`` is a memory-mapped mesh archive (``.pdmsh``), ``key`` a dotted
     leaf name (``diagnostics.solve.solution_quality_id``). Only the leaf's
-    own group is opened.
+    group ``meta.json`` and its own memmap file are opened: two small reads
+    per sample, so selecting thousands of samples at start-up stays cheap on
+    a network file system.
     """
     *group, leaf = key.split(".")
     group_dir = Path(path).joinpath("_tensordict", "global_data", *group)
-    return TensorDict.load_memmap(group_dir)[leaf]
+    meta = json.loads((group_dir / "meta.json").read_text())[leaf]
+    return MemoryMappedTensor.from_filename(
+        group_dir / f"{leaf}.memmap",
+        dtype=getattr(torch, meta["dtype"].removeprefix("torch.")),
+        shape=torch.Size(meta["shape"]),
+    )
 
 
 def _dataset_sample_filter(
