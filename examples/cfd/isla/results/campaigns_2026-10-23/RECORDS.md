@@ -101,6 +101,20 @@ source. Do not edit by hand.
 | `final_rerun_plan/` | The final rerun's plan as decided: the supervisor's decisions with Peter's answers, and the price with AeroZoo's canonical task | `scratch/isla-final-rerun-2026-10-26/` |
 | `az_canonical/` | AZ-CANONICAL: AeroZoo's canonical task, the mean_stable cases only, in every model's configuration, with the constants refit on them | `scratch/isla-az-canonical-2026-10-26/` |
 | `assembly_014/` | ASSEMBLY-014: ISLA 0.14.0 staged: the boundary-only forest ported, the dead biases removed, name-keyed test fills, its tiers and smokes | `scratch/isla-assembly-014-2026-10-26/` |
+| `cert/` | CERT: the compiled slice blocks of ISLA 0.14.0's staged code certified against eager on nine families (Parts 1 and 2), and the compiled and eager steps timed | `scratch/isla-cert-2026-10-27/` |
+| `cert_routing/` | CERT-ROUTING: why the compiled routing gradients differ from eager's (the two bf16 roundings Inductor drops), the precision-raising reference family, and Part 3's verdicts with its positive control | `scratch/isla-cert-routing-2026-10-27/` |
+| `slice_normal_final/` | SLICE-NORMAL-EXP, final: every arm read (DrivAerML Surface, AirfRANS and the lug, options (a) and (a)+(s)), the lug's block-wise certification, and the design of option (c) | `scratch/isla-slice-normal-exp-2026-10-24/` |
+| `af_campaign_read/` | AF-CAMPAIGN, the read: ISLA-DTT on AirfRANS with its far field, arms F, FN, FNC and FNOmega read by the registered rule, with its second read | `scratch/isla-af-campaign-2026-10-25/` |
+| `forest_neartie/` | FOREST-NEARTIE: the face forest's pairs at near-tied frames against the octant forest's, the memory and resume risk, the options and the fix (the rotation bounded in proportion to each node's size, capped by a frame-free ball) | `scratch/isla-forest-neartie-2026-10-27/` |
+| `rule1_root_cause/` | AF-CONFIRM, rule 1 on AeroZoo: the per-condition frame-rotation bound behind its blow-up, its blast radius and fix V2 | `scratch/isla-af-confirm-2026-10-27/` |
+| `version_014/` | VERSION-014: ISLA 0.14.0's version commit, the upstream merge into it, and the near-tie fix staged with its tiers and smokes | `scratch/isla-version-014-2026-10-27/` |
+| `assembly_014_final/` | ASSEMBLY-014, final: ISLA 0.14.0 staged, with its addendum (the kernel basis's dead bias removed, the merges and the tiers) | `scratch/isla-assembly-014-2026-10-26/` |
+| `main_merge_1026/` | MAIN-MERGE-1026: upstream main and #2171's head merged into psharpe/isla, the event-timed iteration time, and their checks | `scratch/isla-mainmerge-1026/` |
+| `main_merge_1027/` | MAIN-MERGE-1027: upstream main with #2174's final form merged into psharpe/isla, and its bitwise checks | `scratch/isla-mainmerge-1027/` |
+| `merge_2171_tidy/` | MERGE-2171-TIDY: #2171's tidied head merged into psharpe/isla, and its checks | `scratch/isla-2171tidy-2026-10-26/` |
+| `af_confirm_prereg/` | AF-CONFIRM's registration: AF-CAMPAIGN's pre-registration with amendments A3 (arm FC, C without N, on AirfRANS), A4 and A5 (C on AeroZoo, read for harm) | `scratch/isla-af-campaign-2026-10-25/` |
+| `final_rerun_decisions_1027/` | The final rerun's decisions as of 2026-10-27: CERT's eager execution (item 8), the recipe's reseeding kept for the rerun (item 9) and ISLA 0.14.0 (item 10) | `scratch/isla-final-rerun-2026-10-26/` |
+| `rerun_azb/` | RERUN-AZB: the final rerun's 16 AeroZoo baseline lanes launched on JHB, their snapshot, smoke and first epochs | `scratch/isla-rerun-azb-2026-10-27/` |
 
 | topic | file | source | md5 |
 | --- | --- | --- | --- |
@@ -526,3 +540,32 @@ source. Do not edit by hand.
 | az_canonical | FINAL_REPORT.md | scratch/isla-az-canonical-2026-10-26/FINAL_REPORT.md | 84d635987ca88b395bff052850d7f6d0 |
 | az_canonical | CONSTANT_CHANGES.md | scratch/isla-az-canonical-2026-10-26/CONSTANT_CHANGES.md | 7c8e70b6980139cc48f941389730f00e |
 | assembly_014 | FINAL_REPORT.md | scratch/isla-assembly-014-2026-10-26/FINAL_REPORT.md | 60d7c0e2935740a8062626fc5dc5b645 |
+| cert | FINAL_REPORT.md | scratch/isla-cert-2026-10-27/FINAL_REPORT.md | 73b643b186ce1b2b766f266154759250 |
+| cert | RESULTS.md | scratch/isla-cert-2026-10-27/RESULTS.md | afaef89592ed8fb0ccabc9339bfc67a5 |
+| cert | out/part2/PART2_VERDICTS.md | scratch/isla-cert-2026-10-27/out/part2/PART2_VERDICTS.md | 406e42e7ea5008f8756b469e827700ed |
+| cert | out/PRICE_CERT.md | scratch/isla-cert-2026-10-27/out/PRICE_CERT.md | 1277e6250a13c984fb696023abcf76d2 |
+| cert_routing | FINAL_REPORT.md | scratch/isla-cert-routing-2026-10-27/FINAL_REPORT.md | 8facd5afd3b1974e72b29d4447f32fac |
+| cert_routing | DIAGNOSIS.md | scratch/isla-cert-routing-2026-10-27/DIAGNOSIS.md | f14639ff5503470dd652db3c3fe99631 |
+| cert_routing | REFORMULATIONS.md | scratch/isla-cert-routing-2026-10-27/REFORMULATIONS.md | 4cfa48f48d1ddc20648f7210355f024e |
+| cert_routing | out/part3/PART3_VERDICTS.md | scratch/isla-cert-routing-2026-10-27/out/part3/PART3_VERDICTS.md | 7ab8b9d6484876c7d3706718e6a7a02e |
+| slice_normal_final | FINAL_REPORT.md | scratch/isla-slice-normal-exp-2026-10-24/FINAL_REPORT.md | c651b6c4031d2dc10dfb0af2a41dbbf6 |
+| slice_normal_final | RESULTS.md | scratch/isla-slice-normal-exp-2026-10-24/RESULTS.md | 815cb8f4492d8d7a5cfd23e54e111e4d |
+| slice_normal_final | C_DESIGN.md | scratch/isla-slice-normal-exp-2026-10-24/C_DESIGN.md | 12f8e4d9fccb6753f30c70e7a5aaedbf |
+| af_campaign_read | RESULTS.md | scratch/isla-af-campaign-2026-10-25/RESULTS.md | e024bd8e99ad43407feffd1e65c234d3 |
+| af_campaign_read | read.md | scratch/isla-af-campaign-2026-10-25/read.md | 0f2882fc911ef71b54d85379265389d8 |
+| af_campaign_read | FINAL_REPORT.md | scratch/isla-af-campaign-2026-10-25/FINAL_REPORT.md | 4ae5f43fc5863acb7601ce1222db85b9 |
+| af_campaign_read | REVIEW_SECOND_READ.md | scratch/isla-af-campaign-2026-10-25/REVIEW_SECOND_READ.md | 365845a6e2dfb704874cd18740492ba1 |
+| forest_neartie | FINAL_REPORT.md | scratch/isla-forest-neartie-2026-10-27/FINAL_REPORT.md | c18974af33d720ae8faf8bd2b0e324d8 |
+| forest_neartie | RISK_TABLE.md | scratch/isla-forest-neartie-2026-10-27/RISK_TABLE.md | 1ad93eabbe6c1281b60cc0ad659cdcf8 |
+| forest_neartie | OPTIONS.md | scratch/isla-forest-neartie-2026-10-27/OPTIONS.md | 63ef8b2bebde45e3fde6265778119a20 |
+| forest_neartie | POSE_TABLE.md | scratch/isla-forest-neartie-2026-10-27/POSE_TABLE.md | 419741a6d11fa9d6402a2d278cd814ff |
+| rule1_root_cause | ROOT_CAUSE_RULE1.md | scratch/isla-af-confirm-2026-10-27/ROOT_CAUSE_RULE1.md | ff610d74af97b4c3affc10e81858340a |
+| version_014 | FINAL_REPORT.md | scratch/isla-version-014-2026-10-27/FINAL_REPORT.md | 238b37a3edb181d6d3da5c868befae3e |
+| version_014 | PHASE2_NEARTIE.md | scratch/isla-version-014-2026-10-27/PHASE2_NEARTIE.md | e25bb8aade65bd6960d78dfdf88e4275 |
+| assembly_014_final | FINAL_REPORT.md | scratch/isla-assembly-014-2026-10-26/FINAL_REPORT.md | 7145d1c94789dbc1240249632cc7eb04 |
+| main_merge_1026 | FINAL_REPORT.md | scratch/isla-mainmerge-1026/FINAL_REPORT.md | cdbd7e44f2e15ef9fe14df356ff3a94d |
+| main_merge_1027 | FINAL_REPORT.md | scratch/isla-mainmerge-1027/FINAL_REPORT.md | a24170c9897ff08bb280e26e5ba37e78 |
+| merge_2171_tidy | FINAL_REPORT.md | scratch/isla-2171tidy-2026-10-26/FINAL_REPORT.md | 8001ee770a932c97cfb2df5a7acf9d10 |
+| af_confirm_prereg | PREREG.md | scratch/isla-af-campaign-2026-10-25/PREREG.md | fc03c18112131d8595824df72131095c |
+| final_rerun_decisions_1027 | SUPERVISOR_DECISIONS.md | scratch/isla-final-rerun-2026-10-26/SUPERVISOR_DECISIONS.md | 7ae610e9e1a05899acd65f8b0c5d64d6 |
+| rerun_azb | FINAL_REPORT.md | scratch/isla-rerun-azb-2026-10-27/FINAL_REPORT.md | 68a484d1779a01d206f8e2b6cbe151cf |

@@ -130,6 +130,20 @@ FOLDER = {
     "final_rerun_plan": "campaigns_2026-10-23",
     "az_canonical": "campaigns_2026-10-23",
     "assembly_014": "campaigns_2026-10-23",
+    "cert": "campaigns_2026-10-23",
+    "cert_routing": "campaigns_2026-10-23",
+    "slice_normal_final": "campaigns_2026-10-23",
+    "af_campaign_read": "campaigns_2026-10-23",
+    "forest_neartie": "campaigns_2026-10-23",
+    "rule1_root_cause": "campaigns_2026-10-23",
+    "version_014": "campaigns_2026-10-23",
+    "assembly_014_final": "campaigns_2026-10-23",
+    "main_merge_1026": "campaigns_2026-10-23",
+    "main_merge_1027": "campaigns_2026-10-23",
+    "merge_2171_tidy": "campaigns_2026-10-23",
+    "af_confirm_prereg": "campaigns_2026-10-23",
+    "final_rerun_decisions_1027": "campaigns_2026-10-23",
+    "rerun_azb": "campaigns_2026-10-23",
 }
 
 

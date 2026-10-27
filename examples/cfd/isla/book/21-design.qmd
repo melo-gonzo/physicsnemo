@@ -187,9 +187,9 @@ three.
   solution, so a fixed axis carries no information about the PDE, only about how the cases were
   posed. ISLA takes directions the physics names and positions only as differences
   (@sec-pose-prior). ISLA-DTT's far-field forest groups cells for speed in a canonical frame the
-  boundary carries, so it moves with the problem; where its axes tie, a regrouping moves the read only by the tree's error, which vanishes as $\theta \to 0$; where
-  rounding decides a cell's octant or a box test, as on the lug, the code as it is builds another forest in another
-  pose (@sec-arch-tree-read, @sec-oq-dtt-frame).
+  boundary carries, so it moves with the problem; where its axes tie, a regrouping moves the read only by the tree's error, which vanishes as $\theta \to 0$, and
+  elsewhere its face classes and box test leave no choice to rounding where an error bound decides it
+  (@sec-arch-tree-read, @sec-oq-dtt-frame).
 - **No mesh-density shortcuts.** A solver integrates over the surface; it does not count the
   cells the mesher placed in a region. Every sum in ISLA is a quadrature with the cells' measure
   weights, so a region's influence is its area, not its cell count (@sec-isla-quadrature).
@@ -216,6 +216,17 @@ this work*, in mechanistic terms? And would a practitioner of classical CFD obje
 construction consumes? A change that cannot answer both is run, when it is run at all, as an
 ablation, labeled as one wherever it appears.
 
+**A change is admissible only if it is principled for reasons that carry to other PDEs.** ISLA is
+an architecture for boundary-driven PDEs, not for one flow: its constructor names no physical
+quantity (@sec-using-scales). So a change whose reason is a property of one domain's physics, a
+fluid's viscous length, for example, is not admitted whatever it scores. Peter's ruling, on the
+viscous near-wall length of @sec-airfrans-far-field: "Yeah I don't think N is admissible per our
+"principled changes only" yardstick. Even if it was better, it wouldn't be better for reasons that
+are transferrable to other domains, so we couldn't in-good-faith accept it." The reasons that do
+carry are of the kind this appendix lists: boundary-integral and quadrature structure, the
+invariances of the problem, consistency under refinement of the discretization, and error bounds
+of the arithmetic.
+
 ## The ledger {#sec-principled-ledger}
 
 **Each row names a decision as the class implements it, the principle it follows, the
@@ -231,6 +242,15 @@ area_isla = max(SURF.shift("ISLA", f, "area") for f in SURF.ds.headline)
 area_base = min(SURF.shift(b, f, "area") for b in S.BASELINES for f in SURF.ds.headline)
 pose_isla = max(SURF.shift("ISLA", f, "posed") for f in SURF.ds.headline)
 pose_base = min(SURF.shift(b, f, "posed") for b in S.BASELINES for f in SURF.ds.headline)
+import re, records as R
+# the face forest retrained on the lug (DTT-POSE-EXP) and the near-tie bound (FOREST-NEARTIE)
+_pn = [float(x) for x in re.search(r"posed / native arm \[([\d.]+), ([\d.]+)\], control \[([\d.]+), ([\d.]+)\]",
+                                    R.load("dtt_pose_exp_read", "results/read/read_all.md")).groups()]
+_nmc = float(R.md_table("forest_neartie", "RISK_TABLE.md", "Near-tie Monte Carlo", 0)[0]["max"])
+_fix = float(next(r_ for r_ in R.md_table("forest_neartie", "OPTIONS.md", "The candidates", 0) if r_["option"].startswith("(c')"))["/ octant, near-tie MC max"])
+_sph = next(r_ for r_ in R.md_table("forest_neartie", "OPTIONS.md", "The candidates", 0) if r_["option"].startswith("(b)"))
+_sph_pct = round(100 * (R.num(_sph["AeroZoo pairs / 0.14.0, census median (min-max)"]) - 1))
+assert "dead" in R.load("assembly_014_final", "FINAL_REPORT.md") and "softmax shift invariance makes it identically zero" in " ".join(R.load("slice_normal_final", "RESULTS.md").split())
 LEDGER = [
     ("Quadrature weights", "measure weights enter the routing as a log-space bias, so every slice state is a measure-weighted mean",
      "a slice aggregate is an integral, not a point population", "unweighted means, which count the cells the mesher placed",
@@ -274,6 +294,12 @@ LEDGER = [
     ("The boundary draw inside the model", "the interior task takes each boundary at full resolution and draws `n_boundary_tokens` (200,000) cells in the forward pass: water-filled over the conditions, each kept with probability proportional to its measure, capped at one, by systematic sampling along the Morton order of the centroids in the boundary's canonical frame, computed in float64, with its Horvitz–Thompson weight $a_i / \\pi_i$ and an exact count $\\min(\\text{cells}, \\text{budget})$; a random start in training, a fixed start (0.5) in evaluation",
      "the boundary tokens are a quadrature of the surface: unbiased for every measure-weighted sum, exact on a condition kept whole, spread over the surface, with static shapes and an inference deterministic on the CPU and the GPU alike (@sec-limits-draw-ties)", "a draw by the datapipe, which fixes the sample before the model sees the surface; an independent draw, whose sample clumps",
      "`test_isla_sampling.py` (exact count, unbiased Horvitz–Thompson sums, spread over the surface), `test_isla_interior_geometry.py` (deterministic evaluation; a finer input mesh reads as another draw of the same quadrature); @sec-using-interior; the draw is the same at every compute precision, and under a rotation with a translation float32 rounding of the moved coordinates still changes a few of its cells (@sec-oq-precision)"),
+    ("ISLA-DTT's forest", "one cluster tree per cube face of the normals in the boundary's canonical frame, built in float64 about the centroid outside autocast; a face tied within the normal's rounding bound goes to the lowest tied axis; a node is admitted only when it is separated with the arithmetic's error and the frame's possible rotation included, the rotation widening each node in proportion to its own size and never past a ball that holds in every frame",
+     "no discrete choice is left to rounding or to the caller's precision where an error bound can decide it, and the bounds are functions of the boundary alone; a rotation moves the point and the node's cells together, so its bound scales with the node, not with the node's distance from the centroid, and stays finite as the frame's variances tie", f"sign octants, which rounding decides on surfaces aligned with the frame; the rotation as an error of each coordinate in proportion to its distance from the centroid, which near a tie of the frame opens every small node far from it; bounding spheres, which read {_sph_pct}% more pairs on AeroZoo; the frame from the full-resolution boundary, which makes a near tie the case's on every draw",
+     f"retrained with it, ISLA-DTT's posed error on the lug is {_pn[0]:.4f} and {_pn[1]:.4f} times its native error, against {_pn[2]:.2f} and {_pn[3]:.2f} with octants; on AeroZoo's near-tie families the pairs stay within {_fix:.2f} times the octant forest's, where the distance-proportional bound reads up to {_nmc:.1f} times (@sec-arch-tree-read, @sec-aerozoo-neartie)"),
+    ("No parameter that cancels", "the slice blocks' geometry logit and the last layer of ISLA-DTT's kernel basis carry no bias",
+     "a constant added to every logit of a softmax cancels, so such a bias has a gradient of zero and is not a parameter of the function", "the biases kept, trained by roundoff alone",
+     f"the geometry logit's bias has a gradient of exactly zero by the softmax's shift invariance ({R.source('slice_normal_final', 'RESULTS.md')}, section 2); the kernel basis's has one at roundoff, and without it the outputs move less than under a one-ulp change of the inputs ({R.source('assembly_014_final', 'FINAL_REPORT.md')}, addendum); @sec-standing-geometry"),
     ("Read-only prediction points on the interior task", "the interior task is ISLA-DTT, with no switch of form: interior tokens are read-only; interacting tokens are the surface task's form, and interacting ISLA, the form the interior standings score, writes its interior tokens into the slices",
      "a prediction at a point depends on that point and the boundary alone; where the registered accuracy read is a close call, ISLA-DTT (Peter's ruling: \"ISLA-DTT, on principle\"); interacting ISLA's interior numbers are scored at its training request count", "query-count augmentation as the default; read-only prediction points with interior writers drawn from the boundary alone, tested in the nearest-token form and not adopted by its registered rule (@tbl-airfrans-anchor)",
      "@sec-limits-query-independence; ISLA-DTT is query-independent to float32 roundoff, and its tree read at a finite opening angle $\\theta$ is an approximation that vanishes as $\\theta \\to 0$ (@sec-oq-dtt-frame); on AeroZoo's held-out splits the two forms read a close call, and interacting ISLA leads on AirfRANS velocity and eddy viscosity and on the lug (@sec-aerozoo-form)"),

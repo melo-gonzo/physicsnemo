@@ -840,6 +840,97 @@ RECORDS = {
         "its tiers and smokes",
         ["FINAL_REPORT.md"],
     ),
+    "cert": (
+        "isla-cert-2026-10-27",
+        "CERT: the compiled slice blocks of ISLA 0.14.0's staged code certified against eager on nine families (Parts 1 "
+        "and 2), and the compiled and eager steps timed",
+        [
+            "FINAL_REPORT.md",
+            "RESULTS.md",
+            "out/part2/PART2_VERDICTS.md",
+            "out/PRICE_CERT.md",
+        ],
+    ),
+    "cert_routing": (
+        "isla-cert-routing-2026-10-27",
+        "CERT-ROUTING: why the compiled routing gradients differ from eager's (the two bf16 roundings Inductor drops), the "
+        "precision-raising reference family, and Part 3's verdicts with its positive control",
+        [
+            "FINAL_REPORT.md",
+            "DIAGNOSIS.md",
+            "REFORMULATIONS.md",
+            "out/part3/PART3_VERDICTS.md",
+        ],
+    ),
+    "slice_normal_final": (
+        "isla-slice-normal-exp-2026-10-24",
+        "SLICE-NORMAL-EXP, final: every arm read (DrivAerML Surface, AirfRANS and the lug, options (a) and (a)+(s)), the "
+        "lug's block-wise certification, and the design of option (c)",
+        ["FINAL_REPORT.md", "RESULTS.md", "C_DESIGN.md"],
+    ),
+    "af_campaign_read": (
+        "isla-af-campaign-2026-10-25",
+        "AF-CAMPAIGN, the read: ISLA-DTT on AirfRANS with its far field, arms F, FN, FNC and FNOmega read by the registered "
+        "rule, with its second read",
+        ["RESULTS.md", "read.md", "FINAL_REPORT.md", "REVIEW_SECOND_READ.md"],
+    ),
+    "forest_neartie": (
+        "isla-forest-neartie-2026-10-27",
+        "FOREST-NEARTIE: the face forest's pairs at near-tied frames against the octant forest's, the memory and resume "
+        "risk, the options and the fix (the rotation bounded in proportion to each node's size, capped by a frame-free ball)",
+        ["FINAL_REPORT.md", "RISK_TABLE.md", "OPTIONS.md", "POSE_TABLE.md"],
+    ),
+    "rule1_root_cause": (
+        "isla-af-confirm-2026-10-27",
+        "AF-CONFIRM, rule 1 on AeroZoo: the per-condition frame-rotation bound behind its blow-up, its blast radius and "
+        "fix V2",
+        ["ROOT_CAUSE_RULE1.md"],
+    ),
+    "version_014": (
+        "isla-version-014-2026-10-27",
+        "VERSION-014: ISLA 0.14.0's version commit, the upstream merge into it, and the near-tie fix staged with its tiers "
+        "and smokes",
+        ["FINAL_REPORT.md", "PHASE2_NEARTIE.md"],
+    ),
+    "assembly_014_final": (
+        "isla-assembly-014-2026-10-26",
+        "ASSEMBLY-014, final: ISLA 0.14.0 staged, with its addendum (the kernel basis's dead bias removed, the merges and "
+        "the tiers)",
+        ["FINAL_REPORT.md"],
+    ),
+    "main_merge_1026": (
+        "isla-mainmerge-1026",
+        "MAIN-MERGE-1026: upstream main and #2171's head merged into psharpe/isla, the event-timed iteration time, and "
+        "their checks",
+        ["FINAL_REPORT.md"],
+    ),
+    "main_merge_1027": (
+        "isla-mainmerge-1027",
+        "MAIN-MERGE-1027: upstream main with #2174's final form merged into psharpe/isla, and its bitwise checks",
+        ["FINAL_REPORT.md"],
+    ),
+    "merge_2171_tidy": (
+        "isla-2171tidy-2026-10-26",
+        "MERGE-2171-TIDY: #2171's tidied head merged into psharpe/isla, and its checks",
+        ["FINAL_REPORT.md"],
+    ),
+    "af_confirm_prereg": (
+        "isla-af-campaign-2026-10-25",
+        "AF-CONFIRM's registration: AF-CAMPAIGN's pre-registration with amendments A3 (arm FC, C without N, on AirfRANS), "
+        "A4 and A5 (C on AeroZoo, read for harm)",
+        ["PREREG.md"],
+    ),
+    "final_rerun_decisions_1027": (
+        "isla-final-rerun-2026-10-26",
+        "The final rerun's decisions as of 2026-10-27: CERT's eager execution (item 8), the recipe's reseeding kept for the "
+        "rerun (item 9) and ISLA 0.14.0 (item 10)",
+        ["SUPERVISOR_DECISIONS.md"],
+    ),
+    "rerun_azb": (
+        "isla-rerun-azb-2026-10-27",
+        "RERUN-AZB: the final rerun's 16 AeroZoo baseline lanes launched on JHB, their snapshot, smoke and first epochs",
+        ["FINAL_REPORT.md"],
+    ),
 }
 
 
@@ -856,6 +947,9 @@ KEPT = {
     ("dtt_knobs_exact", "RESULTS.md"): "ad1ec340c726ec0891c50640b23c6b3c",
     ("rerun_configs", "SUPERVISOR_DECISIONS.md"): "ac7fd5a4719af78c839d464b83d8ef25",
     ("rerun_configs", "price/PRICE.md"): "adeb2a6b8cc18ff40b3a075ba6f8f716",
+    ("slice_normal_dras", "RESULTS.md"): "aaa467d4e56a6ffad16cc5fde44e8c90",
+    ("final_rerun_plan", "SUPERVISOR_DECISIONS.md"): "122e3aab89edba597d3aebd00bd1f88d",
+    ("assembly_014", "FINAL_REPORT.md"): "60d7c0e2935740a8062626fc5dc5b645",
 }
 
 

@@ -730,15 +730,20 @@ are held out per checkpoint but do not confirm a result across the whole set of 
 ## The geometry behind the standings {#sec-standing-geometry}
 
 **Every standing's ISLA checkpoints were trained with ISLA 0.9.0, whose interior geometry differs from the class's in four
-steps, and the class refuses those checkpoints (@sec-using-checkpoint).** The parameters and the network are the same; the
-forward differs only in how a prediction point's wall geometry is built and how the boundary tokens are drawn. On the DrivAerML tasks,
+steps and whose ISLA-DTT forest differs in a fifth, and the class refuses those checkpoints (@sec-using-checkpoint).** The
+network is the same, less two kinds of parameter the class does not have: the bias of each slice block's geometry logit and
+the last bias of ISLA-DTT's kernel basis, each of which adds a constant that cancels in a softmax. Otherwise the forward
+differs only in how a prediction point's wall geometry is built, how the boundary tokens are drawn and how ISLA-DTT's
+forest groups the boundary. On the DrivAerML tasks,
 SHIFT-SUV, AirfRANS and HiLiftAeroML they were trained with configurations that read the body alone (the
 vehicle, the airfoil, the wing); on AeroZoo, the lug, Tensile2d and DeepJEB++ with every stored piece. The recipe's configurations read every stored piece of the domain's boundary, and on SHIFT-SUV and HiLiftAeroML
 the pieces the recipe builds, so on the DrivAerML tasks, SHIFT-SUV, HiLiftAeroML and AirfRANS they read more than the
 standings were trained with
-(@sec-limits-whole-boundary). On AeroZoo the recipe's configurations also train every architecture on all seven fields and on
+(@sec-limits-whole-boundary). The standings' ISLA training ran each slice block compiled on every dataset but Tensile2d,
+AirfRANS and the lug (@tbl-protocol), while the compiled blocks of the class's code certify against eager on DeepJEB++
+alone (@sec-arch-cost). On AeroZoo the recipe's configurations also train every architecture on all seven fields and on
 the `mean_stable` cases alone, where the standing's models trained on five fields and every complete case (@sec-data-aerozoo). On a surface
-task, which computes no wall geometry and draws no tokens, the four steps do not arise. @tbl-standing-geometry lists them.
+task, which computes no wall geometry, draws no tokens and builds no forest, the five steps do not arise. @tbl-standing-geometry lists them.
 
 | step | the standings' checkpoints (ISLA 0.9.0) | the class (@sec-arch-interior-geometry, @sec-arch-boundary-draw) |
 |---|---|---|
@@ -746,6 +751,7 @@ task, which computes no wall geometry and draws no tokens, the four steps do not
 | the sign of the wall distance | the closest feature's pseudo-normal, which cancels at a fold of the surface | the generalized winding number of the oriented cells |
 | the token draw | a Morton order along the dataset's axes, on centroids in the mesh's precision | a Morton order in the boundary's canonical frame, on float64 centroids and measures |
 | a point on the wall | a fixed cutoff of its distance, with float32 normals | its float64 distance within its own rounding bound, with float64 normals |
+| ISLA-DTT's forest | one tree per sign octant of the normals, built under the caller's autocast, the box test with the boxes' own diameters | one tree per cube face of the normals with a tie band, built in float64 about the centroid outside autocast, the box test widened by its error bound and the frame's possible rotation (@sec-arch-tree-read) |
 
 : The interior geometry of the standings' ISLA checkpoints against the class's. How to read this: every other part of the
 forward is the same in both columns; the class's version history is the comment above `__model_checkpoint_version__` in

@@ -1524,8 +1524,36 @@ print(f"- **Compile block by block where the whole graph breaks.** `compile_bloc
       "checkpoints, the compiled blocks agree to 1.5e-5 relative in float32 and at roundoff in float64; in bfloat16 they "
       "round fewer intermediates than eager does: each block's output is no farther from float64 than eager's, and the "
       "model's outputs and parameter gradients are 1.0 to 1.4 times eager's distance to float64 "
-      f"({R.source('dtt_fast_compile', 'RESULTS.md')}). Whether the final code's compiled blocks meet the supervisor's "
-      "certification policy on every dataset is @sec-arch-cost's question.")
+      f"({R.source('dtt_fast_compile', 'RESULTS.md')}). On the class's code the compiled blocks certify against eager on "
+      "DeepJEB++ alone, and a per-group certification cannot decide the other datasets, where two of eager's bfloat16 "
+      "roundings that the compiled blocks leave out meet ill-conditioned routing gradients (@sec-arch-cost, "
+      "@sec-limits-compiled). On that registered verdict the supervisor's decision is to train with "
+      "`compile=false model.compile_blocks=false` on every dataset but DeepJEB++, whose slice blocks stay compiled "
+      "(`compile=false model.compile_blocks=true`); compiled, a step is 15 to 36% shorter (@tbl-using-compile-time).")
+```
+
+```{python}
+#| label: tbl-using-compile-time
+#| output: asis
+# CERT's 20-step smokes of the final rerun's lanes, 4 ranks, iter_time_s median over steps 5-19, compiled and eager
+CT = {r_[""]: r_ for r_ in R.md_table("cert", "FINAL_REPORT.md", "Timing", 0)}
+TASK = {"vol": "DrivAerML Volume, ISLA-DTT", "az full": "AeroZoo `full`, ISLA-DTT", "af": "AirfRANS, ISLA-DTT",
+        "lug": "GINOT bracket lug, ISLA-DTT", "t2d": "PLAID Tensile2d, ISLA-DTT", "drs": "DrivAerML Surface, ISLA",
+        "suv": "SHIFT-SUV, ISLA", "hl": "HiLiftAeroML, ISLA", "djb": "DeepJEB++, ISLA"}
+assert set(TASK) == set(CT["compiled"]) - {""}
+sav = [1 - float(CT["compiled"][k]) / float(CT["eager"][k]) for k in TASK]
+assert round(100 * min(sav)) == 15 and round(100 * max(sav)) == 36
+print("| dataset task, form | compiled step [s] | eager step [s] | compiled ÷ eager |\n|---|--:|--:|--:|")
+for k, name in TASK.items():
+    c_, e_ = float(CT["compiled"][k]), float(CT["eager"][k])
+    print(f"| {name} | {c_:.3f} | {e_:.3f} | {c_ / e_:.2f} |")
+print()
+print(": One training step of ISLA compiled (each slice block compiled, `compile=false` throughout) and eager, at the "
+      "reference configuration on the class's code without its near-tie bound (@sec-arch-tree-read), four GB300 GPUs, bfloat16; "
+      "the median iteration time over steps 5 to 19 of a 20-step run of each task's training command. How to read this: "
+      "a ratio below one is the time compiling saves; the compiled blocks are not certified on any task but DeepJEB++, so the "
+      "saving is taken on DeepJEB++ alone (@sec-arch-cost). Data: "
+      f"{R.source('cert', 'FINAL_REPORT.md')} (Timing); {R.source('cert', 'out/PRICE_CERT.md')}. {{#tbl-using-compile-time}}")
 ```
 
 ## Contracts you can check on your own data {#sec-using-contracts}
@@ -1610,12 +1638,13 @@ with the full request.
 #| output: asis
 import re
 import records as RC   # R is the rotation of the contracts demo above
-# the whole test directory on torch 2.12 and 2.13 (GOLDEN-213's tiers at its head): GB300 GPU tier and full CPU tier
-G213 = {r_["torch"].split()[0]: r_ for r_ in RC.md_table("golden_213", "FINAL_REPORT.md", "Tiers at", 0)}
-_tier = lambda t, c: [int(x.replace(",", "")) for x in re.search(r"([\d,]+) passed(?:, ([\d,]+) skipped)?, 1 xfailed$", G213[t][c]).groups(default="0")]
-gpu_t = {t: _tier(t, "GB300 gpu tier") for t in ("2.12", "2.13")}
-cpu_t = {t: _tier(t, "CPU full tier") for t in ("2.12", "2.13")}
-assert cpu_t["2.12"] == cpu_t["2.13"] and gpu_t["2.12"][1] == 0 and "There are no failures on either torch." in RC.load("golden_213", "FINAL_REPORT.md")
+# the whole test directory on the class's code (VERSION-014's tiers on its version commit with the near-tie fix): the GB300
+# tier on torch 2.12 and 2.13 and the full CPU tier on 2.13
+V14 = {r_["tier"]: r_["result"] for r_ in RC.md_table("version_014", "PHASE2_NEARTIE.md", "Tiers on", 0)}
+_tier = lambda k: [int(x.replace(",", "")) for x in re.search(r"([\d,]+) passed(?:, ([\d,]+) skipped(?: \([^)]*\))?)?, 1 xfailed, 0 failed$", V14[k]).groups(default="0")]
+gpu_t = {t: _tier(f"GB300 whole ISLA dir, torch {t}") for t in ("2.12", "2.13")}
+cpu_t = {"2.13": _tier("CPU full, torch 2.13")}
+assert gpu_t["2.12"][1] == 0 and "mix-order, by design" in V14["GB300 whole ISLA dir, torch 2.13"]
 assert "positive controls for pytorch#195845" in RC.load("golden_213", "FINAL_REPORT.md")
 TBT = {r_["run"]: r_ for r_ in RC.md_table("test_build", "FINAL_REPORT.md", None, 1)}
 fast = next(r_ for k_, r_ in TBT.items() if "fast tier" in k_)
@@ -1627,8 +1656,8 @@ _xf = sorted(p.name for p in _T.glob("test_*.py") if "strict=True" in p.read_tex
 print("**The class's tests run in three tiers: a CI tier on the CPU of about "
       f"{fast_s / 60:.0f} minutes for everyday changes, the whole directory on the CPU, and the whole directory with every CUDA "
       "test on a GPU.** The whole "
-      f"directory, `test/experimental/models/isla/`, passes {cpu_t['2.12'][0]:,} tests on the CPU, where {cpu_t['2.12'][1]} skip, "
-      f"under torch 2.12 and 2.13 alike, and {gpu_t['2.12'][0]:,} on a GB300 with every CUDA test under torch 2.12, with no failure "
+      f"directory, `test/experimental/models/isla/`, passes {cpu_t['2.13'][0]:,} tests on the CPU under torch 2.13, where "
+      f"{cpu_t['2.13'][1]} skip, and {gpu_t['2.12'][0]:,} on a GB300 with every CUDA test under torch 2.12, with no failure "
       f"in any. Under torch 2.13 the GB300 passes {gpu_t['2.13'][0]:,} and skips {gpu_t['2.13'][1]}, the positive controls of the "
       "mix-order fault (pytorch/pytorch#195845, @sec-using-cost), whose kernel torch 2.13's Inductor does not build. The CI tier, "
       f"`-m \"not slow\"`, takes {fast_s:.0f} s. What the tests hold the code to:")
@@ -1659,6 +1688,7 @@ assert _xf == ["test_isla_release.py"], _xf
 print(f"One test is a strict expected failure, in `{_xf[0]}`: it records a known defect "
       "and fails the suite if the defect goes away unnoticed (@sec-limits-xfail). Run the CPU tier with "
       "`pytest test/experimental/models/isla -m \"not slow\"`. Data: "
-      f"{RC.source('golden_213', 'FINAL_REPORT.md')}; {RC.source('test_build', 'FINAL_REPORT.md')}; the size of "
+      f"{RC.source('version_014', 'PHASE2_NEARTIE.md')} (tiers); {RC.source('golden_213', 'FINAL_REPORT.md')}; "
+      f"{RC.source('test_build', 'FINAL_REPORT.md')}; the size of "
       "`test/experimental/models/isla/data/`.")
 ```

@@ -141,9 +141,9 @@ print(f"- **Not that ISLA's pose invariance is exact on every mesh.** Rotated an
       f"rounding picks the direction; retrained with the class's tie rule, it is {TX_PN:.4f} times native (@sec-limits-ties). What "
       "rounding still decides in the class's geometry is @sec-oq-precision. "
       "ISLA-DTT's far-field read has limits of its own: a tie of its forest's frame moves the read only by the tree's error, "
-      "but on the lug, where rounding decides the octant of most cells' normals and many exact ties of the forest's box "
-      "test, its posed error is not its native error, and under bfloat16 training its forest is built from rounded "
-      "coordinates (@sec-arch-tree-read, @sec-oq-dtt-frame).")
+      "and near such a tie, on AeroZoo's spherical far fields, no forest is pose-invariant; the octant forest of the "
+      "standings' ISLA-DTT checkpoints also lets rounding decide the octant of most of the lug's cells, so their posed "
+      "error is not their native error (@sec-arch-tree-read, @sec-oq-dtt-frame).")
 print("- **Not that discretization consistency is an exact invariance at every token count.** Under exact re-meshing of the boundary "
       "ISLA's prediction does not move (@sec-limits-boundary-law); under a change of sampling law its residual is quadrature variance "
       "that shrinks with the cell count (@sec-principle), and a token budget far below the boundary's own cell count is not invariant. "
@@ -483,6 +483,92 @@ print("**The class lays its draw's line in exact integer arithmetic, so the draw
       f"changed token moves an AeroZoo case's outputs by {sci(float(tok[0]))} to {sci(float(tok[1]))}, so the standings' AeroZoo "
       "scores, computed on GPUs, are not materially affected. Data: "
       f"{R.source('draw_exact', 'FINAL_REPORT.md')}; {R.source('draw_exact', 'DESIGN.md')}.")
+```
+
+### The token draw's Morton grid spans every cell {#sec-limits-draw-grid}
+
+```{python}
+#| label: para-limits-draw-grid
+#| output: asis
+MM27 = " ".join(R.load("main_merge_1027", "FINAL_REPORT.md").split())
+assert "ISLA's `sampling.py` still builds its Morton grid over every cell. Main's `sample_cells_systematic` now spans only the cells of positive measure." in MM27
+n_bit = re.search(r"\*\*([\d,]+) of ([\d,]+)\*\* outputs are bitwise", MM27).groups()
+print("**ISLA's token draw lays its Morton grid over every cell of a condition, cells of zero measure included, while the "
+      "library's systematic cell sampler spans only the cells of positive measure.** Both draw with the same inclusion "
+      "probabilities and the same systematic line (`_pps_inclusion_probabilities`, `_systematic_sample` in "
+      "`physicsnemo.mesh.sampling.systematic_sampling`), but the two Morton orders can differ wherever a boundary holds "
+      "zero-measure cells. ISLA's draw is unchanged by the library's grid "
+      f"({n_bit[0]} of {n_bit[1]} outputs of the shared functions and of ISLA's draw bitwise across that change), and taking "
+      f"the library's grid would change ISLA's input wherever a boundary has such cells, a change of the architecture. Data: {R.source('main_merge_1027', 'FINAL_REPORT.md')}.")
+```
+
+### Every chained training run replays its draws {#sec-limits-replay}
+
+```{python}
+#| label: para-limits-replay
+#| output: asis
+NTR = " ".join(R.load("forest_neartie", "FINAL_REPORT.md").split())
+assert "The recipe's checkpoint holds no RNG state, and `set_seed(seed + rank)` runs at every start." in NTR
+assert "Two resumes from copies of one checkpoint drew bitwise the same starts and kept cells." in NTR
+SD9 = " ".join(R.load("final_rerun_decisions_1027", "SUPERVISOR_DECISIONS.md").split())
+assert "9. **The recipe's reseeding is kept for the rerun (supervisor, 2026-10-27 16:40 EDT" in SD9
+assert "the token-draw starts and the point subsamples, but not the case order" in SD9 and "**Decision:** the rerun keeps it." in SD9
+print("**The recipe reseeds every process at every start, so each link of a chained training run replays the same random "
+      "draws.** Its checkpoint holds no random-number state, and each process seeds itself with the run's seed plus its rank "
+      "when it starts. Two resumes from copies of one checkpoint drew bitwise the same starts of the token draw and kept the "
+      "same cells, while an uninterrupted run drew others. A run on a cluster that limits a job's length trains as a chain of "
+      "links, each resumed from the last checkpoint, so every link replays the same sequence of starts of the token draw "
+      "and subsamples of the prediction points, assigned to cases in a new order, and a crash inside a link recurs at the "
+      "same step on every resume. Every chained run is affected, the standings' included. The supervisor's decision keeps "
+      "the recipe as it is for the runs that replace the standings, chained where their standings were chained, so that "
+      "each comparison trains under one protocol. What it costs in accuracy is not measured. What would settle it: a chained run against an uninterrupted "
+      "one, two seeds each, with each rank's random-number state checkpointed. Data: "
+      f"{R.source('forest_neartie', 'FINAL_REPORT.md')} (section 1); {R.source('forest_neartie', 'RISK_TABLE.md')} (Resume "
+      f"replay); {R.source('final_rerun_decisions_1027', 'SUPERVISOR_DECISIONS.md')} (item 9).")
+```
+
+### The compiled blocks are not certified {#sec-limits-compiled}
+
+```{python}
+#| label: para-limits-compiled
+#| output: asis
+CVL = {r_["family"]: r_["Part 2 (null-calibrated, confirmatory)"] for r_ in R.md_table("cert", "FINAL_REPORT.md", "Verdicts", 0)}
+P3L = R.md_table("cert_routing", "FINAL_REPORT.md", "Part 3", 0)
+und = sum(r_["positive control"] == "passed" for r_ in P3L)
+CRL = " ".join(R.load("cert_routing", "FINAL_REPORT.md").split())
+assert "a short training A/B of compiled against eager on several seeds, read on validation error" in CRL
+extra = re.search(r"ISLA training rises from ([\d,]+) to ([\d,]+) GPU-h, \*\*\+([\d,]+) GPU-h", " ".join(R.load("cert", "FINAL_REPORT.md").split())).groups()
+print("**On the class's code, a per-group certification does not decide whether ISLA's compiled slice blocks compute "
+      "eager's function on any dataset but DeepJEB++.** "
+      f"Certified block by block, the compiled blocks pass on DeepJEB++ alone of {({9: "nine"}).get(len(CVL), len(CVL))} datasets. On "
+      "the others the failing groups are ill-conditioned gradients where the compiled path is the more precise: routing "
+      "gradients of near-degenerate slices, whose mean normal nearly cancels, on Tensile2d, the lug and the DrivAerML Volume "
+      "task, and a separate cancellation in the routing logits' backward on HiLiftAeroML, SHIFT-SUV and the DrivAerML "
+      "Surface task. The per-group test cannot tell another rounding from lost precision there: a second test with "
+      f"a family of precision-raising eager implementations missed its positive control on {und} of {len(P3L)} datasets "
+      "(@sec-arch-cost). Trained models are compared only on earlier code, where on the DrivAerML tasks models trained with "
+      "the blocks compiled score as eager-trained ones do (@sec-using-cost). On the registered verdict the supervisor's "
+      f"decision trains eagerly on those datasets, at {extra[2]} more GPU-hours of ISLA training ({extra[0]} to {extra[1]}). "
+      "What would settle it: a short training run of compiled against eager "
+      "blocks on several seeds, read on validation error, a well-conditioned quantity. Cost: not priced. Data: "
+      f"{R.source('cert', 'FINAL_REPORT.md')}; {R.source('cert_routing', 'FINAL_REPORT.md')}.")
+```
+
+### The chunked step's memory forecast {#sec-limits-chunk-memory}
+
+```{python}
+#| label: para-limits-chunk-memory
+#| output: asis
+RTC = " ".join(R.load("forest_neartie", "RISK_TABLE.md").split())
+under = re.search(r"The measured peak reserved exceeds its prediction by \+([\d.]+) to \+([\d.]+) GiB at 200k points in one chunk", RTC).groups()
+win = re.search(r"puts the OOM windows at (\d+)-(\d+)M pairs \(one chunk\) and about (\d+)% of each multi-chunk band", RTC).groups()
+print("**The recipe splits ISLA-DTT's training step into chunks of prediction points by a forecast of its peak memory, and "
+      f"in eager training the forecast is {under[0]} to {under[1]} GiB low at 200,000 points in one chunk.** So a step whose "
+      f"pair count lands just under a chunk boundary can run out of memory: on a GB300, steps of {win[0]} to {win[1]} million "
+      f"pairs in one chunk and about {win[2]}% of each band that needs several chunks. Only AeroZoo's near-tie draws come near "
+      "those counts, and the class's bound on the forest keeps them far below (@sec-aerozoo-neartie). A forecast fitted per "
+      "execution mode, or a larger margin, would remove the window. Data: "
+      f"{R.source('forest_neartie', 'RISK_TABLE.md')} (Memory; The chunker); {R.source('forest_neartie', 'FINAL_REPORT.md')}.")
 ```
 
 ### The prediction depends on the query set {#sec-limits-query-independence}
@@ -836,8 +922,8 @@ AFD = " ".join(R.load("af_fix", "DESIGN.md").split())
 unm = re.search(r"faces \*\*([\d.]+) / ([\d.]+) / ([\d.]+)\*\*", AFD).groups()
 lever = re.search(r"the airfoil sits ([\d.]+) chords from the forest's origin", AFD).group(1)
 print("**Reading the far field, as the class does, costs ISLA accuracy on the AirfRANS interior task as its encoding stands: "
-      f"{f3(wb(RD), 3)} times the airfoil-only standing's error on pressure / velocity / eddy viscosity, and ISLA-DTT "
-      f"{f3(wb(RDD), 3)} times, with its pose broken.** Both forms were trained with the far field as the named condition "
+      f"{f3(wb(RD), 3)} times the airfoil-only standing's error on pressure / velocity / eddy viscosity, and ISLA-DTT with the "
+      f"standings' octant forest {f3(wb(RDD), 3)} times, with its pose broken.** Both forms were trained with the far field as the named condition "
       "`freestream`, two seeds each, on the standings' configuration and training path, and read against the eager-trained "
       "standings by the rule registered for them, which reads *harms* on every field of both. ISLA's pose holds (posed ÷ "
       f"native {min(pose_i):.4f} to {max(pose_i):.4f}); ISLA-DTT's does not ({min(pose_d):.2f} to {max(pose_d):.2f}). The step "
@@ -870,7 +956,7 @@ print(f"- **ISLA-DTT's pose, an octant tie.** This is an analysis beside the reg
       f"{sci(float(comp[0]))}, down to {sci(float(comp[1]))}), and the sign test that sorts cells into octant trees "
       f"(@sec-arch-tree-read) reads rounding there: posed against native, {oct_[0]} to {oct_[1]}% of the far-field cells "
       f"(median {oct_[2]}%) change octant on the 200 test cases. It is the lug's tie (@sec-oq-dtt-frame) at a larger scale. "
-      "The prototype forest of cube-face classes with a tie band (@sec-arch-tree-read) moves no far-field cell between trees under "
+      "The class's forest of cube-face classes with a tie band (@sec-arch-tree-read) moves no far-field cell between trees under "
       f"pose in any of the 200 cases, and an airfoil cell in {TIE['airfoil']['(b) faces'].split(' in ')[1]}; its pair lists "
       f"still leave {100 * float(unm[0]):.1f}% to {100 * float(unm[2]):.1f}% of the posed pairs (median "
       f"{100 * float(unm[1]):.1f}%) with no native match on 24 cases, mostly in the airfoil's trees, which sit {lever} chords "
@@ -878,13 +964,11 @@ print(f"- **ISLA-DTT's pose, an octant tie.** This is an analysis beside the reg
 print()
 print("Peter's ruling stands: \"not only CAN it read the whole boundary - it SHOULD read the whole "
       "boundary!\", and \"Even if there were an accuracy *cost* to reading the whole boundary (not that I expect it), I would "
-      "recommend this.\" So the open question is the encoding, not the input, and the supervisor's course is to change the "
-      "encoding. The candidates the measurements point to are a forest with one set of face trees per declared condition, each "
-      "about its own centroid; a near-wall length built from the declared viscosity and velocity, which does not grow with the "
-      "domain; and a weighting that keeps the far field from holding nearly all the measure: each declared condition its own "
-      "quadrature with a learned share, or, in ISLA-DTT's read alone, a solid-angle prior. None is adopted; adopting the "
-      "near-wall length, either weighting, and the grouping of conditions on datasets that declare several, is Peter's "
-      "decision once ISLA-DTT retrained with them has been read (@sec-oq-af-encoding). The AirfRANS standing is ISLA's airfoil-only "
+      "recommend this.\" So the open question is the encoding, not the input. ISLA-DTT retrained with four nested changes of "
+      "its encoding reads them (@sec-airfrans-far-field): a face forest with one set of trees per declared condition restores "
+      "the pose; a near-wall length built from the declared viscosity and velocity harms eddy viscosity and is not admissible; "
+      "and on top of it each declared condition its own quadrature with a learned share closes the gap to the airfoil-only "
+      "model, as a solid-angle prior in the tree read narrows it. None is part of the class (@sec-oq-af-encoding). The AirfRANS standing is ISLA's airfoil-only "
       f"one (@sec-standing-geometry). Beside it: on {n_norm[0]} of the {n_norm[1]} AirfRANS case files the stored airfoil "
       "normals disagree with the polyline's winding on some segments; ISLA reads the geometric normals, not that field. Data: "
       f"{R.source('af_whole_read', 'read.md')}; {R.source('af_whole_read', 'RESULTS.md')} (sections 1 to 3 and 6); "
@@ -926,8 +1010,11 @@ q6 = SEEDS * lane_gpuh("tensile2d", "GeoTransolver")
 # benchmark, as the final rerun's price prices them (PRICE.md, the AZ-CANONICAL section)
 _PR = " ".join(R.load("final_rerun_plan", "price/PRICE.md").split())
 q_az7 = int(re.search(r"\| baselines, 16 lanes \(AeroZoo\) \| \d+ \| (\d+) \|", _PR).group(1))
-# ISLA-DTT's far-field encoding on AirfRANS, four nested steps, two seeds each, at its registration's approved cap
-q_afenc = int(re.search(r"\*\*Cap approved: (\d+) GPU-h\*\*", " ".join(R.load("af_campaign", "PREREG.frozen_e0739632.md").split())).group(1))
+# one quadrature per condition without the near-wall length on AirfRANS, and on AeroZoo for harm: the two registrations' caps
+_AFP = " ".join(R.load("af_confirm_prereg", "PREREG.md").split())
+q_afenc = sum(int(re.search(p_, _AFP).group(1)) for p_ in (r"against the lane's Part A cap of (\d+)\*\*", r"against Part B's cap of (\d+)\*\*"))
+_CD = " ".join(R.load("slice_normal_final", "C_DESIGN.md").split())
+q_floor = re.search(r"\*\*about (\d+)-(\d+)\*\*", _CD).groups()
 ```
 
 ```{python}
@@ -950,17 +1037,17 @@ rows = [
      "the missing pieces built in the recipe, SHIFT-SUV's box from constants and HiLiftAeroML's inlet and outlet at the stored far-field radius and its symmetry plane from the source STL's root cap, the datasets unchanged; then each standing retrained with ISLA reading them, two seeds",
      "not priced (the supply sets the runs)"),
     ("Which near-wall length removes the near-wall cost of the whole boundary on AirfRANS? (@sec-oq-nearwall)",
-     "a near-wall length that does not grow with the domain, such as the viscous softening, trained on AirfRANS with its far field with only the channel changed, two seeds, read near the wall against the model without it; on ISLA-DTT one step of @sec-oq-af-encoding",
-     "within @sec-oq-af-encoding's"),
-    ("Which encoding of the far field gives ISLA-DTT back its accuracy on AirfRANS? (@sec-oq-af-encoding)",
-     "ISLA-DTT trained on AirfRANS with its far field with, in turn, a forest of face trees per condition, the viscous near-wall length, and one quadrature per condition or a solid-angle read prior, two seeds each, each step read against its control",
-     f"{fmt_h(q_afenc)} (its registration's cap for the whole campaign, scoring included)"),
+     "a near-wall length that does not grow with the domain and is principled for reasons that carry across PDE domains, trained on AirfRANS with its far field with only the channel changed, two seeds, read near the wall against the model without it",
+     "not priced"),
+    ("Does one quadrature per declared condition belong in ISLA? (@sec-oq-af-encoding)",
+     "the quadrature on top of F (the face forest grouped by condition) without the near-wall length on AirfRANS with its far field, and on AeroZoo `full` read for harm against the standings, two seeds each",
+     f"at most {fmt_h(q_afenc)} (the two registrations' caps, scoring included)"),
     ("Does a quarter of the slices cost nothing on AeroZoo and the datasets not run with it? (@sec-oq-slices)",
      "128 slices against 512 in the form each trains on AeroZoo, HiLiftAeroML, SHIFT-SUV, Tensile2d and DeepJEB++, AeroZoo first, two seeds each, read for harm by the same rule",
      "not priced"),
-    ("Should a slice's mean normal be normalized by a smooth form with no constant? (@sec-oq-slice-normal)",
-     "a smooth, constant-free form of the slice's mean-normal invariant, checked by a deterministic test on a closed boundary with uniform routing, where the mean normal is exactly zero, then trained and read for harm against the standings",
-     "not priced"),
+    ("Should a slice's mean normal be normalized by a smooth floor at bfloat16's rounding level? (@sec-oq-slice-normal)",
+     "the floor trained and read for harm against the controls of the two replacements, on the DrivAerML Surface task first, then on ISLA-DTT on AirfRANS and the lug",
+     f"about {q_floor[0]} to {q_floor[1]}"),
 ]
 if HELD:
     rows.append((f"How do the architectures compare on {names(sorted({k for k, _ in HELD}))} {' and '.join(ST[k].fields[f] for k, f in HELD)} measured alike?",
@@ -980,8 +1067,9 @@ print(": The open questions, the measurement that would settle each, and its cos
       "to its cases, and *at most* marks a run priced at a larger set than it trains on; *scoring only* means the measurement reads "
       "checkpoints that exist. How to read this: the "
       "costs are training only, not scoring; they price the experiment's design, not a "
-      f"schedule. Data: {LIM_SRC}, from results/campaigns_2026-10-22/cost_090/extract.jsonl; the far-field encoding's is the cap approved in "
-      f"{R.source('af_campaign', 'PREREG.frozen_e0739632.md')} (section 8).")
+      f"schedule. Data: {LIM_SRC}, from results/campaigns_2026-10-22/cost_090/extract.jsonl; the quadrature's is the caps approved in "
+      f"{R.source('af_confirm_prereg', 'PREREG.md')} (A3.5, A5.5), and the floor's the staged design's estimate in "
+      f"{R.source('slice_normal_final', 'C_DESIGN.md')} (section 5).")
 ```
 
 ### Do ISLA's declared scales add accuracy where the Reynolds number varies widely? {#sec-oq-scales}
@@ -1225,17 +1313,18 @@ print("**The open question is how large ISLA-DTT's tree error is at $\\theta = 1
       + "{} times the error at $\\theta = 1$ on pressure, {} on velocity and {} on eddy viscosity".format(
           *(" / ".join(f"{v:.2f}" for v in EXACT[f]) for f in ("pressure", "velocity", "nut")))
       + " (seeds 42 / 43), so pricing a small $\\theta$ needs a model trained there (@sec-oq-dtt-theta). On the lug the "
-      "frame is not tied, but the forest as the code builds it lets rounding decide the sign octant of most cells' normals and "
-      "many exact ties of its box test (@sec-arch-tree-read): ISLA-DTT's posed error at $\\theta = 1$ is "
+      "frame is not tied, but the octant forest of the standing's checkpoints lets rounding decide the sign octant of most "
+      "cells' normals and many exact ties of its box test (@sec-arch-tree-read): their posed error at $\\theta = 1$ is "
       f"{' and '.join(f'{v:.2f}' for v in LPN['ref'])} times its native error (seeds 42 and 43), with {LPP:.2f} times the pairs "
       f"posed, while at $\\theta = 0$ the two agree (posed ÷ native {' and '.join(f'{v:.4f}' for v in LPN['t0'])}). The same octant "
-      "tie breaks the pose of ISLA-DTT trained on AirfRANS with its far field (@sec-limits-af-whole), where the prototype forest of "
-      "cube-face classes moves no far-field cell between trees under pose in any of the 200 test cases. On boundaries "
-      "with near-equal principal variances the error at $\\theta = 1$ is not measured. What would settle it: ISLA-DTT's "
-      "checkpoints scored rotated and translated and under boundary redraws on cases whose principal variances are nearly "
-      "equal, such as AeroZoo's sphere bodies and spherical enclosures, against the same scorings on cases with a "
-      "well-separated frame. Cost: scoring only. "
-      "Retrained with a forest that depends on the boundary alone (@sec-arch-tree-read), on the lug and the AirfRANS "
+      "tie breaks the pose of ISLA-DTT trained on AirfRANS with its far field (@sec-limits-af-whole), where the class's face "
+      "forest moves no far-field cell between trees under pose in any of the 200 test cases. On boundaries with near-equal "
+      "principal variances, AeroZoo's opposed-sphere and opposed-hemisphere families, the class bounds what the tie costs in "
+      "pairs (@sec-aerozoo-neartie), but the frame turns inside the nearly degenerate plane under pose, so the posed pair "
+      "lists differ for every forest, and the trained error there at $\\theta = 1$ is not measured. What would settle it: "
+      "ISLA-DTT's checkpoints scored rotated and translated and under boundary redraws on those families, against the same "
+      "scorings on cases with a well-separated frame. Cost: scoring only. "
+      "Retrained with the class's face forest (@sec-arch-tree-read), on the lug and the AirfRANS "
       f"interior task, two seeds each, ISLA-DTT's posed error on the lug is "
       f"{pn_arm[0]} and {pn_arm[1]} times its native error (seeds 42 and 43), against {float(pn_arm[2]):.2f} and "
       f"{float(pn_arm[3]):.2f} for the octant forest, and the bfloat16 forest is bitwise the float32 one on every scored case. By "
@@ -1250,9 +1339,9 @@ print("**The open question is how large ISLA-DTT's tree error is at $\\theta = 1
 ```
 
 ::: {.callout-note title="In flight"}
-These numbers come from the octant forest the class builds under the caller's autocast. ISLA-DTT trained with
-the forest that depends on the boundary alone (@sec-arch-tree-read) is to be measured at the reference
-configuration on the 0.14.0 code, and the ledger (@sec-ledger) tracks it.
+These numbers come from the octant forest of the standings' ISLA-DTT checkpoints. ISLA-DTT trained with the class's
+face forest on every interior dataset, AeroZoo's near-tie families included, is being measured, and the ledger
+(@sec-ledger) tracks it.
 :::
 
 ### The sign of the canonical frame on a nearly mirror-symmetric boundary {#sec-oq-frame-sign}
@@ -1555,10 +1644,9 @@ print("**The whole boundary costs ISLA near-wall accuracy on AirfRANS through it
       "near-wall length removes the cost.** "
       "The channel $\\operatorname{asinh}(s_q / 10^{-6})$ is linear for distances below $10^{-6} L$, and with the whole "
       f"boundary that holds {NW_AF}% of AirfRANS's drawn points, its viscous sublayer, buffer layer and the start of its log "
-      "layer, where the trained input layers code $\\log d$ (@sec-arch-interior-geometry). The supervisor holds one "
-      "alternative ready: a viscous softening, $\\operatorname{asinh}(d U / \\nu)$, in which the length unit cancels, so the "
-      "near-wall code does not depend on how far out the domain's outer boundary is drawn; it is one candidate, not a decided "
-      "change. It is defined only where a "
+      "layer, where the trained input layers code $\\log d$ (@sec-arch-interior-geometry). One alternative is measured: "
+      "a viscous softening, $\\operatorname{asinh}(d U / \\nu)$, in which the length unit cancels, so the "
+      "near-wall code does not depend on how far out the domain's outer boundary is drawn. It is defined only where a "
       "viscosity is declared (AirfRANS and AeroZoo); elsewhere the channel stays as it is. On AirfRANS with its far field its "
       f"knee sits at $U d / \\nu = 1$, against $10^{{-6}} \\mathrm{{Re}}_L$ = {NW_REL[0]} to {NW_REL[1]} for the present channel. "
       "It gives up the present channel's guarantee that storing the coordinates in float32 moves it by at most 0.065 wherever "
@@ -1574,14 +1662,16 @@ print("**The whole boundary costs ISLA near-wall accuracy on AirfRANS through it
       f"present channel; a pose changes the channel by {pose_ii:g} at the 99.9th percentile of the points "
       f"({R.num(NL['ii']['pose change p99.9 / max (AirfRANS posed)'], 1):g} at most). In ISLA-DTT it reaches only the points' "
       "own seed features (@sec-arch-seed), since the tree read codes $\\log(r / \\lvert d_q \\rvert)$ unsoftened, so a retrain "
-      "of ISLA-DTT tests it more weakly than one of interacting ISLA would. "
-      "Adopting a new channel is Peter's decision. What would settle it: a near-wall length that does not grow with the domain, "
-      "such as the viscous softening, trained on the same configuration with only the channel changed, two seeds, and read near "
-      "the wall against the model without it; on ISLA-DTT this is one step of @sec-oq-af-encoding, whose cost includes it. Data: "
+      "of ISLA-DTT tests it more weakly than one of interacting ISLA would. Trained into ISLA-DTT on AirfRANS with its far "
+      "field, it harms eddy viscosity and helps no wall-distance band (@sec-airfrans-far-field), and it is not admissible in "
+      "any case: it is built from a fluid's viscosity and velocity, so its gain would not carry to other PDEs "
+      "(@sec-principled-criterion). What would settle the question: a near-wall length that does not grow with the domain "
+      "and is principled for reasons that carry across PDE domains, trained on the same configuration with only the channel "
+      "changed, two seeds, and read near the wall against the model without it. Cost: not priced. Data: "
       f"{R.source('af_fix', 'DESIGN.md')} (section 2); "
       f"{R.source('af_whole_read', 'RESULTS.md')} (section 2); "
       f"{R.source('nearwall', 'RESULTS.md')} (A1 to A3); {R.source('nearwall', 'DESIGN.md')} (sections 3 and 4); "
-      f"{R.source('geo_band_final', 'RESULTS.md')} (item 3).")
+      f"{R.source('geo_band_final', 'RESULTS.md')} (item 3); {R.source('af_campaign_read', 'RESULTS.md')} (sections 4.1 and 4.2).")
 ```
 
 ### ISLA-DTT's encoding of the far field {#sec-oq-af-encoding}
@@ -1589,45 +1679,54 @@ print("**The whole boundary costs ISLA near-wall accuracy on AirfRANS through it
 ```{python}
 #| label: para-oq-af-encoding
 #| output: asis
-AFC = " ".join(R.load("af_campaign", "PREREG.frozen_e0739632.md").split())
-af_cap = int(re.search(r"\*\*Cap approved: (\d+) GPU-h\*\*", AFC).group(1))
-af_gap = re.search(r"is worse than airfoil-only ISLA-DTT \(B-DTT\) by ([\d.]+) / ([\d.]+) / ([\d.]+)", AFC).groups()
-assert all(a_ in AFC for a_ in ("| **F** |", "| **FN** |", "| **FNC** |", "| **FNΩ** [A1] |"))
-print("**The open question is which encoding of the far field gives ISLA-DTT back its accuracy on the AirfRANS interior task.** "
-      f"Trained with the far field, ISLA-DTT's error is {' / '.join(af_gap)} times its airfoil-only error on pressure / velocity / "
-      "eddy viscosity, and three defects of the encoding are measured (@sec-limits-af-whole): the octant forest ties on the far "
-      "field's axis-aligned normals; the near-wall softening, a fixed fraction of a length unit that the far field sets, covers "
-      "the boundary layer (@sec-oq-nearwall); and the far field, with nearly all the measure, takes the slices and most of the "
-      "tree read. Each defect has a principled candidate, and each candidate is measured on top of the steps it needs, so "
-      "that it alone differs from its control:")
+# AF-CAMPAIGN's read (the four nested steps), rule 1's root cause on AeroZoo (AF-CONFIRM), and AF-CONFIRM's two parts (A3, A5)
+_AFR = " ".join(R.load("af_campaign_read", "RESULTS.md").split())
+_bes = {r_[""].split(" (")[0]: r_ for r_ in R.md_table("af_campaign_read", "RESULTS.md", "4.5 Beside", 0)}
+_tri = lambda row: " / ".join(row[f_] for f_ in ("pressure", "velocity", "nut"))
+fnc = re.search(r"\| FNC / FN \| pressure \| [^|]+\| [^|]+\| ([\d.]+) \|", _AFR).group(1)
+assert "**helps on pressure, velocity and nut by R1** (0.610 / 0.640 / 0.653" in _AFR
+RC1 = " ".join(R.load("rule1_root_cause", "ROOT_CAUSE_RULE1.md").split())
+r1_gap = re.search(r"g/E ranged from (\d+) to (\d+) over (\d+) draws", RC1).groups()
+r1_v2 = re.search(r"every draw built ([\d.]+)-([\d.]+)M", RC1).groups()
+r1_pairs = re.search(r"rule 1 built \*\*([\d,]+)M\*\* pairs", RC1).group(1)
+assert "V2's pair lists differ from V0's in 48 of 48 case-draws, though the counts agree to 0.3%" in RC1
+AFP = " ".join(R.load("af_confirm_prereg", "PREREG.md").split())
+capA = int(re.search(r"against the lane's Part A cap of (\d+)\*\*", AFP).group(1))
+capB = int(re.search(r"against Part B's cap of (\d+)\*\*", AFP).group(1))
+assert "**C-AZ** (`azfc_full_c_seed42/43`)" in AFP and "code_r090's own octant forest unchanged (no DTT-POSE forest, no rule 1), plus C" in AFP
+print("**The open question is whether one quadrature per declared condition belongs in ISLA.** On the AirfRANS interior task "
+      "with its far field it is the change that closes ISLA-DTT's gap to its airfoil-only model "
+      f"({_tri(_bes['FNC / B-DTT'])} times on pressure / velocity / eddy viscosity, where ISLA-DTT with the far field and the "
+      f"octant forest reads {_tri(_bes['W-DTT / B-DTT'])}), helping every field against its control "
+      "(@sec-airfrans-far-field). Its argument does not depend on the PDE: a measure-weighted mean over a truncated domain tends to "
+      "the far field alone as the truncation radius grows, and with one quadrature per condition no condition's share goes "
+      "to zero. Two things keep it open. It was measured only on top of the viscous near-wall length, which harms eddy "
+      "viscosity and is not admissible (@sec-oq-nearwall). And it changes every model of a dataset that declares two or "
+      "more conditions, which AirfRANS's two conditions do not test. What would settle it: one quadrature per condition on "
+      "top of F (the face forest grouped by condition) without the near-wall length, on AirfRANS with its far field, two "
+      "seeds, read against F by the same rule; and the quadrature on AeroZoo `full`, on the "
+      "standings' configuration and octant forest, two seeds, read against the standings' ISLA-DTT pair for harm on every "
+      f"field. Cost: at most {capA} and {capB} GPU-hours, the two registrations' caps. The verdict is Peter's: \u201ccontinue "
+      "investigating C but then ask me for a verdict\u201d.")
 print()
-print("1. **The forest.** One set of cube-face trees per declared condition, each in coordinates about that condition's own "
-      "measure-weighted centroid; on a boundary with one condition it is the face forest exactly. Read against ISLA-DTT "
-      "trained with the far field as it is, and for pose.")
-print("2. **The near-wall length.** The softening built from the declared viscosity and velocity, $\\nu / U$ in units of $L$, "
-      "in place of $10^{-6} L$, on top of step 1; it changes only a model whose configuration declares both scales.")
-print("3. **The measure, in the blocks and the read.** Each declared condition its own quadrature: a token's log-weight "
-      "becomes $\\log a_i - \\log A_k + \\beta_k$, with $A_k$ the full-resolution measure of its condition and $\\beta_k$ one "
-      "learned scalar per condition, starting at zero, on top of step 2. A measure-weighted mean over a truncated domain tends to the far field "
-      "alone as the truncation radius grows; with one quadrature per condition no condition's share goes to zero. It changes "
-      "every model of a dataset that declares two or more conditions.")
-print("4. **The measure, in the read alone.** On top of step 2, in place of step 3, each pair of ISLA-DTT's tree read gains a prior "
-      "$-(d - 1) \\log r$, so with zero kernel weights the read weighs a source by $a / r^{d-1}$, the solid angle it would "
-      "subtend facing the point. It leaves the slices as they are.")
-print()
-print("What would settle it: ISLA-DTT trained on AirfRANS with its far field at each step, two seeds each, everything else "
-      "as in ISLA-DTT trained with the far field, read per field against its control (the model as it is for the forest, the "
-      "forest for the near-wall length, the near-wall step for each weighting) by the registered rule: helps if "
-      "$D < \\ln 0.90$ beyond twice its standard error or if both seeds' ratios lie below 1/1.10, harms if $D > \\ln 1.10$ "
-      "beyond it or if both lie above 1.10; by wall-distance band; and for pose. "
-      "Adopting the near-wall length, either weighting, and the grouping of conditions on datasets that declare several, is "
-      f"Peter's decision. Cost: {af_cap:,} GPU-hours for the four steps. Data: {R.source('af_campaign', 'PREREG.frozen_e0739632.md')} "
-      f"(sections 2 and 5); {R.source('af_fix', 'DESIGN.md')}; {R.source('af_fix', 'PRESSURE_PROBE.md')} (section 3).")
+print("The grouping of the face trees by declared condition is not part of the class either. As built for the four steps, "
+      "it took each condition's bound on the frame's rotation from that condition's own covariance, while the frame comes "
+      "from the whole boundary. A square inlet or outlet has two nearly equal in-plane variances, so on AeroZoo the drawn "
+      f"gap of one outlet moved from {r1_gap[0]} to {r1_gap[1]} times the rounding's bound over {r1_gap[2]} draws, and one draw "
+      f"built {r1_pairs} million pairs and ran out of memory. With every group's bound taken from the whole boundary, every "
+      f"draw of that case builds {r1_v2[0]} to {r1_v2[1]} million. What the grouping does to accuracy on its own is not "
+      "measured: on AirfRANS the two conditions are the two connected pieces, the face forest without the grouping was not "
+      "trained with the far field, and the arm that reads the quadrature without the near-wall length keeps the grouping "
+      "with its per-condition bound, whose pair lists on AirfRANS differ from the whole-boundary bound's on every case "
+      "though their counts agree to 0.3%. "
+      f"Data: {R.source('af_campaign_read', 'RESULTS.md')}; {R.source('rule1_root_cause', 'ROOT_CAUSE_RULE1.md')} (sections 1 "
+      f"to 3); {R.source('af_confirm_prereg', 'PREREG.md')} (amendments A3 and A5).")
 ```
 
 ::: {.callout-note title="In flight"}
-The question is open on the far-field model as trained. ISLA-DTT retrained on AirfRANS with its
-far field at each of the four steps is being measured, and the ledger (@sec-ledger) tracks it.
+The question is open on one quadrature per condition read on top of the near-wall length. The quadrature on top of
+the face forest alone on AirfRANS, and on AeroZoo read for harm, are being measured, and the ledger (@sec-ledger)
+tracks them.
 :::
 
 ### A slice's mean normal on a closed boundary {#sec-oq-slice-normal}
@@ -1648,7 +1747,8 @@ assert "0 skipped steps and 0 non-finite losses in any run" in SPK and "no step 
 blip = re.search(r"at most a one-epoch loss blip of about (\d+)%", SPK).group(1)
 from physicsnemo.experimental.models.isla.model import EPS as _EPS
 sci_ = lambda x: f"$" + (lambda m, e: f"{m} \\times 10^{{{int(e)}}}")(*f"{float(x):.1e}".split("e")) + "$"
-print("**The open question is whether a slice's mean normal should be normalized by a smooth form with no constant.** Each "
+print("**The open question is whether a slice's mean normal should be normalized by a smooth floor at the training format's "
+      "rounding level.** Each "
       "slice layer normalizes the measure-weighted mean normal of a slice's tokens to a unit vector, "
       f"$m_s / \\max(\\lvert m_s \\rvert, \\epsilon)$ with $\\epsilon = 10^{{{int(f'{_EPS:.0e}'.split('e')[1])}}}$ (`_SliceBlock.forward`, @sec-arch-layer), "
       "and the relational invariants read it. A slice spread over a closed boundary has a mean normal near zero, because "
@@ -1668,10 +1768,12 @@ print("**The open question is whether a slice's mean normal should be normalized
       f"occur, in compiled and eager runs alike, leave at most a one-epoch loss blip of about {blip}%. On the spike study's "
       "quantitative reading the spike is a property of the normalization, not of the compiled path: the compiled kernels' "
       "coarser partial sums probably make an exact zero more likely (inferred, not measured on the GPU), "
-      "and nothing in the eager code prevents one. What would settle it: a smooth form of the invariant with no constant, "
-      "checked by a deterministic test (a closed boundary with uniform routing, whose mean normal is exactly zero), then "
-      "trained and read for harm against the standings. Cost: not priced. "
-      f"Data: {R.source('dtt_fast_done', 'spike/RESULTS.md')} (sections 1 to 3).")
+      "and nothing in the eager code prevents one. On Tensile2d, the lug and the DrivAerML Volume task the same slices make "
+      "the compiled blocks' certification undecidable: "
+      "where a slice's mean normal nearly cancels, its unit anchor normal is bfloat16 noise in eager and compiled runs alike "
+      "and its gradient is amplified by the inverse norm, so the two paths' per-group distances to float64 do not separate "
+      "another rounding from lost precision (@sec-arch-cost, @sec-limits-compiled). "
+      f"Data: {R.source('dtt_fast_done', 'spike/RESULTS.md')} (sections 1 to 3); {R.source('cert_routing', 'FINAL_REPORT.md')}.")
 DRA = {r_["field"]: r_ for r_ in R.md_table("slice_normal_exp", "reading_DRA.md", None, 0) if r_["protocol"] == "native"}
 dra = [R.num(DRA[f_]["arm ÷ control"]) for f_ in ("pressure_l2", "wss_l2")]
 assert all(DRA[f_]["label"] == "harms" for f_ in DRA)
@@ -1700,10 +1802,30 @@ print("Softening each slice's anchor distance as well, by adding the slice's own
       f"{n_dra} cases in both comparisons; so neither form is a candidate. "
       f"Data: {R.source('slice_normal_dras', 'reading_DRAS.md')}; {R.source('slice_normal_dras', 'reading_MDRA.md')}; "
       f"{R.source('slice_normal_dras', 'RESULTS.md')} (section 4.2); {R.source('slice_normal_exp', 'PREREG.md')} (F2, A6).")
+# SLICE-NORMAL-EXP on AirfRANS and the lug (ISLA-DTT), and option (c)'s design (C_DESIGN.md, not run)
+SNF = R.md_table("slice_normal_final", "RESULTS.md", "4.5 LUG and LUG-S", 0)
+assert next(r_ for r_ in SNF if r_["reading"].startswith("LUG-S"))["label"] == "harms"
+CD = " ".join(R.load("slice_normal_final", "C_DESIGN.md").split())
+assert "g_c(m) = m / sqrt(|m|² + L_s²), L_s = 2u · | Σ_n a_ns |n̂_n| |, u = 2⁻⁸" in CD and "1 / L_s ∈ [128, 128 √d]" in CD
+c_share = re.search(r"0\.008 % of slices on DrivAerML, ([\d.]+-[\d.]+) % on AirfRANS and the lug, ([\d-]+) % on AeroZoo ISLA-DTT", CD).groups()
+c_cost = re.search(r"\*\*about (\d+)-(\d+)\*\*", CD).groups()
 print()
-print("::: {.callout-note title=\"In flight\"}\nThis question rests on the normalization with its clamp, as the code has it, and on "
-      "two replacements read on the DrivAerML Surface task. The same two replacements on ISLA-DTT on the lug, which the AirfRANS "
-      "reading waits on, are being measured, and the ledger (@sec-ledger) tracks it.\n:::")
+print("On ISLA-DTT the two replacements read no better: on AirfRANS with its far field both read *no change* at a "
+      "resolution that resolves only a large harm, the second with both seeds above the control's on every field "
+      "(@sec-airfrans-slice-normal), and on the lug the unnormalized mean normal reads no change with both seeds above the "
+      "control's while the spread distance harms (@sec-lug-limits). The candidate left is a smooth floor at bfloat16's "
+      "rounding level, $m_s / \\sqrt{\\lvert m_s \\rvert^2 + L_s^2}$ with $L_s = 2u \\lvert \\sum_i a_{is} \\lvert \\hat n_i "
+      "\\rvert \\rvert$, the slice's own first-order bound on the rounding of its mean normal, and $u = 2^{-8}$. It is the "
+      "normalization wherever $\\lvert m_s \\rvert \\gg L_s$ and changes only slices near or below the rounding level, "
+      f"{c_share[0].replace('-', ' to ')}% of them on AirfRANS and the lug and {c_share[1].replace('-', ' to ')}% on AeroZoo "
+      "for ISLA-DTT; its gain is at most $1 / L_s \\le 128 \\sqrt d$, against the clamp's $10^{12}$, so it bounds the "
+      "gradient of exactly the near-degenerate slices behind the certification's failures on Tensile2d, the lug and the "
+      "DrivAerML Volume task; the separate cancellation in the routing backward on the surface tasks it does not touch. Its $u$ is a property of the training number "
+      "format fixed in code, not a statistic of the input, and every change of the architecture is Peter's to review: \u201call "
+      "changes to the baseline ISLA model architecture should be reviewed by me\u201d. What would settle it: the floor trained "
+      "and read for harm against the controls of these readings, the DrivAerML Surface task first. Cost: about "
+      f"{c_cost[0]} to {c_cost[1]} GPU-hours for the staged design. Data: {R.source('slice_normal_final', 'RESULTS.md')} "
+      f"(sections 4.3 to 4.5); {R.source('slice_normal_final', 'C_DESIGN.md')} (sections 1 to 5).")
 ```
 
 ### A quarter of the slices {#sec-oq-slices}

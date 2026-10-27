@@ -775,7 +775,7 @@ each token and without the measure bias, are the read-back weights
 (`point_mix`):
 
 $$
-\lambda'_{is} = \lambda_{is} + w_g \cdot \xi_{is} + b_g, \qquad
+\lambda'_{is} = \lambda_{is} + w_g \cdot \xi_{is}, \qquad
 \pi_{is} = \frac{\exp(\lambda'_{is})}{\sum_t \exp(\lambda'_{it})} .
 $$
 
@@ -1952,8 +1952,18 @@ gradient (`BoundaryForest`):
    they decide only which cells share a cluster. No learned map reads them,
    so a tie of the frame does not make the prediction jump by $O(1)$, as it
    does for a network fed canonical coordinates (@sec-landscape-symmetry).
-2. The cells are split by the sign octant of their normal in that frame,
-   and one cluster tree is built per octant
+   The forest is built and walked outside autocast, in the inputs'
+   precision: the coordinates about the centroid and the frame are computed
+   in float64 and rounded once, so a bfloat16 training step builds bitwise
+   the forest a float32 score of the same case builds.
+2. The cells are split by the cube face of their normal in that frame, the
+   axis of its largest component with that component's sign, $2d$ classes
+   (`normal_faces`). A component within twice the bound on its rounding of
+   the largest counts as tied, and the face goes to the lowest tied axis, so
+   rounding does not decide a face where an error bound can. The bound is the
+   cell's own, from its vertices (`normal_error_bound`), plus the frame's
+   rotation under the rounding of its inputs (`frame_rotation_bound`). One
+   cluster tree is built per face
    (`physicsnemo.mesh.spatial.ClusterTree`, which bisects the boxes of a
    Morton space-filling curve down to leaves of `TREE_READ_LEAF_SIZE`
    cells). Opposite normals never share a tree, so no cluster spans both
@@ -1966,16 +1976,19 @@ gradient (`BoundaryForest`):
    model and float32 otherwise, bfloat16 rows included (`node_means`), so a
    float64 model reads its clusters in float64 throughout.
 4. Each point walks every tree once. A node is read as one virtual cell
-   when its box diagonal is below $\theta$ times the distance from the point
-   to the box and its normals are coherent: their measure-weighted RMS chord
+   when it is certainly separated from the point, its box diagonal widened
+   by the arithmetic's error bound and by the frame's possible rotation
+   (`separation_diameter_sq`, below) staying below $\theta$ times the
+   distance from the point to the box, and its normals are coherent: their measure-weighted RMS chord
    about the mean, $\sqrt{2(1 - \lvert \bar n \rvert)}$, is below $\theta$. A
    leaf that fails either test is read cell by cell, and any other node
    hands the point to its two children, so every cell is read exactly once,
    alone or inside one virtual cell
    (`test_point_pairs_admit_only_separated_coherent_nodes_and_cover_every_cell`).
    At $\theta \geq 0.919$ in three dimensions, and $0.765$ in two, the
-   coherence test admits every node: inside one sign octant
-   $\lvert \bar n \rvert \geq 1/\sqrt d$, so at $\theta = 1$ the box test
+   coherence test admits every node: inside one face every normal has
+   $\lvert n_k \rvert \geq 1/\sqrt d$ along the face's axis, so
+   $\lvert \bar n \rvert \geq 1/\sqrt d$, the bound a sign octant gives, and at $\theta = 1$ the box test
    alone decides which clusters a point reads.
 
 The softmax of the global read then runs over each point's list, a virtual
@@ -1986,14 +1999,57 @@ constant over the cluster, reading the virtual cell would equal reading its
 cells one by one. How the build, the walk and the read run on a GPU is
 @sec-arch-tree-exec.
 
-**Under bfloat16 autocast, as in training, the forest is built from rounded
-coordinates.** The two products `points @ frame` in `BoundaryForest.build`
-and `point_pairs` run under the caller's autocast, which casts both factors
-to bfloat16, the 16-bit format training runs in, and rounds the product to
-it. The trees' coordinates and boxes and the node measures are then
-bfloat16, while the box diameters and the walk's box table stay float32, so
-a bfloat16 training step and a float32 score of the same case build
-different forests. The node measures are the denominators of every node's
+```{python}
+#| label: para-arch-tree-neartie
+#| output: asis
+# FOREST-NEARTIE: the near-tie Monte Carlo (face forest with the distance-proportional bound against the octant forest on the
+# same draws), the options table (the class's bound, (c')), the OOM model and what the class's bound changes per dataset
+NT = " ".join(R.load("forest_neartie", "FINAL_REPORT.md").split())
+NMC = R.md_table("forest_neartie", "RISK_TABLE.md", "Near-tie Monte Carlo", 0)[0]
+OPT = {r_["option"].split(" ")[0]: r_ for r_ in R.md_table("forest_neartie", "OPTIONS.md", "The candidates", 0)}
+fix = OPT["(c')"]
+assert "the fix" in fix["option"] and "Only the external_opposed_hemisphere and external_opposed_sphere families" in NT
+oom = re.search(r"OOM chance of a 250-epoch AeroZoo ISLA-DTT lane: about (\d+)%", NT).group(1)
+af_fall, af_lo, af_hi = re.search(r"AirfRANS \(far field\): pairs fall (\d+)% \(([\d.]+)-([\d.]+)\)", NT).groups()
+af_out = float(re.search(r"Outputs change by at most ([\d.e-]+), and", NT).group(1))
+never = re.search(r"never more than 0\.14\.0's", NT) is not None
+assert never
+print("**The frame's possible rotation widens each node in proportion to the node's own size, never past a ball that holds "
+      "in every frame.** The frame is estimated from the drawn tokens, and rounding of its inputs may rotate it from the exact "
+      "canonical frame by at most $\\eta = E / (g - E)$ per coordinate, with $E = 4u \\operatorname{tr} C$ the rounding's "
+      "bound on the covariance $C$ and $g$ its smallest eigenvalue gap (Davis–Kahan; `frame_rotation_bound`). A rotation "
+      "moves the point and the node's cells together, so it changes the node's diagonal and its distance from the point only "
+      "in proportion to the node's own diagonal $D$: the test $\\theta r > f D$ with $f = (1 + \\sqrt d \\eta (1 + \\theta)) / "
+      "(1 - \\sqrt d \\eta)$, at the angle $\\theta / f$ and with the arithmetic's error, certifies that the node is "
+      "separated in the exact frame. In every frame the node's cells lie in the ball of radius $D / 2$ about its box's "
+      "center $c$, so $\\theta \\lvert q - c \\rvert > (\\theta + 2) \\sqrt d D / 2$ certifies it whatever the rotation, and "
+      "the class compares the distance with the smaller of the two diameters (`separation_diameter_sq`). The widening grows "
+      "with $\\eta$ and stays bounded as the frame's variances tie, where $\\eta$ diverges. A bound that treats the rotation "
+      "as an error of each coordinate in proportion to its distance from the centroid certifies the same test, but near a tie "
+      "it opens every small node far from the centroid. AeroZoo's opposed-sphere and opposed-hemisphere families have "
+      "spherical far fields with two or three nearly equal variances, and there the token draw's noise sets the gap: on 60 "
+      f"such cases, 60 draws each, that bound read up to {float(NMC['max']):.1f} times the octant forest's pairs on the same "
+      f"draws (more than 5 times on {NMC['> 5x'].replace(' (', ' of the 3,600 draws, ').rstrip(')')}), about a {oom}% chance of running out of memory in one "
+      "AeroZoo training run of 250 epochs. The class's bound keeps the same draws within "
+      f"{float(fix['/ octant, near-tie MC max']):.2f} times the octant forest's pairs and never reads more pairs than that "
+      f"bound on any saved draw. On AirfRANS with its far field it reads {af_fall}% fewer pairs ({af_lo} to {af_hi} times), "
+      "because the far field puts the airfoil's small nodes far from the centroid, and with random weights the outputs "
+      f"change by at most {sci(af_out)} relative; on the lug, Tensile2d and the DrivAerML Volume task the median "
+      "case's pairs change by at most 0.1%. Under pose no forest is invariant at a near tie: the computed frame turns inside the nearly degenerate plane "
+      f"and the trees turn with it. Data: {R.source('forest_neartie', 'FINAL_REPORT.md')} (sections 1 to 3); "
+      f"{R.source('forest_neartie', 'RISK_TABLE.md')}; {R.source('forest_neartie', 'OPTIONS.md')}.")
+```
+
+**The standings' ISLA-DTT checkpoints read an octant forest built under
+the caller's autocast, from rounded coordinates.** That forest splits the
+cells by the sign octant of their normal in the frame, $2^d$ classes, and
+compares the distance with the boxes' own diameters. The two products
+`points @ frame` of its build and of its walk run under the caller's
+autocast, which casts both factors to bfloat16, the 16-bit format training
+runs in, and rounds the product to it. The trees' coordinates and boxes and
+the node measures are then bfloat16, while the box diameters and the walk's
+box table stay float32, so a bfloat16 training step and a float32 score of
+the same case build different forests. The node measures are the denominators of every node's
 mean key and value, which bfloat16 scales by up to $2^{-9}$, and they shift
 the nodes' log measures by up to $2^{-9}$, so a node no longer reads exactly
 as its cells do on a constant. On the AirfRANS interior task and the
@@ -2016,12 +2072,12 @@ most $2.6 \times 10^{-7}$ of its extent, and no axis changes sign
 results/campaigns_2026-10-23/dtt_pose/MECHANISMS.md, sections 1 and 2).
 
 ::: {.callout-note title="In flight"}
-These numbers come from the octant forest the class builds under the caller's autocast. ISLA-DTT trained with
-the forest that depends on the boundary alone (@sec-arch-tree-read) is to be measured at the reference
-configuration on the 0.14.0 code, and the ledger (@sec-ledger) tracks it.
+These numbers come from the octant forest of the standings' ISLA-DTT checkpoints. ISLA-DTT trained with the
+class's face forest (@sec-arch-tree-read) on every interior dataset at the reference configuration is being
+measured, and the ledger (@sec-ledger) tracks it.
 :::
 
-Three properties hold by construction. At $\theta = 0$, a setting of the
+Three properties of the class's forest hold by construction. At $\theta = 0$, a setting of the
 tests, no cluster is admitted and the read is the read of every cell pair
 by pair (`test_tree_read_at_theta_zero_is_the_exact_read`). At every
 $\theta$ a point's list depends on the forest and the point alone, so the
@@ -2033,11 +2089,12 @@ so ISLA-DTT is pose-invariant. Rounding can break this in two places. The
 frame can tie: two equal principal variances, or an axis without a third
 moment, whose sign then follows whichever of the dataset's axes it overlaps
 most. There a rigid motion can regroup the clusters, and the read moves
-only at the size of the tree's error, which vanishes as $\theta \to 0$. So
-can the octant split, at a normal component that is zero but for rounding
-in that frame: its sign, and so the cell's tree, then rests on rounding.
+only at the size of the tree's error, which vanishes as $\theta \to 0$.
+What rounding still decides in the face split and the box test is generic:
+a cell within rounding of a face's edge, a Morton grid line or the test's
+threshold, whose posed inputs differ by the rounding of the pose itself.
 
-**On the lug, rounding decides the octant of most cells and the box test of
+**In the octant forest, rounding decides the octant of most of the lug's cells and the box test of
 many pairs, in float32 as in bfloat16.** The lug's faces are parallel to its
 principal axes, so most of its normals have components that are exactly zero
 in the forest's frame, and the stored ones are rounding residues: 86% of the
@@ -2069,8 +2126,8 @@ octant, and ISLA-DTT trained with the far field has a posed error 1.53 to
 2.52 times its native error (@sec-limits-af-whole;
 results/campaigns_2026-10-23/af_whole_read/RESULTS.md, sections 1 and 3).
 
-**A forest that depends on the boundary alone is designed and measured on a
-prototype.** The design, approved by the supervisor, changes five things.
+**The class's face forest depends on the boundary alone.** Against the
+octant forest it differs in five things.
 The forest is built and walked outside autocast, in the inputs' precision.
 Its coordinates are taken about the boundary's measure-weighted centroid in
 float64, the frame kept in float64, and rounded once. Its orientation
@@ -2080,12 +2137,12 @@ sign octants; a component within twice the bound on its rounding (the
 cell's own bound from its vertices, plus the frame's rotation under the
 rounding of its inputs) of the largest counts as tied, and the face goes
 to the lowest tied axis. The box test admits a node only when it is
-separated with the arithmetic's error included, so an exact tie of the
-test opens the node in every pose. And each token carries its normal's
+separated with the arithmetic's error and the frame's possible rotation
+included, so an exact tie of the test opens the node in every pose. And each token carries its normal's
 error bound into the forest. A face holds normals with $\lvert n_k \rvert
 \geq 1/\sqrt d$, the bound an octant gives, so the coherence test still
 admits every node at $\theta = 1$, and a normal and its negative still land
-in different trees. On the prototype, an ISLA-DTT forward with random
+in different trees. On a prototype of this forest, an ISLA-DTT forward with random
 weights on 12 lug cases changes under pose by $1.6 \times 10^{-7}$
 relative (the median; float32 roundoff), against $2.1 \times 10^{-6}$ with
 the octant forest; under bfloat16 autocast the forest is bitwise the
@@ -2113,7 +2170,7 @@ assert _lug["N"] == "no change" and all(r_["N"] == "no change" for r_ in _af.val
 pn_arm = re.search(r"posed / native arm \[([\d.]+), ([\d.]+)\], control \[([\d.]+), ([\d.]+)\]", RDX).groups()
 lug_win = re.search(r"arm better in ([\d.]+)% of cases", RDX).group(1)
 assert "no paired label" in RDX and "P pass" in RDX and RDX.count("bitwise") >= 8
-print("**Retrained with the forest that depends on the boundary alone, ISLA-DTT is pose-invariant on the lug.** "
+print("**Retrained with the face forest, ISLA-DTT is pose-invariant on the lug.** "
       f"Trained with it on the lug and the AirfRANS interior task, two seeds each, ISLA-DTT's posed error on the lug is "
       f"{pn_arm[0]} and {pn_arm[1]} times its native error (seeds 42 and 43), against {float(pn_arm[2]):.2f} and "
       f"{float(pn_arm[3]):.2f} for the octant forest, and the bfloat16 forest is bitwise the float32 one on every scored case. By "
@@ -2544,7 +2601,7 @@ per_pair = [
     (3, 12 + 4 + 12),   # rel_hat = rel / |rel|: read 3 + 1, write 3
 ] + [(5, 12 + 4)] * (K + 3) + [   # the K + 3 dot products: read 3, write 1
     (0, 2 * 4 * G),     # concatenate into xi: read and write G floats
-    (2 * G, 4 * G + 4), # refinement w_g . xi + b_g: read G, write 1
+    (2 * G - 1, 4 * G + 4), # refinement w_g . xi: read G, write 1
     (5, 3 * 4 + 4),     # read-back softmax over slices of logits + bias
     (2 * G, 4 + 4 * G), # pooled invariants: read pi and xi
 ]
@@ -2571,7 +2628,7 @@ plt.show()
 
 **The eager region is checkpointed.** Steps c to e and the pooling of step
 h are one *geometry region* per layer (`_geo_region`): a function of
-$(\lambda, r, \hat n, \hat g, z, m)$ whose only parameters are $w_g, b_g$,
+$(\lambda, r, \hat n, \hat g, z, m)$ whose only parameter is $w_g$ (a constant $b_g$ would cancel in both softmaxes, so the map has none),
 returning the refinement $N{\times}M$, the read-back weights $N{\times}M$
 and the pooled invariants $N{\times}(5+K)$. On the eager path the block
 calls it under `torch.utils.checkpoint`, so the separations, distances and
@@ -2694,11 +2751,55 @@ print("**The supervisor's policy certifies a compiled region against eager's own
       f"Tensile2d's ISLA trains eagerly. Data: {R.source('fused_pad', 'FINAL_REPORT.md')}.")
 ```
 
-::: {.callout-note title="In flight"}
-These readings come from three planar and no-direction checkpoints read on the fused kernel's code. The
-certification of the compiled blocks on every dataset is to be measured on the 0.14.0 code, and the ledger
-(@sec-ledger) tracks it.
-:::
+```{python}
+#| label: para-arch-cert-final
+#| output: asis
+# CERT (Parts 1 and 2 on nine families, the class's code) and CERT-ROUTING (the diagnosis and Part 3, with its positive control)
+CV = {r_["family"]: r_["Part 2 (null-calibrated, confirmatory)"] for r_ in R.md_table("cert", "FINAL_REPORT.md", "Verdicts", 0)}
+cert_ok = [k for k, v in CV.items() if v.startswith("certified")]
+assert cert_ok == ["DeepJEB++ (djb)"] and len(CV) == 9
+t2d_x = re.search(r"G2' R ([\d.]+)", CV["Tensile2d (t2d)"]).group(1)
+az_x = re.search(r"G2' R ([\d.]+)", CV["AeroZoo (az)"]).group(1)
+CRF = " ".join(R.load("cert_routing", "FINAL_REPORT.md").split())
+c1 = re.search(r"The attention logits come out (\d+)x closer to fp64 \(([\d.e-]+) against ([\d.e-]+)\)", CRF).groups()
+t2d_m = re.search(r"so its measure-weighted mean normal cancels: norm\(m\) = ([\d.]+)", CRF).group(1)
+m_wrong = re.search(r"Eager's own gradient of m there is (\d+)% wrong", CRF).group(1)
+eag_up = re.search(r"C1: t2d ([\d.]+)x \(compiled ([\d.]+)x\)", CRF).groups()
+P3 = R.md_table("cert_routing", "FINAL_REPORT.md", "Part 3", 0)
+undetected = [r_["family"] for r_ in P3 if r_["positive control"] == "passed"]
+assert len(P3) == 8 and len(undetected) == 4 and not any(r_["verdict"] == "certified" for r_ in P3)
+hl_m = next(r_ for r_ in R.md_table("cert_routing", "FINAL_REPORT.md", "Architecture note", 0) if r_["family"] == "hl")["smallest norm(m)"].split(" ")[0]
+assert "This explains hl, suv and drs." in CRF and "This explains t2d, lug and vol, and in part af, az and suv." in CRF
+assert CV["AeroZoo (az)"].endswith("(fwd9.params c1)") or "fwd9.params c1" in CV["AeroZoo (az)"]
+print("**On the class's code the compiled blocks are more precise than eager op by op, and a per-group certification "
+      "cannot decide whether that is safe where the routing gradients are ill-conditioned.** Certified against a family of "
+      "eager runs calibrated on eager itself, fresh seeds and fresh compile processes, on a trained checkpoint of each of "
+      f"nine dataset families, the compiled blocks pass only on DeepJEB++. The other eight fail in a few gradient groups, "
+      f"routing gradients on seven of them and a parameter-gradient group on AeroZoo, by {az_x} times eager's spread on "
+      f"AeroZoo up to {t2d_x} times on Tensile2d, while in dozens of other groups per family the compiled path is closer to "
+      "float64 than eager. The cause is two roundings that Inductor's default casts leave out and eager makes. The first is "
+      "the routing logits' measure term (the scaled product plus the log measure, which eager adds in bfloat16; compiled, "
+      f"the logits are {c1[0]} times closer to float64, {sci(float(c1[1]))} against {sci(float(c1[2]))}). It explains "
+      "Tensile2d, the lug and the DrivAerML Volume task, and in part AirfRANS, AeroZoo and SHIFT-SUV: there the failing "
+      "groups sit in near-degenerate slices, whose routing weights are nearly uniform over a closed piece of the boundary, "
+      "so that the mean normal nearly cancels, since the measure-weighted normals of a closed surface sum to zero "
+      f"(@sec-oq-slice-normal; {t2d_m} on Tensile2d against terms of order one). Its unit anchor normal is then bfloat16 "
+      "noise in both paths and its gradient is amplified by the inverse norm; eager's own gradient of that mean is "
+      f"{m_wrong}% wrong there, and eager's rounding happens to enlarge the norm. Eager made more precise in that one step "
+      f"alone reproduces the compiled path's excess, {eag_up[0]} against {eag_up[1]} times on Tensile2d in the diagnosis's "
+      f"own measurement, a different one from the certification's {t2d_x}. The second is the accumulation of the routing "
+      "logits' gradient, which eager sums in bfloat16 over every token, a separate cancellation; it explains HiLiftAeroML, "
+      "SHIFT-SUV and the DrivAerML Surface task, and HiLiftAeroML's smallest mean normal, "
+      f"{hl_m}, is not degenerate. A second certification against eager together with nine precision-raising or reordered "
+      "eager implementations, on fresh seeds, certified no family, and its positive control, one bfloat16 rounding added to "
+      f"the inputs of the softmax over points, went undetected in {len(undetected)} of {len(P3)} families, so that gate had "
+      "no power: in these ill-conditioned groups per-group distances do not separate another rounding from lost precision. "
+      "On that registered verdict the supervisor's decision is to train ISLA eagerly on every dataset but DeepJEB++, whose "
+      "compiled blocks certified, with float32 eager as the reference (@sec-using-cost). "
+      f"Data: {R.source('cert', 'FINAL_REPORT.md')}; {R.source('cert', 'out/part2/PART2_VERDICTS.md')}; "
+      f"{R.source('cert_routing', 'FINAL_REPORT.md')}; {R.source('cert_routing', 'DIAGNOSIS.md')}; "
+      f"{R.source('cert_routing', 'out/part3/PART3_VERDICTS.md')}.")
+```
 
 **Where a training step's time goes.** @fig-arch-step-breakdown takes one
 warm training step of interacting ISLA apart on AeroZoo, on one node of
