@@ -26,7 +26,12 @@ from tensordict import TensorDict
 from torch import Tensor
 
 from ._utils import pack_fields, validate_provenance
-from .scores import _DIFFICULTY_REGISTRY, _SCORE_REGISTRY, _strategy_kind
+from .scores import (
+    _SCALE_REGISTRY,
+    _SCORE_REGISTRY,
+    _check_config_value,
+    _strategy_kind,
+)
 
 _ARTIFACT_FORMAT = "physicsnemo.uq.conformal"
 _ARTIFACT_VERSION = 1
@@ -38,8 +43,9 @@ _SCHEMA_KEYS = {
     "alpha",
     "n_cal",
     "thresholds",
-    "difficulty",
+    "scale",
     "mesh_fingerprint",
+    "weighted",
     "provenance",
 }
 
@@ -60,39 +66,47 @@ def _check_exact_keys(value: object, expected: set[str], where: str) -> Mapping:
 
 
 def _strategy_spec(strategy: object, registry: Mapping) -> dict:
-    """Encode a built-in score or difficulty as ``{"kind", "kwargs"}``."""
+    """Encode a registered score or scale as ``{"kind", "kwargs"}``."""
     return {
         "kind": _strategy_kind(strategy, registry),
-        "kwargs": {name: getattr(strategy, name) for name in strategy._saved_kwargs},
+        "kwargs": {
+            name: getattr(strategy, name) for name in type(strategy).config_fields
+        },
     }
 
 
 def _resolve_strategy(spec: object, registry: Mapping, what: str):
-    """Rebuild a built-in score or difficulty from its saved spec."""
+    """Rebuild a registered score or scale from its saved spec."""
     spec = _check_exact_keys(spec, {"kind", "kwargs"}, f"Artifact {what} spec")
     kind = spec["kind"]
     if type(kind) is not str or kind not in registry:
         raise ValueError(
-            f"Unknown built-in {what} kind {kind!r}; expected one of "
-            f"{sorted(registry)!r}."
+            f"Unknown {what} kind {kind!r}; registered kinds are "
+            f"{sorted(registry)!r}. If it is a custom {what}, import the module "
+            "that registers it before loading."
         )
-    expected_types = registry[kind]._saved_kwargs
+    cls = registry[kind]
     kwargs = _check_exact_keys(
-        spec["kwargs"], set(expected_types), f"Artifact {what} {kind!r} kwargs"
+        spec["kwargs"], set(cls.config_fields), f"Artifact {what} {kind!r} kwargs"
     )
-    for name, expected_type in expected_types.items():
-        value = kwargs[name]
-        if type(value) is not expected_type:
-            raise TypeError(
-                f"Artifact {what} {kind!r} kwarg {name!r} must have exact type "
-                f"{expected_type.__name__}, got {type(value).__name__}."
-            )
+    for name, value in kwargs.items():
+        _check_config_value(f"Artifact {what} {kind!r}", name, value)
     try:
-        return registry[kind](**dict(kwargs))
+        strategy = cls(**dict(kwargs))
     except (TypeError, ValueError) as exc:
         raise ValueError(
-            f"Invalid constructor arguments for built-in {what} {kind!r}: {exc}"
+            f"Invalid constructor arguments for {what} {kind!r}: {exc}"
         ) from exc
+    # The rebuilt object must hold exactly the saved values, so a corrupted
+    # file cannot load as a differently configured strategy.
+    for name, value in kwargs.items():
+        rebuilt = getattr(strategy, name)
+        if type(rebuilt) is not type(value) or rebuilt != value:
+            raise ValueError(
+                f"Artifact {what} {kind!r} kwarg {name!r} is {value!r}, but the "
+                f"constructor stores {rebuilt!r}."
+            )
+    return strategy
 
 
 def _wire_thresholds(value: object) -> Tensor | TensorDict:
@@ -127,28 +141,33 @@ def _parse_artifact(payload: object) -> dict:
         )
     payload = _check_exact_keys(payload, _SCHEMA_KEYS, "Conformal artifact")
     score = _resolve_strategy(payload["score"], _SCORE_REGISTRY, "score")
-    difficulty = (
+    scale = (
         None
-        if payload["difficulty"] is None
+        if payload["scale"] is None
         else _resolve_strategy(
-            payload["difficulty"], _DIFFICULTY_REGISTRY, "difficulty"
+            payload["scale"], _SCALE_REGISTRY, "scale"
         )
     )
+    if type(payload["weighted"]) is not bool:
+        raise TypeError(
+            f"Artifact weighted must be a bool, got {payload['weighted']!r}."
+        )
     return {
         "tier": payload["tier"],
         "score": score,
         "alpha": payload["alpha"],
         "n_cal": payload["n_cal"],
         "thresholds": _wire_thresholds(payload["thresholds"]),
-        "difficulty": difficulty,
+        "scale": scale,
         "mesh_fingerprint": payload["mesh_fingerprint"],
+        "weighted": payload["weighted"],
         "provenance": payload["provenance"],
     }
 
 
 def _artifact_payload(state: Mapping) -> dict:
     """Encode predictor state, thresholds keyed by field, for ``torch.save``."""
-    difficulty = state["difficulty"]
+    scale = state["scale"]
     return {
         "format": _ARTIFACT_FORMAT,
         "version": _ARTIFACT_VERSION,
@@ -159,12 +178,13 @@ def _artifact_payload(state: Mapping) -> dict:
         "thresholds": {
             key: value.detach().cpu() for key, value in state["thresholds"].items()
         },
-        "difficulty": (
+        "scale": (
             None
-            if difficulty is None
-            else _strategy_spec(difficulty, _DIFFICULTY_REGISTRY)
+            if scale is None
+            else _strategy_spec(scale, _SCALE_REGISTRY)
         ),
         "mesh_fingerprint": state["mesh_fingerprint"],
+        "weighted": state["weighted"],
         "provenance": validate_provenance(state["provenance"]),
     }
 

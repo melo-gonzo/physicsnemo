@@ -39,7 +39,7 @@ from tensordict import TensorDict
 from torch import Tensor
 
 if TYPE_CHECKING:
-    from .scores import _NonconformityScore
+    from .scores import NonconformityScore
 
 TENSOR_KEY = "__tensor__"
 """Reserved field key used when the inputs are plain tensors."""
@@ -236,7 +236,7 @@ def cast_directed(t: Tensor, dtype: torch.dtype, *, up: bool) -> Tensor:
     return torch.where(wrong_side, bumped, cast)
 
 
-Tier = Literal["cellwise", "functional", "risk_control"]
+Tier = Literal["pointwise", "functional", "risk_control"]
 """Guarantee tier names."""
 
 TIERS: tuple[str, ...] = get_args(Tier)
@@ -370,7 +370,7 @@ def require_mesh(
     fingerprint = points_fingerprint(points)
     if expected is not None and fingerprint != expected:
         raise ValueError(
-            "points does not match the exact calibration mesh; cellwise "
+            "points does not match the exact calibration mesh; pointwise "
             "conformal needs the same mesh (coordinates, dtype, and point "
             f"order) on every call.{hint}"
         )
@@ -378,15 +378,45 @@ def require_mesh(
 
 
 def check_point_alignment(
-    key: str, tensor: Tensor, points: Tensor, name: str = "prediction"
+    key: str,
+    tensor: Tensor,
+    points: Tensor,
+    name: str = "prediction",
+    what: str = "points",
 ) -> Tensor:
-    """Require one leading entry of ``tensor`` per mesh point."""
+    """Require one leading entry of ``tensor`` per mesh point (or per weight)."""
     if tensor.ndim == 0 or tensor.shape[0] != points.shape[0]:
         raise ValueError(
             f"{_field_label(key)} ({name}): shape {tuple(tensor.shape)} must have "
-            f"one leading entry per point (points has {points.shape[0]})."
+            f"one leading entry per point ({what} has {points.shape[0]})."
         )
     return tensor
+
+
+def check_weights(weights: Tensor, pending: list[Tensor] | None = None) -> Tensor:
+    """Require finite, nonnegative, not all zero ``weights`` of shape ``(n_points,)``.
+
+    With ``pending``, append the value flags there instead of syncing.
+    """
+    if not isinstance(weights, Tensor):
+        raise TypeError(f"weights must be a torch.Tensor, got {type(weights).__name__}.")
+    if weights.ndim != 1 or weights.shape[0] == 0:
+        raise ValueError(
+            f"weights must have non-empty shape (n_points,), got {tuple(weights.shape)}."
+        )
+    if not weights.is_floating_point():
+        raise TypeError(f"weights must use a floating-point dtype, got {weights.dtype}.")
+    checks = (
+        (torch.isfinite(weights).all(), "weights contains non-finite value(s)."),
+        ((weights >= 0).all(), "weights must be nonnegative."),
+        ((weights > 0).any(), "weights must not be all zero."),
+    )
+    for ok, problem in checks:
+        if pending is not None:
+            pending.append(ok)
+        elif not ok:
+            raise ValueError(problem)
+    return weights
 
 
 def clamp_min_floor(t: Tensor, eps: float) -> Tensor:
@@ -408,13 +438,13 @@ def clamp_min_floor(t: Tensor, eps: float) -> Tensor:
     return t.clamp_min(floor)
 
 
-def broadcast_difficulty(t: Tensor, ref: Tensor, key: str) -> Tensor:
+def broadcast_scale(t: Tensor, ref: Tensor, key: str) -> Tensor:
     """Reshape per-point scales to ``(n_points, 1, ...)`` to broadcast on ``ref``."""
     if t.ndim == 0:
         return t
     if ref.shape[0] != t.shape[0]:
         raise ValueError(
-            f"{_field_label(key)}: AuxDifficulty gave {t.shape[0]} scales, but "
+            f"{_field_label(key)}: AuxScale gave {t.shape[0]} scales, but "
             f"the field has {ref.shape[0]} points (leading dimension)."
         )
     return t.reshape(t.shape[0], *([1] * (ref.ndim - 1)))
@@ -469,7 +499,7 @@ def check_exact_shape(
 
 def check_aux(
     key: str,
-    score: "_NonconformityScore",
+    score: "NonconformityScore",
     prediction: Tensor,
     aux: Mapping[str, Tensor] | None,
     pending: list[Tensor] | None = None,
@@ -479,9 +509,14 @@ def check_aux(
     An infinite sigma would otherwise make the score zero. ``pending`` works
     as in :func:`check_finite`.
     """
-    if aux is None:
-        return
-    for aux_key in [k for k in score.aux_keys if k in aux]:
+    missing = [k for k in score.aux_keys if not isinstance(aux, Mapping) or k not in aux]
+    if missing:
+        raise ValueError(
+            f"{_field_label(key)}: {type(score).__name__} requires aux entries "
+            f"{list(score.aux_keys)}; missing {missing}. Pass aux={{key: tensor}} "
+            "(or, for TensorDict inputs, aux={field: {key: tensor}})."
+        )
+    for aux_key in score.aux_keys:
         value = aux[aux_key]
         if not isinstance(value, Tensor):
             raise TypeError(

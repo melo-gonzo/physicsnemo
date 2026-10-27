@@ -32,7 +32,9 @@ from ._utils import (
     _field_label,
     alpha_as_fraction,
     check_exact_shape,
+    check_point_alignment,
     check_real,
+    check_weights,
     fetch_ints,
     field_items,
     normalize_keys,
@@ -87,30 +89,36 @@ class CoverageAccumulator:
     from the predictor, so the report measures what the predictor's
     calibrator guarantees:
 
-    - ``"cellwise"`` (``CellwiseCalibrator``): how often each element lies
+    - ``"pointwise"`` (``PointwiseCalibrator``): how often each element lies
       inside its interval.
     - ``"functional"`` (``FunctionalBandCalibrator``): how often a sample
       lies inside its band at every point.
     - ``"risk_control"`` (``RiskControlCalibrator``): the mean fraction of
-      points per sample that fall outside the band.
+      points per sample that fall outside the band, weighted when
+      :meth:`update` receives ``weights``.
 
     Call :meth:`update` once per held-out sample, then :meth:`finalize` for
     the report.
 
     Parameters
     ----------
-    tier : {"cellwise", "functional", "risk_control"}
+    tier : {"pointwise", "functional", "risk_control"}
         The predictor's ``tier``, naming the calibrator that produced it;
         selects the reported statistic.
     alpha : float
         The predictor's target miscoverage (or risk) level. Reported in the
-        metadata and used to count cellwise elements at or above target
+        metadata and used to count pointwise elements at or above target
         coverage.
     n_cal : int
         Number of calibration samples of the predictor; reported only.
     keys : Sequence[str], optional
         Calibrated field names for ``TensorDict`` inputs, or ``None`` for
         plain tensors.
+    weighted : bool, optional
+        Whether the predictor was calibrated with ``weights`` (risk-control
+        tier only). ``True`` requires ``weights`` on every :meth:`update`,
+        ``False`` rejects them, and ``None`` (the default) accepts whichever
+        the first update uses and holds every later update to it.
 
     Notes
     -----
@@ -148,9 +156,16 @@ class CoverageAccumulator:
         alpha: float,
         n_cal: int,
         keys: Sequence[str] | None = None,
+        weighted: bool | None = None,
     ) -> None:
         if tier not in TIERS:
             raise ValueError(f"tier must be one of {TIERS}, got {tier!r}.")
+        if weighted is not None and type(weighted) is not bool:
+            raise TypeError(f"weighted must be a bool or None, got {weighted!r}.")
+        if weighted and tier != "risk_control":
+            raise ValueError(
+                f"weighted=True applies only to the risk_control tier, not {tier!r}."
+            )
         self._tier = tier
         self._alpha = validate_alpha(alpha)
         self._n_cal = validate_n_cal(n_cal)
@@ -158,12 +173,16 @@ class CoverageAccumulator:
         field_keys = (TENSOR_KEY,) if self._keys is None else self._keys
         self._counters = {key: _FieldCounters() for key in field_keys}
         self._element_hits: dict[str, Tensor] = {}
+        self._weighted: bool | None = weighted
+        self._weighted_fixed = weighted is not None
 
     def update(
         self,
         lo: Float[Tensor, "*dims"] | TensorDict,
         hi: Float[Tensor, "*dims"] | TensorDict,
         target: Float[Tensor, "*dims"] | TensorDict,
+        *,
+        weights: Float[Tensor, "n_points"] | None = None,
     ) -> None:
         r"""Add one held-out sample to the statistics.
 
@@ -181,6 +200,21 @@ class CoverageAccumulator:
             Upper bounds, same shape and container type as ``lo``.
         target : torch.Tensor | TensorDict
             Observed values, same shape and container type as ``lo``.
+        weights : torch.Tensor, optional
+            Per-point weights of shape :math:`(n_{\text{points}},)` for the
+            ``"risk_control"`` tier only: floating point, finite,
+            nonnegative, not all zero, on any device; for example cell areas
+            or volumes on a non-uniform mesh (with :mod:`physicsnemo.mesh`,
+            :func:`~physicsnemo.mesh.calculus.point_measures`). The sample's
+            coverage becomes its weighted fraction of covered points,
+            normalized by the sum of the weights, matching a
+            :class:`~physicsnemo.experimental.uq.conformal.RiskControlCalibrator`
+            calibrated with ``weights``. One vector applies to every
+            calibrated field, so each field's leading dimension must equal
+            ``len(weights)``. Pass ``weights`` on every call or on none; an
+            accumulator from ``predictor.coverage_accumulator()`` requires
+            them when the predictor was calibrated with weights and rejects
+            them otherwise.
 
         Returns
         -------
@@ -191,13 +225,16 @@ class CoverageAccumulator:
         TypeError
             If the inputs are plain tensors for a predictor calibrated on
             ``TensorDict`` fields (or the reverse), or use a non-floating
-            dtype.
+            dtype; if ``weights`` is passed on another tier, on some calls
+            but not others, or is not a floating-point tensor.
         KeyError
             If a ``TensorDict`` lacks a calibrated field.
         ValueError
             If ``target`` is empty, shapes differ, a value is NaN or
-            infinite, a width or the running width sum overflows float64, or
-            (cellwise) the sample shape differs from earlier samples.
+            infinite, a width or the running width sum overflows float64,
+            (pointwise) the sample shape differs from earlier samples, or
+            ``weights`` has the wrong shape, a negative entry, or no positive
+            entry.
 
         Notes
         -----
@@ -212,6 +249,24 @@ class CoverageAccumulator:
         overflow float64, rescale ``lo``, ``hi``, and ``target`` by the same
         factor and start a new accumulator.
         """
+        if weights is not None and self._tier != "risk_control":
+            raise TypeError(
+                f"weights= applies only to the risk_control tier, not {self._tier!r}."
+            )
+        if self._weighted is not None and (weights is not None) != self._weighted:
+            if self._weighted_fixed:
+                raise TypeError(
+                    "The predictor was calibrated with weights=; pass the same "
+                    "kind of weights= to update."
+                    if self._weighted
+                    else "The predictor was calibrated without weights=; omit "
+                    "weights= so the report measures its guarantee."
+                )
+            first = "had" if self._weighted else "did not have"
+            raise TypeError(
+                f"The first held-out sample {first} weights=; pass weights= on "
+                "every call or on none."
+            )
         # field_items with self._keys returns the same keys as self._counters.
         inputs = (("lo", lo), ("hi", hi), ("target", target))
         for name, value in inputs:
@@ -222,31 +277,37 @@ class CoverageAccumulator:
             name: dict(field_items(value, self._keys)) for name, value in inputs
         }
         pending: list[Tensor] = []
-        staged = self._stage(containers, pending)
+        staged = self._stage(containers, weights, pending)
         if not all(fetch_ints(pending)):
             # Repeat with one sync per check to raise the first error.
-            staged = self._stage(containers, None)
+            staged = self._stage(containers, weights, None)
 
         for key, coverage, width_total, width_count in staged:
             counters = self._counters[key]
             counters.width_sum = width_total
             counters.width_count += width_count
             counters.n_samples += 1
-            if self._tier != "cellwise":
+            if self._tier != "pointwise":
                 counters.coverage_sum = _add(counters.coverage_sum, coverage)
             elif key in self._element_hits:
                 previous = self._element_hits[key]
                 previous += coverage.to(device=previous.device)
             else:
                 self._element_hits[key] = coverage
+        self._weighted = weights is not None
 
     def _stage(
-        self, containers: dict[str, dict[str, Tensor]], pending: list[Tensor] | None
+        self,
+        containers: dict[str, dict[str, Tensor]],
+        weights: Tensor | None,
+        pending: list[Tensor] | None,
     ) -> list[tuple[str, Tensor, Tensor, int]]:
         """Check one sample and compute its updates without committing them.
 
         ``pending`` works as in ``check_finite``.
         """
+        if weights is not None:
+            check_weights(weights, pending)
         staged = []
         for key in self._counters:
             # Detach so the running totals never keep the model's autograd graph.
@@ -257,6 +318,8 @@ class CoverageAccumulator:
                 raise ValueError(f"{_field_label(key)}: empty target tensor.")
             check_exact_shape(key, "lo", lo_field, "target", target_field)
             check_exact_shape(key, "hi", hi_field, "target", target_field)
+            if weights is not None:
+                check_point_alignment(key, target_field, weights, "target", "weights")
             check_real(key, "lo", lo_field, pending)
             check_real(key, "hi", hi_field, pending)
             check_real(key, "target", target_field, pending)
@@ -279,13 +342,13 @@ class CoverageAccumulator:
             )
 
             match self._tier:
-                case "cellwise":
+                case "pointwise":
                     # Hit counts stay on device until finalize().
                     coverage = element_covered.to(torch.int64)
                     previous = self._element_hits.get(key)
                     if previous is not None and previous.shape != coverage.shape:
                         raise ValueError(
-                            f"{_field_label(key)}: a cellwise accumulator needs a "
+                            f"{_field_label(key)}: a pointwise accumulator needs a "
                             f"fixed sample shape; got {tuple(coverage.shape)} after "
                             f"{tuple(previous.shape)}."
                         )
@@ -294,13 +357,18 @@ class CoverageAccumulator:
                 case "risk_control":
                     points = torch.atleast_1d(element_covered)
                     point_covered = points.reshape(points.shape[0], -1).all(dim=1)
-                    coverage = point_covered.to(torch.float64).mean()
+                    covered = point_covered.to(torch.float64)
+                    if weights is None:
+                        coverage = covered.mean()
+                    else:
+                        w = weights.to(device=covered.device, dtype=torch.float64)
+                        coverage = (covered * w).sum() / w.sum()
 
             staged.append((key, coverage, width_total, widths.numel()))
         return staged
 
     def empirical_coverage_map(self) -> Float[Tensor, "*dims"] | TensorDict:
-        r"""Fraction of samples in which each element was covered (cellwise only).
+        r"""Fraction of samples in which each element was covered (pointwise only).
 
         Use it to locate the regions of the mesh that the predictor under- or
         over-covers.
@@ -315,11 +383,11 @@ class CoverageAccumulator:
         Raises
         ------
         RuntimeError
-            If the tier is not cellwise, or before the first :meth:`update`.
+            If the tier is not pointwise, or before the first :meth:`update`.
         """
-        if self._tier != "cellwise":
+        if self._tier != "pointwise":
             raise RuntimeError(
-                "empirical_coverage_map() is available only for cellwise predictors."
+                "empirical_coverage_map() is available only for pointwise predictors."
             )
         if not self._element_hits:
             raise RuntimeError("No samples collected; call update() first.")
@@ -344,13 +412,14 @@ class CoverageAccumulator:
             (mean width over every element of every sample), and the tier's
             statistic:
 
-            - cellwise: ``mean_element_coverage``,
+            - pointwise: ``mean_element_coverage``,
               ``minimum_element_coverage``, and ``fraction_at_target`` (the
               fraction of elements whose coverage is at least the target).
             - functional: ``whole_field_coverage``, the fraction of samples
               inside the band at every point.
-            - risk control: ``empirical_mean_risk``, the mean fraction of
-              points per sample with any value outside the interval.
+            - risk control: ``empirical_mean_risk``, the mean over samples of
+              the fraction of points with any value outside the interval
+              (weighted, when :meth:`update` received ``weights``).
 
             Statistics are ``None`` before the first :meth:`update`.
         """
@@ -375,7 +444,7 @@ class CoverageAccumulator:
                 ),
             }
             match self._tier:
-                case "cellwise" if n:
+                case "pointwise" if n:
                     hits = self._element_hits[key]
                     at_target = hits >= _minimum_hits_at_target(n, self._alpha)
                     entry.update(
@@ -383,7 +452,7 @@ class CoverageAccumulator:
                         minimum_element_coverage=float(hits.min()) / n,
                         fraction_at_target=float(at_target.to(torch.float64).mean()),
                     )
-                case "cellwise":
+                case "pointwise":
                     entry.update(
                         mean_element_coverage=None,
                         minimum_element_coverage=None,

@@ -29,14 +29,14 @@ from tensordict import TensorDict
 
 from physicsnemo.experimental.uq.conformal import (
     AbsoluteErrorScore,
-    CellwiseCalibrator,
     ConformalPredictor,
     FunctionalBandCalibrator,
+    PointwiseCalibrator,
     RiskControlCalibrator,
 )
 from physicsnemo.experimental.uq.conformal._utils import (
     TIERS,
-    broadcast_difficulty,
+    broadcast_scale,
 )
 
 __all__ = [
@@ -52,7 +52,7 @@ __all__ = [
 ]
 
 CALIBRATORS = {
-    "cellwise": CellwiseCalibrator,
+    "pointwise": PointwiseCalibrator,
     "functional": FunctionalBandCalibrator,
     "risk_control": RiskControlCalibrator,
 }
@@ -66,7 +66,7 @@ def fit(
     *,
     generator: torch.Generator | None = None,
     score=None,
-    difficulty=None,
+    scale=None,
     alpha: float = 0.2,
     n_samples: int = 30,
     shape: tuple[int, ...] = (200,),
@@ -77,7 +77,7 @@ def fit(
 ):
     """Fit one predictor on ``n_samples`` seeded ``pred + 0.3 * noise`` samples.
 
-    Returns ``(predictor, points)``: the cellwise tier calibrates on a fixed
+    Returns ``(predictor, points)``: the pointwise tier calibrates on a fixed
     ``(shape[0], 1)`` mesh passed on every call (and needed again at
     prediction time); the scaled tiers get ``points=None``. ``fields``
     switches to ``TensorDict`` mode (one independent draw per field, so a
@@ -86,10 +86,10 @@ def fit(
     mapping.
     """
     generator = generator or torch.Generator(device=device).manual_seed(0)
-    kwargs = {} if difficulty is None else {"difficulty": difficulty}
+    kwargs = {} if scale is None else {"scale": scale}
     calibrator = CALIBRATORS[tier](score or AbsoluteErrorScore(), alpha, **kwargs)
     points = None
-    if tier == "cellwise":
+    if tier == "pointwise":
         points = torch.arange(shape[0], dtype=torch.float64, device=device)
         points = points.reshape(shape[0], 1)
 
@@ -159,9 +159,9 @@ def assert_predictor_covers_admitted(
     """
     score = predictor.score.score(prediction, target, aux=aux).double()
     threshold = predictor.thresholds.to(prediction.device, torch.float64)
-    if predictor.difficulty is not None:
-        difficulty = predictor.difficulty(aux).double()
-        threshold = threshold * broadcast_difficulty(difficulty, prediction, "field")
+    if predictor.scale is not None:
+        scale = predictor.scale(aux).double()
+        threshold = threshold * broadcast_scale(scale, prediction, "field")
     lo, hi = predictor.predict_interval(prediction, aux=aux, points=points)
     inside = (target.double() >= lo.double()) & (target.double() <= hi.double())
     bad = (score <= threshold) & ~inside

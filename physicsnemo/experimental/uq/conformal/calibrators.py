@@ -18,8 +18,9 @@ r"""Calibrators that turn held-out model errors into conformal intervals.
 
 Choose a calibrator by the guarantee you need:
 
-- :class:`~physicsnemo.experimental.uq.conformal.CellwiseCalibrator`: an
-  interval for each output element, when every sample uses the same mesh.
+- :class:`~physicsnemo.experimental.uq.conformal.PointwiseCalibrator`: an
+  interval for each output element, when every sample has the same output
+  layout.
 - :class:`~physicsnemo.experimental.uq.conformal.FunctionalBandCalibrator`:
   a functional band that contains every point of a field at once; meshes
   may vary.
@@ -35,9 +36,11 @@ samples must match. A sample that fails a check raises and leaves the
 calibrator unchanged, so you can skip it and continue.
 
 Calibration does not communicate across ranks. Predictions may come from
-many GPUs, but send every calibration sample to the process that calls
-``finalize``: a threshold fit on part of the samples has no guarantee for
-the full set.
+many GPUs, but gather every calibration sample onto the process that calls
+``finalize``, so there is one threshold. A rank that calibrates on its own
+share keeps a valid guarantee only if that share was chosen independently
+of the data, and then from fewer samples and with a different threshold on
+every rank.
 
 The split conformal construction follows `Distribution-Free Predictive
 Inference for Regression <https://arxiv.org/abs/1604.04173>`_ (Lei et al.,
@@ -60,13 +63,14 @@ from torch import Tensor
 
 from ._utils import (
     _field_label,
-    broadcast_difficulty,
+    broadcast_scale,
     check_aux,
     check_exact_shape,
     check_finite,
     check_point_alignment,
     check_points,
     check_real,
+    check_weights,
     conformal_quantile_index,
     field_items,
     kth_smallest_of_samples,
@@ -80,17 +84,18 @@ from ._utils import (
 )
 from .predictors import ConformalPredictor
 from .scores import (
-    _DIFFICULTY_REGISTRY,
+    _SCALE_REGISTRY,
     _SCORE_REGISTRY,
-    AuxDifficulty,
+    AuxScale,
+    NonconformityScore,
     _check_no_double_scale,
-    _NonconformityScore,
-    _Score,
+    _inversion_message,
     _snapshot_strategy,
+    _uncovered_count,
 )
 
 __all__ = [
-    "CellwiseCalibrator",
+    "PointwiseCalibrator",
     "FunctionalBandCalibrator",
     "RiskControlCalibrator",
 ]
@@ -99,20 +104,20 @@ __all__ = [
 _Stage = Callable[[str, Tensor, Tensor, Mapping[str, Tensor] | None], object]
 
 
-def _normalized_scores(raw: Tensor, difficulty: Tensor | None, key: str) -> Tensor:
-    """Divide scores by the difficulty in float64; reject non-finite or tiny results."""
+def _normalized_scores(raw: Tensor, scale: Tensor | None, key: str) -> Tensor:
+    """Divide scores by the scale in float64; reject non-finite or tiny results."""
     raw64 = raw.to(torch.float64)
-    if difficulty is None:
+    if scale is None:
         return raw64
-    difficulty64 = broadcast_difficulty(difficulty, raw, key).to(torch.float64)
-    normalized = raw64 / difficulty64
-    check_finite(key, "the scores divided by the AuxDifficulty scale", normalized)
+    scale64 = broadcast_scale(scale, raw, key).to(torch.float64)
+    normalized = raw64 / scale64
+    check_finite(key, "the scores divided by the per-point scale", normalized)
     underflow = (raw64 != 0) & (normalized.abs() < torch.finfo(torch.float64).tiny)
     if bool(underflow.any()):
         raise ValueError(
             f"{_field_label(key)}: {int(underflow.sum())} score(s) divided by "
-            "the AuxDifficulty scale are too small for float64. Rescale the "
-            "data or the difficulty aux entry."
+            "the per-point scale are too small for float64. Rescale the "
+            "data or the aux entry the AuxScale reads."
         )
     return normalized
 
@@ -122,7 +127,7 @@ class _SplitCalibratorBase:
 
     def __init__(
         self,
-        score: _Score,
+        score: NonconformityScore,
         alpha: float,
         *,
         keys: Sequence[str] | None = None,
@@ -136,7 +141,7 @@ class _SplitCalibratorBase:
         self._scores: dict[str, list[Tensor]] = {}
 
     @property
-    def score(self) -> _NonconformityScore:
+    def score(self) -> NonconformityScore:
         r"""Copy of the score set at construction; editing it has no effect."""
         return copy.deepcopy(self._score)
 
@@ -219,18 +224,40 @@ class _SplitCalibratorBase:
             for key, prediction_field, target_field, aux_field in fields:
                 if points is not None:
                     check_point_alignment(key, prediction_field, points, "prediction")
+                if self._n == 0:
+                    self._check_score_inverts(
+                        key, prediction_field, target_field, aux_field
+                    )
                 staged[key] = stage(key, prediction_field, target_field, aux_field)
             self._tensor_mode, self._schema = _tensor_mode, schema
             for key, record in staged.items():
                 self._scores.setdefault(key, []).append(record)
             self._n += 1
 
+    def _check_score_inverts(
+        self,
+        key: str,
+        prediction: Tensor,
+        target: Tensor,
+        aux: Mapping[str, Tensor] | None,
+    ) -> None:
+        """Reject a score whose ``bounds()`` does not invert ``score()`` on this sample."""
+        uncovered = int(_uncovered_count(self._score, prediction, target, aux))
+        if uncovered:
+            raise ValueError(
+                f"{_field_label(key)}: "
+                + _inversion_message(self._score, uncovered, target.numel())
+            )
+
     def _require_finalizable(self) -> None:
         if self._n == 0:
             raise RuntimeError("No calibration samples collected.")
 
-    def _conformal_thresholds(self) -> Tensor | TensorDict:
-        k = conformal_quantile_index(self._n, self._alpha)
+    def _resolve_alpha(self, alpha: float | None) -> float:
+        return self._alpha if alpha is None else validate_alpha(alpha)
+
+    def _conformal_thresholds(self, alpha: float) -> Tensor | TensorDict:
+        k = conformal_quantile_index(self._n, alpha)
         return pack_fields(
             {
                 key: kth_smallest_of_samples(per_sample, k)
@@ -239,44 +266,49 @@ class _SplitCalibratorBase:
         )
 
     def _build_predictor(
-        self, tier: str, thresholds: Tensor | TensorDict, **state
+        self, tier: str, thresholds: Tensor | TensorDict, *, alpha: float, **state
     ) -> ConformalPredictor:
         return ConformalPredictor._from_state(
             tier=tier,
             score=self._score,
-            alpha=self._alpha,
+            alpha=alpha,
             n_cal=self._n,
             thresholds=thresholds,
             **state,
         )
 
 
-class CellwiseCalibrator(_SplitCalibratorBase):
-    r"""Calibrate a separate interval width for every output element on a fixed mesh.
+class PointwiseCalibrator(_SplitCalibratorBase):
+    r"""Calibrate a separate interval width for every output element of a fixed layout.
 
-    Use this calibrator when every calibration and deployment sample uses
-    the same mesh or grid, with the points in the same order, and you want
-    an interval for each output element, as in the field-level conformal
-    prediction of `Gopakumar et al., 2024
-    <https://arxiv.org/abs/2408.09881>`_. If the mesh changes between
-    samples, use
+    Use this calibrator when every calibration and deployment sample has the
+    same output layout and you want an interval for each output element, as
+    in the field-level conformal prediction of `Gopakumar et al., 2024
+    <https://arxiv.org/abs/2408.09881>`_. The layout can be a mesh or grid
+    with the points in the same order, or a fixed set of outputs such as
+    scalar observables. The calibrator requires the same output shape on
+    every call. If the mesh changes between samples, use
     :class:`~physicsnemo.experimental.uq.conformal.FunctionalBandCalibrator`
     or :class:`~physicsnemo.experimental.uq.conformal.RiskControlCalibrator`.
 
-    Pass the mesh coordinates as ``points=`` on every call. Two meshes count
-    as the same only when their coordinate values, order, shape, and dtype
-    all match; the same point count is not enough.
+    For outputs on a mesh, pass the coordinates as ``points=`` on every call
+    to also check that every sample, and later every prediction, uses the
+    same mesh. Two meshes count as the same only when their coordinate
+    values, order, shape, and dtype all match; the same point count is not
+    enough.
 
     Guarantee: each output element is covered with probability at least
     :math:`1 - \alpha`, one element at a time, not the whole field at once.
 
     Parameters
     ----------
-    score : AbsoluteErrorScore | NormalizedErrorScore | QuantileRegressionScore
+    score : NonconformityScore
         Defines the interval: ``AbsoluteErrorScore`` for a fixed-width band
         around the prediction, ``NormalizedErrorScore`` for a band scaled by
         ``aux["sigma"]``, ``QuantileRegressionScore`` to adjust the model's
-        own ``aux["lo"]`` and ``aux["hi"]`` bounds. The calibrator keeps a
+        own ``aux["lo"]`` and ``aux["hi"]`` bounds, or a custom score
+        registered with
+        :func:`~physicsnemo.experimental.uq.conformal.register_score`. The calibrator keeps a
         copy, so later edits to ``score`` have no effect.
     alpha : float
         Target miscoverage level in :math:`(0, 1)`; ``alpha=0.1`` means
@@ -300,11 +332,11 @@ class CellwiseCalibrator(_SplitCalibratorBase):
     --------
     >>> import torch
     >>> from physicsnemo.experimental.uq.conformal import (
-    ...     AbsoluteErrorScore, CellwiseCalibrator,
+    ...     AbsoluteErrorScore, PointwiseCalibrator,
     ... )
     >>> _ = torch.manual_seed(0)
     >>> points = torch.rand(50, 3)
-    >>> calibrator = CellwiseCalibrator(AbsoluteErrorScore(), alpha=0.1)
+    >>> calibrator = PointwiseCalibrator(AbsoluteErrorScore(), alpha=0.1)
     >>> for _ in range(20):
     ...     prediction = torch.randn(50, 2)
     ...     target = prediction + 0.1 * torch.randn(50, 2)
@@ -317,7 +349,7 @@ class CellwiseCalibrator(_SplitCalibratorBase):
 
     def __init__(
         self,
-        score: _Score,
+        score: NonconformityScore,
         alpha: float,
         *,
         keys: Sequence[str] | None = None,
@@ -331,7 +363,7 @@ class CellwiseCalibrator(_SplitCalibratorBase):
         target: Float[Tensor, "*dims"] | TensorDict,
         *,
         aux: Mapping[str, Float[Tensor, "*dims"]] | Mapping[str, Mapping] | None = None,
-        points: Float[Tensor, "n_points n_spatial_dims"],
+        points: Float[Tensor, "n_points n_spatial_dims"] | None = None,
     ) -> None:
         r"""Add one calibration sample.
 
@@ -348,10 +380,10 @@ class CellwiseCalibrator(_SplitCalibratorBase):
             ``{"lo": ..., "hi": ...}`` for ``QuantileRegressionScore``. For
             ``TensorDict`` inputs, nest by field name, as in
             ``{"pressure": {"sigma": ...}}``.
-        points : torch.Tensor
+        points : torch.Tensor, optional
             Mesh coordinates of shape
             :math:`(n_{\text{points}}, n_{\text{spatial\_dims}})`, identical
-            on every call.
+            on every call. Pass them on every call or on none.
 
         Returns
         -------
@@ -360,12 +392,12 @@ class CellwiseCalibrator(_SplitCalibratorBase):
         Raises
         ------
         ValueError
-            If ``points`` differs from the first sample's mesh, if
-            ``prediction`` and ``target`` shapes differ, or if any value is
-            non-finite.
+            If ``points`` differs from the first sample's mesh, if the
+            output shape differs from the first sample's, if ``prediction``
+            and ``target`` shapes differ, or if any value is non-finite.
         TypeError
-            If ``points`` is not passed, or if plain tensors and
-            ``TensorDict`` inputs are mixed.
+            If ``points`` is passed on some calls but not others, or if
+            plain tensors and ``TensorDict`` inputs are mixed.
         KeyError
             If the set of fields differs from the first sample.
 
@@ -373,7 +405,15 @@ class CellwiseCalibrator(_SplitCalibratorBase):
         -----
         A sample that raises is not stored.
         """
-        fingerprint = require_mesh(points, self._mesh_fingerprint)
+        if self._n and (points is None) != (self._mesh_fingerprint is None):
+            first = "had" if self._mesh_fingerprint is not None else "did not have"
+            raise TypeError(
+                f"The first calibration sample {first} points=; pass points= "
+                "on every call or on none."
+            )
+        fingerprint = (
+            None if points is None else require_mesh(points, self._mesh_fingerprint)
+        )
 
         def stage(key, prediction_field, target_field, aux_field):
             score = check_finite(
@@ -385,65 +425,80 @@ class CellwiseCalibrator(_SplitCalibratorBase):
                 raise ValueError(
                     f"{_field_label(key)}: score shape {tuple(score.shape)} differs "
                     f"from the first sample's {tuple(self._scores[key][0].shape)}; "
-                    "CellwiseCalibrator needs the same shape on every call."
+                    "PointwiseCalibrator needs the same shape on every call."
                 )
             return score.detach().cpu().contiguous()
 
         self._collect(prediction, target, aux, points, stage)
         self._mesh_fingerprint = fingerprint
 
-    def finalize(self) -> ConformalPredictor:
+    def finalize(self, *, alpha: float | None = None) -> ConformalPredictor:
         r"""Fit the per-element thresholds and return the predictor.
+
+        Parameters
+        ----------
+        alpha : float, optional
+            Miscoverage level for this predictor, in :math:`(0, 1)`. Defaults
+            to the constructor's ``alpha``. The stored calibration scores are
+            reused, so one calibrator can produce predictors at several
+            levels from one pass over the calibration set. Choose the levels
+            before looking at the fitted intervals: picking ``alpha`` from
+            the results weakens the guarantee.
 
         Returns
         -------
         ConformalPredictor
-            A cellwise
+            A pointwise
             :class:`~physicsnemo.experimental.uq.conformal.ConformalPredictor`
-            with one threshold per output element. Its ``predict_interval``
-            requires the same ``points`` used in calibration.
+            with one threshold per output element. If calibration used
+            ``points``, its ``predict_interval`` requires the same ``points``.
 
         Raises
         ------
         RuntimeError
             If no samples were collected.
+        TypeError
+            If ``alpha`` is not a real number.
         ValueError
-            If :math:`n_{cal} < (1 - \alpha) / \alpha`, for example fewer
+            If ``alpha`` is outside :math:`(0, 1)`, or if
+            :math:`n_{cal} < (1 - \alpha) / \alpha`, for example fewer
             than 9 samples for ``alpha=0.1``. Collect more or raise ``alpha``.
         """
+        alpha = self._resolve_alpha(alpha)
         self._require_finalizable()
         return self._build_predictor(
-            "cellwise",
-            self._conformal_thresholds(),
+            "pointwise",
+            self._conformal_thresholds(alpha),
+            alpha=alpha,
             mesh_fingerprint=self._mesh_fingerprint,
         )
 
 
 class _ScaledCalibratorBase(_SplitCalibratorBase):
-    """Shared ``update`` for calibrators with an optional ``AuxDifficulty``."""
+    """Shared ``update`` and scaled scores for calibrators with an ``AuxScale``."""
 
     _reduce: Callable[[Tensor], Tensor]
 
     def __init__(
         self,
-        score: _Score,
+        score: NonconformityScore,
         alpha: float,
         *,
-        difficulty: AuxDifficulty | None = None,
+        scale: AuxScale | None = None,
         keys: Sequence[str] | None = None,
     ) -> None:
         super().__init__(score, alpha, keys=keys)
-        self._difficulty = (
+        self._scale = (
             None
-            if difficulty is None
-            else _snapshot_strategy(difficulty, _DIFFICULTY_REGISTRY, "difficulty")
+            if scale is None
+            else _snapshot_strategy(scale, _SCALE_REGISTRY, "scale")
         )
-        _check_no_double_scale(self._score, self._difficulty)
+        _check_no_double_scale(self._score, self._scale)
 
     @property
-    def difficulty(self) -> AuxDifficulty | None:
-        r"""Copy of the ``AuxDifficulty`` set at construction, or ``None``."""
-        return copy.deepcopy(self._difficulty)
+    def scale(self) -> AuxScale | None:
+        r"""Copy of the ``AuxScale`` set at construction, or ``None``."""
+        return copy.deepcopy(self._scale)
 
     def update(
         self,
@@ -460,13 +515,13 @@ class _ScaledCalibratorBase(_SplitCalibratorBase):
         prediction : torch.Tensor | TensorDict
             Model output of shape :math:`(n_{\text{points}}, *\text{dims})`
             (any shape :math:`(*\text{dims})` when neither ``points`` nor
-            ``difficulty`` is used), or a field container of such tensors.
+            ``scale`` is used), or a field container of such tensors.
         target : torch.Tensor | TensorDict
             Observed values, same shape and container type as ``prediction``.
         aux : Mapping[str, torch.Tensor] | Mapping[str, Mapping], optional
-            Extra tensors read by the score or ``AuxDifficulty``, each the
+            Extra tensors read by the score or ``AuxScale``, each the
             same shape as ``prediction``, such as ``{"sigma": ...}`` for
-            ``AuxDifficulty("sigma")``. For ``TensorDict`` inputs, nest by
+            ``AuxScale("sigma")``. For ``TensorDict`` inputs, nest by
             field name, as in ``{"pressure": {"sigma": ...}}``.
         points : torch.Tensor, optional
             Mesh coordinates of shape
@@ -495,19 +550,29 @@ class _ScaledCalibratorBase(_SplitCalibratorBase):
         """
 
         def stage(key, prediction_field, target_field, aux_field):
-            difficulty = (
-                None if self._difficulty is None else self._difficulty(aux_field)
+            return self._reduce(
+                self._scaled_scores(key, prediction_field, target_field, aux_field)
             )
-            raw = check_finite(
-                key,
-                "the nonconformity scores",
-                self._score.score(prediction_field, target_field, aux=aux_field),
-            )
-            return self._reduce(_normalized_scores(raw, difficulty, key))
 
         if points is not None:
             check_points(points)
         self._collect(prediction, target, aux, points, stage)
+
+    def _scaled_scores(
+        self,
+        key: str,
+        prediction: Tensor,
+        target: Tensor,
+        aux: Mapping[str, Tensor] | None,
+    ) -> Tensor:
+        """One field's finite scores divided by the per-point scale, in float64."""
+        scale = None if self._scale is None else self._scale(aux)
+        raw = check_finite(
+            key,
+            "the nonconformity scores",
+            self._score.score(prediction, target, aux=aux),
+        )
+        return _normalized_scores(raw, scale, key)
 
 
 class FunctionalBandCalibrator(_ScaledCalibratorBase):
@@ -515,36 +580,47 @@ class FunctionalBandCalibrator(_ScaledCalibratorBase):
 
     Use this calibrator when a single band must cover every point of a field
     at the same time, for example to bound the worst-case error over a mesh.
-    Meshes may differ between calibration and deployment. The band's
-    half-width at point :math:`x` is :math:`\text{threshold} \cdot s(x)`,
-    where :math:`s` is the optional ``AuxDifficulty`` scale; without one the
-    width is constant. If bounding the expected fraction of missed points is
-    enough, :class:`~physicsnemo.experimental.uq.conformal.RiskControlCalibrator`
+    Meshes may differ between calibration and deployment. At point
+    :math:`x` the score turns :math:`\text{threshold} \cdot s(x)` into the
+    band, where :math:`s` is the per-point scale from the optional
+    ``AuxScale``. Without one the width is whatever the score gives: constant for
+    ``AbsoluteErrorScore``, proportional to ``aux["sigma"]`` for
+    ``NormalizedErrorScore``, and following the quantile heads for
+    ``QuantileRegressionScore``. If bounding the expected fraction of missed
+    points is enough,
+    :class:`~physicsnemo.experimental.uq.conformal.RiskControlCalibrator`
     gives tighter bands.
 
     Guarantee: a new field lies inside the band at every point with
-    probability at least :math:`1 - \alpha`.
+    probability at least :math:`1 - \alpha`. For a field of shape
+    :math:`(n_{\text{points}}, C)` the band covers all points and all
+    :math:`C` channels at the same time, because each sample's score is its
+    maximum over every element. Each ``TensorDict`` field gets its own
+    threshold and its own guarantee; there is no joint guarantee across
+    fields.
 
     Parameters
     ----------
-    score : AbsoluteErrorScore | NormalizedErrorScore | QuantileRegressionScore
+    score : NonconformityScore
         Defines the interval (see
-        :class:`~physicsnemo.experimental.uq.conformal.CellwiseCalibrator`).
+        :class:`~physicsnemo.experimental.uq.conformal.PointwiseCalibrator`).
         The calibrator keeps a copy.
     alpha : float
         Target miscoverage level in :math:`(0, 1)`.
-    difficulty : AuxDifficulty, optional
+    scale : AuxScale, optional
         Per-point scale :math:`s(x)` that widens the band where it is large.
-        ``None`` gives a constant width.
+        With ``None`` the score sets the width, for example constant for
+        ``AbsoluteErrorScore`` and proportional to ``aux["sigma"]`` for
+        ``NormalizedErrorScore``.
     keys : Sequence[str], optional
         Names of the ``TensorDict`` fields to calibrate (see
-        :class:`~physicsnemo.experimental.uq.conformal.CellwiseCalibrator`).
+        :class:`~physicsnemo.experimental.uq.conformal.PointwiseCalibrator`).
         By default every field is calibrated.
 
     Raises
     ------
     ValueError
-        If ``score`` already divides by the aux key ``difficulty`` reads.
+        If ``score`` already divides by the aux key ``scale`` reads.
 
     Notes
     -----
@@ -575,8 +651,18 @@ class FunctionalBandCalibrator(_ScaledCalibratorBase):
 
     _reduce = staticmethod(lambda normalized: normalized.amax().detach().cpu())
 
-    def finalize(self) -> ConformalPredictor:
+    def finalize(self, *, alpha: float | None = None) -> ConformalPredictor:
         r"""Fit the band threshold and return the predictor.
+
+        Parameters
+        ----------
+        alpha : float, optional
+            Miscoverage level for this predictor, in :math:`(0, 1)`. Defaults
+            to the constructor's ``alpha``. The stored per-sample maxima are
+            reused, so one calibrator can produce predictors at several
+            levels from one pass over the calibration set. Choose the levels
+            before looking at the fitted bands: picking ``alpha`` from the
+            results weakens the guarantee.
 
         Returns
         -------
@@ -584,21 +670,26 @@ class FunctionalBandCalibrator(_ScaledCalibratorBase):
             A functional
             :class:`~physicsnemo.experimental.uq.conformal.ConformalPredictor`
             with one float64 scalar threshold per field. It applies the same
-            ``AuxDifficulty``, so pass the same ``aux`` keys at prediction.
+            ``AuxScale``, so pass the same ``aux`` keys at prediction.
 
         Raises
         ------
         RuntimeError
             If no samples were collected.
+        TypeError
+            If ``alpha`` is not a real number.
         ValueError
-            If :math:`n_{cal} < (1 - \alpha) / \alpha`, for example fewer
+            If ``alpha`` is outside :math:`(0, 1)`, or if
+            :math:`n_{cal} < (1 - \alpha) / \alpha`, for example fewer
             than 9 samples for ``alpha=0.1``. Collect more or raise ``alpha``.
         """
+        alpha = self._resolve_alpha(alpha)
         self._require_finalizable()
         return self._build_predictor(
             "functional",
-            self._conformal_thresholds(),
-            difficulty=self._difficulty,
+            self._conformal_thresholds(alpha),
+            alpha=alpha,
+            scale=self._scale,
         )
 
 
@@ -614,29 +705,66 @@ def _from_ordered_bits(i: int) -> float:
     return struct.unpack("<d", struct.pack("<q", bits))[0]
 
 
-def _crc_threshold(sorted_scores: list[Tensor], alpha: float) -> float:
+def _crc_threshold(
+    sorted_scores: list[Tensor | tuple[Tensor, Tensor]], alpha: float
+) -> float:
     """Smallest observed ``lambda`` with ``(R(lambda) + 1) / (n + 1) <= alpha``.
 
+    Each entry is one sample's sorted per-point scores, or a ``(scores, tail)``
+    pair from :func:`_sorted_point_scores` for a weighted sample, where
+    ``tail[j]`` is the normalized weight of the points of sorted rank ``j`` or
+    above.
+
     ``R`` only drops at observed scores, so the smallest float64 that meets the
-    bound is an observed score. Bisecting over float64 bit patterns finds it in
-    at most 64 probes of one binary search per sample, without sorting the
-    pooled scores.
+    bound is an observed score. The search bisects over float64 bit patterns
+    rather than numeric midpoints or sorted pooled candidates:
+
+    - Ordered bit patterns are a total order over every float64, signed zeros
+      included, so bisecting them lands exactly on an observed score in at
+      most 64 probes.
+    - Numeric midpoints can stall when ``lo`` and ``hi`` are adjacent floats,
+      and need thousands of halvings to cross a range such as 1e-300 to 1e300.
+    - Sorting the pooled candidates would materialize and sort
+      ``n_cal * n_points`` scores (56 million for 140 samples of 400,000
+      points); bit bisection needs only each sample's already-sorted scores
+      and one ``searchsorted`` per sample per probe.
+
+    An unweighted sample's miss fraction is an exact ``Fraction`` of its point
+    count. A weighted sample's tail mass comes from a float64 normalization and
+    cumulative sum, whose rounding moves it by at most ``numel * 2**-52``, so
+    that margin is added: rounding can only raise the estimated risk, never
+    lower it, and the threshold stays valid.
     """
     n = len(sorted_scores)
     alpha_exact = require_feasible_alpha(n, alpha)
-    scores64 = [scores.to(torch.float64) for scores in sorted_scores]
+    samples = [
+        (record.to(torch.float64), None)
+        if isinstance(record, Tensor)
+        else (record[0].to(torch.float64), record[1])
+        for record in sorted_scores
+    ]
+
+    def mass_above(scores: Tensor, tail: Tensor | None, rank: int) -> Fraction:
+        numel = scores.numel()
+        if tail is None:
+            return Fraction(numel - rank, numel)
+        if rank == 0:
+            return Fraction(1)
+        if rank == numel:
+            return Fraction(0)
+        return Fraction(float(tail[rank])) + Fraction(numel, 2**52)
 
     def within_budget(candidate: float) -> bool:
         probe = torch.tensor(candidate, dtype=torch.float64)
         total_loss = Fraction()
-        for scores in scores64:
-            exceed = scores.numel() - int(torch.searchsorted(scores, probe, right=True))
-            total_loss += Fraction(exceed, scores.numel())
+        for scores, tail in samples:
+            rank = int(torch.searchsorted(scores, probe, right=True))
+            total_loss += mass_above(scores, tail, rank)
         return (total_loss + 1) / (n + 1) <= alpha_exact
 
     # Below the smallest score every point is missed; at the largest none is.
-    lo = _ordered_bits(min(float(scores[0]) for scores in scores64)) - 1
-    hi = _ordered_bits(max(float(scores[-1]) for scores in scores64))
+    lo = _ordered_bits(min(float(scores[0]) for scores, _ in samples)) - 1
+    hi = _ordered_bits(max(float(scores[-1]) for scores, _ in samples))
     while hi - lo > 1:
         mid = (lo + hi) // 2
         if within_budget(_from_ordered_bits(mid)):
@@ -646,12 +774,23 @@ def _crc_threshold(sorted_scores: list[Tensor], alpha: float) -> float:
     return _from_ordered_bits(hi)
 
 
-def _sorted_point_scores(normalized: Tensor) -> Tensor:
-    """Max over trailing dims to get one score per point, sorted before the CPU copy."""
+def _sorted_point_scores(
+    normalized: Tensor, weights: Tensor | None = None
+) -> Tensor | tuple[Tensor, Tensor]:
+    """Max over trailing dims to get one score per point, sorted before the CPU copy.
+
+    With ``weights``, also return the normalized weights' tail mass in score
+    order: ``tail[j]`` is the weight of the points of sorted rank ``j`` or above.
+    """
     if normalized.ndim > 1:
         normalized = normalized.amax(dim=tuple(range(1, normalized.ndim)))
-    point_scores = normalized.reshape(-1)
-    return point_scores.detach().sort().values.cpu()
+    point_scores = normalized.reshape(-1).detach()
+    if weights is None:
+        return point_scores.sort().values.cpu()
+    sorted_scores, perm = point_scores.sort()
+    w = weights.to(device=point_scores.device, dtype=torch.float64)
+    tail = (w / w.sum())[perm].flip(0).cumsum(0).flip(0)
+    return sorted_scores.cpu(), tail.cpu()
 
 
 class RiskControlCalibrator(_ScaledCalibratorBase):
@@ -662,35 +801,43 @@ class RiskControlCalibrator(_ScaledCalibratorBase):
     cover every point at once. It gives much tighter bands than
     :class:`~physicsnemo.experimental.uq.conformal.FunctionalBandCalibrator`
     in exchange for this weaker guarantee. A point counts as missed when any
-    of its components (trailing dimensions) falls outside the band. Every
-    sample has equal weight, whatever its point count. The threshold comes
+    of its trailing components is outside the band, for example any channel
+    of an :math:`(n_{\text{points}}, C)` field. Every sample has equal
+    weight, whatever its point count; within a sample, ``weights=`` on
+    :meth:`update` weights the points, for example by cell area or volume on
+    a non-uniform mesh. Separate ``TensorDict`` fields get separate
+    thresholds and separate guarantees, not a joint one. The threshold comes
     from conformal risk control (CRC), `Conformal Risk Control
     <https://arxiv.org/abs/2208.02814>`_ (Angelopoulos, Bates, Fisch, Lei
     and Schuster, 2022).
 
     Guarantee: the expected fraction of missed points in a new sample is at
-    most :math:`\alpha`.
+    most :math:`\alpha`; with ``weights``, the expected weighted fraction of
+    missed points is at most :math:`\alpha`.
 
     Parameters
     ----------
-    score : AbsoluteErrorScore | NormalizedErrorScore | QuantileRegressionScore
+    score : NonconformityScore
         Defines the interval (see
-        :class:`~physicsnemo.experimental.uq.conformal.CellwiseCalibrator`).
+        :class:`~physicsnemo.experimental.uq.conformal.PointwiseCalibrator`).
         The calibrator keeps a copy.
     alpha : float
         Target expected fraction of missed points, in :math:`(0, 1)`.
-    difficulty : AuxDifficulty, optional
+    scale : AuxScale, optional
         Per-point scale :math:`s(x)` that widens the band where it is large.
-        ``None`` gives a constant width.
+        Without one the width is whatever the score gives: constant for
+        ``AbsoluteErrorScore``, proportional to ``aux["sigma"]`` for
+        ``NormalizedErrorScore``, and following the quantile heads for
+        ``QuantileRegressionScore``.
     keys : Sequence[str], optional
         Names of the ``TensorDict`` fields to calibrate (see
-        :class:`~physicsnemo.experimental.uq.conformal.CellwiseCalibrator`).
+        :class:`~physicsnemo.experimental.uq.conformal.PointwiseCalibrator`).
         By default every field is calibrated.
 
     Raises
     ------
     ValueError
-        If ``score`` already divides by the aux key ``difficulty`` reads.
+        If ``score`` already divides by the aux key ``scale`` reads.
 
     Notes
     -----
@@ -700,23 +847,26 @@ class RiskControlCalibrator(_ScaledCalibratorBase):
 
     The calibrator keeps every sample's per-point scores on the CPU until
     :meth:`finalize`, so memory grows with the total number of calibration
-    points.
+    points; with ``weights`` it doubles, one float64 tail mass per point.
 
     Examples
     --------
     >>> import torch
     >>> from physicsnemo.experimental.uq.conformal import (
-    ...     AbsoluteErrorScore, AuxDifficulty, RiskControlCalibrator,
+    ...     AbsoluteErrorScore, AuxScale, RiskControlCalibrator,
     ... )
     >>> _ = torch.manual_seed(0)
     >>> calibrator = RiskControlCalibrator(
-    ...     AbsoluteErrorScore(), alpha=0.1, difficulty=AuxDifficulty("sigma")
+    ...     AbsoluteErrorScore(), alpha=0.1, scale=AuxScale("sigma")
     ... )
     >>> for n_points in range(40, 60):
     ...     prediction = torch.randn(n_points, 2)
     ...     sigma = torch.rand(n_points, 2) + 0.5
     ...     target = prediction + sigma * torch.randn(n_points, 2)
-    ...     calibrator.update(prediction, target, aux={"sigma": sigma})
+    ...     cell_areas = torch.rand(n_points) + 0.5
+    ...     calibrator.update(
+    ...         prediction, target, aux={"sigma": sigma}, weights=cell_areas
+    ...     )
     >>> predictor = calibrator.finalize()
     >>> sigma = torch.rand(30, 2) + 0.5
     >>> lo, hi = predictor.predict_interval(torch.randn(30, 2), aux={"sigma": sigma})
@@ -724,10 +874,118 @@ class RiskControlCalibrator(_ScaledCalibratorBase):
     torch.Size([30, 2])
     """
 
-    _reduce = staticmethod(_sorted_point_scores)
+    def __init__(
+        self,
+        score: NonconformityScore,
+        alpha: float,
+        *,
+        scale: AuxScale | None = None,
+        keys: Sequence[str] | None = None,
+    ) -> None:
+        super().__init__(score, alpha, scale=scale, keys=keys)
+        self._weighted = False
 
-    def finalize(self) -> ConformalPredictor:
+    def update(
+        self,
+        prediction: Float[Tensor, "*dims"] | TensorDict,
+        target: Float[Tensor, "*dims"] | TensorDict,
+        *,
+        aux: Mapping[str, Float[Tensor, "*dims"]] | Mapping[str, Mapping] | None = None,
+        points: Float[Tensor, "n_points n_spatial_dims"] | None = None,
+        weights: Float[Tensor, "n_points"] | None = None,
+    ) -> None:
+        r"""Add one calibration sample; its point count may differ from other samples.
+
+        Parameters
+        ----------
+        prediction : torch.Tensor | TensorDict
+            Model output of shape :math:`(n_{\text{points}}, *\text{dims})`
+            (any shape :math:`(*\text{dims})` when none of ``points``,
+            ``scale``, and ``weights`` is used), or a field container of
+            such tensors.
+        target : torch.Tensor | TensorDict
+            Observed values, same shape and container type as ``prediction``.
+        aux : Mapping[str, torch.Tensor] | Mapping[str, Mapping], optional
+            Extra tensors read by the score or ``AuxScale``, each the
+            same shape as ``prediction``, such as ``{"sigma": ...}`` for
+            ``AuxScale("sigma")``. For ``TensorDict`` inputs, nest by
+            field name, as in ``{"pressure": {"sigma": ...}}``.
+        points : torch.Tensor, optional
+            Mesh coordinates of shape
+            :math:`(n_{\text{points}}, n_{\text{spatial\_dims}})`; may differ
+            between samples. Only checks that each field has one leading
+            entry per point; it does not change the band.
+        weights : torch.Tensor, optional
+            Per-point weights of shape :math:`(n_{\text{points}},)`: floating
+            point, finite, nonnegative, not all zero, on any device. For
+            example cell areas or volumes on a non-uniform mesh (with
+            :mod:`physicsnemo.mesh`,
+            :func:`~physicsnemo.mesh.calculus.point_measures`). The sample's
+            loss becomes its weighted fraction of missed points, normalized by
+            the sum of the weights, and the guarantee becomes "the expected
+            weighted fraction of missed points is at most :math:`\alpha`".
+            For ``TensorDict`` inputs one vector applies to every calibrated
+            field, so each field's leading dimension must equal
+            ``len(weights)``. Pass ``weights`` on every call or on none.
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        ValueError
+            If ``prediction`` and ``target`` shapes differ, if any value,
+            scale, or weight is non-finite, if a score divided by its scale
+            is too small for float64, or if ``weights`` has the wrong shape,
+            a negative entry, or no positive entry.
+        TypeError
+            If plain tensors and ``TensorDict`` inputs are mixed, if
+            ``weights`` is passed on some calls but not others, or if it is
+            not a floating-point tensor.
+        KeyError
+            If the set of fields differs from the first sample.
+
+        Notes
+        -----
+        A sample that raises is not stored.
+        """
+        if self._n and (weights is not None) != self._weighted:
+            first = "had" if self._weighted else "did not have"
+            raise TypeError(
+                f"The first calibration sample {first} weights=; pass weights= "
+                "on every call or on none."
+            )
+        if points is not None:
+            check_points(points)
+        if weights is not None:
+            check_weights(weights)
+
+        def stage(key, prediction_field, target_field, aux_field):
+            if weights is not None:
+                check_point_alignment(
+                    key, prediction_field, weights, "prediction", "weights"
+                )
+            return _sorted_point_scores(
+                self._scaled_scores(key, prediction_field, target_field, aux_field),
+                weights,
+            )
+
+        self._collect(prediction, target, aux, points, stage)
+        self._weighted = weights is not None
+
+    def finalize(self, *, alpha: float | None = None) -> ConformalPredictor:
         r"""Fit the CRC threshold and return the predictor.
+
+        Parameters
+        ----------
+        alpha : float, optional
+            Risk level for this predictor, in :math:`(0, 1)`. Defaults to
+            the constructor's ``alpha``. The stored per-point scores are
+            reused, so one calibrator can produce predictors at several
+            levels from one pass over the calibration set. Choose the levels
+            before looking at the fitted bands: picking ``alpha`` from the
+            results weakens the guarantee.
 
         Returns
         -------
@@ -735,24 +993,29 @@ class RiskControlCalibrator(_ScaledCalibratorBase):
             A risk-control
             :class:`~physicsnemo.experimental.uq.conformal.ConformalPredictor`
             with one float64 scalar threshold per field. It applies the same
-            ``AuxDifficulty``, so pass the same ``aux`` keys at prediction.
+            ``AuxScale``, so pass the same ``aux`` keys at prediction.
 
         Raises
         ------
         RuntimeError
             If no samples were collected.
+        TypeError
+            If ``alpha`` is not a real number.
         ValueError
-            If :math:`n_{cal} < (1 - \alpha) / \alpha`, for example fewer
+            If ``alpha`` is outside :math:`(0, 1)`, or if
+            :math:`n_{cal} < (1 - \alpha) / \alpha`, for example fewer
             than 9 samples for ``alpha=0.1``. Collect more or raise ``alpha``.
         """
+        alpha = self._resolve_alpha(alpha)
         self._require_finalizable()
         thresholds = {
-            key: torch.tensor(
-                _crc_threshold(samples, self._alpha),
-                dtype=torch.float64,
-            )
+            key: torch.tensor(_crc_threshold(samples, alpha), dtype=torch.float64)
             for key, samples in self._scores.items()
         }
         return self._build_predictor(
-            "risk_control", pack_fields(thresholds), difficulty=self._difficulty
+            "risk_control",
+            pack_fields(thresholds),
+            alpha=alpha,
+            scale=self._scale,
+            weighted=self._weighted,
         )

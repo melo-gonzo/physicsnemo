@@ -31,7 +31,7 @@ from ._utils import (
     TIERS,
     Tier,
     _field_label,
-    broadcast_difficulty,
+    broadcast_scale,
     check_aux,
     check_point_alignment,
     check_points,
@@ -50,12 +50,11 @@ from ._utils import (
 from .artifacts import _parse_artifact, _save_artifact
 from .diagnostics import CoverageAccumulator
 from .scores import (
-    _DIFFICULTY_REGISTRY,
+    _SCALE_REGISTRY,
     _SCORE_REGISTRY,
-    AuxDifficulty,
+    AuxScale,
+    NonconformityScore,
     _check_no_double_scale,
-    _NonconformityScore,
-    _Score,
     _snapshot_strategy,
 )
 
@@ -77,13 +76,13 @@ def _validate_mesh_fingerprint(value: object) -> str:
 def _validate_thresholds(
     tier: str,
     thresholds: Tensor | TensorDict,
-    score_type: type[_NonconformityScore],
+    score_type: type[NonconformityScore],
 ) -> dict[str, Tensor]:
     """Check thresholds against the tier and score, and return detached copies."""
     out: dict[str, Tensor] = {}
     for key, value in field_items(thresholds):
         check_real(key, "threshold", value)
-        if tier == "cellwise":
+        if tier == "pointwise":
             threshold = value
         else:
             if value.ndim != 0:
@@ -93,11 +92,11 @@ def _validate_thresholds(
                 )
             # float64 so a low-precision prediction cannot round the threshold down.
             threshold = value.to(torch.float64)
-        if not score_type._signed_threshold and bool((threshold < 0).any()):
+        if not score_type.signed_threshold and bool((threshold < 0).any()):
             raise ValueError(
                 f"{_field_label(key)}: negative threshold, but "
-                f"{score_type.__name__} scores are never "
-                "negative. Only QuantileRegressionScore allows negative thresholds."
+                f"{score_type.__name__} scores are never negative "
+                "(signed_threshold is False)."
             )
         out[key] = threshold.detach().clone()
     return out
@@ -113,21 +112,24 @@ class ConformalPredictor:
     only to restore thresholds you computed elsewhere.
 
     The predictor has the guarantee of the calibrator that produced it. A
-    cellwise predictor works only on the calibration mesh (same coordinates,
-    dtype, and point order). Functional and risk-control predictors accept
-    any mesh and may widen intervals per point with an ``AuxDifficulty``.
+    pointwise predictor works only on the calibration output shape and, if
+    calibration used ``points``, only on the calibration mesh (same
+    coordinates, dtype, and point order). Functional and risk-control
+    predictors accept any mesh and may widen intervals per point with an
+    ``AuxScale``.
 
     Parameters
     ----------
-    tier : {"cellwise", "functional", "risk_control"}
-        Calibrator that produced ``thresholds``: ``"cellwise"`` for
-        :class:`~physicsnemo.experimental.uq.conformal.CellwiseCalibrator`,
+    tier : {"pointwise", "functional", "risk_control"}
+        Calibrator that produced ``thresholds``: ``"pointwise"`` for
+        :class:`~physicsnemo.experimental.uq.conformal.PointwiseCalibrator`,
         ``"functional"`` for
         :class:`~physicsnemo.experimental.uq.conformal.FunctionalBandCalibrator`,
         ``"risk_control"`` for
         :class:`~physicsnemo.experimental.uq.conformal.RiskControlCalibrator`.
-    score : AbsoluteErrorScore | NormalizedErrorScore | QuantileRegressionScore
-        Score used during calibration. The predictor keeps its own copy, so
+    score : NonconformityScore
+        Score used during calibration: a built-in score or a registered
+        custom one. The predictor keeps its own copy, so
         later changes to ``score`` have no effect.
     alpha : float
         Target miscoverage (or risk) level in :math:`(0, 1)`.
@@ -135,19 +137,24 @@ class ConformalPredictor:
         Number of calibration samples.
     thresholds : torch.Tensor | TensorDict
         A tensor for one field, or a ``TensorDict`` keyed by field name.
-        Cellwise: one tensor of shape :math:`(*\text{dims})` per field.
+        Pointwise: one tensor of shape :math:`(*\text{dims})` per field.
         Other tiers: one scalar per field, stored in float64. Values must be
         finite, and nonnegative unless ``score`` is a
         :class:`~physicsnemo.experimental.uq.conformal.QuantileRegressionScore`.
-    difficulty : AuxDifficulty, optional
+    scale : AuxScale, optional
         Per-point scale applied to the threshold at prediction time
         (functional and risk-control tiers only).
     points : torch.Tensor, optional
         Calibration mesh coordinates of shape
-        :math:`(n_{\text{points}}, n_{\text{spatial\_dims}})`, required for
-        the cellwise tier and rejected otherwise. The predictor keeps only a
-        checksum of them, and :meth:`predict_interval` accepts only the same
-        coordinates, dtype, and point order.
+        :math:`(n_{\text{points}}, n_{\text{spatial\_dims}})`, for the
+        pointwise tier only. The predictor keeps only a checksum of them, and
+        :meth:`predict_interval` then requires the same coordinates, dtype,
+        and point order. Omit them for pointwise outputs without a mesh.
+    weighted : bool, optional, default=False
+        Whether calibration weighted the points (risk-control tier only).
+        The accumulator from :meth:`coverage_accumulator` then requires
+        ``weights`` on every update, so the report measures the weighted
+        risk the predictor guarantees.
 
     Raises
     ------
@@ -157,18 +164,19 @@ class ConformalPredictor:
         - ``tier`` is not one of the three names above.
         - :math:`n_{cal} < (1 - \alpha) / \alpha`: collect more samples or
           raise ``alpha``.
-        - ``tier="cellwise"`` without ``points`` or with ``difficulty``.
+        - ``tier="pointwise"`` with ``scale``.
         - Another tier with ``points``.
         - ``points`` is empty, not 2-D, or not finite.
-        - A threshold is not finite; a cellwise threshold's leading size is
-          not the number of mesh points; another tier's threshold is not a
-          scalar.
+        - A threshold is not finite; with ``points``, a pointwise threshold's
+          leading size is not the number of mesh points; another tier's
+          threshold is not a scalar.
         - A threshold is negative and ``score`` is not
           ``QuantileRegressionScore``.
-        - ``difficulty`` reads the aux key that ``score`` divides by.
+        - ``scale`` reads the aux key that ``score`` divides by.
+        - ``weighted=True`` on a tier other than ``"risk_control"``.
     TypeError
-        If ``score`` or ``difficulty`` is not a built-in class, or a
-        threshold is not floating point.
+        If ``score`` or ``scale`` is not a built-in class, a threshold is
+        not floating point, or ``weighted`` is not a ``bool``.
 
     Examples
     --------
@@ -190,12 +198,13 @@ class ConformalPredictor:
         self,
         *,
         tier: Tier,
-        score: _Score,
+        score: NonconformityScore,
         alpha: float,
         n_cal: int,
         thresholds: Float[Tensor, "*dims"] | Float[Tensor, ""] | TensorDict,
-        difficulty: AuxDifficulty | None = None,
+        scale: AuxScale | None = None,
         points: Float[Tensor, "n_points n_spatial_dims"] | None = None,
+        weighted: bool = False,
     ) -> None:
         self._init(
             tier=tier,
@@ -203,8 +212,9 @@ class ConformalPredictor:
             alpha=alpha,
             n_cal=n_cal,
             thresholds=thresholds,
-            difficulty=difficulty,
+            scale=scale,
             mesh_fingerprint=None if points is None else points_fingerprint(points),
+            weighted=weighted,
         )
 
     @classmethod
@@ -218,45 +228,51 @@ class ConformalPredictor:
         self,
         *,
         tier: Tier,
-        score: _Score,
+        score: NonconformityScore,
         alpha: float,
         n_cal: int,
         thresholds: Tensor | TensorDict,
-        difficulty: AuxDifficulty | None = None,
+        scale: AuxScale | None = None,
         mesh_fingerprint: str | None = None,
         provenance: Mapping | None = None,
+        weighted: bool = False,
     ) -> None:
         if tier not in TIERS:
             raise ValueError(f"tier must be one of {TIERS}, got {tier!r}.")
+        if type(weighted) is not bool:
+            raise TypeError(f"weighted must be a bool, got {type(weighted).__name__}.")
+        if weighted and tier != "risk_control":
+            raise ValueError(
+                f"weighted=True applies only to the risk_control tier, not {tier!r}."
+            )
         require_feasible_alpha(n_cal, alpha)
         alpha = float(alpha)
         score_snapshot = _snapshot_strategy(score, _SCORE_REGISTRY, "score")
 
-        if tier == "cellwise":
-            if difficulty is not None:
+        if tier == "pointwise":
+            if scale is not None:
                 raise ValueError(
-                    "A cellwise predictor does not take difficulty=; only "
-                    "functional and risk_control predictors use AuxDifficulty."
+                    "A pointwise predictor does not take scale=; only "
+                    "functional and risk_control predictors use AuxScale."
                 )
-            if mesh_fingerprint is None:
-                raise ValueError(
-                    "A cellwise predictor requires points=, the calibration "
-                    "mesh coordinates."
-                )
-            difficulty_snapshot = None
-            mesh_snapshot = _validate_mesh_fingerprint(mesh_fingerprint)
+            scale_snapshot = None
+            mesh_snapshot = (
+                None
+                if mesh_fingerprint is None
+                else _validate_mesh_fingerprint(mesh_fingerprint)
+            )
         else:
             if mesh_fingerprint is not None:
                 raise ValueError(
-                    f"A {tier} predictor does not take points=; only cellwise "
+                    f"A {tier} predictor does not take points=; only pointwise "
                     "predictors use points."
                 )
-            difficulty_snapshot = (
+            scale_snapshot = (
                 None
-                if difficulty is None
-                else _snapshot_strategy(difficulty, _DIFFICULTY_REGISTRY, "difficulty")
+                if scale is None
+                else _snapshot_strategy(scale, _SCALE_REGISTRY, "scale")
             )
-            _check_no_double_scale(score_snapshot, difficulty_snapshot)
+            _check_no_double_scale(score_snapshot, scale_snapshot)
             mesh_snapshot = None
 
         self._tier = tier
@@ -275,15 +291,16 @@ class ConformalPredictor:
                         f"{tuple(threshold.shape)} must have one leading entry "
                         f"per mesh point ({n_points})."
                     )
-        self._difficulty = difficulty_snapshot
+        self._scale = scale_snapshot
         self._mesh_fingerprint = mesh_snapshot
+        self._weighted = weighted
         self._provenance = {} if provenance is None else validate_provenance(provenance)
 
     @property
     def tier(self) -> Tier:
         r"""Calibrator that produced this predictor.
 
-        ``"cellwise"`` for ``CellwiseCalibrator``, ``"functional"`` for
+        ``"pointwise"`` for ``PointwiseCalibrator``, ``"functional"`` for
         ``FunctionalBandCalibrator``, or ``"risk_control"`` for
         ``RiskControlCalibrator``.
         """
@@ -300,14 +317,14 @@ class ConformalPredictor:
         return self._n_cal
 
     @property
-    def score(self) -> _NonconformityScore:
+    def score(self) -> NonconformityScore:
         r"""A copy of the calibration score; editing it has no effect here."""
         return copy.deepcopy(self._score)
 
     @property
-    def difficulty(self) -> AuxDifficulty | None:
-        r"""A copy of the ``AuxDifficulty``, or ``None`` if intervals are not scaled."""
-        return copy.deepcopy(self._difficulty)
+    def scale(self) -> AuxScale | None:
+        r"""A copy of the ``AuxScale``, or ``None`` if intervals are not scaled."""
+        return copy.deepcopy(self._scale)
 
     @property
     def provenance(self) -> dict:
@@ -318,6 +335,11 @@ class ConformalPredictor:
     def _tensor_mode(self) -> bool:
         """Whether calibration used a plain tensor instead of a ``TensorDict``."""
         return set(self._thresholds_by_key) == {TENSOR_KEY}
+
+    @property
+    def weighted(self) -> bool:
+        r"""Whether calibration weighted the points (risk-control tier only)."""
+        return self._weighted
 
     @property
     def keys(self) -> list[str] | None:
@@ -364,7 +386,7 @@ class ConformalPredictor:
         pending: list[Tensor] | None,
     ) -> Tensor:
         threshold = self._thresholds_by_key[key]
-        if self._tier == "cellwise":
+        if self._tier == "pointwise":
             if threshold.shape != prediction.shape:
                 raise ValueError(
                     f"{_field_label(key)}: prediction shape {tuple(prediction.shape)} "
@@ -372,19 +394,19 @@ class ConformalPredictor:
                 )
             return threshold
 
-        if self._difficulty is None:
+        if self._scale is None:
             return threshold
-        difficulty = self._difficulty._scales(aux, pending).to(
+        scale = self._scale._scales(aux, pending).to(
             device=prediction.device, dtype=torch.float64
         )
-        scaled = threshold * broadcast_difficulty(difficulty, prediction, key)
+        scaled = threshold * broadcast_scale(scale, prediction, key)
         finite = torch.isfinite(scaled).all()
         if pending is not None:
             pending.append(finite)
         elif not finite:
             raise ValueError(
-                f"{_field_label(key)}: threshold times the AuxDifficulty scale "
-                "overflows float64; rescale the difficulty values."
+                f"{_field_label(key)}: threshold times the per-point scale "
+                "overflows float64; rescale the aux entry the AuxScale reads."
             )
         return scaled
 
@@ -396,7 +418,7 @@ class ConformalPredictor:
         pending: list[Tensor] | None,
     ) -> tuple[dict[str, Tensor], dict[str, Tensor]]:
         """Validate the inputs and compute bounds; ``pending`` as in ``check_finite``."""
-        if self._tier == "cellwise":
+        if self._mesh_fingerprint is not None:
             require_mesh(
                 points,
                 self._mesh_fingerprint,
@@ -405,6 +427,11 @@ class ConformalPredictor:
                 pending,
             )
         elif points is not None:
+            if self._tier == "pointwise":
+                raise TypeError(
+                    "This predictor was calibrated without points=, so it has no "
+                    "mesh to compare against; omit points=."
+                )
             check_points(points, pending)
 
         lo_out: dict[str, Tensor] = {}
@@ -442,24 +469,25 @@ class ConformalPredictor:
         ----------
         prediction : torch.Tensor | TensorDict
             Model output for one sample, of shape :math:`(*\text{dims})`, or
-            a ``TensorDict`` of such tensors. For the cellwise tier the shape
+            a ``TensorDict`` of such tensors. For the pointwise tier the shape
             must equal the calibration shape. When ``points`` is given, the
             leading dimension must be :math:`n_{\text{points}}`.
         aux : Mapping[str, torch.Tensor] | Mapping[str, Mapping], optional
-            Extra tensors the score or ``AuxDifficulty`` reads, each with the
+            Extra tensors the score or ``AuxScale`` reads, each with the
             shape of the prediction: ``"sigma"`` for
             :class:`~physicsnemo.experimental.uq.conformal.NormalizedErrorScore`,
             ``"lo"`` and ``"hi"`` for
             :class:`~physicsnemo.experimental.uq.conformal.QuantileRegressionScore`,
-            and the ``key`` of an ``AuxDifficulty``. For ``TensorDict``
+            and the ``key`` of an ``AuxScale``. For ``TensorDict``
             inputs, nest by field name, for example
             ``aux={"pressure": {"sigma": s}}``.
         points : torch.Tensor, optional
             Mesh coordinates of shape
             :math:`(n_{\text{points}}, n_{\text{spatial\_dims}})`. Required
-            for the cellwise tier, where they must match the calibration
-            coordinates, dtype, and point order. Other tiers use them only to
-            check that each field has one leading entry per point.
+            for a pointwise predictor calibrated with ``points``, where they
+            must match the calibration coordinates, dtype, and point order,
+            and rejected by one calibrated without them. Other tiers use them
+            only to check that each field has one leading entry per point.
 
         Returns
         -------
@@ -471,11 +499,12 @@ class ConformalPredictor:
         ------
         TypeError
             If ``prediction`` is a plain tensor for a predictor calibrated on
-            ``TensorDict`` fields, or the reverse, or a cellwise predictor
-            gets no ``points``.
+            ``TensorDict`` fields, or the reverse, or a pointwise predictor
+            gets no ``points`` when calibration used them, or gets ``points``
+            when calibration did not.
         ValueError
             If a shape differs from calibration, values are not finite, or
-            (cellwise) ``points`` describes a different mesh.
+            (pointwise) ``points`` describes a different mesh.
             If meshes vary between samples, calibrate with
             :class:`~physicsnemo.experimental.uq.conformal.FunctionalBandCalibrator`
             or
@@ -492,10 +521,10 @@ class ConformalPredictor:
         rescale the model outputs and recalibrate. Do not clip bounds
         inward: that can remove coverage.
 
-        Each call checks every input value, and for the cellwise tier the
-        ``points`` checksum, on the inputs' device, then synchronizes with the
-        GPU once to read the results. This method is not intended for use
-        inside ``torch.compile`` regions.
+        Each call checks every input value, and any pointwise ``points``
+        checksum, on the inputs' device, then synchronizes with the GPU once
+        to read the results. This method is not intended for use inside
+        ``torch.compile`` regions.
         """
         selection = self.keys
         require_container_kind(prediction, selection, "This predictor", "prediction")
@@ -527,12 +556,15 @@ class ConformalPredictor:
             A new, empty
             :class:`~physicsnemo.experimental.uq.conformal.CoverageAccumulator`
             set to this predictor's tier, ``alpha``, ``n_cal``, and fields.
+            For a risk-control predictor it requires ``weights`` on every
+            update if calibration used them, and rejects them otherwise.
         """
         return CoverageAccumulator(
             tier=self._tier,
             alpha=self._alpha,
             n_cal=self._n_cal,
             keys=self.keys,
+            weighted=self._weighted if self._tier == "risk_control" else None,
         )
 
     def save(self, path: Path | str, *, provenance: Mapping | None = None) -> None:
@@ -563,8 +595,9 @@ class ConformalPredictor:
             "alpha": self._alpha,
             "n_cal": self._n_cal,
             "thresholds": self._thresholds_by_key,
-            "difficulty": self._difficulty,
+            "scale": self._scale,
             "mesh_fingerprint": self._mesh_fingerprint,
+            "weighted": self._weighted,
             "provenance": self._provenance if provenance is None else provenance,
         }
         _save_artifact(state, path, lambda written: self._read(written, path))
