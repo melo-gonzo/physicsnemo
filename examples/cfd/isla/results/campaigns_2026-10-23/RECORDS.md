@@ -113,6 +113,7 @@ source. Do not edit by hand.
 | `main_merge_1027/` | MAIN-MERGE-1027: upstream main with #2174's final form merged into psharpe/isla, and its bitwise checks | `scratch/isla-mainmerge-1027/` |
 | `merge_2171_tidy/` | MERGE-2171-TIDY: #2171's tidied head merged into psharpe/isla, and its checks | `scratch/isla-2171tidy-2026-10-26/` |
 | `af_confirm_prereg/` | AF-CONFIRM's registration: AF-CAMPAIGN's pre-registration with amendments A3 (arm FC, C without N, on AirfRANS), A4 and A5 (C on AeroZoo, read for harm) | `scratch/isla-af-campaign-2026-10-25/` |
+| `final_rerun_decisions_1027/` | The final rerun's decisions as of 2026-10-27: CERT's eager execution (item 8), the recipe's reseeding kept for the rerun (item 9) and ISLA 0.14.0 (item 10) | `scratch/isla-final-rerun-2026-10-26/` |
 | `rerun_azb/` | RERUN-AZB: the final rerun's 16 AeroZoo baseline lanes launched on JHB, their snapshot, smoke and first epochs | `scratch/isla-rerun-azb-2026-10-27/` |
 
 | topic | file | source | md5 |
@@ -566,4 +567,5 @@ source. Do not edit by hand.
 | main_merge_1027 | FINAL_REPORT.md | scratch/isla-mainmerge-1027/FINAL_REPORT.md | a24170c9897ff08bb280e26e5ba37e78 |
 | merge_2171_tidy | FINAL_REPORT.md | scratch/isla-2171tidy-2026-10-26/FINAL_REPORT.md | 8001ee770a932c97cfb2df5a7acf9d10 |
 | af_confirm_prereg | PREREG.md | scratch/isla-af-campaign-2026-10-25/PREREG.md | fc03c18112131d8595824df72131095c |
+| final_rerun_decisions_1027 | SUPERVISOR_DECISIONS.md | scratch/isla-final-rerun-2026-10-26/SUPERVISOR_DECISIONS.md | 7ae610e9e1a05899acd65f8b0c5d64d6 |
 | rerun_azb | FINAL_REPORT.md | scratch/isla-rerun-azb-2026-10-27/FINAL_REPORT.md | 68a484d1779a01d206f8e2b6cbe151cf |

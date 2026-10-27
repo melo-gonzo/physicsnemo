@@ -43764,8 +43764,10 @@ POSE_TABLE.md). Done 15:17 EDT; 8.32 of 15 GPU-h.
   OOM chance of about 13 percent per 250-epoch AeroZoo ISLA-DTT lane: the chunked step's eager peak forecast is 3.6 to 4.0
   GiB low, so a step OOMs at 942-968M pairs in one chunk and in about 2 percent of each multi-chunk band.
 - **Resume replay.** The checkpoint holds no RNG state and `set_seed(seed + rank)` runs at every start, so every chained link
-  replays the same draws, and a crash in a resumed segment recurs. This holds for every chained run, the standings included;
-  the supervisor keeps it for the rerun, for like-for-like comparisons, and fixes it after.
+  replays the same draws (the token-draw starts and the point subsamples, not the case order), and a crash in a resumed
+  segment recurs. This holds for every chained run, the standings included. The supervisor's decision (16:40 EDT, item 9 of
+  results/campaigns_2026-10-23/final_rerun_decisions_1027/SUPERVISOR_DECISIONS.md, md5 7ae610e9): the rerun keeps it, so
+  each comparison trains under one protocol, and the fix comes after the rerun.
 - **Root cause and fix.** The frame and eta come from the drawn tokens, and the 0.14.0 staging widened each node by the
   rotation in proportion to its distance from the centroid. (c') widens it in proportion to its own size, by
   $f = (1 + \sqrt d \eta (1 + \theta)) / (1 - \sqrt d \eta)$ at the angle $\theta / f$, capped by the ball of half its

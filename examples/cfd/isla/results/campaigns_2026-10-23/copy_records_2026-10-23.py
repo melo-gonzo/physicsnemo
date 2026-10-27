@@ -920,6 +920,12 @@ RECORDS = {
         "A4 and A5 (C on AeroZoo, read for harm)",
         ["PREREG.md"],
     ),
+    "final_rerun_decisions_1027": (
+        "isla-final-rerun-2026-10-26",
+        "The final rerun's decisions as of 2026-10-27: CERT's eager execution (item 8), the recipe's reseeding kept for the "
+        "rerun (item 9) and ISLA 0.14.0 (item 10)",
+        ["SUPERVISOR_DECISIONS.md"],
+    ),
     "rerun_azb": (
         "isla-rerun-azb-2026-10-27",
         "RERUN-AZB: the final rerun's 16 AeroZoo baseline lanes launched on JHB, their snapshot, smoke and first epochs",

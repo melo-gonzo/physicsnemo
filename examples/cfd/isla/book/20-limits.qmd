@@ -510,17 +510,22 @@ print("**ISLA's token draw lays its Morton grid over every cell of a condition, 
 NTR = " ".join(R.load("forest_neartie", "FINAL_REPORT.md").split())
 assert "The recipe's checkpoint holds no RNG state, and `set_seed(seed + rank)` runs at every start." in NTR
 assert "Two resumes from copies of one checkpoint drew bitwise the same starts and kept cells." in NTR
+SD9 = " ".join(R.load("final_rerun_decisions_1027", "SUPERVISOR_DECISIONS.md").split())
+assert "9. **The recipe's reseeding is kept for the rerun (supervisor, 2026-10-27 16:40 EDT" in SD9
+assert "the token-draw starts and the point subsamples, but not the case order" in SD9 and "**Decision:** the rerun keeps it." in SD9
 print("**The recipe reseeds every process at every start, so each link of a chained training run replays the same random "
       "draws.** Its checkpoint holds no random-number state, and each process seeds itself with the run's seed plus its rank "
       "when it starts. Two resumes from copies of one checkpoint drew bitwise the same starts of the token draw and kept the "
       "same cells, while an uninterrupted run drew others. A run on a cluster that limits a job's length trains as a chain of "
-      "links, each resumed from the last checkpoint, so every link restarts the same sequence of draws: the training sees "
-      "fewer distinct draws of the boundary tokens, and of everything else the recipe draws, than an uninterrupted run, and a "
-      "crash inside a link recurs at the same step on every resume. Every chained run is affected, the standings' included, "
-      "and the runs that replace the standings keep the recipe as it is, so they compare with the standings like for like. "
-      "What it costs in accuracy is not measured. What would settle it: a chained run against an uninterrupted one, two "
-      f"seeds each, with each rank's random-number state checkpointed. Data: {R.source('forest_neartie', 'FINAL_REPORT.md')} "
-      f"(section 1); {R.source('forest_neartie', 'RISK_TABLE.md')} (Resume replay).")
+      "links, each resumed from the last checkpoint, so every link restarts the same sequence of draws, the starts of the "
+      "token draw and the subsamples of the prediction points, though not the order of the cases: the training sees fewer "
+      "distinct draws than an uninterrupted run, and a crash inside a link recurs at the same step on every resume. Every "
+      "chained run is affected, the standings' included. By the supervisor's decision the runs that replace the standings "
+      "keep the recipe as it is, chained where their standings were chained, so that each comparison trains under one "
+      "protocol. What it costs in accuracy is not measured. What would settle it: a chained run against an uninterrupted "
+      "one, two seeds each, with each rank's random-number state checkpointed. Data: "
+      f"{R.source('forest_neartie', 'FINAL_REPORT.md')} (section 1); {R.source('forest_neartie', 'RISK_TABLE.md')} (Resume "
+      f"replay); {R.source('final_rerun_decisions_1027', 'SUPERVISOR_DECISIONS.md')} (item 9).")
 ```
 
 ### The compiled blocks are not certified {#sec-limits-compiled}
