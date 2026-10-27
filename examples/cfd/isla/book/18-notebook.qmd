@@ -43745,7 +43745,8 @@ C_DESIGN.md md5 12f8e4d9). Done 00:08 EDT; 1,379.9 of 1,440 GPU-h.
 - The lug's own compiled blocks fail the block-wise certification (86 of 1,200 groups), so the lug trains eager.
 - Option (c), the smooth floor $m / \sqrt{|m|^2 + L_s^2}$ with $L_s = 2u |\sum_n a_{ns} |\hat n_n||$ and $u = 2^{-8}$, is designed
   (C_DESIGN.md) and not run: about 600-650 GPU-h staged, DrivAerML Surface first; its constant is a change of the
-  architecture for Peter's review. CERT-ROUTING finds it addresses exactly the slices that make the compiled-path
+  architecture, which Peter's rule sends to him: "all changes to the baseline ISLA model architecture should be reviewed by
+  me" (@sec-nb-rulings-1027). CERT-ROUTING finds it addresses exactly the slices that make the compiled-path
   certification undecidable (@sec-nb-cert).
 
 **For the book.** 12 gains @sec-airfrans-slice-normal; 16's limits gain the lug reads and its certification; 20's
@@ -43788,7 +43789,7 @@ Records results/campaigns_2026-10-23/main_merge_1026/, merge_2171_tidy/ and main
 - **MAIN-MERGE-1027** (merged 13:58 EDT 10-27 as daf1e605b): upstream main aad6ce655 with #2167, #2191 and #2174's squash
   merge; 4,620 of 4,620 draw-function outputs and 110 of 110 golden variants bitwise. ISLA's draw keeps its Morton grid over
   every cell, where `sample_cells_systematic` spans only cells of positive measure; changing it would be an architecture
-  change for Peter's review, and it is not made.
+  change, which Peter's rule sends to him (@sec-nb-rulings-1027), and it is not made.
 - **Pull requests**, read with gh at 17:40 EDT 10-27: #2174 merged at 13:06 EDT as aad6ce655; #2171, #2173 and #2170 open,
   review required.
 
