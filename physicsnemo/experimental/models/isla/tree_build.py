@@ -17,15 +17,15 @@
 r"""The fast build of ISLA-DTT's boundary forest (:class:`~.tree_read.BoundaryForest`).
 
 The reference build makes one GLOBE
-:class:`~physicsnemo.mesh.spatial.cluster_tree.ClusterTree` per normal octant, and each
+:class:`~physicsnemo.mesh.spatial.cluster_tree.ClusterTree` per normal face, and each
 tree's Morton topology splits its ranges level by level with a host sync per level:
-about 180 syncs per case. This build makes the same forest for every octant at once
+about 180 syncs per case. This build makes the same forest for every face at once
 with one sync. The Morton codes are the reference's expression, evaluated with each
-cell's own octant's bounds; two stable sorts give the reference's order (octant, then
+cell's own face's bounds; two stable sorts give the reference's order (face, then
 code, then cell); one Warp kernel finds every node from the positions (each sorted
 position walks down from its tree's root, computing the reference's split at every
 node on its way, and emits the nodes whose range starts there), a count pass and a
-fill pass; a sort of the nodes by (octant, depth, start) is the reference's node
+fill pass; a sort of the nodes by (face, depth, start) is the reference's node
 numbering. The topology is integer arithmetic, so it is the reference's exactly.
 Every floating-point value is computed by the reference's own expressions: the boxes by
 :func:`~physicsnemo.mesh.spatial.cluster_tree._node_boxes` on the whole forest (an exact
@@ -61,8 +61,10 @@ _START_BITS = 40
 #: ``_DEPTH_BINS - 2`` is left to the reference build (one level short of what a
 #: node's 6-bit key depth and int64 path hold).
 _DEPTH_BINS = 64
-#: Cells the build takes: Warp's thread ids are int32.
-_MAX_CELLS = 2**31
+#: Warp refuses an array of this many elements or more, and its thread ids are int32.
+#: The build's Warp arrays hold one entry per cell (the count pass) or one per node
+#: (the fill pass), and a forest has up to 2 N - 1 nodes, so each is checked.
+_WARP_MAX_ELEMENTS = 2**31
 
 _LOGGED: set = set()
 
@@ -215,20 +217,20 @@ def _launch(kernel, n: int, inputs: list, ref: torch.Tensor) -> None:
         wp.launch(kernel, dim=n, inputs=arrays, device=device, stream=stream)
 
 
-def _morton_codes(points_f: torch.Tensor, octant: torch.Tensor, n_trees: int) -> torch.Tensor:
-    """Each cell's code in its own octant's tree: the isotropic quantization of
-    :func:`~physicsnemo.mesh.spatial.bvh._compute_morton_codes` with the octant's
+def _morton_codes(points_f: torch.Tensor, face: torch.Tensor, n_trees: int) -> torch.Tensor:
+    """Each cell's code in its own face's tree: the isotropic quantization of
+    :func:`~physicsnemo.mesh.spatial.bvh._compute_morton_codes` with the face's
     bounds (exact minima and maxima), then the same bit spreading."""
     n, d = points_f.shape
     n_bits = min(62, 63 // d)
     max_val = (1 << n_bits) - 1
     q = points_f.to(torch.float64 if points_f.dtype == torch.float64 else torch.float32)
-    idx = octant[:, None].expand(-1, d)
+    idx = face[:, None].expand(-1, d)
     cmin = q.new_full((n_trees, d), float("inf")).scatter_reduce(0, idx, q, "amin")
     cmax = q.new_full((n_trees, d), float("-inf")).scatter_reduce(0, idx, q, "amax")
     extent = (cmax - cmin).amax(dim=1)
     safe = torch.where(extent != 0, extent, torch.ones_like(extent))
-    coords = ((q - cmin[octant]) / safe[octant, None] * max_val).long().clamp(0, max_val)
+    coords = ((q - cmin[face]) / safe[face, None] * max_val).long().clamp(0, max_val)
     for shift, mask in _MORTON_SPREAD_STEPS[d]:
         coords = (coords | (coords << shift)) & mask
     return (coords << torch.arange(d, device=q.device)).sum(dim=1)
@@ -240,27 +242,28 @@ def forest_tables(
     normals: torch.Tensor,
     vecs: torch.Tensor | None,
     points_f: torch.Tensor,
-    octant: torch.Tensor,
+    face: torch.Tensor,
     *,
     leaf_size: int,
 ) -> dict | None:
     """The fields of :class:`~.tree_read.BoundaryForest` that its trees make, with the
     nodes' raw mean normal as ``mean_n``, for the cells at lab ``points`` ``(N, d)``
-    (``points_f`` in the boundary's frame, ``octant`` their normals' octants), or
-    ``None`` where the reference build must make them (no cells, ``_MAX_CELLS`` or
-    more, or a tree too deep for a node path)."""
+    (``points_f`` in the boundary's frame, ``face`` their normals' faces,
+    :func:`~.tree_read.normal_faces`), or
+    ``None`` where the reference build must make them (no cells, cells or nodes past
+    Warp's ``_WARP_MAX_ELEMENTS``, or a tree too deep for a node path)."""
     n, d = points_f.shape
-    if n == 0 or n >= _MAX_CELLS or leaf_size < 1:
+    if n == 0 or n >= _WARP_MAX_ELEMENTS or leaf_size < 1:
         return None
     device = points.device
-    n_oct = 2**d
-    ### Cells by octant then code then index: the trees' sorted orders, end to end.
-    codes = _morton_codes(points_f, octant, n_oct)
+    n_face = 2 * d
+    ### Cells by face then code then index: the trees' sorted orders, end to end.
+    codes = _morton_codes(points_f, face, n_face)
     by_code = torch.argsort(codes, stable=True)
-    cells = by_code[torch.argsort(octant[by_code], stable=True)]
+    cells = by_code[torch.argsort(face[by_code], stable=True)]
     sorted_codes = codes[cells].contiguous()
-    pos_tree = octant[cells].contiguous()
-    cells_per = torch.zeros(n_oct, dtype=torch.long, device=device).index_add_(0, octant, torch.ones_like(octant))
+    pos_tree = face[cells].contiguous()
+    cells_per = torch.zeros(n_face, dtype=torch.long, device=device).index_add_(0, face, torch.ones_like(face))
     tree_end = torch.cumsum(cells_per, 0)
     tree_start = tree_end - cells_per
 
@@ -269,8 +272,8 @@ def forest_tables(
     leaf_depth = torch.empty(n, dtype=torch.long, device=device)
     fixed = [sorted_codes, pos_tree, tree_start, tree_end, int(leaf_size), int(_MORTON_BALANCE)]
     _launch(_node_count_kernel, n, [*fixed, count, leaf_depth], points)
-    nodes_per = torch.zeros(n_oct, dtype=torch.long, device=device).index_add_(0, pos_tree, count)
-    depth_per = torch.zeros(n_oct, dtype=torch.long, device=device).scatter_reduce_(
+    nodes_per = torch.zeros(n_face, dtype=torch.long, device=device).index_add_(0, pos_tree, count)
+    depth_per = torch.zeros(n_face, dtype=torch.long, device=device).scatter_reduce_(
         0, pos_tree, leaf_depth, "amax"
     )
     ### The internal nodes starting at position p have the depths leaf_depth - count + 1
@@ -280,12 +283,12 @@ def forest_tables(
     bins.index_add_(0, (leaf_depth - count + 1).clamp_max(_DEPTH_BINS - 1), starts_here)
     bins.index_add_(0, leaf_depth.clamp_max(_DEPTH_BINS - 1), -starts_here)
     stats = torch.cat([cells_per, nodes_per, torch.cumsum(bins, 0)]).tolist()
-    cells_per_h = stats[:n_oct]
-    nodes_per_h = stats[n_oct : 2 * n_oct]
-    internal_per_depth = stats[2 * n_oct :]
-    if internal_per_depth[_DEPTH_BINS - 2]:
-        return None
+    cells_per_h = stats[:n_face]
+    nodes_per_h = stats[n_face : 2 * n_face]
+    internal_per_depth = stats[2 * n_face :]
     m_total = sum(nodes_per_h)
+    if internal_per_depth[_DEPTH_BINS - 2] or m_total >= _WARP_MAX_ELEMENTS:
+        return None
     n_internal = sum(internal_per_depth)
     n_levels = sum(1 for c in internal_per_depth if c)
 
@@ -349,7 +352,7 @@ def forest_tables(
     if vecs is not None:
         parts.append(vecs[cells].flatten(1))
     weighted = (torch.cat(parts, dim=1) * sorted_w.unsqueeze(-1)).double()
-    trees_h = [k for k in range(n_oct) if cells_per_h[k]]
+    trees_h = [k for k in range(n_face) if cells_per_h[k]]
     c_bounds, m_bounds, a = [0], [0], 0
     for k in trees_h:
         a += cells_per_h[k]
@@ -378,12 +381,12 @@ def forest_tables(
         node_vecs = means[:, 2 * d :].to(data_dtype).reshape(m_total, *vecs.shape[1:]).contiguous()
     node_measure = total_64.to(points_f.dtype)
 
-    ### One ClusterTree per octant over its slice of the table (local ids), for the
+    ### One ClusterTree per face over its slice of the table (local ids), for the
     ### reference walk: each field made for the whole table (row by row, so each tree's
     ### rows are its own computation's) and sliced per tree.
-    by_octant = torch.argsort(octant, stable=True)
+    by_face = torch.argsort(face, stable=True)
     local = torch.empty_like(cells)
-    local[by_octant] = torch.arange(n, device=device) - tree_start[octant[by_octant]]
+    local[by_face] = torch.arange(n, device=device) - tree_start[face[by_face]]
     node_offset = F.pad(torch.cumsum(nodes_per[torch.nonzero_static(cells_per, size=len(trees_h))[:, 0]], 0), (1, 0))
     tree_rs = range_start - tree_start[tree]
     tree_m0 = node_offset[ordinal[tree]]
@@ -393,7 +396,7 @@ def forest_tables(
     leaf_count = torch.where(is_leaf, range_count, 0)
     diameter_sq = (aabb_max - aabb_min).pow(2).sum(dim=-1)
     source_order = local[cells]
-    source_points = points_f[by_octant]
+    source_points = points_f[by_face]
     root_ids = torch.zeros(len(trees_h), dtype=torch.long, device=device)
     trees, tree_cells = [], []
     for t, k in enumerate(trees_h):
@@ -418,7 +421,7 @@ def forest_tables(
                 batch_size=torch.Size([]),
             )
         )
-        tree_cells.append(by_octant[a:b])
+        tree_cells.append(by_face[a:b])
     return {
         "trees": trees,
         "tree_cells": tree_cells,

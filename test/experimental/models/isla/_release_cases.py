@@ -21,6 +21,7 @@ import torch
 
 from physicsnemo.experimental.models import ISLA
 from test.experimental.models.isla._meshes import soup
+from test.experimental.models.isla.goldens.cases import param_generator
 
 #: Every configuration declares one scalar and one vector output, one boundary condition
 #: without fields and one global direction.
@@ -38,15 +39,24 @@ CONFIGS = {
 }
 
 
-def _instantiate_model(seed: int = 0, **kwargs) -> ISLA:
-    """Build an ISLA with reproducible random parameters (MOD-008b pattern), forced to
-    the eager geometry region (the one the goldens were recorded with)."""
-    model = ISLA(**kwargs)
-    model.geo_kernel = "eager"
-    gen = torch.Generator(device="cpu").manual_seed(seed)
+def _fill(model: torch.nn.Module, seed: int) -> torch.nn.Module:
+    """Every parameter of ``model`` set to ``randn * 0.1`` from its own generator
+    (:func:`param_generator`); returns the model."""
     with torch.no_grad():
-        for p in model.parameters():
-            p.copy_(torch.randn(p.shape, generator=gen, dtype=p.dtype) * 0.1)
+        for n, p in model.named_parameters():
+            p.copy_(
+                torch.randn(p.shape, generator=param_generator(seed, n), dtype=p.dtype)
+                * 0.1
+            )
+    return model
+
+
+def _instantiate_model(seed: int = 0, **kwargs) -> ISLA:
+    """Build an ISLA with reproducible random parameters (MOD-008b pattern; each
+    parameter from its own name-keyed generator, :func:`_fill`), forced to the eager
+    geometry region (the one the goldens were recorded with)."""
+    model = _fill(ISLA(**kwargs), seed)
+    model.geo_kernel = "eager"
     return model.eval()
 
 

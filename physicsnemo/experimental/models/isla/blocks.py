@@ -271,7 +271,9 @@ class _SliceBlock(nn.Module):
         ### invariants -- many local, data-adaptive reference points instead of
         ### any global frame (smooth by construction).
         self.geo_width = hidden // 2
-        self.geo_logit = nn.Linear(self.n_geo, 1)
+        ### No bias: a constant added to every slice's logit cancels in both the
+        ### softmax over slices and the one over points, so it would get no gradient.
+        self.geo_logit = nn.Linear(self.n_geo, 1, bias=False)
         self.geo_feat = nn.Linear(self.n_geo, self.geo_width)
         self.slice_mlp = nn.Sequential(
             nn.LayerNorm(hidden),

@@ -342,6 +342,7 @@ from physicsnemo.experimental.models.isla.scales import (
     split_scale_keys,
 )
 from physicsnemo.experimental.models.isla.tree_read import (
+    normal_error_bound,
     TREE_READ_THETA,
     TreeReadWalk,
     _KernelBasis,
@@ -439,10 +440,10 @@ def _refuse_earlier_state_dict(module, state_dict, prefix, local_metadata, *args
     ``load_state_dict``), not only ``Module.from_checkpoint``, which checks the
     recorded version. Two marks tell an earlier state dict: the parameter layout
     before 0.7.0 (the shared seed embedding ``embed.0``, the prediction points'
-    ``qt.type_offset`` and ``qt.embed``), and, for 0.7.0 to 0.12.0, whose layout is
-    the current one, the state-dict version torch records for every module
-    (``ISLA._version``, 1 before 0.8.0, 8 for 0.8.0, 9 for 0.9.0, 10 for the
-    unmerged head-frame candidate 0.10.0, 11 for 0.11.0 and 12 for 0.12.0). A state dict rebuilt without
+    ``qt.type_offset`` and ``qt.embed``), and, for 0.7.0 to 0.13.0, the state-dict
+    version torch records for every module (``ISLA._version``, 1 before 0.8.0, 8 for
+    0.8.0, 9 for 0.9.0, 10 for the unmerged head-frame candidate 0.10.0, 11 for 0.11.0,
+    12 for 0.12.0 and 13 for 0.13.0). A state dict rebuilt without
     torch's metadata (a dict comprehension over it) carries no version and is read
     by its layout alone."""
     old = sorted(
@@ -463,7 +464,8 @@ def _refuse_earlier_state_dict(module, state_dict, prefix, local_metadata, *args
         raise RuntimeError(
             f"this ISLA state dict was written before version {module.__model_checkpoint_version__} "
             f"(state-dict version {version}, now {type(module)._version}): its weights have the "
-            "current layout but were trained on an earlier forward (before 0.8.0, the "
+            "current layout (before 0.14.0, with two more parameters) but were trained on an "
+            "earlier forward (before 0.8.0, the "
             "prediction points' geometry encoding sign(s) log(|s| + 1e-12) and the direction "
             "from the surface, in place of asinh(s / 1e-6) and sign(d) times it; before "
             "0.9.0, the length unit without each boundary cell's own second moment, and for "
@@ -474,7 +476,12 @@ def _refuse_earlier_state_dict(module, state_dict, prefix, local_metadata, *args
             "geometry's first-order tie and on-wall bands and its arithmetic in the caller's "
             "frame; before 0.13.0, the constructor's dim, boundary_tokens, query_independent "
             "and reynolds, the scales' velocity_scale and roles, and interacting interior "
-            "ISLA; state-dict version 10 is the unmerged head-frame "
+            "ISLA; "
+            "before 0.14.0, ISLA-DTT's boundary forest split by sign octants and built under "
+            "autocast in the caller's precision and uncentred coordinates, with the boxes' own "
+            "diameters and no bound on each token's normal, and the slice blocks' geo_logit "
+            "bias and ISLA-DTT's kernel basis's last bias; "
+            "state-dict version 10 is the unmerged head-frame "
             "candidate 0.10.0), and "
             "ISLA keeps no upgrade path; "
             "load it with the code that wrote it, or retrain"
@@ -694,14 +701,23 @@ class ISLA(Module):
     ### their names with `defines` in place of velocity_scale and the density and
     ### viscosity roles). The same parameters and forward for the surface task and
     ### ISLA-DTT; new constructor arguments. No earlier checkpoint loads: ISLA is
-    ### unreleased and keeps no upgrade paths.
-    __model_checkpoint_version__ = "0.13.0"
+    ### unreleased and keeps no upgrade paths. 0.14.0: ISLA-DTT's boundary forest
+    ### as a function of the boundary alone (built outside autocast in centred
+    ### float64 canonical-frame coordinates, cube-face orientation classes with
+    ### their error-bound band in place of sign octants, the separation diameter
+    ### widened by the coordinates' error bound and by the frame's rotation in
+    ### proportion to each node's own size, never past a frame-free ball, each
+    ### token's normal_tol); the slice blocks' routing-bias Linear and ISLA-DTT's
+    ### kernel basis's last Linear without their dead biases (blocks.<i>.geo_logit.bias
+    ### and kernel_basis.net.4.bias gone from the state dict: constants that cancel in
+    ### a softmax). The same function otherwise.
+    __model_checkpoint_version__ = "0.14.0"
     #: torch's state-dict version of the module (``nn.Module._version``, recorded in
     #: every state dict's metadata): 1 before 0.8.0, 8 for 0.8.0, 9 for 0.9.0, 10 for
-    #: the head-frame candidate, 11 for 0.11.0 and 12 for 0.12.0, so a state dict of
-    #: 0.7.0 to 0.12.0, whose parameter layout is the current one, is told apart and
-    #: refused on load (:func:`_refuse_earlier_state_dict`).
-    _version = 13
+    #: the head-frame candidate, 11 for 0.11.0, 12 for 0.12.0 and 13 for 0.13.0, so a
+    #: state dict of 0.7.0 to 0.13.0 is told apart and refused on load
+    #: (:func:`_refuse_earlier_state_dict`).
+    _version = 14
 
     def __init__(
         self,
@@ -975,7 +991,7 @@ class ISLA(Module):
         ### every other model owns exactly the parameters it has without the read.
         self._tree_read_theta = TREE_READ_THETA
         ### tree_read_kernel names the implementation of the tree read, as geo_kernel
-        ### does the geometry region's: "reference" (the per-octant cluster trees,
+        ### does the geometry region's: "reference" (the per-face cluster trees,
         ### GLOBE's walk, the kernel term a matmul read by segment_softmax.py) or
         ### "auto", where the forest build (tree_build.py), the walk (tree_walk.py)
         ### and the read (fused_read.py: the kernel term computed inside the read,
@@ -1922,6 +1938,17 @@ class ISLA(Module):
                 )
             boundary = boundary.apply(lambda t: t[:, kept], batch_size=[1, kept.shape[0]])
             boundary["measure"] = weights[None].to(boundary["measure"].dtype)
+            if self.kernel_reads is not None:
+                ### The forest's orientation faces read each kept cell's normal with the
+                ### bound on its rounding (tree_read.normal_error_bound), from the meshes'
+                ### vertices as given, measured from the tokens' weighted centroid.
+                ### (cells: the union's, from the points' geometry above.)
+                with torch.no_grad(), torch.autocast(q_points.device.type, enabled=False):
+                    verts = torch.cat([m.points.to(q_points.device) for m in meshes])
+                    simplex = verts[cells[kept]]
+                    w = weights.double()
+                    centre = (w[:, None] * simplex.double().mean(1)).sum(0) / w.sum()
+                    boundary["normal_tol"] = normal_error_bound(simplex, centre)[None]
             query = query[None]
         return boundary, query, g_unit, g_scalars, gauge, scales, out_points, global_td, out_rows
 
@@ -1932,16 +1959,17 @@ class ISLA(Module):
         points = pts.points if isinstance(pts, Mesh) else pts
         return TensorDict(points=points, batch_size=points.shape[:1])
 
-    def _tree_read_pairs(self, bnd: TensorDict, qry: TensorDict, q_wall, g_unit):
+    def _tree_read_pairs(self, bnd: TensorDict, qry: TensorDict, q_wall, g_unit, normal_tol=None):
         """The boundary read's pairs (:mod:`tree_read`): each point's near cells and
         admitted clusters at the forest's opening angle, their kernel basis
         and log measures; ``bnd`` and ``qry`` are the boundary's and the points'
-        tokens and ``q_wall`` ``(B, Q)`` the points' built-in wall distance (frame
-        units)."""
-        return walk_range_pairs(self.kernel_basis, self._tree_read_walk(bnd, qry, q_wall, g_unit))
+        tokens, ``q_wall`` ``(B, Q)`` the points' built-in wall distance (frame
+        units) and ``normal_tol`` ``(B, N)`` the bound on the rounding of each
+        boundary token's normal (``None``: the normals as given are exact)."""
+        return walk_range_pairs(self.kernel_basis, self._tree_read_walk(bnd, qry, q_wall, g_unit, normal_tol))
 
     def _tree_read_walk(
-        self, bnd: TensorDict, qry: TensorDict, q_wall, g_unit, walk_points: bool = True
+        self, bnd: TensorDict, qry: TensorDict, q_wall, g_unit, normal_tol=None, walk_points: bool = True
     ) -> TreeReadWalk:
         """The forest and the points' lists of :meth:`_tree_read_pairs`, before the
         kernel basis
@@ -1960,6 +1988,7 @@ class ISLA(Module):
             g_unit=g_unit,
             theta=self._tree_read_theta,
             eps=EPS,
+            normal_tol=normal_tol,
             kernel=self.resolve_tree_read_kernel(q_r),
             walk=self.tree_read_kernel,
             build=self.tree_read_kernel,
@@ -2091,7 +2120,9 @@ class ISLA(Module):
         if query is not None:
             q_tokens, q_wall = self._query_tokens(query, tokens["log_w"], g_unit, g_scalars, gauge, boundary["points"])
             if self.kernel_reads is not None:
-                kernel_pairs = self._tree_read_pairs(tokens, q_tokens, q_wall, g_unit)
+                kernel_pairs = self._tree_read_pairs(
+                    tokens, q_tokens, q_wall, g_unit, boundary.get("normal_tol", None)
+                )
             tokens = torch.cat([tokens, q_tokens], dim=1)
             _hint_token_axis(n + q_tokens.shape[1], self._token_widths)
         padded = _pad_tokens(tokens, TOKEN_ALIGNMENT)
@@ -2310,7 +2341,12 @@ class _QueryChunks:
         ### The forest now, each chunk's points walked by the chunk: the lists held are
         ### one chunk's, and the fast walk's array limit applies to a chunk's pairs.
         self.walk = model._tree_read_walk(
-            tokens, {"r": query["points"] / self.gauge, "n_hat": q_nhat}, s[..., 0].abs(), g_unit, walk_points=False
+            tokens,
+            {"r": query["points"] / self.gauge, "n_hat": q_nhat},
+            s[..., 0].abs(),
+            g_unit,
+            boundary.get("normal_tol", None),
+            walk_points=False,
         )
         ### The boundary side's token axis completed as forward completes its own
         ### (_pad_tokens): at an unaligned count cuBLAS reduces some token-axis bf16

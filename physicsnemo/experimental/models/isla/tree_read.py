@@ -52,9 +52,9 @@ over the cluster, :math:`\sum_{j \in C} \omega_j e^{z_{qj}} v_j` would equal
 The kernel reads a cell's normal through three cosines, so a cluster is a usable
 virtual cell only when its normals agree: the mean normal of a cluster spanning both
 faces of a thin body is a random direction. The boundary is therefore held as a
-*forest*: the cells are split by the octant of their normal (the orientation split;
-opposite normals never share a tree) and one cluster tree is built per octant
-(:class:`BoundaryForest`). A point walks every tree. A cluster is admitted when its
+*forest*: the cells are split by the cube face of their normal (the orientation split:
+the axis of its largest component and that component's sign; opposite normals never
+share a tree) and one cluster tree is built per face (:class:`BoundaryForest`). A point walks every tree. A cluster is admitted when its
 box diagonal is below :math:`\theta` times its distance to the point (the tree's
 criterion) and its normals are coherent: the measure-weighted RMS chord of the
 normals about their mean, :math:`\sqrt{2 (1 - |\bar n|)}`, is below :math:`\theta`
@@ -77,8 +77,28 @@ the same approximation in every pose, and the posed protocol equals the native o
 Trees built on lab coordinates were not: on AirfRANS at theta 1 their error rose
 1.9x / 1.25x / 3.3x on pressure / velocity / viscosity under a rigid motion.
 
+No discrete choice of the forest is left to rounding where an error bound can decide
+it, and none to the caller's precision. The forest is built and walked outside
+autocast, in the inputs' precision, with its coordinates in the boundary's frame about
+its centroid computed in float64 and rounded once, so a bf16-autocast forward builds
+bitwise the float32 forward's forest. A normal's face is tied when its two largest
+components are within the bound on their rounding (:func:`normal_error_bound`, and the
+frame's own rotation, :func:`frame_rotation_bound`), and a tied normal takes the lowest
+tied axis; the box test compares the distance with a diameter widened by the
+coordinates' error bound and by the frame's rotation, which moves the points and the
+cells together and so widens each node in proportion to its own size, never past a
+frame-free bound (:func:`separation_diameter_sq`), so an exact tie of the criterion is
+opened in every pose and a nearly tied frame costs a bounded factor of pairs. The bounds are measured in the boundary's own frame,
+so they are functions of the boundary alone and their edges do not move with the pose.
+What rounding still decides is generic: cells within rounding of a face boundary, a
+Morton grid line or the criterion, whose posed inputs differ by the rounding of the
+pose itself. Sign octants were the earlier split: on surfaces aligned with the frame
+(GINOT's lug, 86 % of whose normals have exact-zero components there) the octant was the
+sign of a rounding residue, and posing the lug changed every point's list (posed
+error 1.53 / 1.98x native on two trained seeds at theta 1).
+
 Constants. ``TREE_READ_LEAF_SIZE`` (cells per leaf), the orientation split into the
-:math:`2^d` sign octants and ``TREE_READ_PAIR_CHUNK`` (pairs per chunk of the basis
+:math:`2 d` cube faces and ``TREE_READ_PAIR_CHUNK`` (pairs per chunk of the basis
 evaluation) are implementation constants: at a fixed :math:`\theta` they change the
 cost and the grouping of the exact pairs, and at :math:`\theta = 0` nothing at all.
 
@@ -110,7 +130,7 @@ from physicsnemo.experimental.models.isla.segment_softmax import (
 )
 from physicsnemo.experimental.models.isla.tree_build import forest_tables, resolve_tree_build
 from physicsnemo.experimental.models.isla.tree_walk import walk_fits, walk_pairs
-from physicsnemo.mesh.spatial._frame import canonical_frame
+from physicsnemo.mesh.spatial._frame import canonical_frame, frame_coordinates
 from physicsnemo.mesh.spatial._ragged import _ragged_arange
 from physicsnemo.mesh.spatial.cluster_tree import ClusterTree
 
@@ -143,25 +163,124 @@ TREE_READ_LEAF_SIZE = 4
 TREE_READ_PAIR_CHUNK = 1 << 22
 
 
-def normal_octants(normals: torch.Tensor) -> torch.Tensor:
-    """The sign octant of each normal, ``0`` to ``2**d - 1`` (bit ``k`` set when
-    component ``k`` is positive; a zero component takes the sign of the next nonzero
-    one, cyclically). Antipodal: ``-n`` lands in the octant ``2**d - 1`` minus
-    that of ``n``, so opposite normals never share an octant and a winding flip
-    maps every octant's cells to the antipodal octant."""
-    d = normals.shape[1]
-    code = torch.zeros(normals.shape[0], dtype=torch.long, device=normals.device)
-    for k in range(d):
-        c = normals[:, k]
-        for j in range(1, d):
-            c = torch.where(c == 0, normals[:, (k + j) % d], c)
-        code = code * 2 + (c > 0).long()
-    return code
+def normal_faces(normals: torch.Tensor, tol: torch.Tensor) -> torch.Tensor:
+    """The cube face of each normal, ``0`` to ``2 d - 1``: ``2 k + 1`` when component
+    ``k`` is the largest in absolute value and positive, ``2 k`` when it is negative.
+    ``tol`` ``(N,)`` bounds the error of each of a normal's components; a component
+    within ``2 tol`` of the largest may be the largest, and the face goes to the lowest
+    such axis, so rounding never decides it. Antipodal: ``-n`` lands on the face
+    opposite ``n``'s (the same axis, the other sign), so opposite normals never share
+    a face and a winding flip maps every face's cells to the opposite face. Inside a
+    face every normal has ``|n_k| >= 1 / sqrt(d)`` (up to ``tol``), the bound of a sign
+    octant."""
+    a = normals.abs()
+    tied = a >= a.amax(dim=1, keepdim=True) - 2 * tol[:, None]
+    k = tied.to(torch.int8).argmax(dim=1)
+    return 2 * k + (normals.gather(1, k[:, None])[:, 0] > 0).long()
+
+
+def normal_error_bound(simplex: torch.Tensor, centre: torch.Tensor) -> torch.Tensor:
+    r"""A bound on the error of each cell's unit normal ``(C,)`` (on every component),
+    from its vertices ``simplex`` ``(C, d, d)`` as given and the boundary's centroid
+    ``centre`` ``(d,)``: with :math:`u` the unit roundoff of the vertices' precision,
+    :math:`V` the largest distance of a vertex from the centroid and :math:`e_j` the
+    edges from the first vertex, the normal :math:`c / |c|` of the edges' generalized
+    cross product :math:`c` moves by at most :math:`u (6 V \sum_k \prod_{j \ne k} |e_j|
+    + 2 (d - 1) \prod_j |e_j|) / |c| + (d + 2) u`: each vertex rounded (:math:`u V`), the
+    edges and the product computed and normalized in that precision. :math:`V` is
+    measured from the centroid, so the bound is a function of the boundary alone, the
+    same in every pose (a pose far from the origin adds its own rounding, which no
+    function of the boundary can follow). In float64; a zero-measure cell gets an
+    infinite bound."""
+    v = simplex.double()
+    d = v.shape[-1]
+    u = torch.finfo(simplex.dtype).eps / 2
+    big = (v - centre.double()).norm(dim=-1).amax(dim=1)
+    e = (v[:, 1:] - v[:, :1]).norm(dim=-1)  # (C, d - 1)
+    if d == 2:
+        c = e[:, 0]
+        rest = torch.ones_like(c)
+    else:
+        edges = v[:, 1:] - v[:, :1]
+        c = torch.linalg.cross(edges[:, 0], edges[:, 1], dim=-1).norm(dim=-1) if d == 3 else (
+            torch.linalg.det(edges @ edges.transpose(1, 2)).clamp_min(0).sqrt()
+        )
+        rest = torch.stack([e[:, [j for j in range(d - 1) if j != k]].prod(dim=1) for k in range(d - 1)], 1).sum(1)
+    full = e.prod(dim=1)
+    bound = u * (6 * big * rest + 2 * (d - 1) * full) / c + (d + 2) * u
+    return torch.where(c > 0, bound, torch.full_like(bound, math.inf))
+
+
+def frame_rotation_bound(x: torch.Tensor, w: torch.Tensor, u: float) -> torch.Tensor:
+    r"""A bound on the rotation of the canonical frame by the rounding of its inputs:
+    positions ``x`` ``(N, d)`` about their centroid with normalized weights ``w``, each
+    coordinate in error by at most :math:`2 u |x|` (the input's rounding and the division
+    by the length unit), move the covariance by at most :math:`E = 4 u \operatorname{tr} C`,
+    and its axes by at most :math:`E / (g - E)` with :math:`g` the smallest eigenvalue gap
+    (Davis-Kahan). Zero when :math:`E \ge g`: the variances are then equal to rounding, a
+    tie of the frame, which no bound on the forest can cover. In float64."""
+    x, w = x.double(), w.double()
+    cov = torch.stack([(w[:, None] * x * x[:, j, None]).sum(0) for j in range(x.shape[1])], 1)
+    lam = torch.linalg.eigvalsh(cov)
+    err = 4 * u * lam.sum()
+    gap = (lam[1:] - lam[:-1]).amin() if lam.numel() > 1 else lam.new_full((), math.inf)
+    return torch.where(gap > err, err / (gap - err), torch.zeros_like(err))
+
+
+def separation_diameter_sq(tree: ClusterTree, theta: float, eta: torch.Tensor, d: int, u: float) -> torch.Tensor:
+    r"""The squared diameter the walk compares a point's distance with, so that a
+    node is admitted only when it is certainly well separated in the boundary's exact
+    canonical frame: the true distance :math:`r^*` of the point from the node's box and
+    the box's true diagonal :math:`D^*` satisfy :math:`\theta r^* > D^*` whenever the
+    computed :math:`\theta r > D'`, with :math:`D` the computed diagonal and :math:`R`
+    the largest distance of the box from the centroid. :math:`D'` is the smaller of two
+    sufficient diameters:
+
+    - :math:`D_\eta = f D_u(\theta / f)`. Rounding moves each coordinate of a point
+      :math:`p` by at most :math:`3 u |p|` (in the centred frame), so with the walk's
+      own float32 arithmetic :math:`\theta r > D_u(\theta) = (D (1 + 3 \theta u) + 6 (1 +
+      \theta) u R) (1 + 2 u) / (1 - (d + 6) u)` certifies the criterion in the computed
+      frame. That frame is rotated from the exact one by at most ``eta`` per coordinate
+      (:func:`frame_rotation_bound`), and the rotation moves the point and the node's
+      cells together: the exact box's diagonal is at most :math:`D (1 + \sqrt d \eta)`
+      and its distance at least :math:`r (1 - \sqrt d \eta) - \sqrt d \eta D`, so
+      :math:`\theta r > f D` with :math:`f = (1 + \sqrt d \eta (1 + \theta)) / (1 -
+      \sqrt d \eta)` certifies it. The rotation thus widens each node in proportion to
+      its own size, not to its distance from the centroid. Defined for :math:`\sqrt d
+      \eta < 1`.
+    - :math:`D_\circ`, which holds whatever the frame's rotation. The node's cells lie
+      in the ball of radius :math:`D / 2` about its box's centre :math:`c`, so in any
+      frame its box lies in the cube of half side :math:`D / 2` about :math:`c`, and
+      :math:`\theta |q - c| > (\theta + 2) \sqrt d D / 2` certifies the criterion; the
+      walk's distance to the box is at most :math:`|q - c|`. With the rounding
+      (:math:`a = 3 \sqrt d u` on a vector), :math:`D_\circ = ((\theta + 2) \sqrt d (D / 2
+      + a R) + \theta a R) (1 + 2 u) / ((1 - a) (1 - (d + 3) u))`.
+
+    So the widening grows with ``eta`` and stays bounded as the frame's variances tie.
+    A tie of the criterion (the structured meshes' distance equal to the diameter) is
+    opened whichever way rounding falls."""
+    lo, hi = tree.node_aabb_min.double(), tree.node_aabb_max.double()
+    diam = (hi - lo).square().sum(-1).sqrt()
+    reach = torch.maximum(lo.abs(), hi.abs()).norm(dim=-1)
+    k = 3 * u
+
+    def rounded(t):
+        return (diam * (1 + t * k) + 2 * (1 + t) * k * reach) * (1 + 2 * u) / (1 - k - (d + 3) * u)
+
+    a = math.sqrt(d) * k
+    ball = ((theta + 2) * math.sqrt(d) * (diam / 2 + a * reach) + theta * a * reach) * (1 + 2 * u)
+    ball = ball / ((1 - a) * (1 - (d + 3) * u))
+    se = math.sqrt(d) * eta.double()
+    sure = se < 1
+    se = torch.where(sure, se, torch.zeros_like(se))
+    f = (1 + se * (1 + theta)) / (1 - se)
+    wide = torch.where(sure, torch.minimum(f * rounded(theta / f), ball), ball)
+    return wide.square().to(tree.node_diameter_sq.dtype)
 
 
 @dataclass
 class BoundaryForest:
-    """One case's boundary as a forest of cluster trees, one per normal octant, with
+    """One case's boundary as a forest of cluster trees, one per normal face, with
     the trees' nodes in one table (tree by tree, each tree's nodes in its own order)
     and the cells in one order (tree by tree, each tree's cells in its sorted order).
 
@@ -175,7 +294,8 @@ class BoundaryForest:
 
     n_cells: int
     theta: float
-    frame: torch.Tensor  # (d, d) the boundary's own frame (canonical_frame); trees and boxes live in points @ frame
+    frame: torch.Tensor  # (d, d) float64, the boundary's own frame (canonical_frame)
+    origin: torch.Tensor  # (d,) float64, the cells' measure-weighted centroid; trees and boxes live in (x - origin) @ frame
     trees: list[ClusterTree]
     tree_cells: list[torch.Tensor]  # per tree, the cells it holds (its sources, in its input order)
     node_offset: torch.Tensor  # (T + 1,) each tree's first node in the table
@@ -211,36 +331,60 @@ class BoundaryForest:
         theta: float,
         leaf_size: int = TREE_READ_LEAF_SIZE,
         eps: float = 1e-12,
+        normal_tol: torch.Tensor | None = None,
         build: str = "auto",
     ) -> "BoundaryForest":
         """The forest over cells at ``points`` ``(N, d)`` with ``measure`` ``(N,)``,
         unit ``normals`` ``(N, d)`` and rank-1 inputs ``vecs`` ``(N, P, d)`` or
-        ``None``. No gradient flows into it (a numerical device). ``build`` picks how
+        ``None``; ``normal_tol`` ``(N,)`` bounds the error of each normal's components
+        (:func:`normal_error_bound`; ``None``: the normals are exact as given, up to
+        their own rounding). No gradient flows into it (a numerical device), and it is
+        built outside autocast, in the inputs' precision with its frame arithmetic in
+        float64, so a forward under autocast builds the same forest. ``build`` picks how
         it is built, not what it is (:func:`~.tree_build.resolve_tree_build`): the
-        per-octant cluster trees below, or the same forest from one pass over all
-        octants (:func:`~.tree_build.forest_tables`)."""
+        per-face cluster trees below, or the same forest from one pass over all
+        faces (:func:`~.tree_build.forest_tables`)."""
+        with torch.autocast(points.device.type, enabled=False):
+            return cls._build(points, measure, normals, vecs, theta, leaf_size, eps, normal_tol, build)
+
+    @classmethod
+    def _build(cls, points, measure, normals, vecs, theta, leaf_size, eps, normal_tol, build) -> "BoundaryForest":
         points, measure, normals = points.detach(), measure.detach(), normals.detach()
         vecs = None if vecs is None else vecs.detach()
         n, d = points.shape
         device = points.device
         coherent_length = 1.0 - 0.5 * float(theta) ** 2
-        ### The trees and the octants live in the boundary's own frame, so the forest
-        ### is the same in every pose of the case (up to ties); the virtual cells
-        ### (centroids, normals, rank-1 means) stay in the frame the read works in.
-        frame = canonical_frame(points, measure)
-        points_f, normals_f = points @ frame, normals @ frame
-        octant = normal_octants(normals_f)
+        ### The trees and the faces live in the boundary's own frame about its centroid,
+        ### computed in float64 and rounded once, so the forest is the same in every pose
+        ### of the case (up to the frame's ties); the virtual cells (centroids, normals,
+        ### rank-1 means) stay in the frame the read works in.
+        u = torch.finfo(points.dtype).eps / 2
+        w64 = measure.double().clamp_min(0)
+        w64 = w64 / w64.sum().clamp_min(torch.finfo(torch.float64).tiny)
+        frame = canonical_frame(points.double(), measure)
+        origin = (w64[:, None] * points.double()).sum(0)
+        x = points.double() - origin
+        points_f = frame_coordinates(x, frame).to(points.dtype)
+        normals_f = frame_coordinates(normals.double(), frame)
+        eta = frame_rotation_bound(x, w64, u)
+        if normal_tol is None:
+            tol = torch.full((n,), (d + 2) * torch.finfo(normals.dtype).eps / 2, dtype=torch.float64, device=device)
+        else:
+            tol = normal_tol.double()
+        face = normal_faces(normals_f, tol + eta)
         if resolve_tree_build(build, points) == "fast":
-            tables = forest_tables(
-                points, measure, normals, vecs, points_f, octant, leaf_size=leaf_size
-            )
+            tables = forest_tables(points, measure, normals, vecs, points_f, face, leaf_size=leaf_size)
             if tables is not None:
+                for tree in tables["trees"]:
+                    tree.node_diameter_sq = separation_diameter_sq(tree, float(theta), eta, d, u)
+                tables["diameter_sq"] = torch.cat([tree.node_diameter_sq for tree in tables["trees"]])
                 mean_n = tables.pop("mean_n")
                 length = mean_n.norm(dim=-1)
                 return cls(
                     n_cells=n,
                     theta=float(theta),
                     frame=frame,
+                    origin=origin,
                     **tables,
                     normal=mean_n / length[:, None].clamp_min(eps),
                     coherent=length > coherent_length,
@@ -249,11 +393,12 @@ class BoundaryForest:
         starts, counts, lefts, rights, boxes = [], [], [], [], []
         centers, nrm, vec, meas = [], [], [], []
         c_off = m_off = 0
-        for k in range(2**d):
-            sel = (octant == k).nonzero().squeeze(-1)
+        for k in range(2 * d):
+            sel = (face == k).nonzero().squeeze(-1)
             if sel.numel() == 0:
                 continue
             tree = ClusterTree.from_points(points_f[sel], leaf_size=leaf_size, areas=measure[sel])
+            tree.node_diameter_sq = separation_diameter_sq(tree, float(theta), eta, d, u)
             data = {"n": normals[sel]}
             if vecs is not None:
                 data["u"] = vecs[sel]
@@ -305,6 +450,7 @@ class BoundaryForest:
             n_cells=n,
             theta=float(theta),
             frame=frame,
+            origin=origin,
             trees=trees,
             tree_cells=tree_cells,
             node_offset=node_offset,
@@ -344,16 +490,27 @@ class BoundaryForest:
         how, not what (:func:`resolve_walk`): the fast walk gives the same lists in
         the same order. Lists past Warp's array limit are walked by the reference
         under ``"auto"`` and refused under ``"fast"``."""
-        return self.frame_pairs(points.detach() @ self.frame, theta, walk)
+        return self.frame_pairs(self.frame_points(points), theta, walk)
+
+    def frame_points(self, points: torch.Tensor) -> torch.Tensor:
+        """The points in the trees' coordinates, as the cells are (:meth:`build`):
+        about the forest's origin in float64, in its frame, rounded once to the points'
+        dtype, outside autocast."""
+        with torch.autocast(points.device.type, enabled=False):
+            return frame_coordinates(points.detach().double() - self.origin, self.frame).to(points.dtype)
 
     def frame_pairs(
         self, points_f: torch.Tensor, theta: float | None = None, walk: str = "auto", count_only: bool = False
     ) -> tuple[torch.Tensor, torch.Tensor, int] | torch.Tensor:
         """:meth:`point_pairs` of points already in the trees' coordinates
-        (``points.detach() @ frame``, in the dtype the product gives); with
-        ``count_only`` each point's number of pairs ``(Q,)`` alone, which the fast walk
-        counts without making the lists (so past Warp's limit on the lists too)."""
+        (:meth:`frame_points`); with ``count_only`` each point's number of pairs
+        ``(Q,)`` alone, which the fast walk counts without making the lists (so past
+        Warp's limit on the lists too)."""
         theta = self.theta if theta is None else float(theta)
+        with torch.autocast(points_f.device.type, enabled=False):
+            return self._frame_pairs(points_f, theta, walk, count_only)
+
+    def _frame_pairs(self, points_f, theta, walk, count_only):
         if resolve_walk(walk, points_f, theta, self) == "fast":
             pairs = walk_pairs(self, points_f, theta, count_only)
             if pairs is not None:
@@ -392,16 +549,17 @@ def resolve_walk(walk: str, points: torch.Tensor, theta: float, forest: Boundary
     CUDA points when the forest's depth fits its stack, else the reference, logged
     once per device type and choice; a forced name is kept (``"fast"`` runs on CPU
     too). At ``theta = 0`` there is no walk (the plan is every pair) and the
-    reference's construction runs either way. Under autocast the forest's
-    coordinates are in the autocast dtype (``points @ frame``), and the fast walk
-    rounds as its torch kernels do."""
+    reference's construction runs either way. Both walks run outside autocast, in
+    the forest's precision, and the fast walk rounds as the reference's torch
+    kernels do."""
     if walk not in ("auto", "reference", "fast"):
         raise ValueError(f"walk must be 'auto', 'reference' or 'fast', got {walk!r}")
     if theta == 0:
         return "reference"
     if walk == "fast" and not walk_fits(forest):
         raise ValueError(
-            f"the fast walk does not take this forest ({len(forest.levels)} levels, {forest.aabb_min.dtype} boxes)"
+            f"the fast walk does not take this forest ({len(forest.levels)} levels, "
+            f"{forest.n_nodes} {forest.aabb_min.shape[1]}-D {forest.aabb_min.dtype} boxes)"
         )
     if walk != "auto":
         return walk
@@ -542,7 +700,10 @@ class _KernelBasis(nn.Module):
             nn.GELU(),
             nn.Linear(KERNEL_READ_HIDDEN, KERNEL_READ_HIDDEN),
             nn.GELU(),
-            nn.Linear(KERNEL_READ_HIDDEN, KERNEL_READ_BASIS),
+            ### No bias: the basis enters only the reads' logits, through each block's
+            ### linear kernel, where a constant basis offset is a per-head constant over
+            ### a point's pairs, which cancels in the softmax.
+            nn.Linear(KERNEL_READ_HIDDEN, KERNEL_READ_BASIS, bias=False),
         )
 
     def forward(self, inv: torch.Tensor) -> torch.Tensor:
@@ -649,6 +810,7 @@ def tree_read_walk(
     g_unit: torch.Tensor,
     theta: float,
     eps: float,
+    normal_tol: torch.Tensor | None = None,
     walk: str = "auto",
     build: str = "auto",
     kernel: str = "reference",
@@ -660,7 +822,9 @@ def tree_read_walk(
     direction), ``query_wall`` ``(B, Q)`` the point's built-in wall distance;
     ``boundary_r``, ``boundary_n``
     ``(B, N, d)``, ``boundary_vecs`` ``(B, N, P_b, d)`` or ``None``; ``log_frac``
-    ``(B, N)`` the cells' log measure fractions; ``g_unit`` ``(B, K, d)``.
+    ``(B, N)`` the cells' log measure fractions; ``g_unit`` ``(B, K, d)``;
+    ``normal_tol`` ``(B, N)`` or ``None`` the bound on each cell's normal
+    (:meth:`BoundaryForest.build`).
 
     Per case: the forest over the cells (:class:`BoundaryForest`, with the measure
     fractions as the measure), each point's walk of it at ``theta``
@@ -695,9 +859,10 @@ def tree_read_walk(
                 theta=theta,
                 leaf_size=TREE_READ_LEAF_SIZE,
                 eps=eps,
+                normal_tol=None if normal_tol is None else normal_tol[i],
                 build=build,
             )
-            points_f = query_r[i].detach() @ forest.frame
+            points_f = forest.frame_points(query_r[i])
             points_fs.append(points_f)
             lists.append(forest.frame_pairs(points_f, walk=walk) if walk_points else None)
             node_measure = forest.measure.to(log_frac.dtype)
@@ -740,8 +905,8 @@ def tree_read_walk(
 
 @contextlib.contextmanager
 def _walk_context(walk: TreeReadWalk):
-    """No gradient, and the autocast state :func:`tree_read_walk` ran in: the opening
-    test's dtypes follow the autocast state (:func:`resolve_walk`)."""
+    """No gradient, and the autocast state :func:`tree_read_walk` ran in (the walk
+    itself runs outside autocast, :meth:`BoundaryForest.frame_pairs`)."""
     enabled, dtype = walk.autocast
     with torch.no_grad(), torch.autocast(walk.omega.device.type, dtype=dtype, enabled=enabled):
         yield

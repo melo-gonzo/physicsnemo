@@ -175,11 +175,11 @@ def test_a_forced_build_runs_that_build(build, monkeypatch):
 
 
 def test_a_cell_limit_at_the_cell_count_leaves_the_forest_to_the_reference(monkeypatch):
-    """``tree_build._MAX_CELLS`` patched to the cell count and ``tree_read.forest_tables``
+    """``tree_build._WARP_MAX_ELEMENTS`` patched to the cell count and ``tree_read.forest_tables``
     spied (``test_fast_forest_build_refuses_what_it_cannot_build``): the spy is
     reached, the tables decline and the reference build makes the forest."""
     calls = reaches(monkeypatch, tree_read, "forest_tables")
-    monkeypatch.setattr(tree_build, "_MAX_CELLS", 300)
+    monkeypatch.setattr(tree_build, "_WARP_MAX_ELEMENTS", 300)
     with ran(tree_build.forest_tables, REFERENCE_BUILD) as r:
         _forest(build="fast")
     assert len(calls) == 1

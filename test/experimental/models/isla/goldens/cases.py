@@ -32,6 +32,7 @@ one-line change here (its golden must then still pass, bitwise in the A/B harnes
 
 import fnmatch
 import functools
+import hashlib
 import importlib
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -186,6 +187,17 @@ def _gen(seed: int) -> torch.Generator:
     return torch.Generator().manual_seed(seed)
 
 
+def param_generator(seed: int, name: str) -> torch.Generator:
+    """The CPU generator of one parameter's seeded fill, seeded by the base ``seed``
+    and the parameter's qualified ``name`` (a SHA-256 of both, stable across processes),
+    so that adding, removing or reordering other parameters leaves its values bitwise.
+    Shared with the release writer (``_release_cases._fill``)."""
+    key = hashlib.sha256(f"{seed}:{name}".encode()).digest()
+    return torch.Generator(device="cpu").manual_seed(
+        int.from_bytes(key[:8], "little") >> 1
+    )
+
+
 def _to(inputs: dict, device, keys=None) -> dict:
     return {k: v.to(device) for k, v in inputs.items() if keys is None or k in keys}
 
@@ -274,10 +286,12 @@ def _cotangent(t: torch.Tensor, seed: int) -> torch.Tensor:
 
 
 def _params(module: torch.nn.Module, seed: int, std: float = 0.3) -> dict:
-    """Random values for every parameter of ``module`` (``param.<name>``), float64."""
-    g = _gen(seed)
+    """Random values for every parameter of ``module`` (``param.<name>``), float64,
+    each from its own generator keyed by ``seed`` and the parameter's name, so that a
+    change to one parameter leaves every other one's values bitwise."""
     return {
-        f"param.{n}": torch.randn(p.shape, generator=g, dtype=D) * std
+        f"param.{n}": torch.randn(p.shape, generator=param_generator(seed, n), dtype=D)
+        * std
         for n, p in module.named_parameters()
     }
 
@@ -292,14 +306,13 @@ def _load(
     return module
 
 
-def _param_grads(module: torch.nn.Module, prefix="grad.param.", zero=()) -> dict:
-    """Every parameter's gradient but those named in ``zero``: parameters whose
-    gradient is zero in exact arithmetic (a constant that cancels in a softmax), so
-    that what is computed is roundoff alone, which no golden can hold."""
+def _param_grads(module: torch.nn.Module, prefix="grad.param.") -> dict:
+    """Every parameter's gradient. (ISLA has no parameter whose gradient is zero in
+    exact arithmetic, roundoff alone, which no golden could hold: the slice blocks'
+    geo_logit bias and the kernel basis's last bias, constants that cancel in a
+    softmax, are gone.)"""
     return {
-        prefix + n: p.grad
-        for n, p in module.named_parameters()
-        if p.grad is not None and n not in zero
+        prefix + n: p.grad for n, p in module.named_parameters() if p.grad is not None
     }
 
 
@@ -511,6 +524,7 @@ _case("G-SAMP", "draw_inputs", _draw_inputs_build, _draw_inputs_run)
 
 _FOREST_FIELDS = (
     "frame",
+    "origin",
     "node_offset",
     "cells",
     "range_start",
@@ -675,7 +689,9 @@ def _walk_run(theta):
             x["in.points"], x["in.measure"], x["in.normals"], None, theta=theta
         )
         qi, si, n_node = f.point_pairs(x["in.queries"], walk=variant)
-        counts = f.frame_pairs(x["in.queries"] @ f.frame, walk=variant, count_only=True)
+        counts = f.frame_pairs(
+            f.frame_points(x["in.queries"]), walk=variant, count_only=True
+        )
         return {
             "out.qi": qi,
             "out.si": si,
@@ -1363,9 +1379,7 @@ def _read_run(n_vecs):
         out["out.basis"], out["out.read"] = pairs.basis.detach(), y.detach()
         out.update({"grad.h_b": h_b.grad, "grad.h_q": h_q.grad})
         out.update(_param_grads(read, "grad.read."))
-        ### (the basis MLP's last bias adds a per-head constant to every pair's logit,
-        ### which cancels in each point's softmax: its gradient is roundoff)
-        out.update(_param_grads(basis, "grad.basis.", zero=("net.4.bias",)))
+        out.update(_param_grads(basis, "grad.basis."))
         ### The pairs of ranges of points (query_chunks' path): each range's lists and basis.
         lazy = target("tree_read_walk")(**walk_kw, walk_points=False)
         out["out.pair_counts"] = target("walk_pair_counts")(lazy)
@@ -1485,10 +1499,8 @@ def _slice_block_run(n_vecs, n_tens):
                 for k, t in zip(("protos", "z_pos", "m_s", "z"), slices)
             }
         )
-        ### (geo_logit's bias is a constant over the slices, which cancels in both
-        ### softmaxes: its gradient is roundoff)
         out.update({"grad.h": h.grad, "grad.r": r.grad, "grad.h_read": hq.grad})
-        out.update(_param_grads(block, zero=("geo_logit.bias",)))
+        out.update(_param_grads(block))
         return out
 
     return run
@@ -1956,15 +1968,6 @@ def _cotangent_loss(fields: dict, seed: int) -> torch.Tensor:
     )
 
 
-#: Parameters whose gradient is zero in exact arithmetic (constants that cancel in a
-#: softmax: each slice block's geo_logit bias, a constant over the slices, and the
-#: boundary read's basis MLP's last bias, a per-head constant on every pair's logit),
-#: so that what is computed is roundoff alone.
-_MODEL_ZERO_GRADS = tuple(f"blocks.{i}.geo_logit.bias" for i in range(2)) + (
-    "kernel_basis.net.4.bias",
-)
-
-
 def _model_run(spec: _ModelSpec):
     def run(inputs, device, variant):
         """The forward pass's outputs, and every parameter's gradient of a fixed
@@ -1973,7 +1976,7 @@ def _model_run(spec: _ModelSpec):
         fields = _flat_outputs(model(**kw))
         _cotangent_loss(fields, 70).backward()
         out = {f"out.{k}": t.detach() for k, t in fields.items()}
-        out.update(_param_grads(model, zero=_MODEL_ZERO_GRADS))
+        out.update(_param_grads(model))
         return out
 
     return run
@@ -1995,7 +1998,7 @@ def _chunks_run(spec: _ModelSpec):
             _cotangent_loss(fields, 80 + 10 * i).backward()
             out.update({f"out.range{i}.{k}": t.detach() for k, t in fields.items()})
         chunks.backward()
-        out.update(_param_grads(model, zero=_MODEL_ZERO_GRADS))
+        out.update(_param_grads(model))
         return out
 
     return run
@@ -2143,19 +2146,30 @@ _MODEL_VARIANTS = {"cpu": ("reference",), "cuda": ("auto", "reference")}
 #: Four elements of each parameter's gradient in the committed golden (beside its
 #: summaries over every element), to keep the models' goldens within their budget.
 _MODEL_SAMPLES = {"grad.param.*": 4}
-#: The routings' gains and value projections (each slice block's ``assign`` and the
-#: head frame's) reach the loss through softmaxes over the slices whose terms nearly
+#: The routings' gains, key and value projections (each slice block's ``assign`` and
+#: the head frame's) reach the loss through softmaxes over the slices whose terms nearly
 #: cancel: their gradients are 1e-5 to 1e-11 of the largest, and carry the rounding of
 #: the terms. Measured between one, three and four threads (largest relative to their
-#: own largest element): 1.1e-10 in float64, 4.2e-2 in float32. Bounds: 1e-8 in
-#: float64; not compared in float32, where they are mostly roundoff.
-_ROUTING_GRADS = ("grad.param.*assign.gain", "grad.param.*assign.v_proj.*")
+#: own largest element): 1.1e-10 in float64, 4.2e-2 in float32. The key projections,
+#: measured on six draws of the name-keyed parameters (seed + 1000 k, k = 0..5), at
+#: 2, 3, 4, 8 and 16 threads against one, with the slice blocks' geo_logit bias (since
+#: removed) and without, need 3.8e-12 in float64 and 5.5e-3 in float32 (every other
+#: model output stays within CPU_RTOL there: 5.5e-13 and 2.8e-4 at most). Bounds: 1e-8
+#: in float64; in float32 the gains and value projections are not compared (mostly
+#: roundoff), the key projections at 5e-2, nine times their measured need.
+_ROUTING_GRADS = (
+    "grad.param.*assign.gain",
+    "grad.param.*assign.k_proj.*",
+    "grad.param.*assign.v_proj.*",
+)
 #: Their run-to-run spread on CUDA in float32 (atomics upstream, then the
-#: cancellation): measured up to 2.2e-3 of their largest element (job 379129).
+#: cancellation): measured up to 2.2e-3 of their largest element on the gains and
+#: value projections (job 379129); the key projections, of the same mechanism, take
+#: the same family bound unmeasured.
 _ROUTING_FAMILY = dict.fromkeys(_ROUTING_GRADS, 1e-2)
 _MODEL_TOL = {
     D: dict.fromkeys(_ROUTING_GRADS, 1e-8),
-    F: dict.fromkeys(_ROUTING_GRADS, None),
+    F: {**dict.fromkeys(_ROUTING_GRADS, None), "grad.param.*assign.k_proj.*": 5e-2},
 }
 #: The scales' moments and factors are float64 sums of a float32 model's cell
 #: measures and fields, so they carry float32 rounding. Measured against the x86

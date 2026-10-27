@@ -568,12 +568,20 @@ def test_builtin_geometry_is_the_surface_s_for_every_draw_of_the_tokens():
 
 def test_outputs_are_invariant_to_the_resolution_of_the_input_mesh():
     """The same geometry at two and four times the resolution (every cell split
-    into equal pieces) at a budget of 400 tokens: the outputs move by at most 2.5
-    percent (relative L2; measured 0.3 to 0.6 percent), no more than three times
-    the largest change between two training-mode draws on the native mesh (0.1 to
-    1 percent), so a change of resolution reads as another draw of the same
+    into equal pieces) at a budget of 400 tokens: the outputs move (relative L2) by
+    less than three times the largest change between training-mode draws on the
+    native mesh, so a change of resolution reads as another draw of the same
     quadrature. Kept whole (the default budget exceeds every cell count) the
-    outputs move by under 1e-3."""
+    outputs move by under 1e-3: the resolution invariance without draw noise.
+
+    The draws' spread depends on the random weights. Measured with init seeds 0-7
+    on e89e77180 and on the commit that dropped geo_logit's bias (resprobe/
+    res_seeds.txt of scratch/isla-assembly-014-2026-10-26): spreads 1.2-9.3 % (2-D)
+    and 0.9-3.0 % (3-D) on the base, 0.8-18.1 % and 0.8-6.1 % on the head; refined
+    over spread at most 1.30 (base) and 1.20 (head). An absolute cap of 2.5 % failed
+    3 of 8 seeds in 2-D on the base itself, so it is not a bound; a tripwire of
+    0.37, twice the largest refined change or spread measured (0.185), still fails a
+    regression that makes every draw noisy."""
     for dim in (2, 3):
         if dim == 2:
             surface, q, gd = _airfoil_case()
@@ -608,8 +616,9 @@ def test_outputs_are_invariant_to_the_resolution_of_the_input_mesh():
                     boundary_meshes={"wall": fine}, prediction_points=q, global_data=gd
                 )
             )
+        assert spread < 0.37, (dim, spread)
         for refined in (a, b):
-            assert _rel(refined, base) < min(2.5e-2, 3 * spread), (
+            assert _rel(refined, base) < min(0.37, 3 * spread), (
                 dim,
                 _rel(refined, base),
                 spread,

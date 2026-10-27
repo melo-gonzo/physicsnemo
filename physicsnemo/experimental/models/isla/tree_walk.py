@@ -30,12 +30,12 @@ output; a breadth-first fill pass writes the entries in that order, each level a
 buffer of the opened nodes' (left, right) pairs read even entries first, so no sort
 follows. The opening test is the reference's arithmetic, operation by operation in
 the boxes' dtype, in a module compiled without contracted multiply-adds, so every
-decision is the reference's. Under autocast the forest's coordinates are bfloat16
-(``points @ frame`` is an autocast matmul), and which steps of the test run in
-bfloat16 depends on the device's autocast lists (CUDA's runs ``pow`` and ``sum`` in
-float32): the dtype of each step is read from torch's dispatch, and the kernels
-compute in float32 and round to bfloat16 where torch's bfloat16 kernels do (each
-elementwise result; a sum once, after accumulating in float32).
+decision is the reference's. The forest is built and walked outside autocast, in its
+inputs' precision (:meth:`~.tree_read.BoundaryForest.build`); for a forest of
+reduced-precision inputs the dtype of each step of the test is read from torch's
+dispatch, and the kernels compute in float32 and round to bfloat16 or float16 where
+torch's kernels do (each elementwise result; a sum once, after accumulating in
+float32).
 """
 
 from typing import Any
@@ -258,16 +258,19 @@ _LOW = {torch.bfloat16: 1, torch.float16: 2}
 
 
 def walk_fits(forest) -> bool:
-    """The forest is two- or three-dimensional, its depth fits the count pass's stack
-    and its boxes are floating point. The walk's arrays (the points' coordinates, the
-    per-thread counts, the pairs and the scratch) must also each stay below Warp's
-    ``WARP_MAX_ELEMENTS`` (2**31); the pairs' and the scratch's sizes are known only
-    after the count pass, so :func:`walk_pairs` checks them and returns ``None``."""
+    """The forest is two- or three-dimensional, its depth fits the count pass's stack,
+    its boxes are floating point and their entries (the node tables' largest Warp
+    arrays, up to 2 N d for N cells) stay below Warp's ``WARP_MAX_ELEMENTS`` (2**31).
+    The walk's other arrays (the points' coordinates, the per-thread counts, the pairs
+    and the scratch) must also each stay below it; the pairs' and the scratch's sizes
+    are known only after the count pass, so :func:`walk_pairs` checks them and returns
+    ``None``."""
     fields = (forest.aabb_min, forest.aabb_max, forest.diameter_sq)
     return (
         forest.aabb_min.shape[1] in (2, 3)
         and len(forest.levels) + 2 <= WALK_STACK
         and all(x.dtype in (torch.float32, torch.float64, *_LOW) for x in fields)
+        and forest.aabb_min.numel() < WARP_MAX_ELEMENTS
     )
 
 

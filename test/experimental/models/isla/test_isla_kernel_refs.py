@@ -638,7 +638,7 @@ def test_the_fast_walk_of_no_points_or_no_trees_and_at_its_first_size_limit(
     limit give None before any launch, counted or not."""
     pts, nrm, w, _ = cloud(300, d=3, seed=1)
     f = BoundaryForest.build(pts, w, nrm, None, theta=1.0)
-    q = cloud(40, d=3, seed=2, scale=(3.0,) * 3)[0] @ f.frame
+    q = f.frame_points(cloud(40, d=3, seed=2, scale=(3.0,) * 3)[0])
     qi, si, n_node = tree_walk.walk_pairs(f, q[:0], 1.0)
     assert qi.shape == si.shape == (0,) and n_node == 0
     assert torch.equal(
