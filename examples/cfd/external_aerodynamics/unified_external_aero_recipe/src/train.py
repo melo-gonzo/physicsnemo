@@ -601,8 +601,22 @@ def _run_epoch(
     step and emits per-step TensorBoard + JSONL entries (``phase: "step"``);
     val mode wraps the loop in ``torch.no_grad()``, skips TensorBoard
     per-step logging, and emits a lighter-weight JSONL record per step
-    (``phase: "val_step"``) carrying ``epoch``, ``val_step``, ``loss``
-    and ``step_time_s``.
+    (``phase: "val_step"``) carrying ``epoch``, ``val_step``, ``loss``,
+    ``step_time_s`` and ``iter_time_s``. Epoch summaries carry
+    ``epoch_seconds`` and, on GPU, ``peak_memory_gib``: the epoch's peak
+    allocated memory, the maximum over ranks.
+
+    The two per-step times (console ``Step:`` and ``Iter:``):
+
+    - ``step_time_s``: host time from the end of the previous step to just
+      before this step's readback starts; it misses the device work still
+      queued and the wait for the other ranks.
+    - ``iter_time_s``: the true time per iteration, between CUDA events
+      recorded at that point of consecutive steps (the first from the start
+      of the loop), read once the step's readback has landed, so it adds no
+      host sync. The events time the device's stream, so the iteration times
+      sum to the loop's time and include any wait for the loader. Off CUDA,
+      where every step's readback is synchronous, it is host time.
 
     Args:
         mode: ``"train"`` or ``"val"``. ``"train"`` requires *optimizer*
@@ -642,8 +656,17 @@ def _run_epoch(
     ### the epoch's end logs the rest (see _start_step_readback).
     pending: deque = deque()
 
-    def log_step(i, step_dt, mem_gb, lr, reduced):
-        """Log one step's landed record, whose values are global all-rank means."""
+    def log_step(i, step_dt, mem_gb, lr, span, reduced):
+        """Log one step's landed record, whose values are global all-rank means.
+        ``span`` is the step's iteration time in seconds, or the pair of CUDA
+        timing events around it, recorded before the step's readback and so
+        complete once it has landed (the wait below never runs then)."""
+        if isinstance(span, float):
+            iter_dt = span
+        else:
+            if not span[1].query():
+                span[1].synchronize()
+            iter_dt = span[0].elapsed_time(span[1]) / 1e3
         step_loss = reduced["loss"].item()
         step_losses = {key: value.item() for key, value in reduced["losses"].items()}
         step_metrics = {key: value.item() for key, value in reduced["metrics"].items()}
@@ -653,7 +676,8 @@ def _run_epoch(
         logger.info(
             f"{log_prefix} {epoch} [{i + 1}/{num_steps}] "
             f"Loss: {step_loss:.6f} "
-            f"Step: {step_dt:.3f}s"
+            f"Step: {step_dt:.3f}s "
+            f"Iter: {iter_dt:.3f}s"
             f"{mem_str}"
         )
 
@@ -674,6 +698,7 @@ def _run_epoch(
                         ("lr", lr),
                         ("performance/mem_gb", mem_gb),
                         ("performance/step_time_s", step_dt),
+                        ("performance/iter_time_s", iter_dt),
                     ):
                         writer.add_scalar(f"iteration/{tag}", value, global_step)
                 if log_jsonl is not None:
@@ -684,6 +709,7 @@ def _run_epoch(
                             "loss": step_loss,
                             "mem_gb": mem_gb,
                             "step_time_s": step_dt,
+                            "iter_time_s": iter_dt,
                             **step_losses,
                             **step_metrics,
                         }
@@ -697,14 +723,30 @@ def _run_epoch(
                         "val_step": i,
                         "loss": step_loss,
                         "step_time_s": step_dt,
+                        "iter_time_s": iter_dt,
                         **step_losses,
                         **step_metrics,
                     }
                 )
 
+    ### Each summary's peak memory measures only its own epoch.
+    on_cuda = torch.device(dist_manager.device).type == "cuda"
+    if on_cuda:
+        torch.cuda.reset_peak_memory_stats(dist_manager.device)
+
+    def iteration_mark():
+        """A point on the device's timeline (a CUDA timing event, recorded),
+        or off CUDA the host clock."""
+        if not on_cuda:
+            return time.perf_counter()
+        mark = torch.cuda.Event(enable_timing=True)
+        mark.record()
+        return mark
+
     epoch_t0 = time.perf_counter()
     with grad_ctx:
         step_t0 = time.perf_counter()
+        iter_mark = iteration_mark()
         for i, batch in enumerate(dataloader):
             batch = recursive_to_device(batch, dist_manager.device)
             chunked = is_train and scaler is None and _chunked_step(model, batch)
@@ -772,8 +814,11 @@ def _run_epoch(
             ### Start this step's all-rank readback without waiting, then log
             ### every earlier step whose copy has landed, in order.
             lr = scheduler.get_last_lr()[0] if is_train else None
+            mark = iteration_mark()
+            span = mark - iter_mark if not on_cuda else (iter_mark, mark)
+            iter_mark = mark
             pending.append(
-                (i, step_dt, mem_gb, lr)
+                (i, step_dt, mem_gb, lr, span)
                 + _start_step_readback(
                     loss_det, losses, metrics, device=dist_manager.device
                 )
@@ -810,6 +855,17 @@ def _run_epoch(
         f"({n_local} steps, {epoch_dt / n:.3f}s/step avg)"
     )
 
+    ### Peak device memory of the epoch, the maximum over ranks.
+    peak_gib = None
+    if on_cuda:
+        peak = torch.tensor(
+            [torch.cuda.max_memory_allocated(dist_manager.device) / 2**30],
+            device=dist_manager.device,
+        )
+        if dist.is_available() and dist.is_initialized():
+            dist.all_reduce(peak, op=dist.ReduceOp.MAX)
+        peak_gib = float(peak.item())
+
     if is_rank0:
         _log_to_tensorboard(writer, avg_losses, "epoch", epoch)
         _log_to_tensorboard(writer, avg_metrics, "epoch/metrics", epoch)
@@ -822,6 +878,8 @@ def _run_epoch(
                     "loss": avg_loss,
                     **avg_losses,
                     **avg_metrics,
+                    "epoch_seconds": epoch_dt,
+                    **({"peak_memory_gib": peak_gib} if peak_gib is not None else {}),
                 }
             )
 

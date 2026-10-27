@@ -48,6 +48,7 @@ import ast
 import inspect
 import logging
 import textwrap
+import time
 from contextlib import nullcontext
 from types import SimpleNamespace
 
@@ -856,6 +857,67 @@ def test_epoch_end_drains_records_still_in_flight(monkeypatch, device, mode):
     records, expected = _run_test_epoch(monkeypatch, loader, device, mode=mode)
     _check_steps(records, expected, mode, 7)
     assert len(waits) == 7
+
+
+@pytest.mark.parametrize("device", _DEVICES)
+@pytest.mark.parametrize("mode", ["train", "val"])
+def test_iter_time_is_the_whole_iteration(monkeypatch, device, mode):
+    """Every per-step record carries ``iter_time_s``, the whole iteration: on
+    CUDA it includes device work the host does not wait for (a 50M-cycle GPU
+    sleep queued by the loader, which ``step_time_s`` misses), off CUDA the
+    loader's host time. The iteration times add up to the loop's time."""
+
+    class Loader:
+        """Five batches, each after a GPU sleep (CUDA) or a host sleep."""
+
+        def __len__(self):
+            return 5
+
+        def __iter__(self):
+            for k in range(5):
+                if device == "cuda":
+                    torch.cuda._sleep(50_000_000)
+                else:
+                    time.sleep(0.02)
+                yield {"k": float(k)}
+
+    records, _ = _run_test_epoch(
+        monkeypatch, Loader(), device, mode=mode, reference=False
+    )
+    steps = [r for r in records if r["phase"] == f"{mode}_step"]
+    (summary,) = [r for r in records if r["phase"] == f"{mode}_summary"]
+    assert len(steps) == 5
+    assert all(r["iter_time_s"] > 0.005 for r in steps), steps
+    if device == "cuda":
+        assert all(r["step_time_s"] < r["iter_time_s"] for r in steps[1:]), steps
+    total = sum(r["iter_time_s"] for r in steps)
+    assert 0.8 * summary["epoch_seconds"] < total <= summary["epoch_seconds"]
+
+
+@pytest.mark.parametrize("device", _DEVICES)
+def test_iter_time_survives_the_epoch_end_drain(monkeypatch, device):
+    """Records logged by the epoch-end drain carry ``iter_time_s`` too."""
+    _hold_readbacks(monkeypatch)
+    loader = [{"k": float(k)} for k in range(4)]
+    records, _ = _run_test_epoch(monkeypatch, loader, device, mode="train")
+    steps = [r for r in records if r["phase"] == "train_step"]
+    assert len(steps) == 4 and all(r["iter_time_s"] > 0 for r in steps)
+
+
+@pytest.mark.parametrize("device", _DEVICES)
+def test_summary_records_epoch_cost(monkeypatch, device):
+    """The epoch summary carries ``epoch_seconds``, and ``peak_memory_gib``
+    on CUDA only, measured from the start of the epoch."""
+    if device == "cuda":
+        ### A 256 MiB tensor, freed at once, before the epoch must not count.
+        torch.empty(2**28, dtype=torch.uint8, device=device)
+    loader = [{"k": float(k)} for k in range(2)]
+    records, _ = _run_test_epoch(monkeypatch, loader, device, mode="train")
+    (summary,) = [r for r in records if r["phase"] == "train_summary"]
+    assert summary["epoch_seconds"] > 0
+    assert ("peak_memory_gib" in summary) == (device == "cuda")
+    if device == "cuda":
+        assert 0 < summary["peak_memory_gib"] < 0.25
 
 
 def test_profile_stop_drains_its_records(monkeypatch):

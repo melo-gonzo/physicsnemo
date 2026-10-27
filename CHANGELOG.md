@@ -344,6 +344,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unified external aero recipe: training steps no longer wait for the GPU to
   log each step's loss. Each step's values are read back without blocking and
   logged once they land, so the datapipe's prefetch now overlaps compute.
+- Unified external aero recipe: each step also logs `iter_time_s`, the true
+  time per iteration, timed with CUDA events and read when the step's values
+  land, since `step_time_s` misses queued device work. Epoch summaries record
+  `epoch_seconds` and, on GPU, `peak_memory_gib`.
 
 ### Deprecated
 
