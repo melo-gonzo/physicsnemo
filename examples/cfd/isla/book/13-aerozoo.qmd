@@ -777,8 +777,8 @@ print(": The registered readout's ratios on AeroZoo's metric, beside the registe
 print()
 print(S.form_callout("its rows in @tbl-aerozoo-standing are ISLA-DTT 0.9.0, read against interacting ISLA in "
                      "@sec-aerozoo-form", what="ISLA 0.9.0 in both its interior forms, GeoTransolver and Transolver",
-                     also="faster ISLA-DTT code and ISLA-DTT retrained with the forest whose octant test is antipodal "
-                          "(@sec-arch-tree-read)"))
+                     also="GeoTransolver-volume and Transolver retrained on AeroZoo's canonical benchmark with all seven "
+                          "fields"))
 ```
 
 ```{python}
@@ -917,8 +917,8 @@ print()
 print("The interacting form stays in the class. A surface task uses it: under Peter's ruling for the surface task, it reads every "
       "named boundary and predicts at the cells of the boundaries it names (@sec-arch-modes); ISLA-DTT's form of the surface "
       "task costs about four times its step on a DrivAerML case with the whole boundary at 200,000 and 400,000 cells, and the supervisor's reading of the revisit that ruling asks for keeps the "
-      "interacting form there (@sec-cost-surface-form). On an interior task the class builds ISLA-DTT alone. This read compares the two forms with ISLA-DTT's forest as the "
-      "code builds it, whose octant test is not antipodal at zero normal components (@sec-arch-tree-read). Data: "
+      "interacting form there (@sec-cost-surface-form). On an interior task the class builds ISLA-DTT alone. This read compares the two forms with the octant forest of the "
+      "0.9.0 checkpoints, whose octant test is not antipodal at zero normal components (@sec-arch-tree-read). Data: "
       f"{AZSRC}; {R.source('az_decide_final', 'RESULTS.md')} (sections 2 and 3); {R.source('az_compliant', 'PREREG_v2.md')} "
       "(sections 12(f) and 13).")
 ```
@@ -1130,6 +1130,64 @@ print("The standing's scoring inherits that dependence in a milder form: the ful
       "these. Data: "
       f"{R.source('az_rescore', 'PARTITION.md')}.")
 ```
+
+### ISLA-DTT's forest on the spherical far fields {#sec-aerozoo-neartie}
+
+```{python}
+#| label: para-aerozoo-neartie
+#| output: asis
+import re as _re2
+# FOREST-NEARTIE: the census of 320 mean_stable cases by split and family, the near-tie Monte Carlo, the OOM model, the
+# pose check at near ties, and the class's bound (option (c'))
+NTF = " ".join(R.load("forest_neartie", "FINAL_REPORT.md").split())
+NTO = " ".join(R.load("forest_neartie", "OPTIONS.md").split())
+FAM = R.md_table("forest_neartie", "RISK_TABLE.md", None, 1)   # AeroZoo by split and family
+fmax = lambda fam: max(float(r_["max"]) for r_ in FAM if r_["family"] == fam)
+emax = lambda fam: max(float(r_["face eta max"]) for r_ in FAM if r_["family"] == fam)
+CEN = next(r_ for r_ in R.md_table("forest_neartie", "RISK_TABLE.md", None, 0) if r_["dataset"] == "aerozoo_uvolume")
+NMC = R.md_table("forest_neartie", "RISK_TABLE.md", "Near-tie Monte Carlo", 0)[0]
+fix = next(r_ for r_ in R.md_table("forest_neartie", "OPTIONS.md", "The candidates", 0) if r_["option"].startswith("(c')"))
+gaps = _re2.search(r"Full-resolution gap/E is (\d+) to ([\d,]+) there, against at least ([\d,]+) for boxes and at least ([\d,]+) for ducts", NTF).groups()
+oom = _re2.search(r"OOM chance of a 250-epoch AeroZoo ISLA-DTT lane: about (\d+)%", NTF).group(1)
+pz = {k: _re2.search(_re2.escape(k) + r": (\d+)% / (\d+)%", NTO).groups() for k in ("(c')", "octant")}
+pz_fix, pz_oct = pz["(c')"], pz["octant"]
+_eb = f"{emax('external_box'):.1e}".split("e")
+assert "A training A/B on AeroZoo's opposed-sphere and hemisphere cases" in NTF
+print("**On AeroZoo's opposed-sphere and opposed-hemisphere families the boundary's principal variances nearly tie, and the "
+      "class bounds what that tie costs ISLA-DTT's forest.** Their spherical far fields make two or three of the measure-weighted "
+      f"variances nearly equal: the smallest eigenvalue gap of the full-resolution boundary is {gaps[0]} to {gaps[1]} times the "
+      f"rounding's bound on the covariance there, against at least {gaps[2]} for the boxes and {gaps[3]} for the ducts. The forest's "
+      "frame is estimated from the drawn tokens, so near such a tie the draw's noise sets the gap, and the bound on the frame's "
+      "rotation reaches "
+      f"{max(emax('external_opposed_hemisphere'), emax('external_opposed_sphere')):.3f} per coordinate on these families against "
+      f"at most ${_eb[0]} \\times 10^{{{int(_eb[1])}}}$ on the boxes (@sec-arch-tree-read). On a census of 320 `mean_stable` cases drawn five "
+      f"times each, the face forest with the bound in proportion to the distance from the centroid reads a median {CEN['face/octant median']} "
+      f"times the octant forest's pairs and at most {float(CEN['max']):.2f}; on 60 near-tie cases drawn 60 times each, up to "
+      f"{float(NMC['max']):.1f} times, more than twice on {NMC['> 2x'].replace(' (', ' of the 3,600 draws (')}, which puts a 250-epoch ISLA-DTT run at about "
+      f"a {oom}% chance of running out of memory on a GB300, and a run resumed from a checkpoint replays its draws "
+      "(@sec-limits-replay). The class's bound, the rotation in proportion to each node's own size and capped by a frame-free "
+      f"ball, keeps those draws within {float(fix['/ octant, near-tie MC max']):.2f} times the octant forest's pairs and the census "
+      f"within {float(fix['/ octant, census max']):.2f}; the median draw is unchanged. No forest is pose-invariant at a near tie, "
+      "because the computed frame turns inside the nearly degenerate plane: with random weights, the posed pair lists of the "
+      f"near-tie test cases leave a median {pz_fix[0]}% of the pairs with no native match (at most {pz_fix[1]}%), "
+      f"against {pz_oct[0]}% ({pz_oct[1]}%) for the octant forest. What the bound does to accuracy on these families is "
+      "not measured: that needs ISLA-DTT trained with each bound on them, two seeds. Data: "
+      f"{R.source('forest_neartie', 'FINAL_REPORT.md')}; {R.source('forest_neartie', 'RISK_TABLE.md')}; "
+      f"{R.source('forest_neartie', 'OPTIONS.md')}.")
+```
+
+### One quadrature per condition on AeroZoo {#sec-aerozoo-quadrature}
+
+**One quadrature per declared condition, the weighting that closes ISLA-DTT's far-field penalty on AirfRANS
+(@sec-airfrans-far-field), is checked on AeroZoo for harm.** AeroZoo declares its inlet, outlet, no-slip walls and slip
+surfaces as separate conditions, so the weighting changes every AeroZoo model. The check trains it on the standings'
+configuration and forest, two seeds, against the standings' ISLA-DTT pair, and reads each of the five fields by the
+registered rule for harm.
+
+::: {.callout-note title="In flight"}
+The AeroZoo standing comes from ISLA-DTT with one quadrature over the whole boundary. ISLA-DTT with one quadrature per
+condition on AeroZoo `full` is being measured, and the ledger (@sec-ledger) tracks it.
+:::
 
 ## What this dataset does not say {#sec-aerozoo-limits}
 

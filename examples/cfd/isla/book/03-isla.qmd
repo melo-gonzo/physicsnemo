@@ -746,7 +746,7 @@ plt.show()
 
 The invariants do two jobs in a layer. A learned linear map of $\xi_{is}$
 to one scalar **refines the routing**,
-$\lambda'_{is} = \lambda_{is} + w_g \cdot \xi_{is} + b_g$, so that a slice
+$\lambda'_{is} = \lambda_{is} + w_g \cdot \xi_{is}$, so that a slice
 can prefer tokens that are near its anchor, downstream of it, or facing it;
 the routing weights $a'_{is}$ are recomputed with the refined scores. And
 the invariants are **pooled back** to the token (idea 5), so it learns
@@ -1517,7 +1517,7 @@ answer. @fig-isla-dtt shows one point's read on the airfoil.
 #|   its size is below $\theta = 1$ times its distance to the point. How to
 #|   read this: a schematic of the access pattern with a simple bisection
 #|   tree; the model's forest also separates cells whose normals point in
-#|   different octants, which this picture omits.
+#|   different cube faces, which this picture omits.
 #| code-fold: true
 J = joukowski(n_cells=160)
 P_ = J["mid"]; Wc = J["w"]
@@ -1617,12 +1617,15 @@ third moments), but only to group cells for speed; no learned map reads
 it. In exact arithmetic every pose of a case gets the same clusters. Where that
 frame ties, on a body with equal principal variances or a symmetric axis, a
 rotation can regroup clusters, and that moves the read only by the tree's
-error, which vanishes as $\theta \to 0$. The code as it is lets rounding
-decide more: under bfloat16 training the forest is built from rounded
-coordinates, and on the lug, whose normals have components that are
-exactly zero in the frame, rounding picks the sign octant of most cells and
-settles many exact ties of the box test, so a posed lug gets another forest
-(@sec-arch-modes, @sec-arch-tree-read). The two properties the relative
+error, which vanishes as $\theta \to 0$. Elsewhere the forest leaves no
+discrete choice to rounding where an error bound can decide it: it is built
+in float64 about the centroid outside autocast, a normal whose largest
+components tie within rounding goes to the lowest tied cube face, and the
+box test is widened by its arithmetic's error and by the frame's possible
+rotation, so a posed lug gets the same forest (@sec-arch-modes,
+@sec-arch-tree-read). The standings' ISLA-DTT checkpoints were trained with
+an octant forest built under bfloat16 autocast, in which rounding picks the
+sign octant of most of the lug's cells. The two properties the relative
 construction buys, pose and discretization, are the subject of
 @sec-invariances.
 

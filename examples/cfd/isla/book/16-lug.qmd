@@ -399,10 +399,11 @@ print("- **The standing is of the interacting form.** ISLA-DTT, whose prediction
       f"read level ({R.num(GL1['test bf16']):.3f}), mostly because bfloat16's read-out noise, about twice the lug's float32 errors, "
       f"compresses the gap toward 1; even so ISLA-DTT is worse in {GL_BF_WORSE}% of the test cases and on the surface nodes "
       f"({R.num(GL3['bf16']):.2f}; {R.source('dtt_knobs', 'gap/gap_table.md')}). Rotated and translated, ISLA-DTT's error on "
-      "the lug is 1.53 and 1.98 times its native error (seeds 42 and 43): rounding decides the sign octant of most of "
-      "its cells' normals and many exact ties of the forest's box test, so the posed lug gets another forest "
+      "the lug is 1.53 and 1.98 times its native error (seeds 42 and 43): in the octant forest of these checkpoints rounding "
+      "decides the sign octant of most of its cells' normals and many exact ties of the forest's box test, so the posed lug "
+      "gets another forest "
       f"(@sec-arch-tree-read; {R.source('dtt_knobs', 'sens/sens_table.md')}; {R.source('dtt_pose', 'MECHANISMS.md')}). "
-      "Retrained with a forest that depends on the boundary alone (@sec-arch-tree-read), on the lug and the AirfRANS "
+      "Retrained with the class's face forest, which depends on the boundary alone (@sec-arch-tree-read), on the lug and the AirfRANS "
       f"interior task, two seeds each, ISLA-DTT's posed error on the lug is "
       f"{pn_arm[0]} and {pn_arm[1]} times its native error (seeds 42 and 43), against {float(pn_arm[2]):.2f} and "
       f"{float(pn_arm[3]):.2f} for the octant forest, and the bfloat16 forest is bitwise the float32 one on every scored case. By "
@@ -418,8 +419,31 @@ print("- **The standing is of the interacting form.** ISLA-DTT, whose prediction
 - **Against Transolver the inputs differ.** Transolver reads no boundary-condition label, and knows the clamp and the load only through the shape in its fixed pose; GeoTransolver reads the four labels, and ISLA the same conditions as named boundaries (@tbl-model-inputs).
 - **Not matched in cost**, and the published GINOT, Transolver and GNOT numbers are on the authors' split: comparable in kind, not in value.
 
+```{python}
+#| label: para-lug-slice-normal
+#| output: asis
+# SLICE-NORMAL-EXP on the lug: (a) and (a)+(s) against the standing's fix-trained ISLA-DTT pair, (s) against (a) beside;
+# the lug's block-wise certification of the compiled blocks (section 2) and CERT's on the class's code
+SNL = {r_["reading"]: r_ for r_ in R.md_table("slice_normal_final", "RESULTS.md", "4.5 LUG and LUG-S", 0)}
+la, ls = SNL["LUG (a) vs control"], SNL["LUG-S (a)+(s) vs control"]
+assert la["label"] == "no change" and la["flag"] == "up" and ls["label"] == "harms"
+SNT = " ".join(R.load("slice_normal_final", "RESULTS.md").split())
+pna = re.search(r"posed ÷ native ([\d.]+) / ([\d.]+) for \(a\), and \*\*([\d.]+) / ([\d.]+) for \(a\)\+\(s\)\*\*", SNT).groups()
+cert_lug = next(r_ for r_ in R.md_table("cert", "FINAL_REPORT.md", "Verdicts", 0) if r_["family"] == "lug")
+lug_x = re.search(r"G2' R ([\d.]+)", cert_lug["Part 2 (null-calibrated, confirmatory)"]).group(1)
+print("- **Neither replacement of the slice mean normal's normalization helps on the lug.** Retrained on the lug, "
+      "two seeds, against the standing's ISLA-DTT pair: the unnormalized mean normal reads "
+      f"{la['ratio']} on von Mises stress, *no change* by the registered rule but with both of its seeds above both of the "
+      f"control's, and the unnormalized mean normal with the slice-spread distance {ls['ratio']}, which *harms*; the spread "
+      f"distance also about doubles the posed ÷ native ({pna[2]} and {pna[3]} against {pna[0]} and {pna[1]} with the mean "
+      f"normal alone) (@sec-oq-slice-normal; {R.source('slice_normal_final', 'RESULTS.md')}, section 4.5).")
+print("- **The lug's compiled blocks are not certified.** Block by block against eager, the compiled routing gradients' "
+      f"excess over eager's own spread reaches {lug_x} times on the lug, in slices whose mean normal nearly cancels, so ISLA-DTT "
+      "trains eagerly on the lug (@sec-arch-cost; " + R.source("cert", "FINAL_REPORT.md") + ").")
+```
+
 ::: {.callout-note title="In flight"}
-These numbers come from the octant forest the class builds under the caller's autocast. ISLA-DTT trained with
-the forest that depends on the boundary alone (@sec-arch-tree-read) is to be measured at the reference
-configuration on the 0.14.0 code, and the ledger (@sec-ledger) tracks it.
+These numbers come from the octant forest of the standing's ISLA-DTT checkpoints. ISLA-DTT trained with the class's
+face forest at the reference configuration on the lug, eagerly, is being measured, and the ledger (@sec-ledger)
+tracks it.
 :::

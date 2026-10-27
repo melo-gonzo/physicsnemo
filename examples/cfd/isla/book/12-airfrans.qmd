@@ -288,7 +288,7 @@ print(St.table("tbl-airfrans-protocols", f"The AirfRANS interior task (ISLA: int
 print(S.form_callout("its row here is ISLA-DTT 0.9.0, whose error is " + " / ".join(f"{St.ratio('ISLA-DTT', f):.3f}" for f in FK)
                      + " times interacting ISLA's on " + " / ".join(l for _, l in FIELDS),
                      what="interacting ISLA 0.9.0 and ISLA-DTT 0.9.0 reading the airfoil alone (trained with the far field as well, "
-                          "both read a harm: @sec-limits-af-whole)"))
+                          "both read a harm: @sec-limits-af-whole, @sec-airfrans-far-field)"))
 ```
 
 ```{python}
@@ -656,10 +656,127 @@ print("**ISLA-DTT's gap to interacting ISLA on AirfRANS is one of fit, and it si
 ```
 
 ::: {.callout-note title="In flight"}
-These numbers come from ISLA and ISLA-DTT reading the airfoil alone. Trained with the far field as well, both
-read a harm (@sec-limits-af-whole); ISLA reading the far field replaces them in the final reference run, which the
-ledger (@sec-ledger) tracks.
+These numbers come from ISLA and ISLA-DTT reading the airfoil alone. Read with the far field as well, ISLA-DTT pays a
+penalty that its encoding as the class builds it does not remove (@sec-airfrans-far-field); ISLA-DTT reading the far
+field, as the class reads AirfRANS, is being measured at the reference configuration, and the ledger (@sec-ledger)
+tracks it.
 :::
+
+### Reading the far field {#sec-airfrans-far-field}
+
+```{python}
+#| label: para-airfrans-far-field
+#| output: asis
+import re
+# AF-CAMPAIGN's registered read (R1 per step, native; R3 pose; the beside rows against the airfoil-only ISLA-DTT pair)
+_AFC = R.load("af_campaign_read", "RESULTS.md")
+_sec = _AFC.split("### 4.1 R1 per step")[1].split("\n\n")[1]
+_rows = [[c_.strip().replace("**", "") for c_ in ln.replace("\\|", "¦").strip().strip("|").split("|")] for ln in _sec.splitlines()]
+_hd = _rows[0]; R1 = []
+for r_ in _rows[2:]:
+    d_ = dict(zip(_hd, r_))
+    d_["step"] = d_["step"] or R1[-1]["step"]
+    R1.append(d_)
+assert len(R1) == 12 and [d_["step"] for d_ in R1[::3]] == ["F / W-DTT", "FN / F", "FNC / FN", "FNΩ / FN"]
+lab = {(d_["step"], d_["field"]): d_ for d_ in R1}
+assert lab[("FN / F", "nut")]["label"] == "harms" and all(lab[("FNC / FN", f_)]["label"] == "helps" for f_ in ("pressure", "velocity", "nut"))
+BES = {r_[""].split(" (")[0]: r_ for r_ in R.md_table("af_campaign_read", "RESULTS.md", "4.5 Beside", 0)}
+POSE = {r_["arm"]: r_ for r_ in R.md_table("af_campaign_read", "RESULTS.md", "4.3 R3 pose", 0)}
+assert all(POSE[a_]["R3"].startswith(("pose holds", "holds at the standing's level")) for a_ in POSE)
+pmax = max(R.num(POSE["F"][f_], k_) for f_ in ("pressure", "velocity", "nut") for k_ in (0, 1))
+COSTC = {r_["arm"]: R.num(r_["smoke step vs W-DTT's code (384133)"]) for r_ in R.md_table("af_campaign_read", "RESULTS.md", "4.4 R4 cost", 0)}
+FLD = (("pressure", "pressure"), ("velocity", "velocity"), ("nut", "eddy viscosity"))
+tri = lambda row: " / ".join(row[f_] for f_, _ in FLD)
+RC1 = " ".join(R.load("rule1_root_cause", "ROOT_CAUSE_RULE1.md").split())
+r1_pairs = re.search(r"rule 1 built \*\*([\d,]+)M\*\* pairs", RC1).group(1)
+r1_ung, r1_oct = re.search(r"without groups \(DTT-POSE\) built ([\d.]+)M, and the octants \(code_r090\) ([\d.]+)M", RC1).groups()
+print("**Read with its far field, as the class's configuration reads AirfRANS, ISLA-DTT with the standings' octant forest "
+      f"has {tri(BES['W-DTT / B-DTT'])} times its airfoil-only error on pressure / velocity / eddy viscosity; one quadrature per "
+      f"declared condition, with the face forest and the viscous near-wall length beneath it, closes the gap, at "
+      f"{tri(BES['FNC / B-DTT'])} times.** The far field holds nearly all the boundary's measure and the octant forest ties on "
+      "its axis-aligned normals (@sec-limits-af-whole). Four changes of the encoding were each trained on top of the steps "
+      "it needs, two seeds each, everything else as in ISLA-DTT trained with the far field, and read against its control by "
+      "the registered rule: *helps* if $D$, the log ratio of seed means, is below $\\ln 0.90$ and more than twice its "
+      "standard error from zero, or if both seeds' ratios are below 1/1.10, the second marked *paired*; *harms* the mirror "
+      "image above 1.10; else *no effect*. "
+      "The four steps are F, the face forest with one set of trees per declared condition (each about that condition's "
+      "centroid); FN, F with the distance channel softened at the viscous near-wall length $\\nu / U$ (N), "
+      "$\\operatorname{asinh}(dU/\\nu)$ in place of $\\operatorname{asinh}(s_q / 10^{-6})$; FNC, FN with each declared "
+      "condition its own quadrature (C), a token's log-weight $\\log a_i - \\log A_k + \\beta_k$ with $A_k$ its condition's "
+      "full-resolution measure and $\\beta_k$ one learned scalar per condition; and FNΩ, FN with a solid-angle prior (Ω), "
+      "$-(d - 1)\\log r$ on each pair of the tree read. "
+      "@tbl-airfrans-far-field gives the readings as registered.")
+print()
+print("| step, against its control | field | ratio of seed means | seed ratios (42 / 43) | registered reading |\n|---|---|--:|--:|---|")
+for d_ in R1:
+    print(f"| {d_['step']} | {dict(FLD)[d_['field']]} | {d_['X / Y']} | {d_['paired r42 / r43']} | {d_['label']} |")
+print()
+print(": ISLA-DTT trained on the AirfRANS interior task with its far field, four nested changes of its encoding, each "
+      "against its control: W-DTT is ISLA-DTT with the far field and the octant forest, and each step's control is the step "
+      "beneath it; native mesh, the 200 test airfoils, float32, two seeds each. How to read this: a ratio below one favors "
+      "the step; *paired* marks a reading that rests on both seeds' ratios, not on the standard error; the steps are "
+      "nested, so FNC and FNΩ carry the viscous length that FN adds. Data: "
+      f"{R.source('af_campaign_read', 'RESULTS.md')} (sections 4.1 and 4.5); {R.source('af_campaign_read', 'read.md')}. "
+      "{#tbl-airfrans-far-field}")
+print()
+print("- **The face forest restores the pose.** With F, posed ÷ native is at most "
+      f"{pmax:.4f} on every field and seed, where the octant forest's is 1.53 to 2.52; eddy viscosity reads "
+      f"{lab[('F / W-DTT', 'nut')]['label']}, pressure and velocity no effect within W-DTT's own seed spread. F groups "
+      "the trees by declared condition. On AirfRANS the two conditions are the two connected pieces, so the campaign does not "
+      "tell that grouping from the face forest alone, which was not trained here. The class builds the face forest without "
+      "the grouping: on AeroZoo the grouping took each condition's frame-rotation bound from that condition's own "
+      "covariance, not from the whole boundary's that the frame comes from, so a square inlet or outlet, whose two in-plane "
+      f"variances nearly tie, built {r1_pairs} million pairs on one draw, against {r1_ung} million without groups and "
+      f"{r1_oct} million with octants. Taking the bound from the whole boundary for every group removes that "
+      "(@sec-oq-af-encoding); the grouping's effect alone is not measured.")
+print(f"- **The viscous near-wall length harms eddy viscosity** ({lab[('FN / F', 'nut')]['X / Y']} times F's, both seeds "
+      "above 1.10) and helps no wall-distance band. It is not admissible in ISLA whatever its accuracy. Peter's ruling: "
+      "\u201cYeah I don't think N is admissible per our \"principled changes only\" yardstick. Even if it was better, it "
+      "wouldn't be better for reasons that are transferrable to other domains, so we couldn't in-good-faith accept "
+      "it.\u201d The length is built from fluid quantities, a viscosity and a velocity, so its gain would not carry to "
+      "other PDEs (@sec-principled-criterion).")
+print("- **One quadrature per condition helps every field**, "
+      f"{' / '.join(lab[('FNC / FN', f_)]['X / Y'] for f_, _ in FLD)} times FN's, each beyond twice its standard error, "
+      f"with the pose at the standing's level, and puts the model at {tri(BES['FNC / B-DTT'])} times the airfoil-only "
+      "ISLA-DTT's error, beside the registered rule. It changes every model of a dataset that declares two or more "
+      "conditions, and it was measured only on top of the viscous length. It is not part of the class; whether it is, is "
+      "Peter's verdict to give: \u201ccontinue investigating C but then ask me for a verdict\u201d.")
+print(f"- **The solid-angle prior helps every field**, {' / '.join(lab[('FNΩ / FN', f_)]['X / Y'] for f_, _ in FLD)} "
+      f"times FN's (pressure and eddy viscosity paired), and leaves the model at {tri(BES['FNΩ / B-DTT'])} times the "
+      "airfoil-only error. It is not part of the class either.")
+print(f"- **Cost.** Each step's training step is {min(v for k, v in COSTC.items() if k != 'W-DTT (AF-WHOLE)'):.3f} to "
+      f"{max(v for k, v in COSTC.items() if k != 'W-DTT (AF-WHOLE)'):.3f} times W-DTT's on one node.")
+```
+
+::: {.callout-note title="In flight"}
+The quadrature reading above comes from one quadrature per condition on top of the viscous near-wall length.
+The same quadrature on top of the face forest alone, on AirfRANS, and on AeroZoo read for harm (@sec-aerozoo-quadrature)
+are being measured, and the ledger (@sec-ledger) tracks them.
+:::
+
+### A slice's mean normal {#sec-airfrans-slice-normal}
+
+```{python}
+#| label: para-airfrans-slice-normal
+#| output: asis
+# SLICE-NORMAL-EXP on AirfRANS: (a) and (a)+(s) against AF-WHOLE's ISLA-DTT with its far field (registered), (s) against (a) beside
+SNA = {r_["field"]: r_ for r_ in R.md_table("slice_normal_final", "RESULTS.md", "4.3 AF, option (a)", 0)}
+SNS = [r_ for r_ in R.md_table("slice_normal_final", "RESULTS.md", "4.4 AF-S", 0)]
+reg = [r_ for r_ in SNS if r_["reading"].startswith("registered")]
+assert all(r_["label"] == "no change" for r_ in list(SNA.values()) + reg) and all(r_["flag"] == "up" for r_ in reg)
+SNR = " ".join(R.load("slice_normal_final", "RESULTS.md").split())
+spread = re.search(r"The control's own seeds sit (\d+)-(\d+) % apart", SNR).groups()
+print("**Neither replacement of the slice mean normal's normalization (@sec-oq-slice-normal) reads a change on AirfRANS, "
+      "at a resolution that resolves only a large harm.** Trained with the far field, two seeds, against ISLA-DTT trained "
+      "alike, the unnormalized mean normal reads "
+      + " / ".join(SNA[f_]["ratio"] for f_ in ("pressure", "velocity (in-plane)", "nut"))
+      + " on pressure / velocity / eddy viscosity, and the unnormalized mean normal with the slice-spread distance "
+      + " / ".join(r_["ratio"] for r_ in reg)
+      + ", both *no change* by the registered rule, the second with both of its seeds above both of the control's on every "
+      f"field. The control's seeds are {spread[0]} to {spread[1]}% apart, so these readings are not evidence of no effect; "
+      "on the DrivAerML Surface task both forms harm, so neither is a candidate. "
+      f"Data: {R.source('slice_normal_final', 'RESULTS.md')} (sections 4.3 to 4.5).")
+```
 
 ### Outside the training range: the extrapolation splits {#sec-interior-extrapolation}
 
@@ -1013,7 +1130,9 @@ print("- **Whether ISLA's declared scales add accuracy where the Reynolds number
       "global input carries its gain on this dataset (@sec-airfrans-attribution), while ISLA-DTT without them loses accuracy on every "
       "field (@sec-airfrans-dtt-reference); AeroZoo, whose Reynolds number varies widely, has no such arm.")
 print("- **The standing reads the airfoil alone.** The class reads the far field as well, and on this task that costs accuracy "
-      "as its encoding stands: trained with it, ISLA's error rises on every field and ISLA-DTT's pose breaks (@sec-limits-af-whole).")
+      "as its encoding stands: trained with it, ISLA's error rises on every field, and ISLA-DTT's with the octant forest rises "
+      "and its pose breaks (@sec-limits-af-whole). The encodings that close the gap, one quadrature per condition above all, are "
+      "measured on top of a near-wall length the class does not admit, and none is part of the class (@sec-airfrans-far-field).")
 print("- **Interacting ISLA depends on its request.** The query-population dependence has no knob that removes it, so it is a limit of the "
       "interacting form (@sec-airfrans-query-population, @sec-limits-query-independence).")
 ```
