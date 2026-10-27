@@ -1610,23 +1610,28 @@ with the full request.
 #| output: asis
 import re
 import records as RC   # R is the rotation of the contracts demo above
-GPF_ = " ".join(RC.load("geo_port", "FINAL_REPORT.md").split())
-cpu_t = [int(x.replace(",", "")) for x in re.search(r"full CPU tier \d+: ([\d,]+) passed, ([\d,]+) skipped, (\d+) xfailed", GPF_).groups()]
-gpu_t = [int(x.replace(",", "")) for x in re.search(r"GB300 tier \d+: ([\d,]+) passed, (\d+) xfailed, 0 failed", GPF_).groups()]
-assert cpu_t[2] == gpu_t[1] == 1 and "(Module.load), 0 failed" in GPF_
+# the whole test directory on torch 2.12 and 2.13 (GOLDEN-213's tiers at its head): GB300 GPU tier and full CPU tier
+G213 = {r_["torch"].split()[0]: r_ for r_ in RC.md_table("golden_213", "FINAL_REPORT.md", "Tiers at", 0)}
+_tier = lambda t, c: [int(x.replace(",", "")) for x in re.search(r"([\d,]+) passed(?:, ([\d,]+) skipped)?, 1 xfailed$", G213[t][c]).groups(default="0")]
+gpu_t = {t: _tier(t, "GB300 gpu tier") for t in ("2.12", "2.13")}
+cpu_t = {t: _tier(t, "CPU full tier") for t in ("2.12", "2.13")}
+assert cpu_t["2.12"] == cpu_t["2.13"] and gpu_t["2.12"][1] == 0 and "There are no failures on either torch." in RC.load("golden_213", "FINAL_REPORT.md")
+assert "positive controls for pytorch#195845" in RC.load("golden_213", "FINAL_REPORT.md")
 TBT = {r_["run"]: r_ for r_ in RC.md_table("test_build", "FINAL_REPORT.md", None, 1)}
 fast = next(r_ for k_, r_ in TBT.items() if "fast tier" in k_)
 fast_s = RC.num(fast["wall"])
-data_b = int(RC.num(re.search(r"goldens_v1\.pt [\d,]+ → [\d,]+ B, data/ ([\d,]+) B", GPF_).group(1)))
-assert data_b < 2**20
 _T = Path(physicsnemo.__file__).parent.parent / "test" / "experimental" / "models" / "isla"
+data_b = sum(p_.stat().st_size for p_ in (_T / "data").iterdir())
+assert data_b < 2**20
 _xf = sorted(p.name for p in _T.glob("test_*.py") if "strict=True" in p.read_text() and "xfail(" in p.read_text())
 print("**The class's tests run in three tiers: a CI tier on the CPU of about "
       f"{fast_s / 60:.0f} minutes for everyday changes, the whole directory on the CPU, and the whole directory with every CUDA "
       "test on a GPU.** The whole "
-      f"directory, `test/experimental/models/isla/`, passes {cpu_t[0]:,} tests on the CPU, where {cpu_t[1]} skip, "
-      f"and {gpu_t[0]:,} on a GB300 with every CUDA test, with no failure in either; the CI tier, `-m \"not slow\"`, takes "
-      f"{fast_s:.0f} s. What the tests hold the code to:")
+      f"directory, `test/experimental/models/isla/`, passes {cpu_t['2.12'][0]:,} tests on the CPU, where {cpu_t['2.12'][1]} skip, "
+      f"under torch 2.12 and 2.13 alike, and {gpu_t['2.12'][0]:,} on a GB300 with every CUDA test under torch 2.12, with no failure "
+      f"in any. Under torch 2.13 the GB300 passes {gpu_t['2.13'][0]:,} and skips {gpu_t['2.13'][1]}, the positive controls of the "
+      "mix-order fault (pytorch/pytorch#195845, @sec-using-cost), whose kernel torch 2.13's Inductor does not build. The CI tier, "
+      f"`-m \"not slow\"`, takes {fast_s:.0f} s. What the tests hold the code to:")
 print()
 print(f"- **Goldens.** Module and whole-model outputs and gradients recorded bitwise per device, {data_b:,} bytes of data in "
       "all; a change that moves one fails until its commit regenerates that file with "
@@ -1654,5 +1659,6 @@ assert _xf == ["test_isla_release.py"], _xf
 print(f"One test is a strict expected failure, in `{_xf[0]}`: it records a known defect "
       "and fails the suite if the defect goes away unnoticed (@sec-limits-xfail). Run the CPU tier with "
       "`pytest test/experimental/models/isla -m \"not slow\"`. Data: "
-      f"{RC.source('geo_port', 'FINAL_REPORT.md')}; {RC.source('test_build', 'FINAL_REPORT.md')}.")
+      f"{RC.source('golden_213', 'FINAL_REPORT.md')}; {RC.source('test_build', 'FINAL_REPORT.md')}; the size of "
+      "`test/experimental/models/isla/data/`.")
 ```

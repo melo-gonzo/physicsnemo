@@ -32,7 +32,7 @@ from physicsnemo.experimental.models.isla.sampling import (
     sample_boundary_cells,
     water_fill,
 )
-from physicsnemo.mesh.sampling import pps_inclusion_probabilities
+from physicsnemo.mesh.sampling.systematic_sampling import _pps_inclusion_probabilities
 
 D = torch.float64
 DEVICES = [
@@ -112,7 +112,7 @@ def test_horvitz_thompson_measure_sums_are_unbiased(draws):
     budget = 300
     shares = water_fill(torch.tensor(sizes, dtype=D), budget)
     pi = torch.cat(
-        [pps_inclusion_probabilities(a, s) for a, s in zip(measures, shares)]
+        [_pps_inclusion_probabilities(a, s) for a, s in zip(measures, shares)]
     )
     total = torch.stack([a.sum() for a in measures])
     torch.manual_seed(0)
@@ -162,7 +162,7 @@ def _whole_kept_once(kept, measures, budget):
     """Asserts the draw keeps distinct cells and every cell with pi = 1 exactly once."""
     shares = water_fill(torch.tensor([a.shape[0] for a in measures], dtype=D), budget)
     pi = torch.cat(
-        [pps_inclusion_probabilities(a, s) for a, s in zip(measures, shares)]
+        [_pps_inclusion_probabilities(a, s) for a, s in zip(measures, shares)]
     )
     assert torch.equal(kept, kept.unique())
     assert bool(torch.isin((pi.cpu() == 1).nonzero()[:, 0], kept.cpu()).all())
@@ -233,7 +233,7 @@ def test_tiny_measures_keep_their_share():
     )
     measures = [a, torch.rand(40, generator=g, dtype=D)]
     centroids = [torch.randn(n, 3, generator=g, dtype=D) for n in (5000, 40)]
-    pi = pps_inclusion_probabilities(a, torch.tensor(260.0, dtype=D))
+    pi = _pps_inclusion_probabilities(a, torch.tensor(260.0, dtype=D))
     assert bool((pi >= 0).all())
     assert abs(float(pi.sum()) - 260) < 1e-9
     kept, w = sample_boundary_cells(

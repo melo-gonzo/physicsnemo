@@ -376,14 +376,14 @@ runs the class's own draw on the airfoil.
 #| fig-height: 5.0
 #| code-fold: true
 from physicsnemo.experimental.models.isla.sampling import sample_boundary_cells
-from physicsnemo.mesh.sampling import pps_inclusion_probabilities
+from physicsnemo.mesh.sampling.systematic_sampling import _pps_inclusion_probabilities
 from physicsnemo.experimental.models.isla.model import EVAL_START
 from physicsnemo.mesh.spatial.bvh import _compute_morton_codes
 frac_d = np.concatenate([[0.0], np.cumsum(1.0 - 0.75 * np.sin(np.linspace(0, np.pi, 160)) ** 6)]); frac_d /= frac_d[-1]
 JD = joukowski(n_cells=160, frac=frac_d)
 a_d, x_d = torch.tensor(JD["w"]), torch.tensor(JD["mid"])
 BUDGET_D = 32
-pi_d = pps_inclusion_probabilities(a_d.double(), torch.tensor(float(BUDGET_D), dtype=torch.float64)).numpy()
+pi_d = _pps_inclusion_probabilities(a_d.double(), torch.tensor(float(BUDGET_D), dtype=torch.float64)).numpy()
 kept_d, w_d = sample_boundary_cells([a_d], [x_d], BUDGET_D, torch.tensor(EVAL_START, dtype=torch.float64))
 kept_d = kept_d.numpy()
 order_d = _compute_morton_codes(x_d, isotropic=True).argsort(stable=True).numpy()
@@ -417,7 +417,7 @@ plt.show()
 In symbols, with $N_\beta$ the cell count of condition $\beta$, $B$ the
 budget, $\lambda$ the water level (`water_fill`), $c_\beta$ the
 proportionality constant of condition $\beta$
-(`pps_inclusion_probabilities` in `physicsnemo.mesh.sampling`) and $u$ the start:
+(`_pps_inclusion_probabilities` in `physicsnemo.mesh.sampling.systematic_sampling`) and $u$ the start:
 
 $$
 b_\beta = \min(N_\beta, \lambda), \quad \sum_\beta b_\beta = \min\Big(\sum_\beta N_\beta,\ B\Big);
@@ -475,8 +475,8 @@ The water filling, the capped inclusion probabilities found exactly from the sor
 #| label: code-boundary-draw
 #| output: asis
 listing("sampling.py", "water_fill")
-listing("physicsnemo/mesh/sampling/systematic_sampling.py", "pps_inclusion_probabilities", root=REPO_SRC)
-listing("physicsnemo/mesh/sampling/systematic_sampling.py", "systematic_sample", root=REPO_SRC)
+listing("physicsnemo/mesh/sampling/systematic_sampling.py", "_pps_inclusion_probabilities", root=REPO_SRC)
+listing("physicsnemo/mesh/sampling/systematic_sampling.py", "_systematic_sample", root=REPO_SRC)
 listing("sampling.py", "sample_boundary_cells")
 listing("model.py", "ISLA._case_inputs", start="### The boundary tokens: the sample", end="query = query[None]")
 ```

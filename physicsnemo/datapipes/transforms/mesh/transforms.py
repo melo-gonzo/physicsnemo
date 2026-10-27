@@ -219,9 +219,10 @@ class CenterMesh(MeshTransform):
         subtracted, so inference can shift results back. A dotted name is a
         nested key, as in the other mesh transforms. For a
         :class:`DomainMesh`, the center is stored in the domain-level
-        ``global_data``. A later transform with ``transform_global_data=True``
-        (such as :class:`RotateMesh` or :class:`ScaleMesh`) rotates or scales
-        the stored center as well. The default preserves the historical
+        ``global_data``. A later origin-fixed :class:`RotateMesh` or
+        :class:`ScaleMesh` with ``transform_global_data={<key>: True}``
+        transforms the stored center too; translations and non-origin pivots
+        do not update it. The default preserves the historical
         behavior without adding metadata.
     """
 
@@ -249,7 +250,7 @@ class CenterMesh(MeshTransform):
         com = self._compute_com(mesh)
         centered = mesh.translate(-com)
         if self.store_center_as is not None:
-            global_data = centered.global_data.clone()
+            global_data = centered.global_data.copy()
             global_data[self.store_center_as] = com
             centered.global_data = global_data
         return centered
@@ -273,7 +274,7 @@ class CenterMesh(MeshTransform):
         com = self._compute_com(domain.interior)
         centered = domain.translate(-com)
         if self.store_center_as is not None:
-            global_data = centered.global_data.clone()
+            global_data = centered.global_data.copy()
             global_data[self.store_center_as] = com
             centered.global_data = global_data
         return centered

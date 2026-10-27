@@ -37,6 +37,7 @@ import logging
 import math
 import os
 import time
+from collections import deque
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import nullcontext
 from pathlib import Path
@@ -133,12 +134,9 @@ def _reduce_and_average(
     (train ``drop_last=True``, val pads) that equals the true global mean and
     keeps the integer count out of the float reduction buffer. It is
     granularity-neutral, mirrors the inference-side ``infer._allreduce_sums``,
-    and is called at two boundaries:
-
-    - Per step, with ``n_samples == 1``, so the logged iteration curves are
-      global all-rank means rather than rank-0's shard.
-    - Per epoch, with ``n_samples == n_local`` and the running epoch sums, for
-      the dataset-wide summary.
+    and is called once per epoch, with ``n_samples == n_local`` and the running
+    epoch sums, for the dataset-wide summary (per-step values go through
+    :func:`_start_step_readback`).
 
     Args:
         loss_sum: Rank-local sum of scalar losses over the ``n_samples`` being
@@ -193,6 +191,28 @@ def _reduce_and_average(
         {key: value.item() for key, value in reduced["losses"].items()},
         {key: value.item() for key, value in reduced["metrics"].items()},
     )
+
+
+def _start_step_readback(
+    loss: Float[torch.Tensor, ""],
+    losses_td: TensorDict,
+    metrics_td: TensorDict,
+    *,
+    device: torch.device | str,
+) -> tuple[TensorDict, torch.cuda.Event | None]:
+    """Start the all-rank mean of one step's values and its copy to the host.
+
+    The copy is ``non_blocking``, so no step waits for the device. Read the
+    returned host ``TensorDict`` only once the returned event (``None`` off
+    CUDA, where the copy is synchronous) has completed.
+    """
+    bundle = TensorDict({"loss": loss, "losses": losses_td, "metrics": metrics_td})
+    reduced = fused_all_reduce(bundle, op=dist.ReduceOp.AVG, device=device)
+    if torch.device(device).type != "cuda":
+        return reduced, None
+    reduced, event = reduced.to("cpu", non_blocking=True), torch.cuda.Event()
+    event.record()
+    return reduced, event
 
 
 ### ---------------------------------------------------------------------------
@@ -582,18 +602,21 @@ def _run_epoch(
     val mode wraps the loop in ``torch.no_grad()``, skips TensorBoard
     per-step logging, and emits a lighter-weight JSONL record per step
     (``phase: "val_step"``) carrying ``epoch``, ``val_step``, ``loss``,
-    ``step_time_s`` and ``iter_time_s``.
+    ``step_time_s`` and ``iter_time_s``. Epoch summaries carry
+    ``epoch_seconds`` and, on GPU, ``peak_memory_gib``: the epoch's peak
+    allocated memory, the maximum over ranks.
 
     The two per-step times (console ``Step:`` and ``Iter:``):
 
-    - ``step_time_s``: host time from the end of the previous step's logging
-      to just before this step's per-step reduction; it misses the device work
-      still queued and the wait for the other ranks.
-    - ``iter_time_s``: time between the ends of consecutive per-step
-      reductions (the first from the start of the epoch). The reduction syncs
-      with the device and, under DDP, with every rank, so this is the true time
-      per iteration; the iteration times sum to the epoch's time but for the
-      last step's logging.
+    - ``step_time_s``: host time from the end of the previous step to just
+      before this step's readback starts; it misses the device work still
+      queued and the wait for the other ranks.
+    - ``iter_time_s``: the true time per iteration, between CUDA events
+      recorded at that point of consecutive steps (the first from the start
+      of the loop), read once the step's readback has landed, so it adds no
+      host sync. The events time the device's stream, so the iteration times
+      sum to the loop's time and include any wait for the loader. Off CUDA,
+      where every step's readback is synchronous, it is host time.
 
     Args:
         mode: ``"train"`` or ``"val"``. ``"train"`` requires *optimizer*
@@ -619,7 +642,7 @@ def _run_epoch(
     is_rank0 = dist_manager.rank == 0
 
     ### All three accumulators live on-device, so epoch sums build up with no
-    ### per-step host sync (the only per-step D2H is inside _reduce_and_average).
+    ### per-step host sync (per-step values are read back without waiting, below).
     ### total_loss is float64 for accumulation precision, downcast to float32 at
     ### the epoch reduce. None = not yet seeded; n_local is this rank's local
     ### sample count.
@@ -629,26 +652,103 @@ def _run_epoch(
     precision = getattr(cfg, "precision", "float32")
     n_local = 0
     num_steps = len(dataloader)
+    ### One entry per step, logged in order once its readback has landed;
+    ### the epoch's end logs the rest (see _start_step_readback).
+    pending: deque = deque()
+
+    def log_step(i, step_dt, mem_gb, lr, span, reduced):
+        """Log one step's landed record, whose values are global all-rank means.
+        ``span`` is the step's iteration time in seconds, or the pair of CUDA
+        timing events around it, recorded before the step's readback and so
+        complete once it has landed (the wait below never runs then)."""
+        if isinstance(span, float):
+            iter_dt = span
+        else:
+            if not span[1].query():
+                span[1].synchronize()
+            iter_dt = span[0].elapsed_time(span[1]) / 1e3
+        step_loss = reduced["loss"].item()
+        step_losses = {key: value.item() for key, value in reduced["losses"].items()}
+        step_metrics = {key: value.item() for key, value in reduced["metrics"].items()}
+        ### Train mode includes Mem in the per-step line; val drops it
+        ### because the no_grad path is the lowest-noise place to look.
+        mem_str = f" Mem: {mem_gb:.2f}GB" if is_train else ""
+        logger.info(
+            f"{log_prefix} {epoch} [{i + 1}/{num_steps}] "
+            f"Loss: {step_loss:.6f} "
+            f"Step: {step_dt:.3f}s "
+            f"Iter: {iter_dt:.3f}s"
+            f"{mem_str}"
+        )
+
+        ### Per-step TensorBoard is train-only (val_writer is epoch-only);
+        ### per-step JSONL is written in both modes so downstream tooling gets
+        ### val step-times directly. The logged values are global all-rank
+        ### means (rank 0 is only the writer).
+        if is_rank0:
+            if is_train:
+                global_step = epoch * num_steps + i
+                if writer is not None:
+                    ### Tags: iteration/loss/... and iteration/metrics/...
+                    _log_to_tensorboard(writer, step_losses, "iteration", global_step)
+                    _log_to_tensorboard(
+                        writer, step_metrics, "iteration/metrics", global_step
+                    )
+                    for tag, value in (
+                        ("lr", lr),
+                        ("performance/mem_gb", mem_gb),
+                        ("performance/step_time_s", step_dt),
+                        ("performance/iter_time_s", iter_dt),
+                    ):
+                        writer.add_scalar(f"iteration/{tag}", value, global_step)
+                if log_jsonl is not None:
+                    log_jsonl(
+                        {
+                            "phase": "train_step",
+                            "global_step": global_step,
+                            "loss": step_loss,
+                            "mem_gb": mem_gb,
+                            "step_time_s": step_dt,
+                            "iter_time_s": iter_dt,
+                            **step_losses,
+                            **step_metrics,
+                        }
+                    )
+            elif log_jsonl is not None:
+                ### Val records name their epoch and omit mem_gb (lowest-noise path).
+                log_jsonl(
+                    {
+                        "phase": "val_step",
+                        "epoch": epoch,
+                        "val_step": i,
+                        "loss": step_loss,
+                        "step_time_s": step_dt,
+                        "iter_time_s": iter_dt,
+                        **step_losses,
+                        **step_metrics,
+                    }
+                )
+
     ### Each summary's peak memory measures only its own epoch.
-    if torch.cuda.is_available() and dist_manager.device.type == "cuda":
+    on_cuda = torch.device(dist_manager.device).type == "cuda"
+    if on_cuda:
         torch.cuda.reset_peak_memory_stats(dist_manager.device)
+
+    def iteration_mark():
+        """A point on the device's timeline (a CUDA timing event, recorded),
+        or off CUDA the host clock."""
+        if not on_cuda:
+            return time.perf_counter()
+        mark = torch.cuda.Event(enable_timing=True)
+        mark.record()
+        return mark
+
     epoch_t0 = time.perf_counter()
     with grad_ctx:
         step_t0 = time.perf_counter()
-        iter_t0 = step_t0
-        ### Iterated by hand: a train step fetches the next batch during its
-        ### backward (below). Under cfg.profile, stop after step
-        ### _PROFILE_MAX_STEPS.
-        batches = iter(dataloader)
-        next_batch = None
-        stop = min(num_steps, _PROFILE_MAX_STEPS + 1) if cfg.profile else num_steps
-
-        def load():
-            return recursive_to_device(next(batches), dist_manager.device)
-
-        for i in range(stop):
-            batch = load() if next_batch is None else next_batch
-            next_batch = None
+        iter_mark = iteration_mark()
+        for i, batch in enumerate(dataloader):
+            batch = recursive_to_device(batch, dist_manager.device)
             chunked = is_train and scaler is None and _chunked_step(model, batch)
             if chunked:
                 optimizer.zero_grad()
@@ -676,19 +776,11 @@ def _run_epoch(
                     optimizer.zero_grad()
                 if precision == "float16" and scaler is not None:
                     scaler.scale(loss).backward()
-                    if i + 1 < stop:
-                        next_batch = load()
                     scaler.step(optimizer)
                     scaler.update()
                 else:
                     if not chunked:
                         loss.backward()
-                    ### Load the next batch now, while the GPU still runs this
-                    ### backward, so the loader's host-side work overlaps GPU
-                    ### work instead of leaving the GPU idle at the start of the
-                    ### next step. Same samples, same order.
-                    if i + 1 < stop:
-                        next_batch = load()
                     optimizer.step()
                 if cfg.training.get("scheduler_update_mode", "epoch") == "step":
                     scheduler.step()
@@ -708,7 +800,7 @@ def _run_epoch(
             n_local += 1
 
             ### Detached scalar loss: accumulate the epoch sum on-device (no
-            ### host sync) and feed the per-step reducer below.
+            ### host sync) and keep it for this step's readback below.
             loss_det = loss.detach()
             total_loss += loss_det
 
@@ -719,108 +811,30 @@ def _run_epoch(
                 else 0
             )
 
-            ### Reduce this step's loss + metrics across ranks so the iteration
-            ### logs are global all-rank means, not rank-0's shard. This is a
-            ### collective: EVERY rank must call it, so it sits outside the
-            ### rank-0 logging gate below. ``n_samples=1`` is this step's local
-            ### sample count (one batch == one sample), matching the
-            ### ``n_local += 1`` accumulation above. Equal per-rank step counts
-            ### keep the per-step collective deadlock-free (see
-            ### ``_reduce_and_average``).
-            step_loss, step_losses, step_metrics = _reduce_and_average(
-                loss_det, losses, metrics, 1, device=dist_manager.device
+            ### Start this step's all-rank readback without waiting, then log
+            ### every earlier step whose copy has landed, in order.
+            lr = scheduler.get_last_lr()[0] if is_train else None
+            mark = iteration_mark()
+            span = mark - iter_mark if not on_cuda else (iter_mark, mark)
+            iter_mark = mark
+            pending.append(
+                (i, step_dt, mem_gb, lr, span)
+                + _start_step_readback(
+                    loss_det, losses, metrics, device=dist_manager.device
+                )
             )
-            ### The reduction above syncs with the device (and every rank under
-            ### DDP), so this clock reads after this step's device work.
-            now = time.perf_counter()
-            iter_dt = now - iter_t0
-            iter_t0 = now
+            while pending and (pending[0][-1] is None or pending[0][-1].query()):
+                log_step(*pending.popleft()[:-1])
 
-            ### Train mode includes Mem in the per-step line; val drops it
-            ### because the no_grad path is the lowest-noise place to look.
-            mem_str = f" Mem: {mem_gb:.2f}GB" if is_train else ""
-            logger.info(
-                f"{log_prefix} {epoch} [{i + 1}/{num_steps}] "
-                f"Loss: {step_loss:.6f} "
-                f"Step: {step_dt:.3f}s "
-                f"Iter: {iter_dt:.3f}s"
-                f"{mem_str}"
-            )
-
-            ### Per-step TensorBoard is train-only (val_writer is epoch-only);
-            ### per-step JSONL is written in both modes so downstream tooling gets
-            ### val step-times directly. The logged values are global all-rank
-            ### means (rank 0 is only the writer).
-            if is_rank0:
-                if is_train:
-                    global_step = epoch * num_steps + i
-                    if writer is not None:
-                        ### Loss keys already start with `loss/`, so the iteration
-                        ### prefix yields tags like `iteration/loss/pressure`;
-                        ### metric tags get an explicit `iteration/metrics/...`
-                        ### namespace so we never have to split by string prefix.
-                        _log_to_tensorboard(
-                            writer, step_losses, "iteration", global_step
-                        )
-                        _log_to_tensorboard(
-                            writer, step_metrics, "iteration/metrics", global_step
-                        )
-                        writer.add_scalar(
-                            "iteration/lr",
-                            scheduler.get_last_lr()[0],
-                            global_step=global_step,
-                        )
-                        writer.add_scalar(
-                            "iteration/performance/mem_gb",
-                            mem_gb,
-                            global_step=global_step,
-                        )
-                        writer.add_scalar(
-                            "iteration/performance/step_time_s",
-                            step_dt,
-                            global_step=global_step,
-                        )
-                        writer.add_scalar(
-                            "iteration/performance/iter_time_s",
-                            iter_dt,
-                            global_step=global_step,
-                        )
-                    if log_jsonl is not None:
-                        log_jsonl(
-                            {
-                                "phase": "train_step",
-                                "global_step": global_step,
-                                "loss": step_loss,
-                                "mem_gb": mem_gb,
-                                "step_time_s": step_dt,
-                                "iter_time_s": iter_dt,
-                                **step_losses,
-                                **step_metrics,
-                            }
-                        )
-                elif log_jsonl is not None:
-                    ### Val per-step record. ``epoch`` is explicit (unlike
-                    ### the train ``step`` records, which the parser infers
-                    ### from surrounding ``train`` markers) so val_step
-                    ### records can be associated with an epoch without
-                    ### relying on surrounding context. ``mem_gb`` is
-                    ### intentionally omitted -- the no_grad path is the
-                    ### lowest-noise place to measure step time and we
-                    ### don't want allocator state hopping in TB.
-                    log_jsonl(
-                        {
-                            "phase": "val_step",
-                            "epoch": epoch,
-                            "val_step": i,
-                            "loss": step_loss,
-                            "step_time_s": step_dt,
-                            "iter_time_s": iter_dt,
-                            **step_losses,
-                            **step_metrics,
-                        }
-                    )
-
+            if cfg.profile and i >= _PROFILE_MAX_STEPS:
+                break
             step_t0 = time.perf_counter()
+
+        ### The epoch's end waits for the copies still in flight.
+        for *record, event in pending:
+            if event is not None:
+                event.synchronize()
+            log_step(*record)
 
     epoch_dt = time.perf_counter() - epoch_t0
     n = max(n_local, 1)
@@ -843,7 +857,7 @@ def _run_epoch(
 
     ### Peak device memory of the epoch, the maximum over ranks.
     peak_gib = None
-    if torch.cuda.is_available() and dist_manager.device.type == "cuda":
+    if on_cuda:
         peak = torch.tensor(
             [torch.cuda.max_memory_allocated(dist_manager.device) / 2**30],
             device=dist_manager.device,

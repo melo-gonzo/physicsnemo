@@ -59,7 +59,7 @@ from physicsnemo.experimental.models.isla.tree_read import (
     _TreeKernelRead,
     kernel_geo_width,
 )
-from physicsnemo.mesh.sampling.systematic_sampling import _cumsum, systematic_sample
+from physicsnemo.mesh.sampling.systematic_sampling import _cumsum, _systematic_sample
 from test.experimental.models.isla._forced import ran
 from test.experimental.models.isla._geometry_cases import (
     _near_wall,
@@ -142,12 +142,12 @@ def _planted_hits(measures, centroids):
     residual ``D = line[-1] - k 2**Q``. Returns ``Q`` and ``(start, earlier, later)``
     per boundary: the start and the cells at the line's positions ``i`` and
     ``i + 1``, each shorter than one unit, so each holds at most one hit."""
-    with ran(_cumsum, systematic_sample) as r:
+    with ran(_cumsum, _systematic_sample) as r:
         sampling.sample_boundary_cells(
             measures, centroids, BUDGET, torch.tensor(0.5, dtype=D)
         )
     line = r.returns(_cumsum)[-1]  # the draw's last scan is the line
-    order = r.calls(systematic_sample)[-1]["order"]
+    order = r.calls(_systematic_sample)[-1]["order"]
     assert line.dtype == torch.int64
     assert line.shape == order.shape == (sum(m.shape[0] for m in measures),)
     Q = 62 - BUDGET.bit_length()

@@ -655,7 +655,7 @@ in @sec-limits.
 | HiLiftAeroML | native files | `datasets/highlift_surface.yaml` | `conf/model/isla_surface_highlift.yaml` |
 | SHIFT-SUV | native files | `datasets/shift_suv_surface.yaml` and the two family files | `conf/model/isla_surface_shift_suv.yaml`, reading the vehicle and the CFD box the dataset files build (the standing's checkpoints were trained with `isla_surface.yaml` on the vehicle alone; @sec-oq-whole-boundary) |
 | AirfRANS | `results/campaigns_2026-09-21/af/airfrans_convert.py` | `datasets/airfrans_uvolume_2d.yaml` (ISLA), `airfrans_uvolume.yaml` (the baselines) | `conf/model/isla_volume_airfrans.yaml` |
-| AeroZoo | native files of the dataset release | `datasets/aerozoo_uvolume.yaml` and its six held-out-split files, which hold the benchmark protocol's physical PDE inputs only (@sec-data-aerozoo) | `conf/model/isla_volume_aerozoo.yaml` |
+| AeroZoo | native files of the dataset release | `datasets/aerozoo_uvolume.yaml` and its six held-out-split files, which hold the benchmark protocol's physical PDE inputs only and keep each split's `mean_stable` cases, AeroZoo's canonical benchmark (@sec-data-aerozoo) | `conf/model/isla_volume_aerozoo.yaml` |
 | PLAID Tensile2d | `results/campaigns_2026-09-22/datasets/plaid_tensile2d_convert.py` | `results/campaigns_2026-10-02/char/datasets/plaid_tensile2d.yaml` | `conf/model/isla_tensile2d.yaml` |
 | GINOT Bracket Lug | `results/campaigns_2026-09-22/datasets/ginot_lug_convert.py` | `results/campaigns_2026-10-02/char/datasets/ginot_lug_volume.yaml` | `conf/model/isla_lug.yaml` |
 | DeepJEB++ | `results/campaigns_2026-09-22/datasets/deepjebpp_convert.py` | `results/campaigns_2026-10-02/char/datasets/deepjebpp_surface.yaml` | `conf/model/isla_surface_deepjebpp.yaml` |
@@ -736,7 +736,8 @@ SHIFT-SUV, AirfRANS and HiLiftAeroML they were trained with configurations that 
 vehicle, the airfoil, the wing); on AeroZoo, the lug, Tensile2d and DeepJEB++ with every stored piece. The recipe's configurations read every stored piece of the domain's boundary, and on SHIFT-SUV and HiLiftAeroML
 the pieces the recipe builds, so on the DrivAerML tasks, SHIFT-SUV, HiLiftAeroML and AirfRANS they read more than the
 standings were trained with
-(@sec-limits-whole-boundary). On a surface
+(@sec-limits-whole-boundary). On AeroZoo the recipe's configurations also train every architecture on all seven fields and on
+the `mean_stable` cases alone, where the standing's models trained on five fields and every complete case (@sec-data-aerozoo). On a surface
 task, which computes no wall geometry and draws no tokens, the four steps do not arise. @tbl-standing-geometry lists them.
 
 | step | the standings' checkpoints (ISLA 0.9.0) | the class (@sec-arch-interior-geometry, @sec-arch-boundary-draw) |

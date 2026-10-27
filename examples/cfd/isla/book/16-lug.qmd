@@ -178,6 +178,25 @@ plt.show()
 **Every node is a prediction point; the readout is the relative L2 error of the von Mises stress over the `{python} f"{N_TEST}"` test lugs, at 2,400 training lugs, 500 epochs and two seeds.** The three architectures run at their reference configurations: ISLA width 512, 12 layers, 512 slices, learning rate 3.75e-4; GeoTransolver width 256 and Transolver width 512 with 16 layers, both at 1e-3. No model trains with rotation or translation augmentation. Each checkpoint is scored twice on the same lugs: on the native mesh, and with every lug rotated by a random three-dimensional rotation and translated by one RMS node radius (@sec-invariances). This pipeline has no centering step, so the translation reaches every model. The third scoring of the other datasets, a uniform point cloud, is the native mesh here, because the surface triangles are kept whole.
 
 ```{python}
+#| label: para-lug-slices
+#| output: asis
+import math as _m
+import re
+import records as _RS
+# SLICES-ALL: ISLA-DTT with 128 slices against the lug standing's fix-trained ISLA-DTT pair (512 slices), native, and the whole-run step
+_SLL = next(r_ for r_ in _RS.md_table("slices_all", "reading_LUG.md") if r_["protocol"] == "native")
+assert _SLL["label"] == "no change" and _SLL["flag"] == "none"
+_SLLX = " ".join(_RS.load("slices_all", "RESULTS.md").split())
+_sll_step = re.search(r"the control's 0\.425 / 0\.420 s \(\*\*(0\.\d+)\*\*\)", _SLLX).group(1)
+print(f"With 128 slices in place of 512, ISLA-DTT's von Mises error on the lug is {_SLL['arm ÷ control']} times its error at 512 "
+      "slices (a ratio of arithmetic seed means, two seeds each, both trained on the fixed compiled path), no change by the rule "
+      "registered for the test; the 512-slice seeds sit far apart, so only an effect above about "
+      f"{100 * (_m.exp(float(_SLL['2 SE'])) - 1):.0f}% would register. Its training step falls only to {_sll_step} of the 512-slice "
+      "step, since little of ISLA-DTT's step on the lug scales with the slice count (@sec-oq-slices). "
+      f"Data: {_RS.source('slices_all', 'reading_LUG.md')}; {_RS.source('slices_all', 'RESULTS.md')}.")
+```
+
+```{python}
 #| label: tab-lug-cost
 #| output: asis
 import re as _re
