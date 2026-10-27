@@ -914,6 +914,12 @@ RECORDS = {
         "MERGE-2171-TIDY: #2171's tidied head merged into psharpe/isla, and its checks",
         ["FINAL_REPORT.md"],
     ),
+    "af_confirm_prereg": (
+        "isla-af-campaign-2026-10-25",
+        "AF-CONFIRM's registration: AF-CAMPAIGN's pre-registration with amendments A3 (arm FC, C without N, on AirfRANS), "
+        "A4 and A5 (C on AeroZoo, read for harm)",
+        ["PREREG.md"],
+    ),
     "rerun_azb": (
         "isla-rerun-azb-2026-10-27",
         "RERUN-AZB: the final rerun's 16 AeroZoo baseline lanes launched on JHB, their snapshot, smoke and first epochs",

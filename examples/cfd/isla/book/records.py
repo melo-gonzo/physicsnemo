@@ -141,6 +141,7 @@ FOLDER = {
     "main_merge_1026": "campaigns_2026-10-23",
     "main_merge_1027": "campaigns_2026-10-23",
     "merge_2171_tidy": "campaigns_2026-10-23",
+    "af_confirm_prereg": "campaigns_2026-10-23",
     "rerun_azb": "campaigns_2026-10-23",
 }
 
