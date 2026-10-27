@@ -43599,6 +43599,218 @@ forest's training at the reference configuration on the 0.14.0 code.
 
 *Applied for the supervisor by the book lane BOOK-AFTERNOON on 2026-10-26.*
 
+## 2026-10-27 — ISLA 0.14.0 merged: DTT-POSE's face forest with FOREST-NEARTIE's bounded rotation widening, the Warp-limit guards and both dead biases removed; rule 1 and C are not in it {#sec-nb-version-014}
+
+Records results/campaigns_2026-10-23/version_014/ (FINAL_REPORT.md md5 238b37a3, PHASE2_NEARTIE.md md5 e25bb8aa) and
+assembly_014_final/FINAL_REPORT.md (md5 7145d1c9, ASSEMBLY-014 with its addendum; the hand-over copy 60d7c0e2 stays under
+assembly_014). psharpe/isla d8ba83f86, merged at 17:09 EDT from psharpe/isla-014-v-neartie-0140 6e9e2b94e.
+
+- **What 0.14.0 holds.** DTT-POSE's forest: one tree per cube face of the normals with a tie band, built in float64 about the
+  centroid outside autocast, the box test widened by the arithmetic's error bound. FOREST-NEARTIE's fix (981ca5aaf): the
+  frame's possible rotation widens each node in proportion to its own size, capped by a frame-free ball
+  (@sec-nb-forest-neartie). The Warp-limit guards of the fast build and walk. The slice blocks' `geo_logit` bias and the
+  kernel basis's last bias removed, each a constant that cancels in a softmax (ASSEMBLY-014's addendum: the basis bias's
+  gradient 3.6e-18 of the largest in float64, the model without it inside a one-ulp input change). Seeded test fills keyed
+  by parameter name. The version commit: `__model_checkpoint_version__ = "0.14.0"`, `_version = 14`, every earlier state
+  dict refused. Each architecture change was reviewed by Peter (@sec-nb-rulings-1027). Rule 1 and C are not in it.
+- **Checks.** VERSION-014 phase 1 merged psharpe/isla daf1e605b (upstream main aad6ce655) into psharpe/isla-014 8097ed00f
+  with no conflict hunk, 110 of 110 golden variants bitwise. Phase 2 merged the fix, 86 of 110 variants bitwise and the 24
+  others the 12 G-FOREST forest cases in `diameter_sq` alone, the same lines as FOREST-NEARTIE's own A/B; the fixtures
+  regenerated with 57 of 57 and 84 of 84 tensors bitwise and both checkpoint-output goldens byte-identical. Tiers on
+  6e9e2b94e: GB300 1,327 passed, 6 skipped (the mix-order controls) and 1 xfailed on torch 2.13, 1,333 passed and 1 xfailed
+  on 2.12; CPU 784 passed, 533 skipped and 1 xfailed on 2.13; recipe 648 passed, 34 skipped. Smokes, head ÷ base, 0.955 to
+  1.032 on every family. 9.1 GPU-h.
+
+**For the book.** 05's forest (@sec-arch-tree-read) describes the face forest, its tie band and the bounded rotation widening
+as the class's, the octant forest as the standings' checkpoints'; the refinement formula loses $b_g$ (03, 05). 07's
+@tbl-standing-geometry gains the forest row and the two parameters. 03, 04, 09, 13, 16, 20 and 21 name the octant forest as
+the standings' and the face forest as the class's. 06's test paragraph reads VERSION-014's tiers. The forest callouts in 05,
+16 and 20 now say the face forest is being measured at the reference configuration.
+
+*Applied for the supervisor by the book lane BOOK-EVENING on 2026-10-27.*
+
+## 2026-10-27 — CERT and CERT-ROUTING: the compiled slice blocks certify on DeepJEB++ alone; Inductor drops two of eager's bf16 roundings, so the compiled path is the more precise, and a per-group gate cannot decide near-degenerate slices; every ISLA lane but DeepJEB++'s trains eager {#sec-nb-cert}
+
+Records results/campaigns_2026-10-23/cert/ (FINAL_REPORT.md md5 73b643b1, RESULTS.md, out/part2/PART2_VERDICTS.md,
+out/PRICE_CERT.md) and cert_routing/ (FINAL_REPORT.md md5 8facd5af, DIAGNOSIS.md, REFORMULATIONS.md,
+out/part3/PART3_VERDICTS.md).
+
+- **CERT** (done 04:03 EDT, 16.8 of 30 GPU-h, psharpe/isla-014 8097ed00f, torch 2.13). Part 1's zero-failure gate failed
+  eager against itself and decided nothing. Part 2, null-calibrated on fresh seeds and fresh compile processes, certified
+  DeepJEB++ alone; the other eight families fail in a few routing-gradient groups, by 1.016 (AeroZoo) to 11.4 (Tensile2d)
+  times eager's spread, while the compiled path is closer to float64 than eager in 25 to 111 other groups per family.
+  Compiled is 15 to 36 percent faster in 20-step smokes on four ranks. The supervisor kept the registered verdict: every
+  ISLA lane but DeepJEB++'s trains eager, ISLA's training 3,216 to 4,031 GPU-h (+815).
+- **CERT-ROUTING** (done 07:05 EDT, 14.1 of 25 GPU-h). C1: eager rounds the prototypes' logit measure term in bf16, which
+  Inductor computes in fp32 (logits 65 times closer to float64). C2: eager accumulates the routing logits' gradient in bf16.
+  Proved both ways: eager's rounding put back into the compiled path recovers, and eager made more precise in that step
+  alone reproduces the excess (Tensile2d 13.3 against 13.3). The failing groups are near-degenerate slices: Tensile2d block
+  2's mean normal has norm 0.0056 against terms of order one, its anchor normal is bf16 noise in both paths, and eager's own
+  gradient of it is 58 percent wrong. No fix (the one that passes, eager's rounding put back, declined by the supervisor at
+  05:15 EDT as not principled). Part 3 (approved 05:53 EDT, eager plus nine precision-raising members, fresh seeds 4 and 5)
+  certified nothing, and its positive control went undetected in 4 of 8 families (hl, lug, suv, vol): the gate is without
+  power as registered.
+
+**For the book.** 05 (@sec-arch-cost) states the result and drops its In-flight callout; 06 states the eager launch and
+gains @tbl-using-compile-time from CERT's smokes; 07's @sec-standing-geometry notes the certification; 15 and 16 state their
+datasets' excess (11.4 and 2.005); 20 gains @sec-limits-compiled, and @sec-oq-slice-normal ties the near-degenerate slices
+to option (c).
+
+*Applied for the supervisor by the book lane BOOK-EVENING on 2026-10-27.*
+
+## 2026-10-27 — AF-CAMPAIGN read: on AirfRANS with its far field the face forest with rule 1 restores the pose, the viscous near-wall length harms eddy viscosity, and per-condition quadrature closes ISLA-DTT's gap to its airfoil-only model {#sec-nb-af-campaign-read}
+
+Records results/campaigns_2026-10-23/af_campaign_read/ (RESULTS.md md5 e024bd8e, read.md md5 0f2882fc, FINAL_REPORT.md,
+REVIEW_SECOND_READ.md). Read 08:33 EDT by `harness/read_affix.py` (md5 b60f28d3, unchanged); every section-4 check passed;
+a lane-reviewer recomputed every number; 918.6 of 1,000 GPU-h.
+
+| step | pressure | velocity | eddy viscosity |
+|---|---|---|---|
+| F / W-DTT | no effect 0.756 | no effect 0.828 | helps (paired) 0.697 |
+| FN / F | no effect 1.102 | no effect 1.090 | harms 1.156 |
+| FNC / FN | helps 0.610 | helps 0.640 | helps 0.653 |
+| FNΩ / FN | helps (paired) 0.802 | helps 0.803 | helps (paired) 0.858 |
+
+- R3: pose holds for F, FN and FNΩ, and FNC holds at the standing's level; W-DTT's was 1.53 to 2.52.
+- Beside the rules: W-DTT / B-DTT 1.943 / 1.531 / 1.893 (the whole-boundary penalty), FNC / B-DTT 0.987 / 0.885 / 0.996,
+  FNΩ / B-DTT 1.297 / 1.110 / 1.309.
+- The registered consequences: N harms, so it is not proposed, and Peter ruled it inadmissible (@sec-nb-rulings-1027); C
+  and Ω go to Peter; F0 was not run, and on AirfRANS rule 1 and grouping by component coincide. FNC and FNΩ both carry N.
+
+**For the book.** 12 gains @sec-airfrans-far-field with @tbl-airfrans-far-field, the N ruling verbatim, C's status with an
+In-flight callout for AF-CONFIRM, and rule 1's root cause; 12's standing callout and limits bullet are restated. 20's
+@sec-limits-af-whole summarizes the read, @sec-oq-nearwall records N's harm and inadmissibility, and @sec-oq-af-encoding
+becomes C's open question with rule 1's status (its callout replaced). 21 gains the admissibility principle.
+
+*Applied for the supervisor by the book lane BOOK-EVENING on 2026-10-27.*
+
+## 2026-10-27 — Peter's rulings: the viscous near-wall length is inadmissible; every change to the baseline architecture goes to him; rule 1 adopted, then held by the supervisor after its root cause; the fallback; the forest's near-tie fix approved {#sec-nb-rulings-1027}
+
+Peter's words, verbatim, with the memory topics that hold them.
+
+- About 09:30 EDT, on N after AF-CAMPAIGN's read (near-wall-length-inadmissible-ruling.md): "Yeah I don't think N is
+  admissible per our "principled changes only" yardstick. Even if it was better, it wouldn't be better for reasons that are
+  transferrable to other domains, so we couldn't in-good-faith accept it."
+- About 09:40 EDT (architecture-changes-peter-review-ruling.md): "Agreed. Adopt rule 1 now; continue investigating C but
+  then ask me for a verdict. As a reminder, all changes to the baseline ISLA model architecture should be reviewed by me".
+- About 09:46 EDT, on DTT-POSE's face forest and the two dead-parameter removals that the supervisor had staged for 0.14.0
+  (same topic): "Approved on both, thanks for showing me these".
+- About 11:13 EDT the supervisor held rule 1 out of the staged 0.14.0 code after AF-CONFIRM's AeroZoo blow-up, until a root
+  cause and a reviewed fix exist; the root cause and fix V2 followed at about 12:00 EDT (@sec-nb-af-confirm).
+- About 11:20 EDT, on the supervisor's fallback (if rule 1 has no fix he has reviewed by noon 10-29, 0.14.0 ships without
+  rule 1 and C, with the face forest and the dead-parameter removals, and the ISLA rerun keeps its 11-05 target; same
+  topic): "yes, go with that plan".
+- About 17:08 EDT, on FOREST-NEARTIE's fix (same topic): "yes, I approve".
+
+**For the book.** 12 and 21 quote the N ruling; 12 and 20 quote the C words; 20's @sec-oq-slice-normal quotes the review
+rule; 14 gains RULINGS-1027.
+
+*Applied for the supervisor by the book lane BOOK-EVENING on 2026-10-27.*
+
+## 2026-10-27 — AF-CONFIRM: C without N on AirfRANS and C on AeroZoo read for harm, both training; rule 1's AeroZoo blow-up traced to a per-condition rotation bound, fixed by V2 and held; AF-PORT-014 on hold {#sec-nb-af-confirm}
+
+Records results/campaigns_2026-10-23/rule1_root_cause/ROOT_CAUSE_RULE1.md (md5 ff610d74) and af_confirm_prereg/PREREG.md
+(md5 fc03c181, AF-CAMPAIGN's registration with amendments A3 to A5.7).
+
+- **Part A** (A3, cap 260 GPU-h): arm FC, F plus C without N, on AirfRANS with its far field against F, two seeds; its lanes
+  use rule 1 as committed in c0fa1fc28.
+- **Rule 1's root cause.** FC on AeroZoo ran out of memory at step 19 of its smoke: c0fa1fc28 took each condition's
+  frame-rotation bound from that condition's own covariance, not from the whole boundary's that the frame comes from. A
+  square outlet's drawn gap moved from 9 to 324 times its bound over 13 draws; one draw built 1,405M pairs, against 54.0M
+  without groups and 47.0M with octants. V2 (3e6cc1636) takes the bound from the whole boundary for every group: every draw
+  of that case 49.4M to 52.5M. On AirfRANS V2's pair lists differ from c0fa1fc28's on every case-draw, with counts within
+  0.3 percent. The same probes found DTT-POSE's own near-tie (652M pairs on one draw of AeroZoo full.train case 0;
+  @sec-nb-forest-neartie). Rule 1 stays held; its isolated effect is untested.
+- **Part B** (A5, cap 600 GPU-h): by the supervisor's decision B1 of 12:07 EDT, C-AZ, C on the standings' octant forest
+  (code_r090 plus C, with a node logsumexp over its conditions; port fix e36111772 for empty conditions), on AeroZoo `full`
+  against azc_full_dtt_seed42/43, read for harm on all five fields. Checks and smoke pass (step 0.934 of the control's);
+  lanes 428634 and 428635 launched 12:53 EDT.
+- **AF-PORT-014** (done 13:23 EDT): rule 1 with V2 on psharpe/isla-014-rule1 3772271d7 and C on psharpe/isla-014-afc
+  f4f1c210e, tiers green, both on hold for 0.14.0 under the fallback.
+
+**For the book.** 12's quadrature callout and 13's @sec-aerozoo-quadrature callout mark the two parts; 20's
+@sec-oq-af-encoding states rule 1's root cause and untested effect and prices the two parts.
+
+*Applied for the supervisor by the book lane BOOK-EVENING on 2026-10-27.*
+
+## 2026-10-27 — SLICE-NORMAL-EXP done: on AirfRANS neither slice-normal fix reads a change at low resolution, on the lug (a) reads no change with an up flag and (a)+(s) harms; neither is a candidate, and option (c) waits {#sec-nb-slice-normal-final}
+
+Records results/campaigns_2026-10-23/slice_normal_final/ (FINAL_REPORT.md md5 c651b6c4, RESULTS.md md5 815cb8f4,
+C_DESIGN.md md5 12f8e4d9). Done 00:08 EDT; 1,379.9 of 1,440 GPU-h.
+
+- AF (a), against AF-WHOLE's ISLA-DTT: 1.076 / 1.153 / 1.234, no change. AF-S, (a)+(s): 1.294 / 1.196 / 1.457, no change
+  with every field flagged up; the control's seeds are 31 to 39 percent apart. (s) on top of (a): pressure 1.202, harms-sized.
+- LUG (a): 1.199, no change with an up flag. LUG-S: 1.263, harms. (s) about doubles the lug's posed ÷ native (4.59 / 3.25
+  against 2.42 / 1.86).
+- The lug's own compiled blocks fail the block-wise certification (86 of 1,200 groups), so the lug trains eager.
+- Option (c), the smooth floor $m / \sqrt{|m|^2 + L_s^2}$ with $L_s = 2u |\sum_n a_{ns} |\hat n_n||$ and $u = 2^{-8}$, is designed
+  (C_DESIGN.md) and not run: about 600-650 GPU-h staged, DrivAerML Surface first; its constant is a change of the
+  architecture for Peter's review. CERT-ROUTING finds it addresses exactly the slices that make the compiled-path
+  certification undecidable (@sec-nb-cert).
+
+**For the book.** 12 gains @sec-airfrans-slice-normal; 16's limits gain the lug reads and its certification; 20's
+@sec-oq-slice-normal becomes option (c)'s question, drops its In-flight callout, and its table row is restated.
+
+*Applied for the supervisor by the book lane BOOK-EVENING on 2026-10-27.*
+
+## 2026-10-27 — FOREST-NEARTIE: on AeroZoo's spherical far fields the face forest read up to 8.4 times the octant forest's pairs; bounding the rotation in proportion to each node's size, capped by a frame-free ball, keeps it within 1.27 times; approved and in 0.14.0 {#sec-nb-forest-neartie}
+
+Records results/campaigns_2026-10-23/forest_neartie/ (FINAL_REPORT.md md5 c18974af, RISK_TABLE.md, OPTIONS.md,
+POSE_TABLE.md). Done 15:17 EDT; 8.32 of 15 GPU-h.
+
+- **Risk.** On the same draws: AeroZoo census (320 cases x 5) face ÷ octant median 0.954, at most 2.23; near-tie Monte
+  Carlo (60 x 60) up to 8.40, over 5 times on 3 draws. Only the opposed-sphere and opposed-hemisphere families nearly tie. An
+  OOM chance of about 13 percent per 250-epoch AeroZoo ISLA-DTT lane: the chunked step's eager peak forecast is 3.6 to 4.0
+  GiB low, so a step OOMs at 942-968M pairs in one chunk and in about 2 percent of each multi-chunk band.
+- **Resume replay.** The checkpoint holds no RNG state and `set_seed(seed + rank)` runs at every start, so every chained link
+  replays the same draws, and a crash in a resumed segment recurs. This holds for every chained run, the standings included;
+  the supervisor keeps it for the rerun, for like-for-like comparisons, and fixes it after.
+- **Root cause and fix.** The frame and eta come from the drawn tokens, and the 0.14.0 staging widened each node by the
+  rotation in proportion to its distance from the centroid. (c') widens it in proportion to its own size, by
+  $f = (1 + \sqrt d \eta (1 + \theta)) / (1 - \sqrt d \eta)$ at the angle $\theta / f$, capped by the ball of half its
+  diagonal about its box's center: at most 1.27 times the octant forest's pairs on the near-tie draws, never more than the
+  staging's on 1,632 saved draws; AirfRANS with its far field 17 percent fewer pairs, outputs within 4.2e-7; lug, Tensile2d
+  and DrivAerML unchanged. Options (a) and (b) declined (per-case ties; +29 percent pairs). Peter approved it at about 17:08
+  EDT (@sec-nb-rulings-1027). Accuracy A/Bs on the near-tie families and on AirfRANS are not run.
+
+**For the book.** 05 gains the bounded widening; 13 gains @sec-aerozoo-neartie; 20 gains @sec-limits-replay and
+@sec-limits-chunk-memory, and @sec-oq-dtt-frame names the near-tie families; 21's ledger gains the forest row.
+
+*Applied for the supervisor by the book lane BOOK-EVENING on 2026-10-27.*
+
+## 2026-10-26 to 2026-10-27 — Main merges: upstream main and #2171's head, #2171's tidied head, and upstream main with #2174's final form merged into psharpe/isla; ISLA's draw unchanged {#sec-nb-main-merges-1027}
+
+Records results/campaigns_2026-10-23/main_merge_1026/, merge_2171_tidy/ and main_merge_1027/ (FINAL_REPORT.md each, md5 cdbd7e44, 8001ee77 and a24170c9).
+
+- **MAIN-MERGE-1026** (merged 22:28 EDT 10-26 as 1a86c09f9): upstream main 3908973f6, #2171's head bb83f5d55 and an
+  event-timed `iter_time_s` with `epoch_seconds` and `peak_memory_gib`; 81 of 83 configs' loader leaves bitwise.
+- **MERGE-2171-TIDY** (merged 23:04 EDT 10-26 as 6f1e527f1): #2171's tidied head 867050087, recipe-only; smokes bitwise.
+- **MAIN-MERGE-1027** (merged 13:58 EDT 10-27 as daf1e605b): upstream main aad6ce655 with #2167, #2191 and #2174's squash
+  merge; 4,620 of 4,620 draw-function outputs and 110 of 110 golden variants bitwise. ISLA's draw keeps its Morton grid over
+  every cell, where `sample_cells_systematic` spans only cells of positive measure; changing it would be an architecture
+  change for Peter's review, and it is not made.
+- **Pull requests**, read with gh at 17:40 EDT 10-27: #2174 merged at 13:06 EDT as aad6ce655; #2171, #2173 and #2170 open,
+  review required.
+
+**For the book.** 20 gains @sec-limits-draw-grid; 14's ISLA-LIB-SAMPLING row names the private draw helpers.
+
+*Applied for the supervisor by the book lane BOOK-EVENING on 2026-10-27.*
+
+## 2026-10-27 — The final rerun starts: the 16 AeroZoo baseline lanes train on JHB, and the 32 ISLA lanes launch on ISLA 0.14.0, eager except DeepJEB++ {#sec-nb-rerun-azb}
+
+Record results/campaigns_2026-10-23/rerun_azb/FINAL_REPORT.md (md5 68a484d1).
+
+- **RERUN-AZB** (done 09:45 EDT): 14 GeoTransolver and 2 Transolver lanes on JHB from psharpe/isla 6f1e527f1's md5-checked
+  snapshot; every lane past its first-epoch check at 0.73-0.82 of PRICE's epoch; ends due 02:15 to 11:30 EDT 10-28; 1,344
+  GPU-h projected against 1,858. JHB's MDT0009 is read-only, so new directories are pinned.
+- **RERUN-ISLA** (running): the 32 ISLA lanes on 0.14.0, AeroZoo's 14 on JHB and 18 on LHR, eager except DeepJEB++, launching
+  the evening of 10-27.
+
+**For the book.** 13's standing callout names the baselines' retraining; the standings' callouts stand until the lanes are
+scored.
+
+*Applied for the supervisor by the book lane BOOK-EVENING on 2026-10-27.*
+
 ## 2026-10-22 — MECH-090: on Tensile2d the fixed compiled path's float32 gradients sit at a one-ulp eager floor, and pytorch/pytorch#195845 added a unit-dependent sink to ISLA's slice-state softmax (registered emulations not confirmed; a post-smoke emulation matches) {#sec-nb-mech090}
 
 **Question.** REF-090's Tensile2d control (@sec-nb-ref090-t2d-control) read (b) by its registered weighing, in which A2
