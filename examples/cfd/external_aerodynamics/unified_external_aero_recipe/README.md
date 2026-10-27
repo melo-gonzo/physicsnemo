@@ -1012,9 +1012,10 @@ Training and validation metrics are logged in two places per run:
   external store.
 
 Each step logs two times (console `Step:` and `Iter:`). `step_time_s` is host
-time up to the step's per-step loss reduction, without the device work still
-queued. `iter_time_s` is the true time per iteration, between the ends of
-consecutive reductions, which wait for the step's device work on every rank.
+time up to the start of the step's readback, without the device work still
+queued. `iter_time_s` is the true time per iteration, between CUDA events
+recorded at the same point of consecutive steps and read once the step's
+readback has landed, so it adds no host sync.
 
 Under multi-GPU (DDP), all logged loss and metric values -- per-step and
 per-epoch alike -- are global all-rank means (reduced across ranks with a

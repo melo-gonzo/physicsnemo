@@ -30,6 +30,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`examples/cfd/rotor37_geotransolver`)
 - Adds an experimental, independently implemented SMART operator with sampled
   geometry encoding, reusable latent contexts, and chunked field decoding.
+- Adds `physicsnemo.experimental.uq.conformal`: post-hoc conformal prediction
+  for spatio-temporal fields with `PointwiseCalibrator`,
+  `FunctionalBandCalibrator`, `RiskControlCalibrator`, `ConformalPredictor`,
+  `CoverageAccumulator`, `AbsoluteErrorScore`, `NormalizedErrorScore`,
+  `QuantileRegressionScore`, and `AuxScale`. Custom scores subclass
+  `NonconformityScore` and register with `register_score`; `check_score`
+  tests them.
 
 - Adds standalone FLARE++ attention and model APIs, with input-conditioned
   dynamic routing, plus a ``GALE_FPP`` backend for using the same mixer inside
@@ -334,12 +341,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `perturbed_grid` primitive takes `perturbation_scale` as a fraction of
   the grid spacing (was an absolute length), so its default no longer folds
   cells, even on fine grids.
+- Unified external aero recipe: training steps no longer wait for the GPU to
+  log each step's loss. Each step's values are read back without blocking and
+  logged once they land, so the datapipe's prefetch now overlaps compute.
 - Unified external aero recipe: each step also logs `iter_time_s`, the true
-  time per iteration, since `step_time_s` misses queued device work. Epoch
-  summaries record `epoch_seconds` and, on GPU, `peak_memory_gib`.
-- Unified external aero recipe: training loads the next batch while the GPU
-  runs the backward, instead of at the start of the next step, so the GPU no
-  longer waits for the loader's host-side work. Samples and order are unchanged.
+  time per iteration, timed with CUDA events and read when the step's values
+  land, since `step_time_s` misses queued device work. Epoch summaries record
+  `epoch_seconds` and, on GPU, `peak_memory_gib`.
 
 ### Deprecated
 
@@ -380,6 +388,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Multi-node jobs launched with `srun` no longer hang in
+  `DistributedManager.initialize()` when Slurm starts rank 0 on a different node
+  from the one that ran `srun`. The rendezvous now uses the job step's first node.
+- `DistributedManager.initialize()` works in a Slurm batch script run without
+  `srun`. It used to find no rendezvous address there and raise a `TypeError`.
 - `Mesh.get_point_to_points_adjacency()`, `get_facet_mesh()`, and
   `get_boundary_mesh()` compile with `torch.compile(fullgraph=True, dynamic=True)`.
   Facet extraction now specializes on the cell width instead of passing a
@@ -539,6 +552,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `text_1d_2d` outlines are closed loops; before, each ended in a zero-length
   edge. `text_2d_2d` fills curved glyphs fully: thin rings such as U+25CB lost
   part of their area.
+- Unified external aero recipe: GLOBE-volume trains on all the requested
+  vehicle surface cells, not about 4% of them.
 - Seeded `DomainMeshReader` subsamples select the same rows from Zarr stores
   as from memmap files. Before, boundaries read in full, and interiors read
   with `drop_interior_cells`, could differ between the two formats.

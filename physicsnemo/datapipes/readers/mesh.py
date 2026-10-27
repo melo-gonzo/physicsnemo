@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import glob as _glob
 import logging
+import operator
 from pathlib import Path
 from typing import Any, Iterator, Literal
 
@@ -499,14 +500,18 @@ class DomainMeshReader:
             over the closed integer range ``[lo, hi]``, from the sample's
             generator (so it is reproducible per ``(epoch, index)`` under
             ``set_epoch``), and overrides ``subsample_n_points`` for the
-            interior only; boundaries keep the fixed sizes. A count above
+            interior only; boundaries are subsampled as without it, per
+            ``boundary_subsample`` (so with ``"points"`` and no
+            ``subsample_n_points`` they stay at full resolution). A count above
             the interior's size keeps all of its points, so the draw is
             uniform only when ``hi`` is at most that size. This is
             query-count augmentation: a model trained on a range of interior
             request sizes is asked to give the same field at every size
             (consistency in the fine-mesh limit) instead of learning the one
-            count it was trained at. Default ``None`` leaves behaviour
-            unchanged.
+            count it was trained at. Under ``MeshDataset(cache_host=True)``
+            the first draw for each sample is cached and reused, so the
+            augmentation has no effect across epochs. Default ``None``
+            leaves behaviour unchanged.
         extra_boundaries : dict[str, dict] or None, optional
             Load additional sibling meshes as extra boundaries on each
             sample.  Each key is the boundary name to assign; each value
@@ -559,11 +564,15 @@ class DomainMeshReader:
             )
         self.boundary_subsample = boundary_subsample
         if interior_n_points_range is not None:
-            lo, hi = (int(interior_n_points_range[0]), int(interior_n_points_range[1]))
-            if lo <= 0 or hi < lo:
+            try:
+                lo, hi = (operator.index(n) for n in interior_n_points_range)
+                valid = 0 < lo <= hi
+            except (TypeError, ValueError):
+                valid = False
+            if not valid:
                 raise ValueError(
-                    "interior_n_points_range must be (lo, hi) with 0 < lo <= hi, "
-                    f"got {interior_n_points_range!r}"
+                    "interior_n_points_range must be two integers (lo, hi) with "
+                    f"0 < lo <= hi, got {interior_n_points_range!r}"
                 )
             interior_n_points_range = (lo, hi)
         self.interior_n_points_range = interior_n_points_range
