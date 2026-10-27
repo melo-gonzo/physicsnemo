@@ -85,8 +85,10 @@ bitwise the float32 forward's forest. A normal's face is tied when its two large
 components are within the bound on their rounding (:func:`normal_error_bound`, and the
 frame's own rotation, :func:`frame_rotation_bound`), and a tied normal takes the lowest
 tied axis; the box test compares the distance with a diameter widened by the
-coordinates' error bound (:func:`separation_diameter_sq`), so an exact tie of the
-criterion is opened in every pose. The bounds are measured in the boundary's own frame,
+coordinates' error bound and by the frame's rotation, which moves the points and the
+cells together and so widens each node in proportion to its own size, never past a
+frame-free bound (:func:`separation_diameter_sq`), so an exact tie of the criterion is
+opened in every pose and a nearly tied frame costs a bounded factor of pairs. The bounds are measured in the boundary's own frame,
 so they are functions of the boundary alone and their edges do not move with the pose.
 What rounding still decides is generic: cells within rounding of a face boundary, a
 Morton grid line or the criterion, whose posed inputs differ by the rounding of the
@@ -225,21 +227,54 @@ def frame_rotation_bound(x: torch.Tensor, w: torch.Tensor, u: float) -> torch.Te
     return torch.where(gap > err, err / (gap - err), torch.zeros_like(err))
 
 
-def separation_diameter_sq(tree: ClusterTree, theta: float, kappa_u: torch.Tensor, d: int, u: float) -> torch.Tensor:
+def separation_diameter_sq(tree: ClusterTree, theta: float, eta: torch.Tensor, d: int, u: float) -> torch.Tensor:
     r"""The squared diameter the walk compares a point's distance with, so that a
-    node is admitted only when it is certainly well separated: with every coordinate of
-    a point :math:`p` in error by at most :math:`\kappa u |p|` (``kappa_u``, in the
-    centred canonical frame) and the walk's own float32 arithmetic, the true distance
-    :math:`r^*` and diameter :math:`D^*` satisfy :math:`\theta r^* > D^*` whenever the
-    computed :math:`\theta r > D'` with :math:`D' = (D (1 + \theta \kappa u) + 2 (1 + \theta)
-    \kappa u R) (1 + 2 u) / (1 - (\kappa + d + 3) u)`, :math:`R` the largest distance of
-    the node's box from the centroid. A tie of the criterion (the structured meshes'
-    distance equal to the diameter) is thereby opened, whichever way rounding falls."""
+    node is admitted only when it is certainly well separated in the boundary's exact
+    canonical frame: the true distance :math:`r^*` of the point from the node's box and
+    the box's true diagonal :math:`D^*` satisfy :math:`\theta r^* > D^*` whenever the
+    computed :math:`\theta r > D'`, with :math:`D` the computed diagonal and :math:`R`
+    the largest distance of the box from the centroid. :math:`D'` is the smaller of two
+    sufficient diameters:
+
+    - :math:`D_\eta = f D_u(\theta / f)`. Rounding moves each coordinate of a point
+      :math:`p` by at most :math:`3 u |p|` (in the centred frame), so with the walk's
+      own float32 arithmetic :math:`\theta r > D_u(\theta) = (D (1 + 3 \theta u) + 6 (1 +
+      \theta) u R) (1 + 2 u) / (1 - (d + 6) u)` certifies the criterion in the computed
+      frame. That frame is rotated from the exact one by at most ``eta`` per coordinate
+      (:func:`frame_rotation_bound`), and the rotation moves the point and the node's
+      cells together: the exact box's diagonal is at most :math:`D (1 + \sqrt d \eta)`
+      and its distance at least :math:`r (1 - \sqrt d \eta) - \sqrt d \eta D`, so
+      :math:`\theta r > f D` with :math:`f = (1 + \sqrt d \eta (1 + \theta)) / (1 -
+      \sqrt d \eta)` certifies it. The rotation thus widens each node in proportion to
+      its own size, not to its distance from the centroid. Defined for :math:`\sqrt d
+      \eta < 1`.
+    - :math:`D_\circ`, which holds whatever the frame's rotation. The node's cells lie
+      in the ball of radius :math:`D / 2` about its box's centre :math:`c`, so in any
+      frame its box lies in the cube of half side :math:`D / 2` about :math:`c`, and
+      :math:`\theta |q - c| > (\theta + 2) \sqrt d D / 2` certifies the criterion; the
+      walk's distance to the box is at most :math:`|q - c|`. With the rounding
+      (:math:`a = 3 \sqrt d u` on a vector), :math:`D_\circ = ((\theta + 2) \sqrt d (D / 2
+      + a R) + \theta a R) (1 + 2 u) / ((1 - a) (1 - (d + 3) u))`.
+
+    So the widening grows with ``eta`` and stays bounded as the frame's variances tie.
+    A tie of the criterion (the structured meshes' distance equal to the diameter) is
+    opened whichever way rounding falls."""
     lo, hi = tree.node_aabb_min.double(), tree.node_aabb_max.double()
     diam = (hi - lo).square().sum(-1).sqrt()
     reach = torch.maximum(lo.abs(), hi.abs()).norm(dim=-1)
-    wide = (diam * (1 + theta * kappa_u) + 2 * (1 + theta) * kappa_u * reach) * (1 + 2 * u)
-    wide = wide / (1 - kappa_u - (d + 3) * u)
+    k = 3 * u
+
+    def rounded(t):
+        return (diam * (1 + t * k) + 2 * (1 + t) * k * reach) * (1 + 2 * u) / (1 - k - (d + 3) * u)
+
+    a = math.sqrt(d) * k
+    ball = ((theta + 2) * math.sqrt(d) * (diam / 2 + a * reach) + theta * a * reach) * (1 + 2 * u)
+    ball = ball / ((1 - a) * (1 - (d + 3) * u))
+    se = math.sqrt(d) * eta.double()
+    sure = se < 1
+    se = torch.where(sure, se, torch.zeros_like(se))
+    f = (1 + se * (1 + theta)) / (1 - se)
+    wide = torch.where(sure, torch.minimum(f * rounded(theta / f), ball), ball)
     return wide.square().to(tree.node_diameter_sq.dtype)
 
 
@@ -337,12 +372,11 @@ class BoundaryForest:
         else:
             tol = normal_tol.double()
         face = normal_faces(normals_f, tol + eta)
-        kappa_u = 3 * u + eta
         if resolve_tree_build(build, points) == "fast":
             tables = forest_tables(points, measure, normals, vecs, points_f, face, leaf_size=leaf_size)
             if tables is not None:
                 for tree in tables["trees"]:
-                    tree.node_diameter_sq = separation_diameter_sq(tree, float(theta), kappa_u, d, u)
+                    tree.node_diameter_sq = separation_diameter_sq(tree, float(theta), eta, d, u)
                 tables["diameter_sq"] = torch.cat([tree.node_diameter_sq for tree in tables["trees"]])
                 mean_n = tables.pop("mean_n")
                 length = mean_n.norm(dim=-1)
@@ -364,7 +398,7 @@ class BoundaryForest:
             if sel.numel() == 0:
                 continue
             tree = ClusterTree.from_points(points_f[sel], leaf_size=leaf_size, areas=measure[sel])
-            tree.node_diameter_sq = separation_diameter_sq(tree, float(theta), kappa_u, d, u)
+            tree.node_diameter_sq = separation_diameter_sq(tree, float(theta), eta, d, u)
             data = {"n": normals[sel]}
             if vecs is not None:
                 data["u"] = vecs[sel]
