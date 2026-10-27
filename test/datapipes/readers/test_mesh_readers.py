@@ -158,6 +158,128 @@ class TestDomainMeshReader:
         loaded, _ = reader[0]
         assert "Re" in loaded.global_data.keys()
 
+    def _save_point_cloud_with_triangulated_wall(self, tmp_path, n_cells, n_interior):
+        """Point-cloud interior + disjoint-triangle wall with scattered vertex ids.
+
+        Vertex ids are permuted so a cell's three vertices are not stored
+        adjacently, as on a real surface; a contiguous point block then
+        retains a cell only if all three of its vertices happen to fall in it.
+        """
+        gen = torch.Generator().manual_seed(0)
+        wall = Mesh(
+            points=torch.randn(3 * n_cells, 3, generator=gen),
+            cells=torch.randperm(3 * n_cells, generator=gen).reshape(n_cells, 3),
+        )
+        dm = DomainMesh(
+            interior=Mesh(points=torch.randn(n_interior, 3, generator=gen)),
+            boundaries={"wall": wall},
+        )
+        dm.save(tmp_path / "dm.pdmsh")
+
+    def test_boundary_subsample_modes(self, tmp_path):
+        """``boundary_subsample`` selects which subsample(s) hit the boundaries."""
+        k = 500
+        self._save_point_cloud_with_triangulated_wall(tmp_path, 2000, 5000)
+
+        def load(mode):
+            reader = DomainMeshReader(
+                tmp_path,
+                pattern="*.pdmsh",
+                subsample_n_cells=k,
+                subsample_n_points=k,
+                boundary_subsample=mode,
+            )
+            reader.set_generator(torch.Generator().manual_seed(0))
+            return reader[0][0]
+
+        ### "both" (default): cells-then-points on a triangulated boundary keeps
+        ### only cells whose three vertices all survive the point cut, ~k/27.
+        both = load("both")
+        assert both.interior.n_points == k
+        assert both.boundaries["wall"].n_cells < 100
+
+        cells = load("cells")
+        assert cells.interior.n_points == k
+        assert cells.boundaries["wall"].n_cells == k
+
+        points = load("points")
+        assert points.interior.n_points == k
+        assert points.boundaries["wall"].n_points == k
+
+    def test_boundary_subsample_invalid(self, tmp_path):
+        self._make_domain_mesh().save(tmp_path / "dm.pdmsh")
+        with pytest.raises(ValueError, match="boundary_subsample"):
+            DomainMeshReader(tmp_path, pattern="*.pdmsh", boundary_subsample="neither")
+
+    def test_interior_n_points_range(self, tmp_path):
+        """Query-count augmentation: the interior count is drawn per sample
+        from ``[lo, hi]``, reproducibly under ``set_epoch``; boundaries keep
+        their fixed sizes; ``None`` leaves the fixed behaviour unchanged."""
+        self._save_point_cloud_with_triangulated_wall(tmp_path, 2000, 5000)
+        lo, hi = 300, 900
+        reader = DomainMeshReader(
+            tmp_path,
+            pattern="*.pdmsh",
+            subsample_n_cells=500,
+            interior_n_points_range=(lo, hi),
+        )
+        reader.set_generator(torch.Generator().manual_seed(0))
+        fixed = DomainMeshReader(
+            tmp_path,
+            pattern="*.pdmsh",
+            subsample_n_cells=500,
+            subsample_n_points=500,
+        )
+        fixed.set_generator(torch.Generator().manual_seed(0))
+        counts = []
+        for epoch in range(6):
+            reader.set_epoch(epoch)
+            dm = reader[0][0]
+            counts.append(dm.interior.n_points)
+            assert lo <= dm.interior.n_points <= hi
+            # Boundaries are not touched by the range: the cell subsample
+            # alone keeps exactly ``subsample_n_cells`` wall cells.
+            assert dm.boundaries["wall"].n_cells == 500
+        assert len(set(counts)) > 1, counts
+        # Reproducible: same epoch, same draw.
+        reader.set_epoch(3)
+        a = reader[0][0].interior.n_points
+        reader.set_epoch(4)
+        reader.set_epoch(3)
+        assert reader[0][0].interior.n_points == a
+        # Default None: fixed count unchanged.
+        assert fixed[0][0].interior.n_points == 500
+        with pytest.raises(ValueError):
+            DomainMeshReader(
+                tmp_path, pattern="*.pdmsh", interior_n_points_range=(900, 300)
+            )
+
+    def test_interior_n_points_range_overrides_subsample_n_points(self, tmp_path):
+        """The range replaces ``subsample_n_points`` for the interior only;
+        boundaries are still subsampled to ``subsample_n_points``."""
+        self._save_point_cloud_with_triangulated_wall(tmp_path, 2000, 5000)
+        lo, hi, k = 300, 900, 1000
+        reader = DomainMeshReader(
+            tmp_path,
+            pattern="*.pdmsh",
+            subsample_n_points=k,
+            interior_n_points_range=[lo, hi],
+        )
+        reader.set_generator(torch.Generator().manual_seed(0))
+        for epoch in range(4):
+            reader.set_epoch(epoch)
+            dm = reader[0][0]
+            assert lo <= dm.interior.n_points <= hi
+            assert dm.boundaries["wall"].n_points == k
+
+    @pytest.mark.parametrize(
+        "bad", [(300.9, 900.2), (300, 900, 5), (300,), (0, 10), (900, 300), 300]
+    )
+    def test_interior_n_points_range_invalid(self, tmp_path, bad):
+        self._make_domain_mesh().save(tmp_path / "dm.pdmsh")
+        with pytest.raises(ValueError, match="interior_n_points_range"):
+            DomainMeshReader(tmp_path, pattern="*.pdmsh", interior_n_points_range=bad)
+
 
 class TestMeshDataset:
     """Tests for MeshDataset with mesh transforms."""
@@ -206,6 +328,18 @@ class TestMeshDataset:
             loaded.boundaries["wall"].points,
             torch.tensor([[2.0, 0.0, 0.0], [6.0, 0.0, 0.0]]),
         )
+
+    def test_close_closes_mesh_readers(self, tmp_path):
+        """MeshDataset.close() closes MeshReader and DomainMeshReader."""
+        two_triangles_2d.load().save(tmp_path / "m.pmsh")
+        DomainMesh(interior=Mesh(points=torch.randn(10, 3))).save(tmp_path / "dm.pdmsh")
+        for reader in (
+            MeshReader(tmp_path, pattern="*.pmsh"),
+            DomainMeshReader(tmp_path, pattern="*.pdmsh"),
+        ):
+            ds = MeshDataset(reader)
+            ds[0]
+            ds.close()
 
 
 class TestDomainMeshTransforms:
@@ -424,6 +558,54 @@ class TestDomainMeshReaderExtraBoundaries:
 
         with pytest.raises(FileNotFoundError, match="nonexistent"):
             _ = reader[0]
+
+
+class TestReadersKeepDatasetFilesUnchanged:
+    """Readers map saved meshes copy-on-write: an in-place edit of a loaded
+    sample stays in memory and never reaches the dataset on disk."""
+
+    def test_mesh_reader(self, tmp_path):
+        mesh = single_triangle_3d.load()
+        mesh.point_data["p"] = torch.ones(mesh.n_points)
+        mesh.save(tmp_path / "m.pmsh")
+
+        loaded, _ = MeshReader(tmp_path, pattern="*.pmsh")[0]
+        loaded.points.add_(1.0)
+        loaded.point_data["p"].mul_(0.0)
+
+        reloaded = Mesh.load(tmp_path / "m.pmsh")
+        torch.testing.assert_close(reloaded.points, mesh.points)
+        torch.testing.assert_close(reloaded.point_data["p"], mesh.point_data["p"])
+
+    def test_domain_mesh_reader_with_extra_boundary(self, tmp_path):
+        case_dir = tmp_path / "case"
+        case_dir.mkdir()
+        dm = DomainMesh(
+            interior=Mesh(points=torch.randn(10, 3)),
+            boundaries={"wall": single_triangle_3d.load()},
+        )
+        dm.save(case_dir / "domain.pdmsh")
+        farfield = Mesh(points=torch.randn(7, 3))
+        farfield.save(case_dir / "farfield.pmsh")
+
+        reader = DomainMeshReader(
+            tmp_path,
+            pattern="**/*.pdmsh",
+            extra_boundaries={"farfield": {"pattern": "farfield*.pmsh"}},
+        )
+        loaded, _ = reader[0]
+        loaded.interior.points.add_(1.0)
+        loaded.boundaries["wall"].points.add_(1.0)
+        loaded.boundaries["farfield"].points.add_(1.0)
+
+        reloaded = DomainMesh.load(case_dir / "domain.pdmsh")
+        torch.testing.assert_close(reloaded.interior.points, dm.interior.points)
+        torch.testing.assert_close(
+            reloaded.boundaries["wall"].points, dm.boundaries["wall"].points
+        )
+        torch.testing.assert_close(
+            Mesh.load(case_dir / "farfield.pmsh").points, farfield.points
+        )
 
 
 class TestTensorDictMeshApply:
