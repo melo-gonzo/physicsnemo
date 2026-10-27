@@ -28,14 +28,15 @@ the forward pass from the full-resolution surfaces (:func:`sample_boundary_cells
   :math:`\pi_i = \min(1, c\,a_i)`, :math:`c` the one constant with
   :math:`\sum_i \pi_i = b` (the capped fixed point of the iterative adjustment,
   found exactly from the sorted measures: the library's
-  ``pps_inclusion_probabilities`` in :mod:`physicsnemo.mesh.sampling`); a
+  ``_pps_inclusion_probabilities`` in
+  :mod:`physicsnemo.mesh.sampling.systematic_sampling`); a
   condition kept whole has every :math:`\pi_i = 1`. A share past the count of
   positive measures keeps every positive cell, and the cells of zero measure fill
   the rest of the share equally (as
   :func:`~physicsnemo.mesh.sampling.sample_cells_systematic` does), at
   Horvitz-Thompson weight 0.
 - **Draw.** Systematic sampling
-  (:func:`~physicsnemo.mesh.sampling.systematic_sample`): the
+  (:func:`~physicsnemo.mesh.sampling.systematic_sampling._systematic_sample`): the
   cells are laid along a line, each condition's cells in the Morton (Z-order) order
   of their centroids in the boundary's canonical frame
   (:func:`~physicsnemo.mesh.spatial._frame.canonical_frame` over every cell), each
@@ -80,7 +81,7 @@ from jaxtyping import Float, Int
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
 from physicsnemo.mesh.geometry._cell_areas import compute_cell_areas
-from physicsnemo.mesh.sampling import pps_inclusion_probabilities, systematic_sample
+from physicsnemo.mesh.sampling.systematic_sampling import _pps_inclusion_probabilities, _systematic_sample
 from physicsnemo.mesh.spatial._frame import canonical_frame, frame_coordinates
 from physicsnemo.mesh.spatial.bvh import _compute_morton_codes
 from physicsnemo.mesh.utilities._gather import gather_rows
@@ -140,8 +141,8 @@ def sample_boundary_cells(
     :math:`)`, and their Horvitz-Thompson measure weights :math:`a_i / \pi_i`
     ``(k,)``, in the dtype of the measures, with the float64 :math:`\pi_i`. The tail
     sums are a fixed-order float64 scan and the line and its hits exact int64 fixed
-    point (:func:`~physicsnemo.mesh.sampling.systematic_sample`), so the draw is
-    bitwise the same run to run and on every device for the same order.
+    point (:func:`~physicsnemo.mesh.sampling.systematic_sampling._systematic_sample`),
+    so the draw is bitwise the same run to run and on every device for the same order.
     See the module docstring.
     """
     with torch.no_grad():
@@ -157,7 +158,7 @@ def sample_boundary_cells(
             if n_i == 0:
                 continue
             a = a.detach().double()
-            pi_i = pps_inclusion_probabilities(a, shares[i])
+            pi_i = _pps_inclusion_probabilities(a, shares[i])
             ### A share past the positive measures keeps every positive cell, and the
             ### zero-measure cells fill the rest of it equally, at weight 0 (as
             ### sample_cells_systematic does); without a zero measure pi_i is as is.
@@ -181,7 +182,7 @@ def sample_boundary_cells(
         ### that hold it (evaluated with the builtin min), a recompile on the other.
         k = budget + (total - budget) * (1 // (total // budget + 1))
         ### In the cells' own order, so a condition kept whole is its mesh as given.
-        kept = systematic_sample(pi, k, start, order=order, max_n_samples=budget)
+        kept = _systematic_sample(pi, k, start, order=order, max_n_samples=budget)
         pi_kept = pi[kept]
     measure = torch.cat(measures)
     return kept, measure[kept] / pi_kept.to(measure.dtype)

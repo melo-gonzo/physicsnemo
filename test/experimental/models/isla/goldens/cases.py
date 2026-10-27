@@ -51,7 +51,7 @@ TARGETS = {
     "frame_coordinates": "physicsnemo.mesh.spatial._frame:frame_coordinates",
     "water_fill": f"{ISLA}.sampling:water_fill",
     "pps_inclusion_probabilities": (
-        "physicsnemo.mesh.sampling.systematic_sampling:pps_inclusion_probabilities"
+        "physicsnemo.mesh.sampling.systematic_sampling:_pps_inclusion_probabilities"
     ),
     "draw_inputs": f"{ISLA}.sampling:draw_inputs",
     "sample_boundary_cells": f"{ISLA}.sampling:sample_boundary_cells",
