@@ -517,12 +517,11 @@ print("**The recipe reseeds every process at every start, so each link of a chai
       "draws.** Its checkpoint holds no random-number state, and each process seeds itself with the run's seed plus its rank "
       "when it starts. Two resumes from copies of one checkpoint drew bitwise the same starts of the token draw and kept the "
       "same cells, while an uninterrupted run drew others. A run on a cluster that limits a job's length trains as a chain of "
-      "links, each resumed from the last checkpoint, so every link restarts the same sequence of draws, the starts of the "
-      "token draw and the subsamples of the prediction points, though not the order of the cases: the training sees fewer "
-      "distinct draws than an uninterrupted run, and a crash inside a link recurs at the same step on every resume. Every "
-      "chained run is affected, the standings' included. By the supervisor's decision the runs that replace the standings "
-      "keep the recipe as it is, chained where their standings were chained, so that each comparison trains under one "
-      "protocol. What it costs in accuracy is not measured. What would settle it: a chained run against an uninterrupted "
+      "links, each resumed from the last checkpoint, so every link replays the same sequence of starts of the token draw "
+      "and subsamples of the prediction points, assigned to cases in a new order, and a crash inside a link recurs at the "
+      "same step on every resume. Every chained run is affected, the standings' included. The supervisor's decision keeps "
+      "the recipe as it is for the runs that replace the standings, chained where their standings were chained, so that "
+      "each comparison trains under one protocol. What it costs in accuracy is not measured. What would settle it: a chained run against an uninterrupted "
       "one, two seeds each, with each rank's random-number state checkpointed. Data: "
       f"{R.source('forest_neartie', 'FINAL_REPORT.md')} (section 1); {R.source('forest_neartie', 'RISK_TABLE.md')} (Resume "
       f"replay); {R.source('final_rerun_decisions_1027', 'SUPERVISOR_DECISIONS.md')} (item 9).")
@@ -539,13 +538,18 @@ und = sum(r_["positive control"] == "passed" for r_ in P3L)
 CRL = " ".join(R.load("cert_routing", "FINAL_REPORT.md").split())
 assert "a short training A/B of compiled against eager on several seeds, read on validation error" in CRL
 extra = re.search(r"ISLA training rises from ([\d,]+) to ([\d,]+) GPU-h, \*\*\+([\d,]+) GPU-h", " ".join(R.load("cert", "FINAL_REPORT.md").split())).groups()
-print("**Whether ISLA's compiled slice blocks train as well as eager ones is not known on any dataset but DeepJEB++.** "
-      f"Certified block by block on the class's code, the compiled blocks pass on DeepJEB++ alone of {({9: "nine"}).get(len(CVL), len(CVL))} datasets; on "
-      "the others the failing groups are routing gradients in slices whose mean normal nearly cancels, where the compiled "
-      "path is the more precise and the per-group test cannot tell another rounding from lost precision: a second test with "
+print("**On the class's code, a per-group certification does not decide whether ISLA's compiled slice blocks compute "
+      "eager's function on any dataset but DeepJEB++.** "
+      f"Certified block by block, the compiled blocks pass on DeepJEB++ alone of {({9: "nine"}).get(len(CVL), len(CVL))} datasets. On "
+      "the others the failing groups are ill-conditioned gradients where the compiled path is the more precise: routing "
+      "gradients of near-degenerate slices, whose mean normal nearly cancels, on Tensile2d, the lug and the DrivAerML Volume "
+      "task, and a separate cancellation in the routing logits' backward on HiLiftAeroML, SHIFT-SUV and the DrivAerML "
+      "Surface task. The per-group test cannot tell another rounding from lost precision there: a second test with "
       f"a family of precision-raising eager implementations missed its positive control on {und} of {len(P3L)} datasets "
-      f"(@sec-arch-cost). So the runs that replace the standings train eagerly on those datasets, at {extra[2]} more GPU-hours "
-      f"of ISLA training ({extra[0]} to {extra[1]}). What would settle it: a short training run of compiled against eager "
+      "(@sec-arch-cost). Trained models are compared only on earlier code, where on the DrivAerML tasks models trained with "
+      "the blocks compiled score as eager-trained ones do (@sec-using-cost). On the registered verdict the supervisor's "
+      f"decision trains eagerly on those datasets, at {extra[2]} more GPU-hours of ISLA training ({extra[0]} to {extra[1]}). "
+      "What would settle it: a short training run of compiled against eager "
       "blocks on several seeds, read on validation error, a well-conditioned quantity. Cost: not priced. Data: "
       f"{R.source('cert', 'FINAL_REPORT.md')}; {R.source('cert_routing', 'FINAL_REPORT.md')}.")
 ```
@@ -1036,7 +1040,7 @@ rows = [
      "a near-wall length that does not grow with the domain and is principled for reasons that carry across PDE domains, trained on AirfRANS with its far field with only the channel changed, two seeds, read near the wall against the model without it",
      "not priced"),
     ("Does one quadrature per declared condition belong in ISLA? (@sec-oq-af-encoding)",
-     "the quadrature on top of the face forest without the near-wall length on AirfRANS with its far field, and on AeroZoo `full` read for harm against the standings, two seeds each",
+     "the quadrature on top of F (the face forest grouped by condition) without the near-wall length on AirfRANS with its far field, and on AeroZoo `full` read for harm against the standings, two seeds each",
      f"at most {fmt_h(q_afenc)} (the two registrations' caps, scoring included)"),
     ("Does a quarter of the slices cost nothing on AeroZoo and the datasets not run with it? (@sec-oq-slices)",
      "128 slices against 512 in the form each trains on AeroZoo, HiLiftAeroML, SHIFT-SUV, Tensile2d and DeepJEB++, AeroZoo first, two seeds each, read for harm by the same rule",
@@ -1694,13 +1698,13 @@ print("**The open question is whether one quadrature per declared condition belo
       "with its far field it is the change that closes ISLA-DTT's gap to its airfoil-only model "
       f"({_tri(_bes['FNC / B-DTT'])} times on pressure / velocity / eddy viscosity, where ISLA-DTT with the far field and the "
       f"octant forest reads {_tri(_bes['W-DTT / B-DTT'])}), helping every field against its control "
-      "(@sec-airfrans-far-field). Its principle carries across PDEs: a measure-weighted mean over a truncated domain tends to "
+      "(@sec-airfrans-far-field). Its argument does not depend on the PDE: a measure-weighted mean over a truncated domain tends to "
       "the far field alone as the truncation radius grows, and with one quadrature per condition no condition's share goes "
       "to zero. Two things keep it open. It was measured only on top of the viscous near-wall length, which harms eddy "
       "viscosity and is not admissible (@sec-oq-nearwall). And it changes every model of a dataset that declares two or "
       "more conditions, which AirfRANS's two conditions do not test. What would settle it: one quadrature per condition on "
-      "top of the face forest with one set of trees per condition, without the near-wall length, on AirfRANS with its far "
-      "field, two seeds, read against the forest alone by the same rule; and the quadrature on AeroZoo `full`, on the "
+      "top of F (the face forest grouped by condition) without the near-wall length, on AirfRANS with its far field, two "
+      "seeds, read against F by the same rule; and the quadrature on AeroZoo `full`, on the "
       "standings' configuration and octant forest, two seeds, read against the standings' ISLA-DTT pair for harm on every "
       f"field. Cost: at most {capA} and {capB} GPU-hours, the two registrations' caps. The verdict is Peter's: \u201ccontinue "
       "investigating C but then ask me for a verdict\u201d.")
@@ -1764,7 +1768,8 @@ print("**The open question is whether a slice's mean normal should be normalized
       f"occur, in compiled and eager runs alike, leave at most a one-epoch loss blip of about {blip}%. On the spike study's "
       "quantitative reading the spike is a property of the normalization, not of the compiled path: the compiled kernels' "
       "coarser partial sums probably make an exact zero more likely (inferred, not measured on the GPU), "
-      "and nothing in the eager code prevents one. The same slices make the compiled blocks' certification undecidable: "
+      "and nothing in the eager code prevents one. On Tensile2d, the lug and the DrivAerML Volume task the same slices make "
+      "the compiled blocks' certification undecidable: "
       "where a slice's mean normal nearly cancels, its unit anchor normal is bfloat16 noise in eager and compiled runs alike "
       "and its gradient is amplified by the inverse norm, so the two paths' per-group distances to float64 do not separate "
       "another rounding from lost precision (@sec-arch-cost, @sec-limits-compiled). "
@@ -1814,7 +1819,8 @@ print("On ISLA-DTT the two replacements read no better: on AirfRANS with its far
       "normalization wherever $\\lvert m_s \\rvert \\gg L_s$ and changes only slices near or below the rounding level, "
       f"{c_share[0].replace('-', ' to ')}% of them on AirfRANS and the lug and {c_share[1].replace('-', ' to ')}% on AeroZoo "
       "for ISLA-DTT; its gain is at most $1 / L_s \\le 128 \\sqrt d$, against the clamp's $10^{12}$, so it bounds the "
-      "gradient of exactly the slices that make the certification undecidable. Its $u$ is a property of the training number "
+      "gradient of exactly the near-degenerate slices behind the certification's failures on Tensile2d, the lug and the "
+      "DrivAerML Volume task; the separate cancellation in the routing backward on the surface tasks it does not touch. Its $u$ is a property of the training number "
       "format fixed in code, not a statistic of the input, and every change of the architecture is Peter's to review: \u201call "
       "changes to the baseline ISLA model architecture should be reviewed by me\u201d. What would settle it: the floor trained "
       "and read for harm against the controls of these readings, the DrivAerML Surface task first. Cost: about "

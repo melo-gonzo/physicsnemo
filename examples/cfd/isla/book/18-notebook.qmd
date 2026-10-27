@@ -43636,18 +43636,21 @@ out/PRICE_CERT.md) and cert_routing/ (FINAL_REPORT.md md5 8facd5af, DIAGNOSIS.md
 out/part3/PART3_VERDICTS.md).
 
 - **CERT** (done 04:03 EDT, 16.8 of 30 GPU-h, psharpe/isla-014 8097ed00f, torch 2.13). Part 1's zero-failure gate failed
-  eager against itself and decided nothing. Part 2, null-calibrated on fresh seeds and fresh compile processes, certified
-  DeepJEB++ alone; the other eight families fail in a few routing-gradient groups, by 1.016 (AeroZoo) to 11.4 (Tensile2d)
+  eager against itself, so it decided nothing (the supervisor's ruling of 02:55 EDT). Part 2, null-calibrated on fresh seeds and fresh compile processes, certified
+  DeepJEB++ alone; the other eight families fail in a few gradient groups (routing on seven, a parameter group on
+  AeroZoo), by 1.016 (AeroZoo) to 11.4 (Tensile2d)
   times eager's spread, while the compiled path is closer to float64 than eager in 25 to 111 other groups per family.
   Compiled is 15 to 36 percent faster in 20-step smokes on four ranks. The supervisor kept the registered verdict: every
   ISLA lane but DeepJEB++'s trains eager, ISLA's training 3,216 to 4,031 GPU-h (+815).
 - **CERT-ROUTING** (done 07:05 EDT, 14.1 of 25 GPU-h). C1: eager rounds the prototypes' logit measure term in bf16, which
   Inductor computes in fp32 (logits 65 times closer to float64). C2: eager accumulates the routing logits' gradient in bf16.
   Proved both ways: eager's rounding put back into the compiled path recovers, and eager made more precise in that step
-  alone reproduces the excess (Tensile2d 13.3 against 13.3). The failing groups are near-degenerate slices: Tensile2d block
+  alone reproduces the excess (Tensile2d 13.3 against 13.3, the diagnosis's own measurement). C1's failing groups
+  (Tensile2d, the lug, DrivAerML Volume; in part AirfRANS, AeroZoo, SHIFT-SUV) are near-degenerate slices: Tensile2d block
   2's mean normal has norm 0.0056 against terms of order one, its anchor normal is bf16 noise in both paths, and eager's own
-  gradient of it is 58 percent wrong. No fix (the one that passes, eager's rounding put back, declined by the supervisor at
-  05:15 EDT as not principled). Part 3 (approved 05:53 EDT, eager plus nine precision-raising members, fresh seeds 4 and 5)
+  gradient of it is 58 percent wrong. C2 (HiLift, SHIFT-SUV, DrivAerML Surface) is a separate cancellation in the
+  routing backward; HiLift's smallest mean normal, 0.056, is not degenerate. No fix (the one that passes, eager's rounding put back, declined by the supervisor at
+  05:15 EDT as not principled). Part 3 (approved by the supervisor at 05:53 EDT, eager plus nine precision-raising members, fresh seeds 4 and 5)
   certified nothing, and its positive control went undetected in 4 of 8 families (hl, lug, suv, vol): the gate is without
   power as registered.
 
@@ -43684,7 +43687,7 @@ becomes C's open question with rule 1's status (its callout replaced). 21 gains 
 
 *Applied for the supervisor by the book lane BOOK-EVENING on 2026-10-27.*
 
-## 2026-10-27 — Peter's rulings: the viscous near-wall length is inadmissible; every change to the baseline architecture goes to him; rule 1 adopted, then held by the supervisor after its root cause; the fallback; the forest's near-tie fix approved {#sec-nb-rulings-1027}
+## 2026-10-27 — Peter's rulings: the viscous near-wall length is inadmissible; every change to the baseline architecture goes to him; rule 1 adopted, then held by the supervisor after its AeroZoo blow-up; the fallback; the forest's near-tie fix approved {#sec-nb-rulings-1027}
 
 Peter's words, verbatim, with the memory topics that hold them.
 

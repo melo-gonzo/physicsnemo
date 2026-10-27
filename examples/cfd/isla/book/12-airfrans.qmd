@@ -691,7 +691,8 @@ r1_pairs = re.search(r"rule 1 built \*\*([\d,]+)M\*\* pairs", RC1).group(1)
 r1_ung, r1_oct = re.search(r"without groups \(DTT-POSE\) built ([\d.]+)M, and the octants \(code_r090\) ([\d.]+)M", RC1).groups()
 print("**Read with its far field, as the class's configuration reads AirfRANS, ISLA-DTT with the standings' octant forest "
       f"has {tri(BES['W-DTT / B-DTT'])} times its airfoil-only error on pressure / velocity / eddy viscosity; one quadrature per "
-      f"declared condition, with the face forest and the viscous near-wall length beneath it, closes the gap, at "
+      f"declared condition, with the face forest grouped by condition and the viscous near-wall length beneath it, closes "
+      f"the gap, at "
       f"{tri(BES['FNC / B-DTT'])} times.** The far field holds nearly all the boundary's measure and the octant forest ties on "
       "its axis-aligned normals (@sec-limits-af-whole). Four changes of the encoding were each trained on top of the steps "
       "it needs, two seeds each, everything else as in ISLA-DTT trained with the far field, and read against its control by "
@@ -749,7 +750,8 @@ print(f"- **Cost.** Each step's training step is {min(v for k, v in COSTC.items(
 
 ::: {.callout-note title="In flight"}
 The quadrature reading above comes from one quadrature per condition on top of the viscous near-wall length.
-The same quadrature on top of the face forest alone, on AirfRANS, and on AeroZoo read for harm (@sec-aerozoo-quadrature)
+The same quadrature on top of F (the face forest grouped by condition) without the near-wall length, on AirfRANS, and on
+AeroZoo read for harm (@sec-aerozoo-quadrature)
 are being measured, and the ledger (@sec-ledger) tracks them.
 :::
 

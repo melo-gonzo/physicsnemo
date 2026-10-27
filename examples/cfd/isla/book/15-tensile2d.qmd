@@ -483,10 +483,11 @@ t2d_m = _re.search(r"so its measure-weighted mean normal cancels: norm\(m\) = ([
 t2d_up = _re.search(r"C1: t2d ([\d.]+)x \(compiled ([\d.]+)x\)", CRT).groups()
 print("- **The compiled blocks are not certified on Tensile2d.** Block by block against eager on a trained checkpoint, the "
       f"compiled routing gradient of the third block exceeds eager's own spread {t2d_x} times, the largest excess of the nine "
-      "datasets. The compiled path rounds less than eager there: eager made more precise in that one step alone reads "
-      f"{t2d_up[0]} times, against the compiled path's {t2d_up[1]}. The group is ill-conditioned, a slice whose routing is "
-      f"nearly uniform over the closed specimen boundary, whose mean normal has norm {t2d_m} (@sec-arch-cost). So ISLA-DTT trains "
-      "eagerly on Tensile2d, as the standing's ISLA did. Data: " + R.source("cert", "FINAL_REPORT.md") + "; "
+      "datasets. The compiled path rounds less than eager there: in the diagnosis's own measurement, a different one from "
+      f"the certification's, eager made more precise in that one step alone reads {t2d_up[0]} times, against the compiled "
+      f"path's {t2d_up[1]}. The group is ill-conditioned, a slice whose routing is nearly uniform over the closed specimen "
+      f"boundary, whose mean normal has norm {t2d_m} (@sec-arch-cost). So the compiled path's training on Tensile2d is not "
+      "known to match eager's, and eager training stays the reference there, as for the standing's ISLA. Data: " + R.source("cert", "FINAL_REPORT.md") + "; "
       + R.source("cert_routing", "FINAL_REPORT.md") + ".")
 print("- **The plastic-strain column is an ordering on a constant-offset metric.** It says little about how well any of the three "
       "predicts the plastic field, since the validation specimens that never yield dominate it (@sec-data-tensile2d).")

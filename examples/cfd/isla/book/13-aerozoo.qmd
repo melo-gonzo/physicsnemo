@@ -1179,7 +1179,8 @@ print("**On AeroZoo's opposed-sphere and opposed-hemisphere families the boundar
 ### One quadrature per condition on AeroZoo {#sec-aerozoo-quadrature}
 
 **One quadrature per declared condition, the weighting that closes ISLA-DTT's far-field penalty on AirfRANS
-(@sec-airfrans-far-field), is checked on AeroZoo for harm.** AeroZoo declares its inlet, outlet, no-slip walls and slip
+(@sec-airfrans-far-field), is checked on AeroZoo for harm.** On AirfRANS it was measured only on top of the viscous
+near-wall length, which is not admissible in ISLA (@sec-oq-nearwall). AeroZoo declares its inlet, outlet, no-slip walls and slip
 surfaces as separate conditions, so the weighting changes every AeroZoo model. The check trains it on the standings'
 configuration and forest, two seeds, against the standings' ISLA-DTT pair, and reads each of the five fields by the
 registered rule for harm.

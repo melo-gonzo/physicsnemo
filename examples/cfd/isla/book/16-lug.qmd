@@ -438,8 +438,8 @@ print("- **Neither replacement of the slice mean normal's normalization helps on
       f"distance also about doubles the posed ÷ native ({pna[2]} and {pna[3]} against {pna[0]} and {pna[1]} with the mean "
       f"normal alone) (@sec-oq-slice-normal; {R.source('slice_normal_final', 'RESULTS.md')}, section 4.5).")
 print("- **The lug's compiled blocks are not certified.** Block by block against eager, the compiled routing gradients' "
-      f"excess over eager's own spread reaches {lug_x} times on the lug, in slices whose mean normal nearly cancels, so ISLA-DTT "
-      "trains eagerly on the lug (@sec-arch-cost; " + R.source("cert", "FINAL_REPORT.md") + ").")
+      f"excess over eager's own spread reaches {lug_x} times on the lug, in slices whose mean normal nearly cancels, so eager training "
+      "is the reference for ISLA-DTT on the lug (@sec-arch-cost; " + R.source("cert", "FINAL_REPORT.md") + ").")
 ```
 
 ::: {.callout-note title="In flight"}

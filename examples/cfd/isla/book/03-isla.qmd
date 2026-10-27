@@ -1622,8 +1622,8 @@ discrete choice to rounding where an error bound can decide it: it is built
 in float64 about the centroid outside autocast, a normal whose largest
 components tie within rounding goes to the lowest tied cube face, and the
 box test is widened by its arithmetic's error and by the frame's possible
-rotation, so a posed lug gets the same forest (@sec-arch-modes,
-@sec-arch-tree-read). The standings' ISLA-DTT checkpoints were trained with
+rotation, so a posed lug gets nearly the same forest; what rounding still
+decides is generic (@sec-arch-modes, @sec-arch-tree-read). The standings' ISLA-DTT checkpoints were trained with
 an octant forest built under bfloat16 autocast, in which rounding picks the
 sign octant of most of the lug's cells. The two properties the relative
 construction buys, pose and discretization, are the subject of

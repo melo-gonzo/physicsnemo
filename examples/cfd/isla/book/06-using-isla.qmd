@@ -1525,10 +1525,11 @@ print(f"- **Compile block by block where the whole graph breaks.** `compile_bloc
       "round fewer intermediates than eager does: each block's output is no farther from float64 than eager's, and the "
       "model's outputs and parameter gradients are 1.0 to 1.4 times eager's distance to float64 "
       f"({R.source('dtt_fast_compile', 'RESULTS.md')}). On the class's code the compiled blocks certify against eager on "
-      "DeepJEB++ alone, and a per-group certification cannot decide the other datasets, where a slice's mean normal nearly "
-      "cancels (@sec-arch-cost, @sec-limits-compiled). So the ISLA training runs that replace the standings launch with "
-      "`compile=false model.compile_blocks=false` on every dataset but DeepJEB++, whose surface model compiles whole; "
-      "compiled, a step is 15 to 36% shorter (@tbl-using-compile-time).")
+      "DeepJEB++ alone, and a per-group certification cannot decide the other datasets, where two of eager's bfloat16 "
+      "roundings that the compiled blocks leave out meet ill-conditioned routing gradients (@sec-arch-cost, "
+      "@sec-limits-compiled). On that registered verdict the supervisor's decision is to train with "
+      "`compile=false model.compile_blocks=false` on every dataset but DeepJEB++, whose slice blocks stay compiled "
+      "(`compile=false model.compile_blocks=true`); compiled, a step is 15 to 36% shorter (@tbl-using-compile-time).")
 ```
 
 ```{python}
@@ -1547,7 +1548,7 @@ for k, name in TASK.items():
     c_, e_ = float(CT["compiled"][k]), float(CT["eager"][k])
     print(f"| {name} | {c_:.3f} | {e_:.3f} | {c_ / e_:.2f} |")
 print()
-print(": One training step of ISLA compiled (each slice block compiled, the surface models compiled whole) and eager, at the "
+print(": One training step of ISLA compiled (each slice block compiled, `compile=false` throughout) and eager, at the "
       "reference configuration on the class's code without its near-tie bound (@sec-arch-tree-read), four GB300 GPUs, bfloat16; "
       "the median iteration time over steps 5 to 19 of a 20-step run of each task's training command. How to read this: "
       "a ratio below one is the time compiling saves; the compiled blocks are not certified on any task but DeepJEB++, so the "
