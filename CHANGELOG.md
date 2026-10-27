@@ -134,6 +134,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Partitioning a graph across GPUs (`partition_graph_with_id_mapping`, behind
+  `DistributedGraph` and GraphCast's distributed mode) no longer loops over
+  destination nodes in Python. A 1-million-node grid now takes well under a
+  second instead of half a minute or more.
 - `ClusterTree` builds tighter trees by default (`split="morton"`), so
   Barnes-Hut plans need 2-4x fewer interactions at the same `theta`.
   `split="midpoint"` gives the previous trees.
@@ -411,6 +415,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`partition_size > 1`, or a `DistributedGraph` in place of the PyG graph),
   so the distributed shallow-water example works. This broke when the DGL
   backend was removed.
+- `partition_graph_with_id_mapping`, and so `partition_graph_nodewise`,
+  `partition_graph_by_coordinate_bbox` and `DistributedGraph`, accept `int32`
+  CSC indices and rank mappings. Before, they failed with a dtype mismatch.
 - `weighted_multinomial` with `replacement=True` accepts more than 2^24
   weights, instead of raising `torch.multinomial`'s category-limit error. So
   DoMINO's `sample_points_on_mesh` now works on meshes with over 2^24 faces.
@@ -719,6 +726,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the whole process when nothing has imported `torch._dynamo` before it.
 
 ### Security
+
+- CI and the Docker image no longer trust the compromised eMudhra emSign root
+  CA ([advisory](https://discuss.python.org/t/109576)). uv is now 0.13.5 in
+  CI and the Dockerfile, the image upgrades `ca-certificates` and requires
+  `pip>=26.2.2` and `certifi>=2026.10.19`, and the lockfiles pin `certifi` 2026.10.23 and
+  `virtualenv` 21.14.13. The GPU CI bootstrap installs the Hugging Face CLI
+  with uv instead of Ubuntu's apt pip, and `install-ci` sets `check-latest`
+  so it uses the patched CPython releases.
 
 ### Dependencies
 
