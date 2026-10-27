@@ -656,10 +656,9 @@ print("**ISLA-DTT's gap to interacting ISLA on AirfRANS is one of fit, and it si
 ```
 
 ::: {.callout-note title="In flight"}
-These numbers come from ISLA and ISLA-DTT reading the airfoil alone. Read with the far field as well, ISLA-DTT pays a
-penalty that its encoding as the class builds it does not remove (@sec-airfrans-far-field); ISLA-DTT reading the far
-field, as the class reads AirfRANS, is being measured at the reference configuration, and the ledger (@sec-ledger)
-tracks it.
+These numbers come from ISLA and ISLA-DTT reading the airfoil alone; read with the far field as well, ISLA-DTT with
+the standings' octant forest pays a penalty (@sec-airfrans-far-field). ISLA-DTT as the class builds it, reading the far
+field, is being measured at the reference configuration, and the ledger (@sec-ledger) tracks it.
 :::
 
 ### Reading the far field {#sec-airfrans-far-field}
@@ -722,7 +721,7 @@ print()
 print("- **The face forest restores the pose.** With F, posed ÷ native is at most "
       f"{pmax:.4f} on every field and seed, where the octant forest's is 1.53 to 2.52; eddy viscosity reads "
       f"{lab[('F / W-DTT', 'nut')]['label']}, pressure and velocity no effect within W-DTT's own seed spread. F groups "
-      "the trees by declared condition. On AirfRANS the two conditions are the two connected pieces, so the campaign does not "
+      "the trees by declared condition. On AirfRANS the two conditions are the two connected pieces, so the four steps do not "
       "tell that grouping from the face forest alone, which was not trained here. The class builds the face forest without "
       "the grouping: on AeroZoo the grouping took each condition's frame-rotation bound from that condition's own "
       "covariance, not from the whole boundary's that the frame comes from, so a square inlet or outlet, whose two in-plane "

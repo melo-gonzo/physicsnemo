@@ -1548,7 +1548,7 @@ for k, name in TASK.items():
     print(f"| {name} | {c_:.3f} | {e_:.3f} | {c_ / e_:.2f} |")
 print()
 print(": One training step of ISLA compiled (each slice block compiled, the surface models compiled whole) and eager, at the "
-      "reference configuration on the class's code before its near-tie bound (@sec-arch-tree-read), four GB300 GPUs, bfloat16; "
+      "reference configuration on the class's code without its near-tie bound (@sec-arch-tree-read), four GB300 GPUs, bfloat16; "
       "the median iteration time over steps 5 to 19 of a 20-step run of each task's training command. How to read this: "
       "a ratio below one is the time compiling saves; the compiled blocks are not certified on any task but DeepJEB++, so the "
       "saving is taken on DeepJEB++ alone (@sec-arch-cost). Data: "
