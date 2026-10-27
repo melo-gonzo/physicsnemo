@@ -916,6 +916,155 @@ def test_box_test_ties_are_opened(kernel):
     assert float((si == f.n_cells + nodes[qi]).sum()) >= 0.9 * nodes.numel()
 
 
+def _nearly_tied_ellipsoid(n, gap_over_bound, seed):
+    r"""A float32 boundary like a near-spherical far field: ``n`` cells of equal measure
+    on an ellipsoid of semi-axes 1, 1 and 1.5, normals inward, and 400 points inside it
+    near the wall (at 0.8 to 0.99 of its radius), in a random orientation. The two lower
+    variances of the cells' covariance are set apart by ``gap_over_bound`` times the
+    rounding bound :math:`E = 4 u \operatorname{tr} C` of
+    :func:`~physicsnemo.experimental.models.isla.tree_read.frame_rotation_bound`, so the
+    canonical frame's two lower axes tie to within that many times their rounding, as
+    AeroZoo's opposed-sphere and hemisphere far fields do."""
+    g = torch.Generator().manual_seed(seed)
+    axes = torch.tensor([1.0, 1.0, 1.5], dtype=D)
+    x = torch.nn.functional.normalize(torch.randn(n, 3, generator=g, dtype=D), dim=-1)
+    nrm = -x
+    x = x * axes
+    c = x.mean(0)
+    lam, V = torch.linalg.eigh((x - c).t() @ (x - c) / n)
+    y = (x - c) @ V
+    y[:, 1] *= math.sqrt((lam[0] + gap_over_bound * 4 * 2.0**-24 * lam.sum()) / lam[1])
+    R = orthogonal(3, seed + 1)
+    d = torch.nn.functional.normalize(torch.randn(400, 3, generator=g, dtype=D), dim=-1)
+    q = d * axes * (0.8 + 0.19 * torch.rand(400, 1, generator=g, dtype=D))
+    w = torch.full((n,), 1.0 / n)
+    return (y @ R.T).float(), (nrm @ V @ R.T).float(), w, ((q - c) @ V @ R.T).float()
+
+
+def test_a_nearly_tied_frame_widens_the_separation_test_by_the_nodes_own_size(
+    monkeypatch,
+):
+    """When the canonical frame's variances nearly tie, its rotation bound eta is large
+    (here about 0.05). The rotation moves the points and the cells together, so it
+    widens each node's separation diameter in proportion to the node's own size, and
+    the pairs stay within a fraction of those of the same forest with eta at zero (1.4
+    times here). Treating eta as an error of every coordinate in proportion to its
+    distance from the centroid (0.14.0's kappa = 3u + eta) opened the small nodes near
+    the wall for the points beside them: 3.0 times the pairs here, and on AeroZoo's
+    near-spherical cases up to 6.8 times a draw's own median (FOREST-NEARTIE)."""
+    pts, nrm, w, q = _nearly_tied_ellipsoid(6000, 21.0, seed=3)
+    seen = {}
+    bound = tree_read.frame_rotation_bound
+
+    def spy(x, wt, u):
+        seen["eta"] = float(bound(x, wt, u))
+        return bound(x, wt, u)
+
+    monkeypatch.setattr(tree_read, "frame_rotation_bound", spy)
+    tied = BoundaryForest.build(pts, w, nrm, None, theta=TREE_READ_THETA)
+    assert 0.03 < seen["eta"] < 0.08
+    monkeypatch.setattr(
+        tree_read, "frame_rotation_bound", lambda x, wt, u: torch.zeros((), dtype=D)
+    )
+    exact = BoundaryForest.build(pts, w, nrm, None, theta=TREE_READ_THETA)
+    n_tied, n_exact = tied.point_pairs(q)[0].numel(), exact.point_pairs(q)[0].numel()
+    assert n_tied <= 1.6 * n_exact, (n_tied, n_exact)
+
+
+def _admitted_boxes_in(f, q, qi, si, frame_map):
+    """For every admitted (point, node) pair, the squared gap from the point to the
+    node's box and the box's squared diagonal, both in the coordinates ``frame_map``
+    gives the trees' coordinates (float64)."""
+    n = f.n_cells
+    is_node = si >= n
+    node = si[is_node] - n
+    cells, which = f.node_cells(node)
+    pts_f = frame_map(frame_coordinates(f._points - f.origin, f.frame))
+    p = frame_map(frame_coordinates(q.double() - f.origin, f.frame))[qi[is_node]]
+    lo = torch.full((node.numel(), 3), math.inf, dtype=D).scatter_reduce(
+        0, which[:, None].expand(-1, 3), pts_f[cells], "amin"
+    )
+    hi = torch.full((node.numel(), 3), -math.inf, dtype=D).scatter_reduce(
+        0, which[:, None].expand(-1, 3), pts_f[cells], "amax"
+    )
+    gap = torch.clamp(torch.maximum(p - hi, lo - p), min=0).square().sum(-1)
+    return gap, (hi - lo).square().sum(-1)
+
+
+@pytest.mark.parametrize("eta", [0.0, 0.01, 0.2, 2.0])
+def test_admitted_nodes_are_separated_in_every_frame_within_the_rotation_bound(
+    eta, monkeypatch
+):
+    """The separation diameter certifies the criterion in the exact frame: for every
+    node a point admits, the point's distance from the node's box exceeds the box's
+    diagonal over theta in every frame rotated from the trees' by at most eta per
+    coordinate (any frame once eta is 2: the ball about the box's centre certifies it
+    there)."""
+    monkeypatch.setattr(
+        tree_read, "frame_rotation_bound", lambda x, wt, u: torch.tensor(eta, dtype=D)
+    )
+    pts, nrm, w, _ = cloud(800, d=3, seed=6)
+    q, _, _, _ = cloud(150, d=3, seed=7, scale=(3.0, 3.0, 3.0))
+    f = BoundaryForest.build(pts, w, nrm, None, theta=TREE_READ_THETA)
+    f._points = pts
+    qi, si, n_node = f.point_pairs(q)
+    assert n_node > 0
+    g = torch.Generator().manual_seed(2)
+    for k in range(6):
+        if eta >= 2.0:
+            Q = orthogonal(3, 40 + k)
+        else:
+            ### a rotation by the angle whose chord is eta, about a random axis
+            axis = torch.nn.functional.normalize(
+                torch.randn(3, generator=g, dtype=D), dim=0
+            )
+            phi = 2 * math.asin(eta / 2)
+            K = torch.tensor(
+                [
+                    [0, -axis[2], axis[1]],
+                    [axis[2], 0, -axis[0]],
+                    [-axis[1], axis[0], 0],
+                ],
+                dtype=D,
+            )
+            Q = torch.eye(3, dtype=D) + math.sin(phi) * K + (1 - math.cos(phi)) * K @ K
+        gap, diag = _admitted_boxes_in(f, q, qi, si, lambda x: x @ Q.T)
+        assert bool((gap * TREE_READ_THETA**2 > diag).all()), k
+
+
+def test_separation_diameter_is_bounded_as_the_frame_ties():
+    """The separation diameter grows with the frame's rotation bound, never past the
+    frame-free ball bound, and in proportion to the node's own size: a node far from the
+    centroid widens as much as one near it."""
+    pts, nrm, w, _ = cloud(600, d=3, seed=9)
+    f = BoundaryForest.build(pts.float(), w.float(), nrm.float(), None, theta=1.0)
+    tree = f.trees[0]
+    far = types.SimpleNamespace(
+        node_aabb_min=tree.node_aabb_min + 1e3,
+        node_aabb_max=tree.node_aabb_max + 1e3,
+        node_diameter_sq=tree.node_diameter_sq,
+    )
+    u = 2.0**-24
+    sep = tree_read.separation_diameter_sq
+    etas = [0.0, 1e-4, 0.01, 0.05, 0.3, 0.57, 0.58, 1.0, 10.0]
+    near_d = [sep(tree, 1.0, torch.tensor(e, dtype=D), 3, u).double() for e in etas]
+    far_d = [sep(far, 1.0, torch.tensor(e, dtype=D), 3, u).double() for e in etas]
+    for a, b in zip(near_d, near_d[1:]):
+        assert bool((b >= a).all())
+    ### Past sqrt(3) eta = 1 no rotation bound certifies anything, and the ball does.
+    assert torch.equal(near_d[-1], near_d[-2]) and torch.equal(near_d[-2], near_d[-3])
+    diam_sq = (tree.node_aabb_max - tree.node_aabb_min).double().square().sum(-1)
+    big = diam_sq > 1e-4
+    ball = (3 * math.sqrt(3) / 2) ** 2 * diam_sq[big]
+    assert torch.allclose(near_d[-1][big], ball, rtol=1e-4)
+    ### At eta 0.05 the widening is about f = (1 + 2 sqrt(3) eta) / (1 - sqrt(3) eta),
+    ### the same near the centroid and 1000 units away (up to rounding's own share).
+    f05 = (1 + 2 * math.sqrt(3) * 0.05) / (1 - math.sqrt(3) * 0.05)
+    for d_ in (near_d, far_d):
+        ratio = (d_[3][big] / d_[0][big]).sqrt()
+        assert bool((ratio <= f05 * (1 + 1e-3)).all()), float(ratio.max())
+
+
 def test_model_forward_is_the_same_in_float32_poses_of_a_frame_aligned_case(
     monkeypatch,
 ):
