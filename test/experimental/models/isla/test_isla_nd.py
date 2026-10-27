@@ -256,8 +256,8 @@ def test_dimension_mismatch_is_refused_and_two_d_is_not_embedded_three_d():
     ### + 1 = 2049 for each of its three prototype synthesizers (two blocks and the
     ### head frame: the key and value maps and the gain); the interior model (ISLA-DTT)
     ### adds 128 for the prediction-point side (qt.seed 3 x 32 + 32 over n.g and the
-    ### built-in distance pair) and 18704 for the boundary read: the kernel basis
-    ### 8 x 64 + 64, 64 x 64 + 64, 64 x 16 + 16 = 5776 over the 6 + 2K = 8 pair
+    ### built-in distance pair) and 18688 for the boundary read: the kernel basis
+    ### 8 x 64 + 64, 64 x 64 + 64, 64 x 16 = 5760 over the 6 + 2K = 8 pair
     ### invariants, and per block 6464 (two LayerNorms 2 x 64, the value map 32 x 64
     ### + 64, the key and query maps 2 x 32 x 32, the kernel 16 x 8, the output map
     ### 64 x 32).
@@ -280,5 +280,5 @@ def test_dimension_mismatch_is_refused_and_two_d_is_not_embedded_three_d():
                 interior=True,
             ).parameters()
         )
-        == n_surface + 128 + 5776 + 2 * 6464
+        == n_surface + 128 + 5760 + 2 * 6464
     )
