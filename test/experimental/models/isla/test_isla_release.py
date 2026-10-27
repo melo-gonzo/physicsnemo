@@ -640,7 +640,7 @@ def test_seeded_fills_leave_other_parameters_bitwise_when_one_is_removed():
 
 @pytest.mark.parametrize("file_name", list(CHECKPOINTS))
 def test_isla_reference_checkpoint_matches_golden(device, file_name):
-    """A committed reference checkpoint (version 0.13.0) loads through
+    """A committed reference checkpoint (version 0.14.0) loads through
     ``Module.from_checkpoint`` without a warning, as the model of its configuration
     (every public attribute but the execution choices, which a loaded model starts at
     "auto"), and keeps its outputs (``<name>_checkpoint_output_v1.pth``). Regenerate
@@ -789,6 +789,7 @@ EARLIER_RELEASES = {
     "0.10.0": 10,
     "0.11.0": 11,
     "0.12.0": 12,
+    "0.13.0": 13,
 }
 
 
@@ -819,7 +820,7 @@ def test_isla_checkpoint_of_an_earlier_version_is_refused(tmp_path, file_name, r
     ``Module.load`` into a current model (the recipe's resume) with the state-dict
     version named; with only its weights' state-dict version earlier (the metadata
     current), ``from_checkpoint`` refuses it too."""
-    assert ISLA.__model_checkpoint_version__ == "0.13.0" and ISLA._version == 13
+    assert ISLA.__model_checkpoint_version__ == "0.14.0" and ISLA._version == 14
     cfg, _ = CHECKPOINTS[file_name]
     src = DATA_DIR / file_name
     with zipfile.ZipFile(src) as z:
@@ -829,12 +830,12 @@ def test_isla_checkpoint_of_an_earlier_version_is_refused(tmp_path, file_name, r
     with pytest.raises(
         IOError,
         match=re.escape(
-            f"version {release} is not compatible with current version 0.13.0"
+            f"version {release} is not compatible with current version 0.14.0"
         ),
     ):
         Module.from_checkpoint(str(old))
     sd_version = (
-        rf"before version 0\.13\.0 \(state-dict version {EARLIER_RELEASES[release]},"
+        rf"before version 0\.14\.0 \(state-dict version {EARLIER_RELEASES[release]},"
     )
     with pytest.raises(RuntimeError, match=sd_version):
         ISLA(**cfg).load(str(old), strict=True)
@@ -907,36 +908,37 @@ def test_isla_earlier_state_dict_is_refused_on_every_loading_path(tmp_path):
     "release, version",
     [(r, v) for r, v in EARLIER_RELEASES.items() if v > 1 or r == "0.7.0"],
 )
-def test_isla_0_7_0_to_0_12_0_state_dicts_are_refused_on_every_loading_path(
+def test_isla_0_7_0_to_0_13_0_state_dicts_are_refused_on_every_loading_path(
     tmp_path, release, version
 ):
-    """0.7.0 to 0.12.0 and the unmerged head-frame candidate 0.10.0 have the current
-    parameter layout but an earlier forward or constructor (the prediction points'
-    geometry encoding before 0.8.0, the interior task's length unit measured on the
-    drawn tokens before 0.9.0, the geometry before its robustness bundle in 0.11.0, the
-    candidate's head frame, the exact geometry's first-order bands before 0.12.0, and
-    the constructor's dim, boundary_tokens, query_independent and reynolds before 0.13.0): their state dicts,
+    """0.7.0 to 0.13.0 and the unmerged head-frame candidate 0.10.0 have an earlier
+    forward, constructor or parameters (the prediction points' geometry encoding
+    before 0.8.0, the interior task's length unit measured on the drawn tokens before
+    0.9.0, the geometry before its robustness bundle in 0.11.0, the candidate's head
+    frame, the exact geometry's first-order bands before 0.12.0, the constructor's dim,
+    boundary_tokens, query_independent and reynolds before 0.13.0, and ISLA-DTT's forest and the
+    slice blocks' and the kernel basis's dead biases before 0.14.0): their state dicts,
     told apart by the state-dict version torch records (1 before 0.8.0, as every 0.7.0
-    checkpoint carries, 8 for 0.8.0, 9 for 0.9.0, 10 for the candidate, 11 for 0.11.0
-    and 12 for 0.12.0), are refused by ``Module.load``, ``load_state_dict`` and through
+    checkpoint carries, 8 for 0.8.0, 9 for 0.9.0, 10 for the candidate, 11 for 0.11.0,
+    12 for 0.12.0 and 13 for 0.13.0), are refused by ``Module.load``, ``load_state_dict`` and through
     a DDP-style wrapper, with the version named; the current state dict loads."""
     model = _instantiate_model(**CONFIGS["dtt"])
     path = tmp_path / "isla.mdlus"
     model.save(path)
     old = model.state_dict()
-    assert old._metadata[""]["version"] == ISLA._version == 13
+    assert old._metadata[""]["version"] == ISLA._version == 14
     old._metadata[""]["version"] = version  # what that release wrote
     stale = _rewritten(path, tmp_path / f"isla_{release}_weights.mdlus", None, old)
     fresh = ISLA(**CONFIGS["dtt"])
     with pytest.raises(
-        RuntimeError, match=rf"before version 0\.13\.0 \(state-dict version {version}"
+        RuntimeError, match=rf"before version 0\.14\.0 \(state-dict version {version}"
     ):
         fresh.load(str(stale), strict=True)
     with pytest.raises(RuntimeError, match="no upgrade path"):
         fresh.load_state_dict(old, strict=False)
     wrapped = torch.nn.ModuleDict({"module": model}).state_dict()
     wrapped._metadata["module"]["version"] = version
-    with pytest.raises(RuntimeError, match="before version 0.13.0"):
+    with pytest.raises(RuntimeError, match="before version 0.14.0"):
         torch.nn.ModuleDict({"module": fresh}).load_state_dict(wrapped)
     fresh.load(str(path))  # the current state dict loads
     _assert_dict_close(fresh.state_dict(), model.state_dict(), atol=0.0, rtol=0.0)

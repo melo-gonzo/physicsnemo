@@ -440,10 +440,10 @@ def _refuse_earlier_state_dict(module, state_dict, prefix, local_metadata, *args
     ``load_state_dict``), not only ``Module.from_checkpoint``, which checks the
     recorded version. Two marks tell an earlier state dict: the parameter layout
     before 0.7.0 (the shared seed embedding ``embed.0``, the prediction points'
-    ``qt.type_offset`` and ``qt.embed``), and, for 0.7.0 to 0.12.0, whose layout is
-    the current one, the state-dict version torch records for every module
-    (``ISLA._version``, 1 before 0.8.0, 8 for 0.8.0, 9 for 0.9.0, 10 for the
-    unmerged head-frame candidate 0.10.0, 11 for 0.11.0 and 12 for 0.12.0). A state dict rebuilt without
+    ``qt.type_offset`` and ``qt.embed``), and, for 0.7.0 to 0.13.0, the state-dict
+    version torch records for every module (``ISLA._version``, 1 before 0.8.0, 8 for
+    0.8.0, 9 for 0.9.0, 10 for the unmerged head-frame candidate 0.10.0, 11 for 0.11.0,
+    12 for 0.12.0 and 13 for 0.13.0). A state dict rebuilt without
     torch's metadata (a dict comprehension over it) carries no version and is read
     by its layout alone."""
     old = sorted(
@@ -464,7 +464,8 @@ def _refuse_earlier_state_dict(module, state_dict, prefix, local_metadata, *args
         raise RuntimeError(
             f"this ISLA state dict was written before version {module.__model_checkpoint_version__} "
             f"(state-dict version {version}, now {type(module)._version}): its weights have the "
-            "current layout but were trained on an earlier forward (before 0.8.0, the "
+            "current layout (before 0.14.0, with two more parameters) but were trained on an "
+            "earlier forward (before 0.8.0, the "
             "prediction points' geometry encoding sign(s) log(|s| + 1e-12) and the direction "
             "from the surface, in place of asinh(s / 1e-6) and sign(d) times it; before "
             "0.9.0, the length unit without each boundary cell's own second moment, and for "
@@ -475,7 +476,12 @@ def _refuse_earlier_state_dict(module, state_dict, prefix, local_metadata, *args
             "geometry's first-order tie and on-wall bands and its arithmetic in the caller's "
             "frame; before 0.13.0, the constructor's dim, boundary_tokens, query_independent "
             "and reynolds, the scales' velocity_scale and roles, and interacting interior "
-            "ISLA; state-dict version 10 is the unmerged head-frame "
+            "ISLA; "
+            "before 0.14.0, ISLA-DTT's boundary forest split by sign octants and built under "
+            "autocast in the caller's precision and uncentred coordinates, with the boxes' own "
+            "diameters and no bound on each token's normal, and the slice blocks' geo_logit "
+            "bias and ISLA-DTT's kernel basis's last bias; "
+            "state-dict version 10 is the unmerged head-frame "
             "candidate 0.10.0), and "
             "ISLA keeps no upgrade path; "
             "load it with the code that wrote it, or retrain"
@@ -695,14 +701,23 @@ class ISLA(Module):
     ### their names with `defines` in place of velocity_scale and the density and
     ### viscosity roles). The same parameters and forward for the surface task and
     ### ISLA-DTT; new constructor arguments. No earlier checkpoint loads: ISLA is
-    ### unreleased and keeps no upgrade paths.
-    __model_checkpoint_version__ = "0.13.0"
+    ### unreleased and keeps no upgrade paths. 0.14.0: ISLA-DTT's boundary forest
+    ### as a function of the boundary alone (built outside autocast in centred
+    ### float64 canonical-frame coordinates, cube-face orientation classes with
+    ### their error-bound band in place of sign octants, the separation diameter
+    ### widened by the coordinates' error bound and by the frame's rotation in
+    ### proportion to each node's own size, never past a frame-free ball, each
+    ### token's normal_tol); the slice blocks' routing-bias Linear and ISLA-DTT's
+    ### kernel basis's last Linear without their dead biases (blocks.<i>.geo_logit.bias
+    ### and kernel_basis.net.4.bias gone from the state dict: constants that cancel in
+    ### a softmax). The same function otherwise.
+    __model_checkpoint_version__ = "0.14.0"
     #: torch's state-dict version of the module (``nn.Module._version``, recorded in
     #: every state dict's metadata): 1 before 0.8.0, 8 for 0.8.0, 9 for 0.9.0, 10 for
-    #: the head-frame candidate, 11 for 0.11.0 and 12 for 0.12.0, so a state dict of
-    #: 0.7.0 to 0.12.0, whose parameter layout is the current one, is told apart and
-    #: refused on load (:func:`_refuse_earlier_state_dict`).
-    _version = 13
+    #: the head-frame candidate, 11 for 0.11.0, 12 for 0.12.0 and 13 for 0.13.0, so a
+    #: state dict of 0.7.0 to 0.13.0 is told apart and refused on load
+    #: (:func:`_refuse_earlier_state_dict`).
+    _version = 14
 
     def __init__(
         self,
