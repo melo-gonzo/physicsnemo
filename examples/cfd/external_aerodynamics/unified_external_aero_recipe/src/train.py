@@ -39,9 +39,9 @@ import os
 import time
 from collections import deque
 from collections.abc import Callable, Iterator, Mapping
-from contextlib import nullcontext
+from contextlib import ExitStack, nullcontext
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, NamedTuple
 
 import hydra
 import torch
@@ -140,18 +140,17 @@ def _reduce_and_average(
 
     Args:
         loss_sum: Rank-local sum of scalar losses over the ``n_samples`` being
-            collapsed, as a 0-D on-device tensor -- one step's detached
-            ``loss`` per step, or the running epoch-loss tensor -- not a mean.
+            collapsed, as a 0-D on-device tensor (the running epoch loss),
+            not a mean.
         losses_td: Rank-local per-field loss sum: a 0-D (``batch_size=[]``)
             ``TensorDict`` whose leaves are summed scalar losses, one per loss
-            term. ``None`` is the "zero samples" sentinel (see Notes); it does
-            not arise on the per-step path, where a batch is always present.
+            term. ``None`` is the "zero samples" sentinel (see Returns).
         metrics_td: The matching per-field metric-sum accumulator, with the
             same ``None`` sentinel. Seeded in lock-step with ``losses_td``, so
             the two are ``None`` together or populated together.
         n_samples: Number of samples this rank contributed to ``loss_sum`` and
-            the accumulators (``1`` per step, ``n_local`` per epoch; equal to
-            the step count because the recipe runs ``batch_size == 1``).
+            the accumulators (``n_local``, equal to the step count because
+            the recipe runs ``batch_size == 1``).
         device: The rank's collective/compute device (``dist_manager.device``),
             where the ``all_reduce`` runs.
 
@@ -165,9 +164,8 @@ def _reduce_and_average(
         collective.
 
     Notes:
-        The per-step collective is deadlock-free only because every rank runs
-        the same step count (train ``drop_last=True``, val pads) and packs the
-        same leaves in the same order (all ranks share one ``target_config``).
+        Every rank packs the same leaves in the same order (all ranks share
+        one ``target_config``), so the collective matches up across ranks.
         Single-process skips the reduction, leaving single-GPU logs unchanged.
     """
     if losses_td is None or metrics_td is None:
@@ -213,6 +211,20 @@ def _start_step_readback(
     reduced, event = reduced.to("cpu", non_blocking=True), torch.cuda.Event()
     event.record()
     return reduced, event
+
+
+class _PendingStep(NamedTuple):
+    """One step's record, logged once its host copy has landed. ``span`` is
+    the step's iteration time in seconds (off CUDA), or the pair of CUDA
+    timing events around it, recorded before the step's readback starts."""
+
+    i: int
+    step_dt: float
+    mem_gb: float
+    lr: float | None
+    span: float | tuple[torch.cuda.Event, torch.cuda.Event]
+    host_values: TensorDict
+    landed: torch.cuda.Event | None
 
 
 ### ---------------------------------------------------------------------------
@@ -654,22 +666,23 @@ def _run_epoch(
     num_steps = len(dataloader)
     ### One entry per step, logged in order once its readback has landed;
     ### the epoch's end logs the rest (see _start_step_readback).
-    pending: deque = deque()
+    pending: deque[_PendingStep] = deque()
 
-    def log_step(i, step_dt, mem_gb, lr, span, reduced):
-        """Log one step's landed record, whose values are global all-rank means.
-        ``span`` is the step's iteration time in seconds, or the pair of CUDA
-        timing events around it, recorded before the step's readback and so
-        complete once it has landed (the wait below never runs then)."""
+    def log_step(step: _PendingStep) -> None:
+        """Log one step's landed record, whose values are global all-rank means."""
+        i, step_dt, mem_gb, lr, span, host_values, _ = step
+        ### The span's events precede the readback's on the stream, so they
+        ### are complete once it has landed and the wait below never runs.
         if isinstance(span, float):
             iter_dt = span
         else:
             if not span[1].query():
                 span[1].synchronize()
             iter_dt = span[0].elapsed_time(span[1]) / 1e3
-        step_loss = reduced["loss"].item()
-        step_losses = {key: value.item() for key, value in reduced["losses"].items()}
-        step_metrics = {key: value.item() for key, value in reduced["metrics"].items()}
+        ### Landed host copies, so .item() here does not wait for the GPU.
+        step_loss = host_values["loss"].item()
+        step_losses = {k: v.item() for k, v in host_values["losses"].items()}
+        step_metrics = {k: v.item() for k, v in host_values["metrics"].items()}
         ### Train mode includes Mem in the per-step line; val drops it
         ### because the no_grad path is the lowest-noise place to look.
         mem_str = f" Mem: {mem_gb:.2f}GB" if is_train else ""
@@ -743,8 +756,15 @@ def _run_epoch(
         mark.record()
         return mark
 
+    def log_landed() -> None:
+        """Log, in order, every pending step whose copy has landed."""
+        while pending and (pending[0].landed is None or pending[0].landed.query()):
+            log_step(pending.popleft())
+
     epoch_t0 = time.perf_counter()
-    with grad_ctx:
+    with grad_ctx, ExitStack() as on_exit:
+        ### If a step raises, log the steps whose copies have landed, without waiting.
+        on_exit.callback(log_landed)
         step_t0 = time.perf_counter()
         iter_mark = iteration_mark()
         for i, batch in enumerate(dataloader):
@@ -812,29 +832,29 @@ def _run_epoch(
             )
 
             ### Start this step's all-rank readback without waiting, then log
-            ### every earlier step whose copy has landed, in order.
+            ### every step whose copy has landed, in order. The readback is a
+            ### collective, so every rank calls it, outside the rank-0 logging
+            ### gate; equal per-rank step counts keep it deadlock-free.
             lr = scheduler.get_last_lr()[0] if is_train else None
             mark = iteration_mark()
             span = mark - iter_mark if not on_cuda else (iter_mark, mark)
             iter_mark = mark
-            pending.append(
-                (i, step_dt, mem_gb, lr, span)
-                + _start_step_readback(
-                    loss_det, losses, metrics, device=dist_manager.device
-                )
+            readback = _start_step_readback(
+                loss_det, losses, metrics, device=dist_manager.device
             )
-            while pending and (pending[0][-1] is None or pending[0][-1].query()):
-                log_step(*pending.popleft()[:-1])
+            pending.append(_PendingStep(i, step_dt, mem_gb, lr, span, *readback))
+            log_landed()
 
             if cfg.profile and i >= _PROFILE_MAX_STEPS:
                 break
             step_t0 = time.perf_counter()
 
         ### The epoch's end waits for the copies still in flight.
-        for *record, event in pending:
-            if event is not None:
-                event.synchronize()
-            log_step(*record)
+        while pending:
+            step = pending.popleft()
+            if step.landed is not None:
+                step.landed.synchronize()
+            log_step(step)
 
     epoch_dt = time.perf_counter() - epoch_t0
     n = max(n_local, 1)
