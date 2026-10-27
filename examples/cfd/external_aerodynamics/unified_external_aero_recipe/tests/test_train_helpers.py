@@ -44,16 +44,18 @@ this module's tensorboard skip guard.)
 
 from __future__ import annotations
 
-import ast
-import inspect
 import logging
-import textwrap
+import os
+import socket
 import time
 from contextlib import nullcontext
+from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
 import torch
+import torch.distributed as dist
+import torch.multiprocessing as mp
 from omegaconf import OmegaConf
 from tensordict import TensorDict
 
@@ -739,28 +741,40 @@ _DEVICES = [
 
 
 class _InFlight:
-    """A readback event that never lands before the epoch's end, so every
-    record goes through the epoch-end drain; counts its waits."""
+    """A readback event that lands only when ``landed()`` says so (by default
+    never before the epoch's end, so every record goes through the epoch-end
+    drain); counts its waits. It wraps the real event, so a record's host copy
+    has always landed by the time it is read."""
 
-    def __init__(self, waits):
+    def __init__(self, waits, landed, event):
         self.waits = waits
+        self.landed = landed
+        self.event = event
 
     def query(self):
-        return False
+        if not self.landed():
+            return False
+        if self.event is not None:
+            self.event.synchronize()
+        return True
 
     def synchronize(self):
         self.waits.append(self)
+        if self.event is not None:
+            self.event.synchronize()
 
 
-def _hold_readbacks(monkeypatch):
-    """Patch :func:`train._start_step_readback` so no record lands before the
-    epoch's end; returns the list of drain waits, one per record."""
-    waits = []
+def _hold_readbacks(monkeypatch, landed=lambda step: False):
+    """Patch :func:`train._start_step_readback` so a record lands before the
+    epoch's end only when ``landed(step)`` says so; returns the list of
+    drain waits, one per record."""
+    waits, steps = [], []
     start = train._start_step_readback
 
     def held(*args, **kwargs):
-        reduced, _ = start(*args, **kwargs)
-        return reduced, _InFlight(waits)
+        reduced, event = start(*args, **kwargs)
+        steps.append(step := len(steps))
+        return reduced, _InFlight(waits, lambda: landed(step), event)
 
     monkeypatch.setattr(train, "_start_step_readback", held)
     return waits
@@ -930,6 +944,72 @@ def test_profile_stop_drains_its_records(monkeypatch):
     assert steps == list(range(train._PROFILE_MAX_STEPS + 1))
 
 
+def test_error_logs_only_the_landed_records(monkeypatch):
+    """When a step raises, the records whose copies have landed are logged,
+    in order up to the first one still in flight, with no wait; nothing
+    after them is logged, and the error propagates."""
+    raised = False
+    waits = _hold_readbacks(monkeypatch, landed=lambda step: raised and step != 3)
+    scalars = []
+    writer = SimpleNamespace(
+        add_scalar=lambda tag, value, global_step: scalars.append((tag, global_step))
+    )
+
+    class Loader:
+        """Five batches, then an error, at which steps 0-2 and 4 have landed."""
+
+        def __len__(self):
+            return 7
+
+        def __iter__(self):
+            nonlocal raised
+            yield from ({"k": float(k)} for k in range(5))
+            raised = True
+            raise RuntimeError("step failed")
+
+    with pytest.raises(RuntimeError, match="step failed"):
+        _run_test_epoch(monkeypatch, Loader(), "cpu", mode="train", writer=writer)
+    assert [step for tag, step in scalars if tag == "iteration/lr"] == [0, 1, 2]
+    assert waits == []
+
+
+@pytest.mark.parametrize("device", _DEVICES)
+def test_error_path_records_carry_iter_time(monkeypatch, device):
+    """The landed records that a raising step logs carry ``iter_time_s``,
+    with no wait for the records still in flight."""
+    raised = False
+    waits = _hold_readbacks(monkeypatch, landed=lambda step: raised and step < 2)
+    scalars = []
+    writer = SimpleNamespace(
+        add_scalar=lambda tag, value, global_step: scalars.append(
+            (tag, value, global_step)
+        )
+    )
+
+    class Loader:
+        """Three batches, then an error, at which steps 0 and 1 have landed."""
+
+        def __len__(self):
+            return 4
+
+        def __iter__(self):
+            nonlocal raised
+            yield from ({"k": float(k)} for k in range(3))
+            raised = True
+            raise RuntimeError("step failed")
+
+    with pytest.raises(RuntimeError, match="step failed"):
+        _run_test_epoch(monkeypatch, Loader(), device, mode="train", writer=writer)
+    iter_times = [
+        (step, value)
+        for tag, value, step in scalars
+        if tag == "iteration/performance/iter_time_s"
+    ]
+    assert [step for step, _ in iter_times] == [0, 1]
+    assert all(value > 0 for _, value in iter_times)
+    assert waits == []
+
+
 def test_lr_is_read_at_its_own_step(monkeypatch):
     """A record logged late carries the lr right after its own step's
     scheduler step, not the lr when it is logged."""
@@ -977,12 +1057,13 @@ def test_train_steps_do_not_sync_with_the_device(monkeypatch):
         def __iter__(self):
             nonlocal in_steps
             in_steps = True
+            previous = torch.cuda.get_sync_debug_mode()
             torch.cuda.set_sync_debug_mode("error")
             try:
                 for k in range(12):
                     yield {"k": float(k)}
             finally:
-                torch.cuda.set_sync_debug_mode("default")
+                torch.cuda.set_sync_debug_mode(previous)
                 in_steps = False
 
     records, _ = _run_test_epoch(
@@ -1009,30 +1090,39 @@ def test_step_readback_lands_in_pinned_memory():
     assert all(leaf.device.type == "cpu" and leaf.is_pinned() for leaf in leaves)
 
 
-def test_step_path_has_no_host_readback():
-    """``_start_step_readback`` and ``_run_epoch``'s step loop call no
-    ``.cpu()``, ``.item()``, ``.tolist()`` or ``.numpy()``, nor the blocking
-    ``_reduce_and_average``. Host values are read only in ``log_step``, from
-    landed copies, and in the epoch summary."""
+def _readback_rank(rank, port):
+    """One rank of :func:`test_step_readback_is_the_all_rank_mean`."""
+    os.environ.update(MASTER_ADDR="127.0.0.1", MASTER_PORT=str(port))
+    dist.init_process_group(
+        "gloo", rank=rank, world_size=2, timeout=timedelta(seconds=60)
+    )
+    try:
+        loss = torch.tensor(1.37 * (rank + 1))
+        losses = TensorDict({"loss/test": loss * 7})
+        metrics = TensorDict({"test_l2": loss.sqrt()})
+        host_values, _ = train._start_step_readback(loss, losses, metrics, device="cpu")
+        expected = _reduce_and_average(loss, losses, metrics, 1, device="cpu")
+        assert host_values["loss"].item() == expected[0]
+        assert {k: v.item() for k, v in host_values["losses"].items()} == expected[1]
+        assert {k: v.item() for k, v in host_values["metrics"].items()} == expected[2]
+    finally:
+        dist.destroy_process_group()
 
-    def called(node):
-        return {
-            call.func.attr if isinstance(call.func, ast.Attribute) else call.func.id
-            for call in ast.walk(node)
-            if isinstance(call, ast.Call)
-            and isinstance(call.func, (ast.Attribute, ast.Name))
-        }
 
-    readbacks = {"cpu", "item", "tolist", "numpy", "_reduce_and_average"}
-    source = textwrap.dedent(inspect.getsource(train._start_step_readback))
-    assert not called(ast.parse(source)) & readbacks
-    tree = ast.parse(textwrap.dedent(inspect.getsource(train._run_epoch)))
-    (loop,) = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.For) and "dataloader" in ast.unparse(node.iter)
-    ]
-    assert not called(loop) & readbacks
+@pytest.mark.skipif(
+    not dist.is_available()
+    or not dist.is_gloo_available()
+    or "spawn" not in mp.get_all_start_methods(),
+    reason="needs gloo and the spawn start method",
+)
+def test_step_readback_is_the_all_rank_mean():
+    """Across two CPU ranks with different values, each step's readback is
+    the all-rank mean, equal to the blocking per-step readback
+    (``_reduce_and_average`` with ``n_samples=1``)."""
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    mp.spawn(_readback_rank, args=(port,), nprocs=2)
 
 
 def test_float32_matmuls_stay_full_precision():
