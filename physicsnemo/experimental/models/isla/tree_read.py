@@ -666,7 +666,10 @@ class _KernelBasis(nn.Module):
             nn.GELU(),
             nn.Linear(KERNEL_READ_HIDDEN, KERNEL_READ_HIDDEN),
             nn.GELU(),
-            nn.Linear(KERNEL_READ_HIDDEN, KERNEL_READ_BASIS),
+            ### No bias: the basis enters only the reads' logits, through each block's
+            ### linear kernel, where a constant basis offset is a per-head constant over
+            ### a point's pairs, which cancels in the softmax.
+            nn.Linear(KERNEL_READ_HIDDEN, KERNEL_READ_BASIS, bias=False),
         )
 
     def forward(self, inv: torch.Tensor) -> torch.Tensor:

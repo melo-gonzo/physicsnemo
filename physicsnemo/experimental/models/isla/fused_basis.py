@@ -95,7 +95,7 @@ def unsupported_reason(basis: torch.nn.Module, geometry: dict) -> str | None:
     if not HAS_TRITON:
         return "Triton with libdevice is not importable"
     lin = (basis.net[0], basis.net[2], basis.net[4])
-    params = [t for m in lin for t in (m.weight, m.bias)]
+    params = [t for m in lin for t in (m.weight, m.bias) if t is not None]
     geo = [geometry[k] for k in ("query_r", "query_n", "query_wall", "src_r", "src_n", "g_unit")]
     if geometry["src_vecs"] is not None:
         geo.append(geometry["src_vecs"])
@@ -120,8 +120,13 @@ def supported(basis: torch.nn.Module, geometry: dict) -> bool:
 def mlp_weights(basis: torch.nn.Module) -> tuple[torch.Tensor, ...]:
     """The basis MLP's weights and biases ``(W1, b1, W2, b2, W3, b3)`` as its layers
     read them: under autocast on their device cast to its dtype, once per forward pass
-    (autocast caches one cast of each for every chunk), else the parameters themselves."""
-    params = [t for m in (basis.net[0], basis.net[2], basis.net[4]) for t in (m.weight, m.bias)]
+    (autocast caches one cast of each for every chunk), else the parameters themselves.
+    A layer without a bias (the last one, ``_KernelBasis``) gets exact zeros."""
+    params = [
+        t if t is not None else m.weight.new_zeros(m.out_features)
+        for m in (basis.net[0], basis.net[2], basis.net[4])
+        for t in (m.weight, m.bias)
+    ]
     dev = params[0].device.type
     if torch.is_autocast_enabled(dev):
         dt = torch.get_autocast_dtype(dev)

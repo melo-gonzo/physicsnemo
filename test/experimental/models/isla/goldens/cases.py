@@ -306,14 +306,13 @@ def _load(
     return module
 
 
-def _param_grads(module: torch.nn.Module, prefix="grad.param.", zero=()) -> dict:
-    """Every parameter's gradient but those named in ``zero``: parameters whose
-    gradient is zero in exact arithmetic (a constant that cancels in a softmax), so
-    that what is computed is roundoff alone, which no golden can hold."""
+def _param_grads(module: torch.nn.Module, prefix="grad.param.") -> dict:
+    """Every parameter's gradient. (ISLA has no parameter whose gradient is zero in
+    exact arithmetic, roundoff alone, which no golden could hold: the slice blocks'
+    geo_logit bias and the kernel basis's last bias, constants that cancel in a
+    softmax, are gone.)"""
     return {
-        prefix + n: p.grad
-        for n, p in module.named_parameters()
-        if p.grad is not None and n not in zero
+        prefix + n: p.grad for n, p in module.named_parameters() if p.grad is not None
     }
 
 
@@ -1380,9 +1379,7 @@ def _read_run(n_vecs):
         out["out.basis"], out["out.read"] = pairs.basis.detach(), y.detach()
         out.update({"grad.h_b": h_b.grad, "grad.h_q": h_q.grad})
         out.update(_param_grads(read, "grad.read."))
-        ### (the basis MLP's last bias adds a per-head constant to every pair's logit,
-        ### which cancels in each point's softmax: its gradient is roundoff)
-        out.update(_param_grads(basis, "grad.basis.", zero=("net.4.bias",)))
+        out.update(_param_grads(basis, "grad.basis."))
         ### The pairs of ranges of points (query_chunks' path): each range's lists and basis.
         lazy = target("tree_read_walk")(**walk_kw, walk_points=False)
         out["out.pair_counts"] = target("walk_pair_counts")(lazy)
@@ -1971,12 +1968,6 @@ def _cotangent_loss(fields: dict, seed: int) -> torch.Tensor:
     )
 
 
-#: Parameters whose gradient is zero in exact arithmetic (a constant that cancels in a
-#: softmax: the boundary read's basis MLP's last bias, a per-head constant on every
-#: pair's logit), so that what is computed is roundoff alone.
-_MODEL_ZERO_GRADS = ("kernel_basis.net.4.bias",)
-
-
 def _model_run(spec: _ModelSpec):
     def run(inputs, device, variant):
         """The forward pass's outputs, and every parameter's gradient of a fixed
@@ -1985,7 +1976,7 @@ def _model_run(spec: _ModelSpec):
         fields = _flat_outputs(model(**kw))
         _cotangent_loss(fields, 70).backward()
         out = {f"out.{k}": t.detach() for k, t in fields.items()}
-        out.update(_param_grads(model, zero=_MODEL_ZERO_GRADS))
+        out.update(_param_grads(model))
         return out
 
     return run
@@ -2007,7 +1998,7 @@ def _chunks_run(spec: _ModelSpec):
             _cotangent_loss(fields, 80 + 10 * i).backward()
             out.update({f"out.range{i}.{k}": t.detach() for k, t in fields.items()})
         chunks.backward()
-        out.update(_param_grads(model, zero=_MODEL_ZERO_GRADS))
+        out.update(_param_grads(model))
         return out
 
     return run

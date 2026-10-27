@@ -1,14 +1,14 @@
 {
  "format": 1,
- "commit": "a525ba77334afda527efaca2d694849b555dedbf",
+ "commit": "121b7857887a1747138169db120ea4e1fcc04b6c",
  "code_modified": true,
  "harness": {
   "__init__.py": "0a7ef7faa425a61c89987fff234f7169",
-  "cases.py": "632ecbd9088af682d2fcc78774913e82",
+  "cases.py": "57d4fcb1eeace3083b4828231230ba57",
   "compare.py": "7a3507ec13ed802e56dd08597468ae58",
   "record.py": "bd4001d5e9a550e6b398bec54940d5e6"
  },
- "date": "2026-10-26T10:39:21-04:00",
+ "date": "2026-10-26T22:37:14-04:00",
  "platform": {
   "python": "3.13.8",
   "torch": "2.13.0+cu130",
@@ -25,7 +25,7 @@
  "versions": {
   "physicsnemo.experimental.models.isla": "178546cdd26fc5a010e26ac102086b66",
   "physicsnemo.experimental.models.isla.blocks": "de1f4f74a2b8b0a10d0b53a5c7bc22b3",
-  "physicsnemo.experimental.models.isla.fused_basis": "189eb1e6096e0bb4a7c67bd5c12f8bc3",
+  "physicsnemo.experimental.models.isla.fused_basis": "f8d094cca65fb5ed8f8550dc8311db64",
   "physicsnemo.experimental.models.isla.fused_read": "866ad10d8622509e0df2ba7abfb688b5",
   "physicsnemo.experimental.models.isla.geometry": "0dcb76f4d860e62c6cbeced8c36006b1",
   "physicsnemo.experimental.models.isla.geometry_fast": "8516d69bf3dd3f4696c2472dd76513f9",
@@ -36,12 +36,12 @@
   "physicsnemo.experimental.models.isla.scales": "c6ae7036d8b0bfbfcc06530fcc6bab7d",
   "physicsnemo.experimental.models.isla.segment_softmax": "a00b1d5cc85a3c18d9eaaa10b25e0b18",
   "physicsnemo.experimental.models.isla.tree_build": "b590484d00fd0eadbd31d4dfd0eff38f",
-  "physicsnemo.experimental.models.isla.tree_read": "7e7a536a76acd6801396fab0ed52725e",
+  "physicsnemo.experimental.models.isla.tree_read": "be6c216f33ec2d4793649f99e579968e",
   "physicsnemo.experimental.models.isla.tree_walk": "8c957c6ef1ab89f2962f5e4fbf0ffcf7",
   "physicsnemo.mesh.sampling.systematic_sampling": "82ad653c4369be3d6a157ca0e17162e2",
   "physicsnemo.mesh.spatial._frame": "d0a7cc93f87f14dfbeabd04b87d14922"
  },
  "samples": 16,
  "cases": 90,
- "tensors": 3175
+ "tensors": 3171
 }
