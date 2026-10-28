@@ -1150,7 +1150,7 @@ class ISLA(Module):
         self, name: str, points, normals, measure, fields: TensorDict, g_unit, g_scalars
     ) -> TensorDict:
         """One condition's boundary tokens over ``(B, n)``: their ``points``,
-        ``normals`` and ``measure`` (``None``: none given) and, in the block layout
+        ``normals`` and ``measure`` and, in the block layout
         over every declared condition (zeros in the other conditions' columns), the
         ``seed`` ``[1, n.g_k, the fields' invariants, global scalars]`` and the
         condition's block vectors ``vecs`` and rank-2 tensors ``tens`` (when any
@@ -1174,8 +1174,7 @@ class ISLA(Module):
             seed=self._in_block(torch.cat(seed, -1), self._seed_columns, i, 2),
             batch_size=[b, n],
         )
-        if measure is not None:
-            tokens["measure"] = measure
+        tokens["measure"] = measure
         if self._vec_columns[-1]:
             if not inputs.n_block_vecs:
                 vecs = points.new_zeros(b, n, 0, d)
@@ -1379,53 +1378,10 @@ class ISLA(Module):
         self._geo_kernel_applied = kernel
         return None
 
-    def _validate_inputs(
-        self, condition, points, normals, measure_weights, query_points, surface_points=None, surface_cells=None
-    ) -> None:
-        """Shape and presence checks for :meth:`_forward_tensors`."""
-        d = self.n_spatial_dims
-        if condition not in self.boundary_schemas:
-            raise ValueError(
-                f"condition {condition!r} is not one of the declared boundary conditions "
-                f"{list(self.boundary_names)!r}"
-            )
-        if self.boundary_schemas[condition]:
-            raise ValueError(
-                "the batched routine takes no per-token inputs; pass the meshes to forward"
-            )
-        if points.ndim != 3 or points.shape[-1] != d:
-            raise ValueError(
-                f"Expected points of shape (B, N, {d}) (this model has n_spatial_dims={d}) but got tensor of shape {tuple(points.shape)}"
-            )
-        b, n, _ = points.shape
-        if normals.shape != points.shape:
-            raise ValueError(
-                f"Expected normals of shape {(b, n, d)} but got tensor of shape {tuple(normals.shape)}"
-            )
-        if measure_weights is not None and measure_weights.numel() != b * n:
-            raise ValueError(
-                f"Expected measure_weights of shape {(b, n)} but got tensor of shape {tuple(measure_weights.shape)}"
-            )
-        if query_points is None:
-            if self.interior:
-                raise ValueError("an interior model (interior=True) needs query_points")
-            return
-        if not self.interior:
-            raise ValueError(
-                "query_points given to a surface model (interior=False); build with interior=True"
-            )
-        if query_points.ndim != 3 or query_points.shape[0] != b or query_points.shape[-1] != d:
-            raise ValueError(
-                f"Expected query_points of shape ({b}, Q, {d}) but got tensor of shape {tuple(query_points.shape)}"
-            )
-        if surface_points is None or surface_cells is None:
-            raise ValueError("query_points need the boundary surface: surface_points and surface_cells")
-
-    def _global_rows(self, data: TensorDict, b: int, like) -> TensorDict:
-        """The declared global fields of ``data`` over a batch of ``b`` cases, in
-        ``like``'s dtype at their declared shapes (a single case's values, one row,
-        shared across the batch)."""
-        rows = TensorDict(batch_size=[b])
+    def _global_rows(self, data: TensorDict, like) -> TensorDict:
+        """The declared global fields of ``data`` as one case's row, in ``like``'s
+        dtype at their declared shapes."""
+        rows = TensorDict(batch_size=[1])
         for name, spec in self.global_schema.items():
             shape, width = spec.shape(self.n_spatial_dims), spec.numel(self.n_spatial_dims)
             t = data.get(FieldSchema.key(name))
@@ -1435,11 +1391,11 @@ class ISLA(Module):
                         f"global_inputs[{name!r}]: expected {width} values per case, got "
                         f"{tuple(t.shape) if isinstance(t, torch.Tensor) else type(t).__name__}"
                     )
-                if t.numel() // width not in (1, b):
+                if t.numel() != width:
                     raise ValueError(
-                        f"global_inputs[{name!r}] gives {t.numel() // width} rows for a batch of {b}"
+                        f"global_inputs[{name!r}] gives {t.numel() // width} rows for a batch of 1"
                     )
-            rows.set(FieldSchema.key(name), t.reshape(-1, *shape).to(like.dtype).expand(b, *shape))
+            rows.set(FieldSchema.key(name), t.reshape(1, *shape).to(like.dtype))
         return rows
 
     def _global_fields(self, global_rows: TensorDict, like, scales: dict | None = None):
@@ -1873,7 +1829,7 @@ class ISLA(Module):
         measures = [cell_measures(m) for m in meshes]
         like = meshes[0].points
         global_td = self._select_global_data(global_data, like.device)
-        global_rows = self._global_rows(global_td, 1, like)
+        global_rows = self._global_rows(global_td, like)
         ### The length unit, the measure-weighted RMS pairwise distance of the given
         ### boundaries at full resolution, each cell with its own second moment (the
         ### parallel-axis term), so it is exact for the piecewise-flat surface: the same
@@ -1995,112 +1951,27 @@ class ISLA(Module):
             walk_points=walk_points,
         )
 
-    def _forward_tensors(
-        self,
-        *,
-        points: Float[torch.Tensor, "batch tokens n_spatial_dims"],
-        normals: Float[torch.Tensor, "batch tokens n_spatial_dims"],
-        measure_weights: Float[torch.Tensor, "batch tokens"] | None = None,
-        global_inputs: Mapping[str, torch.Tensor] | None = None,
-        query_points: Float[torch.Tensor, "batch queries n_spatial_dims"] | None = None,
-        surface_points: Float[torch.Tensor, "batch vertices n_spatial_dims"] | None = None,
-        surface_cells: Float[torch.Tensor, "batch cells n_spatial_dims"] | None = None,
-        condition: str | None = None,
-        cell_second_moments: Float[torch.Tensor, "batch tokens"] | None = None,
-    ) -> TensorDict:
-        """The batched network on bare token tensors, the tokens of one boundary
-        condition without per-cell fields (``condition``, default the model's one
-        declared condition); the release tests pin it, and it
-        runs the same :meth:`_forward_tokens` as :meth:`forward`.
-
-        ``points``, ``normals`` ``(B, N, d)``; ``measure_weights`` ``(B, N)``
-        (``None``: every token the same weight); ``global_inputs`` a flat
-        ``{dotted name: tensor}`` mapping over the declared global fields
-        (per-case values ``(B,)`` / ``(B, d)``, or one row shared across the
-        batch); ``query_points`` ``(B, Q, d)`` for an interior model, with the
-        boundary surface each case's geometry is computed from as
-        ``surface_points`` ``(B, V, d)`` and ``surface_cells`` ``(B, F, d)``
-        (vertex indices; :func:`exact_boundary_geometry`); ``cell_second_moments``
-        ``(B, N)`` the tokens' own second moments in the length unit
-        (:func:`~physicsnemo.experimental.models.isla.geometry.cell_second_moments`;
-        ``None``: the tokens are points). The tokens are used as
-        given: nothing is sampled here. Returns the outputs
-        over the ``(B, N_out)`` tokens the head read.
-        """
-        if condition is None and len(self.boundary_names) == 1:
-            condition = self.boundary_names[0]
-        if self._scaled:
-            raise NotImplementedError(
-                "the batched routine takes no boundary meshes, from which the declared scales are "
-                "computed; pass the meshes to forward"
-            )
-        if not torch.compiler.is_compiling():
-            self._validate_inputs(
-                condition, points, normals, measure_weights, query_points, surface_points, surface_cells
-            )
-        fields = global_inputs or {}
-        missing = [k for k in self.global_schema if k not in fields]
-        extra = [k for k in fields if k not in self.global_schema]
-        if missing or extra:
-            raise ValueError(
-                f"global_inputs fields do not match the declared set: missing {missing!r}, "
-                f"unexpected {extra!r}"
-            )
-        b, n, _ = points.shape
-        data = TensorDict({FieldSchema.key(k): v for k, v in fields.items()}, batch_size=[])
-        g_unit, g_scalars = self._global_fields(self._global_rows(data, b, points), points)
-        boundary = self._condition_tokens(
-            condition,
-            points,
-            normals,
-            None if measure_weights is None else measure_weights.reshape(b, n),
-            TensorDict(batch_size=[b, n]),
-            g_unit,
-            g_scalars,
-        )
-        query = None
-        if query_points is not None:
-            geometry = [
-                exact_boundary_geometry(
-                    query_points[i], surface_points[i], surface_cells[i], kernel=self.resolve_geometry_kernel(query_points)
-                )
-                for i in range(b)
-            ]
-            query = TensorDict(
-                points=query_points,
-                wall_distance=torch.stack([g[0] for g in geometry]),
-                wall_direction=torch.stack([g[1] for g in geometry]),
-                batch_size=query_points.shape[:2],
-            )
-        gauge = rms_pairwise_distance(
-            points,
-            None if measure_weights is None else measure_weights.reshape(b, n),
-            EPS,
-            cell_second_moments,
-        )
-        return self._redimensionalize(self._forward_tokens(boundary, query, g_unit, g_scalars, gauge=gauge), None)
-
     def _forward_tokens(
         self,
         boundary: TensorDict,
         query: TensorDict | None,
         g_unit: torch.Tensor,
         g_scalars: torch.Tensor | None,
-        gauge: torch.Tensor | None = None,
+        gauge: torch.Tensor,
         out_rows: list[tuple[int, int]] | None = None,
     ) -> TensorDict:
         """The batched network on the token inputs.
 
         ``boundary`` holds the boundary tokens over ``(B, N)``: ``points`` and
-        ``normals`` ``(B, N, d)``, ``measure`` ``(B, N)`` (absent: every token the
-        same weight) and the conditions' inputs in the block layout, ``seed`` and
+        ``normals`` ``(B, N, d)``, ``measure`` ``(B, N)`` and the conditions' inputs
+        in the block layout, ``seed`` and
         the block ``vecs`` and ``tens`` (:meth:`_condition_tokens`);
         ``query`` (interior) the prediction-point tokens over ``(B, Q)``:
         ``points`` and the built-in geometry ``wall_distance`` ``(B, Q)`` and ``wall_direction`` ``(B, Q, d)``
         (:func:`exact_boundary_geometry`);
         ``g_unit`` ``(B, K, d)`` and ``g_scalars`` ``(B, S)`` (or ``None``) the
         global inputs (:meth:`_global_fields`); ``gauge`` ``(B, 1, 1)`` the length
-        unit (``None``: measured on the given boundary tokens); ``out_rows`` the
+        unit (:meth:`_gauge`); ``out_rows`` the
         surface task's output tokens as ``(start, stop)`` ranges of the boundary
         tokens (``None``: every boundary token).
         Returns the declared outputs over the ``(B, N_out)`` tokens the head reads.
@@ -2160,10 +2031,9 @@ class ISLA(Module):
         ### gradient of h over its consumers in the order they were built.
         return self._head(out, (lambda: self._frame_anchors(h, log_w, r)) if self.needs_frame else None)
 
-    def _boundary_tokens(self, boundary: TensorDict, g_unit: torch.Tensor, gauge: torch.Tensor | None):
+    def _boundary_tokens(self, boundary: TensorDict, g_unit: torch.Tensor, gauge: torch.Tensor):
         """The boundary tokens' state over ``(B, N)`` (:meth:`_forward_tokens`), the
-        length unit (measured on the tokens when ``gauge`` is ``None``) and the
-        geometry kernel the blocks are called with."""
+        length unit and the geometry kernel the blocks are called with."""
         points = boundary["points"]
         b, n, _ = points.shape
         _hint_token_axis(n, self._token_widths)
@@ -2177,19 +2047,11 @@ class ISLA(Module):
         ### weighted mean (used only inside this scalar; the frame keeps no
         ### centre). Normalized weights make it converge under refinement where
         ### the total measure diverges, and make it invariant to a weight rescale.
-        ### forward passes the full-resolution boundary's (exact for every draw).
-        measure = boundary.get("measure", None)
-        if gauge is None:
-            gauge = rms_pairwise_distance(points, measure, EPS)
+        ### gauge is the full-resolution boundary's (_gauge, exact for every draw).
         normals = boundary["normals"]
         n_hat = normals / normals.norm(dim=-1, keepdim=True).clamp_min(EPS)
 
-        if measure is None:
-            ### No measures given: every token carries the same measure, i.e. the
-            ### count-weighted quadrature.
-            log_w = points.new_zeros(b, n, 1)
-        else:
-            log_w = torch.log(measure.to(points.dtype).clamp_min(EPS))[..., None]
+        log_w = torch.log(boundary["measure"].to(points.dtype).clamp_min(EPS))[..., None]
 
         ### Boundary inputs: each condition's seed through its input layer, its
         ### vectors and tensors through its maps onto the shared channels.

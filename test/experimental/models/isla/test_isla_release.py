@@ -24,8 +24,7 @@ r"""Release-readiness tests for ISLA (MODELS_IMPLEMENTATION.md MOD-008a/b/c).
   ``isla_dtt_v1.pth``), and in ``isla_release_v2.pth`` a float64 configuration per
   task at 1e-12, a rich surface model with scales, ISLA-DTT in two dimensions, the
   in-model token draw over about 2,000 cells, and ``query_chunks`` (outputs and
-  gradients); the exactness of the Mesh wrapper over the internal batched routine;
-  and the backbone golden.
+  gradients); and the backbone golden.
 - MOD-008c: committed reference checkpoints of both tasks (``isla_default_v1.mdlus``,
   ``isla_dtt_v1.mdlus``) through ``Module.from_checkpoint`` (attributes and
   forward), a checkpoint round trip over schemas, and the refusal of every earlier
@@ -41,9 +40,8 @@ module goldens included); a bare ``--regenerate`` is refused. Regenerate only wh
 in the commit: the reference checkpoints stand for a checkpoint written by the code
 of their version (regenerate them at a version bump), and ``isla_backbone_v1.pth``
 only when the backbone changes by decision (a forward hook on ``norm_out`` under
-``CONFIGS["default"]`` / ``_make_tensors``; last recorded when the boundary
-conditions came to be declared by name, each with its own input layer, checkpoint
-0.7.0). :func:`regenerate` below writes the files of this test.
+``CONFIGS["default"]`` on ``_make_inputs``, through ``forward``). :func:`regenerate`
+below writes the files of this test.
 """
 
 import inspect
@@ -60,8 +58,6 @@ import torch
 
 from physicsnemo.core.module import Module
 from physicsnemo.experimental.models import ISLA
-from physicsnemo.experimental.models.isla.geometry import cell_second_moments
-from physicsnemo.mesh.calculus.measure import cell_measures
 from test.experimental.models.isla._meshes import outputs
 from test.experimental.models.isla._release_cases import (
     CONFIGS,
@@ -83,21 +79,6 @@ CHECKPOINTS = {
     "isla_default_v1.mdlus": (CONFIGS["default"], 7),
     "isla_dtt_v1.mdlus": (dict(CONFIGS["dtt"], hidden=16), 8),
 }
-
-
-def _make_tensors(device, seed: int = 1234) -> dict:
-    """Deterministic batched token tensors for the internal routine: two cases, 64
-    cells, unit normals, positive measures (the backbone golden's inputs)."""
-    gen = torch.Generator(device="cpu").manual_seed(seed)
-    b, n = 2, 64
-    pts = torch.randn(b, n, 3, generator=gen) * torch.tensor([3.0, 2.0, 1.0])
-    nrm = torch.nn.functional.normalize(torch.randn(b, n, 3, generator=gen), dim=-1)
-    w = torch.rand(b, n, generator=gen) + 0.5
-    g = torch.nn.functional.normalize(torch.randn(b, 1, 3, generator=gen), dim=-1)
-    inputs = dict(points=pts, normals=nrm, measure_weights=w)
-    inputs = {k: v.to(device) for k, v in inputs.items()}
-    inputs["global_inputs"] = {"g": g.to(device)}
-    return inputs
 
 
 def _load_reference(file_name: str, key: str | None = None) -> dict:
@@ -506,63 +487,16 @@ def test_isla_query_chunks_non_regression(device):
     torch.testing.assert_close(scale, ref["grad_scales"], atol=bound, rtol=0.0)
 
 
-@pytest.mark.parametrize("config", list(CONFIGS))
-def test_mesh_wrapper_is_exact_over_the_batched_routine(device, config):
-    """The Mesh API is a wrapper: the same parameters run through ``forward`` on the
-    meshes and through the internal batched routine on the very tensors the wrapper
-    reads (cell centroids, cell normals, effective cell measures and second moments, the cells as the
-    surface of the interior geometry, a batch axis of one) give bitwise-identical
-    outputs."""
-    model = _instantiate_model(**CONFIGS[config]).to(device)
-    inputs = _make_inputs(device, query=(config != "default"))
-    mesh = inputs["boundary_meshes"]["wall"]
-    q = inputs.get("prediction_points")
-    with torch.no_grad():
-        via_mesh = model(**inputs)
-        direct = model._forward_tensors(
-            points=mesh.cell_centroids[None],
-            normals=mesh.cell_normals[None],
-            measure_weights=cell_measures(mesh)[None],
-            global_inputs={"g": inputs["global_data"]["g"]},
-            query_points=None if q is None else q[None],
-            surface_points=mesh.points[None],
-            surface_cells=mesh.cells[None],
-            cell_second_moments=cell_second_moments(mesh)[None],
-        )
-    expected_points = mesh.cell_centroids if q is None else q
-    assert torch.equal(via_mesh.points, expected_points) and via_mesh.n_cells == 0
-    for k, v in direct.items():
-        if config == "dtt" and via_mesh.point_data[k].is_cuda:
-            ### The boundary read's node means are float32 sums by CUDA's index_add, whose
-            ### atomics add in no fixed order, so the two calls agree to float32 roundoff,
-            ### not bitwise (non-bitwise results from atomics are fine within a small
-            ### multiple of float32 eps). The bound is eps times the length of the reordered
-            ### sums (at most the 64 boundary cells summed into one node), relative to each
-            ### element and, for the elements near zero, to the field's RMS: about 1.2e-7
-            ### absolute on p, six times the largest difference seen on a GB300 (2.05e-8).
-            eps, depth = torch.finfo(torch.float32).eps, mesh.n_cells
-            ref = v[0]
-            torch.testing.assert_close(
-                via_mesh.point_data[k],
-                ref,
-                rtol=depth * eps,
-                atol=depth * eps * float(ref.square().mean().sqrt()),
-            )
-        else:
-            assert torch.equal(via_mesh.point_data[k], v[0]), k
-    assert torch.equal(via_mesh.global_data["g"], inputs["global_data"]["g"])
-
-
 def _backbone_golden() -> torch.Tensor:
     """The pre-head token state (``norm_out``'s output) of ``CONFIGS["default"]`` on
-    ``_make_tensors`` through the internal batched routine, on the CPU."""
+    ``_make_inputs`` (a point-soup mesh) through ``forward``, on the CPU."""
     model = _instantiate_model(**CONFIGS["default"])
     captured = {}
     model.norm_out.register_forward_hook(
         lambda mod, i, o: captured.setdefault("x", o.detach().clone())
     )
     with torch.no_grad():
-        model._forward_tensors(**_make_tensors("cpu"))
+        model(**_make_inputs("cpu"))
     return captured["x"]
 
 
@@ -570,10 +504,9 @@ def test_isla_backbone_matches_the_recorded_backbone():
     """With no per-token inputs, the pre-head token state (``norm_out`` output) of
     the surface model is the one recorded when the backbone was last changed by
     decision (the slice sublayer's normalized reads, H-RESID arm A2), for the same
-    parameters and token tensors. ``data/isla_backbone_v1.pth``
+    parameters and inputs. ``data/isla_backbone_v1.pth``
     was recorded with a forward hook on ``norm_out`` (seed 0 parameters, seed 1234
-    inputs, as here) on an x86 CPU; the tensors enter through the internal batched
-    routine, which the Mesh wrapper calls. Compared at float32 tolerance: the same
+    inputs, as here) on an x86 CPU, through ``forward``. Compared at float32 tolerance: the same
     graph gives bitwise-identical values on the recording architecture and differs
     at the last bits across CPU architectures (BLAS reduction order), which is not a
     property of the model. Regenerate (only when the backbone changes by decision):
