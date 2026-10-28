@@ -795,9 +795,9 @@ def _tree_winding(q, mesh):
     s, par = pts[cells], parity.to(D)
     e = s[:, 1:] - s[:, :1]
     area = par[:, None] * 0.5 * torch.linalg.cross(e[:, 0], e[:, 1], dim=-1)
-    return geometry._tree_winding_numbers(
-        q.double(), s, par, area, geometry._cell_tree(s)
-    )
+    tree, order, s_leaf = geometry._preorder_cell_tree(s)
+    w = geometry._packed_winding_sum(q.double(), s_leaf, par[order], area[order], tree)
+    return w / (4 * math.pi)
 
 
 _DEVICES = ["cpu", pytest.param("cuda", marks=[pytest.mark.cuda, requires_cuda])]

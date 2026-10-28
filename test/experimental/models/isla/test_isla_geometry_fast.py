@@ -30,6 +30,7 @@ from physicsnemo.experimental.models.isla.geometry import exact_boundary_geometr
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.geometry._cell_normals import compute_cell_normals
 from physicsnemo.mesh.primitives.surfaces import cube_surface
+from physicsnemo.mesh.spatial._lbvh import build_lbvh_topology
 from test.experimental.models.isla._forced import ran
 from test.experimental.models.isla._geometry_cases import (
     _box_ties,
@@ -178,16 +179,12 @@ def _run(kernel, q, points, cells, monkeypatch):
             return seen["search"]
 
         monkeypatch.setattr(geometry, name, spy)
-    sign, tree_w = geometry._winding_sign, geometry._tree_winding_numbers
+    sign = geometry._winding_sign
 
-    def spy_sign(query, simplex, parity, tree, w=None, oriented=None):
+    def spy_sign(query, simplex, parity, w=None, oriented=None):
         if w is not None:
             seen["w"] = w / (4 * torch.pi)
-        return sign(query, simplex, parity, tree, w, oriented)
-
-    def spy_tree_w(*args):
-        seen["w"] = tree_w(*args)
-        return seen["w"]
+        return sign(query, simplex, parity, w, oriented)
 
     segment_w = geometry._segment_winding_numbers
 
@@ -196,7 +193,6 @@ def _run(kernel, q, points, cells, monkeypatch):
         return seen["w"]
 
     monkeypatch.setattr(geometry, "_winding_sign", spy_sign)
-    monkeypatch.setattr(geometry, "_tree_winding_numbers", spy_tree_w)
     monkeypatch.setattr(geometry, "_segment_winding_numbers", spy_segment_w)
     q, points = q.clone().requires_grad_(), points.clone().requires_grad_()
     d, u = exact_boundary_geometry(q, points, cells, kernel=kernel)
@@ -249,6 +245,43 @@ def test_fast_search_equals_the_reference_bitwise(case, dtype, device, monkeypat
         ), name
 
 
+@pytest.mark.parametrize("f", [1, 2, 3, 5, 17, 100, 1000])
+def test_the_preorder_tree_is_the_library_lbvh_renumbered(f):
+    """The search's tree (one kernel, nodes in depth-first preorder) is
+    ``build_lbvh_topology``'s midpoint-split tree with one cell per leaf, its nodes
+    renumbered in preorder: the same children, the node after each subtree, the same
+    sorted cell at each leaf and the same inner nodes at each level."""
+    g = torch.Generator().manual_seed(f)
+    simplex = torch.rand(f, 3, 3, dtype=D, generator=g)
+    (left, right, escape, levels, leaf_cell, _, _), _, _ = geometry._preorder_cell_tree(
+        simplex
+    )
+    topo = build_lbvh_topology(f, 1, torch.device("cpu"))
+    lib_left, lib_right = topo.left_child.tolist(), topo.right_child.tolist()
+    pre, size, stack = {}, {}, [0]
+    while stack:
+        n = stack.pop()
+        pre[n] = len(pre)
+        if lib_left[n] >= 0:
+            stack += [lib_right[n], lib_left[n]]
+    for n in sorted(pre, key=pre.get, reverse=True):
+        size[n] = 1 + (
+            size[lib_left[n]] + size[lib_right[n]] if lib_left[n] >= 0 else 0
+        )
+    total = 2 * f - 1
+    assert len(pre) == total == left.shape[0]
+    for n, p in pre.items():
+        inner = lib_left[n] >= 0
+        assert int(left[p]) == (pre[lib_left[n]] if inner else -1)
+        assert int(right[p]) == (pre[lib_right[n]] if inner else -1)
+        assert int(escape[p]) == (p + size[n] if p + size[n] < total else -1)
+        assert int(leaf_cell[p]) == (-1 if inner else int(topo.leaf_start[n]))
+    assert [sorted(level.tolist()) for level in levels] == [
+        sorted(pre[n] for n in level.tolist())
+        for level in topo.internal_nodes_per_level
+    ]
+
+
 def _fan(n: int = 96):
     """A fan of ``n`` triangles around a hub, 50 queries above the hub (``n``
     candidates each, more than the 64 slots at the default 96) and 400 elsewhere."""
@@ -275,7 +308,7 @@ def test_ball_search_in_blocks_of_rows_equals_one_launch(kernel, monkeypatch):
     caps, launch = [], geometry.wp.launch
 
     def spy(k, dim, *args, **kwargs):
-        if k in (geometry._ball_candidates_kernel, geometry._ball_winding_kernel):
+        if k is geometry._ball_candidates_kernel:
             caps.append((kwargs["inputs"][14], dim))  # (slots per row, rows)
         return launch(k, dim, *args, **kwargs)
 
@@ -299,8 +332,7 @@ def test_ball_search_overflow_list_and_its_fallback_equal_the_default_slots(
     overflow list (``list``: a sphere's queries, whose few extra candidates fit in
     it, so one launch) or, when it is full, to a second pass (``fallback``: a fan's
     hub queries, 94 extra candidates each, against a list of 450 entries); every
-    output is bitwise that of the default 64 slots, the winding number of the
-    reference's first pass (:func:`_ball_winding_kernel`) included."""
+    output is bitwise that of the default 64 slots."""
     if case == "list":
         q, sphere = _near_wall(3, 400, 15, band=0.5), _sphere(2)
         points, cells = sphere.points, sphere.cells
@@ -312,7 +344,7 @@ def test_ball_search_overflow_list_and_its_fallback_equal_the_default_slots(
     launch, ball = geometry.wp.launch, geometry._ball_candidates
 
     def spy(k, dim, *args, **kwargs):
-        if k in (geometry._ball_candidates_kernel, geometry._ball_winding_kernel):
+        if k is geometry._ball_candidates_kernel:
             caps.append(kwargs["inputs"][14])
         return launch(k, dim, *args, **kwargs)
 

@@ -288,34 +288,26 @@ def _geometry_case(dim):
 def test_a_named_search_kernel_runs_that_search(dim, kernel, monkeypatch):
     """``exact_boundary_geometry(kernel=...)`` with the two search ops spied
     (test_isla_geometry_fast's ``_run``, test_isla_geometry_thin's ``recorded``): the
-    named op's spy is reached, and the fast search's own code runs only under
-    ``"fast"`` (the welded canonical cells in either dimension; the preorder tree and
-    the packed winding sum in three dimensions), the reference's tree only under
-    ``"reference"``."""
+    named op's spy is reached, and the fast search's own code (the welded canonical
+    cells) runs only under ``"fast"``."""
     spies = {
         n: reaches(monkeypatch, geometry, n)
         for n in ("_closest_candidates", "_closest_candidates_fast")
     }
     fast_only = [geometry_fast.canonical_cells]
-    if dim == 3:
-        fast_only += [geometry._preorder_cell_tree, geometry._packed_winding_sum]
-    with ran(*fast_only, geometry._cell_tree) as r:
+    with ran(*fast_only) as r:
         exact_boundary_geometry(*_geometry_case(dim), kernel=kernel)
     named = "_closest_candidates_fast" if kernel == "fast" else "_closest_candidates"
     assert [len(v) for k, v in spies.items() if k == named] == [1]
     assert all(not v for k, v in spies.items() if k != named)
     assert all((r.count(f) > 0) == (kernel == "fast") for f in fast_only)
-    if dim == 3:
-        assert (r.count(geometry._cell_tree) > 0) == (kernel == "reference")
 
 
 @pytest.mark.parametrize("kernel", ["reference", "fast"])
 def test_the_winding_spies_reach_the_three_dimensional_search(kernel, monkeypatch):
-    """``geometry._winding_sign`` and ``geometry._tree_winding_numbers`` spied
-    (test_isla_geometry_fast's ``_run`` reads the winding number through them): the
-    sign's spy is reached under either kernel."""
+    """``geometry._winding_sign`` spied (test_isla_geometry_fast's ``_run`` reads
+    the winding number through it): the spy is reached under either kernel."""
     sign = reaches(monkeypatch, geometry, "_winding_sign")
-    reaches(monkeypatch, geometry, "_tree_winding_numbers")
     exact_boundary_geometry(*_geometry_case(3), kernel=kernel)
     assert len(sign) == 1
 
