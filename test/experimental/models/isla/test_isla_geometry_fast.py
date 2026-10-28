@@ -16,10 +16,11 @@
 
 """The fast search of the prediction points' boundary geometry against the reference.
 
-``exact_boundary_geometry(kernel="fast")`` traverses the same tree in another
-layout; every output of the search, the winding number, the distance, the direction
-and their gradients must equal the reference's bitwise, on closed, open, folded and
-repeated surfaces, at ties, on the wall and in float32 and float64.
+``exact_boundary_geometry(kernel="fast")`` runs the Triton weld, canonical-cell and
+weight kernels where the reference runs their torch code; every output of the search,
+the winding number, the distance, the direction and their gradients must equal the
+reference's bitwise, on closed, open, folded and repeated surfaces, at ties, on the
+wall and in float32 and float64.
 """
 
 import pytest

@@ -1014,10 +1014,9 @@ def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.T
     ``_BALL_SLOTS`` slots per query and an overflow list of ``Q`` pairs; when that
     list is full, the queries that overflow their slots are searched again with as
     many slots as they need, so no candidate is dropped. The pairs come in no
-    particular order (the caller sorts them). The queries are
-    traversed in Morton order, so neighbouring threads visit neighbouring nodes.
-    ``reach`` is the greatest
-    norm of a vertex. The zero-area cells ``flat`` ``(F,)``
+    particular order (the caller sorts them). The queries are traversed in Morton
+    order, so neighbouring threads visit neighbouring nodes. ``reach`` is the
+    greatest norm of a vertex. The zero-area cells ``flat`` ``(F,)``
     (:func:`_zero_area`) have no plane, and the float64 distance is not defined on
     them: they are kept wherever their boxes are reached. Nor are the planes of a
     cell whose float64 normal is not certified to its float32 rounding (``delta >

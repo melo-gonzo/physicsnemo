@@ -59,7 +59,6 @@ from torch.autograd.function import once_differentiable
 from physicsnemo.experimental.models.isla._triton import HAS_TRITON, tl, triton
 from physicsnemo.experimental.models.isla.segment_softmax import PairPlan, _source_items
 
-
 #: Pairs per tile of a program's loop, warps per program, and pairs per program of
 #: the by-source backward (launch constants; on GB300 at DrivAerML scale, 200k points x
 #: 680 pairs, 32-pair tiles on one warp ran each kernel 1.3x to 2.3x faster than the

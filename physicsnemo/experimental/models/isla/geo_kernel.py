@@ -54,7 +54,12 @@ import torch
 import torch.nn.functional as F
 
 ### (ISLA resolves geo_kernel to the eager region whenever HAS_TRITON is False.)
-from physicsnemo.experimental.models.isla._triton import HAS_TRITON, libdevice, tl, triton
+from physicsnemo.experimental.models.isla._triton import (
+    HAS_TRITON,
+    libdevice,
+    tl,
+    triton,
+)
 from physicsnemo.experimental.models.isla.blocks import _geo_width
 
 MAX_SLICES = 1024
@@ -666,7 +671,7 @@ def _geo_region_fwd(
     pooled = torch.empty(b, n, ng, device=r.device, dtype=out_dt)
     w = weight.reshape(-1).to(r.dtype).contiguous()
     bb = bias.reshape(-1).to(r.dtype).contiguous()
-    block_n, block_s = _fwd_block(s, k), triton.next_power_of_2(s)
+    block_n, block_s = _fwd_block(s, k), triton.next_power_of_2(max(s, 1))
     grid = (triton.cdiv(n, block_n), b)
     _geo_fwd_kernel[grid](
         r,
@@ -759,7 +764,7 @@ def _geo_region_bwd(
     grad_bias = grad_bias.contiguous()
     grad_mix = grad_mix.contiguous()
     grad_pooled = grad_pooled.contiguous()
-    block_n, block_s = _bwd_block(s, k), triton.next_power_of_2(s)
+    block_n, block_s = _bwd_block(s, k), triton.next_power_of_2(max(s, 1))
     n_tiles = triton.cdiv(n, block_n)
     glogit = torch.empty_like(logits_pre)
     gr = torch.empty(b, n, 3, device=r.device, dtype=r.dtype)
