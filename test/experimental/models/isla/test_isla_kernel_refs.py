@@ -63,6 +63,7 @@ from physicsnemo.experimental.models.isla.geometry import exact_boundary_geometr
 from physicsnemo.experimental.models.isla.segment_softmax import PairPlan
 from physicsnemo.experimental.models.isla.tree_read import BoundaryForest
 from test.experimental.models.isla._forced import ran
+from test.experimental.models.isla._geometry_cases import _fan
 from test.experimental.models.isla._kernel_cases import (
     _basis_case,
     _basis_step,
@@ -71,7 +72,6 @@ from test.experimental.models.isla._kernel_cases import (
 )
 from test.experimental.models.isla._marks import requires_cuda, requires_cuda_triton
 from test.experimental.models.isla._meshes import cloud
-from test.experimental.models.isla.test_isla_geometry_fast import _fan
 
 D = torch.float64
 _DEVICES = ["cpu", pytest.param("cuda", marks=[pytest.mark.cuda, requires_cuda])]

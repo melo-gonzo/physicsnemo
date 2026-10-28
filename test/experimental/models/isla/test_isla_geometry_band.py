@@ -35,10 +35,9 @@ from physicsnemo.experimental.models.isla import geometry
 from physicsnemo.experimental.models.isla.geometry import exact_boundary_geometry
 from physicsnemo.mesh.geometry._cell_normals import compute_cell_normals
 from physicsnemo.mesh.primitives.surfaces import sphere_icosahedral
-from test.experimental.models.isla._geometry_cases import _exact_d2
+from test.experimental.models.isla._geometry_cases import _exact_d2, _quad_diagonals
 from test.experimental.models.isla._marks import requires_cuda
 from test.experimental.models.isla._meshes import orthogonal
-from test.experimental.models.isla.test_isla_interior_geometry import _quad_diagonals
 
 D = torch.float64
 U32, U64 = 2.0**-24, 2.0**-53

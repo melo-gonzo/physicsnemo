@@ -38,6 +38,7 @@ from test.experimental.models.isla._geometry_cases import (
     _capped_cube,
     _circle,
     _face_queries,
+    _fan,
     _finned_cube,
     _interior,
     _naca,
@@ -272,20 +273,6 @@ def test_the_preorder_tree_is_the_library_lbvh_renumbered(f):
         sorted(pre[n] for n in level.tolist())
         for level in topo.internal_nodes_per_level
     ]
-
-
-def _fan(n: int = 96):
-    """A fan of ``n`` triangles around a hub, 50 queries above the hub (``n``
-    candidates each, more than the 64 slots at the default 96) and 400 elsewhere."""
-    t = torch.arange(n, dtype=D) * (2 * torch.pi / n)
-    rim = torch.stack([torch.cos(t), torch.sin(t), 0 * t], -1)
-    points = torch.cat([rim.new_zeros(1, 3), rim])
-    i = torch.arange(1, n + 1)
-    cells = torch.stack([torch.zeros_like(i), i, i % n + 1], -1)
-    g = torch.Generator().manual_seed(0)
-    hub = torch.linspace(0.01, 0.5, 50, dtype=D)[:, None] * torch.tensor([0.0, 0, 1])
-    q = torch.cat([hub, torch.rand(400, 3, dtype=D, generator=g) * 3 - 1.5])
-    return q, points, cells
 
 
 @pytest.mark.parametrize("kernel", ["reference", "fast"])

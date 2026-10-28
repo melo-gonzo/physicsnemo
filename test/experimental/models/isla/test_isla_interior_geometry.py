@@ -46,6 +46,7 @@ from test.experimental.models.isla._geometry_cases import (
     _naca,
     _near_wall,
     _polygon,
+    _quad_diagonals,
     _sphere,
     _torus,
 )
@@ -1181,29 +1182,6 @@ def test_float32_points_within_the_bound_are_on_the_wall(surface):
     cells = inv[m.cells][torch.randperm(m.n_cells, generator=g)].roll(1, -1)
     d3, u3 = exact_boundary_geometry(q, pts[perm], cells)
     assert torch.equal(d3, d) and torch.equal(u3, u)
-
-
-def _quad_diagonals(case: str):
-    """Float32 queries at the midpoints of a posed torus's quad diagonals (the edge
-    each quad's two triangles share, which near-duplicate normals meet across), the
-    torus's points and its cells: the 48 x 24 torus (``renumbering``), or the split
-    torus of test_on_wall_direction_is_a_function_of_the_input_mesh
-    (``precision``)."""
-    if case == "renumbering":
-        m = torus.load(n_major=48, n_minor=24)
-        pts = (m.points.double() @ orthogonal(3, 7).T).float()
-    else:
-        m = torus.load(n_major=28, n_minor=12)
-        g = torch.Generator().manual_seed(0)
-        p = m.points.double() * (
-            1 + 1e-5 * (2 * torch.rand(m.n_points, 1, dtype=D, generator=g) - 1)
-        )
-        pts = (p @ orthogonal(3, 7).T + torch.arange(1, 4, dtype=D) / 3).float()
-    ### torus.load writes each quad's two triangles at k and k + n_quads.
-    n_quads = m.n_cells // 2
-    a, b = m.cells[:n_quads], m.cells[n_quads:]
-    shared = (a[:, :, None] == b[:, None, :]).any(-1)
-    return pts[a[shared].view(n_quads, 2)].mean(1), pts, m.cells
 
 
 @pytest.mark.parametrize("case", ["renumbering", "precision"])
