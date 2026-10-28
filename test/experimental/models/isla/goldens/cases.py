@@ -1132,8 +1132,7 @@ def _geo_run(inputs, device, variant, drop=()):
         for n in (
             "_closest_candidates",
             "_closest_candidates_fast",
-            "_winding_sign",
-            "_tree_winding_numbers",
+            "_packed_winding_sum",
         )
     }
 
@@ -1141,20 +1140,16 @@ def _geo_run(inputs, device, variant, drop=()):
         seen["search"] = _op(*args)
         return seen["search"]
 
-    def sign(query, simplex, parity, tree, w=None, oriented=None):
-        if w is not None:
-            seen["w"] = w / (4 * torch.pi)
-        return saved["_winding_sign"](query, simplex, parity, tree, w, oriented)
-
     def tree_w(*args):
-        seen["w"] = saved["_tree_winding_numbers"](*args)
-        return seen["w"]
+        w = saved["_packed_winding_sum"](*args)
+        seen["w"] = w / (4 * torch.pi)
+        return w
 
     geo._closest_candidates = lambda *a: search(*a, _op=saved["_closest_candidates"])
     geo._closest_candidates_fast = lambda *a: search(
         *a, _op=saved["_closest_candidates_fast"]
     )
-    geo._winding_sign, geo._tree_winding_numbers = sign, tree_w
+    geo._packed_winding_sum = tree_w
     try:
         q = x["in.queries"].clone().requires_grad_()
         p = x["in.points"].clone().requires_grad_()

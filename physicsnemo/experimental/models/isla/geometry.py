@@ -24,6 +24,7 @@ positions only, so they refer to no frame origin."""
 
 import itertools
 import math
+from typing import Any
 
 import torch
 import warp as wp
@@ -32,10 +33,8 @@ from jaxtyping import Float, Int
 from physicsnemo.core.function_spec import FunctionSpec
 from physicsnemo.experimental.models.isla import geometry_fast
 from physicsnemo.experimental.models.isla.tree_walk import WARP_MAX_ELEMENTS
-from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.geometry._cell_normals import compute_cell_normals
 from physicsnemo.mesh.spatial._frame import canonical_frame, frame_coordinates
-from physicsnemo.mesh.spatial._lbvh import build_lbvh_topology
 from physicsnemo.mesh.spatial.bvh import _compute_morton_codes
 from physicsnemo.nn.functional.geometry.sdf import _closest_point_weights
 
@@ -51,7 +50,7 @@ _SEARCH_PAIRS = 2**23
 LENGTH_SOFTENING = 1e-6
 
 #: The far-field criterion of the winding number that signs the distance
-#: (:func:`_tree_winding_numbers`; Barill et al. 2018's ``beta``): a BVH node's
+#: (:func:`_packed_winding_sum`; Barill et al. 2018's ``beta``): a BVH node's
 #: expansion stands in for its cells when the query lies farther than this many node
 #: radii from its centre. A performance setting, like the tree read's
 #: ``TREE_READ_THETA``: the error falls to zero as it grows. Measured at 2 against
@@ -64,7 +63,7 @@ LENGTH_SOFTENING = 1e-6
 WINDING_NUMBER_BETA = 2.0
 
 
-def soft_log_length(s: torch.Tensor, eps: float = LENGTH_SOFTENING) -> torch.Tensor:
+def soft_log_length(s: torch.Tensor) -> torch.Tensor:
     r"""The logarithmic channel of a signed length ``s`` in the frame's length unit:
     :math:`\operatorname{asinh}(s / \varepsilon)`.
 
@@ -84,19 +83,12 @@ def soft_log_length(s: torch.Tensor, eps: float = LENGTH_SOFTENING) -> torch.Ten
     the channel is invariant to a uniform scaling of the geometry) is a numerical
     resolution, not a model parameter: about 17 times float32's unit roundoff
     :math:`2^{-24}`, the resolution of a distance relative to the frame's length
-    wherever the geometry sits in its domain. Measured with the whole boundary on
-    AirfRANS, DrivAerML Volume and AeroZoo, float32 rounding of the coordinates and of
-    the closest-point arithmetic moves the channel by at most 0.12, with the body
-    anywhere in its domain. The channel is linear for :math:`\lvert s \rvert` below
-    :math:`\varepsilon`. With the whole boundary of an external flow, the length unit
-    is the domain's size, so that range can reach into the boundary layer. On
-    AirfRANS with its far field (305 chords) it holds 19.5 % of the interior points:
-    the viscous sublayer, the buffer layer and the start of the log layer (:math:`y^+`
-    about 25-90, estimated). The first nodes there sit at about
-    :math:`5 \times 10^{-9}` of the frame's length, below float32's resolution of the
-    domain. On DrivAerML Volume with its domain the range holds 0.57 % of the points.
+    wherever the geometry sits in its domain. The channel is linear for
+    :math:`\lvert s \rvert` below :math:`\varepsilon`; with the whole boundary of an
+    external flow the length unit is the domain's size, so that range can reach into
+    the boundary layer.
     """
-    return torch.asinh(s / eps)
+    return torch.asinh(s / LENGTH_SOFTENING)
 
 
 def rms_pairwise_distance(
@@ -724,10 +716,11 @@ def _grouped_min_norm(group: torch.Tensor, c: torch.Tensor, n_groups: int) -> to
 
 
 @wp.func
-def _triangle_distance2(p: wp.vec3d, a: wp.vec3d, b: wp.vec3d, c: wp.vec3d) -> wp.float64:
+def _triangle_distance2(p: Any, a: Any, b: Any, c: Any):
     """The squared distance from ``p`` to the triangle ``abc`` (Ericson 2005, Sec.
-    5.1.5); NaN on a degenerate triangle, which the caller keeps."""
-    zero = wp.float64(0.0)
+    5.1.5), in the precision of the vectors (float64 or float32); NaN on a degenerate
+    triangle, which the caller keeps."""
+    zero = type(p[0])(0.0)
     ab = b - a
     ac = c - a
     ap = p - a
@@ -823,12 +816,7 @@ def _ball_candidates_kernel(
     k = wp.int64(0)
     node = wp.int32(0)
     while node >= 0:
-        lo = node_lo[node]
-        hi = node_hi[node]
-        g0 = wp.max(wp.max(lo[0] - x32[0], x32[0] - hi[0]), zero)
-        g1 = wp.max(wp.max(lo[1] - x32[1], x32[1] - hi[1]), zero)
-        g2 = wp.max(wp.max(lo[2] - x32[2], x32[2] - hi[2]), zero)
-        if g0 * g0 + g1 * g1 + g2 * g2 <= r2_32:
+        if _box_gap2(node_lo[node], node_hi[node], x32) <= r2_32:
             c = leaf_cell[node]
             if c >= wp.int64(0):
                 j = c * wp.int64(4)
@@ -881,35 +869,6 @@ def _node_boxes_kernel(
     hi[i] = wp.max(hi[left[i]], hi[right[i]])
 
 
-@wp.kernel
-def _parents_kernel(left: wp.array(dtype=wp.int64), right: wp.array(dtype=wp.int64), parent: wp.array(dtype=wp.int64)):
-    """Each inner node's children point back to it."""
-    i = wp.tid()
-    if left[i] >= wp.int64(0):
-        parent[left[i]] = wp.int64(i)
-        parent[right[i]] = wp.int64(i)
-
-
-@wp.kernel
-def _escape_kernel(
-    left: wp.array(dtype=wp.int64),
-    right: wp.array(dtype=wp.int64),
-    parent: wp.array(dtype=wp.int64),
-    escape: wp.array(dtype=wp.int64),
-):
-    """The node after each node's subtree in depth-first order: the right sibling of
-    its nearest ancestor-or-self that is a left child, -1 when there is none."""
-    n = wp.int64(wp.tid())
-    e = wp.int64(-1)
-    while n > wp.int64(0):
-        p = parent[n]
-        if left[p] == n:
-            e = right[p]
-            break
-        n = p
-    escape[wp.tid()] = e
-
-
 def _bottom_up(kernel, levels, arrays, ref: torch.Tensor):
     """``kernel`` over the inner nodes of each level of a BVH, deepest first, one
     launch per level (``arrays`` follow the node ids)."""
@@ -920,35 +879,6 @@ def _bottom_up(kernel, levels, arrays, ref: torch.Tensor):
             wp.launch(kernel, dim=inner.shape[0], inputs=[wp.from_torch(inner, dtype=wp.int64), *arrays], device=device, stream=stream)
 
 
-def _cell_tree(simplex: torch.Tensor):
-    """A BVH over the cells ``simplex`` ``(F, 3, 3)``, one cell per leaf (the
-    midpoint-split LBVH of :class:`physicsnemo.mesh.spatial.BVH`), with what a
-    stackless traversal needs: each node's two children, its escape pointer (the
-    node after its subtree, -1 at the end), the inner nodes of each level, root
-    first, each node's cell (-1 inside), and each node's box ``(N, 3)`` twice (least
-    and greatest corner), in float32 rounded outward for the traversals' pruning. The
-    cells are put in Morton order in the boundary's canonical frame
-    (:func:`~physicsnemo.mesh.spatial._frame.canonical_frame`), so the tree, and the
-    far field of :func:`_tree_winding_numbers` on it, is the same in every pose of the
-    case; the boxes are in the queries' frame. The topology depends on ``F`` alone, so it is
-    built without reading the device."""
-    f, dev = simplex.shape[0], simplex.device
-    order = _morton_order(simplex)
-    topo = build_lbvh_topology(f, 1, dev)
-    left, right = topo.left_child[: topo.node_count], topo.right_child[: topo.node_count]
-    levels = topo.internal_nodes_per_level
-    parent, escape = torch.full_like(left, -1), torch.empty_like(left)
-    device, stream = FunctionSpec.warp_launch_context(simplex)
-    with FunctionSpec.warp_stream_scope(stream):
-        wp.init()
-        links = [wp.from_torch(t.contiguous(), dtype=wp.int64) for t in (left, right, parent)]
-        wp.launch(_parents_kernel, dim=left.shape[0], inputs=links, device=device, stream=stream)
-        wp.launch(_escape_kernel, dim=left.shape[0], inputs=[*links, wp.from_torch(escape, dtype=wp.int64)], device=device, stream=stream)
-    leaf_start, leaf_count = topo.leaf_start[: topo.node_count], topo.leaf_count[: topo.node_count]
-    leaf_cell = torch.where(leaf_count > 0, order[leaf_start.clamp_min(0)], -1)
-    return left, right, escape, levels, leaf_cell, *_tree_boxes(simplex, left, right, levels, leaf_cell)
-
-
 def _morton_order(simplex: torch.Tensor) -> torch.Tensor:
     """The cells ``simplex`` ``(F, 3, 3)`` in the Morton order of their centroids in the
     boundary's canonical frame (:func:`~physicsnemo.mesh.spatial._frame.canonical_frame`),
@@ -956,11 +886,8 @@ def _morton_order(simplex: torch.Tensor) -> torch.Tensor:
     f = simplex.shape[0]
     e = simplex[:, 1:] - simplex[:, :1]
     frame = canonical_frame(simplex.mean(1), torch.linalg.cross(e[:, 0], e[:, 1], dim=-1).norm(dim=-1))
-    cells = torch.arange(3 * f, device=simplex.device).reshape(f, 3)
     ### Column products, not a GEMM (see frame_coordinates).
-    return _compute_morton_codes(
-        Mesh(points=frame_coordinates(simplex.reshape(-1, 3), frame), cells=cells).cell_centroids
-    ).argsort(stable=True)
+    return _compute_morton_codes(frame_coordinates(simplex.reshape(-1, 3), frame).reshape(f, 3, 3).mean(1)).argsort(stable=True)
 
 
 def _tree_boxes(simplex, left, right, levels, leaf_cell):
@@ -1043,11 +970,19 @@ def _inner_per_level(f: int) -> list[int]:
 
 
 def _preorder_cell_tree(simplex: torch.Tensor):
-    """:func:`_cell_tree`'s tree (the same Morton order and topology, so every
-    traversal visits the same nodes in the same order) built by one kernel, its nodes
-    in depth-first preorder, so a node's left child is the next node; and its leaves
-    hold the cells in sorted order: leaf ``i`` holds row ``i`` of ``simplex[order]``,
-    returned with ``order`` ``(F,)``."""
+    """A BVH over the cells ``simplex`` ``(F, 3, 3)``, one cell per leaf (the
+    midpoint-split LBVH of :class:`physicsnemo.mesh.spatial.BVH`), built by one kernel,
+    its nodes in depth-first preorder, so a node's left child is the next node; with
+    what a stackless traversal needs: each node's two children, its escape pointer (the
+    node after its subtree, -1 at the end), the inner nodes of each level, root first,
+    each node's cell (-1 inside), and each node's box ``(N, 3)`` twice (least and
+    greatest corner), in float32 rounded outward for the traversals' pruning. The cells
+    are put in Morton order in the boundary's canonical frame
+    (:func:`~physicsnemo.mesh.spatial._frame.canonical_frame`), so the tree, and the
+    far field of :func:`_packed_winding_sum` on it, is the same in every pose of the
+    case; the boxes are in the queries' frame. Its leaves hold the cells in sorted
+    order: leaf ``i`` holds row ``i`` of ``simplex[order]``, returned with ``order``
+    ``(F,)``."""
     f, dev = simplex.shape[0], simplex.device
     order = _morton_order(simplex)
     n = 2 * f - 1
@@ -1070,10 +1005,10 @@ def _preorder_cell_tree(simplex: torch.Tensor):
     return (left, right, escape, levels, leaf_cell, *_tree_boxes(s_sorted, left, right, levels, leaf_cell)), order, s_sorted
 
 
-def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.Tensor, tree, winding=None, reach=None, flat=None):
+def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.Tensor, tree, reach, flat=None):
     """The (query, cell) pairs ``(P,)``, ``(P,)`` of every cell of ``simplex`` ``(F,
     3, 3)`` within ``radius`` ``(Q,)`` of its query ``(Q, 3)``, all float64: a Warp
-    traversal of the BVH ``tree`` over the cells (:func:`_cell_tree`),
+    traversal of the BVH ``tree`` over the cells (:func:`_preorder_cell_tree`),
     with its boxes and the queries in float32 for the pruning (rounded outward and
     padded) and the distances to the cells in float64. One pass fills
     ``_BALL_SLOTS`` slots per query and an overflow list of ``Q`` pairs; when that
@@ -1081,10 +1016,8 @@ def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.T
     many slots as they need, so no candidate is dropped. The pairs come in no
     particular order (the caller sorts them). The queries are
     traversed in Morton order, so neighbouring threads visit neighbouring nodes.
-    With ``winding`` (:func:`_winding_moments` on the same tree), the first pass
-    also sums the solid angles (:func:`_ball_winding_kernel`), returned as a third
-    output ``(Q,)``, the winding number times ``4 pi``. ``reach``, the greatest
-    norm of a vertex, when the caller has it. The zero-area cells ``flat`` ``(F,)``
+    ``reach`` is the greatest
+    norm of a vertex. The zero-area cells ``flat`` ``(F,)``
     (:func:`_zero_area`) have no plane, and the float64 distance is not defined on
     them: they are kept wherever their boxes are reached. Nor are the planes of a
     cell whose float64 normal is not certified to its float32 rounding (``delta >
@@ -1119,8 +1052,6 @@ def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.T
     r32 = r32.nextafter(r32.new_tensor(torch.inf))
     ### (the lower bound's float32 rounding: the products and offsets, against the
     ### coordinates' magnitude)
-    if reach is None:
-        reach = simplex.norm(dim=-1).amax()
     reach32 = ((r32.double() + 16 * torch.finfo(torch.float32).eps * (query.norm(dim=-1) + reach)) * (1 + 1e-5)).float()
     device, stream = FunctionSpec.warp_launch_context(query)
     fixed = [
@@ -1144,7 +1075,7 @@ def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.T
     overflow_count = torch.zeros(1, dtype=torch.int64, device=dev)
     overflow = [wp.from_torch(t, dtype=wp.int64) for t in (overflow_query, overflow_cell, overflow_count)]
 
-    def search(rows, cap, extra=None):
+    def search(rows, cap):
         count = torch.zeros(rows.shape[0], dtype=torch.int64, device=dev)
         out = torch.empty(rows.shape[0] * cap, dtype=torch.int64, device=dev)
         ### Blocks of rows whose slots Warp takes as one array (under 2**31 entries:
@@ -1155,41 +1086,36 @@ def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.T
             for s in range(0, rows.shape[0], block):
                 e = min(s + block, rows.shape[0])
                 wp.launch(
-                    _ball_candidates_kernel if extra is None else _ball_winding_kernel,
+                    _ball_candidates_kernel,
                     dim=e - s,
                     inputs=[*fixed, wp.from_torch(rows[s:e], dtype=wp.int64), cap,
                             wp.from_torch(count[s:e], dtype=wp.int64),
-                            wp.from_torch(out[s * cap : e * cap], dtype=wp.int64), *overflow, *(extra or [])],
+                            wp.from_torch(out[s * cap : e * cap], dtype=wp.int64), *overflow],
                     device=device,
                     stream=stream,
                 )
         return count, out.reshape(-1, cap)
 
     rows = _compute_morton_codes(query).argsort()
-    w = None
-    if winding is not None:
-        w = torch.empty(query.shape[0], dtype=torch.float64, device=dev)
-        count, out = search(rows, _BALL_SLOTS, [*winding, wp.from_torch(w, dtype=wp.float64)])
-    else:
-        count, out = search(rows, _BALL_SLOTS)
+    count, out = search(rows, _BALL_SLOTS)
     n_overflow = int(overflow_count[0])
     if n_overflow <= overflow_query.shape[0]:
         keep = torch.arange(_BALL_SLOTS, device=dev) < count[:, None]
         li, pk = rows[:, None].expand_as(out)[keep], out[keep]
-        return torch.cat([li, overflow_query[:n_overflow]]), torch.cat([pk, overflow_cell[:n_overflow]]), w
+        return torch.cat([li, overflow_query[:n_overflow]]), torch.cat([pk, overflow_cell[:n_overflow]])
     over = count > _BALL_SLOTS
     keep = (torch.arange(_BALL_SLOTS, device=dev) < count[:, None]) & ~over[:, None]
     li, pk = rows[:, None].expand_as(out)[keep], out[keep]
-    if bool(over.any()):
-        rows = rows[over]
-        count, out = search(rows, int(count.max()))
-        keep = torch.arange(out.shape[1], device=dev) < count[:, None]
-        li, pk = torch.cat([li, rows[:, None].expand_as(out)[keep]]), torch.cat([pk, out[keep]])
-    return li, pk, w
+    ### (the list is full, so some query overflowed its slots)
+    rows = rows[over]
+    count, out = search(rows, int(count.max()))
+    keep = torch.arange(out.shape[1], device=dev) < count[:, None]
+    return torch.cat([li, rows[:, None].expand_as(out)[keep]]), torch.cat([pk, out[keep]])
 
 
 #: Entries of the traversal stack of :func:`_nearest_cells`; a midpoint-split tree of
-#: ``F`` cells is ``ceil(log2 F)`` deep and needs one more.
+#: ``F`` cells is ``ceil(log2 F)`` deep and needs one more. The kernels take int32 node
+#: ids, so ``2 F - 1 < 2^31`` and the tree is at most 30 deep.
 _NEAREST_STACK = 64
 _nearest_stack = wp.types.vector(length=_NEAREST_STACK, dtype=wp.int32)
 _nearest_gaps = wp.types.vector(length=_NEAREST_STACK, dtype=wp.float32)
@@ -1208,44 +1134,6 @@ def _box_gap2(lo: wp.vec3f, hi: wp.vec3f, x: wp.vec3f) -> wp.float32:
     g1 = wp.max(wp.max(lo[1] - x[1], x[1] - hi[1]), zero)
     g2 = wp.max(wp.max(lo[2] - x[2], x[2] - hi[2]), zero)
     return g0 * g0 + g1 * g1 + g2 * g2
-
-
-@wp.func
-def _triangle_distance2_32(p: wp.vec3f, a: wp.vec3f, b: wp.vec3f, c: wp.vec3f) -> wp.float32:
-    """:func:`_triangle_distance2` in float32 (NaN on a degenerate triangle)."""
-    zero = wp.float32(0.0)
-    ab = b - a
-    ac = c - a
-    ap = p - a
-    d1 = wp.dot(ab, ap)
-    d2 = wp.dot(ac, ap)
-    if d1 <= zero and d2 <= zero:
-        return wp.dot(ap, ap)
-    bp = p - b
-    d3 = wp.dot(ab, bp)
-    d4 = wp.dot(ac, bp)
-    if d3 >= zero and d4 <= d3:
-        return wp.dot(bp, bp)
-    vc = d1 * d4 - d3 * d2
-    if vc <= zero and d1 >= zero and d3 <= zero:
-        r = ap - ab * (d1 / (d1 - d3))
-        return wp.dot(r, r)
-    cp = p - c
-    d5 = wp.dot(ab, cp)
-    d6 = wp.dot(ac, cp)
-    if d6 >= zero and d5 <= d6:
-        return wp.dot(cp, cp)
-    vb = d5 * d2 - d1 * d6
-    if vb <= zero and d2 >= zero and d6 <= zero:
-        r = ap - ac * (d2 / (d2 - d6))
-        return wp.dot(r, r)
-    va = d3 * d6 - d5 * d4
-    if va <= zero and d4 - d3 >= zero and d5 - d6 >= zero:
-        r = bp - (c - b) * ((d4 - d3) / ((d4 - d3) + (d5 - d6)))
-        return wp.dot(r, r)
-    denom = va + vb + vc
-    r = ap - ab * (vb / denom) - ac * (vc / denom)
-    return wp.dot(r, r)
 
 
 @wp.kernel
@@ -1281,7 +1169,7 @@ def _nearest_cell_kernel(
             c = leaf_cell[node]
             if c >= wp.int64(0):
                 i = c * wp.int64(3)
-                d2 = _triangle_distance2_32(
+                d2 = _triangle_distance2(
                     x, _vec3f(corners[i]), _vec3f(corners[i + wp.int64(1)]), _vec3f(corners[i + wp.int64(2)])
                 )
                 if d2 < best:
@@ -1319,13 +1207,11 @@ def _nearest_cell_kernel(
 def _nearest_cells(query: torch.Tensor, simplex: torch.Tensor, tree) -> torch.Tensor:
     """For each query ``(Q, 3)``, the index of a cell of ``simplex`` ``(F, 3, 3)``
     nearest to it in float32 ``(Q,)``, by a Warp traversal of the BVH ``tree`` over the
-    cells (:func:`_cell_tree`); cell 0 when every distance is NaN. Its exact distance
+    cells (:func:`_preorder_cell_tree`); cell 0 when every distance is NaN. Its exact distance
     bounds the closest one, so any cell would do for the search radius; a near one
     keeps the radius, and so the candidate pairs, few. The queries are traversed in
     Morton order."""
-    left, right, _, levels, leaf_cell, lo, hi = tree
-    if len(levels) >= _NEAREST_STACK:
-        raise ValueError(f"a tree {len(levels)} levels deep exceeds the nearest-cell stack ({_NEAREST_STACK})")
+    left, right, _, _, leaf_cell, lo, hi = tree
     nearest = torch.zeros(query.shape[0], dtype=torch.int64, device=query.device)
     device, stream = FunctionSpec.warp_launch_context(query)
     with FunctionSpec.warp_stream_scope(stream):
@@ -1395,7 +1281,7 @@ def _node_moments_kernel(
     radius: wp.array(dtype=wp.float64),
 ):
     """The far-field moments of each node ``inner[tid]`` from its two children's
-    (:func:`_tree_winding_numbers`)."""
+    (:func:`_packed_winding_sum`)."""
     i = inner[wp.tid()]
     a = left[i]
     b = right[i]
@@ -1412,163 +1298,8 @@ def _node_moments_kernel(
     radius[i] = wp.max(wp.length(ea) + radius[a], wp.length(eb) + radius[b])
 
 
-@wp.kernel
-def _winding_kernel(
-    left: wp.array(dtype=wp.int32),
-    escape: wp.array(dtype=wp.int32),
-    leaf_cell: wp.array(dtype=wp.int64),
-    centre: wp.array(dtype=wp.vec3d),
-    far2: wp.array(dtype=wp.float32),
-    dipole: wp.array(dtype=wp.vec3f),
-    spread: wp.array(dtype=wp.mat33f),
-    corners: wp.array(dtype=wp.vec3d),
-    parity: wp.array(dtype=wp.float64),
-    query: wp.array(dtype=wp.vec3d),
-    out: wp.array(dtype=wp.float64),
-):
-    """The sum of the signed solid angles of the cells seen from each query: a
-    stackless depth-first traversal of the BVH that takes a node's expansion (in
-    float32, from the float64 offset of its centre) where the query is farther than
-    ``far2`` (squared) from it, and the exact solid angle (float64, the canonical
-    vertices ``corners`` times the cell's ``parity``) at the near leaves."""
-    tid = wp.tid()
-    x = query[tid]
-    total = wp.float64(0.0)
-    node = wp.int32(0)
-    while node >= 0:
-        e = centre[node] - x
-        r = wp.vec3f(wp.float32(e[0]), wp.float32(e[1]), wp.float32(e[2]))
-        r2 = wp.dot(r, r)
-        if r2 > far2[node]:
-            inv2 = wp.float32(1.0) / r2
-            s = spread[node]
-            near = wp.dot(dipole[node], r) + s[0, 0] + s[1, 1] + s[2, 2]
-            total += wp.float64((near - wp.float32(3.0) * wp.dot(r, wp.mul(s, r)) * inv2) * inv2 * wp.sqrt(inv2))
-            node = escape[node]
-        else:
-            c = leaf_cell[node]
-            if c >= wp.int64(0):
-                i = c * wp.int64(3)
-                total += parity[c] * _solid_angle(x, corners[i], corners[i + wp.int64(1)], corners[i + wp.int64(2)])
-                node = escape[node]
-            else:
-                node = left[node]
-    out[tid] = total
-
-
-@wp.kernel
-def _ball_winding_kernel(
-    node_lo: wp.array(dtype=wp.vec3f),
-    node_hi: wp.array(dtype=wp.vec3f),
-    left: wp.array(dtype=wp.int32),
-    escape: wp.array(dtype=wp.int32),
-    leaf_cell: wp.array(dtype=wp.int64),
-    corners: wp.array(dtype=wp.vec3d),
-    thin: wp.array(dtype=wp.vec2d),
-    planes: wp.array(dtype=wp.vec4f),
-    query: wp.array(dtype=wp.vec3d),
-    query32: wp.array(dtype=wp.vec3f),
-    radius: wp.array(dtype=wp.float64),
-    radius32: wp.array(dtype=wp.float32),
-    reach32: wp.array(dtype=wp.float32),
-    rows: wp.array(dtype=wp.int64),
-    cap: wp.int64,
-    count: wp.array(dtype=wp.int64),
-    cells_out: wp.array(dtype=wp.int64),
-    overflow_query: wp.array(dtype=wp.int64),
-    overflow_cell: wp.array(dtype=wp.int64),
-    overflow_count: wp.array(dtype=wp.int64),
-    centre: wp.array(dtype=wp.vec3d),
-    far2: wp.array(dtype=wp.float32),
-    dipole: wp.array(dtype=wp.vec3f),
-    spread: wp.array(dtype=wp.mat33f),
-    wcorners: wp.array(dtype=wp.vec3d),
-    parity: wp.array(dtype=wp.float64),
-    w_out: wp.array(dtype=wp.float64),
-):
-    """:func:`_ball_candidates_kernel` and :func:`_winding_kernel` in one traversal
-    of the same BVH: a node is entered when either needs it, and each keeps the node
-    after the subtree it has finished with (-2 while it is active), so each sees the
-    nodes its own traversal visits, in the same order: the same candidates (the
-    overflow list included) and the same sum, bitwise."""
-    tid = wp.tid()
-    q = rows[tid]
-    x = query[q]
-    x32 = query32[q]
-    r2 = radius[q] * radius[q]
-    r2_32 = radius32[q] * radius32[q]
-    reach2 = reach32[q] * reach32[q]
-    zero = wp.float32(0.0)
-    k = wp.int64(0)
-    total = wp.float64(0.0)
-    node = wp.int32(0)
-    w_skip = wp.int32(-2)
-    b_skip = wp.int32(-2)
-    while node >= 0:
-        if node == w_skip:
-            w_skip = wp.int32(-2)
-        if node == b_skip:
-            b_skip = wp.int32(-2)
-        w_near = wp.int32(0)
-        if w_skip == wp.int32(-2):
-            e = centre[node] - x
-            r = wp.vec3f(wp.float32(e[0]), wp.float32(e[1]), wp.float32(e[2]))
-            rr = wp.dot(r, r)
-            if rr > far2[node]:
-                inv2 = wp.float32(1.0) / rr
-                s = spread[node]
-                near = wp.dot(dipole[node], r) + s[0, 0] + s[1, 1] + s[2, 2]
-                total += wp.float64((near - wp.float32(3.0) * wp.dot(r, wp.mul(s, r)) * inv2) * inv2 * wp.sqrt(inv2))
-                w_skip = escape[node]
-            else:
-                w_near = wp.int32(1)
-        b_in = wp.int32(0)
-        if b_skip == wp.int32(-2):
-            lo = node_lo[node]
-            hi = node_hi[node]
-            g0 = wp.max(wp.max(lo[0] - x32[0], x32[0] - hi[0]), zero)
-            g1 = wp.max(wp.max(lo[1] - x32[1], x32[1] - hi[1]), zero)
-            g2 = wp.max(wp.max(lo[2] - x32[2], x32[2] - hi[2]), zero)
-            if g0 * g0 + g1 * g1 + g2 * g2 <= r2_32:
-                b_in = wp.int32(1)
-            else:
-                b_skip = escape[node]
-        c = leaf_cell[node]
-        if c >= wp.int64(0):
-            if w_near == wp.int32(1):
-                i = c * wp.int64(3)
-                total += parity[c] * _solid_angle(x, wcorners[i], wcorners[i + wp.int64(1)], wcorners[i + wp.int64(2)])
-            if b_in == wp.int32(1):
-                j = c * wp.int64(4)
-                h = planes[j]
-                sp = h[0] * x32[0] + h[1] * x32[1] + h[2] * x32[2] - h[3]
-                o = zero
-                for m in range(1, 4):
-                    h = planes[j + wp.int64(m)]
-                    o = wp.max(o, h[0] * x32[0] + h[1] * x32[1] + h[2] * x32[2] - h[3])
-                i = c * wp.int64(3)
-                if not (sp * sp + o * o > reach2) and not _beyond(
-                    x, corners[i], corners[i + wp.int64(1)], corners[i + wp.int64(2)], thin[c], radius[q], r2
-                ):
-                    if k < cap:
-                        cells_out[wp.int64(tid) * cap + k] = c
-                    else:
-                        slot = wp.atomic_add(overflow_count, 0, wp.int64(1))
-                        if slot < overflow_query.shape[0]:
-                            overflow_query[slot] = q
-                            overflow_cell[slot] = c
-                    k += wp.int64(1)
-            node = escape[node]
-        elif w_near == wp.int32(1) or b_in == wp.int32(1):
-            node = left[node]
-        else:
-            node = escape[node]
-    count[tid] = k
-    w_out[q] = total
-
-
 def _winding_moments(simplex: torch.Tensor, parity: torch.Tensor, area: torch.Tensor, tree):
-    """The far-field data of :func:`_tree_winding_numbers` per node of ``tree``, as
+    """The far-field data of :func:`_packed_winding_sum` per node of ``tree``, as
     the Warp arrays its traversal reads: the centre, the squared far-field radius,
     the dipole and its spread, then the cells' corners and parities."""
     left, right, escape, levels, leaf_cell, _, _ = tree
@@ -1610,42 +1341,9 @@ def _winding_moments(simplex: torch.Tensor, parity: torch.Tensor, area: torch.Te
     ]
 
 
-def _tree_winding_numbers(query: torch.Tensor, simplex: torch.Tensor, parity: torch.Tensor, area: torch.Tensor, tree):
-    """The generalized winding number of the oriented triangles ``simplex`` ``(F, 3,
-    3)`` (canonical, orientation ``parity`` ``(F,)``, area vectors ``area`` ``(F,
-    3)``) at each query ``(Q, 3)``, all float64, by Barill, Dickson, Schmidt, Levin
-    and Jacobson (2018) on the BVH ``tree`` (:func:`_cell_tree`): every node carries
-    the area-weighted centre ``p`` of its cells, a radius about it, their dipole
-    moment ``m = sum a_f n_f`` and its spread ``N = sum a_f n_f (c_f - p)^T``
-    (one bottom-up pass over the levels); a node farther than ``WINDING_NUMBER_BETA``
-    radii takes the expansion of the solid angle about ``p`` to first order, ``m .
-    r / |r|^3 + tr(N) / |r|^3 - 3 r . N r / |r|^5`` with ``r = p - x``, and the near
-    leaves the exact solid angle."""
-    left, _, escape, _, leaf_cell, _, _ = tree
-    out = torch.empty(query.shape[0], dtype=torch.float64, device=query.device)
-    device, stream = FunctionSpec.warp_launch_context(query)
-    with FunctionSpec.warp_stream_scope(stream):
-        wp.init()
-        wp.launch(
-            _winding_kernel,
-            dim=query.shape[0],
-            inputs=[
-                wp.from_torch(left.int().contiguous(), dtype=wp.int32),
-                wp.from_torch(escape.int().contiguous(), dtype=wp.int32),
-                wp.from_torch(leaf_cell.contiguous(), dtype=wp.int64),
-                *_winding_moments(simplex, parity, area, tree),
-                wp.from_torch(query.contiguous(), dtype=wp.vec3d),
-                wp.from_torch(out, dtype=wp.float64),
-            ],
-            device=device,
-            stream=stream,
-        )
-    return out / (4 * torch.pi)
-
-
 @wp.struct
 class _WindingNode:
-    """What :func:`_winding_kernel` reads of a node, in one record: the centre, the
+    """What :func:`_packed_winding_kernel` reads of a node, in one record: the centre, the
     squared far-field radius, the dipole and its spread, the node after its subtree
     and its cell (-1 inside)."""
 
@@ -1687,17 +1385,19 @@ def _packed_winding_kernel(
     rows: wp.array(dtype=wp.int64),
     out: wp.array(dtype=wp.float64),
 ):
-    """:func:`_winding_kernel` on a tree in depth-first preorder
-    (:func:`_preorder_cell_tree`, an inner node's left child is the next node) with
-    its nodes packed: the same nodes in the same order, the same arithmetic."""
+    """The sum of the signed solid angles of the cells seen from each query: a
+    stackless depth-first traversal of the BVH (:func:`_preorder_cell_tree`, an inner
+    node's left child is the next node; its nodes packed) that takes a node's expansion
+    (in float32, from the float64 offset of its centre) where the query is farther than
+    ``far2`` (squared) from it, and the exact solid angle (float64, the canonical
+    vertices ``corners`` times the cell's ``parity``) at the near leaves."""
     q = rows[wp.tid()]
     x = query[q]
     total = wp.float64(0.0)
     node = wp.int32(0)
     while node >= 0:
         nd = nodes[node]
-        e = nd.centre - x
-        r = wp.vec3f(wp.float32(e[0]), wp.float32(e[1]), wp.float32(e[2]))
+        r = _vec3f(nd.centre - x)
         r2 = wp.dot(r, r)
         if r2 > nd.far2:
             inv2 = wp.float32(1.0) / r2
@@ -1717,10 +1417,18 @@ def _packed_winding_kernel(
 
 
 def _packed_winding_sum(query: torch.Tensor, simplex: torch.Tensor, parity: torch.Tensor, area: torch.Tensor, tree):
-    """The sum of the signed solid angles at each query ``(Q, 3)`` of
-    :func:`_tree_winding_numbers` (the winding number times ``4 pi``), on a tree from
-    :func:`_preorder_cell_tree` whose leaves hold the rows of ``simplex``: its moments,
-    then one record per node and one traversal, the queries in Morton order."""
+    """The generalized winding number times ``4 pi`` of the oriented triangles
+    ``simplex`` ``(F, 3, 3)`` (canonical, orientation ``parity`` ``(F,)``, area vectors
+    ``area`` ``(F, 3)``) at each query ``(Q, 3)``, all float64, by Barill, Dickson,
+    Schmidt, Levin and Jacobson (2018) on the BVH ``tree`` from
+    :func:`_preorder_cell_tree` whose leaves hold the rows of ``simplex``: every node
+    carries the area-weighted centre ``p`` of its cells, a radius about it, their dipole
+    moment ``m = sum a_f n_f`` and its spread ``N = sum a_f n_f (c_f - p)^T`` (one
+    bottom-up pass over the levels); a node farther than ``WINDING_NUMBER_BETA`` radii
+    takes the expansion of the solid angle about ``p`` to first order, ``m . r / |r|^3
+    + tr(N) / |r|^3 - 3 r . N r / |r|^5`` with ``r = p - x``, and the near leaves the
+    exact solid angle. Its moments, then one record per node and one traversal, the
+    queries in Morton order."""
     left, _, escape, _, leaf_cell, _, _ = tree
     centre, far2, dipole, spread, corners, par = _winding_moments(simplex, parity, area, tree)
     out = torch.empty(query.shape[0], dtype=torch.float64, device=query.device)
@@ -1798,11 +1506,12 @@ def _segment_winding_numbers(query: torch.Tensor, simplex: torch.Tensor, parity:
     return out / (2 * torch.pi)
 
 
-def _winding_sign(query: torch.Tensor, simplex: torch.Tensor, parity: torch.Tensor, tree, w=None, oriented=None):
-    """The sign of the distance at each query ``(Q, d)``, float64: ``sign(sigma / 2 -
-    w)``, with ``w`` the generalized winding number of the oriented cells
-    ``simplex`` (canonical, orientation ``parity``; Jacobson, Kavan and
-    Sorkine-Hornung 2013) and ``sigma`` the sign of the volume they enclose,
+def _winding_sign(sigma: torch.Tensor, w: torch.Tensor):
+    """The sign of the distance at each query, float64: ``sign(sigma / 2 - w)``, with
+    ``w`` ``(Q,)`` the generalized winding number of the oriented cells at the queries
+    (Jacobson, Kavan and Sorkine-Hornung 2013; :func:`_packed_winding_sum` in three
+    dimensions, :func:`_segment_winding_numbers` in two) and ``sigma`` the sign of the
+    volume they enclose (:func:`_oriented_areas`),
     ``V = sum_f a_f n_f . (c_f - g) / d`` about their area-weighted centroid ``g``
     (+1 at ``V = 0`` and at ``w = sigma / 2``). For a closed surface ``w`` is
     ``(sigma - 1) / 2`` on the side the normals point to and ``(sigma + 1) / 2`` on
@@ -1810,15 +1519,7 @@ def _winding_sign(query: torch.Tensor, simplex: torch.Tensor, parity: torch.Tens
     bound), so ``sigma / 2 - w`` is +1/2 or -1/2: positive on the side the normals
     point to; coincident cells of opposite orientation (a
     zero-thickness fold) cancel in ``w``, so both of its sides take the sign of the
-    region around it. ``w`` times ``4 pi``, when the ball search has summed it, and
-    ``oriented``, :func:`_oriented_areas` of the cells, when the caller has it."""
-    area, sigma = _oriented_areas(simplex, parity) if oriented is None else oriented
-    if w is not None:
-        w = w / (4 * torch.pi)
-    elif tree is None:
-        w = _segment_winding_numbers(query, simplex, parity)
-    else:
-        w = _tree_winding_numbers(query, simplex, parity, area, tree)
+    region around it."""
     return torch.where(0.5 * sigma - w >= 0, 1.0, -1.0).to(w)
 
 
@@ -1878,6 +1579,117 @@ def _certified_tied(tq: torch.Tensor, c: torch.Tensor, tau: torch.Tensor, nq: in
             dist = (cc[:, :, None] - cc[:, None, :]).norm(dim=-1)
             tied[ids[h]] = (dist > tt[:, :, None] + tt[:, None, :]).flatten(1).any(1)
     return tied
+
+
+def _closest_pair(li, pk, dist, err, points, cells, parity, nq):
+    """Per query ``(nq,)``: the pair of its closest point (an index into the pairs
+    ``li``, ``pk`` with distances ``dist`` and error bounds ``err``), the least
+    distance, and the least upper bound ``dist + err``. Cells at exactly the least
+    distance (cells sharing the closest point compute it bitwise) are ordered by their
+    positions, the lexicographic order of their canonical vertices as given
+    (``points[cells]``) and then their ``parity``, not by their indices, so the
+    closest cell, its bound and its weights do not depend on the cells' order."""
+    inf = dist.new_full((nq,), torch.inf)
+    d_min = inf.scatter_reduce(0, li, dist, "amin")
+    upper = inf.scatter_reduce(0, li, dist + err, "amin")
+    pair = torch.arange(li.shape[0], device=li.device)
+    first = torch.full((nq,), li.shape[0], dtype=torch.long, device=li.device).scatter_reduce(
+        0, li, torch.where(dist == d_min[li], pair, li.shape[0]), "amin"
+    )
+    ### Equal least distances (cells sharing the closest point compute it bitwise, so
+    ### they tie exactly) are broken by the cells' positions, not by their indices: the
+    ### lexicographic order of their canonical vertices as given, then their parity.
+    ### So the closest cell, its band and its weights are functions of the positions.
+    ### One key column at a time, each keeping the rows at the query's least value;
+    ### identical keys are the same cell, so the least pair among them is the cell.
+    least = dist == d_min[li]
+    key = torch.cat([points[cells[pk]].flatten(1), parity[pk, None].to(points.dtype)], 1)
+    for k in key.unbind(1):
+        k_min = k.new_full((nq,), torch.inf).scatter_reduce(0, li, torch.where(least, k, torch.inf), "amin")
+        least = least & (k == k_min[li])
+    pick = torch.full_like(first, li.shape[0]).scatter_reduce(0, li, torch.where(least, pair, li.shape[0]), "amin")
+    first = torch.where(pick < li.shape[0], pick, first)
+    return first, d_min, upper
+
+
+def _feature_reached(li, pk, w, cells, flat, n_vertices):
+    """Per pair, whether every cell sharing the feature of its closest point (a vertex
+    or an edge by the weights ``w``; a cell's interior is reached) is among the
+    query's pairs ``li``, ``pk``: a vertex or an edge point is a local minimum of the
+    distance on the surface only where every cell sharing that feature reaches the
+    same point. The zero-area cells ``flat`` (or ``None``) count their distinct
+    vertices and the edges between consecutive distinct ones once. Also each pair's
+    count of nonzero weights."""
+    nonzero = w > 0
+    n_nonzero = nonzero.sum(-1)
+    corners = cells[pk]
+    key = torch.where(n_nonzero == 1, corners.gather(1, w.argmax(-1, keepdim=True))[:, 0], -1)
+    if flat is not None:
+        ### A zero-area cell's features are its distinct vertices and the edges between
+        ### consecutive distinct ones, each counted once (n_vertices: none).
+        consecutive = cells[:, 1:] != cells[:, :-1]
+        vertices = torch.where(flat[:, None] & ~torch.cat([torch.ones_like(consecutive[:, :1]), consecutive], 1), n_vertices, cells)
+        count = torch.bincount(vertices.reshape(-1), minlength=n_vertices + 1)[key.clamp_min(0)]
+    else:
+        count = torch.bincount(cells.reshape(-1), minlength=n_vertices)[key.clamp_min(0)]
+    if cells.shape[1] == 3:
+        a, b = cells[:, [0, 0, 1]], cells[:, [1, 2, 2]]
+        if flat is not None:
+            edges = torch.stack([consecutive[:, 0], torch.zeros_like(flat), consecutive[:, 1]], 1)
+            a, b = (torch.where(flat[:, None] & ~edges, n_vertices, x) for x in (a, b))
+        edge_keys, edge_valence = torch.unique(
+            n_vertices + torch.minimum(a, b) * n_vertices + torch.maximum(a, b), return_counts=True
+        )
+        ends = corners.masked_fill(~nonzero, n_vertices)
+        ends = ends.sort(-1).values  # the edge's two vertices, ascending
+        edge = n_vertices + ends[:, 0] * n_vertices + ends[:, 1]
+        key = torch.where(n_nonzero == 2, edge, key)
+        count = torch.where(
+            n_nonzero == 2,
+            edge_valence[torch.searchsorted(edge_keys, edge).clamp_max(edge_keys.shape[0] - 1)],
+            count,
+        )
+    reached = torch.ones_like(nonzero[:, 0])
+    on_feature = key >= 0
+    group = torch.stack([li[on_feature], key[on_feature]], -1)
+    _, inverse, counts = torch.unique(group, dim=0, return_inverse=True, return_counts=True)
+    reached[on_feature] = counts[inverse] == count[on_feature]
+    return reached, n_nonzero
+
+
+def _tie_uncertainty(st, q64, tq, eta, e_t, d_t, wall, on_cell):
+    """The certified uncertainty ``tau`` of each tie row's direction (cells ``st``,
+    queries ``q64[tq]``, storage roundings ``eta``, bands ``e_t``, distances ``d_t``):
+    ``sqrt(2) s`` (2 where ``s >= 1``), ``s`` a bound on the sine of the angle between
+    the computed direction and the exact one of the inputs as given; 0 on the surface
+    (``wall``), where normals that differ tie. ``on_cell`` rows take the cell's normal
+    with Ericson's misplacement, the others the direction from the point."""
+    ### Off the surface, a tie is two certified-distinct directions, |c_i - c_j| >
+    ### tau_i + tau_j, tau = sqrt(2) s (the chord of a sine error s < 1; else 2).
+    ### A cell's normal: its vertices each within eta = u |v| of the exact ones (their
+    ### storage rounding), so |dX| <= 4 eta L + 4 eta^2 against the certified
+    ### |X| - |E| (Shewchuk), with the float64 normal's own bound (delta) and its
+    ### normalization. A direction from a point: the point within the band E_k (and
+    ### Ericson's misplacement on a face), over D_k.
+    u64 = torch.finfo(torch.float64).eps / 2
+    if st.shape[-1] == 3:
+        delta_t, kappa_t, longest_t = _thin_bounds(st)
+        size = torch.linalg.cross(st[:, 1] - st[:, 0], st[:, 2] - st[:, 0], dim=-1).norm(dim=-1)
+        s_n = (4 * eta * longest_t + 4 * eta * eta) / (size * (1 - delta_t)) + delta_t + 4 * u64
+        mis = kappa_t * (q64[tq][:, None] - st).square().sum(-1).amax(-1)
+    else:
+        length = (st[:, 1] - st[:, 0]).norm(dim=-1)
+        s_n = 2 * eta / (length - 2 * eta) + 4 * u64
+        mis = torch.zeros_like(length)
+    s_n = torch.where(s_n >= 0, s_n, torch.inf)
+    s_p = torch.where(d_t > 0, (e_t + 4 * u64 * d_t) / d_t, torch.inf)
+    s_c = s_n + torch.where(d_t > 0, (mis + e_t) / d_t, torch.inf)
+    s = torch.where(wall, s_n, torch.where(on_cell, s_c, s_p))
+    ### On the surface the bound is 0 (normals that differ tie): the least-norm point of
+    ### their hull lies within tau_k + max_j tau_j of each member k, the group's
+    ### certified uncertainty, so it needs no certificate, and it is the certified case's own value, so u does not depend on
+    ### the queries' precision.
+    return torch.where(wall, 0.0, torch.where(s < 1, 2.0**0.5 * s, 2.0))
 
 
 def _closest_candidates_impl(query_points, points, cells, parity, face_normals, fast: bool):
@@ -1943,14 +1755,13 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     segments within its own rounding (``40 u (|x'| + max |v'|)`` on each side, with
     room over a first-order count of 33.5 units: the brute-force distance 14, the
     centred copies' rounding 1, the comparison's square and root 2.5, and the
-    arithmetic share of the least's bound 16) and the error bounds of the least. The winding
-    number takes the same BVH in three dimensions, unless cells repeat.
+    arithmetic share of the least's bound 16) and the error bounds of the least. The BVH
+    is built in depth-first preorder with its cells in leaf order
+    (:func:`_preorder_cell_tree`), and the winding number takes the same BVH in three
+    dimensions, on packed node records (:func:`_packed_winding_sum`), unless cells
+    repeat.
 
-    ``fast`` changes how the three-dimensional candidates and the winding number are
-    traversed, not what they are: the same tree in depth-first preorder with its
-    cells in leaf order (:func:`_preorder_cell_tree`), the ball search alone on it,
-    and the winding number on packed node records (:func:`_packed_winding_sum`); and
-    it computes the closest weights (:func:`_closest_weights`: Ericson's, the
+    ``fast`` computes the closest weights (:func:`_closest_weights`: Ericson's, the
     thin-cell guard and the accurate point) by two Triton kernels on CUDA, bitwise the
     torch code's."""
     nq, dim = query_points.shape
@@ -1967,28 +1778,19 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
             kept = (~covered).nonzero()[:, 0]
             cells, parity, face_normals, simplex, flat = (x[kept] for x in (cells, parity, face_normals, simplex, flat))
             any_flat = bool(flat.any())
-    face_n, tree = face_normals.double(), None
+    face_n = face_normals.double()
     ### The winding number is the surface's, not the cell list's: identical oriented
     ### cells count once. The cells go in the sorted order of their keys, so a surface
     ### stored with repeated cells has the same BVH, and the same far field, as the
-    ### surface stored once (a stable lexicographic sort, as in _weld).
-    if fast:
-        ### (the same order by two stable sorts of keys that pack adjacent columns)
-        low = cells[:, -1] * 2 + (parity > 0)
-        high = cells[:, 0] * points.shape[0] + cells[:, 1] if dim == 3 else cells[:, 0]
-        order = torch.argsort(low, stable=True)
-        order = order[torch.argsort(high[order], stable=True)]
-        low, high = low[order], high[order]
-        new = (low[1:] != low[:-1]) | (high[1:] != high[:-1])
-        del low, high
-    else:
-        rows = torch.cat([cells, parity[:, None]], 1)
-        order = torch.arange(rows.shape[0], device=dev)
-        for k in reversed(range(rows.shape[1])):
-            order = order[torch.argsort(rows[order, k], stable=True)]
-        rows = rows[order]
-        new = (rows[1:] != rows[:-1]).any(-1)
-        del rows
+    ### surface stored once: the stable lexicographic order of (cells, parity), as in
+    ### _weld, by two stable sorts of keys that pack adjacent columns.
+    low = cells[:, -1] * 2 + (parity > 0)
+    high = cells[:, 0] * points.shape[0] + cells[:, 1] if dim == 3 else cells[:, 0]
+    order = torch.argsort(low, stable=True)
+    order = order[torch.argsort(high[order], stable=True)]
+    low, high = low[order], high[order]
+    new = (low[1:] != low[:-1]) | (high[1:] != high[:-1])
+    del low, high
     rep = order[torch.cat([new.new_ones(1), new])]
     del new
     ### The band: the storage term on the magnitudes as given, the arithmetic's on
@@ -2010,52 +1812,36 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     ### (no normal, no area, no solid angle: its parity 0 in the winding number)
     if any_flat:
         p_rep = torch.where(flat[rep], 0.0, p_rep)
-    oriented = _oriented_areas(s_rep, p_rep)
+    area, sigma = _oriented_areas(s_rep, p_rep)
     if dim == 3:
-        ### Without repeated cells the two trees are one, and one traversal serves the
-        ### ball search and the winding number.
+        ### Without repeated cells the two trees are one: the ball search and the
+        ### winding number traverse the same tree.
         once = rep.shape[0] == cells.shape[0]
         s_ord = s_rep if once else simplex[order]
         f_ord = flat[order] if any_flat else None
-        winding = None
-        if fast:
-            tree, leaf_order, s_leaf = _preorder_cell_tree(s_ord)
-            if once:
-                ### (the leaves hold the cells; the winding number reads them there)
-                s_ord = s_rep = None
-            seed = order[leaf_order[_nearest_cells(query_c, s_leaf, tree)]]
-        else:
-            tree = _cell_tree(s_ord)
-            seed = order[_nearest_cells(query_c, s_ord, tree)]
+        tree, leaf_order, s_leaf = _preorder_cell_tree(s_ord)
+        if once:
+            ### (the leaves hold the cells; the winding number reads them there)
+            s_ord = s_rep = None
+        seed = order[leaf_order[_nearest_cells(query_c, s_leaf, tree)]]
         w0 = _closest_weights(q64, simplex[seed], flat[seed] if any_flat else None, fast)
         bound = (q64 - (w0[..., None] * simplex[seed]).sum(1)).norm(dim=-1) + band(torch.arange(nq, device=dev), seed)
         ### (padded by twice the bound, the kernel's float64 distances against these,
         ### and by the rounding of its box test)
         radius = (bound + 3 * err_max) * (1 + 1e-12)
-        if fast:
-            li, pk, _ = _ball_candidates(
-                q64, radius, s_leaf, tree, reach=reach.max(), flat=None if f_ord is None else f_ord[leaf_order]
-            )
-            pk = order[leaf_order[pk]]
-            ### (the winding number reads the tree's links and leaves, not its boxes)
-            tree = (*tree[:5], None, None)
-            if not once:
-                tree, leaf_order, s_leaf = _preorder_cell_tree(s_rep)
-            w_sum = _packed_winding_sum(q64, s_leaf, p_rep[leaf_order], oriented[0][leaf_order], tree)
-        else:
-            if once:
-                winding = _winding_moments(s_rep, p_rep, oriented[0], tree)
-            li, pk, w_sum = _ball_candidates(q64, radius, s_ord, tree, winding, flat=f_ord)
-            pk = order[pk]
-            tree = (*tree[:5], None, None)
-            if winding is None:
-                tree = _cell_tree(s_rep)
+        li, pk = _ball_candidates(
+            q64, radius, s_leaf, tree, reach=reach.max(), flat=None if f_ord is None else f_ord[leaf_order]
+        )
+        pk = order[leaf_order[pk]]
+        ### (the winding number reads the tree's links and leaves, not its boxes)
+        tree = (*tree[:5], None, None)
+        if not once:
+            tree, leaf_order, s_leaf = _preorder_cell_tree(s_rep)
+        w_sum = _packed_winding_sum(q64, s_leaf, p_rep[leaf_order], area[leaf_order], tree)
     else:
-        w_sum = None
         rounding = 40 * torch.finfo(query_points.dtype).eps / 2 * (q_norm + reach.max())
         li, pk = _segment_candidates(query_c, points_c, cells, (2 * (rounding + err_max)).to(query_points.dtype))
-    ### In the order of (query, cell): the same pairs in the same order from either
-    ### traversal.
+    ### In the order of (query, cell).
     f = cells.shape[0]
     key = (li * f + pk).sort().values
     li, pk = key // f, key % f
@@ -2064,64 +1850,9 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     diff = q64[li] - (w[..., None] * tri).sum(1)
     dist = diff.norm(dim=-1)
     err = band(li, pk)
-    inf = dist.new_full((nq,), torch.inf)
-    d_min = inf.scatter_reduce(0, li, dist, "amin")
-    upper = inf.scatter_reduce(0, li, dist + err, "amin")
-    pair = torch.arange(li.shape[0], device=dev)
-    first = torch.full((nq,), li.shape[0], dtype=torch.long, device=dev).scatter_reduce(
-        0, li, torch.where(dist == d_min[li], pair, li.shape[0]), "amin"
-    )
-    ### Equal least distances (cells sharing the closest point compute it bitwise, so
-    ### they tie exactly) are broken by the cells' positions, not by their indices: the
-    ### lexicographic order of their canonical vertices as given, then their parity.
-    ### So the closest cell, its band and its weights are functions of the positions.
-    ### One key column at a time, each keeping the rows at the query's least value;
-    ### identical keys are the same cell, so the least pair among them is the cell.
-    least = dist == d_min[li]
-    key = torch.cat([points[cells[pk]].flatten(1), parity[pk, None].to(points.dtype)], 1)
-    for k in key.unbind(1):
-        k_min = k.new_full((nq,), torch.inf).scatter_reduce(0, li, torch.where(least, k, torch.inf), "amin")
-        least = least & (k == k_min[li])
-    pick = torch.full_like(first, li.shape[0]).scatter_reduce(0, li, torch.where(least, pair, li.shape[0]), "amin")
-    first = torch.where(pick < li.shape[0], pick, first)
+    first, d_min, upper = _closest_pair(li, pk, dist, err, points, cells, parity, nq)
     idx, on_wall = pk[first], d_min - err[first] <= 0
-    ### The feature of each closest point (a vertex, an edge, or -1 for a cell's
-    ### interior), and whether all of its cells reach it.
-    n_vertices = points.shape[0]
-    nonzero = w > 0
-    n_nonzero = nonzero.sum(-1)
-    corners = cells[pk]
-    key = torch.where(n_nonzero == 1, corners.gather(1, w.argmax(-1, keepdim=True))[:, 0], -1)
-    if any_flat:
-        ### A zero-area cell's features are its distinct vertices and the edges between
-        ### consecutive distinct ones, each counted once (n_vertices: none).
-        consecutive = cells[:, 1:] != cells[:, :-1]
-        vertices = torch.where(flat[:, None] & ~torch.cat([torch.ones_like(consecutive[:, :1]), consecutive], 1), n_vertices, cells)
-        count = torch.bincount(vertices.reshape(-1), minlength=n_vertices + 1)[key.clamp_min(0)]
-    else:
-        count = torch.bincount(cells.reshape(-1), minlength=n_vertices)[key.clamp_min(0)]
-    if dim == 3:
-        a, b = cells[:, [0, 0, 1]], cells[:, [1, 2, 2]]
-        if any_flat:
-            edges = torch.stack([consecutive[:, 0], torch.zeros_like(flat), consecutive[:, 1]], 1)
-            a, b = (torch.where(flat[:, None] & ~edges, n_vertices, x) for x in (a, b))
-        edge_keys, edge_valence = torch.unique(
-            n_vertices + torch.minimum(a, b) * n_vertices + torch.maximum(a, b), return_counts=True
-        )
-        ends = corners.masked_fill(~nonzero, n_vertices)
-        ends = ends.sort(-1).values  # the edge's two vertices, ascending
-        edge = n_vertices + ends[:, 0] * n_vertices + ends[:, 1]
-        key = torch.where(n_nonzero == 2, edge, key)
-        count = torch.where(
-            n_nonzero == 2,
-            edge_valence[torch.searchsorted(edge_keys, edge).clamp_max(edge_keys.shape[0] - 1)],
-            count,
-        )
-    reached = torch.ones_like(nonzero[:, 0])
-    on_feature = key >= 0
-    group = torch.stack([li[on_feature], key[on_feature]], -1)
-    _, inverse, counts = torch.unique(group, dim=0, return_inverse=True, return_counts=True)
-    reached[on_feature] = counts[inverse] == count[on_feature]
+    reached, n_nonzero = _feature_reached(li, pk, w, cells, flat if any_flat else None, points.shape[0])
     ### On the surface the directions are the cells' normals, renormalized in float64
     ### (the least-norm step needs unit vectors); a degenerate cell has none.
     wall_n = face_n / face_n.norm(dim=-1, keepdim=True)
@@ -2143,35 +1874,9 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     )
     wall = on_wall[tq]
     tc = torch.where(wall[:, None], wall_n[pk[tie]], tc)
-    ### Off the surface, a tie is two certified-distinct directions, |c_i - c_j| >
-    ### tau_i + tau_j, tau = sqrt(2) s (the chord of a sine error s < 1; else 2).
-    ### A cell's normal: its vertices each within eta = u |v| of the exact ones (their
-    ### storage rounding), so |dX| <= 4 eta L + 4 eta^2 against the certified
-    ### |X| - |E| (Shewchuk), with the float64 normal's own bound (delta) and its
-    ### normalization. A direction from a point: the point within the band E_k (and
-    ### Ericson's misplacement on a face), over D_k.
     pt = pk[tie]
-    st = simplex[pt]
-    eta = u_in * given_reach[pt]
-    if dim == 3:
-        delta_t, kappa_t, longest_t = _thin_bounds(st)
-        size = torch.linalg.cross(st[:, 1] - st[:, 0], st[:, 2] - st[:, 0], dim=-1).norm(dim=-1)
-        s_n = (4 * eta * longest_t + 4 * eta * eta) / (size * (1 - delta_t)) + delta_t + 4 * u64
-        mis = kappa_t * (q64[tq][:, None] - st).square().sum(-1).amax(-1)
-    else:
-        length = (st[:, 1] - st[:, 0]).norm(dim=-1)
-        s_n = 2 * eta / (length - 2 * eta) + 4 * u64
-        mis = torch.zeros_like(length)
-    s_n = torch.where(s_n >= 0, s_n, torch.inf)
-    e_t, d_t = err[tie], dist[tie]
-    s_p = torch.where(d_t > 0, (e_t + 4 * u64 * d_t) / d_t, torch.inf)
-    s_c = s_n + torch.where(d_t > 0, (mis + e_t) / d_t, torch.inf)
-    s = torch.where(wall, s_n, torch.where(on_cell, s_c, s_p))
-    ### On the surface the bound is 0 (normals that differ tie): the least-norm point of
-    ### their hull lies within tau_k + max_j tau_j of each member k, the group's
-    ### certified uncertainty, so it needs no certificate, and it is the certified case's own value, so u does not depend on
-    ### the queries' precision.
-    tied = _certified_tied(tq, tc, torch.where(wall, 0.0, torch.where(s < 1, 2.0**0.5 * s, 2.0)), nq)
+    tau = _tie_uncertainty(simplex[pt], q64, tq, u_in * given_reach[pt], err[tie], dist[tie], wall, on_cell)
+    tied = _certified_tied(tq, tc, tau, nq)
     if any_flat:
         ### On a zero-area closest cell the direction is the tie's over the cells
         ### that hold the query and have a normal: theirs, or 0 with none (the
@@ -2181,7 +1886,8 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     g, c, wall = tq[sel], tc[sel], wall[sel]
     m = _grouped_min_norm(torch.cat([g, g[wall] + nq]), torch.cat([c, -c[wall]]), 2 * nq)
     tie_u = torch.where(on_wall[:, None], 0.5 * (m[:nq] - m[nq:]), m[:nq])
-    sign = _winding_sign(q64, s_rep, p_rep, tree, w_sum, oriented)
+    winding = w_sum / (4 * torch.pi) if dim == 3 else _segment_winding_numbers(q64, s_rep, p_rep)
+    sign = _winding_sign(sigma, winding)
     if kept is not None:
         idx = kept[idx]
     return idx, tied, tie_u.to(query_points.dtype), sign.to(query_points.dtype), on_wall, w[first]
@@ -2204,7 +1910,7 @@ def _closest_candidates_fast(
     query_points: torch.Tensor, points: torch.Tensor, cells: torch.Tensor, parity: torch.Tensor, face_normals: torch.Tensor
 ) -> _SearchOutputs:
     """The closest-feature search, :func:`_closest_candidates_impl` with ``fast``: the
-    reference's outputs bitwise, from a faster traversal on GPUs."""
+    reference's outputs bitwise, from Triton kernels on CUDA."""
     return _closest_candidates_impl(query_points, points, cells, parity, face_normals, fast=True)
 
 
@@ -2400,8 +2106,8 @@ def exact_boundary_geometry(
 
     ``kernel`` names the implementation of the search, not what it computes:
     ``"reference"`` defines it, and ``"fast"`` gives the same outputs bitwise
-    from a faster traversal in three dimensions and, on CUDA with Triton, the
-    closest points' weights fused into two kernels (:func:`_closest_candidates_impl`).
+    from Triton kernels on CUDA: the weld, the canonical cells and the closest
+    points' weights fused into two kernels (:func:`_closest_candidates_impl`).
     """
     if query_points.shape[-1] not in (2, 3):
         raise NotImplementedError(

@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-r"""Fused Triton kernel for ISLA's per-layer geometry region (KERNEL STUDY, 2026-09-13).
+r"""Fused Triton kernel for ISLA's per-layer geometry region.
 
 The dense geometry region of a slice block (``blocks._geo_region``) evaluates the
 point-anchor relational invariants on the (B, N, S) point-slice grid, the (5+T)->1
@@ -50,34 +50,16 @@ gradient is the more precise one). Float64 is supported for exactness tests.
 
 from __future__ import annotations
 
-import importlib
-
 import torch
 import torch.nn.functional as F
 
-from physicsnemo.core.version_check import is_package_available
-
-### Triton is an optional dependency (it ships with the CUDA wheels of torch and is
-### absent on CPU-only installs). It is loaded through importlib so that the
-### package's external-import contract sees no hard dependency, and the
-### @triton.jit kernels below are only defined when it is present; ISLA resolves
-### geo_kernel=None to the eager region whenever HAS_TRITON is False.
-HAS_TRITON = is_package_available("triton")
-if HAS_TRITON:
-    try:
-        triton = importlib.import_module("triton")
-        tl = importlib.import_module("triton.language")
-        libdevice = importlib.import_module("triton.language.extra").libdevice
-    except Exception:  # pragma: no cover - a broken triton install is treated as absent
-        HAS_TRITON = False
+### (ISLA resolves geo_kernel to the eager region whenever HAS_TRITON is False.)
+from physicsnemo.experimental.models.isla._triton import HAS_TRITON, libdevice, tl, triton
+from physicsnemo.experimental.models.isla.blocks import _geo_width
 
 MAX_SLICES = 1024
 #: Per-point vectors the kernels are unrolled for: global directions plus token rank-1 vectors.
 MAX_DIRECTIONS = 4
-
-
-def _next_pow2(x: int) -> int:
-    return 1 << (x - 1).bit_length()
 
 
 if HAS_TRITON:
@@ -111,6 +93,108 @@ if HAS_TRITON:
             tl.load(ptr + offs, mask=mask, other=0.0),
             tl.load(ptr + offs + 1, mask=mask, other=0.0),
             tl.load(ptr + offs + 2, mask=mask, other=0.0),
+        )
+
+    @triton.jit
+    def _region_tile(
+        r_ptr, n_ptr, d_ptr, z_ptr, m_ptr, logit_ptr, w_ptr, b_ptr, pid_b, offs_n, offs_s, mask_n, mask_s, mask, eps,
+        r_sb, r_sn, n_sb, n_sn, d_sb, d_sn, d_sk, z_sb, z_ss, m_sb, m_ss, l_sb, l_sn,
+        K: tl.constexpr, T: tl.constexpr, IDX_E: tl.constexpr, IDX_F: tl.constexpr, IDX_G: tl.constexpr,
+        LIN_BF16: tl.constexpr, LOGIT_BF16: tl.constexpr, F64: tl.constexpr,
+    ):
+        """The forward tile both kernels evaluate, from the loads to the mix: the inputs
+        (the per-point vectors past ``T`` repeat the first), the offsets ``rel``, the
+        distance before and after its clamp, ``rel_hat``, the invariants and routing
+        weights as the Linear reads them (past ``T``, the first direction's), the routing
+        bias and the point->slice mix."""
+        r0, r1, r2 = _load3(r_ptr, pid_b * r_sb + offs_n * r_sn, mask_n)
+        n0, n1, n2 = _load3(n_ptr, pid_b * n_sb + offs_n * n_sn, mask_n)
+        d0, d1, d2 = _load3(d_ptr, pid_b * d_sb + offs_n * d_sn, mask_n)
+        e0, e1, e2 = d0, d1, d2
+        f0, f1, f2 = d0, d1, d2
+        i0, i1, i2 = d0, d1, d2
+        if T >= 2:
+            e0, e1, e2 = _load3(d_ptr, pid_b * d_sb + offs_n * d_sn + d_sk, mask_n)
+        if T >= 3:
+            f0, f1, f2 = _load3(d_ptr, pid_b * d_sb + offs_n * d_sn + 2 * d_sk, mask_n)
+        if T >= 4:
+            i0, i1, i2 = _load3(d_ptr, pid_b * d_sb + offs_n * d_sn + 3 * d_sk, mask_n)
+        z0, z1, z2 = _load3(z_ptr, pid_b * z_sb + offs_s * z_ss, mask_s)
+        m0, m1, m2 = _load3(m_ptr, pid_b * m_sb + offs_s * m_ss, mask_s)
+
+        rel0 = r0[:, None] - z0[None, :]
+        rel1 = r1[:, None] - z1[None, :]
+        rel2 = r2[:, None] - z2[None, :]
+        dist_raw = _sqrt(rel0 * rel0 + rel1 * rel1 + rel2 * rel2, F64)
+        dist = tl.maximum(dist_raw, eps)
+        h0 = _div(rel0, dist, F64)
+        h1 = _div(rel1, dist, F64)
+        h2 = _div(rel2, dist, F64)
+        g0 = dist
+        g1 = libdevice.log(dist)
+        g2 = h0 * d0[:, None] + h1 * d1[:, None] + h2 * d2[:, None]
+        if T >= 2:
+            g2b = h0 * e0[:, None] + h1 * e1[:, None] + h2 * e2[:, None]
+        if T >= 3:
+            g2c = h0 * f0[:, None] + h1 * f1[:, None] + h2 * f2[:, None]
+        if T >= 4:
+            g2d = h0 * i0[:, None] + h1 * i1[:, None] + h2 * i2[:, None]
+        g3 = h0 * n0[:, None] + h1 * n1[:, None] + h2 * n2[:, None]
+        g4 = h0 * m0[None, :] + h1 * m1[None, :] + h2 * m2[None, :]
+        g5 = (
+            n0[:, None] * m0[None, :]
+            + n1[:, None] * m1[None, :]
+            + n2[:, None] * m2[None, :]
+        )
+
+        bb = _rn(tl.load(b_ptr), LIN_BF16)
+        q0 = _rn(g0, LIN_BF16)
+        q1 = _rn(g1, LIN_BF16)
+        q2 = _rn(g2, LIN_BF16)
+        q3 = _rn(g3, LIN_BF16)
+        q4 = _rn(g4, LIN_BF16)
+        q5 = _rn(g5, LIN_BF16)
+        q2b = q2
+        q2c = q2
+        q2d = q2
+        if T >= 2:
+            q2b = _rn(g2b, LIN_BF16)
+        if T >= 3:
+            q2c = _rn(g2c, LIN_BF16)
+        if T >= 4:
+            q2d = _rn(g2d, LIN_BF16)
+        w0 = _rn(tl.load(w_ptr + 0), LIN_BF16)
+        w1 = _rn(tl.load(w_ptr + 1), LIN_BF16)
+        w2 = _rn(tl.load(w_ptr + 2), LIN_BF16)
+        w3 = _rn(tl.load(w_ptr + 2 + K), LIN_BF16)
+        w4 = _rn(tl.load(w_ptr + 3 + K), LIN_BF16)
+        w5 = _rn(tl.load(w_ptr + 4 + K), LIN_BF16)
+        w2b = w2
+        w2c = w2
+        w2d = w2
+        bias = q0 * w0 + q1 * w1 + q2 * w2 + q3 * w3 + q4 * w4 + q5 * w5
+        if T >= 2:
+            w2b = _rn(tl.load(w_ptr + IDX_E), LIN_BF16)
+            bias = bias + q2b * w2b
+        if T >= 3:
+            w2c = _rn(tl.load(w_ptr + IDX_F), LIN_BF16)
+            bias = bias + q2c * w2c
+        if T >= 4:
+            w2d = _rn(tl.load(w_ptr + IDX_G), LIN_BF16)
+            bias = bias + q2d * w2d
+        bias = _rn(bias + bb, LIN_BF16)
+
+        l_off = pid_b * l_sb + offs_n[:, None] * l_sn + offs_s[None, :]
+        logit = tl.load(logit_ptr + l_off, mask=mask, other=0.0).to(bias.dtype)
+        x = _rn(logit + bias, LOGIT_BF16)
+        x = tl.where(mask_s[None, :], x, float("-inf"))
+        mx = tl.max(x, axis=1)
+        e = libdevice.exp(x - mx[:, None])
+        ssum = tl.sum(e, axis=1)
+        mix = _div(e, ssum[:, None], F64)
+        return (
+            n0, n1, n2, d0, d1, d2, e0, e1, e2, f0, f1, f2, i0, i1, i2, m0, m1, m2, rel0, rel1, rel2, dist_raw, dist,
+            h0, h1, h2, q0, q1, q2, q2b, q2c, q2d, q3, q4, q5, w0, w1, w2, w2b, w2c, w2d, w3, w4, w5, bias, mix,
         )
 
     @triton.jit
@@ -171,85 +255,14 @@ if HAS_TRITON:
         IDX_F: tl.constexpr = 4 if K >= 3 else 7
         IDX_G: tl.constexpr = 5 if K >= 4 else 8
 
-        r0, r1, r2 = _load3(r_ptr, pid_b * r_sb + offs_n * r_sn, mask_n)
-        n0, n1, n2 = _load3(n_ptr, pid_b * n_sb + offs_n * n_sn, mask_n)
-        d0, d1, d2 = _load3(d_ptr, pid_b * d_sb + offs_n * d_sn, mask_n)
-        if T >= 2:
-            e0, e1, e2 = _load3(d_ptr, pid_b * d_sb + offs_n * d_sn + d_sk, mask_n)
-        if T >= 3:
-            f0, f1, f2 = _load3(d_ptr, pid_b * d_sb + offs_n * d_sn + 2 * d_sk, mask_n)
-        if T >= 4:
-            i0, i1, i2 = _load3(d_ptr, pid_b * d_sb + offs_n * d_sn + 3 * d_sk, mask_n)
-        z0, z1, z2 = _load3(z_ptr, pid_b * z_sb + offs_s * z_ss, mask_s)
-        m0, m1, m2 = _load3(m_ptr, pid_b * m_sb + offs_s * m_ss, mask_s)
-
-        rel0 = r0[:, None] - z0[None, :]
-        rel1 = r1[:, None] - z1[None, :]
-        rel2 = r2[:, None] - z2[None, :]
-        dist_raw = _sqrt(rel0 * rel0 + rel1 * rel1 + rel2 * rel2, F64)
-        dist = tl.maximum(dist_raw, eps)
-        h0 = _div(rel0, dist, F64)
-        h1 = _div(rel1, dist, F64)
-        h2 = _div(rel2, dist, F64)
-        g0 = dist
-        g1 = libdevice.log(dist)
-        g2 = h0 * d0[:, None] + h1 * d1[:, None] + h2 * d2[:, None]
-        if T >= 2:
-            g2b = h0 * e0[:, None] + h1 * e1[:, None] + h2 * e2[:, None]
-        if T >= 3:
-            g2c = h0 * f0[:, None] + h1 * f1[:, None] + h2 * f2[:, None]
-        if T >= 4:
-            g2d = h0 * i0[:, None] + h1 * i1[:, None] + h2 * i2[:, None]
-        g3 = h0 * n0[:, None] + h1 * n1[:, None] + h2 * n2[:, None]
-        g4 = h0 * m0[None, :] + h1 * m1[None, :] + h2 * m2[None, :]
-        g5 = (
-            n0[:, None] * m0[None, :]
-            + n1[:, None] * m1[None, :]
-            + n2[:, None] * m2[None, :]
+        (
+            n0, n1, n2, d0, d1, d2, e0, e1, e2, f0, f1, f2, i0, i1, i2, m0, m1, m2, rel0, rel1, rel2, dist_raw, dist,
+            h0, h1, h2, q0, q1, q2, q2b, q2c, q2d, q3, q4, q5, w0, w1, w2, w2b, w2c, w2d, w3, w4, w5, bias, mix,
+        ) = _region_tile(
+            r_ptr, n_ptr, d_ptr, z_ptr, m_ptr, logit_ptr, w_ptr, b_ptr, pid_b, offs_n, offs_s, mask_n, mask_s, mask, eps,
+            r_sb, r_sn, n_sb, n_sn, d_sb, d_sn, d_sk, z_sb, z_ss, m_sb, m_ss, l_sb, l_sn,
+            K, T, IDX_E, IDX_F, IDX_G, LIN_BF16, LOGIT_BF16, F64,
         )
-
-        bb = _rn(tl.load(b_ptr), LIN_BF16)
-        q0 = _rn(g0, LIN_BF16)
-        q1 = _rn(g1, LIN_BF16)
-        q2 = _rn(g2, LIN_BF16)
-        q3 = _rn(g3, LIN_BF16)
-        q4 = _rn(g4, LIN_BF16)
-        q5 = _rn(g5, LIN_BF16)
-        q2b = q2
-        q2c = q2
-        q2d = q2
-        if T >= 2:
-            q2b = _rn(g2b, LIN_BF16)
-        if T >= 3:
-            q2c = _rn(g2c, LIN_BF16)
-        if T >= 4:
-            q2d = _rn(g2d, LIN_BF16)
-        w0 = _rn(tl.load(w_ptr + 0), LIN_BF16)
-        w1 = _rn(tl.load(w_ptr + 1), LIN_BF16)
-        w2 = _rn(tl.load(w_ptr + 2), LIN_BF16)
-        w3 = _rn(tl.load(w_ptr + 2 + K), LIN_BF16)
-        w4 = _rn(tl.load(w_ptr + 3 + K), LIN_BF16)
-        w5 = _rn(tl.load(w_ptr + 4 + K), LIN_BF16)
-        bias = q0 * w0 + q1 * w1 + q2 * w2 + q3 * w3 + q4 * w4 + q5 * w5
-        if T >= 2:
-            w2b = _rn(tl.load(w_ptr + IDX_E), LIN_BF16)
-            bias = bias + q2b * w2b
-        if T >= 3:
-            w2c = _rn(tl.load(w_ptr + IDX_F), LIN_BF16)
-            bias = bias + q2c * w2c
-        if T >= 4:
-            w2d = _rn(tl.load(w_ptr + IDX_G), LIN_BF16)
-            bias = bias + q2d * w2d
-        bias = _rn(bias + bb, LIN_BF16)
-
-        l_off = pid_b * l_sb + offs_n[:, None] * l_sn + offs_s[None, :]
-        logit = tl.load(logit_ptr + l_off, mask=mask, other=0.0).to(bias.dtype)
-        x = _rn(logit + bias, LOGIT_BF16)
-        x = tl.where(mask_s[None, :], x, float("-inf"))
-        mx = tl.max(x, axis=1)
-        e = libdevice.exp(x - mx[:, None])
-        ssum = tl.sum(e, axis=1)
-        mix = _div(e, ssum[:, None], F64)
 
         tl.store(
             bias_out_ptr + pid_b * bo_sb + offs_n[:, None] * bo_sn + offs_s[None, :],
@@ -349,84 +362,15 @@ if HAS_TRITON:
         IDX_F: tl.constexpr = 4 if K >= 3 else 7
         IDX_G: tl.constexpr = 5 if K >= 4 else 8
 
-        r0, r1, r2 = _load3(r_ptr, pid_b * r_sb + offs_n * r_sn, mask_n)
-        n0, n1, n2 = _load3(n_ptr, pid_b * n_sb + offs_n * n_sn, mask_n)
-        d0, d1, d2 = _load3(d_ptr, pid_b * d_sb + offs_n * d_sn, mask_n)
-        if T >= 2:
-            e0, e1, e2 = _load3(d_ptr, pid_b * d_sb + offs_n * d_sn + d_sk, mask_n)
-        if T >= 3:
-            f0, f1, f2 = _load3(d_ptr, pid_b * d_sb + offs_n * d_sn + 2 * d_sk, mask_n)
-        if T >= 4:
-            i0, i1, i2 = _load3(d_ptr, pid_b * d_sb + offs_n * d_sn + 3 * d_sk, mask_n)
-        z0, z1, z2 = _load3(z_ptr, pid_b * z_sb + offs_s * z_ss, mask_s)
-        m0, m1, m2 = _load3(m_ptr, pid_b * m_sb + offs_s * m_ss, mask_s)
-
-        # ---- recompute the forward tile (identical to _geo_fwd_kernel)
-        rel0 = r0[:, None] - z0[None, :]
-        rel1 = r1[:, None] - z1[None, :]
-        rel2 = r2[:, None] - z2[None, :]
-        dist_raw = _sqrt(rel0 * rel0 + rel1 * rel1 + rel2 * rel2, F64)
-        dist = tl.maximum(dist_raw, eps)
-        h0 = _div(rel0, dist, F64)
-        h1 = _div(rel1, dist, F64)
-        h2 = _div(rel2, dist, F64)
-        g0 = dist
-        g1 = libdevice.log(dist)
-        g2 = h0 * d0[:, None] + h1 * d1[:, None] + h2 * d2[:, None]
-        if T >= 2:
-            g2b = h0 * e0[:, None] + h1 * e1[:, None] + h2 * e2[:, None]
-        if T >= 3:
-            g2c = h0 * f0[:, None] + h1 * f1[:, None] + h2 * f2[:, None]
-        if T >= 4:
-            g2d = h0 * i0[:, None] + h1 * i1[:, None] + h2 * i2[:, None]
-        g3 = h0 * n0[:, None] + h1 * n1[:, None] + h2 * n2[:, None]
-        g4 = h0 * m0[None, :] + h1 * m1[None, :] + h2 * m2[None, :]
-        g5 = (
-            n0[:, None] * m0[None, :]
-            + n1[:, None] * m1[None, :]
-            + n2[:, None] * m2[None, :]
+        # ---- the forward tile (_region_tile, as _geo_fwd_kernel)
+        (
+            n0, n1, n2, d0, d1, d2, e0, e1, e2, f0, f1, f2, i0, i1, i2, m0, m1, m2, rel0, rel1, rel2, dist_raw, dist,
+            h0, h1, h2, q0, q1, q2, q2b, q2c, q2d, q3, q4, q5, w0, w1, w2, w2b, w2c, w2d, w3, w4, w5, bias, mix,
+        ) = _region_tile(
+            r_ptr, n_ptr, d_ptr, z_ptr, m_ptr, logit_ptr, w_ptr, b_ptr, pid_b, offs_n, offs_s, mask_n, mask_s, mask, eps,
+            r_sb, r_sn, n_sb, n_sn, d_sb, d_sn, d_sk, z_sb, z_ss, m_sb, m_ss, l_sb, l_sn,
+            K, T, IDX_E, IDX_F, IDX_G, LIN_BF16, LOGIT_BF16, F64,
         )
-        bb = _rn(tl.load(b_ptr), LIN_BF16)
-        q0 = _rn(g0, LIN_BF16)
-        q1 = _rn(g1, LIN_BF16)
-        q2 = _rn(g2, LIN_BF16)
-        q3 = _rn(g3, LIN_BF16)
-        q4 = _rn(g4, LIN_BF16)
-        q5 = _rn(g5, LIN_BF16)
-        q2b = q2
-        q2c = q2
-        q2d = q2
-        if T >= 2:
-            q2b = _rn(g2b, LIN_BF16)
-        if T >= 3:
-            q2c = _rn(g2c, LIN_BF16)
-        if T >= 4:
-            q2d = _rn(g2d, LIN_BF16)
-        w0 = _rn(tl.load(w_ptr + 0), LIN_BF16)
-        w1 = _rn(tl.load(w_ptr + 1), LIN_BF16)
-        w2 = _rn(tl.load(w_ptr + 2), LIN_BF16)
-        w3 = _rn(tl.load(w_ptr + 2 + K), LIN_BF16)
-        w4 = _rn(tl.load(w_ptr + 3 + K), LIN_BF16)
-        w5 = _rn(tl.load(w_ptr + 4 + K), LIN_BF16)
-        bias = q0 * w0 + q1 * w1 + q2 * w2 + q3 * w3 + q4 * w4 + q5 * w5
-        if T >= 2:
-            w2b = _rn(tl.load(w_ptr + IDX_E), LIN_BF16)
-            bias = bias + q2b * w2b
-        if T >= 3:
-            w2c = _rn(tl.load(w_ptr + IDX_F), LIN_BF16)
-            bias = bias + q2c * w2c
-        if T >= 4:
-            w2d = _rn(tl.load(w_ptr + IDX_G), LIN_BF16)
-            bias = bias + q2d * w2d
-        bias = _rn(bias + bb, LIN_BF16)
-        l_off = pid_b * l_sb + offs_n[:, None] * l_sn + offs_s[None, :]
-        logit = tl.load(logit_ptr + l_off, mask=mask, other=0.0).to(bias.dtype)
-        x = _rn(logit + bias, LOGIT_BF16)
-        x = tl.where(mask_s[None, :], x, float("-inf"))
-        mx = tl.max(x, axis=1)
-        e = libdevice.exp(x - mx[:, None])
-        ssum = tl.sum(e, axis=1)
-        mix = _div(e, ssum[:, None], F64)
 
         # ---- incoming gradients
         gbias_in = tl.load(
@@ -618,12 +562,6 @@ if HAS_TRITON:
             tl.store(gd + 3 * gd_sk + 2, tl.sum(tl.where(mask, gg2d * h2, 0.0), axis=1), mask=mask_n)
 
 
-def _geo_width(t: int) -> int:
-    """Invariants per point-slice pair for ``t`` per-point vectors: distance, its log,
-    the ``t`` direction cosines, rel.n, rel.m and n.m."""
-    return 5 + t
-
-
 def _check(r, n_hat, d_hat, z_pos, m_s, logits_pre, weight, bias, n_global):
     b, n, _ = r.shape
     s = z_pos.shape[1]
@@ -728,7 +666,7 @@ def _geo_region_fwd(
     pooled = torch.empty(b, n, ng, device=r.device, dtype=out_dt)
     w = weight.reshape(-1).to(r.dtype).contiguous()
     bb = bias.reshape(-1).to(r.dtype).contiguous()
-    block_n, block_s = _fwd_block(s, k), _next_pow2(s)
+    block_n, block_s = _fwd_block(s, k), triton.next_power_of_2(s)
     grid = (triton.cdiv(n, block_n), b)
     _geo_fwd_kernel[grid](
         r,
@@ -821,7 +759,7 @@ def _geo_region_bwd(
     grad_bias = grad_bias.contiguous()
     grad_mix = grad_mix.contiguous()
     grad_pooled = grad_pooled.contiguous()
-    block_n, block_s = _bwd_block(s, k), _next_pow2(s)
+    block_n, block_s = _bwd_block(s, k), triton.next_power_of_2(s)
     n_tiles = triton.cdiv(n, block_n)
     glogit = torch.empty_like(logits_pre)
     gr = torch.empty(b, n, 3, device=r.device, dtype=r.dtype)

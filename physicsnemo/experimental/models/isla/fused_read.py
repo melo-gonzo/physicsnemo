@@ -53,22 +53,11 @@ gradient under autocast takes that form, the fastest); with float32 operands it 
 
 from __future__ import annotations
 
-import importlib
-
 import torch
 from torch.autograd.function import once_differentiable
 
-from physicsnemo.core.version_check import is_package_available
+from physicsnemo.experimental.models.isla._triton import HAS_TRITON, tl, triton
 from physicsnemo.experimental.models.isla.segment_softmax import PairPlan, _source_items
-
-### Triton is an optional dependency, loaded through importlib (as in geo_kernel.py).
-HAS_TRITON = is_package_available("triton")
-if HAS_TRITON:
-    try:
-        triton = importlib.import_module("triton")
-        tl = importlib.import_module("triton.language")
-    except Exception:  # pragma: no cover - a broken triton install is treated as absent
-        HAS_TRITON = False
 
 
 #: Pairs per tile of a program's loop, warps per program, and pairs per program of

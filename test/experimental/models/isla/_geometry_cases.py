@@ -27,6 +27,7 @@ from physicsnemo.experimental.models import ISLA
 from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.primitives.curves import circle_2d
 from physicsnemo.mesh.primitives.surfaces import cube_surface, sphere_icosahedral, torus
+from test.experimental.models.isla._meshes import orthogonal
 
 D = torch.float64
 PV = {"p": {"rank": 0}, "v": {"rank": 1}}
@@ -336,3 +337,40 @@ def _soup(seed, h):
         ]
     )
     return tri.reshape(-1, 3), torch.arange(144).reshape(-1, 3), q
+
+
+def _quad_diagonals(case: str):
+    """Float32 queries at the midpoints of a posed torus's quad diagonals (the edge
+    each quad's two triangles share, which near-duplicate normals meet across), the
+    torus's points and its cells: the 48 x 24 torus (``renumbering``), or the split
+    torus of test_on_wall_direction_is_a_function_of_the_input_mesh
+    (``precision``)."""
+    if case == "renumbering":
+        m = torus.load(n_major=48, n_minor=24)
+        pts = (m.points.double() @ orthogonal(3, 7).T).float()
+    else:
+        m = torus.load(n_major=28, n_minor=12)
+        g = torch.Generator().manual_seed(0)
+        p = m.points.double() * (
+            1 + 1e-5 * (2 * torch.rand(m.n_points, 1, dtype=D, generator=g) - 1)
+        )
+        pts = (p @ orthogonal(3, 7).T + torch.arange(1, 4, dtype=D) / 3).float()
+    ### torus.load writes each quad's two triangles at k and k + n_quads.
+    n_quads = m.n_cells // 2
+    a, b = m.cells[:n_quads], m.cells[n_quads:]
+    shared = (a[:, :, None] == b[:, None, :]).any(-1)
+    return pts[a[shared].view(n_quads, 2)].mean(1), pts, m.cells
+
+
+def _fan(n: int = 96):
+    """A fan of ``n`` triangles around a hub, 50 queries above the hub (``n``
+    candidates each, more than the 64 slots at the default 96) and 400 elsewhere."""
+    t = torch.arange(n, dtype=D) * (2 * torch.pi / n)
+    rim = torch.stack([torch.cos(t), torch.sin(t), 0 * t], -1)
+    points = torch.cat([rim.new_zeros(1, 3), rim])
+    i = torch.arange(1, n + 1)
+    cells = torch.stack([torch.zeros_like(i), i, i % n + 1], -1)
+    g = torch.Generator().manual_seed(0)
+    hub = torch.linspace(0.01, 0.5, 50, dtype=D)[:, None] * torch.tensor([0.0, 0, 1])
+    q = torch.cat([hub, torch.rand(400, 3, dtype=D, generator=g) * 3 - 1.5])
+    return q, points, cells
