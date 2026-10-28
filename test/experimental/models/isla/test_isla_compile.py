@@ -62,9 +62,7 @@ SCHEMAS = {
 
 def _model(task: str) -> ISLA:
     torch.manual_seed(0)
-    if task == "surface":
-        kw = {"boundary_schemas": {"wall": {}}, "global_schema": {"g": {"rank": 1}}}
-    elif task == "inputs":
+    if task == "inputs":
         kw = {
             "boundary_schemas": SCHEMAS["inputs"],
             "global_schema": {"g": {"rank": 1}},
@@ -112,7 +110,7 @@ def _model(task: str) -> ISLA:
 
 def _case(task: str, sizes: dict, device, seed: int, nq: int = 0) -> dict:
     g = torch.Generator().manual_seed(seed)
-    if task in ("surface", "global_source"):
+    if task == "global_source":
         sizes = {"wall": sum(sizes.values())}
     meshes = {}
     for k, (name, n) in enumerate(sorted(sizes.items())):
@@ -157,7 +155,9 @@ def _assert_close(a, b, device, rel=3e-2):
 
 @pytest.mark.slow  # 32-55 s per case on LHR CPU: Inductor compiles the whole model
 @pytest.mark.parametrize("device", DEVICES)
-@pytest.mark.parametrize("task", ["surface", "inputs", "scales", "global_source"])
+### (A surface model without inputs is the "inputs" task's simpler case, and
+### test_isla_kernels.py compiles it whole on CUDA.)
+@pytest.mark.parametrize("task", ["inputs", "scales", "global_source"])
 def test_whole_model_compiles_fullgraph_with_dynamic_shapes_and_matches_eager(
     task, device
 ):

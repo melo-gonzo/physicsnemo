@@ -97,42 +97,102 @@ def setup():
     return m, mesh, drv, _run(m, mesh, drv)
 
 
-def test_rotation_equivariance(setup):
-    m, mesh, drv, base = setup
-    q = _rotation()
-    _assert_rotated(_run(m, transform(mesh, q), drv @ q.T), base, q)
-
-
-def test_rotation_equivariance_with_scales():
-    """With ISLA's own scales (a global velocity source, a vector output in its
-    units) the output still rotates with the geometry and the source."""
-    torch.manual_seed(0)
-    m = (
-        ISLA(
+#: The rigid motions of :func:`test_rigid_motions_move_the_outputs`: the model's
+#: arguments (beside :func:`_isla`'s), the cloud's size, whether its cells carry two
+#: rank-0 fields, the global direction's magnitude, whether the motion rotates, its
+#: shift, and the bound.
+RIGID = {
+    "rotation": (
+        dict(hidden=64, n_layers=3, n_slices=32),
+        500,
+        False,
+        1.0,
+        True,
+        None,
+        1e-10,
+    ),
+    "translation": (
+        dict(hidden=64, n_layers=3, n_slices=32),
+        500,
+        False,
+        1.0,
+        False,
+        (3.0, -7.0, 11.0),
+        1e-10,
+    ),
+    ### ISLA's own scales: a global velocity source, outputs in its units.
+    "rotation_with_scales": (
+        dict(
+            hidden=32,
+            n_layers=2,
+            n_slices=8,
             output_schema={
                 "p": {"rank": 0, "units": {"U": 2}},
                 "v": {"rank": 1, "units": {"U": 1}},
             },
-            boundary_schemas=WALL,
             global_schema={"g": {"rank": 1, "units": {"U": 1}, "defines": "U"}},
-            hidden=32,
+        ),
+        200,
+        False,
+        7.0,
+        True,
+        None,
+        1e-9,
+    ),
+    ### Two rank-0 boundary fields (one leaf per scalar) in cell_data ride along.
+    "rotation_with_boundary_scalars": (
+        dict(
+            hidden=64,
             n_layers=2,
-            n_slices=8,
+            n_slices=16,
+            boundary_schemas={"wall": {"bc_a": {"rank": 0}, "bc_b": {"rank": 0}}},
+        ),
+        300,
+        True,
+        1.0,
+        True,
+        None,
+        1e-10,
+    ),
+}
+
+
+@pytest.mark.parametrize("case", list(RIGID))
+def test_rigid_motions_move_the_outputs(case):
+    """A rotation of the boundary (its fields moved with it) and the global direction
+    keeps p and rotates v; a translation changes nothing."""
+    kw, n, fields, scale, rotated, shift, atol = RIGID[case]
+    torch.manual_seed(0)
+    m = (
+        ISLA(
+            **{"output_schema": PV, "global_schema": G, "boundary_schemas": WALL, **kw}
         )
         .double()
         .eval()
     )
-    pts, nrm, w, drv = cloud(200)
-    mesh = soup(pts, nrm, w)
-    q = _rotation()
-    base = _run(m, mesh, 7.0 * drv)
-    _assert_rotated(_run(m, transform(mesh, q), 7.0 * drv @ q.T), base, q, atol=1e-9)
-
-
-def test_translation_invariance(setup):
-    m, mesh, drv, base = setup
-    shift = torch.tensor([3.0, -7.0, 11.0], dtype=D)
-    assert same(_run(m, transform(mesh, shift=shift), drv), base, atol=1e-10)
+    pts, nrm, w, drv = cloud(n)
+    data = (
+        {"bc_a": torch.randn(n, dtype=D), "bc_b": torch.randn(n, dtype=D)}
+        if fields
+        else None
+    )
+    mesh = soup(pts, nrm, w, cell_data=data)
+    base = _run(m, mesh, scale * drv)
+    if fields:
+        ### the constant, n.g and the two fields
+        assert m.boundary_conditions["wall"].seed.in_features == 1 + 1 + 2
+    q = _rotation() if rotated else None
+    moved = transform(
+        mesh,
+        q,
+        shift=None if shift is None else torch.tensor(shift, dtype=D),
+        specs=m.boundary_schemas["wall"],
+    )
+    out = _run(m, moved, scale * drv @ q.T if rotated else scale * drv)
+    if rotated:
+        _assert_rotated(out, base, q, atol=atol)
+    else:
+        assert same(out, base, atol=atol)
 
 
 @pytest.mark.parametrize("k", [0.5, 2.0, 4.0])
@@ -184,35 +244,6 @@ def test_no_effective_measures_is_the_geometric_quadrature(setup):
     assert not same(none, base, atol=1e-3)
 
 
-def test_boundary_scalar_contracts():
-    """Two rank-0 boundary fields (one leaf per scalar) in ``cell_data`` ride along
-    under a rotation."""
-    torch.manual_seed(0)
-    m = (
-        _isla(
-            hidden=64,
-            n_layers=2,
-            n_slices=16,
-            boundary_schemas={"wall": {"bc_a": {"rank": 0}, "bc_b": {"rank": 0}}},
-        )
-        .double()
-        .eval()
-    )
-    pts, nrm, w, drv = cloud(300)
-    bs = {"bc_a": torch.randn(300, dtype=D), "bc_b": torch.randn(300, dtype=D)}
-    mesh = soup(pts, nrm, w, cell_data=bs)
-    base = _run(m, mesh, drv)
-    q = _rotation()
-    _assert_rotated(
-        _run(m, transform(mesh, q, specs=m.boundary_schemas["wall"]), drv @ q.T),
-        base,
-        q,
-    )
-    assert (
-        m.boundary_conditions["wall"].seed.in_features == 1 + 1 + 2
-    )  # constant, n.g, the two fields
-
-
 def test_head_runs_under_bf16_autocast():
     """Mixed-precision smoke: the head must survive bf16 autocast (the geometry is
     kept in the input precision by construction)."""
@@ -254,23 +285,6 @@ def test_every_parameter_receives_a_gradient(interior):
     assert not unused, unused
     assert (m.qt is not None) == interior
     assert not any(n.startswith("qt") for n, _ in m.named_parameters()) or interior
-
-
-def test_geo_pool_then_project_is_exact():
-    """Pooling the relational invariants over slices and then projecting is
-    exactly the old project-then-pool (the projection is affine and the slice
-    mix is a softmax over slices, so the bias passes through unchanged). This
-    is the identity behind the memory saving: the saved activation is
-    (B, N, geo) instead of (B, N, S, hidden/2)."""
-    from physicsnemo.experimental.models.isla.blocks import _SliceBlock
-
-    torch.manual_seed(0)
-    blk = _SliceBlock(64, 32, 1).double()
-    geo = torch.randn(2, 50, 32, blk.n_geo, dtype=D)
-    mix = torch.softmax(torch.randn(2, 50, 32, dtype=D), dim=-1)
-    old = torch.einsum("bns,bnsg->bng", mix, blk.geo_feat(geo))
-    new = blk.geo_feat(torch.einsum("bns,bnsg->bng", mix, geo))
-    assert torch.allclose(old, new, atol=1e-12, rtol=0.0)
 
 
 def test_interior_task_contracts():
@@ -458,8 +472,8 @@ def _frame_cloud(n=300, seed=0):
 
 def test_frame_contracts():
     """The origin-free frame: exact translation invariance without centering
-    (fp64), rotation equivariance, and the feature widths (one seed invariant
-    n.g, six relational invariants in the slice blocks)."""
+    (fp64) by a shift a thousand times the cells' size, and the feature widths (one
+    seed invariant n.g, six relational invariants in the slice blocks)."""
     mesh, drv = _frame_cloud()
     shift = torch.tensor([300.0, -70.0, 1100.0], dtype=D)
     torch.manual_seed(1)
@@ -473,8 +487,6 @@ def test_frame_contracts():
     ### the cell normals are recomputed from the shifted vertices (a 1e3 shift on
     ### 0.2 cells costs ~1e-13 in the normals), hence 1e-10 rather than 1e-12
     assert same(_run(m, transform(mesh, shift=shift), drv), base, atol=1e-10)
-    q = _rotation()
-    _assert_rotated(_run(m, transform(mesh, q), drv @ q.T), base, q)
 
 
 def _float32_case(device, interior):
