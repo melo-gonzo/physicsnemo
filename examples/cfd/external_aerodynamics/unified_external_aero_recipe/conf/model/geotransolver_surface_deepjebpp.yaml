@@ -1,0 +1,60 @@
+# @package _global_
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# GeoTransolver on DeepJEB++ surface (2026-09-22): the recipe's surface template (geotransolver_surface.yaml: 256 wide, 12
+# layers, 256 slices, surface-scale radii on the mm -> 0.1 m coordinates) with the per-cell inputs coordinates, outward
+# normals, bc_fixed, bc_loaded and the standardized traction vector bc_load, and the global embedding [load_dir (3),
+# load_type one-hot (2)]. Use ++model.n_hidden=512 for the program's GeoTransolver-512 comparator.
+input_type: tensors
+output_type: tensors
+
+forward_kwargs:
+  geometry: interior.points
+  local_embedding:
+    - interior.points
+    - boundaries.surface.cell_data.normals
+    - boundaries.surface.cell_data.bc_fixed
+    - boundaries.surface.cell_data.bc_loaded
+    - boundaries.surface.cell_data.bc_load
+  local_positions: interior.points
+  global_embedding:
+    - global_data.load_dir
+    - global_data.load_type
+
+model:
+  _target_: physicsnemo.models.geotransolver.GeoTransolver
+  out_dim: ${out_dim}     # 4 = von_mises (1) + displacement (3), from the dataset's targets block
+  functional_dim: 11      # 3 + 3 + 1 + 1 + 3
+  geometry_dim: 3
+  global_dim: 5           # load_dir (3) + load_type (2)
+  n_layers: 12
+  n_hidden: 256
+  dropout: 0.0
+  n_head: 8
+  act: "gelu"
+  mlp_ratio: 4
+  slice_num: 256
+  use_te: false
+  plus: false
+  include_local_features: false
+  radii: [0.1, 0.5, 2.0]  # coordinates in 0.1 m: a bracket spans ~1-2 units, as a DrivAerML car does after /L_ref
+  neighbors_in_radius: [16, 32, 64]
+  n_hidden_local: 32
+  state_mixing_mode: "weighted"
+  activation_checkpointing: false
+  checkpointing_ratio: 1.0
+  activation_checkpointing_components: [blocks]
