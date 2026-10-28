@@ -305,6 +305,7 @@ from tensordict import TensorDict
 
 from physicsnemo.core.meta import ModelMetaData
 from physicsnemo.core.module import Module
+from physicsnemo.experimental.models.isla import fused_read
 from physicsnemo.experimental.models.isla.blocks import (
     _QueryTokens,
     _RoutingLogits,
@@ -1218,11 +1219,7 @@ class ISLA(Module):
         cached = getattr(self, "_tree_read_kernel_cache", None)
         if cached is not None and cached[0] == key:
             return cached[1]
-        try:
-            from .fused_read import HAS_TRITON
-        except Exception:  # pragma: no cover - a broken triton install falls back
-            HAS_TRITON = False
-        ok = points.is_cuda and HAS_TRITON and points.dtype != torch.float64
+        ok = points.is_cuda and fused_read.HAS_TRITON and points.dtype != torch.float64
         chosen = "fused" if ok else "reference"
         if torch.compiler.is_compiling():
             return chosen
@@ -1232,7 +1229,7 @@ class ISLA(Module):
             chosen,
             points.device,
             points.is_cuda,
-            HAS_TRITON,
+            fused_read.HAS_TRITON,
             points.dtype,
         )
         return chosen

@@ -1039,16 +1039,13 @@ def test_separation_diameter_is_bounded_as_the_frame_ties():
     pts, nrm, w, _ = cloud(600, d=3, seed=9)
     f = BoundaryForest.build(pts.float(), w.float(), nrm.float(), None, theta=1.0)
     tree = f.trees[0]
-    far = types.SimpleNamespace(
-        node_aabb_min=tree.node_aabb_min + 1e3,
-        node_aabb_max=tree.node_aabb_max + 1e3,
-        node_diameter_sq=tree.node_diameter_sq,
-    )
+    near = (tree.node_aabb_min, tree.node_aabb_max)
+    far = (tree.node_aabb_min + 1e3, tree.node_aabb_max + 1e3)
     u = 2.0**-24
     sep = tree_read.separation_diameter_sq
     etas = [0.0, 1e-4, 0.01, 0.05, 0.3, 0.57, 0.58, 1.0, 10.0]
-    near_d = [sep(tree, 1.0, torch.tensor(e, dtype=D), 3, u).double() for e in etas]
-    far_d = [sep(far, 1.0, torch.tensor(e, dtype=D), 3, u).double() for e in etas]
+    near_d = [sep(*near, 1.0, torch.tensor(e, dtype=D), 3, u).double() for e in etas]
+    far_d = [sep(*far, 1.0, torch.tensor(e, dtype=D), 3, u).double() for e in etas]
     for a, b in zip(near_d, near_d[1:]):
         assert bool((b >= a).all())
     ### Past sqrt(3) eta = 1 no rotation bound certifies anything, and the ball does.
@@ -1648,7 +1645,7 @@ def test_fast_forest_build_refuses_what_it_cannot_build(monkeypatch):
     monkeypatch.setattr(tree_read, "forest_tables", spy)
     pts, nrm, w, _ = cloud(300, d=3, seed=5, dtype=torch.float32)
     for limit in (301, 300):
-        monkeypatch.setattr(tree_build, "_WARP_MAX_ELEMENTS", limit)
+        monkeypatch.setattr(tree_walk, "WARP_MAX_ELEMENTS", limit)
         forests = [
             BoundaryForest.build(pts, w, nrm, None, theta=1.0, leaf_size=4, build=b)
             for b in ("reference", "fast")
@@ -1676,7 +1673,7 @@ def test_fast_forest_build_leaves_nodes_past_warps_limit_to_the_reference(monkey
     ref = BoundaryForest.build(pts, w, nrm, None, build="reference", **kw)
     assert ref.n_nodes > 300 + 1
     for limit, declines in ((ref.n_nodes + 1, False), (ref.n_nodes, True)):
-        monkeypatch.setattr(tree_build, "_WARP_MAX_ELEMENTS", limit)
+        monkeypatch.setattr(tree_walk, "WARP_MAX_ELEMENTS", limit)
         fast = BoundaryForest.build(pts, w, nrm, None, build="fast", **kw)
         assert not _forest_differences(ref, fast)
         assert (tables[-1] is None) == declines, limit
@@ -2635,7 +2632,7 @@ def test_fused_kernel_basis_matches_the_reference_basis(
     dev = torch.device("cuda")
     geo_c, plan_c = _to(geometry, dev, torch.float32), _to(plan, dev, torch.float32)
     basis_c = copy.deepcopy(basis).float().to(dev)
-    assert fused_basis.supported(basis_c, geo_c)
+    assert fused_basis.unsupported_reason(basis_c, geo_c) is None
     inv = fused_basis.pair_invariants(plan_c.qi, plan_c.bj, 0, 0, geo_c)
     inv_ref = tree_pair_invariants(plan_c.qi.long(), plan_c.bj.long(), **geo_c)
     assert torch.allclose(inv, inv_ref, rtol=1e-6, atol=1e-6)
@@ -2782,11 +2779,14 @@ def test_tree_read_pairs_fused_on_cuda_builds_the_basis_in_the_fused_kernel(
     assert torch.equal(ref.plan.bj.long(), fus.plan.bj.long())
     scale = float(ref.basis.abs().max())
     assert torch.allclose(fus.basis, ref.basis, rtol=1e-5, atol=1e-5 * scale)
-    ref = tree_read.walk_range_pairs(
-        basis, tree_read.tree_read_walk(kernel="reference", **kw), 40, 110
-    )
-    fus = tree_read.walk_range_pairs(
-        basis, tree_read.tree_read_walk(kernel="fused", **kw), 40, 110
+    ref, fus = (
+        tree_read.walk_range_pairs(
+            basis,
+            tree_read.walk_points_range(
+                tree_read.tree_read_walk(kernel=k, walk_points=False, **kw), 40, 110
+            ),
+        )
+        for k in ("reference", "fused")
     )
     assert len(calls) == 2
     assert torch.equal(ref.plan.qi.long(), fus.plan.qi.long())

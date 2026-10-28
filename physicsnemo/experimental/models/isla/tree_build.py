@@ -46,12 +46,9 @@ from physicsnemo.mesh.spatial._lbvh import LBVHTopology
 from physicsnemo.mesh.spatial.bvh import _MORTON_SPREAD_STEPS
 from physicsnemo.mesh.spatial.cluster_tree import _MORTON_BALANCE, ClusterTree, _node_boxes
 
-try:
-    import warp as wp
+import warp as wp
 
-    HAS_WARP = True
-except ImportError:  # pragma: no cover - warp is a dependency of the geometry
-    HAS_WARP = False
+from physicsnemo.experimental.models.isla import tree_walk
 
 logger = logging.getLogger(__name__)
 
@@ -61,17 +58,13 @@ _START_BITS = 40
 #: ``_DEPTH_BINS - 2`` is left to the reference build (one level short of what a
 #: node's 6-bit key depth and int64 path hold).
 _DEPTH_BINS = 64
-#: Warp refuses an array of this many elements or more, and its thread ids are int32.
-#: The build's Warp arrays hold one entry per cell (the count pass) or one per node
-#: (the fill pass), and a forest has up to 2 N - 1 nodes, so each is checked.
-_WARP_MAX_ELEMENTS = 2**31
 
 _LOGGED: set = set()
 
 
 def resolve_tree_build(build: str, points: torch.Tensor) -> str:
     """The forest build to run: ``"reference"`` or ``"fast"`` when ``build`` forces
-    it; under ``"auto"`` the fast build for CUDA points when Warp imports and the
+    it; under ``"auto"`` the fast build for CUDA points when the
     dimension is 2 or 3, else the reference. Logged once per (device type, choice)."""
     if build not in ("auto", "reference", "fast"):
         raise ValueError(f"build must be 'auto', 'reference' or 'fast', got {build!r}")
@@ -79,134 +72,131 @@ def resolve_tree_build(build: str, points: torch.Tensor) -> str:
         raise ValueError(f"the fast build does not take {points.shape[-1]}-D points")
     if build != "auto":
         return build
-    ok = points.is_cuda and HAS_WARP and points.shape[-1] in (2, 3)
+    ok = points.is_cuda and points.shape[-1] in (2, 3)
     chosen = "fast" if ok else "reference"
     key = (points.device.type, chosen)
     if key not in _LOGGED and not torch.compiler.is_compiling():
         _LOGGED.add(key)
         logger.info(
-            "ISLA tree_build=auto resolved to %r on %s (cuda=%s, warp=%s, dim=%d)",
+            "ISLA tree_build=auto resolved to %r on %s (cuda=%s, dim=%d)",
             chosen,
             points.device.type,
             points.is_cuda,
-            HAS_WARP,
             points.shape[-1],
         )
     return chosen
 
 
-if HAS_WARP:
-
-    @wp.func
-    def _morton_split(codes: wp.array(dtype=wp.int64), s: wp.int64, e: wp.int64, balance: wp.int64):
-        """The split of the range ``[s, e)`` of sorted ``codes``, as
-        :func:`~physicsnemo.mesh.spatial._lbvh.build_morton_topology` makes it: the
-        first position in ``[lo, hi]`` whose code reaches ``codes[hi]`` with the bits
-        below the highest bit in which ``codes[lo - 1]`` and ``codes[hi]`` differ
-        cleared, or the midpoint when they are equal."""
-        size = e - s
-        margin = wp.int64(1)
-        if balance > wp.int64(0):
-            margin = wp.max(size // balance, wp.int64(1))
-        lo = s + margin
-        hi = e - margin
-        last = codes[hi]
-        diff = codes[lo - wp.int64(1)] ^ last
-        q = s + size // wp.int64(2)
-        if diff > wp.int64(0):
-            m = diff
-            m = m | (m >> wp.int64(1))
-            m = m | (m >> wp.int64(2))
-            m = m | (m >> wp.int64(4))
-            m = m | (m >> wp.int64(8))
-            m = m | (m >> wp.int64(16))
-            m = m | (m >> wp.int64(32))
-            key = last - (last & (m >> wp.int64(1)))
-            a = lo
-            b = hi
-            while a < b:
-                mid = a + (b - a) // wp.int64(2)
-                if codes[mid] < key:
-                    a = mid + wp.int64(1)
-                else:
-                    b = mid
-            q = a
-        return q
-
-    @wp.kernel
-    def _node_count_kernel(
-        codes: wp.array(dtype=wp.int64),
-        tree: wp.array(dtype=wp.int64),
-        tree_start: wp.array(dtype=wp.int64),
-        tree_end: wp.array(dtype=wp.int64),
-        leaf_size: wp.int64,
-        balance: wp.int64,
-        count: wp.array(dtype=wp.int64),
-        leaf_depth: wp.array(dtype=wp.int64),
-    ):
-        """The number of nodes whose range starts at sorted position ``tid`` (a chain
-        of left children ending at a leaf) and the depth of that leaf."""
-        p = wp.int64(wp.tid())
-        t = tree[p]
-        s = tree_start[t]
-        e = tree_end[t]
-        depth = wp.int64(0)
-        n = wp.int64(0)
-        if s == p:
-            n = wp.int64(1)
-        while e - s > leaf_size:
-            q = _morton_split(codes, s, e, balance)
-            if p < q:
-                e = q
+@wp.func
+def _morton_split(codes: wp.array(dtype=wp.int64), s: wp.int64, e: wp.int64, balance: wp.int64):
+    """The split of the range ``[s, e)`` of sorted ``codes``, as
+    :func:`~physicsnemo.mesh.spatial._lbvh.build_morton_topology` makes it: the
+    first position in ``[lo, hi]`` whose code reaches ``codes[hi]`` with the bits
+    below the highest bit in which ``codes[lo - 1]`` and ``codes[hi]`` differ
+    cleared, or the midpoint when they are equal."""
+    size = e - s
+    margin = wp.int64(1)
+    if balance > wp.int64(0):
+        margin = wp.max(size // balance, wp.int64(1))
+    lo = s + margin
+    hi = e - margin
+    last = codes[hi]
+    diff = codes[lo - wp.int64(1)] ^ last
+    q = s + size // wp.int64(2)
+    if diff > wp.int64(0):
+        m = diff
+        m = m | (m >> wp.int64(1))
+        m = m | (m >> wp.int64(2))
+        m = m | (m >> wp.int64(4))
+        m = m | (m >> wp.int64(8))
+        m = m | (m >> wp.int64(16))
+        m = m | (m >> wp.int64(32))
+        key = last - (last & (m >> wp.int64(1)))
+        a = lo
+        b = hi
+        while a < b:
+            mid = a + (b - a) // wp.int64(2)
+            if codes[mid] < key:
+                a = mid + wp.int64(1)
             else:
-                s = q
-            depth = depth + wp.int64(1)
-            if s == p:
-                n = n + wp.int64(1)
-        count[p] = n
-        leaf_depth[p] = depth
+                b = mid
+        q = a
+    return q
 
-    @wp.kernel
-    def _node_fill_kernel(
-        codes: wp.array(dtype=wp.int64),
-        tree: wp.array(dtype=wp.int64),
-        tree_start: wp.array(dtype=wp.int64),
-        tree_end: wp.array(dtype=wp.int64),
-        leaf_size: wp.int64,
-        balance: wp.int64,
-        offset: wp.array(dtype=wp.int64),
-        node_depth: wp.array(dtype=wp.int64),
-        node_count: wp.array(dtype=wp.int64),
-        node_path: wp.array(dtype=wp.int64),
-    ):
-        """The nodes whose range starts at sorted position ``tid``, from ``offset[tid]``
-        on: depth, item count and path (bit ``k`` set when the node lies in the right
-        child of its ancestor at depth ``k``)."""
-        p = wp.int64(wp.tid())
-        t = tree[p]
-        s = tree_start[t]
-        e = tree_end[t]
-        depth = wp.int64(0)
-        path = wp.int64(0)
-        j = offset[p]
+@wp.kernel
+def _node_count_kernel(
+    codes: wp.array(dtype=wp.int64),
+    tree: wp.array(dtype=wp.int64),
+    tree_start: wp.array(dtype=wp.int64),
+    tree_end: wp.array(dtype=wp.int64),
+    leaf_size: wp.int64,
+    balance: wp.int64,
+    count: wp.array(dtype=wp.int64),
+    leaf_depth: wp.array(dtype=wp.int64),
+):
+    """The number of nodes whose range starts at sorted position ``tid`` (a chain
+    of left children ending at a leaf) and the depth of that leaf."""
+    p = wp.int64(wp.tid())
+    t = tree[p]
+    s = tree_start[t]
+    e = tree_end[t]
+    depth = wp.int64(0)
+    n = wp.int64(0)
+    if s == p:
+        n = wp.int64(1)
+    while e - s > leaf_size:
+        q = _morton_split(codes, s, e, balance)
+        if p < q:
+            e = q
+        else:
+            s = q
+        depth = depth + wp.int64(1)
+        if s == p:
+            n = n + wp.int64(1)
+    count[p] = n
+    leaf_depth[p] = depth
+
+@wp.kernel
+def _node_fill_kernel(
+    codes: wp.array(dtype=wp.int64),
+    tree: wp.array(dtype=wp.int64),
+    tree_start: wp.array(dtype=wp.int64),
+    tree_end: wp.array(dtype=wp.int64),
+    leaf_size: wp.int64,
+    balance: wp.int64,
+    offset: wp.array(dtype=wp.int64),
+    node_depth: wp.array(dtype=wp.int64),
+    node_count: wp.array(dtype=wp.int64),
+    node_path: wp.array(dtype=wp.int64),
+):
+    """The nodes whose range starts at sorted position ``tid``, from ``offset[tid]``
+    on: depth, item count and path (bit ``k`` set when the node lies in the right
+    child of its ancestor at depth ``k``)."""
+    p = wp.int64(wp.tid())
+    t = tree[p]
+    s = tree_start[t]
+    e = tree_end[t]
+    depth = wp.int64(0)
+    path = wp.int64(0)
+    j = offset[p]
+    if s == p:
+        node_depth[j] = depth
+        node_count[j] = e - s
+        node_path[j] = path
+        j = j + wp.int64(1)
+    while e - s > leaf_size:
+        q = _morton_split(codes, s, e, balance)
+        if p < q:
+            e = q
+        else:
+            s = q
+            path = path | (wp.int64(1) << depth)
+        depth = depth + wp.int64(1)
         if s == p:
             node_depth[j] = depth
             node_count[j] = e - s
             node_path[j] = path
             j = j + wp.int64(1)
-        while e - s > leaf_size:
-            q = _morton_split(codes, s, e, balance)
-            if p < q:
-                e = q
-            else:
-                s = q
-                path = path | (wp.int64(1) << depth)
-            depth = depth + wp.int64(1)
-            if s == p:
-                node_depth[j] = depth
-                node_count[j] = e - s
-                node_path[j] = path
-                j = j + wp.int64(1)
 
 
 def _launch(kernel, n: int, inputs: list, ref: torch.Tensor) -> None:
@@ -246,14 +236,17 @@ def forest_tables(
     *,
     leaf_size: int,
 ) -> dict | None:
-    """The fields of :class:`~.tree_read.BoundaryForest` that its trees make, with the
-    nodes' raw mean normal as ``mean_n``, for the cells at lab ``points`` ``(N, d)``
+    """The fields of :class:`~.tree_read.BoundaryForest` that its trees make, but the
+    walk's node diameters (``diameter_sq``, and the trees' ``node_diameter_sq``, which
+    the caller sets), with the nodes' raw mean normal as ``mean_n``, for the cells at lab ``points`` ``(N, d)``
     (``points_f`` in the boundary's frame, ``face`` their normals' faces,
     :func:`~.tree_read.normal_faces`), or
     ``None`` where the reference build must make them (no cells, cells or nodes past
-    Warp's ``_WARP_MAX_ELEMENTS``, or a tree too deep for a node path)."""
+    Warp's ``tree_walk.WARP_MAX_ELEMENTS``, or a tree too deep for a node path)."""
     n, d = points_f.shape
-    if n == 0 or n >= _WARP_MAX_ELEMENTS or leaf_size < 1:
+    ### The build's Warp arrays hold one entry per cell (the count pass) or one per node
+    ### (the fill pass), and a forest has up to 2 N - 1 nodes, so each is checked.
+    if n == 0 or n >= tree_walk.WARP_MAX_ELEMENTS or leaf_size < 1:
         return None
     device = points.device
     n_face = 2 * d
@@ -287,7 +280,7 @@ def forest_tables(
     nodes_per_h = stats[n_face : 2 * n_face]
     internal_per_depth = stats[2 * n_face :]
     m_total = sum(nodes_per_h)
-    if internal_per_depth[_DEPTH_BINS - 2] or m_total >= _WARP_MAX_ELEMENTS:
+    if internal_per_depth[_DEPTH_BINS - 2] or m_total >= tree_walk.WARP_MAX_ELEMENTS:
         return None
     n_internal = sum(internal_per_depth)
     n_levels = sum(1 for c in internal_per_depth if c)
@@ -394,7 +387,6 @@ def forest_tables(
     tree_right = torch.where(is_leaf, -1, right - tree_m0)
     leaf_start = torch.where(is_leaf, tree_rs, -1)
     leaf_count = torch.where(is_leaf, range_count, 0)
-    diameter_sq = (aabb_max - aabb_min).pow(2).sum(dim=-1)
     source_order = local[cells]
     source_points = points_f[by_face]
     root_ids = torch.zeros(len(trees_h), dtype=torch.long, device=device)
@@ -406,7 +398,7 @@ def forest_tables(
             ClusterTree(
                 node_aabb_min=aabb_min[ma:mb],
                 node_aabb_max=aabb_max[ma:mb],
-                node_diameter_sq=diameter_sq[ma:mb],
+                node_diameter_sq=None,  # the walk's, set by the caller (tree_read)
                 node_left_child=tree_left[ma:mb],
                 node_right_child=tree_right[ma:mb],
                 leaf_start=leaf_start[ma:mb],
@@ -436,7 +428,6 @@ def forest_tables(
         "levels": levels,
         "aabb_min": aabb_min,
         "aabb_max": aabb_max,
-        "diameter_sq": diameter_sq,
         "center": center,
         "mean_n": mean_n,
         "vecs": node_vecs,

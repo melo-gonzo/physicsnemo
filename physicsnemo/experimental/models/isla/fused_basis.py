@@ -112,11 +112,6 @@ def unsupported_reason(basis: torch.nn.Module, geometry: dict) -> str | None:
     return None
 
 
-def supported(basis: torch.nn.Module, geometry: dict) -> bool:
-    """Whether the fused basis applies (:func:`unsupported_reason`)."""
-    return unsupported_reason(basis, geometry) is None
-
-
 def mlp_weights(basis: torch.nn.Module) -> tuple[torch.Tensor, ...]:
     """The basis MLP's weights and biases ``(W1, b1, W2, b2, W3, b3)`` as its layers
     read them: under autocast on their device cast to its dtype, once per forward pass

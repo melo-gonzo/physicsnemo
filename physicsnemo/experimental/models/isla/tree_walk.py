@@ -53,7 +53,8 @@ wp.set_module_options({"fuse_fp": False, "enable_backward": False})
 #: by the reference (:func:`walk_fits`).
 WALK_STACK = 96
 _walk_stack = wp.types.vector(length=WALK_STACK, dtype=wp.int32)
-#: Warp refuses an array of this many elements or more (:func:`walk_fits`).
+#: Warp refuses an array of this many elements or more, and its thread ids are int32
+#: (:func:`walk_fits`, :func:`~.tree_build.forest_tables`).
 WARP_MAX_ELEMENTS = 2**31
 
 
