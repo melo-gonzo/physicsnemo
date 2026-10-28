@@ -175,6 +175,7 @@ def check_output_stats(stats, output_schema) -> dict | None:
         }
     return out
 
+
 @dataclass(frozen=True)
 class DeclaredScales:
     """The scales the declarations define (:func:`parse_scales`), as the model reads
@@ -201,7 +202,13 @@ class DeclaredScales:
 
 
 def parse_scales(
-    out_extras, b_extras, g_extras, output_stats, output_schema, boundary_schemas, global_schema
+    out_extras,
+    b_extras,
+    g_extras,
+    output_stats,
+    output_schema,
+    boundary_schemas,
+    global_schema,
 ) -> DeclaredScales:
     """The opt-in scales (the ISLA module docstring, *Scales*) from the declarations'
     ISLA-local keys (:func:`split_scale_keys`: ``out_extras``, ``g_extras`` and
@@ -218,11 +225,17 @@ def parse_scales(
         for name, local in extras.items():
             rank = schemas[kind][name].rank
             defined = local.get(DEFINES)
-            if defined is not None and not (rank == 1 or (rank == 0 and kind == "global_schema")):
+            if defined is not None and not (
+                rank == 1 or (rank == 0 and kind == "global_schema")
+            ):
                 raise ValueError(
                     f"{kind}[{name!r}]: a scale is defined by a rank-1 field or a rank-0 global; got rank {rank}"
                 )
-            if defined is not None and rank == 0 and ("units" in local or "scale" in local):
+            if (
+                defined is not None
+                and rank == 0
+                and ("units" in local or "scale" in local)
+            ):
                 raise ValueError(
                     f"{kind}[{name!r}]: the value of the scale {defined!r} is consumed, not an input; "
                     "it takes no units and no scale"
@@ -248,15 +261,20 @@ def parse_scales(
     }
     global_scale = {n: e["scale"] for n, e in g_extras.items() if "scale" in e}
     boundary_units = {
-        c: {n: e["units"] for n, e in extras.items() if e.get("units")} for c, extras in b_extras.items()
+        c: {n: e["units"] for n, e in extras.items() if e.get("units")}
+        for c, extras in b_extras.items()
     }
     boundary_scale = {
-        c: {n: e["scale"] for n, e in extras.items() if "scale" in e} for c, extras in b_extras.items()
+        c: {n: e["scale"] for n, e in extras.items() if "scale" in e}
+        for c, extras in b_extras.items()
     }
     ### The rank-1 sources of the one RMS scale (boundary fields, pooled, or one
     ### global) and the rank-0 globals whose values are scales (consumed).
     boundary_sources = [
-        (c, n) for c, extras in b_extras.items() for n, e in extras.items() if DEFINES in e
+        (c, n)
+        for c, extras in b_extras.items()
+        for n, e in extras.items()
+        if DEFINES in e
     ]
     global_sources = [
         n for n, e in g_extras.items() if DEFINES in e and global_schema[n].rank == 1
@@ -265,12 +283,16 @@ def parse_scales(
     for n, e in g_extras.items():
         if DEFINES in e and global_schema[n].rank == 0:
             if e[DEFINES] in defined_values:
-                raise ValueError(f"global_schema: two fields define the scale {e[DEFINES]!r}")
+                raise ValueError(
+                    f"global_schema: two fields define the scale {e[DEFINES]!r}"
+                )
             defined_values[e[DEFINES]] = n
     rms = {b_extras[c][n][DEFINES] for c, n in boundary_sources}
     rms |= {g_extras[n][DEFINES] for n in global_sources}
     if len(rms) > 1:
-        raise ValueError(f"at most one scale is defined by rank-1 fields; got {sorted(rms)!r}")
+        raise ValueError(
+            f"at most one scale is defined by rank-1 fields; got {sorted(rms)!r}"
+        )
     rms_scale = next(iter(rms), None)
     if rms_scale in defined_values:
         raise ValueError(
@@ -289,7 +311,9 @@ def parse_scales(
     declared = {LENGTH, *defined_values, *rms}
     undefined = sorted(used - declared)
     if undefined:
-        raise ValueError(f"units name {undefined!r}, which no field defines; the scales are {sorted(declared)!r}")
+        raise ValueError(
+            f"units name {undefined!r}, which no field defines; the scales are {sorted(declared)!r}"
+        )
     has_source = bool(boundary_sources or global_sources)
     output_stats = check_output_stats(output_stats, output_schema)
     ### The scales are declared when any field has units or an input scale or
