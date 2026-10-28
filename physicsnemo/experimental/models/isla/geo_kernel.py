@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-r"""Fused Triton kernel for ISLA's per-layer geometry region (KERNEL STUDY, 2026-09-13).
+r"""Fused Triton kernel for ISLA's per-layer geometry region.
 
 The dense geometry region of a slice block (``blocks._geo_region``) evaluates the
 point-anchor relational invariants on the (B, N, S) point-slice grid, the (5+T)->1
