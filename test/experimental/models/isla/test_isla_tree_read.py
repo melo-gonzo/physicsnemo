@@ -1765,14 +1765,10 @@ def _step_grads(m, mesh, drv, q, autocast=False):
     return {k: v.detach().double().cpu() for k, v in out.items()}, grads
 
 
-def test_tree_read_kernel_resolves_to_the_reference_on_cpu_and_its_basis_flow_is_exact(
-    monkeypatch,
-):
+def test_tree_read_kernel_resolves_to_the_reference_on_cpu(monkeypatch):
     """On CPU ``tree_read_kernel="auto"`` resolves to the reference read. Forcing
     ``"fused"`` there (the resolver patched) keeps the reference read (the fused
-    kernels need CUDA) but builds the basis as the fused path does, from the plan
-    with the invariants rebuilt in backward: outputs and every gradient bitwise equal
-    to the reference's."""
+    kernels need CUDA): outputs and every gradient bitwise equal to the reference's."""
     m = _model(3, 0.5).double()
     mesh, drv, q = _case()
     assert m.tree_read_kernel == "auto" and m.resolve_tree_read_kernel(q) == "reference"
@@ -1782,12 +1778,12 @@ def test_tree_read_kernel_resolves_to_the_reference_on_cpu_and_its_basis_flow_is
     try:
         ref = _step_grads(m, mesh, drv, q)
         monkeypatch.setattr(ISLA, "resolve_tree_read_kernel", lambda self, p: "fused")
-        with ran(tree_read._chunked_basis_from_plan) as r:
+        with ran(tree_read.tree_read_walk) as r:
             fused = _step_grads(m, mesh, drv, q)
     finally:
         torch.set_num_threads(threads)
-    ### The fused path's basis flow ran (else the reference is compared with itself).
-    assert r.count(tree_read._chunked_basis_from_plan) > 0
+    ### The forced name reached the read (else the reference is compared with itself).
+    assert [c["kernel"] for c in r.calls(tree_read.tree_read_walk)] == ["fused"]
     for a, b in zip(ref, fused):
         assert a.keys() == b.keys() and all(torch.equal(a[k], b[k]) for k in a)
 
