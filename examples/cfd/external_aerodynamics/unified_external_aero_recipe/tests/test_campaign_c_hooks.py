@@ -14,41 +14,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for the transfer program's campaign-C hooks: the constant condition
-field and weight-only initialization from another run's checkpoint."""
+"""Tests for the transfer program's campaign-C hook: weight-only
+initialization from another run's checkpoint."""
 
 import torch
-from domain_transforms import SetConstantCellField
-from tensordict import TensorDict
 from utils import initialize_from_checkpoint
 
 from physicsnemo.experimental.models.isla import ISLA
-from physicsnemo.mesh import Mesh
 from physicsnemo.utils.checkpoint import save_checkpoint
-
-
-def _patch() -> Mesh:
-    pts = torch.tensor([[0.0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0]])
-    cells = torch.tensor([[0, 1, 2], [0, 2, 3]])
-    return Mesh(points=pts, cells=cells, global_data=TensorDict({}, batch_size=[]))
-
-
-def test_constant_cell_field_shape_value_and_dtype():
-    """SetConstantCellField writes an (n_cells, 1) field of the given value in the points' dtype."""
-    m = SetConstantCellField(field_name="cond", value=1.0)(_patch())
-    f = m.cell_data["cond"]
-    assert f.shape == (2, 1) and f.dtype == m.points.dtype
-    assert torch.equal(f, torch.ones(2, 1))
-    m0 = SetConstantCellField(field_name="cond", value=0.0)(_patch())
-    assert torch.equal(m0.cell_data["cond"], torch.zeros(2, 1))
-
-
-def test_constant_cell_field_survives_cell_slicing():
-    """The constant field is ordinary cell data, so cell slicing keeps it."""
-    m = SetConstantCellField(field_name="cond", value=1.0)(_patch()).slice_cells(
-        torch.tensor([1])
-    )
-    assert torch.equal(m.cell_data["cond"], torch.ones(1, 1))
 
 
 def test_initialize_from_checkpoint_loads_weights_only(tmp_path):

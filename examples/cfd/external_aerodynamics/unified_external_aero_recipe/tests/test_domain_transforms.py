@@ -293,24 +293,6 @@ def test_drivaer_surface_pipeline_moves_the_domain_boundaries_with_the_vehicle(
     assert nearest.max() < 1e-5
 
 
-def test_stack_scalar_fields_builds_a_zero_padded_vector():
-    """Two stored components become one (N, 3) field with z = 0; sources are kept."""
-    from domain_transforms import StackScalarFields
-
-    mesh = _two_triangles()
-    mesh.cell_data["bc_x"] = torch.tensor([1.0, 2.0])
-    mesh.cell_data["bc_y"] = torch.tensor([[3.0], [4.0]])
-    out = StackScalarFields(fields=["bc_x", "bc_y"], output_field="bc")(mesh)
-    assert torch.equal(
-        out.cell_data["bc"], torch.tensor([[1.0, 3.0, 0.0], [2.0, 4.0, 0.0]])
-    )
-    assert "bc_x" in out.cell_data and "bc_y" in out.cell_data
-    with pytest.raises(KeyError):
-        StackScalarFields(fields=["missing"], output_field="bc")(mesh)
-    with pytest.raises(ValueError):
-        StackScalarFields(fields=["a", "b", "c", "d"], output_field="bc")
-
-
 def test_flip_boundary_orientation_reverses_the_named_boundaries():
     """The named boundary's cells are rewound (every normal reversed, centroids and
     measures unchanged) and its stored normals negated; other boundaries, the
@@ -416,10 +398,8 @@ def test_flip_boundary_orientation_does_not_sync_on_cuda():
 
 
 SEEDED_SUBSAMPLERS = (
-    "PrefixPlusRandomSubsampleMesh",
     "PoissonBiasedSubsampleMesh",
     "StratifiedSubsampleMesh",
-    "SdfBiasedSubsampleInteriorPoints",
 )
 
 
@@ -437,23 +417,14 @@ def _seeded_draw(name: str, device: torch.device, generator) -> torch.Tensor:
         cells=torch.arange(3 * n).reshape(n, 3),
     ).to(device)
     kwargs = {
-        "PrefixPlusRandomSubsampleMesh": {"n_prefix": 10, "n_cells": 97},
         "PoissonBiasedSubsampleMesh": {
             "n_cells_expected": 97,
             "weight_mode": "uniform",
         },
         "StratifiedSubsampleMesh": {"n_cells": 97},
-        "SdfBiasedSubsampleInteriorPoints": {"n_points_expected": 97},
     }[name]
     transform = getattr(domain_transforms, name)(**kwargs)
     transform._generator = generator
-    if name == "SdfBiasedSubsampleInteriorPoints":
-        interior = Mesh(
-            points=torch.rand(n, 3, generator=g),
-            point_data={"sdf": torch.rand(n, generator=g)},
-        )
-        domain = DomainMesh(interior=interior, boundaries={"vehicle": surface})
-        return transform.apply_to_domain(domain.to(device)).interior.points
     return transform(surface).points
 
 
