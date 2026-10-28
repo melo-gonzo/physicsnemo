@@ -91,9 +91,9 @@ pipeline:
       n_theta: 64
       n_phi: 32
     # Unit freestream direction as a NEW global leaf U_inf_dir (U_inf stays
-    # physical). Consumed as the nondimensional rank-1 drive by the
-    # MeshTransformer2 template (drive: global_data.U_inf_dir); inert for
-    # models that do not declare it. Mirrors drivaer_ml_surface.yaml;
+    # physical). Consumed as the unit global vector input by ISLA
+    # (global_schema: U_inf_dir); inert for models that do not declare it.
+    # Mirrors drivaer_ml_surface.yaml;
     # placed before CenterMesh so the rotation augmentation would rotate it
     # together with U_inf and the geometry.
     - _target_: ${dp:ComputeFreestreamDirection}
@@ -136,7 +136,7 @@ pipeline:
     - _target_: ${dp:PoissonBiasedSubsampleMesh}   # CHAR-PROTOCOLS area: inclusion probability proportional to cell area, exact HT weights
       n_cells_expected: ${sampling_resolution}
       weight_mode: area
-    # MeshTransformer2 measure validation.
+    # mesh collate's measure validation.
     # Terminal: convert the surface Mesh into a DomainMesh per the recipe
     # contract. cell_data_targets are auto-injected from the `targets:` block.
     - _target_: ${dp:DropDegenerateCells}   # 2026-10-02: the wings carry 53 to 137 exactly zero-area triangles per 200,000 cells; the mesh collate refuses a zero measure
