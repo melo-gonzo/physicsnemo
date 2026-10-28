@@ -97,6 +97,26 @@ class TestMeshReader:
             torch.tensor([8.0, 9.0, 0.0, 1.0]),
         )
 
+    @pytest.mark.parametrize("mode", ["uniform", "block"])
+    def test_subsample_mode_on_ordered_storage(self, tmp_path, mode):
+        # Points stored sorted along x: a block is a slab, uniform spans x.
+        x = torch.linspace(0, 1, 10_000)
+        Mesh(points=torch.stack([x, x, x], dim=-1)).save(tmp_path / "m.pt")
+        reader = MeshReader(
+            tmp_path, pattern="*.pt", subsample_n_points=1_000, subsample_mode=mode
+        )
+        reader.set_generator(torch.Generator().manual_seed(0))
+        loaded, _ = reader[0]
+        span = float(loaded.points[:, 0].max() - loaded.points[:, 0].min())
+        assert loaded.n_points == 1_000
+        assert (span > 0.95) if mode == "uniform" else (span < 0.15 or span > 0.85)
+        if mode == "uniform":
+            assert (loaded.points[1:, 0] > loaded.points[:-1, 0]).all()
+
+    def test_invalid_subsample_mode_raises(self, tmp_path):
+        with pytest.raises(ValueError, match="subsample_mode"):
+            MeshReader(tmp_path, subsample_mode="random")
+
 
 class TestDomainMeshReader:
     """Tests for DomainMeshReader (DomainMesh per sample)."""
@@ -279,6 +299,27 @@ class TestDomainMeshReader:
         self._make_domain_mesh().save(tmp_path / "dm.pdmsh")
         with pytest.raises(ValueError, match="interior_n_points_range"):
             DomainMeshReader(tmp_path, pattern="*.pdmsh", interior_n_points_range=bad)
+
+    @pytest.mark.parametrize("mode", ["uniform", "block"])
+    def test_interior_subsample_mode_on_ordered_storage(self, tmp_path, mode):
+        # A point-cloud interior stored sorted along x, read with
+        # drop_interior_cells as the AeroZoo interior task does.
+        x = torch.linspace(0, 1, 10_000)
+        DomainMesh(interior=Mesh(points=torch.stack([x, x, x], dim=-1))).save(
+            tmp_path / "dm.pdmsh"
+        )
+        reader = DomainMeshReader(
+            tmp_path,
+            subsample_n_points=1_000,
+            subsample_mode=mode,
+            drop_interior_cells=True,
+        )
+        reader.set_generator(torch.Generator().manual_seed(0))
+        dm, _ = reader[0]
+        px = dm.interior.points[:, 0]
+        span = float(px.max() - px.min())
+        assert dm.interior.n_points == 1_000
+        assert (span > 0.95) if mode == "uniform" else (span < 0.15 or span > 0.85)
 
 
 class TestMeshDataset:

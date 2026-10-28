@@ -32,7 +32,7 @@ from typing import Any, Iterator, Literal
 
 import torch
 
-from physicsnemo.datapipes._indexing import _cyclic_block_indices
+from physicsnemo.datapipes._indexing import SubsampleMode, _subsample_indices
 from physicsnemo.datapipes._rng import spawn_generator
 from physicsnemo.datapipes.registry import register
 from physicsnemo.mesh import DomainMesh, Mesh
@@ -50,8 +50,10 @@ def _subsample_mesh_points(
     mesh: Mesh,
     n_points: int,
     generator: torch.Generator | None = None,
+    mode: SubsampleMode = "block",
 ) -> Mesh:
-    """Subsample a Mesh to *n_points* via a cyclic contiguous block read.
+    """Subsample a Mesh to *n_points* via a cyclic contiguous block read
+    (``mode="block"``) or a uniform random draw of rows (``mode="uniform"``).
 
     Uses one or two contiguous runs for page-sequential I/O on memmap-backed
     data while giving every point the same inclusion probability.
@@ -67,11 +69,12 @@ def _subsample_mesh_points(
     """
     if mesh.n_points <= n_points:
         return mesh
-    indices = _cyclic_block_indices(
+    indices = _subsample_indices(
         mesh.n_points,
         n_points,
+        mode,
+        mesh.points.device,
         generator=generator,
-        device=mesh.points.device,
     )
     if mesh.n_cells == 0:
         result = Mesh(
@@ -92,8 +95,10 @@ def _subsample_mesh_cells(
     mesh: Mesh,
     n_cells: int,
     generator: torch.Generator | None = None,
+    mode: SubsampleMode = "block",
 ) -> Mesh:
-    """Subsample a Mesh to *n_cells* via a cyclic contiguous block read on cells.
+    """Subsample a Mesh to *n_cells* via a cyclic contiguous block read on cells
+    (``mode="block"``) or a uniform random draw of cells (``mode="uniform"``).
 
     Preserves cell topology: each selected cell retains its full vertex
     connectivity.  Unreferenced points are compacted out.  Uses
@@ -116,11 +121,12 @@ def _subsample_mesh_cells(
     n_total = mesh.n_cells
     if n_total <= n_cells:
         return mesh
-    indices = _cyclic_block_indices(
+    indices = _subsample_indices(
         n_total,
         n_cells,
+        mode,
+        mesh.cells.device,
         generator=generator,
-        device=mesh.cells.device,
     )
     mesh = mesh.slice_cells(indices)
     # Compact: drop vertices not referenced by any surviving cell
@@ -148,6 +154,7 @@ def _zarr_mesh_subsampled(
     n_points: int | None,
     generator: torch.Generator | None,
     drop_cells: bool = False,
+    mode: SubsampleMode = "block",
 ) -> Mesh:
     """Partial-read a zarr mesh group: fetch only the subsample window.
 
@@ -160,13 +167,21 @@ def _zarr_mesh_subsampled(
     """
     from physicsnemo.mesh.io import io_zarr as _ioz
 
+    def rows(indices: torch.Tensor):
+        """A leaf reader for the selected rows: 1-2 slice reads for a block, a sorted gather otherwise."""
+        if mode == "block":
+            runs = _indices_to_runs(indices)
+            return lambda a: _ioz._read_rows(a, runs)
+        idx = indices.numpy()
+        return lambda a: _ioz._read_index(a, idx)
+
     total_cells = group["cells"].shape[0] if "cells" in group and not drop_cells else 0
     total_points = group["points"].shape[0]
 
     if total_cells > 0 and n_cells is not None and total_cells > n_cells:
-        indices = _cyclic_block_indices(total_cells, n_cells, generator=generator)
-        runs = _indices_to_runs(indices)
-        cells = _ioz._read_rows(group["cells"], runs)
+        indices = _subsample_indices(total_cells, n_cells, mode, generator=generator)
+        read = rows(indices)
+        cells = read(group["cells"])
         # Compact: gather only referenced vertices; remap connectivity to the
         # sorted-unique order, matching slice_cells + slice_points.
         referenced, inverse = torch.unique(cells, return_inverse=True)
@@ -178,24 +193,22 @@ def _zarr_mesh_subsampled(
             point_data=_ioz._read_tree(
                 group, "point_data", leaf_reader=lambda a: _ioz._read_index(a, ref_np)
             ),
-            cell_data=_ioz._read_tree(
-                group, "cell_data", leaf_reader=lambda a: _ioz._read_rows(a, runs)
-            ),
+            cell_data=_ioz._read_tree(group, "cell_data", leaf_reader=read),
             global_data=_ioz._read_tree(group, "global_data"),
         )
         scale_measures(mesh, total_cells / n_cells)
         if n_points is not None:
-            mesh = _subsample_mesh_points(mesh, n_points, generator=generator)
+            mesh = _subsample_mesh_points(
+                mesh, n_points, generator=generator, mode=mode
+            )
         return mesh
 
     if total_cells == 0 and n_points is not None and total_points > n_points:
-        indices = _cyclic_block_indices(total_points, n_points, generator=generator)
-        runs = _indices_to_runs(indices)
+        indices = _subsample_indices(total_points, n_points, mode, generator=generator)
+        read = rows(indices)
         mesh = Mesh(
-            points=_ioz._read_rows(group["points"], runs),
-            point_data=_ioz._read_tree(
-                group, "point_data", leaf_reader=lambda a: _ioz._read_rows(a, runs)
-            ),
+            points=read(group["points"]),
+            point_data=_ioz._read_tree(group, "point_data", leaf_reader=read),
             cell_data=None if drop_cells else _ioz._read_tree(group, "cell_data"),
             global_data=_ioz._read_tree(group, "global_data"),
         )
@@ -214,7 +227,7 @@ def _zarr_mesh_subsampled(
             point_data=mesh.point_data,
             global_data=mesh.global_data,
         )
-    return _subsample_mesh(mesh, n_cells, n_points, generator=generator)
+    return _subsample_mesh(mesh, n_cells, n_points, generator=generator, mode=mode)
 
 
 def _subsample_mesh(
@@ -222,6 +235,7 @@ def _subsample_mesh(
     n_cells: int | None = None,
     n_points: int | None = None,
     generator: torch.Generator | None = None,
+    mode: SubsampleMode = "block",
 ) -> Mesh:
     """Apply cell and/or point subsampling to a single Mesh.
 
@@ -229,9 +243,9 @@ def _subsample_mesh(
     subsequent point subsample operates on the already-reduced mesh.
     """
     if n_cells is not None:
-        mesh = _subsample_mesh_cells(mesh, n_cells, generator=generator)
+        mesh = _subsample_mesh_cells(mesh, n_cells, generator=generator, mode=mode)
     if n_points is not None:
-        mesh = _subsample_mesh_points(mesh, n_points, generator=generator)
+        mesh = _subsample_mesh_points(mesh, n_points, generator=generator, mode=mode)
     return mesh
 
 
@@ -253,6 +267,7 @@ class MeshReader:
         include_index_in_metadata: bool = True,
         subsample_n_points: int | None = None,
         subsample_n_cells: int | None = None,
+        subsample_mode: SubsampleMode = "block",
     ) -> None:
         """
         Initialize the mesh reader.
@@ -287,6 +302,12 @@ class MeshReader:
             probability to effective measures, preserving the integration
             measure (see :mod:`physicsnemo.mesh.calculus.measure`).  Applied before
             ``subsample_n_points`` when both are set.
+        subsample_mode : {"block", "uniform"}, default="block"
+            How the subsamples pick rows. ``"block"`` reads one cyclic
+            contiguous run in storage order, the fastest I/O, but spatially
+            representative only when the on-disk order is shuffled.
+            ``"uniform"`` draws a uniformly random, sorted set of rows, which
+            is representative in any storage order at the cost of a gather.
         """
         self._root = Path(path)
         self._pattern = pattern
@@ -294,6 +315,11 @@ class MeshReader:
         self.include_index_in_metadata = include_index_in_metadata
         self.subsample_n_points = subsample_n_points
         self.subsample_n_cells = subsample_n_cells
+        if subsample_mode not in ("block", "uniform"):
+            raise ValueError(
+                f"subsample_mode must be 'block' or 'uniform', got {subsample_mode!r}"
+            )
+        self.subsample_mode = subsample_mode
         # Base seed + epoch for deterministic per-index RNG (see
         # :meth:`set_generator`). ``None`` means unseeded.
         self._seed_base: int | None = None
@@ -345,6 +371,7 @@ class MeshReader:
                     self.subsample_n_cells,
                     self.subsample_n_points,
                     generator,
+                    mode=self.subsample_mode,
                 )
             return from_zarr(mesh_path)
         # mode="r": copy-on-write maps, so in-place edits of a sample never
@@ -399,6 +426,7 @@ class MeshReader:
             self.subsample_n_cells,
             self.subsample_n_points,
             generator=generator,
+            mode=self.subsample_mode,
         )
 
         if self.pin_memory:
@@ -440,6 +468,7 @@ class DomainMeshReader:
         include_index_in_metadata: bool = True,
         subsample_n_points: int | None = None,
         subsample_n_cells: int | None = None,
+        subsample_mode: SubsampleMode = "block",
         boundary_subsample: Literal["both", "cells", "points"] = "both",
         extra_boundaries: dict[str, dict] | None = None,
         drop_interior_cells: bool = False,
@@ -482,6 +511,12 @@ class DomainMeshReader:
             :mod:`physicsnemo.mesh.calculus.measure`).  Applied
             before
             ``subsample_n_points`` when both are set.
+        subsample_mode : {"block", "uniform"}, default="block"
+            How the subsamples pick rows. ``"block"`` reads one cyclic
+            contiguous run in storage order, the fastest I/O, but spatially
+            representative only when the on-disk order is shuffled.
+            ``"uniform"`` draws a uniformly random, sorted set of rows, which
+            is representative in any storage order at the cost of a gather.
         boundary_subsample : {"both", "cells", "points"}, default="both"
             Which of the two subsamples apply to the in-file boundary
             meshes.  ``"both"`` applies ``subsample_n_cells`` then
@@ -556,6 +591,11 @@ class DomainMeshReader:
         self.drop_in_file_boundaries = drop_in_file_boundaries
         self.subsample_n_points = subsample_n_points
         self.subsample_n_cells = subsample_n_cells
+        if subsample_mode not in ("block", "uniform"):
+            raise ValueError(
+                f"subsample_mode must be 'block' or 'uniform', got {subsample_mode!r}"
+            )
+        self.subsample_mode = subsample_mode
         if boundary_subsample not in ("both", "cells", "points"):
             raise ValueError(
                 "boundary_subsample must be one of 'both', 'cells', 'points'; "
@@ -655,6 +695,7 @@ class DomainMeshReader:
                     interior_n_points,
                     generator,
                     drop_cells=self.drop_interior_cells,
+                    mode=self.subsample_mode,
                 )
                 boundaries = {}
                 if not self.drop_in_file_boundaries and "boundaries" in root:
@@ -665,6 +706,7 @@ class DomainMeshReader:
                             bnd_n_cells,
                             bnd_n_points,
                             generator,
+                            mode=self.subsample_mode,
                         )
                         for name, grp in root["boundaries"].groups()
                     }
@@ -751,6 +793,7 @@ class DomainMeshReader:
                 n_cells=self.subsample_n_cells,
                 n_points=interior_n_points,
                 generator=generator,
+                mode=self.subsample_mode,
             )
             bnd_n_cells, bnd_n_points = self._boundary_subsample_sizes()
             boundaries = {
@@ -759,6 +802,7 @@ class DomainMeshReader:
                     n_cells=bnd_n_cells,
                     n_points=bnd_n_points,
                     generator=generator,
+                    mode=self.subsample_mode,
                 )
                 for name in dm.boundary_names
             }
