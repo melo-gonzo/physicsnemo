@@ -347,10 +347,8 @@ from physicsnemo.experimental.models.isla.inputs import (
 )
 from physicsnemo.experimental.models.isla.sampling import draw_inputs, sample_boundary_cells
 from physicsnemo.experimental.models.isla.scales import (
-    DEFINES,
-    LENGTH,
-    check_output_stats,
     merged,
+    parse_scales,
     rms_moments,
     scale_factor,
     split_scale_keys,
@@ -712,7 +710,16 @@ class ISLA(Module):
         self.global_schema = _declare(
             "global_schema", global_schema, max_rank=1, allow_odd=False
         )
-        self._init_scales(out_extras, b_extras, g_extras, output_stats)
+        ### The opt-in scales (module docstring, *Scales*), checked against the schemas.
+        sc = parse_scales(
+            out_extras, b_extras, g_extras, output_stats, self.output_schema, self.boundary_schemas, self.global_schema
+        )
+        self._output_units, self._output_scale = sc.output_units, sc.output_scale
+        self._global_units, self._global_scale = sc.global_units, sc.global_scale
+        self._boundary_units, self._boundary_scale = sc.boundary_units, sc.boundary_scale
+        self._boundary_sources, self._global_sources = sc.boundary_sources, sc.global_sources
+        self._defined_values, self._rms_scale = sc.defined_values, sc.rms_scale
+        self.output_stats, self._scaled, self._fp32_head = sc.output_stats, sc.scaled, sc.fp32_head
         ### The task structure: a surface task predicts at the cells of the boundaries
         ### forward names and has no prediction-point parameters; an interior task
         ### predicts at prediction points that enter the encoder as tokens, passive
@@ -920,104 +927,6 @@ class ISLA(Module):
                 | {m.normalized_shape[-1] for m in self.modules() if isinstance(m, nn.LayerNorm)}
             )
         )
-
-    def _init_scales(self, out_extras, b_extras, g_extras, output_stats) -> None:
-        """The opt-in scales (module docstring, *Scales*) from the declarations'
-        ISLA-local keys (:func:`~physicsnemo.experimental.models.isla.scales.split_scale_keys`),
-        checked against the parsed schemas."""
-        decl = {"output_schema": out_extras, "global_schema": g_extras}
-        decl.update({f"boundary_schemas[{n!r}]": e for n, e in b_extras.items()})
-        schemas = {"output_schema": self.output_schema, "global_schema": self.global_schema}
-        schemas.update({f"boundary_schemas[{n!r}]": s for n, s in self.boundary_schemas.items()})
-        used = set()
-        for kind, extras in decl.items():
-            for name, local in extras.items():
-                rank = schemas[kind][name].rank
-                defined = local.get(DEFINES)
-                if defined is not None and not (rank == 1 or (rank == 0 and kind == "global_schema")):
-                    raise ValueError(
-                        f"{kind}[{name!r}]: a scale is defined by a rank-1 field or a rank-0 global; got rank {rank}"
-                    )
-                if defined is not None and rank == 0 and ("units" in local or "scale" in local):
-                    raise ValueError(
-                        f"{kind}[{name!r}]: the value of the scale {defined!r} is consumed, not an input; "
-                        "it takes no units and no scale"
-                    )
-                if kind == "global_schema" and rank == 1 and defined is None:
-                    if "units" in local or "scale" in local:
-                        raise ValueError(
-                            f"{kind}[{name!r}]: a rank-1 global that defines no scale enters as a "
-                            "direction only, so units and a scale have no effect on it; declare its magnitude as a "
-                            "rank-0 global"
-                        )
-                if kind == "global_schema" and rank == 1 and "scale" in local:
-                    raise ValueError(
-                        f"{kind}[{name!r}]: a rank-1 global's magnitude is the scale {defined!r}; it takes no scale"
-                    )
-                used |= set(local.get("units", {}))
-        self._output_units = {n: e["units"] for n, e in out_extras.items() if e.get("units")}
-        self._output_scale = {n: e["scale"] for n, e in out_extras.items() if "scale" in e}
-        self._global_units = {
-            n: e["units"]
-            for n, e in g_extras.items()
-            if e.get("units") and DEFINES not in e and self.global_schema[n].rank == 0
-        }
-        self._global_scale = {n: e["scale"] for n, e in g_extras.items() if "scale" in e}
-        self._boundary_units = {
-            c: {n: e["units"] for n, e in extras.items() if e.get("units")} for c, extras in b_extras.items()
-        }
-        self._boundary_scale = {
-            c: {n: e["scale"] for n, e in extras.items() if "scale" in e} for c, extras in b_extras.items()
-        }
-        ### The rank-1 sources of the one RMS scale (boundary fields, pooled, or one
-        ### global) and the rank-0 globals whose values are scales (consumed).
-        self._boundary_sources = [
-            (c, n) for c, extras in b_extras.items() for n, e in extras.items() if DEFINES in e
-        ]
-        self._global_sources = [
-            n for n, e in g_extras.items() if DEFINES in e and self.global_schema[n].rank == 1
-        ]
-        self._defined_values = {}
-        for n, e in g_extras.items():
-            if DEFINES in e and self.global_schema[n].rank == 0:
-                if e[DEFINES] in self._defined_values:
-                    raise ValueError(f"global_schema: two fields define the scale {e[DEFINES]!r}")
-                self._defined_values[e[DEFINES]] = n
-        rms = {b_extras[c][n][DEFINES] for c, n in self._boundary_sources}
-        rms |= {g_extras[n][DEFINES] for n in self._global_sources}
-        if len(rms) > 1:
-            raise ValueError(f"at most one scale is defined by rank-1 fields; got {sorted(rms)!r}")
-        self._rms_scale = next(iter(rms), None)
-        if self._rms_scale in self._defined_values:
-            raise ValueError(
-                f"the scale {self._rms_scale!r} is defined by a rank-1 field and by the rank-0 global "
-                f"{self._defined_values[self._rms_scale]!r}"
-            )
-        if self._boundary_sources and self._global_sources:
-            raise ValueError(
-                f"the sources of the scale {self._rms_scale!r} are rank-1 boundary fields or one rank-1 global, "
-                f"not both: got {self._boundary_sources!r} and {self._global_sources!r}"
-            )
-        if len(self._global_sources) > 1:
-            raise ValueError(
-                f"at most one rank-1 global defines the scale {self._rms_scale!r}; got {self._global_sources!r}"
-            )
-        declared = {LENGTH, *self._defined_values, *rms}
-        undefined = sorted(used - declared)
-        if undefined:
-            raise ValueError(f"units name {undefined!r}, which no field defines; the scales are {sorted(declared)!r}")
-        has_source = bool(self._boundary_sources or self._global_sources)
-        self.output_stats = check_output_stats(output_stats, self.output_schema)
-        ### The scales are declared when any field has units or an input scale or
-        ### defines a scale.
-        has_input_scale = bool(self._global_scale or any(self._boundary_scale.values()))
-        self._scaled = bool(used or has_source or self._defined_values or has_input_scale)
-        ### The head and the redimensionalization run in the parameters' precision
-        ### under autocast whenever a physical output is assembled or standardized. The
-        ### outputs' precision is bounded by the bf16 trunk either way; the fp32 head keeps
-        ### bf16's rounding of the head's own product and of a nonzero output mean (a
-        ### mean / std of 0.3, for one) out of the outputs.
-        self._fp32_head = self._scaled or self.output_stats is not None or bool(self._output_scale)
 
     @staticmethod
     def _offsets(widths) -> tuple[int, ...]:
