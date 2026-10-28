@@ -308,6 +308,7 @@ import logging
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import NamedTuple
 
 import torch
 import torch.nn as nn
@@ -458,6 +459,27 @@ def _refuse_earlier_state_dict(module, state_dict, prefix, local_metadata, *args
             f"this ISLA state dict has state-dict version {version}; ISLA "
             f"{module.__model_checkpoint_version__} loads version {type(module)._version} only (no upgrade path)"
         )
+
+
+class _CaseInputs(NamedTuple):
+    """One case's inputs to :meth:`ISLA._forward_tokens` (:meth:`ISLA._case_inputs`)."""
+
+    #: The boundary tokens over ``(1, N)`` (the interior task's drawn ones).
+    boundary: TensorDict
+    #: The prediction-point tokens with their geometry over ``(1, Q)`` (interior), else None.
+    query: TensorDict | None
+    #: The unit global directions ``(1, K, d)`` and the global scalars ``(1, S)`` or None.
+    g_unit: torch.Tensor
+    g_scalars: torch.Tensor | None
+    #: The length unit ``(1, 1, 1)``.
+    gauge: torch.Tensor
+    #: The case's scales (:meth:`ISLA._case_scales`), None when none are declared.
+    scales: dict | None
+    #: The output Mesh's points and global data.
+    out_points: torch.Tensor
+    global_td: TensorDict
+    #: The surface task's output token rows as ``(start, stop)`` ranges, None for every row.
+    out_rows: list[tuple[int, int]] | None
 
 
 class ISLA(Module):
@@ -1542,16 +1564,15 @@ class ISLA(Module):
             the dotted names), and whose ``global_data`` is the selected ``global_data`` passed
             through.
         """
-        boundary, query, g_unit, g_scalars, gauge, scales, out_points, global_td, out_rows = self._case_inputs(
-            boundary_meshes, prediction_points, global_data, prediction_boundaries
-        )
+        c = self._case_inputs(boundary_meshes, prediction_points, global_data, prediction_boundaries)
         fields = self._redimensionalize(
-            self._forward_tokens(boundary, query, g_unit, g_scalars, gauge=gauge, out_rows=out_rows), scales
+            self._forward_tokens(c.boundary, c.query, c.g_unit, c.g_scalars, gauge=c.gauge, out_rows=c.out_rows),
+            c.scales,
         )
         return Mesh(
-            points=out_points,
-            point_data=fields[0].to(out_points.device),
-            global_data=global_td,
+            points=c.out_points,
+            point_data=fields[0].to(c.out_points.device),
+            global_data=c.global_td,
         )
 
     def query_chunks(
@@ -1587,11 +1608,11 @@ class ISLA(Module):
             )
         return _QueryChunks(self, self._case_inputs(boundary_meshes, prediction_points, global_data))
 
-    def _case_inputs(self, boundary_meshes, prediction_points, global_data, prediction_boundaries=None) -> tuple:
-        """One case's inputs to :meth:`_forward_tokens` from :meth:`forward`'s:
-        ``(boundary, query, g_unit, g_scalars, gauge, scales)`` (the interior task's
-        boundary tokens drawn, the prediction points with their geometry), then the
-        output points, the selected global data and the surface task's ``out_rows``."""
+    def _case_inputs(
+        self, boundary_meshes, prediction_points, global_data, prediction_boundaries=None
+    ) -> "_CaseInputs":
+        """One case's inputs to :meth:`_forward_tokens` from :meth:`forward`'s
+        (:class:`_CaseInputs`)."""
         ### Validation at the API boundary (skipped under torch.compile): fail
         ### here with the offending mesh, not inside the network.
         if not torch.compiler.is_compiling():
@@ -1693,7 +1714,7 @@ class ISLA(Module):
                     centre = (w[:, None] * simplex.double().mean(1)).sum(0) / w.sum()
                     boundary["normal_tol"] = normal_error_bound(simplex, centre)[None]
             query = query[None]
-        return boundary, query, g_unit, g_scalars, gauge, scales, out_points, global_td, out_rows
+        return _CaseInputs(boundary, query, g_unit, g_scalars, gauge, scales, out_points, global_td, out_rows)
 
     @staticmethod
     def _point_set(pts) -> TensorDict:
@@ -1979,12 +2000,12 @@ class _QueryChunks:
     what the prediction points read of it held as leaves, and the points' side by
     ranges of points (``chunks(start, stop)``), then ``chunks.backward()``."""
 
-    def __init__(self, model: ISLA, inputs: tuple) -> None:
-        boundary, query, g_unit, g_scalars, gauge, scales, out_points, global_td, _ = inputs
-        self.model, self.query, self.g_unit, self.g_scalars = model, query, g_unit, g_scalars
-        self.scales, self.out_points, self.global_td = scales, out_points, global_td
+    def __init__(self, model: ISLA, inputs: "_CaseInputs") -> None:
+        boundary, query, g_unit = inputs.boundary, inputs.query, inputs.g_unit
+        self.model, self.query, self.g_unit, self.g_scalars = model, query, g_unit, inputs.g_scalars
+        self.scales, self.out_points, self.global_td = inputs.scales, inputs.out_points, inputs.global_td
         self._roots, self._leaves = [], []
-        tokens, self.gauge, self.geo_kernel = model._boundary_tokens(boundary, g_unit, gauge)
+        tokens, self.gauge, self.geo_kernel = model._boundary_tokens(boundary, g_unit, inputs.gauge)
         self.like, self.log_w = boundary["points"], tokens["log_w"]
         q_nhat, s, _ = model._query_geometry(query, self.gauge, self.like)
         ### The forest now, each chunk's points walked by the chunk: the lists held are
