@@ -39,20 +39,9 @@ so its result never depends on the path taken.
 
 from __future__ import annotations
 
-import importlib
-
 import torch
 
-from physicsnemo.core.version_check import is_package_available
-
-### Triton is an optional dependency, loaded through importlib as in geo_kernel.py.
-HAS_TRITON = is_package_available("triton")
-if HAS_TRITON:
-    try:
-        triton = importlib.import_module("triton")
-        tl = importlib.import_module("triton.language")
-    except Exception:  # pragma: no cover - a broken triton install is treated as absent
-        HAS_TRITON = False
+from physicsnemo.experimental.models.isla._triton import HAS_TRITON, tl, triton
 
 _SCAN_BLOCK = 1024
 _CELL_BLOCK = 256
