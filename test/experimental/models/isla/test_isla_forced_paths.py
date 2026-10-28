@@ -305,11 +305,13 @@ def test_a_named_search_kernel_runs_that_search(dim, kernel, monkeypatch):
 
 @pytest.mark.parametrize("kernel", ["reference", "fast"])
 def test_the_winding_spies_reach_the_three_dimensional_search(kernel, monkeypatch):
-    """``geometry._winding_sign`` spied (test_isla_geometry_fast's ``_run`` reads
-    the winding number through it): the spy is reached under either kernel."""
+    """``geometry._winding_sign`` and ``geometry._packed_winding_sum`` spied
+    (test_isla_geometry_fast's ``_run`` and the goldens read the winding number
+    through them): both spies are reached under either kernel."""
     sign = reaches(monkeypatch, geometry, "_winding_sign")
+    tree_w = reaches(monkeypatch, geometry, "_packed_winding_sum")
     exact_boundary_geometry(*_geometry_case(3), kernel=kernel)
-    assert len(sign) == 1
+    assert len(sign) == len(tree_w) == 1
 
 
 def test_the_switch_and_the_accurate_point_reach_the_closest_weights(monkeypatch):

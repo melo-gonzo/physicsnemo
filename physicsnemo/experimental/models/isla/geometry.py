@@ -1553,11 +1553,12 @@ def _segment_winding_numbers(query: torch.Tensor, simplex: torch.Tensor, parity:
     return out / (2 * torch.pi)
 
 
-def _winding_sign(query: torch.Tensor, simplex: torch.Tensor, parity: torch.Tensor, w=None, oriented=None):
-    """The sign of the distance at each query ``(Q, d)``, float64: ``sign(sigma / 2 -
-    w)``, with ``w`` the generalized winding number of the oriented cells
-    ``simplex`` (canonical, orientation ``parity``; Jacobson, Kavan and
-    Sorkine-Hornung 2013) and ``sigma`` the sign of the volume they enclose,
+def _winding_sign(sigma: torch.Tensor, w: torch.Tensor):
+    """The sign of the distance at each query, float64: ``sign(sigma / 2 - w)``, with
+    ``w`` ``(Q,)`` the generalized winding number of the oriented cells at the queries
+    (Jacobson, Kavan and Sorkine-Hornung 2013; :func:`_packed_winding_sum` in three
+    dimensions, :func:`_segment_winding_numbers` in two) and ``sigma`` the sign of the
+    volume they enclose (:func:`_oriented_areas`),
     ``V = sum_f a_f n_f . (c_f - g) / d`` about their area-weighted centroid ``g``
     (+1 at ``V = 0`` and at ``w = sigma / 2``). For a closed surface ``w`` is
     ``(sigma - 1) / 2`` on the side the normals point to and ``(sigma + 1) / 2`` on
@@ -1565,14 +1566,7 @@ def _winding_sign(query: torch.Tensor, simplex: torch.Tensor, parity: torch.Tens
     bound), so ``sigma / 2 - w`` is +1/2 or -1/2: positive on the side the normals
     point to; coincident cells of opposite orientation (a
     zero-thickness fold) cancel in ``w``, so both of its sides take the sign of the
-    region around it. ``w`` times ``4 pi`` in three dimensions
-    (:func:`_packed_winding_sum`), and ``oriented``, :func:`_oriented_areas` of the
-    cells, when the caller has it."""
-    _, sigma = _oriented_areas(simplex, parity) if oriented is None else oriented
-    if w is not None:
-        w = w / (4 * torch.pi)
-    else:
-        w = _segment_winding_numbers(query, simplex, parity)
+    region around it."""
     return torch.where(0.5 * sigma - w >= 0, 1.0, -1.0).to(w)
 
 
@@ -1754,7 +1748,7 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     ### (no normal, no area, no solid angle: its parity 0 in the winding number)
     if any_flat:
         p_rep = torch.where(flat[rep], 0.0, p_rep)
-    oriented = _oriented_areas(s_rep, p_rep)
+    area, sigma = _oriented_areas(s_rep, p_rep)
     if dim == 3:
         ### Without repeated cells the two trees are one, and one traversal serves the
         ### ball search and the winding number.
@@ -1779,9 +1773,8 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
         tree = (*tree[:5], None, None)
         if not once:
             tree, leaf_order, s_leaf = _preorder_cell_tree(s_rep)
-        w_sum = _packed_winding_sum(q64, s_leaf, p_rep[leaf_order], oriented[0][leaf_order], tree)
+        w_sum = _packed_winding_sum(q64, s_leaf, p_rep[leaf_order], area[leaf_order], tree)
     else:
-        w_sum = None
         rounding = 40 * torch.finfo(query_points.dtype).eps / 2 * (q_norm + reach.max())
         li, pk = _segment_candidates(query_c, points_c, cells, (2 * (rounding + err_max)).to(query_points.dtype))
     ### In the order of (query, cell).
@@ -1910,7 +1903,8 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     g, c, wall = tq[sel], tc[sel], wall[sel]
     m = _grouped_min_norm(torch.cat([g, g[wall] + nq]), torch.cat([c, -c[wall]]), 2 * nq)
     tie_u = torch.where(on_wall[:, None], 0.5 * (m[:nq] - m[nq:]), m[:nq])
-    sign = _winding_sign(q64, s_rep, p_rep, w_sum, oriented)
+    winding = w_sum / (4 * torch.pi) if dim == 3 else _segment_winding_numbers(q64, s_rep, p_rep)
+    sign = _winding_sign(sigma, winding)
     if kept is not None:
         idx = kept[idx]
     return idx, tied, tie_u.to(query_points.dtype), sign.to(query_points.dtype), on_wall, w[first]

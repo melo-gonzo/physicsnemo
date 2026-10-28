@@ -181,19 +181,11 @@ def _run(kernel, q, points, cells, monkeypatch):
         monkeypatch.setattr(geometry, name, spy)
     sign = geometry._winding_sign
 
-    def spy_sign(query, simplex, parity, w=None, oriented=None):
-        if w is not None:
-            seen["w"] = w / (4 * torch.pi)
-        return sign(query, simplex, parity, w, oriented)
-
-    segment_w = geometry._segment_winding_numbers
-
-    def spy_segment_w(*args):
-        seen["w"] = segment_w(*args)
-        return seen["w"]
+    def spy_sign(sigma, w):
+        seen["w"] = w
+        return sign(sigma, w)
 
     monkeypatch.setattr(geometry, "_winding_sign", spy_sign)
-    monkeypatch.setattr(geometry, "_segment_winding_numbers", spy_segment_w)
     q, points = q.clone().requires_grad_(), points.clone().requires_grad_()
     d, u = exact_boundary_geometry(q, points, cells, kernel=kernel)
     (
