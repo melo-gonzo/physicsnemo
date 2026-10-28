@@ -435,56 +435,16 @@ def _pad_tokens(tokens: TensorDict, alignment: int) -> TensorDict:
 
 
 def _refuse_earlier_state_dict(module, state_dict, prefix, local_metadata, *args) -> None:
-    """A load_state_dict pre-hook: a state dict of an earlier ISLA is refused with the
-    versions named, on every loading path (``Module.load``, ``load_checkpoint``,
+    """A load_state_dict pre-hook: a state dict whose state-dict version (torch's
+    ``nn.Module._version``, recorded in its metadata) is not ``ISLA._version`` is
+    refused on every loading path (``Module.load``, ``load_checkpoint``,
     ``load_state_dict``), not only ``Module.from_checkpoint``, which checks the
-    recorded version. Two marks tell an earlier state dict: the parameter layout
-    before 0.7.0 (the shared seed embedding ``embed.0``, the prediction points'
-    ``qt.type_offset`` and ``qt.embed``), and, for 0.7.0 to 0.13.0, the state-dict
-    version torch records for every module (``ISLA._version``, 1 before 0.8.0, 8 for
-    0.8.0, 9 for 0.9.0, 10 for the unmerged head-frame candidate 0.10.0, 11 for 0.11.0,
-    12 for 0.12.0 and 13 for 0.13.0). A state dict rebuilt without
-    torch's metadata (a dict comprehension over it) carries no version and is read
-    by its layout alone."""
-    old = sorted(
-        k[len(prefix) :]
-        for k in state_dict
-        if k.startswith(prefix) and k[len(prefix) :].startswith(("embed.0.", "qt.type_offset", "qt.embed."))
-    )
-    if old:
-        raise RuntimeError(
-            f"this ISLA state dict has the parameter layout of a checkpoint before version "
-            f"0.7.0 ({', '.join(old[:3])}, ...): ISLA {module.__model_checkpoint_version__} "
-            "declares its boundary conditions by name (boundary_schemas) and keeps no upgrade "
-            "path from earlier checkpoints (0.6.0 and before); load it with the code that "
-            "wrote it, or retrain"
-        )
+    recorded checkpoint version. ISLA keeps no upgrade path."""
     version = local_metadata.get("version")
     if version is not None and version != type(module)._version:
         raise RuntimeError(
-            f"this ISLA state dict was written before version {module.__model_checkpoint_version__} "
-            f"(state-dict version {version}, now {type(module)._version}): its weights have the "
-            "current layout (before 0.14.0, with two more parameters) but were trained on an "
-            "earlier forward (before 0.8.0, the "
-            "prediction points' geometry encoding sign(s) log(|s| + 1e-12) and the direction "
-            "from the surface, in place of asinh(s / 1e-6) and sign(d) times it; before "
-            "0.9.0, the length unit without each boundary cell's own second moment, and for "
-            "the interior task measured on the drawn tokens in place of the full-resolution "
-            "boundary; before 0.11.0, the geometry without least-norm tie directions, the "
-            "winding-number sign of the wall distance, the float64 canonical-frame token "
-            "draw, the on-wall rule and float64 cell normals; before 0.12.0, the exact "
-            "geometry's first-order tie and on-wall bands and its arithmetic in the caller's "
-            "frame; before 0.13.0, the constructor's dim, boundary_tokens, query_independent "
-            "and reynolds, the scales' velocity_scale and roles, and interacting interior "
-            "ISLA; "
-            "before 0.14.0, ISLA-DTT's boundary forest split by sign octants and built under "
-            "autocast in the caller's precision and uncentred coordinates, with the boxes' own "
-            "diameters and no bound on each token's normal, and the slice blocks' geo_logit "
-            "bias and ISLA-DTT's kernel basis's last bias; "
-            "state-dict version 10 is the unmerged head-frame "
-            "candidate 0.10.0), and "
-            "ISLA keeps no upgrade path; "
-            "load it with the code that wrote it, or retrain"
+            f"this ISLA state dict has state-dict version {version}; ISLA "
+            f"{module.__model_checkpoint_version__} loads version {type(module)._version} only (no upgrade path)"
         )
 
 
@@ -675,48 +635,11 @@ class ISLA(Module):
     #: Largest per-token input rank; see the module docstring.
     MAX_INPUT_RANK = 2
 
-    ### 0.7.0: boundary conditions by name (boundary_schemas, one input layer and
-    ### vector and tensor maps per condition), the prediction points' own input layer.
-    ### 0.8.0: the prediction points' geometry encoding is continuous through the
-    ### surface (the built-in distance channel asinh(s / 1e-6) in place of
-    ### sign(s) log(|s| + 1e-12), the direction sign(d) u; same parameters, new
-    ### forward). 0.9.0: the interior task's length unit is the full-resolution
-    ### boundary's RMS pairwise distance, exact and independent of the token draw (in
-    ### place of its estimate from the drawn tokens; same parameters, new forward),
-    ### and the opt-in scales (units, the defined scales, a standardized group,
-    ### output_stats). 0.11.0: the geometry robustness bundle (least-norm
-    ### tie directions, the winding-number sign of the wall distance, the float64
-    ### canonical-frame token draw, the on-wall rule, float64 cell normals, and the
-    ### cell-tree seed of the search radius; same parameters, new forward). 0.10.0
-    ### is skipped: it names the unmerged head-frame candidate, whose checkpoints
-    ### exist, so each version string names one model. 0.12.0: the exact geometry's
-    ### derived, frame-robust tie and on-wall bands (the inputs' storage rounding plus
-    ### a worst case of the float64 arithmetic in the boundary's centred frame,
-    ### certified-distinct tie directions, the offset x - p formed in float64; same
-    ### parameters, new forward). 0.13.0: the interior task is ISLA-DTT without a
-    ### switch (query_independent gone, interacting interior ISLA with it); dim is
-    ### n_spatial_dims and boundary_tokens n_boundary_tokens, Mesh's names; the
-    ### constructor names no application quantity (reynolds gone: a recipe that wants
-    ### a Reynolds number passes it as an ordinary global input; the scales declare
-    ### their names with `defines` in place of velocity_scale and the density and
-    ### viscosity roles). The same parameters and forward for the surface task and
-    ### ISLA-DTT; new constructor arguments. No earlier checkpoint loads: ISLA is
-    ### unreleased and keeps no upgrade paths. 0.14.0: ISLA-DTT's boundary forest
-    ### as a function of the boundary alone (built outside autocast in centred
-    ### float64 canonical-frame coordinates, cube-face orientation classes with
-    ### their error-bound band in place of sign octants, the separation diameter
-    ### widened by the coordinates' error bound and by the frame's rotation in
-    ### proportion to each node's own size, never past a frame-free ball, each
-    ### token's normal_tol); the slice blocks' routing-bias Linear and ISLA-DTT's
-    ### kernel basis's last Linear without their dead biases (blocks.<i>.geo_logit.bias
-    ### and kernel_basis.net.4.bias gone from the state dict: constants that cancel in
-    ### a softmax). The same function otherwise.
+    #: The checkpoint version ``Module`` records and ``Module.from_checkpoint`` checks.
     __model_checkpoint_version__ = "0.14.0"
     #: torch's state-dict version of the module (``nn.Module._version``, recorded in
-    #: every state dict's metadata): 1 before 0.8.0, 8 for 0.8.0, 9 for 0.9.0, 10 for
-    #: the head-frame candidate, 11 for 0.11.0, 12 for 0.12.0 and 13 for 0.13.0, so a
-    #: state dict of 0.7.0 to 0.13.0 is told apart and refused on load
-    #: (:func:`_refuse_earlier_state_dict`).
+    #: every state dict's metadata), so a state dict of another version is refused on
+    #: load (:func:`_refuse_earlier_state_dict`).
     _version = 14
 
     def __init__(

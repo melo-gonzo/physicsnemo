@@ -709,21 +709,9 @@ def test_isla_checkpoint_round_trip(tmp_path, schema):
     assert all(torch.equal(a[k], b[k]) for k in a), schema
 
 
-#: Each earlier release and the state-dict version torch records in its checkpoints
-#: (``ISLA._version``: 1 before 0.8.0, 10 the unmerged head-frame candidate).
-EARLIER_RELEASES = {
-    "0.3.0": 1,
-    "0.4.0": 1,
-    "0.5.0": 1,
-    "0.6.0": 1,
-    "0.7.0": 1,
-    "0.8.0": 8,
-    "0.9.0": 9,
-    "0.10.0": 10,
-    "0.11.0": 11,
-    "0.12.0": 12,
-    "0.13.0": 13,
-}
+#: An earlier release and the state-dict version torch records in its checkpoints
+#: (``ISLA._version``).
+EARLIER_RELEASES = {"0.13.0": 13}
 
 
 def _rewritten(src: Path, dst: Path, version=None, state_dict=None) -> Path:
@@ -767,9 +755,7 @@ def test_isla_checkpoint_of_an_earlier_version_is_refused(tmp_path, file_name, r
         ),
     ):
         Module.from_checkpoint(str(old))
-    sd_version = (
-        rf"before version 0\.14\.0 \(state-dict version {EARLIER_RELEASES[release]},"
-    )
+    sd_version = rf"state-dict version {EARLIER_RELEASES[release]}; ISLA 0\.14\.0 loads version 14"
     with pytest.raises(RuntimeError, match=sd_version):
         ISLA(**cfg).load(str(old), strict=True)
     weights_only = _rewritten(src, tmp_path / f"weights_{release}.mdlus", None, sd)
@@ -803,58 +789,13 @@ def test_isla_checkpoint_relabelled_in_its_metadata_alone_is_refused_by_module_l
     raise AssertionError("Module.load accepted a checkpoint of version 0.12.0")
 
 
-def test_isla_earlier_state_dict_is_refused_on_every_loading_path(tmp_path):
-    """A checkpoint whose weights have the parameter layout before 0.7.0 (the shared
-    seed embedding ``embed.0``, ``qt.type_offset``, ``qt.embed``), loaded the way the
-    recipe resumes and initializes (``Module.load``, strict), or through
-    ``Module.from_checkpoint``, fails with the version named rather than with a list
-    of missing and unexpected keys; so does ``load_state_dict`` itself."""
-    model = _instantiate_model(**CONFIGS["dtt"])
-    path = tmp_path / "isla.mdlus"
-    model.save(path)
-    old = {
-        k: v
-        for k, v in model.state_dict().items()
-        if not k.startswith(("boundary_conditions.", "qt.seed."))
-    }
-    old["embed.0.weight"] = torch.zeros(32, 2)
-    old["qt.type_offset"] = torch.zeros(32)
-    old["qt.embed.0.weight"] = torch.zeros(32, 2)
-    stale = _rewritten(path, tmp_path / "isla_0.6.0_weights.mdlus", None, old)
-    fresh = ISLA(**CONFIGS["dtt"])
-    layout = "parameter layout of a checkpoint before version 0.7.0"
-    with pytest.raises(RuntimeError, match=layout):
-        fresh.load(str(stale), strict=True)
-    with pytest.raises(RuntimeError, match=layout):
-        Module.from_checkpoint(str(stale))
-    with pytest.raises(RuntimeError, match="no upgrade path"):
-        fresh.load_state_dict(old, strict=False)
-    ### a DDP-style prefix is seen through
-    with pytest.raises(RuntimeError, match="before version 0.7.0"):
-        torch.nn.ModuleDict({"module": fresh}).load_state_dict(
-            {f"module.{k}": v for k, v in old.items()}
-        )
-    fresh.load(str(path))  # the current layout loads
-
-
-@pytest.mark.parametrize(
-    "release, version",
-    [(r, v) for r, v in EARLIER_RELEASES.items() if v > 1 or r == "0.7.0"],
-)
-def test_isla_0_7_0_to_0_13_0_state_dicts_are_refused_on_every_loading_path(
+@pytest.mark.parametrize("release, version", list(EARLIER_RELEASES.items()))
+def test_isla_earlier_state_dicts_are_refused_on_every_loading_path(
     tmp_path, release, version
 ):
-    """0.7.0 to 0.13.0 and the unmerged head-frame candidate 0.10.0 have an earlier
-    forward, constructor or parameters (the prediction points' geometry encoding
-    before 0.8.0, the interior task's length unit measured on the drawn tokens before
-    0.9.0, the geometry before its robustness bundle in 0.11.0, the candidate's head
-    frame, the exact geometry's first-order bands before 0.12.0, the constructor's dim,
-    boundary_tokens, query_independent and reynolds before 0.13.0, and ISLA-DTT's forest and the
-    slice blocks' and the kernel basis's dead biases before 0.14.0): their state dicts,
-    told apart by the state-dict version torch records (1 before 0.8.0, as every 0.7.0
-    checkpoint carries, 8 for 0.8.0, 9 for 0.9.0, 10 for the candidate, 11 for 0.11.0,
-    12 for 0.12.0 and 13 for 0.13.0), are refused by ``Module.load``, ``load_state_dict`` and through
-    a DDP-style wrapper, with the version named; the current state dict loads."""
+    """A state dict told apart by the state-dict version torch records is refused by
+    ``Module.load``, ``load_state_dict`` and through a DDP-style wrapper, with the
+    version named; the current state dict loads."""
     model = _instantiate_model(**CONFIGS["dtt"])
     path = tmp_path / "isla.mdlus"
     model.save(path)
@@ -864,53 +805,21 @@ def test_isla_0_7_0_to_0_13_0_state_dicts_are_refused_on_every_loading_path(
     stale = _rewritten(path, tmp_path / f"isla_{release}_weights.mdlus", None, old)
     fresh = ISLA(**CONFIGS["dtt"])
     with pytest.raises(
-        RuntimeError, match=rf"before version 0\.14\.0 \(state-dict version {version}"
+        RuntimeError, match=rf"state-dict version {version}; ISLA 0\.14\.0"
     ):
         fresh.load(str(stale), strict=True)
     with pytest.raises(RuntimeError, match="no upgrade path"):
         fresh.load_state_dict(old, strict=False)
     wrapped = torch.nn.ModuleDict({"module": model}).state_dict()
     wrapped._metadata["module"]["version"] = version
-    with pytest.raises(RuntimeError, match="before version 0.14.0"):
+    with pytest.raises(RuntimeError, match=f"state-dict version {version};"):
         torch.nn.ModuleDict({"module": fresh}).load_state_dict(wrapped)
     fresh.load(str(path))  # the current state dict loads
     _assert_dict_close(fresh.state_dict(), model.state_dict(), atol=0.0, rtol=0.0)
 
 
-#: Constructor arguments ISLA does not take: a nonsense name, and every argument an
-#: earlier ISLA or a prototype took (0.13.0: dim, boundary_tokens, query_independent,
-#: reynolds and the scales' velocity_scale, density and viscosity roles).
-RETIRED_ARGUMENTS = (
-    "nonsense",
-    "dim",
-    "boundary_tokens",
-    "query_independent",
-    "reynolds",
-    "velocity_scale",
-    "density",
-    "viscosity",
-    "routing_norm",
-    "routing_temperature",
-    "scale_mode",
-    "use_measure_weights",
-    "use_relational_geo",
-    "fast_point_softmax",
-    "query_mass",
-    "query_scalar_scale",
-    "query_schema",
-    "local_rho",
-    "query_tokens",
-    "support_tokens",
-    "interior_geometry",
-    "kernel_read",
-    "kernel_read_radius",
-    "kernel_read_blocks",
-    "kernel_read_theta",
-    "mlp_ratio",
-    "geo_checkpoint",
-    "geo_kernel",
-    "eps",
-)
+#: A constructor argument ISLA does not take.
+RETIRED_ARGUMENTS = ("nonsense",)
 
 
 @pytest.mark.parametrize("name", RETIRED_ARGUMENTS)
