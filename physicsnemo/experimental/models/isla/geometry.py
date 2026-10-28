@@ -1733,24 +1733,15 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     ### The winding number is the surface's, not the cell list's: identical oriented
     ### cells count once. The cells go in the sorted order of their keys, so a surface
     ### stored with repeated cells has the same BVH, and the same far field, as the
-    ### surface stored once (a stable lexicographic sort, as in _weld).
-    if fast:
-        ### (the same order by two stable sorts of keys that pack adjacent columns)
-        low = cells[:, -1] * 2 + (parity > 0)
-        high = cells[:, 0] * points.shape[0] + cells[:, 1] if dim == 3 else cells[:, 0]
-        order = torch.argsort(low, stable=True)
-        order = order[torch.argsort(high[order], stable=True)]
-        low, high = low[order], high[order]
-        new = (low[1:] != low[:-1]) | (high[1:] != high[:-1])
-        del low, high
-    else:
-        rows = torch.cat([cells, parity[:, None]], 1)
-        order = torch.arange(rows.shape[0], device=dev)
-        for k in reversed(range(rows.shape[1])):
-            order = order[torch.argsort(rows[order, k], stable=True)]
-        rows = rows[order]
-        new = (rows[1:] != rows[:-1]).any(-1)
-        del rows
+    ### surface stored once: the stable lexicographic order of (cells, parity), as in
+    ### _weld, by two stable sorts of keys that pack adjacent columns.
+    low = cells[:, -1] * 2 + (parity > 0)
+    high = cells[:, 0] * points.shape[0] + cells[:, 1] if dim == 3 else cells[:, 0]
+    order = torch.argsort(low, stable=True)
+    order = order[torch.argsort(high[order], stable=True)]
+    low, high = low[order], high[order]
+    new = (low[1:] != low[:-1]) | (high[1:] != high[:-1])
+    del low, high
     rep = order[torch.cat([new.new_ones(1), new])]
     del new
     ### The band: the storage term on the magnitudes as given, the arithmetic's on
