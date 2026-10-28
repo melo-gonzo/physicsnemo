@@ -24,6 +24,7 @@ positions only, so they refer to no frame origin."""
 
 import itertools
 import math
+from typing import Any
 
 import torch
 import warp as wp
@@ -715,10 +716,11 @@ def _grouped_min_norm(group: torch.Tensor, c: torch.Tensor, n_groups: int) -> to
 
 
 @wp.func
-def _triangle_distance2(p: wp.vec3d, a: wp.vec3d, b: wp.vec3d, c: wp.vec3d) -> wp.float64:
+def _triangle_distance2(p: Any, a: Any, b: Any, c: Any):
     """The squared distance from ``p`` to the triangle ``abc`` (Ericson 2005, Sec.
-    5.1.5); NaN on a degenerate triangle, which the caller keeps."""
-    zero = wp.float64(0.0)
+    5.1.5), in the precision of the vectors (float64 or float32); NaN on a degenerate
+    triangle, which the caller keeps."""
+    zero = type(p[0])(0.0)
     ab = b - a
     ac = c - a
     ap = p - a
@@ -1134,44 +1136,6 @@ def _box_gap2(lo: wp.vec3f, hi: wp.vec3f, x: wp.vec3f) -> wp.float32:
     return g0 * g0 + g1 * g1 + g2 * g2
 
 
-@wp.func
-def _triangle_distance2_32(p: wp.vec3f, a: wp.vec3f, b: wp.vec3f, c: wp.vec3f) -> wp.float32:
-    """:func:`_triangle_distance2` in float32 (NaN on a degenerate triangle)."""
-    zero = wp.float32(0.0)
-    ab = b - a
-    ac = c - a
-    ap = p - a
-    d1 = wp.dot(ab, ap)
-    d2 = wp.dot(ac, ap)
-    if d1 <= zero and d2 <= zero:
-        return wp.dot(ap, ap)
-    bp = p - b
-    d3 = wp.dot(ab, bp)
-    d4 = wp.dot(ac, bp)
-    if d3 >= zero and d4 <= d3:
-        return wp.dot(bp, bp)
-    vc = d1 * d4 - d3 * d2
-    if vc <= zero and d1 >= zero and d3 <= zero:
-        r = ap - ab * (d1 / (d1 - d3))
-        return wp.dot(r, r)
-    cp = p - c
-    d5 = wp.dot(ab, cp)
-    d6 = wp.dot(ac, cp)
-    if d6 >= zero and d5 <= d6:
-        return wp.dot(cp, cp)
-    vb = d5 * d2 - d1 * d6
-    if vb <= zero and d2 >= zero and d6 <= zero:
-        r = ap - ac * (d2 / (d2 - d6))
-        return wp.dot(r, r)
-    va = d3 * d6 - d5 * d4
-    if va <= zero and d4 - d3 >= zero and d5 - d6 >= zero:
-        r = bp - (c - b) * ((d4 - d3) / ((d4 - d3) + (d5 - d6)))
-        return wp.dot(r, r)
-    denom = va + vb + vc
-    r = ap - ab * (vb / denom) - ac * (vc / denom)
-    return wp.dot(r, r)
-
-
 @wp.kernel
 def _nearest_cell_kernel(
     node_lo: wp.array(dtype=wp.vec3f),
@@ -1205,7 +1169,7 @@ def _nearest_cell_kernel(
             c = leaf_cell[node]
             if c >= wp.int64(0):
                 i = c * wp.int64(3)
-                d2 = _triangle_distance2_32(
+                d2 = _triangle_distance2(
                     x, _vec3f(corners[i]), _vec3f(corners[i + wp.int64(1)]), _vec3f(corners[i + wp.int64(2)])
                 )
                 if d2 < best:
