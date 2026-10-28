@@ -191,12 +191,11 @@ class _RoutingLogits(nn.Module):
         self.scale = 1.0 / math.sqrt(hidden)
         self.gain = nn.Parameter(torch.tensor(0.1))
 
-    def prototypes(self, x: torch.Tensor, log_w: torch.Tensor | None) -> torch.Tensor:
+    def prototypes(self, x: torch.Tensor, log_w: torch.Tensor) -> torch.Tensor:
         """Per-sample prototypes (B, S, hidden) from the seeds and the token states."""
         seeds = self.weight.to(x.dtype)  # (S, H)
         att = torch.einsum("sh,bnh->bsn", seeds, self.k_proj(x)) * self.scale  # (B, S, N)
-        if log_w is not None:
-            att = att + log_w[..., 0][:, None, :].to(att.dtype)
+        att = att + log_w[..., 0][:, None, :].to(att.dtype)
         att = torch.softmax(att if att.dtype in (torch.float32, torch.float64) else att.float(), dim=-1).to(x.dtype)
         delta = torch.einsum("bsn,bnh->bsh", att, self.v_proj(x))  # (B, S, H)
         delta = delta - delta.mean(dim=1, keepdim=True)
@@ -223,7 +222,7 @@ class _RoutingLogits(nn.Module):
 
         return ROUTING_TEMPERATURE * torch.einsum("bnh,bsh->bns", unit(x), unit(protos))
 
-    def forward(self, x: torch.Tensor, log_w: torch.Tensor | None = None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, log_w: torch.Tensor) -> torch.Tensor:
         return self.logits(x, self.prototypes(x, log_w))
 
 
@@ -247,17 +246,11 @@ class _SliceBlock(nn.Module):
         self,
         hidden: int,
         n_slices: int,
-        geo_kernel: GeoKernel = "eager",
-        n_global_vectors: int = 1,
+        n_global_vectors: int,
         n_block_vecs: int = 0,
         n_block_tens: int = 0,
     ) -> None:
         super().__init__()
-        ### "fused" evaluates the dense geometry region (invariants -> routing bias
-        ### -> point->slice mix -> pooled invariants) in one Triton kernel per
-        ### direction that never materializes a (B,N,S,.) tensor (see
-        ### geo_kernel.py); same arithmetic as _geo_region, recompute built in.
-        self.geo_kernel = geo_kernel
         self.n_geo = _geo_width(n_global_vectors, n_block_vecs, n_block_tens)
         ### Activation recompute: the per-slice geometry tensors -- rel (B,N,S,3),
         ### rel_hat, dist and two bf16 copies of the (B,N,S,geo) invariants -- are
@@ -299,7 +292,7 @@ class _SliceBlock(nn.Module):
         eps: float,
         vecs=None,
         tens=None,
-        geo_kernel: GeoKernel | None = None,
+        geo_kernel: GeoKernel = "eager",
         slices: bool = False,
     ) -> Float[torch.Tensor, "batch tokens hidden"]:
         """The block over every token; with ``slices`` also what a passive token reads
@@ -332,7 +325,7 @@ class _SliceBlock(nn.Module):
         h = self._update(h, h_n, point_mix, pooled, z)
         return (h, (protos, z_pos, m_s, z)) if slices else h
 
-    def read(self, h, slices, r, n_hat, g_hat, eps: float, vecs=None, tens=None, geo_kernel: GeoKernel | None = None):
+    def read(self, h, slices, r, n_hat, g_hat, eps: float, vecs=None, tens=None, geo_kernel: GeoKernel = "eager"):
         """The block over passive tokens (log weight -inf) given the ``slices`` the
         other tokens formed (``forward(..., slices=True)``): the arithmetic
         :meth:`forward` gives them, which they enter only through their own routing
@@ -344,10 +337,12 @@ class _SliceBlock(nn.Module):
         return self._update(h, h_n, point_mix, pooled, z)
 
     def _geo(self, logits, r, n_hat, g_hat, z_pos, m_s, eps, vecs, tens, geo_kernel):
-        """The geometry region: ``(bias, point_mix, pooled)``."""
-        ### geo_kernel overrides self.geo_kernel for this call (the model's
-        ### resolution under torch.compile, which writes no module state).
-        if (self.geo_kernel if geo_kernel is None else geo_kernel) == "fused":
+        """The geometry region: ``(bias, point_mix, pooled)``. ``geo_kernel`` names its
+        implementation: ``"fused"`` evaluates the dense geometry region (invariants ->
+        routing bias -> point->slice mix -> pooled invariants) in one Triton kernel per
+        direction that never materializes a (B,N,S,.) tensor (see geo_kernel.py), the
+        same arithmetic as :func:`_geo_region` with the recompute built in."""
+        if geo_kernel == "fused":
             ### The fused kernel takes the global directions and the token's rank-1
             ### vectors as one per-point vector set (at most four in all, no rank-2
             ### inputs; the model's resolution checks it).

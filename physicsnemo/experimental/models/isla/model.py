@@ -786,7 +786,7 @@ class ISLA(Module):
         ### geo_kernel.py, which reads the pre-logits once and writes the bias and
         ### mix once per direction, with the recompute built in (CUDA only). "auto"
         ### resolves at the first forward pass to "fused" wherever the fused kernel
-        ### can run and to "eager" otherwise; the blocks read the resolved name.
+        ### can run and to "eager" otherwise; the blocks are called with the resolved name.
         ### Writable: tests and debugging set "eager" or "fused" to force one.
         self.geo_kernel = "auto"
         ### geometry_kernel names the implementation of exact_boundary_geometry's search,
@@ -1284,20 +1284,6 @@ class ISLA(Module):
                 for block in self.blocks
             ]
         return self._block_reads
-
-    def _apply_geo_kernel(self, points: torch.Tensor) -> str | None:
-        """Write the resolved kernel name into the blocks, once per resolution.
-        Under torch.compile the blocks are left untouched: the kernel is returned
-        for the block calls instead (``None`` when the blocks already carry it)."""
-        kernel = self.resolve_geo_kernel(points)
-        if getattr(self, "_geo_kernel_applied", None) == kernel:
-            return None
-        if torch.compiler.is_compiling():
-            return kernel
-        for block in self.blocks:
-            block.geo_kernel = kernel
-        self._geo_kernel_applied = kernel
-        return None
 
     def _global_rows(self, data: TensorDict, like) -> TensorDict:
         """The declared global fields of ``data`` as one case's row, in ``like``'s
@@ -1958,7 +1944,7 @@ class ISLA(Module):
         points = boundary["points"]
         b, n, _ = points.shape
         _hint_token_axis(n, self._token_widths)
-        geo_kernel = self._apply_geo_kernel(points)
+        geo_kernel = self.resolve_geo_kernel(points)
         K, dim = self.n_global_vectors, self.n_spatial_dims
         g_hat = g_unit[:, None].expand(b, n, K, dim)
 

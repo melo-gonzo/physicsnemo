@@ -1466,9 +1466,7 @@ def _slice_block_run(n_vecs, n_tens):
         x = _to(inputs, device)
         dtype = x["in.h"].dtype
         geo = "fused" if variant == "auto" else "eager"
-        block = _load(
-            target("SliceBlock")(32, 8, geo, 1, n_vecs, n_tens), x, device, dtype
-        )
+        block = _load(target("SliceBlock")(32, 8, 1, n_vecs, n_tens), x, device, dtype)
         h, r, hq = (x[k].clone().requires_grad_() for k in ("in.h", "in.r", "q.in.h"))
         y, slices = block(
             h,
@@ -1479,6 +1477,7 @@ def _slice_block_run(n_vecs, n_tens):
             1e-12,
             x.get("in.vecs"),
             x.get("in.tens"),
+            geo_kernel=geo,
             slices=True,
         )
         yq = block.read(
@@ -1490,6 +1489,7 @@ def _slice_block_run(n_vecs, n_tens):
             1e-12,
             x.get("q.in.vecs"),
             x.get("q.in.tens"),
+            geo_kernel=geo,
         )
         ((y * _cotangent(y, 32)).sum() + (yq * _cotangent(yq, 33)).sum()).backward()
         out = {"out.h": y.detach(), "out.h_read": yq.detach()}

@@ -139,7 +139,7 @@ class _InputSet:
 
     specs: Mapping[str, RankSpec]
     n_frame: int
-    dim: int = 3
+    dim: int
     n_scalar: int = field(init=False)
     rank1: list[str] = field(init=False)
     rank2: list[tuple[str, bool]] = field(init=False)

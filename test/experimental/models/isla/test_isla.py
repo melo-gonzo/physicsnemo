@@ -265,7 +265,7 @@ def test_geo_pool_then_project_is_exact():
     from physicsnemo.experimental.models.isla.blocks import _SliceBlock
 
     torch.manual_seed(0)
-    blk = _SliceBlock(64, 32).double()
+    blk = _SliceBlock(64, 32, 1).double()
     geo = torch.randn(2, 50, 32, blk.n_geo, dtype=D)
     mix = torch.softmax(torch.randn(2, 50, 32, dtype=D), dim=-1)
     old = torch.einsum("bns,bnsg->bng", mix, blk.geo_feat(geo))
@@ -812,7 +812,6 @@ def test_geo_kernel_auto_resolves_to_eager_off_cuda_and_honors_explicit_choices(
     eager.load_state_dict(auto.state_dict())
     ya, ye = outputs(_run(auto, mesh, drv)), outputs(_run(eager, mesh, drv))
     assert all(torch.equal(ya[k], ye[k]) for k in ya)
-    assert all(b.geo_kernel == "eager" for b in auto.blocks)
     assert auto._geo_kernel_cache[1] == "eager"
     # five global directions: auto stays eager (off CUDA it does anyway; the kernel is
     # unrolled for one to four)

@@ -54,7 +54,7 @@ def test_cosine_routing_logits_are_bounded_and_bias_free():
         r.v_proj.weight.mul_(1000.0)
         r.gain.fill_(1000.0)  # ... or the synthesis maps ...
         x = torch.randn(2, 50, 64) * 100.0  # ... or the state
-        out = r(x)
+        out = r(x, torch.zeros(2, 50, 1))
     assert ROUTING_TEMPERATURE == 10.0
     assert out.abs().max() <= ROUTING_TEMPERATURE + 1e-5
 
