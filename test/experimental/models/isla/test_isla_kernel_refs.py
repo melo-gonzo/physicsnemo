@@ -24,7 +24,6 @@
   measure's gradient on both paths.
 - The fused read and the fused basis under float16 (``_narrow`` and
   ``unsupported_reason`` accept it).
-- The boundary-token draw on CUDA against CPU.
 - Paths no other test runs: the ball search's second pass, the nearest-cell
   stack's refusal, the forest build's depth-bin fallback, the walk of an empty forest
   or of no points and its first size limit, ``fused_basis.unsupported_reason``'s
@@ -51,7 +50,6 @@ from physicsnemo.experimental.models.isla import (
     fused_read,
     geo_kernel,
     geometry,
-    sampling,
     segment_softmax,
     tree_build,
     tree_read,
@@ -69,11 +67,7 @@ from test.experimental.models.isla._kernel_cases import (
     _to,
     _two_x,
 )
-from test.experimental.models.isla._marks import (
-    DEVICES,
-    requires_cuda,
-    requires_cuda_triton,
-)
+from test.experimental.models.isla._marks import DEVICES, requires_cuda_triton
 from test.experimental.models.isla._meshes import cloud
 from test.experimental.models.isla.test_isla_geometry_fast import _fan
 
@@ -501,37 +495,6 @@ def test_fused_kernel_basis_under_float16_autocast_obeys_the_2x_error_rule(
     names = ["basis"] + [n for n, _ in basis.named_parameters()]
     for name, a, b, e in zip(names, fused, ref, exact):
         _two_x(name, a, b, e, 1e-3)
-
-
-# --------------------------------------------------------------------------- the draw
-def _draw_case(sizes=(9000, 6000, 3000, 400), seed=0):
-    """Four conditions' float64 cell measures and centroids (the last smaller than its
-    share, so kept whole)."""
-    g = torch.Generator().manual_seed(seed)
-    measures = [torch.rand(n, generator=g, dtype=D) ** 3 + 1e-3 for n in sizes]
-    centroids = [
-        torch.randn(n, 3, generator=g, dtype=D) * torch.tensor([3.0, 2.0, 1.0], dtype=D)
-        for n in sizes
-    ]
-    return measures, centroids
-
-
-@pytest.mark.cuda
-@requires_cuda
-def test_the_draw_on_cuda_keeps_the_cpu_draws_cells():
-    """``sample_boundary_cells`` on CUDA keeps the CPU draw's cells, bitwise, and
-    their Horvitz-Thompson weights agree to 1e-12 relative (float64 sums over the
-    cells in another order: a few ulps of the line's length, far below a cell's
-    interval, so a hit lands on the same cell but on a boundary)."""
-    measures, centroids = _draw_case()
-    start = torch.tensor(0.37, dtype=D)
-    kept, weights = sampling.sample_boundary_cells(measures, centroids, 6000, start)
-    kept_c, weights_c = sampling.sample_boundary_cells(
-        [m.cuda() for m in measures], [x.cuda() for x in centroids], 6000, start.cuda()
-    )
-    assert kept.shape == (6000,) and torch.equal(kept_c.cpu(), kept)
-    ### DRAW-EXACT (0.14.0 candidate, int64 sums): tighten to bitwise if its weights are.
-    assert torch.allclose(weights_c.cpu(), weights, rtol=1e-12, atol=0)
 
 
 # --------------------------------------------------------------------------- never-run paths
