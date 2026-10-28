@@ -55,14 +55,11 @@ import torch.nn.functional as F
 
 ### (ISLA resolves geo_kernel to the eager region whenever HAS_TRITON is False.)
 from physicsnemo.experimental.models.isla._triton import HAS_TRITON, libdevice, tl, triton
+from physicsnemo.experimental.models.isla.blocks import _geo_width
 
 MAX_SLICES = 1024
 #: Per-point vectors the kernels are unrolled for: global directions plus token rank-1 vectors.
 MAX_DIRECTIONS = 4
-
-
-def _next_pow2(x: int) -> int:
-    return 1 << (x - 1).bit_length()
 
 
 if HAS_TRITON:
@@ -603,12 +600,6 @@ if HAS_TRITON:
             tl.store(gd + 3 * gd_sk + 2, tl.sum(tl.where(mask, gg2d * h2, 0.0), axis=1), mask=mask_n)
 
 
-def _geo_width(t: int) -> int:
-    """Invariants per point-slice pair for ``t`` per-point vectors: distance, its log,
-    the ``t`` direction cosines, rel.n, rel.m and n.m."""
-    return 5 + t
-
-
 def _check(r, n_hat, d_hat, z_pos, m_s, logits_pre, weight, bias, n_global):
     b, n, _ = r.shape
     s = z_pos.shape[1]
@@ -713,7 +704,7 @@ def _geo_region_fwd(
     pooled = torch.empty(b, n, ng, device=r.device, dtype=out_dt)
     w = weight.reshape(-1).to(r.dtype).contiguous()
     bb = bias.reshape(-1).to(r.dtype).contiguous()
-    block_n, block_s = _fwd_block(s, k), _next_pow2(s)
+    block_n, block_s = _fwd_block(s, k), triton.next_power_of_2(s)
     grid = (triton.cdiv(n, block_n), b)
     _geo_fwd_kernel[grid](
         r,
@@ -806,7 +797,7 @@ def _geo_region_bwd(
     grad_bias = grad_bias.contiguous()
     grad_mix = grad_mix.contiguous()
     grad_pooled = grad_pooled.contiguous()
-    block_n, block_s = _bwd_block(s, k), _next_pow2(s)
+    block_n, block_s = _bwd_block(s, k), triton.next_power_of_2(s)
     n_tiles = triton.cdiv(n, block_n)
     glogit = torch.empty_like(logits_pre)
     gr = torch.empty(b, n, 3, device=r.device, dtype=r.dtype)
