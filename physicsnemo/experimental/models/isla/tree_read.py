@@ -267,6 +267,87 @@ def separation_diameter_sq(
     return wide.square().to(aabb_min.dtype)
 
 
+def _reference_tables(points, measure, normals, vecs, points_f, face, leaf_size: int) -> dict:
+    """:func:`~.tree_build.forest_tables`' fields from the reference build: one GLOBE
+    :class:`~physicsnemo.mesh.spatial.cluster_tree.ClusterTree` per normal face, in face
+    order, its nodes and cells appended to the forest's tables."""
+    n, d = points.shape
+    device = points.device
+    trees, tree_cells, cells, offsets = [], [], [], [0]
+    starts, counts, lefts, rights, boxes = [], [], [], [], []
+    centers, nrm, vec, meas = [], [], [], []
+    c_off = m_off = 0
+    for k in range(2 * d):
+        sel = (face == k).nonzero().squeeze(-1)
+        if sel.numel() == 0:
+            continue
+        tree = ClusterTree.from_points(points_f[sel], leaf_size=leaf_size, areas=measure[sel])
+        data = {"n": normals[sel]}
+        if vecs is not None:
+            data["u"] = vecs[sel]
+        agg = tree.compute_source_aggregates(
+            points[sel], measure[sel], TensorDict(data, batch_size=[int(sel.numel())])
+        )
+        m = tree.n_nodes
+        trees.append(tree)
+        tree_cells.append(sel)
+        cells.append(sel[tree.sorted_source_order])
+        starts.append(tree.node_range_start + c_off)
+        counts.append(tree.node_range_count)
+        lefts.append(torch.where(tree.node_left_child >= 0, tree.node_left_child + m_off, -1))
+        rights.append(torch.where(tree.node_right_child >= 0, tree.node_right_child + m_off, -1))
+        boxes.append((tree.node_aabb_min, tree.node_aabb_max))
+        centers.append(agg.node_centroid)
+        nrm.append(agg.node_source_data["n"])
+        if vecs is not None:
+            vec.append(agg.node_source_data["u"])
+        meas.append(tree.node_total_area)
+        c_off += int(sel.numel())
+        m_off += m
+        offsets.append(m_off)
+    left = torch.cat(lefts)
+    right = torch.cat(rights)
+    range_start = torch.cat(starts)
+    range_count = torch.cat(counts)
+    ### The leaves tile the cells: sorted by their first position, their counts
+    ### concatenate to the forest order.
+    leaf_ids = (left < 0).nonzero().squeeze(-1)
+    leaf_ids = leaf_ids[torch.argsort(range_start[leaf_ids])]
+    position_leaf = torch.repeat_interleave(
+        torch.arange(leaf_ids.shape[0], device=device), range_count[leaf_ids], output_size=n
+    )
+    ### Internal nodes by depth from the roots; a node's children are one level deeper.
+    node_offset = torch.tensor(offsets, device=device)
+    frontier = node_offset[:-1]
+    by_depth = []
+    while frontier.numel():
+        internal = frontier[left[frontier] >= 0]
+        if internal.numel() == 0:
+            break
+        by_depth.append(internal)
+        frontier = torch.cat([left[internal], right[internal]])
+    levels = [(nodes, left[nodes], right[nodes]) for nodes in reversed(by_depth)]
+    return {
+        "trees": trees,
+        "tree_cells": tree_cells,
+        "node_offset": node_offset,
+        "cells": torch.cat(cells),
+        "range_start": range_start,
+        "range_count": range_count,
+        "left": left,
+        "right": right,
+        "leaf_ids": leaf_ids,
+        "position_leaf": position_leaf,
+        "levels": levels,
+        "aabb_min": torch.cat([b[0] for b in boxes]),
+        "aabb_max": torch.cat([b[1] for b in boxes]),
+        "center": torch.cat(centers),
+        "mean_n": torch.cat(nrm),
+        "vecs": torch.cat(vec) if vecs is not None else None,
+        "measure": torch.cat(meas),
+    }
+
+
 @dataclass
 class BoundaryForest:
     """One case's boundary as a forest of cluster trees, one per normal face, with
@@ -361,108 +442,28 @@ class BoundaryForest:
         else:
             tol = normal_tol.double()
         face = normal_faces(normals_f, tol + eta)
+        tables = None
         if resolve_tree_build(build, points) == "fast":
             tables = forest_tables(points, measure, normals, vecs, points_f, face, leaf_size=leaf_size)
-            if tables is not None:
-                diameter_sq = separation_diameter_sq(tables["aabb_min"], tables["aabb_max"], float(theta), eta, d, u)
-                m = 0
-                for tree in tables["trees"]:
-                    tree.node_diameter_sq = diameter_sq[m : m + tree.n_nodes]
-                    m += tree.n_nodes
-                tables["diameter_sq"] = diameter_sq
-                mean_n = tables.pop("mean_n")
-                length = mean_n.norm(dim=-1)
-                return cls(
-                    n_cells=n,
-                    theta=float(theta),
-                    frame=frame,
-                    origin=origin,
-                    **tables,
-                    normal=mean_n / length[:, None].clamp_min(eps),
-                    coherent=length > coherent_length,
-                )
-        trees, tree_cells, cells, offsets = [], [], [], [0]
-        starts, counts, lefts, rights, boxes = [], [], [], [], []
-        centers, nrm, vec, meas = [], [], [], []
-        c_off = m_off = 0
-        for k in range(2 * d):
-            sel = (face == k).nonzero().squeeze(-1)
-            if sel.numel() == 0:
-                continue
-            tree = ClusterTree.from_points(points_f[sel], leaf_size=leaf_size, areas=measure[sel])
-            tree.node_diameter_sq = separation_diameter_sq(
-                tree.node_aabb_min, tree.node_aabb_max, float(theta), eta, d, u
-            )
-            data = {"n": normals[sel]}
-            if vecs is not None:
-                data["u"] = vecs[sel]
-            agg = tree.compute_source_aggregates(
-                points[sel], measure[sel], TensorDict(data, batch_size=[int(sel.numel())])
-            )
-            m = tree.n_nodes
-            trees.append(tree)
-            tree_cells.append(sel)
-            cells.append(sel[tree.sorted_source_order])
-            starts.append(tree.node_range_start + c_off)
-            counts.append(tree.node_range_count)
-            lefts.append(torch.where(tree.node_left_child >= 0, tree.node_left_child + m_off, -1))
-            rights.append(torch.where(tree.node_right_child >= 0, tree.node_right_child + m_off, -1))
-            boxes.append((tree.node_aabb_min, tree.node_aabb_max, tree.node_diameter_sq))
-            centers.append(agg.node_centroid)
-            nrm.append(agg.node_source_data["n"])
-            if vecs is not None:
-                vec.append(agg.node_source_data["u"])
-            meas.append(tree.node_total_area)
-            c_off += int(sel.numel())
-            m_off += m
-            offsets.append(m_off)
-        left = torch.cat(lefts)
-        right = torch.cat(rights)
-        range_start = torch.cat(starts)
-        range_count = torch.cat(counts)
-        ### The leaves tile the cells: sorted by their first position, their counts
-        ### concatenate to the forest order.
-        leaf_ids = (left < 0).nonzero().squeeze(-1)
-        leaf_ids = leaf_ids[torch.argsort(range_start[leaf_ids])]
-        position_leaf = torch.repeat_interleave(
-            torch.arange(leaf_ids.shape[0], device=device), range_count[leaf_ids], output_size=n
-        )
-        ### Internal nodes by depth from the roots; a node's children are one level deeper.
-        node_offset = torch.tensor(offsets, device=device)
-        frontier = node_offset[:-1]
-        by_depth = []
-        while frontier.numel():
-            internal = frontier[left[frontier] >= 0]
-            if internal.numel() == 0:
-                break
-            by_depth.append(internal)
-            frontier = torch.cat([left[internal], right[internal]])
-        levels = [(nodes, left[nodes], right[nodes]) for nodes in reversed(by_depth)]
-        mean_n = torch.cat(nrm)
+        if tables is None:
+            tables = _reference_tables(points, measure, normals, vecs, points_f, face, leaf_size)
+        ### The walk's node diameters (elementwise per node), on the whole table and
+        ### sliced per tree.
+        diameter_sq = separation_diameter_sq(tables["aabb_min"], tables["aabb_max"], float(theta), eta, d, u)
+        m = 0
+        for tree in tables["trees"]:
+            tree.node_diameter_sq = diameter_sq[m : m + tree.n_nodes]
+            m += tree.n_nodes
+        mean_n = tables.pop("mean_n")
         length = mean_n.norm(dim=-1)
         return cls(
             n_cells=n,
             theta=float(theta),
             frame=frame,
             origin=origin,
-            trees=trees,
-            tree_cells=tree_cells,
-            node_offset=node_offset,
-            cells=torch.cat(cells),
-            range_start=range_start,
-            range_count=range_count,
-            left=left,
-            right=right,
-            leaf_ids=leaf_ids,
-            position_leaf=position_leaf,
-            levels=levels,
-            aabb_min=torch.cat([b[0] for b in boxes]),
-            aabb_max=torch.cat([b[1] for b in boxes]),
-            diameter_sq=torch.cat([b[2] for b in boxes]),
-            center=torch.cat(centers),
+            **tables,
+            diameter_sq=diameter_sq,
             normal=mean_n / length[:, None].clamp_min(eps),
-            vecs=torch.cat(vec) if vecs is not None else None,
-            measure=torch.cat(meas),
             coherent=length > coherent_length,
         )
 
