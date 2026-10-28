@@ -58,12 +58,12 @@ YAML configs.  Import this module before Hydra instantiation
 from __future__ import annotations
 
 import logging
-import zlib
 from collections.abc import Sequence
 from typing import Literal
 
 import numpy as np
 import torch
+from merge_global_data import case_directory, case_key
 from symmetry import check_root, load_check_record, load_root_cap, recorded_verdict
 from tensordict import TensorDict
 
@@ -600,15 +600,6 @@ class FixedRandomPose(MeshTransform):
         )
 
 
-def _case_directory(root, sample_path) -> str:
-    """The case directory name: the first path component of ``sample_path`` below the
-    reader ``root`` (e.g. ``run_1``), or the file name when it is not below it."""
-    try:
-        return sample_path.relative_to(root).parts[0]
-    except ValueError:
-        return sample_path.name
-
-
 @register()
 class CaseKeyDomainMeshReader(DomainMeshReader):
     """``DomainMeshReader`` that stores the stable per-case integer ``case_key`` in ``global_data``.
@@ -623,10 +614,6 @@ class CaseKeyDomainMeshReader(DomainMeshReader):
     reader.
     """
 
-    def _case_key(self, index: int) -> torch.Tensor:
-        name = _case_directory(self._root, self._paths[index])
-        return torch.tensor(zlib.crc32(name.encode()) & 0x7FFFFFFF, dtype=torch.int64)
-
     def _load_sample(
         self,
         index: int,
@@ -637,7 +624,7 @@ class CaseKeyDomainMeshReader(DomainMeshReader):
         if "case_key" in dm.global_data.keys():
             raise ValueError("global_data already has a 'case_key' field")
         gd = dm.global_data.clone()
-        gd["case_key"] = self._case_key(index)
+        gd["case_key"] = case_key(self._root, self._paths[index])
         return DomainMesh(
             interior=dm.interior, boundaries=dm.boundaries, global_data=gd
         )
@@ -688,7 +675,7 @@ class _VtkBoundaries:
         dm = super()._load_sample(index, generator, interior_n_points)
         if not self._vtk_boundaries:
             return dm
-        case = _case_directory(self._root, self._paths[index])
+        case = case_directory(self._root, self._paths[index])
         boundaries = dict(dm.boundaries)
         for name, template in self._vtk_boundaries.items():
             if name in boundaries:
