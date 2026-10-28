@@ -128,7 +128,15 @@ class SMARTSurfaceMeshToDomainMesh(MeshToDomainMesh):
 
 
 class SMARTVolumeGeometry(MeshTransform):
-    """Expose the full CFD boundary centroids without embedding the cloud."""
+    """Expose the full CFD boundary centroids without embedding the cloud.
+
+    ``boundary`` names the wall boundary whose face centroids form the
+    geometry cloud: ``vehicle`` on DrivAerML, ``no_slip`` on AeroZoo.
+    """
+
+    def __init__(self, boundary: str = "vehicle") -> None:
+        super().__init__()
+        self.boundary = boundary
 
     def __call__(self, mesh: Mesh) -> Mesh:
         """Require a domain with a CFD vehicle boundary."""
@@ -138,9 +146,11 @@ class SMARTVolumeGeometry(MeshTransform):
         """Retain the CFD surface and add only its geometry coordinates."""
         if "smart_geometry" in domain.boundaries:
             raise ValueError("smart_geometry is reserved for the full geometry cloud")
-        surface = domain.boundaries["vehicle"]
+        surface = domain.boundaries[self.boundary]
         if surface.n_cells == 0:
-            raise ValueError("SMART requires a CFD vehicle boundary with cells")
+            raise ValueError(
+                f"SMART requires a CFD {self.boundary} boundary with cells"
+            )
         return DomainMesh(
             interior=domain.interior,
             boundaries={

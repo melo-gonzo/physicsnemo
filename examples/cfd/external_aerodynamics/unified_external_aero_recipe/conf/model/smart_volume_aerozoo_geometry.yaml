@@ -1,0 +1,67 @@
+# @package _global_
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ---------------------------------------------------------------------------
+# SMART, stock volume template, on AeroZoo v1.2's interior task from geometry only
+# (benchmark aerozoo-interior-geometry-full; datasets/aerozoo_uvolume*.yaml).
+# ---------------------------------------------------------------------------
+# smart_volume.yaml as it is, with its inputs mapped onto the AeroZoo chain. SMART's reader (for its query and
+# geometry seeds) replaces the chain's DomainMeshReader with the same arguments, and its geometry transform is
+# appended after the chain, reading the no_slip walls in place of DrivAerML's vehicle. The chain has already drawn
+# 50,000 faces per boundary, so the geometry cloud is those faces' centroids; SMART subsamples it further
+# (geometry_subsample). The query features are the signed distance and normal to no_slip, and the parameter slot,
+# which reads U_inf on DrivAerML, reads nu_std: AeroZoo has no global free stream and forbids
+# global_data/reference/*. No prescribed boundary value is read: the non-canonical, geometry-only track. The
+# coordinates stay raw (the chain does not center them), as for every AeroZoo arm. The loss is the AeroZoo
+# protocol's (per-case relative L2, velocity weight 3).
+input_type: tensors
+output_type: tensors
+compile: false
+independent_validation: true
+dataset_reader_overrides:
+  _target_: smart_data.SMARTVolumeReader
+dataset_append_transforms:
+  - _target_: smart_data.SMARTVolumeGeometry
+    boundary: no_slip
+training:
+  loss_type: case_relative_l2
+  field_weights:
+    velocity: 3
+forward_kwargs:
+  geometry: boundaries.smart_geometry.points
+  queries: interior.points
+  query_features:
+  - interior.point_data.sdf_wall
+  - interior.point_data.sdf_wall_normals
+  parameters: global_data.nu_std
+  geometry_seed: global_data.smart_geometry_seed
+model:
+  _target_: smart_model.SMARTField
+  field: volume
+  out_dim: ${out_dim}
+  query_feature_channels: 4
+  parameter_channels: 1     # nu_std
+  hidden_dim: 448
+  num_heads: 8
+  num_layers: 6
+  num_latents: 2048
+  geometry_subsample: 16384
+  share_weights: false
+  qk_normalization: true
+  qk_temperature_max: 4.0
+  eval_seed: 0
+  eval_chunk_size: 8192

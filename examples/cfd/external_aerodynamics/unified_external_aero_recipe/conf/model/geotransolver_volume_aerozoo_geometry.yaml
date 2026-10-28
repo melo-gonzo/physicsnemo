@@ -1,0 +1,68 @@
+# @package _global_
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ---------------------------------------------------------------------------
+# GeoTransolver, stock volume template, on AeroZoo v1.2's interior task from geometry only
+# (benchmark aerozoo-interior-geometry-full; datasets/aerozoo_uvolume*.yaml).
+# ---------------------------------------------------------------------------
+# geotransolver_volume.yaml as it is, with its inputs mapped onto the AeroZoo chain: the geometry and the local
+# embedding are the query points with their signed distance and normal to the no_slip walls (sdf_wall,
+# sdf_wall_normals), and the global slot, which reads the unit free-stream direction U_inf_dir on DrivAerML,
+# reads nu_std (the standardized log10 viscosity). AeroZoo has no global free stream and its input rule forbids
+# global_data/reference/*; this follows transolver_volume_aerozoo.yaml. The model reads no prescribed boundary
+# value, so it cannot know the inflow: geometry_aerozoo marks the non-canonical, geometry-only track. The
+# boundary-condition variant is geotransolver_volume_aerozoo.yaml. Architecture and optimizer as in the stock
+# template; the loss is the AeroZoo protocol's (per-case relative L2, velocity weight 3) so every arm on the
+# benchmark trains on one objective.
+dataset_reader_overrides:
+  drop_in_file_boundaries: false   # the AeroZoo chain computes the SDF from the in-file no_slip boundary
+input_type: tensors
+output_type: tensors
+training:
+  loss_type: case_relative_l2
+  field_weights:
+    velocity: 3
+forward_kwargs:
+  geometry: interior.points
+  local_embedding:
+    - interior.points
+    - interior.point_data.sdf_wall
+    - interior.point_data.sdf_wall_normals
+  local_positions: interior.points
+  global_embedding: global_data.nu_std
+model:
+  _target_: physicsnemo.models.geotransolver.GeoTransolver
+  out_dim: ${out_dim}     # auto-set from the chosen dataset's `targets:` block
+  functional_dim: 7       # local_embedding = coords (3) + SDF (1) + SDF normals (3)
+  geometry_dim: 3         # point coordinates
+  global_dim: 1           # nu_std
+  n_layers: 12
+  n_hidden: 256
+  dropout: 0.0
+  n_head: 8
+  act: "gelu"
+  mlp_ratio: 4
+  slice_num: 256
+  use_te: false
+  plus: false
+  include_local_features: true
+  radii: [0.01, 0.05, 0.25, 1.0, 2.5, 5.0]
+  neighbors_in_radius: [8, 16, 32, 32, 64, 128]
+  n_hidden_local: 32
+  state_mixing_mode: "weighted"  # "weighted" (default) or "concat_project"
+  activation_checkpointing: false
+  checkpointing_ratio: 1.0
+  activation_checkpointing_components: [blocks]
