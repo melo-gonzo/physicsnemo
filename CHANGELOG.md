@@ -131,6 +131,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `radius_search` accepts points with 1 or 2 coordinates, as well as 3, with
   both backends. The torch backend accepts any number of coordinates, and
   points with more than 3 use it by default.
+- `ShardTensor` ring attention, ring kNN and ring ball query run on functional
+  collectives; ring attention works under `torch.compile` as an eager
+  graph-break region, with uneven sequence shards and attention masks
+  sharded like the queries. In-place `detach_` on a `ShardTensor` is
+  supported.
+- `radius_search` on sharded inputs works under `torch.compile`.
 
 ### Changed
 
@@ -355,6 +361,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   time per iteration, timed with CUDA events and read when the step's values
   land, since `step_time_s` misses queued device work. Epoch summaries record
   `epoch_seconds` and, on GPU, `peak_memory_gib`.
+- `index_select` and integer-tensor indexing on a `ShardTensor` exchange only
+  the requested rows instead of all-gathering the source; no host sync, and
+  `torch.compile` safe.
+- The stream-based ring helpers `perform_ring_iteration_async` and
+  `get_comm_stream` are removed; use `perform_ring_iteration_funcol` with
+  `wait=False` and `finish_ring_iteration` for overlap.
 
 ### Deprecated
 
@@ -724,6 +736,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the first step.
 - Importing `physicsnemo.domain_parallel` no longer breaks `torch.compile` for
   the whole process when nothing has imported `torch._dynamo` before it.
+- `MeshReader` and `DomainMeshReader` implement `close()`, so
+  `MeshDataset.close()` works on the mesh path.
+- Coordinated subsampling in the zarr readers picks its reference key in the
+  configured order rather than set order, so the rows read are deterministic.
+- `ShardTensor` fixes for domain parallelism: redistribute no longer grows an
+  unbounded planner cache for fixed shapes (step time was climbing with step
+  count),
+  `scatter_tensor` returns a shard that owns its storage, stream recording on
+  wrapped tensors works, and several `torch.compile` tracing issues are
+  resolved.
+- `torch.unbind` on a `Partial` `ShardTensor` resolves the pending reduction
+  before slicing instead of silently dropping it.
+- Fixed autocasting bugs for some attention operations in domain parallelism.
+- Backward through `ShardTensor.to_local()` adopts the gradient's shard order
+  along with its placements, so a sharded primal with a replicated cotangent
+  no longer trips a `DTensorSpec` assertion.
 
 ### Security
 
