@@ -236,7 +236,7 @@ def test_cpu_matches_the_golden(case, variant, golden):
 
 
 @pytest.mark.parametrize("case, variant", _params("cuda"))
-def test_cuda_matches_the_cpu_golden(case, variant, golden):
+def test_cuda_matches_the_cpu_golden(case, variant, golden, monkeypatch):
     """Each CUDA variant (kernels auto: the fast build, walk and geometry search, the
     Triton and fused kernels; and the references on CUDA) against the committed CPU
     golden: inputs and integers exact, floats within :data:`CUDA_RTOL` of
@@ -247,12 +247,8 @@ def test_cuda_matches_the_cpu_golden(case, variant, golden):
     why = C.available(case, "cuda")
     if why:
         pytest.skip(why)
-    tf32 = torch.backends.cuda.matmul.allow_tf32
-    torch.backends.cuda.matmul.allow_tf32 = False
-    try:
-        tensors = C.run_case(case, "cuda", variant)
-    finally:
-        torch.backends.cuda.matmul.allow_tf32 = tf32
+    monkeypatch.setattr(torch.backends.cuda.matmul, "allow_tf32", False)
+    tensors = C.run_case(case, "cuda", variant)
     bad, worst = check(
         golden["cases"][case.id],
         tensors,

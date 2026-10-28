@@ -35,7 +35,7 @@ Regenerate the committed data (CPU, one thread)::
 
 writes the named files of ``data/`` (``all``: every one): ``goldens_v1.pt`` and its
 manifest ``goldens_v1.json``, and the goldens and reference checkpoints of
-``test_isla_release.py`` (its ``WRITERS``). Nothing else writes them. A bare
+``test_isla_release.py`` (``_release_cases.WRITERS``). Nothing else writes them. A bare
 ``--regenerate`` is refused, so that no one rewrites the older goldens by accident.
 """
 
@@ -393,7 +393,7 @@ def main(argv=None) -> int:
     )
     args = p.parse_args(argv)
     if args.regenerate is not None:
-        from test.experimental.models.isla import test_isla_release as release
+        from test.experimental.models.isla import _release_cases as release
 
         files = [GOLDEN.name, *release.WRITERS]
         if not args.regenerate:

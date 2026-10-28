@@ -69,12 +69,15 @@ from test.experimental.models.isla._kernel_cases import (
     _to,
     _two_x,
 )
-from test.experimental.models.isla._marks import requires_cuda, requires_cuda_triton
+from test.experimental.models.isla._marks import (
+    DEVICES,
+    requires_cuda,
+    requires_cuda_triton,
+)
 from test.experimental.models.isla._meshes import cloud
 from test.experimental.models.isla.test_isla_geometry_fast import _fan
 
 D = torch.float64
-_DEVICES = ["cpu", pytest.param("cuda", marks=[pytest.mark.cuda, requires_cuda])]
 _LOW = {torch.float32: 1e-6, torch.bfloat16: 1e-3, torch.float16: 1e-3}
 
 
@@ -533,7 +536,7 @@ def test_the_draw_on_cuda_keeps_the_cpu_draws_cells():
 
 # --------------------------------------------------------------------------- never-run paths
 @pytest.mark.parametrize("kernel", ["reference", "fast"])
-@pytest.mark.parametrize("device", _DEVICES)
+@pytest.mark.parametrize("device", DEVICES)
 def test_the_ball_search_second_pass_finds_the_one_pass_candidates(
     device, kernel, monkeypatch
 ):

@@ -38,12 +38,10 @@ from test.experimental.models.isla._geometry_cases import (
     _rotation,
     _soup,
 )
-from test.experimental.models.isla._marks import requires_cuda
+from test.experimental.models.isla._marks import DEVICES
 
 D = torch.float64
 U64 = 2.0**-53
-
-_DEVICES = ["cpu", pytest.param("cuda", marks=[pytest.mark.cuda, requires_cuda])]
 
 
 def _segment_d2(q, a, b):
@@ -156,7 +154,7 @@ def _check(q, p, c, device):
     assert wrong == 0
 
 
-@pytest.mark.parametrize("device", _DEVICES)
+@pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("dtype", [torch.float32, D])
 @pytest.mark.parametrize("rho", [1e-3, 1e-6])
 @pytest.mark.parametrize("kind", ["cap", "needle"])
@@ -176,7 +174,7 @@ def test_rotated_thin_cells(kind, rho, dtype, device):
     _check((q @ rot.T + shift).to(dtype), (p @ rot.T + shift).to(dtype), c, device)
 
 
-@pytest.mark.parametrize("device", _DEVICES)
+@pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("h", [1e-16, 1e-13])
 @pytest.mark.parametrize("seed", [0, 1])
 def test_sliver_soups(seed, h, device):
@@ -187,7 +185,7 @@ def test_sliver_soups(seed, h, device):
     _check(q, p, c, device)
 
 
-@pytest.mark.parametrize("device", _DEVICES)
+@pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("dtype", [torch.float32, D])
 @pytest.mark.parametrize("h", [1e-4, 1e-7, 1e-10])
 def test_coplanar_cap_changes_nothing(h, dtype, device):
@@ -260,7 +258,7 @@ def test_certified_normal():
     assert not unsure[rho >= 1e-6].any() and unsure[rho <= 1e-12].all()
 
 
-@pytest.mark.parametrize("device", _DEVICES)
+@pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("dtype", [torch.float32, D])
 def test_switch_on_ordinary_cell_changes_nothing_visible(dtype, device, monkeypatch):
     """On a large cell of ordinary shape (rho about 0.4, as DrivAerML's tunnel floor)

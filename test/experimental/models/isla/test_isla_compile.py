@@ -36,10 +36,9 @@ from tensordict import TensorDict
 from torch._inductor.utils import fresh_cache
 
 from physicsnemo.experimental.models import ISLA
-from test.experimental.models.isla._marks import requires_cuda
+from test.experimental.models.isla._marks import DEVICES, requires_cuda
 from test.experimental.models.isla._meshes import cloud, outputs, soup
 
-DEVICES = ["cpu", pytest.param("cuda", marks=[pytest.mark.cuda, requires_cuda])]
 PV = {"p": {"rank": 0}, "v": {"rank": 1}}
 
 #: Per-case token counts, all distinct (and distinct from every other input

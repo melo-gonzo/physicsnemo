@@ -33,15 +33,9 @@ from physicsnemo.experimental.models.isla.sampling import (
     water_fill,
 )
 from physicsnemo.mesh.sampling.systematic_sampling import _pps_inclusion_probabilities
+from test.experimental.models.isla._marks import DEVICES, requires_cuda
 
 D = torch.float64
-DEVICES = [
-    "cpu",
-    pytest.param(
-        "cuda", marks=pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA")
-    ),
-]
-cuda = pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA")
 #: Cell counts of AeroZoo case 0, whose water fill under a budget of 200,000 gives
 #: shares 31250, 58315.5, 52119, 58315.5: at the start 0.5 every cell boundary of
 #: the third condition (kept whole, after a half-integer offset) is on a hit.
@@ -282,7 +276,8 @@ def _half_integer_case(device):
     return [a.to(device) for a in measures], [x.to(device) for x in centroids]
 
 
-@cuda
+@pytest.mark.cuda
+@requires_cuda
 def test_the_draw_is_bitwise_reproducible_on_cuda():
     """Six draws on CUDA of 349,014 cells with full-precision float64 measures at the
     eval start, with half-integer shares before a condition kept whole (hits exactly on
@@ -305,7 +300,8 @@ def test_the_draw_is_bitwise_reproducible_on_cuda():
         _whole_kept_once(kept, measures, 200_000)
 
 
-@cuda
+@pytest.mark.cuda
+@requires_cuda
 def test_the_draw_is_bitwise_the_same_on_cpu_and_cuda():
     """The same float64 inputs on CPU and on CUDA keep the same cells with bitwise the
     same weights."""
