@@ -281,7 +281,7 @@ class _SliceBlock(nn.Module):
             nn.GELU(),
             nn.Linear(MLP_RATIO * hidden, hidden),
         )
-        self.broadcast = nn.Linear(2 * hidden + hidden // 2, hidden)
+        self.broadcast = nn.Linear(2 * hidden + self.geo_width, hidden)
         self.norm_mlp = nn.LayerNorm(hidden)
         self.mlp = nn.Sequential(
             nn.Linear(hidden, MLP_RATIO * hidden),

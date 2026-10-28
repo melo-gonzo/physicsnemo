@@ -326,6 +326,7 @@ from physicsnemo.experimental.models.isla.heads import (
 )
 from physicsnemo.experimental.models.isla.inputs import (
     _BoundaryCondition,
+    _contract_vectors,
     _declare,
     _InputSet,
     _missing_fields,
@@ -1057,9 +1058,9 @@ class ISLA(Module):
 
     @staticmethod
     def _dots(x, g_hat):
-        """x (B, N, d) against the K unit global directions g_hat (B, N, K, d) -> (B, N, K).
-        Multiply-and-sum rather than einsum so autocast leaves the geometry in fp32."""
-        return (x[:, :, None, :] * g_hat).sum(-1)
+        """x (B, N, d) against the K unit global directions g_hat (B, N, K, d) -> (B, N, K)
+        (:func:`~physicsnemo.experimental.models.isla.inputs._contract_vectors`)."""
+        return _contract_vectors(x[:, :, None], g_hat)[:, :, 0]
 
     @staticmethod
     def _in_block(x, cols: tuple[int, ...], i: int, dim: int):
