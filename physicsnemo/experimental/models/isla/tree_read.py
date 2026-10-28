@@ -587,24 +587,29 @@ def resolve_walk(walk: str, points: torch.Tensor, theta: float, forest: Boundary
 class TreeReadPairs:
     """The tree read's pairs of one forward pass, every case flattened: ``plan`` over
     the ``B * Q`` points and the virtual sources (each case's ``N`` cells followed by
-    its forest's nodes), the kernel basis and log measure of every pair, the cells'
-    measure fractions, and each case's forest."""
+    its forest's nodes), the kernel basis of every pair, every source's log measure,
+    the cells' measure fractions, and each case's forest."""
 
     plan: PairPlan
     basis: torch.Tensor  # (P, KERNEL_READ_BASIS)
-    log_m: torch.Tensor  # (P,)
+    src_log_m: torch.Tensor  # (n_b,) every source's log measure
     omega: torch.Tensor  # (B * N,) the cells' measure fractions
     forests: list[BoundaryForest]
     n_cells: int
     n_queries: int
     n_pairs_node: int  # (point, node) pairs over every case
     kernel: str = "reference"  # the blocks' read: "reference" or "fused" (fused_read.py)
-    src_log_m: torch.Tensor | None = None  # (n_b,) every source's log measure; log_m = src_log_m[plan.bj]
     basis_sink: tuple | None = None  # the fused reads' shared basis gradient (fused_read.basis_sink)
 
     @property
     def n_pairs(self) -> int:
         return int(self.plan.qi.shape[0])
+
+    @property
+    def log_m(self) -> torch.Tensor:
+        """Every pair's log measure ``(P,)``, its source's (the reference read's input;
+        the fused read gathers ``src_log_m`` itself)."""
+        return self.src_log_m[self.plan.bj.long()]
 
 
 def node_means(x: torch.Tensor, forest: BoundaryForest, omega: torch.Tensor) -> torch.Tensor:
@@ -926,7 +931,7 @@ def walk_range_pairs(basis: _KernelBasis, walk: TreeReadWalk) -> TreeReadPairs:
     """The pairs of every point of each case of ``walk``, with the kernel basis of
     every pair in chunks (a range of points: :func:`walk_points_range`)."""
     n, nq = walk.n_cells, walk.n_queries
-    qis, sis, bases, logms = [], [], [], []
+    qis, sis, bases = [], [], []
     deferred = []
     src_off = 0
     pair_off = 0
@@ -938,7 +943,6 @@ def walk_range_pairs(basis: _KernelBasis, walk: TreeReadWalk) -> TreeReadPairs:
         else:
             bases.append(_chunked_basis(basis, qi, si, walk.geometry[i]))
         pair_off += int(qi.shape[0])
-        logms.append(walk.src_logm[i][si])
         qis.append(qi + i * nq)
         sis.append(si + src_off)
         src_off += n + forest.n_nodes
@@ -965,14 +969,13 @@ def walk_range_pairs(basis: _KernelBasis, walk: TreeReadWalk) -> TreeReadPairs:
     return TreeReadPairs(
         plan=plan_all,
         basis=basis_all,
-        log_m=torch.cat(logms),
+        src_log_m=torch.cat(walk.src_logm),
         omega=walk.omega,
         forests=walk.forests,
         n_cells=n,
         n_queries=nq,
         n_pairs_node=n_pairs_node,
         kernel=walk.kernel,
-        src_log_m=torch.cat(walk.src_logm),
         basis_sink=fused_read.basis_sink(basis_all) if walk.kernel == "fused" else None,
     )
 
