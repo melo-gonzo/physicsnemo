@@ -1014,7 +1014,7 @@ def _preorder_cell_tree(simplex: torch.Tensor):
     return (left, right, escape, levels, leaf_cell, *_tree_boxes(s_sorted, left, right, levels, leaf_cell)), order, s_sorted
 
 
-def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.Tensor, tree, reach=None, flat=None):
+def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.Tensor, tree, reach, flat=None):
     """The (query, cell) pairs ``(P,)``, ``(P,)`` of every cell of ``simplex`` ``(F,
     3, 3)`` within ``radius`` ``(Q,)`` of its query ``(Q, 3)``, all float64: a Warp
     traversal of the BVH ``tree`` over the cells (:func:`_preorder_cell_tree`),
@@ -1025,8 +1025,8 @@ def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.T
     many slots as they need, so no candidate is dropped. The pairs come in no
     particular order (the caller sorts them). The queries are
     traversed in Morton order, so neighbouring threads visit neighbouring nodes.
-    ``reach``, the greatest
-    norm of a vertex, when the caller has it. The zero-area cells ``flat`` ``(F,)``
+    ``reach`` is the greatest
+    norm of a vertex. The zero-area cells ``flat`` ``(F,)``
     (:func:`_zero_area`) have no plane, and the float64 distance is not defined on
     them: they are kept wherever their boxes are reached. Nor are the planes of a
     cell whose float64 normal is not certified to its float32 rounding (``delta >
@@ -1061,8 +1061,6 @@ def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.T
     r32 = r32.nextafter(r32.new_tensor(torch.inf))
     ### (the lower bound's float32 rounding: the products and offsets, against the
     ### coordinates' magnitude)
-    if reach is None:
-        reach = simplex.norm(dim=-1).amax()
     reach32 = ((r32.double() + 16 * torch.finfo(torch.float32).eps * (query.norm(dim=-1) + reach)) * (1 + 1e-5)).float()
     device, stream = FunctionSpec.warp_launch_context(query)
     fixed = [
@@ -1117,12 +1115,11 @@ def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.T
     over = count > _BALL_SLOTS
     keep = (torch.arange(_BALL_SLOTS, device=dev) < count[:, None]) & ~over[:, None]
     li, pk = rows[:, None].expand_as(out)[keep], out[keep]
-    if bool(over.any()):
-        rows = rows[over]
-        count, out = search(rows, int(count.max()))
-        keep = torch.arange(out.shape[1], device=dev) < count[:, None]
-        li, pk = torch.cat([li, rows[:, None].expand_as(out)[keep]]), torch.cat([pk, out[keep]])
-    return li, pk
+    ### (the list is full, so some query overflowed its slots)
+    rows = rows[over]
+    count, out = search(rows, int(count.max()))
+    keep = torch.arange(out.shape[1], device=dev) < count[:, None]
+    return torch.cat([li, rows[:, None].expand_as(out)[keep]]), torch.cat([pk, out[keep]])
 
 
 #: Entries of the traversal stack of :func:`_nearest_cells`; a midpoint-split tree of
