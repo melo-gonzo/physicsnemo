@@ -14,8 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The AeroZoo adapters (2026-10-09): ComputeLogReynolds, HarmonizeBoundaryFields, BoundaryFieldToGlobal
-and ConcatGlobalFields; ISLA's ComputeBoundaryScales (2026-10-24); the eddy-viscosity / k / omega non-dimensionalization recipes and their inverse; the
+"""The AeroZoo adapters (2026-10-09): ComputeLogReynolds, HarmonizeBoundaryFields;
+ISLA's ComputeBoundaryScales (2026-10-24); the eddy-viscosity / k / omega non-dimensionalization recipes and their inverse; the
 SDF transform's far fill for a boundary the case does not have."""
 
 import math
@@ -23,10 +23,8 @@ import math
 import pytest
 import torch
 from domain_transforms import (
-    BoundaryFieldToGlobal,
     ComputeBoundaryScales,
     ComputeLogReynolds,
-    ConcatGlobalFields,
     HarmonizeBoundaryFields,
 )
 from nondim import NonDimensionalizeByMetadata, freestream_scales
@@ -34,7 +32,6 @@ from sdf import ComputeSDFFromBoundary
 from tensordict import TensorDict
 
 from physicsnemo.mesh import DomainMesh, Mesh
-from physicsnemo.mesh.calculus.measure import scale_measures
 
 ONE_HOT = {"inlet": "bc_inlet", "wall": "bc_wall", "slip": "bc_slip"}
 FIELDS = {"prescribed.dirichlet.velocity": 1, "prescribed.dirichlet.pressure": 0}
@@ -416,86 +413,6 @@ def test_harmonize_refuses_a_wrong_rank_and_an_unknown_boundary():
     ### A bare Mesh has no boundary name: pass-through.
     mesh = Mesh(points=torch.rand(4, 3))
     assert HarmonizeBoundaryFields(one_hot=ONE_HOT, fields=FIELDS)(mesh) is mesh
-
-
-### ---------------------------------------------------------------------------
-### BoundaryFieldToGlobal
-### ---------------------------------------------------------------------------
-
-
-def test_boundary_field_to_global_is_the_measure_weighted_mean():
-    """A uniform value comes back exactly; a varying one is weighted by the effective cell measure
-    (the reader's Horvitz-Thompson weights included); a vector field gives a (d,) leaf; collisions and
-    missing fields are refused; the inlet's uniform turbulence is the use case."""
-    d = _domain()
-    inlet = d.boundaries["inlet"]
-    inlet.cell_data["prescribed", "dirichlet", "omega"] = torch.tensor([1.0, 3.0])
-    scale_measures(inlet, torch.tensor([3.0, 1.0]))  # unequal weights on equal areas
-    out = BoundaryFieldToGlobal(
-        boundary="inlet",
-        fields={
-            "prescribed.dirichlet.tke": "inlet_tke",
-            "prescribed.dirichlet.omega": "inlet_omega",
-            "prescribed.dirichlet.velocity": "inlet_velocity",
-        },
-    ).apply_to_domain(d)
-    gd = out.global_data
-    assert gd["inlet_tke"].shape == () and gd["inlet_omega"].shape == ()
-    torch.testing.assert_close(gd["inlet_tke"], torch.tensor(0.5))
-    torch.testing.assert_close(gd["inlet_omega"], torch.tensor((3 * 1.0 + 1 * 3.0) / 4))
-    torch.testing.assert_close(gd["inlet_velocity"], torch.tensor([10.0, 0.0, 0.0]))
-    with pytest.raises(ValueError, match="already has"):
-        BoundaryFieldToGlobal(
-            "inlet", {"prescribed.dirichlet.tke": "L_ref"}
-        ).apply_to_domain(d)
-    with pytest.raises(KeyError, match="lacks"):
-        BoundaryFieldToGlobal("inlet", {"nope": "x"}).apply_to_domain(d)
-    with pytest.raises(KeyError, match="not found"):
-        BoundaryFieldToGlobal(
-            "outlet", {"prescribed.dirichlet.tke": "x"}
-        ).apply_to_domain(d)
-
-
-def test_boundary_field_to_global_of_an_empty_boundary_is_zero():
-    """A boundary without faces gives a zero global."""
-    d = _domain(slip_faces=0)
-    d.boundaries["slip"].cell_data["q"] = torch.zeros(0)
-    out = BoundaryFieldToGlobal("slip", {"q": "slip_q"}).apply_to_domain(d)
-    assert torch.equal(out.global_data["slip_q"], torch.tensor(0.0))
-
-
-### ---------------------------------------------------------------------------
-### ConcatGlobalFields
-### ---------------------------------------------------------------------------
-
-
-def test_concat_global_fields_flattens_in_order():
-    """The listed globals are flattened and concatenated in the listed order."""
-    d = _domain()
-    gd = d.global_data.clone()
-    gd["log_re_std"] = torch.tensor(0.4)
-    gd["turb"] = torch.tensor([1.0, 2.0])
-    d = DomainMesh(interior=d.interior, boundaries=d.boundaries, global_data=gd)
-    out = ConcatGlobalFields(
-        fields=["U_inf", "log_re_std", "turb"], output_field="global_vector"
-    ).apply_to_domain(d)
-    torch.testing.assert_close(
-        out.global_data["global_vector"], torch.tensor([10.0, 0.0, 0.0, 0.4, 1.0, 2.0])
-    )
-    assert "U_inf" in out.global_data.keys()  # the sources stay
-    with pytest.raises(ValueError, match="already has"):
-        ConcatGlobalFields(["U_inf"], "L_ref").apply_to_domain(d)
-    with pytest.raises(KeyError, match="needs global_data"):
-        ConcatGlobalFields(["missing"], "v")(
-            Mesh(points=torch.rand(4, 3), global_data=gd)
-        )
-    ### On a bare Mesh too.
-    mesh = ConcatGlobalFields(["L_ref", "U_inf"], "v")(
-        Mesh(points=torch.rand(4, 3), global_data=gd)
-    )
-    torch.testing.assert_close(
-        mesh.global_data["v"], torch.tensor([2.0, 10.0, 0.0, 0.0])
-    )
 
 
 ### ---------------------------------------------------------------------------

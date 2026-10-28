@@ -68,6 +68,22 @@ from physicsnemo.mesh.calculus.measure import scale_measures
 logger = logging.getLogger(__name__)
 
 
+def case_directory(root, sample_path) -> str:
+    """The case directory name: the first path component of ``sample_path`` below the
+    reader ``root`` (e.g. ``run_1``), or the file name when it is not below it."""
+    try:
+        return sample_path.relative_to(root).parts[0]
+    except ValueError:
+        return sample_path.name
+
+
+def case_key(root, sample_path) -> torch.Tensor:
+    """The stable per-case integer ``case_key``: the CRC-32 of the case directory
+    name (:func:`case_directory`), as a 0-dim int64."""
+    name = case_directory(root, sample_path)
+    return torch.tensor(zlib.crc32(name.encode()) & 0x7FFFFFFF, dtype=torch.int64)
+
+
 @register()
 class MeshReaderWithGlobalData(MeshReader):
     r"""MeshReader that merges an external tensordict into each Mesh's ``global_data``.
@@ -188,15 +204,7 @@ class MeshReaderWithGlobalData(MeshReader):
         self._store_case_key = bool(store_case_key)
 
     def _case_name(self, index: int) -> str:
-        sample_path = self._paths[index]
-        try:
-            return sample_path.relative_to(self._root).parts[0]
-        except ValueError:
-            return sample_path.name
-
-    def _case_key(self, index: int) -> torch.Tensor:
-        name = self._case_name(index)
-        return torch.tensor(zlib.crc32(name.encode()) & 0x7FFFFFFF, dtype=torch.int64)
+        return case_directory(self._root, self._paths[index])
 
     def _load_sample(self, index: int) -> Mesh:
         mesh = super()._load_sample(index)
@@ -204,7 +212,7 @@ class MeshReaderWithGlobalData(MeshReader):
             if "case_key" in mesh.global_data.keys():
                 raise ValueError("global_data already has a 'case_key' field")
             gd = mesh.global_data.clone()
-            gd["case_key"] = self._case_key(index)
+            gd["case_key"] = case_key(self._root, self._paths[index])
             mesh = mesh.with_data(global_data=gd)
         if self._merge_rel_path is None:
             return mesh
@@ -261,7 +269,7 @@ class MeshReaderWithGlobalData(MeshReader):
             )
         if self._duplicate_masks is None:
             return ComputedDuplicates(mesh.cells)
-        case = sample_path.relative_to(self._root).parts[0]
+        case = self._case_name(index)
         return DuplicateMask(self._duplicate_masks, case, mesh.cells)
 
     def _read_surface(self, index: int) -> tuple[Mesh, dict[str, Any]]:

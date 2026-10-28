@@ -437,7 +437,7 @@ def test_the_interior_configs_build_their_model(model):
 
     paired = {
         "isla_volume_aerozoo": "aerozoo_uvolume",
-        "isla_volume_airfrans": "airfrans_volume_2d",
+        "isla_volume_airfrans": "airfrans_uvolume_2d",
     }
     dataset = paired.get(model, "drivaer_ml_volume_reference")
     cfg = _compose(model, dataset, *SMALL)
@@ -458,7 +458,7 @@ def test_isla_volume_composes_with_the_corrected_measure_dataset():
     assert ds.pipeline.reader.boundary_subsample == "cells"
 
 
-@pytest.mark.parametrize("suffix", ["", "_1case", "_pose", "_posed"])
+@pytest.mark.parametrize("suffix", ["", "_posed"])
 def test_surface_datasets_read_the_tunnel_beside_the_vehicle(suffix):
     """Every DrivAerML Surface dataset file reads the four tunnel boundaries beside the
     subsampled vehicle, places their ground from the whole vehicle in the reader (before
@@ -663,9 +663,10 @@ def _airfrans_chain(cfg) -> list:
         load_dataset_config,
     )
 
+    ### A resolution above the case's points: the chain's SubsampleMesh keeps them all.
     ds = OmegaConf.merge(
-        load_dataset_config(_RECIPE_ROOT / "datasets" / "airfrans_volume_2d.yaml"),
-        {"sampling_resolution": 64},
+        load_dataset_config(_RECIPE_ROOT / "datasets" / "airfrans_uvolume_2d.yaml"),
+        {"sampling_resolution": 10**6},
     )
     ds = _apply_dataset_transform_appends(_apply_dataset_transform_drops(ds, cfg), cfg)
     return [hydra.utils.instantiate(t, _convert_="all") for t in ds.pipeline.transforms]
@@ -678,7 +679,7 @@ def test_isla_airfrans_scales_follow_the_dataset_s_nondimensionalization():
     its square, so the two outputs ISLA declares dimensionless are dimensionless in ISLA's own U; nut, which
     the dataset leaves physical, has the units U L; the one rank-0 global is the recipe's re_z, computed from
     the same source and the constant nu the config sets."""
-    cfg = _compose("isla_volume_airfrans", "airfrans_volume_2d")
+    cfg = _compose("isla_volume_airfrans", "airfrans_uvolume_2d")
     gs = OmegaConf.to_container(cfg.model.global_schema)
     (source,) = [k for k, v in gs.items() if v.get("defines")]
     assert [k for k, v in gs.items() if v["rank"] == 0] == ["re_z"] and gs["re_z"] == {
@@ -696,7 +697,7 @@ def test_isla_airfrans_scales_follow_the_dataset_s_nondimensionalization():
     )
     assert appended[2]["viscosity_field"] in appended[0]["fields"]
     assert appended[2]["standardized_field"] == "re_z"
-    ds = OmegaConf.load(_RECIPE_ROOT / "datasets" / "airfrans_volume_2d.yaml")
+    ds = OmegaConf.load(_RECIPE_ROOT / "datasets" / "airfrans_uvolume_2d.yaml")
     raw = OmegaConf.to_container(ds.pipeline.transforms, resolve=False)
     (nondim_cfg,) = [t for t in raw if "NonDimensionalizeByMetadata" in t["_target_"]]
     nondim = hydra.utils.instantiate(nondim_cfg, _convert_="all")
@@ -740,13 +741,13 @@ def test_isla_airfrans_similarity_end_to_end():
         model_output_stats,
     )
 
-    cfg = _compose("isla_volume_airfrans", "airfrans_volume_2d", *SMALL)
-    targets = _targets("airfrans_volume_2d")
+    cfg = _compose("isla_volume_airfrans", "airfrans_uvolume_2d", *SMALL)
+    targets = _targets("airfrans_uvolume_2d")
     spec = OmegaConf.to_container(cfg.forward_kwargs, resolve=True)
     chain = _airfrans_chain(cfg)
     (normalizer,) = [t for t in chain if type(t).__name__ == "NormalizeMeshFields"]
     torch.manual_seed(0)
-    ds = load_dataset_config(_RECIPE_ROOT / "datasets" / "airfrans_volume_2d.yaml")
+    ds = load_dataset_config(_RECIPE_ROOT / "datasets" / "airfrans_uvolume_2d.yaml")
     model = hydra.utils.instantiate(
         cfg.model,
         _convert_="partial",
@@ -897,7 +898,7 @@ def test_isla_airfrans_reads_the_airfoil_and_the_far_field(dataset, tmp_path):
         )
     ]
     + [
-        ("isla_volume_airfrans", f"airfrans_volume_2d{suffix}")
+        ("isla_volume_airfrans", f"airfrans_uvolume_2d{suffix}")
         for suffix in ("", "_area", "_posed")
     ]
     + [
