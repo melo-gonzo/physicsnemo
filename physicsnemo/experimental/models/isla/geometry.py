@@ -32,7 +32,6 @@ from jaxtyping import Float, Int
 from physicsnemo.core.function_spec import FunctionSpec
 from physicsnemo.experimental.models.isla import geometry_fast
 from physicsnemo.experimental.models.isla.tree_walk import WARP_MAX_ELEMENTS
-from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.geometry._cell_normals import compute_cell_normals
 from physicsnemo.mesh.spatial._frame import canonical_frame, frame_coordinates
 from physicsnemo.mesh.spatial.bvh import _compute_morton_codes
@@ -892,11 +891,8 @@ def _morton_order(simplex: torch.Tensor) -> torch.Tensor:
     f = simplex.shape[0]
     e = simplex[:, 1:] - simplex[:, :1]
     frame = canonical_frame(simplex.mean(1), torch.linalg.cross(e[:, 0], e[:, 1], dim=-1).norm(dim=-1))
-    cells = torch.arange(3 * f, device=simplex.device).reshape(f, 3)
     ### Column products, not a GEMM (see frame_coordinates).
-    return _compute_morton_codes(
-        Mesh(points=frame_coordinates(simplex.reshape(-1, 3), frame), cells=cells).cell_centroids
-    ).argsort(stable=True)
+    return _compute_morton_codes(frame_coordinates(simplex.reshape(-1, 3), frame).reshape(f, 3, 3).mean(1)).argsort(stable=True)
 
 
 def _tree_boxes(simplex, left, right, levels, leaf_cell):
