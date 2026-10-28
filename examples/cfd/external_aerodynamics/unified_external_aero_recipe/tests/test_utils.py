@@ -379,7 +379,10 @@ def test_compile_model_passes_the_template_compile_options(
     monkeypatch.setattr(torch, "compile", lambda m, **kw: calls.append(kw) or m)
     expected = _ISLA_COMPILE if model.startswith("isla") else {}
     per_block = model in _ISLA_PER_BLOCK
-    compiled_by_default = compiled_by_default and not per_block
+    template_compiles = OmegaConf.load(_CONF / "model" / f"{model}.yaml").get(
+        "compile", True
+    )
+    compiled_by_default = compiled_by_default and not per_block and template_compiles
     net = torch.nn.Linear(2, 2)
     for flag, compiled in (
         (None, compiled_by_default),

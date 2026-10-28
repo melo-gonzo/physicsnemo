@@ -37,6 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `QuantileRegressionScore`, and `AuxScale`. Custom scores subclass
   `NonconformityScore` and register with `register_score`; `check_score`
   tests them.
+- Adds an experimental, independently implemented SMART operator with opt-in
+  surface and volume support in the unified external aerodynamics recipe,
+  full CFD geometry, independent online field-query sampling, and chunked inference.
 
 - Adds standalone FLARE++ attention and model APIs, with input-conditioned
   dynamic routing, plus a ``GALE_FPP`` backend for using the same mixer inside
@@ -435,6 +438,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   DoMINO's `sample_points_on_mesh` now works on meshes with over 2^24 faces.
 - `MeshDataset.close()` no longer raises `AttributeError` with a `MeshReader`
   or `DomainMeshReader`. Both readers now have a `close()` method.
+- Unified external aerodynamics checkpoints now include gradient-scaler state,
+  capture the scheduler after its epoch update, and save the final epoch, so new
+  checkpoints resume with the intended learning-rate schedule.
 - `GLOBE` accepts `boundary_meshes` as a TensorDict, as the DrivAerML example
   passes them. Before, every forward pass of that example failed.
 - Under `torch.compile`, GLOBE no longer recompiles on its second training
