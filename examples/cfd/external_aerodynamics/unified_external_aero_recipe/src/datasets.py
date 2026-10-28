@@ -848,9 +848,14 @@ def _build_manifest_val_dataset(
     (avoiding a redundant second reader). ``independent=True`` also builds
     a separate dataset, keeping validation sampling fixed at epoch zero.
     """
-    # Independent readers keep online validation samples at epoch zero even
-    # while the training loader advances its case/epoch sampling streams.
-    if not augment and not independent:
+    # Independent readers (a model template's or a dataset's
+    # independent_validation) keep online validation samples at epoch zero
+    # even while the training loader advances its case/epoch sampling streams.
+    if (
+        not augment
+        and not independent
+        and not ds_yaml.get("independent_validation", False)
+    ):
         return None
     return build_dataset(
         ds_yaml,
@@ -863,7 +868,9 @@ def _build_manifest_val_dataset(
 
 
 def _build_collate(
-    cfg: DictConfig, target_config: dict[str, FieldType]
+    cfg: DictConfig,
+    target_config: dict[str, FieldType],
+    target_sources: dict[str, str] | None = None,
 ) -> Callable[[list[tuple[Any, Any]]], dict[str, Any]]:
     """Build the per-sample collate from the model YAML's I/O contract."""
     if not target_config:
@@ -884,6 +891,7 @@ def _build_collate(
         input_type=input_type,
         forward_kwargs_spec=forward_kwargs_spec,
         target_config=target_config,
+        target_sources=target_sources,
     )
 
 
@@ -1030,6 +1038,7 @@ def build_dataloaders(
     train_offset = 0
     val_offset = 0
     using_manifests = False
+    first_target_sources = None
     first_targets: dict[str, str] | None = None
     first_metrics: list[str] | None = None
 
@@ -1078,9 +1087,17 @@ def build_dataloaders(
             OmegaConf.select(ds_yaml, "metrics", default=OmegaConf.create([])),
             resolve=True,
         )
+        ds_sources = (
+            OmegaConf.to_container(ds_yaml.target_sources, resolve=True)
+            if "target_sources" in ds_yaml
+            else None
+        )
         if first_targets is None:
+            first_target_sources = ds_sources
             first_targets, first_metrics = ds_targets, ds_metrics
         else:
+            if ds_sources != first_target_sources:
+                raise ValueError("All datasets must use the same target_sources")
             validate_dataset_consistency(
                 ds_name,
                 ds_targets,
@@ -1194,8 +1211,14 @@ def build_dataloaders(
         val_datadir = OmegaConf.select(ds_yaml, "val_datadir", default=None)
         if not val_datadir and cfg.get("independent_validation", False):
             val_datadir = train_datadir
+        val_yaml = None
         if val_datadir and Path(val_datadir).exists():
             val_yaml = OmegaConf.merge(ds_yaml, {"train_datadir": val_datadir})
+        elif ds_yaml.get("independent_validation", False):
+            # The no-holdout fallback may reuse training cases, but stochastic
+            # readers still need separate epoch state for fixed validation.
+            val_yaml = ds_yaml
+        if val_yaml is not None:
             val_dataset = build_dataset(
                 val_yaml,
                 augment=False,
@@ -1232,7 +1255,7 @@ def build_dataloaders(
     OmegaConf.update(cfg, "out_dim", out_dim_total, force_add=True)
 
     normalizer = find_normalizer(train_datasets)
-    collate_fn = _build_collate(cfg, first_targets or {})
+    collate_fn = _build_collate(cfg, first_targets or {}, first_target_sources)
     train_dataset = _combine_datasets(train_datasets)
 
     if using_manifests:
@@ -1288,5 +1311,6 @@ def build_dataloaders(
     ### contract.
     dataset_info = {
         "targets": first_targets or {},
+        "target_sources": first_target_sources,
     }
     return train_loader, val_loader, normalizer, dataset_info

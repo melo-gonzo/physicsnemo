@@ -26,6 +26,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `interior_n_points_range` to draw the interior point count for each sample,
   and `CenterMesh` gains `store_center_as` to keep the subtracted center in
   `global_data`.
+- Unified external aero recipe: adds AB-UPT surface, volume, and joint
+  configurations with independent anchor/query sampling and mapped targets
+  for unequal surface/volume point counts.
+
+- Adds an experimental, independently implemented AB-UPT operator with
+  interacting surface/volume anchors, reusable query contexts, and a
+  physically scaled finite-difference vorticity helper.
+
 - Adds a Rotor37 compressor blade example with GeoTransolver
   (`examples/cfd/rotor37_geotransolver`)
 - Adds an experimental, independently implemented SMART operator with sampled

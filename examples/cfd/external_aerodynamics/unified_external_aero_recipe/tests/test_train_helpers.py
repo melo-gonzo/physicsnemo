@@ -1170,7 +1170,7 @@ def test_training_resume_matches_uninterrupted_schedule(
     )
     monkeypatch.setattr(
         train,
-        "build_muon_optimizer",
+        "build_optimizer",
         lambda model, cfg, **kwargs: torch.optim.SGD(
             model.parameters(), lr=0.2, momentum=0.9
         ),

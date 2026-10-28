@@ -26,6 +26,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, TypeAlias
 
+import hydra.utils
 import numpy as np
 import torch
 from omegaconf import DictConfig, OmegaConf
@@ -233,6 +234,27 @@ def compile_model(model: torch.nn.Module, cfg: DictConfig) -> torch.nn.Module:
         model.module.compile(**options)
         return model
     return torch.compile(model, **options)
+
+
+def build_optimizer(
+    model: torch.nn.Module, cfg: DictConfig, *, compile_optimizer: bool = False
+) -> torch.optim.Optimizer:
+    """Build an explicit Hydra optimizer, or retain the existing Muon default.
+
+    Explicit optimizers receive all model parameters. Their configuration must
+    contain only arguments accepted by that optimizer, including any parameter
+    group choices; the recipe does not silently reinterpret optimizer options.
+    """
+    if "_target_" not in cfg.training.optimizer:
+        return build_muon_optimizer(model, cfg, compile_optimizer=compile_optimizer)
+    optimizer = hydra.utils.instantiate(
+        cfg.training.optimizer, params=model.parameters()
+    )
+    if not isinstance(optimizer, torch.optim.Optimizer):
+        raise TypeError("training.optimizer must instantiate a torch optimizer")
+    if compile_optimizer:
+        optimizer.step = torch.compile(optimizer.step)
+    return optimizer
 
 
 def build_muon_optimizer(
