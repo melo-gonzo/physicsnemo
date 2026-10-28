@@ -62,7 +62,7 @@ LENGTH_SOFTENING = 1e-6
 WINDING_NUMBER_BETA = 2.0
 
 
-def soft_log_length(s: torch.Tensor, eps: float = LENGTH_SOFTENING) -> torch.Tensor:
+def soft_log_length(s: torch.Tensor) -> torch.Tensor:
     r"""The logarithmic channel of a signed length ``s`` in the frame's length unit:
     :math:`\operatorname{asinh}(s / \varepsilon)`.
 
@@ -82,19 +82,12 @@ def soft_log_length(s: torch.Tensor, eps: float = LENGTH_SOFTENING) -> torch.Ten
     the channel is invariant to a uniform scaling of the geometry) is a numerical
     resolution, not a model parameter: about 17 times float32's unit roundoff
     :math:`2^{-24}`, the resolution of a distance relative to the frame's length
-    wherever the geometry sits in its domain. Measured with the whole boundary on
-    AirfRANS, DrivAerML Volume and AeroZoo, float32 rounding of the coordinates and of
-    the closest-point arithmetic moves the channel by at most 0.12, with the body
-    anywhere in its domain. The channel is linear for :math:`\lvert s \rvert` below
-    :math:`\varepsilon`. With the whole boundary of an external flow, the length unit
-    is the domain's size, so that range can reach into the boundary layer. On
-    AirfRANS with its far field (305 chords) it holds 19.5 % of the interior points:
-    the viscous sublayer, the buffer layer and the start of the log layer (:math:`y^+`
-    about 25-90, estimated). The first nodes there sit at about
-    :math:`5 \times 10^{-9}` of the frame's length, below float32's resolution of the
-    domain. On DrivAerML Volume with its domain the range holds 0.57 % of the points.
+    wherever the geometry sits in its domain. The channel is linear for
+    :math:`\lvert s \rvert` below :math:`\varepsilon`; with the whole boundary of an
+    external flow the length unit is the domain's size, so that range can reach into
+    the boundary layer.
     """
-    return torch.asinh(s / eps)
+    return torch.asinh(s / LENGTH_SOFTENING)
 
 
 def rms_pairwise_distance(
