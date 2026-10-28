@@ -14,14 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""AF-UNIFORM (2026-10-14): the AirfRANS dataset files of the reference lanes (airfrans_volume, airfrans_volume_2d
-and their CHAR-PROTOCOLS _area / _posed scoring twins) and their uniform-interior twins airfrans_uvolume*.yaml.
+"""AF-UNIFORM (2026-10-14): the uniform-interior AirfRANS dataset files airfrans_uvolume*.yaml.
 
-AirfRANS stores the interior points in solver order, so the source files' reader cap (subsample_n_points, a
-cyclic contiguous block) keeps one spatial window per draw. The twins read each case whole and draw the interior
-with SubsampleMesh first in the chain. The tests pin that the twin is its source but for the draw, and run both
-through the real reader and transforms on a synthetic AirfRANS-shaped case whose stored order is spatial. The
-baselines' airfrans_uvolume_ud*.yaml (DRIVE-FIX, 2026-10-18) add the standardized freestream speed. ISLA's 2-D files
+AirfRANS stores the interior points in solver order, so a reader cap (subsample_n_points, a cyclic contiguous
+block) would keep one spatial window per draw. The files read each case whole and draw the interior with
+SubsampleMesh first in the chain. The tests run them through the real reader and transforms on a synthetic
+AirfRANS-shaped case whose stored order is spatial. The baselines' airfrans_uvolume_ud*.yaml (DRIVE-FIX, 2026-10-18) add the standardized freestream speed. ISLA's 2-D files
 (AF-WHOLE, 2026-10-23) read the far field beside the airfoil from the raw release."""
 
 import sys
@@ -42,15 +40,7 @@ from datasets import build_dataset, load_dataset_config  # noqa: E402
 from physicsnemo.datapipes.protocols import DatasetBase  # noqa: E402
 from physicsnemo.mesh import DomainMesh, Mesh  # noqa: E402
 
-SOURCES = (
-    "airfrans_volume",
-    "airfrans_volume_2d",
-    "airfrans_volume_area",
-    "airfrans_volume_posed",
-    "airfrans_volume_2d_area",
-    "airfrans_volume_2d_posed",
-)
-TWINS = {src.replace("airfrans_volume", "airfrans_uvolume", 1): src for src in SOURCES}
+TWINS = ("airfrans_uvolume_2d", "airfrans_uvolume_2d_area", "airfrans_uvolume_2d_posed")
 N_INTERIOR = 400  # stored interior points of the synthetic case
 N_AIRFOIL = 24  # airfoil segments
 N_FREE = 16  # far-field segments
@@ -189,48 +179,22 @@ def _is_cyclic_block(rows: torch.Tensor, n: int) -> bool:
     return any(s == {(start + i) % n for i in range(len(s))} for start in range(n))
 
 
-@pytest.mark.parametrize("twin", sorted(TWINS))
-def test_uniform_twin_is_its_source_but_the_interior_draw(twin):
-    """airfrans_uvolume*.yaml is its airfrans_volume*.yaml with the reader's two caps removed and a
-    SubsampleMesh(n_points=${sampling_resolution}) first in the chain, after the license and an AF-UNIFORM header."""
-    src = TWINS[twin]
-    datasets = _RECIPE_ROOT / "datasets"
-    lines = (datasets / f"{twin}.yaml").read_text().splitlines()
-    assert lines[16].startswith(
-        f"# AF-UNIFORM (2026-10-14): {src}.yaml with a uniform interior draw."
-    )
-    a = OmegaConf.to_container(OmegaConf.load(datasets / f"{twin}.yaml"), resolve=False)
-    b = OmegaConf.to_container(OmegaConf.load(datasets / f"{src}.yaml"), resolve=False)
-    assert b["pipeline"]["reader"].pop("subsample_n_points") == "${sampling_resolution}"
-    assert b["pipeline"]["reader"].pop("subsample_n_cells") == "${sampling_resolution}"
-    first = a["pipeline"]["transforms"].pop(0)
-    assert first == {
-        "_target_": "${dp:SubsampleMesh}",
-        "n_points": "${sampling_resolution}",
-    }
-    assert a == b
-
-
-@pytest.mark.parametrize("twin", sorted(TWINS))
+@pytest.mark.parametrize("twin", TWINS)
 def test_uniform_twin_draws_a_uniform_interior_subset(twin, case_root):
-    """Through the real reader and chain: the source's draw is one cyclic contiguous block of the stored rows (a
-    spatial window here), the twin's a uniform random subset of K rows that changes with the epoch, with the
-    airfoil whole; every drawn point carries the source pipeline's values for its stored row."""
-    src = TWINS[twin]
-    old, new = _dataset(src, case_root, K), _dataset(twin, case_root, K)
+    """Through the real reader and chain: the draw is a uniform random subset of K rows that changes with the
+    epoch, with the airfoil whole; every drawn point carries the whole-case pipeline's values for its stored row."""
+    new = _dataset(twin, case_root, K)
     whole = _dataset(
-        src, case_root, 10**6
-    )  # the source pipeline with no draw: every stored row
+        twin, case_root, 10**6
+    )  # the same pipeline with no draw: every stored row
     try:
         ref = whole[0][0]
         ref_rows = _rows(ref)
         assert torch.equal(ref_rows.sort().values, torch.arange(N_INTERIOR))
         draws = set()
         for epoch in range(8):
-            for ds in (old, new):
-                ds.set_epoch(epoch)
-            o, d = old[0][0], new[0][0]
-            assert _is_cyclic_block(_rows(o), N_INTERIOR)
+            new.set_epoch(epoch)
+            d = new[0][0]
             rows = _rows(d)
             assert rows.numel() == rows.unique().numel() == K
             assert not _is_cyclic_block(rows, N_INTERIOR)
@@ -252,7 +216,7 @@ def test_uniform_twin_draws_a_uniform_interior_subset(twin, case_root):
                 torch.testing.assert_close(shift, torch.zeros_like(shift))
         assert len(draws) == 8
     finally:
-        for ds in (old, new, whole):
+        for ds in (new, whole):
             DatasetBase.close(ds)
 
 
@@ -289,9 +253,7 @@ def _relative(d: DomainMesh) -> torch.Tensor:
     )
 
 
-@pytest.mark.parametrize(
-    "name", ["airfrans_uvolume_2d", "airfrans_uvolume_2d_posed", "airfrans_volume_2d"]
-)
+@pytest.mark.parametrize("name", ["airfrans_uvolume_2d", "airfrans_uvolume_2d_posed"])
 def test_the_reader_adds_the_far_field_as_geometry_into_the_fluid(name, case_root):
     """Through the real reader and chain: the sample holds the airfoil and the far field, the release's curve whole
     and in the plane (posed: moved with the case), with none of the file's fields, its normals into the fluid."""
@@ -334,19 +296,6 @@ SPEED_STD = {
     "mean": 62.116,
     "std": 17.914,
 }
-
-
-@pytest.mark.parametrize("ud", UD_TWINS)
-def test_ud_twin_is_its_uniform_twin_plus_the_standardized_speed(ud):
-    """airfrans_uvolume_ud*.yaml (the AirfRANS baselines' datasets) is its airfrans_uvolume*.yaml with one
-    last transform, the SplitGlobalVector that writes U_inf_mag_std with fixed constants."""
-    datasets = _RECIPE_ROOT / "datasets"
-    a = OmegaConf.to_container(OmegaConf.load(datasets / f"{ud}.yaml"), resolve=False)
-    b = OmegaConf.to_container(
-        OmegaConf.load(datasets / f"{ud.replace('_ud', '', 1)}.yaml"), resolve=False
-    )
-    assert a["pipeline"]["transforms"].pop() == SPEED_STD
-    assert a == b
 
 
 @pytest.mark.parametrize(
