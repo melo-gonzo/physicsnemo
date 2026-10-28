@@ -29,13 +29,11 @@ import torch
 from physicsnemo.experimental.models.isla import geometry
 from physicsnemo.experimental.models.isla.geometry import exact_boundary_geometry
 from physicsnemo.mesh.primitives.surfaces import cube_surface
-from test.experimental.models.isla._marks import requires_cuda
+from test.experimental.models.isla._marks import DEVICES
 
 D = torch.float64
 L = 2.0**-10
 CASES = ("two coincident", "three coincident", "three collinear")
-
-_DEVICES = ["cpu", pytest.param("cuda", marks=[pytest.mark.cuda, requires_cuda])]
 
 
 def _lattice(g, *shape):
@@ -133,7 +131,7 @@ def test_zero_area_flag(dtype):
     assert flat.tolist() == [True] * 5 + [False] * 3
 
 
-@pytest.mark.parametrize("device", _DEVICES)
+@pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("dtype", [torch.float32, D])
 @pytest.mark.parametrize("case", CASES)
 def test_zero_area_cells_distance(case, dtype, device):
@@ -174,7 +172,7 @@ def test_zero_area_cells_distance(case, dtype, device):
         assert torch.equal(a, b)
 
 
-@pytest.mark.parametrize("device", _DEVICES)
+@pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("dtype", [torch.float32, D])
 @pytest.mark.parametrize("case", CASES)
 def test_zero_area_cells_change_nothing(case, dtype, device):
@@ -201,7 +199,7 @@ def test_zero_area_cells_change_nothing(case, dtype, device):
         assert torch.equal(d, d0) and torch.equal(u, u0)
 
 
-@pytest.mark.parametrize("device", _DEVICES)
+@pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("dtype", [torch.float32, D])
 def test_query_on_zero_area_cells_alone(dtype, device):
     """A query held only by zero-area cells (a segment and a point beside a box)
@@ -236,7 +234,7 @@ def test_query_on_zero_area_cells_alone(dtype, device):
     assert torch.allclose(u[4:], torch.tensor([[0.0, 1, 0], [1, 0, 0]], dtype=D))
 
 
-@pytest.mark.parametrize("device", _DEVICES)
+@pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("dtype", [torch.float32, D])
 def test_zero_length_segments_2d(dtype, device):
     """In two dimensions a zero-length segment is its point: one at a vertex of a

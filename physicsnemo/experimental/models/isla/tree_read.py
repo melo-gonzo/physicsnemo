@@ -74,8 +74,6 @@ cells' measure-weighted covariance, signed by their third moments), so a rotatio
 or rescale of the case gives the same clusters and the same far-field list for every
 point, up to ties of that frame (equal variances, a symmetric axis); the read is then
 the same approximation in every pose, and the posed protocol equals the native one.
-Trees built on lab coordinates were not: on AirfRANS at theta 1 their error rose
-1.9x / 1.25x / 3.3x on pressure / velocity / viscosity under a rigid motion.
 
 No discrete choice of the forest is left to rounding where an error bound can decide
 it, and none to the caller's precision. The forest is built and walked outside
@@ -92,27 +90,14 @@ opened in every pose and a nearly tied frame costs a bounded factor of pairs. Th
 so they are functions of the boundary alone and their edges do not move with the pose.
 What rounding still decides is generic: cells within rounding of a face boundary, a
 Morton grid line or the criterion, whose posed inputs differ by the rounding of the
-pose itself. Sign octants were the earlier split: on surfaces aligned with the frame
-(GINOT's lug, 86 % of whose normals have exact-zero components there) the octant was the
-sign of a rounding residue, and posing the lug changed every point's list (posed
-error 1.53 / 1.98x native on two trained seeds at theta 1).
+pose itself.
 
 Constants. ``TREE_READ_LEAF_SIZE`` (cells per leaf), the orientation split into the
 :math:`2 d` cube faces and ``TREE_READ_PAIR_CHUNK`` (pairs per chunk of the basis
 evaluation) are implementation constants: at a fixed :math:`\theta` they change the
 cost and the grouping of the exact pairs, and at :math:`\theta = 0` nothing at all.
-
-Earlier forms, measured and retired on DrivAerML Volume (200,000 cells, 200,000
-points): the dual-tree plan with a tree over the points (a leaf of points in a
-sparse region is never well separated from the boundary near it: 1.6e9 pairs per
-block at theta 0.5); the per-point walk of the count-midpoint Morton tree (loose
-boxes on a surface: 1,700 sources per point at theta 1); a dedicated principal-axis
-tree with normal-first splits and bounding spheres (980 sources per point at theta 1,
-within 10% of this forest, which builds five times faster and shares its tree with
-GLOBE).
 """
 
-import contextlib
 import dataclasses
 import logging
 import math
@@ -137,6 +122,8 @@ from physicsnemo.mesh.spatial.cluster_tree import ClusterTree
 logger = logging.getLogger(__name__)
 #: Why the fused read used the reference kernel basis, each reason logged once.
 _BASIS_FALLBACKS_LOGGED: set[str] = set()
+#: The walks' resolutions (:func:`resolve_walk`) and fallbacks, each logged once.
+_WALKS_LOGGED: set[tuple[str, str]] = set()
 
 #: Heads of the read; each head owns ``KERNEL_READ_WIDTH // KERNEL_READ_HEADS`` value
 #: channels.
@@ -171,8 +158,7 @@ def normal_faces(normals: torch.Tensor, tol: torch.Tensor) -> torch.Tensor:
     such axis, so rounding never decides it. Antipodal: ``-n`` lands on the face
     opposite ``n``'s (the same axis, the other sign), so opposite normals never share
     a face and a winding flip maps every face's cells to the opposite face. Inside a
-    face every normal has ``|n_k| >= 1 / sqrt(d)`` (up to ``tol``), the bound of a sign
-    octant."""
+    face every normal has ``|n_k| >= 1 / sqrt(d)`` (up to ``tol``)."""
     a = normals.abs()
     tied = a >= a.amax(dim=1, keepdim=True) - 2 * tol[:, None]
     k = tied.to(torch.int8).argmax(dim=1)
@@ -227,8 +213,11 @@ def frame_rotation_bound(x: torch.Tensor, w: torch.Tensor, u: float) -> torch.Te
     return torch.where(gap > err, err / (gap - err), torch.zeros_like(err))
 
 
-def separation_diameter_sq(tree: ClusterTree, theta: float, eta: torch.Tensor, d: int, u: float) -> torch.Tensor:
-    r"""The squared diameter the walk compares a point's distance with, so that a
+def separation_diameter_sq(
+    aabb_min: torch.Tensor, aabb_max: torch.Tensor, theta: float, eta: torch.Tensor, d: int, u: float
+) -> torch.Tensor:
+    r"""The squared diameter the walk compares a point's distance with for the nodes
+    with boxes ``aabb_min``, ``aabb_max`` ``(M, d)`` (elementwise per node), so that a
     node is admitted only when it is certainly well separated in the boundary's exact
     canonical frame: the true distance :math:`r^*` of the point from the node's box and
     the box's true diagonal :math:`D^*` satisfy :math:`\theta r^* > D^*` whenever the
@@ -259,7 +248,7 @@ def separation_diameter_sq(tree: ClusterTree, theta: float, eta: torch.Tensor, d
     So the widening grows with ``eta`` and stays bounded as the frame's variances tie.
     A tie of the criterion (the structured meshes' distance equal to the diameter) is
     opened whichever way rounding falls."""
-    lo, hi = tree.node_aabb_min.double(), tree.node_aabb_max.double()
+    lo, hi = aabb_min.double(), aabb_max.double()
     diam = (hi - lo).square().sum(-1).sqrt()
     reach = torch.maximum(lo.abs(), hi.abs()).norm(dim=-1)
     k = 3 * u
@@ -275,7 +264,88 @@ def separation_diameter_sq(tree: ClusterTree, theta: float, eta: torch.Tensor, d
     se = torch.where(sure, se, torch.zeros_like(se))
     f = (1 + se * (1 + theta)) / (1 - se)
     wide = torch.where(sure, torch.minimum(f * rounded(theta / f), ball), ball)
-    return wide.square().to(tree.node_diameter_sq.dtype)
+    return wide.square().to(aabb_min.dtype)
+
+
+def _reference_tables(points, measure, normals, vecs, points_f, face, leaf_size: int) -> dict:
+    """:func:`~.tree_build.forest_tables`' fields from the reference build: one GLOBE
+    :class:`~physicsnemo.mesh.spatial.cluster_tree.ClusterTree` per normal face, in face
+    order, its nodes and cells appended to the forest's tables."""
+    n, d = points.shape
+    device = points.device
+    trees, tree_cells, cells, offsets = [], [], [], [0]
+    starts, counts, lefts, rights, boxes = [], [], [], [], []
+    centers, nrm, vec, meas = [], [], [], []
+    c_off = m_off = 0
+    for k in range(2 * d):
+        sel = (face == k).nonzero().squeeze(-1)
+        if sel.numel() == 0:
+            continue
+        tree = ClusterTree.from_points(points_f[sel], leaf_size=leaf_size, areas=measure[sel])
+        data = {"n": normals[sel]}
+        if vecs is not None:
+            data["u"] = vecs[sel]
+        agg = tree.compute_source_aggregates(
+            points[sel], measure[sel], TensorDict(data, batch_size=[int(sel.numel())])
+        )
+        m = tree.n_nodes
+        trees.append(tree)
+        tree_cells.append(sel)
+        cells.append(sel[tree.sorted_source_order])
+        starts.append(tree.node_range_start + c_off)
+        counts.append(tree.node_range_count)
+        lefts.append(torch.where(tree.node_left_child >= 0, tree.node_left_child + m_off, -1))
+        rights.append(torch.where(tree.node_right_child >= 0, tree.node_right_child + m_off, -1))
+        boxes.append((tree.node_aabb_min, tree.node_aabb_max))
+        centers.append(agg.node_centroid)
+        nrm.append(agg.node_source_data["n"])
+        if vecs is not None:
+            vec.append(agg.node_source_data["u"])
+        meas.append(tree.node_total_area)
+        c_off += int(sel.numel())
+        m_off += m
+        offsets.append(m_off)
+    left = torch.cat(lefts)
+    right = torch.cat(rights)
+    range_start = torch.cat(starts)
+    range_count = torch.cat(counts)
+    ### The leaves tile the cells: sorted by their first position, their counts
+    ### concatenate to the forest order.
+    leaf_ids = (left < 0).nonzero().squeeze(-1)
+    leaf_ids = leaf_ids[torch.argsort(range_start[leaf_ids])]
+    position_leaf = torch.repeat_interleave(
+        torch.arange(leaf_ids.shape[0], device=device), range_count[leaf_ids], output_size=n
+    )
+    ### Internal nodes by depth from the roots; a node's children are one level deeper.
+    node_offset = torch.tensor(offsets, device=device)
+    frontier = node_offset[:-1]
+    by_depth = []
+    while frontier.numel():
+        internal = frontier[left[frontier] >= 0]
+        if internal.numel() == 0:
+            break
+        by_depth.append(internal)
+        frontier = torch.cat([left[internal], right[internal]])
+    levels = [(nodes, left[nodes], right[nodes]) for nodes in reversed(by_depth)]
+    return {
+        "trees": trees,
+        "tree_cells": tree_cells,
+        "node_offset": node_offset,
+        "cells": torch.cat(cells),
+        "range_start": range_start,
+        "range_count": range_count,
+        "left": left,
+        "right": right,
+        "leaf_ids": leaf_ids,
+        "position_leaf": position_leaf,
+        "levels": levels,
+        "aabb_min": torch.cat([b[0] for b in boxes]),
+        "aabb_max": torch.cat([b[1] for b in boxes]),
+        "center": torch.cat(centers),
+        "mean_n": torch.cat(nrm),
+        "vecs": torch.cat(vec) if vecs is not None else None,
+        "measure": torch.cat(meas),
+    }
 
 
 @dataclass
@@ -372,103 +442,28 @@ class BoundaryForest:
         else:
             tol = normal_tol.double()
         face = normal_faces(normals_f, tol + eta)
+        tables = None
         if resolve_tree_build(build, points) == "fast":
             tables = forest_tables(points, measure, normals, vecs, points_f, face, leaf_size=leaf_size)
-            if tables is not None:
-                for tree in tables["trees"]:
-                    tree.node_diameter_sq = separation_diameter_sq(tree, float(theta), eta, d, u)
-                tables["diameter_sq"] = torch.cat([tree.node_diameter_sq for tree in tables["trees"]])
-                mean_n = tables.pop("mean_n")
-                length = mean_n.norm(dim=-1)
-                return cls(
-                    n_cells=n,
-                    theta=float(theta),
-                    frame=frame,
-                    origin=origin,
-                    **tables,
-                    normal=mean_n / length[:, None].clamp_min(eps),
-                    coherent=length > coherent_length,
-                )
-        trees, tree_cells, cells, offsets = [], [], [], [0]
-        starts, counts, lefts, rights, boxes = [], [], [], [], []
-        centers, nrm, vec, meas = [], [], [], []
-        c_off = m_off = 0
-        for k in range(2 * d):
-            sel = (face == k).nonzero().squeeze(-1)
-            if sel.numel() == 0:
-                continue
-            tree = ClusterTree.from_points(points_f[sel], leaf_size=leaf_size, areas=measure[sel])
-            tree.node_diameter_sq = separation_diameter_sq(tree, float(theta), eta, d, u)
-            data = {"n": normals[sel]}
-            if vecs is not None:
-                data["u"] = vecs[sel]
-            agg = tree.compute_source_aggregates(
-                points[sel], measure[sel], TensorDict(data, batch_size=[int(sel.numel())])
-            )
-            m = tree.n_nodes
-            trees.append(tree)
-            tree_cells.append(sel)
-            cells.append(sel[tree.sorted_source_order])
-            starts.append(tree.node_range_start + c_off)
-            counts.append(tree.node_range_count)
-            lefts.append(torch.where(tree.node_left_child >= 0, tree.node_left_child + m_off, -1))
-            rights.append(torch.where(tree.node_right_child >= 0, tree.node_right_child + m_off, -1))
-            boxes.append((tree.node_aabb_min, tree.node_aabb_max, tree.node_diameter_sq))
-            centers.append(agg.node_centroid)
-            nrm.append(agg.node_source_data["n"])
-            if vecs is not None:
-                vec.append(agg.node_source_data["u"])
-            meas.append(tree.node_total_area)
-            c_off += int(sel.numel())
-            m_off += m
-            offsets.append(m_off)
-        left = torch.cat(lefts)
-        right = torch.cat(rights)
-        range_start = torch.cat(starts)
-        range_count = torch.cat(counts)
-        ### The leaves tile the cells: sorted by their first position, their counts
-        ### concatenate to the forest order.
-        leaf_ids = (left < 0).nonzero().squeeze(-1)
-        leaf_ids = leaf_ids[torch.argsort(range_start[leaf_ids])]
-        position_leaf = torch.repeat_interleave(
-            torch.arange(leaf_ids.shape[0], device=device), range_count[leaf_ids], output_size=n
-        )
-        ### Internal nodes by depth from the roots; a node's children are one level deeper.
-        node_offset = torch.tensor(offsets, device=device)
-        frontier = node_offset[:-1]
-        by_depth = []
-        while frontier.numel():
-            internal = frontier[left[frontier] >= 0]
-            if internal.numel() == 0:
-                break
-            by_depth.append(internal)
-            frontier = torch.cat([left[internal], right[internal]])
-        levels = [(nodes, left[nodes], right[nodes]) for nodes in reversed(by_depth)]
-        mean_n = torch.cat(nrm)
+        if tables is None:
+            tables = _reference_tables(points, measure, normals, vecs, points_f, face, leaf_size)
+        ### The walk's node diameters (elementwise per node), on the whole table and
+        ### sliced per tree.
+        diameter_sq = separation_diameter_sq(tables["aabb_min"], tables["aabb_max"], float(theta), eta, d, u)
+        m = 0
+        for tree in tables["trees"]:
+            tree.node_diameter_sq = diameter_sq[m : m + tree.n_nodes]
+            m += tree.n_nodes
+        mean_n = tables.pop("mean_n")
         length = mean_n.norm(dim=-1)
         return cls(
             n_cells=n,
             theta=float(theta),
             frame=frame,
             origin=origin,
-            trees=trees,
-            tree_cells=tree_cells,
-            node_offset=node_offset,
-            cells=torch.cat(cells),
-            range_start=range_start,
-            range_count=range_count,
-            left=left,
-            right=right,
-            leaf_ids=leaf_ids,
-            position_leaf=position_leaf,
-            levels=levels,
-            aabb_min=torch.cat([b[0] for b in boxes]),
-            aabb_max=torch.cat([b[1] for b in boxes]),
-            diameter_sq=torch.cat([b[2] for b in boxes]),
-            center=torch.cat(centers),
+            **tables,
+            diameter_sq=diameter_sq,
             normal=mean_n / length[:, None].clamp_min(eps),
-            vecs=torch.cat(vec) if vecs is not None else None,
-            measure=torch.cat(meas),
             coherent=length > coherent_length,
         )
 
@@ -478,19 +473,17 @@ class BoundaryForest:
         pos, which = _ragged_arange(self.range_start[nodes], self.range_count[nodes])
         return self.cells[pos], which
 
-    def point_pairs(
-        self, points: torch.Tensor, theta: float | None = None, walk: str = "auto"
-    ) -> tuple[torch.Tensor, torch.Tensor, int]:
+    def point_pairs(self, points: torch.Tensor, walk: str = "auto") -> tuple[torch.Tensor, torch.Tensor, int]:
         """Every point's list: ``(qi, si, n_node)`` sorted by point, where ``si`` below
         ``n_cells`` names a cell and ``n_cells + m`` names node ``m``; ``n_node`` is the
-        number of node entries. Each tree is walked once per point at ``theta``
-        (the forest's own by default); a node is admitted only when its box is well
+        number of node entries. Each tree is walked once per point at the forest's
+        ``theta``, for which its diameters and coherence are made; a node is admitted only when its box is well
         separated from the point and its normals are coherent, so each point's list
         holds every cell exactly once, as itself or inside one node. ``walk`` names
         how, not what (:func:`resolve_walk`): the fast walk gives the same lists in
         the same order. Lists past Warp's array limit are walked by the reference
         under ``"auto"`` and refused under ``"fast"``."""
-        return self.frame_pairs(self.frame_points(points), theta, walk)
+        return self.frame_pairs(self.frame_points(points), walk)
 
     def frame_points(self, points: torch.Tensor) -> torch.Tensor:
         """The points in the trees' coordinates, as the cells are (:meth:`build`):
@@ -500,15 +493,14 @@ class BoundaryForest:
             return frame_coordinates(points.detach().double() - self.origin, self.frame).to(points.dtype)
 
     def frame_pairs(
-        self, points_f: torch.Tensor, theta: float | None = None, walk: str = "auto", count_only: bool = False
+        self, points_f: torch.Tensor, walk: str = "auto", count_only: bool = False
     ) -> tuple[torch.Tensor, torch.Tensor, int] | torch.Tensor:
         """:meth:`point_pairs` of points already in the trees' coordinates
         (:meth:`frame_points`); with ``count_only`` each point's number of pairs
         ``(Q,)`` alone, which the fast walk counts without making the lists (so past
         Warp's limit on the lists too)."""
-        theta = self.theta if theta is None else float(theta)
         with torch.autocast(points_f.device.type, enabled=False):
-            return self._frame_pairs(points_f, theta, walk, count_only)
+            return self._frame_pairs(points_f, self.theta, walk, count_only)
 
     def _frame_pairs(self, points_f, theta, walk, count_only):
         if resolve_walk(walk, points_f, theta, self) == "fast":
@@ -537,9 +529,6 @@ class BoundaryForest:
             return torch.bincount(qi, minlength=points_f.shape[0])
         order = torch.argsort(qi, stable=True)
         return qi[order], si[order], n_node
-
-
-_WALKS_LOGGED: set[tuple[str, str]] = set()
 
 
 def resolve_walk(walk: str, points: torch.Tensor, theta: float, forest: BoundaryForest) -> str:
@@ -584,20 +573,18 @@ def resolve_walk(walk: str, points: torch.Tensor, theta: float, forest: Boundary
 class TreeReadPairs:
     """The tree read's pairs of one forward pass, every case flattened: ``plan`` over
     the ``B * Q`` points and the virtual sources (each case's ``N`` cells followed by
-    its forest's nodes), the kernel basis and log measure of every pair, the cells'
-    measure fractions, and each case's forest."""
+    its forest's nodes), the kernel basis of every pair, every source's log measure,
+    the cells' measure fractions, and each case's forest."""
 
     plan: PairPlan
     basis: torch.Tensor  # (P, KERNEL_READ_BASIS)
-    log_m: torch.Tensor  # (P,)
+    src_log_m: torch.Tensor  # (n_b,) every source's log measure
     omega: torch.Tensor  # (B * N,) the cells' measure fractions
     forests: list[BoundaryForest]
-    src_offsets: list[int]
     n_cells: int
     n_queries: int
     n_pairs_node: int  # (point, node) pairs over every case
     kernel: str = "reference"  # the blocks' read: "reference" or "fused" (fused_read.py)
-    src_log_m: torch.Tensor | None = None  # (n_b,) every source's log measure; log_m = src_log_m[plan.bj]
     basis_sink: tuple | None = None  # the fused reads' shared basis gradient (fused_read.basis_sink)
 
     @property
@@ -605,8 +592,10 @@ class TreeReadPairs:
         return int(self.plan.qi.shape[0])
 
     @property
-    def n_pairs_cell(self) -> int:
-        return self.n_pairs - self.n_pairs_node
+    def log_m(self) -> torch.Tensor:
+        """Every pair's log measure ``(P,)``, its source's (the reference read's input;
+        the fused read gathers ``src_log_m`` itself)."""
+        return self.src_log_m[self.plan.bj.long()]
 
 
 def node_means(x: torch.Tensor, forest: BoundaryForest, omega: torch.Tensor) -> torch.Tensor:
@@ -710,27 +699,6 @@ class _KernelBasis(nn.Module):
         return self.net(inv)
 
 
-def _chunked_basis(basis: _KernelBasis, qi, si, geometry: dict) -> torch.Tensor:
-    """The kernel basis of every pair ``(P, KERNEL_READ_BASIS)`` in chunks of
-    ``TREE_READ_PAIR_CHUNK`` pairs. The pair invariants are geometry of the inputs (no
-    gradient reaches them), so they are computed once and kept; under gradient only
-    the basis MLP of each chunk is checkpointed (its hidden activations are rebuilt in
-    backward, the gathers of the invariants are not)."""
-    grad = torch.is_grad_enabled() and any(p.requires_grad for p in basis.parameters())
-    parts = []
-    for a in range(0, int(qi.shape[0]), TREE_READ_PAIR_CHUNK):
-        with torch.no_grad():
-            inv = tree_pair_invariants(
-                qi[a : a + TREE_READ_PAIR_CHUNK], si[a : a + TREE_READ_PAIR_CHUNK], **geometry
-            )
-        ### Kept in the MLP's own dtype (bfloat16 under autocast): the fused read consumes it in every block and its gradient
-        ### accumulates over the blocks in that dtype; 2e8 to 7e8 rows at DrivAerML scale.
-        parts.append(checkpoint(basis, inv, use_reentrant=False) if grad else basis(inv))
-    if not parts:
-        return geometry["query_r"].new_zeros(0, KERNEL_READ_BASIS)
-    return torch.cat(parts)
-
-
 def _basis_of_pairs(basis: _KernelBasis, qi, si, q_off: int, s_off: int, geometry: dict) -> torch.Tensor:
     with torch.no_grad():
         inv = tree_pair_invariants(qi.long() - q_off, si.long() - s_off, **geometry)
@@ -747,11 +715,12 @@ def _chunked_basis_from_plan(
     geometry: dict,
     weights: tuple | None = None,
 ) -> torch.Tensor:
-    """The kernel basis of one case's pairs, the plan's rows ``a:b``, in the chunks of
-    :func:`_chunked_basis` and with its values, but each chunk's invariants inside the
-    checkpoint too: backward rebuilds them from the plan's indices (``q_off`` and
-    ``s_off`` the case's first point and source), so nothing per pair but the basis
-    is kept. With ``weights`` (:func:`fused_basis.mlp_weights`) each chunk is one
+    """The kernel basis of one case's pairs ``(P, KERNEL_READ_BASIS)``, the plan's rows
+    ``a:b``, in chunks of ``TREE_READ_PAIR_CHUNK`` pairs. The pair invariants are
+    geometry of the inputs (no gradient reaches them); under gradient each chunk's
+    invariants and basis MLP are checkpointed: backward rebuilds them from the plan's
+    indices (``q_off`` and ``s_off`` the case's first point and source), so nothing per
+    pair but the basis is kept. With ``weights`` (:func:`fused_basis.mlp_weights`) each chunk is one
     fused kernel of the invariants and the MLP (:mod:`fused_basis`)."""
     grad = torch.is_grad_enabled() and any(p.requires_grad for p in basis.parameters())
     parts = []
@@ -761,6 +730,8 @@ def _chunked_basis_from_plan(
             parts.append(fused_basis.fused_kernel_basis(weights, plan.qi[c:e], plan.bj[c:e], q_off, s_off, geometry))
             continue
         args = (basis, plan.qi[c:e], plan.bj[c:e], q_off, s_off, geometry)
+        ### Kept in the MLP's own dtype (bfloat16 under autocast): the fused read consumes it in every block and its gradient
+        ### accumulates over the blocks in that dtype; 2e8 to 7e8 rows at DrivAerML scale.
         parts.append(checkpoint(_basis_of_pairs, *args, use_reentrant=False) if grad else _basis_of_pairs(*args))
     if not parts:
         return geometry["query_r"].new_zeros(0, KERNEL_READ_BASIS)
@@ -772,11 +743,11 @@ class TreeReadWalk:
     """Every case's forest and point lists (:func:`tree_read_walk`), before the kernel
     basis: per case the pairs ``(qi, si, n_node)`` sorted by point, the inputs of their
     invariants (:func:`tree_pair_invariants`) and the sources' log measures.
-    :func:`walk_range_pairs` assembles the pairs of any range of points from it;
+    :func:`walk_range_pairs` assembles the pairs from it;
     ``kernel`` is the read's implementation (:func:`tree_read_walk`). A walk made
     with ``walk_points=False`` has no lists (``None`` per case) and keeps what
     :func:`walk_points_range` walks a range of points with: per case the points in
-    the forest's frame, the walk's implementation and the autocast state."""
+    the forest's frame, and the walk's implementation."""
 
     forests: list[BoundaryForest]
     lists: list[tuple[torch.Tensor, torch.Tensor, int] | None]
@@ -788,7 +759,6 @@ class TreeReadWalk:
     kernel: str
     points_f: list[torch.Tensor] | None = None
     walk: str = "auto"
-    autocast: tuple[bool, torch.dtype] | None = None
 
 
 def tree_read_pairs(basis: _KernelBasis, **inputs) -> TreeReadPairs:
@@ -836,11 +806,11 @@ def tree_read_walk(
     to the kernel MLP. ``walk`` names the walk's implementation
     (:func:`resolve_walk`); ``build`` is the forest's build
     (:meth:`BoundaryForest.build`); ``kernel`` is the read's, recorded for
-    :func:`walk_range_pairs` (with ``"fused"`` the blocks read through
-    :mod:`fused_read`, and the basis is built after the plan from its indices, the
-    same values with the invariants rebuilt in backward:
-    :func:`_chunked_basis_from_plan`, by one fused kernel per chunk where
-    :func:`fused_basis.supported` holds). With ``walk_points=False`` no point is
+    :func:`walk_range_pairs`, which builds the basis after the plan from its indices,
+    the invariants rebuilt in backward (:func:`_chunked_basis_from_plan`); with
+    ``"fused"`` the blocks read through :mod:`fused_read`, and the basis of each chunk
+    is one fused kernel where :func:`fused_basis.unsupported_reason` finds no reason
+    against it. With ``walk_points=False`` no point is
     walked here: :func:`walk_points_range` walks any range of them later.
     """
     b, nq, d = query_r.shape
@@ -887,7 +857,6 @@ def tree_read_walk(
         forests.append(forest)
         geometries.append(geometry)
         src_logms.append(src_logm)
-    device = query_r.device.type
     return TreeReadWalk(
         forests=forests,
         lists=lists,
@@ -899,27 +868,17 @@ def tree_read_walk(
         kernel=kernel,
         points_f=None if walk_points else points_fs,
         walk=walk,
-        autocast=(torch.is_autocast_enabled(device), torch.get_autocast_dtype(device)),
     )
-
-
-@contextlib.contextmanager
-def _walk_context(walk: TreeReadWalk):
-    """No gradient, and the autocast state :func:`tree_read_walk` ran in (the walk
-    itself runs outside autocast, :meth:`BoundaryForest.frame_pairs`)."""
-    enabled, dtype = walk.autocast
-    with torch.no_grad(), torch.autocast(walk.omega.device.type, dtype=dtype, enabled=enabled):
-        yield
 
 
 def walk_points_range(walk: TreeReadWalk, start: int, stop: int) -> TreeReadWalk:
     """The walk of the points ``start`` to ``stop`` of a walk made without its lists
     (``tree_read_walk(walk_points=False)``), numbered from ``start``, with those
     points' geometry: each forest walked for those points alone, from the same
-    coordinates in its frame and in the same autocast state, so each point's list is
+    coordinates in its frame, so each point's list is
     the one the walk of every point gives it, in the same order, and
     :func:`walk_range_pairs` of the result is the pairs of that range."""
-    with _walk_context(walk):
+    with torch.no_grad():
         lists = [f.frame_pairs(p[start:stop], walk=walk.walk) for f, p in zip(walk.forests, walk.points_f)]
     rows = ("query_r", "query_n", "query_wall")
     geometry = [{**g, **{k: g[k][start:stop] for k in rows}} for g in walk.geometry]
@@ -932,40 +891,25 @@ def walk_pair_counts(walk: TreeReadWalk) -> torch.Tensor:
     them."""
     if walk.points_f is None:
         return sum(torch.bincount(qi, minlength=walk.n_queries) for qi, _, _ in walk.lists)
-    with _walk_context(walk):
+    with torch.no_grad():
         return sum(f.frame_pairs(p, walk=walk.walk, count_only=True) for f, p in zip(walk.forests, walk.points_f))
 
 
-def walk_range_pairs(
-    basis: _KernelBasis, walk: TreeReadWalk, start: int = 0, stop: int | None = None
-) -> TreeReadPairs:
-    """The pairs of the points ``start`` to ``stop`` (default: every point) of each
-    case of ``walk``, numbered from ``start``, with the kernel basis of every pair in
-    chunks: each point's list is the walk's, so a range of points reads exactly what
-    it reads among all of them."""
-    n, nq_all = walk.n_cells, walk.n_queries
-    stop = nq_all if stop is None else stop
-    nq = stop - start
-    qis, sis, bases, logms, offsets = [], [], [], [], []
+def walk_range_pairs(basis: _KernelBasis, walk: TreeReadWalk) -> TreeReadPairs:
+    """The pairs of every point of each case of ``walk``, with the kernel basis of
+    every pair in chunks (a range of points: :func:`walk_points_range`)."""
+    n, nq = walk.n_cells, walk.n_queries
+    qis, sis, bases = [], [], []
     deferred = []
     src_off = 0
     pair_off = 0
     n_pairs_node = 0
     for i, forest in enumerate(walk.forests):
         qi, si, n_node = walk.lists[i]
-        if (start, stop) != (0, nq_all):
-            a, b = torch.searchsorted(qi, qi.new_tensor([start, stop])).tolist()
-            qi, si = qi[a:b], si[a:b]
-            n_node = int((si >= n).sum())
-        if walk.kernel == "fused":
-            deferred.append((pair_off, pair_off + int(qi.shape[0]), i * nq - start, src_off, walk.geometry[i]))
-        else:
-            bases.append(_chunked_basis(basis, qi, si, walk.geometry[i]))
+        deferred.append((pair_off, pair_off + int(qi.shape[0]), i * nq, src_off, walk.geometry[i]))
         pair_off += int(qi.shape[0])
-        logms.append(walk.src_logm[i][si])
-        qis.append(qi + (i * nq - start))
+        qis.append(qi + i * nq)
         sis.append(si + src_off)
-        offsets.append(src_off)
         src_off += n + forest.n_nodes
         n_pairs_node += n_node
     plan_all = PairPlan.build(torch.cat(qis), torch.cat(sis), len(walk.forests) * nq, src_off)
@@ -978,27 +922,28 @@ def walk_range_pairs(
             perm=plan_all.perm.int(),
             qi_by_b=plan_all.qi_by_b.int(),
         )
-    ### One cast of the MLP's weights for every case and chunk, as autocast's weight cache gives the reference.
-    reason = next(filter(None, (fused_basis.unsupported_reason(basis, item[-1]) for item in deferred)), None)
-    weights = fused_basis.mlp_weights(basis) if deferred and reason is None else None
-    if reason is not None and reason not in _BASIS_FALLBACKS_LOGGED:
-        _BASIS_FALLBACKS_LOGGED.add(reason)
-        logger.info("ISLA fused tree read: the reference kernel basis is used (%s)", reason)
+    ### The fused read's basis: one cast of the MLP's weights for every case and chunk, as autocast's weight cache
+    ### gives the reference.
+    weights = None
+    if walk.kernel == "fused":
+        reason = next(filter(None, (fused_basis.unsupported_reason(basis, item[-1]) for item in deferred)), None)
+        weights = fused_basis.mlp_weights(basis) if deferred and reason is None else None
+        if reason is not None and reason not in _BASIS_FALLBACKS_LOGGED:
+            _BASIS_FALLBACKS_LOGGED.add(reason)
+            logger.info("ISLA fused tree read: the reference kernel basis is used (%s)", reason)
     for a, e, q_off, s_off, geometry in deferred:
         bases.append(_chunked_basis_from_plan(basis, plan_all, a, e, q_off, s_off, geometry, weights))
     basis_all = torch.cat(bases)
     return TreeReadPairs(
         plan=plan_all,
         basis=basis_all,
-        log_m=torch.cat(logms),
+        src_log_m=torch.cat(walk.src_logm),
         omega=walk.omega,
         forests=walk.forests,
-        src_offsets=offsets,
         n_cells=n,
         n_queries=nq,
         n_pairs_node=n_pairs_node,
         kernel=walk.kernel,
-        src_log_m=torch.cat(walk.src_logm),
         basis_sink=fused_read.basis_sink(basis_all) if walk.kernel == "fused" else None,
     )
 

@@ -18,16 +18,10 @@
 
     python -m test.experimental.models.isla.goldens.compare A B [--all]
 
-Exit 0 (PASS), 1 (FAIL) or 2 (INCONCLUSIVE). The reading rules:
+Exit 0 (PASS) or 1 (FAIL). The reading rules:
 
 - **CPU: bitwise.** Every input, output and gradient has the same SHA-256 on both sides.
-- **CUDA (kernels auto): bitwise**, except
-  - the draw's kept cells are compared first, in every repeat of both sides: where any
-    two differ, the case is INCONCLUSIVE (the draw's float64 ``cumsum`` is not
-    run-to-run deterministic on CUDA, so a kept cell can flip; rerun, never pass). On
-    CPU a kept difference is a FAIL (the CPU draw is deterministic). DRAW-EXACT;
-  - the draw's Horvitz-Thompson weights compare at 1e-15 relative to ``max|A|``, every
-    pair of repeats within a side or across;
+- **CUDA (kernels auto): bitwise** (the draw included), except
   - the outputs a case names as its ``family`` (float atomics, measured) compare
     against the run-to-run family: the median over every pair of repeats across the
     sides of ``max|B_i - A_j|`` must not exceed the largest ``max|X_i - X_j|`` within
@@ -50,12 +44,8 @@ import torch
 
 from test.experimental.models.isla.goldens import record as R
 
-PASS, FAIL, INCONCLUSIVE = 0, 1, 2
-STATUS = {PASS: "PASS", FAIL: "FAIL", INCONCLUSIVE: "INCONCLUSIVE"}
-#: DRAW-EXACT: the draw's weights on CUDA: their float64 sums wobble by a few ulps run
-#: to run (and a kept cell can flip, read INCONCLUSIVE below); DRAW-EXACT makes both
-#: bitwise.
-WEIGHTS_RTOL = 1e-15
+PASS, FAIL = 0, 1
+STATUS = {PASS: "PASS", FAIL: "FAIL"}
 #: A family passes when the median cross-side distance is at most this many times the
 #: largest within-side distance: five runs a side estimate the family's spread from
 #: below (cross/within ratios up to 1.2 between two records of the same code, job
@@ -97,15 +87,6 @@ def _family(a: dict, b: dict, key: str, name: str) -> tuple[float, float]:
     return statistics.median(cross), max(within, default=0.0)
 
 
-def _all_pairs(a: dict, b: dict, key: str, name: str) -> float:
-    """The largest distance between any two repeats, within a side or across."""
-    runs = _runs(a, key, name) + _runs(b, key, name)
-    return max(
-        (_maxdiff(x, y) for i, x in enumerate(runs) for y in runs[i + 1 :]),
-        default=0.0,
-    )
-
-
 def compare_case(a: dict, b: dict, key: str) -> tuple[int, list]:
     """Status and rows ``(tensor, verdict, detail)`` of one case variant."""
     ca, cb = a["cases"][key], b["cases"][key]
@@ -116,17 +97,6 @@ def compare_case(a: dict, b: dict, key: str) -> tuple[int, list]:
         only = sorted(set(ta) ^ set(tb))
         return FAIL, [(n, "FAIL", "on one side only") for n in only]
     cuda = ca["device"] == "cuda"
-    ### DRAW-EXACT: the kept cells first, in every repeat of both sides.
-    for n in ca["kept"]:
-        if len(set(ta[n]["sha256"]) | set(tb[n]["sha256"])) > 1:
-            d = _all_pairs(a, b, key, n)
-            verdict = INCONCLUSIVE if cuda else FAIL
-            rows.append(
-                (n, STATUS[verdict], f"kept cells differ (max index difference {d:g})")
-            )
-            status = max(status, verdict)
-    if status != PASS:
-        return status, rows
     for n in ta:
         ha, hb = ta[n]["sha256"], tb[n]["sha256"]
         if ta[n]["dtype"] != tb[n]["dtype"] or ta[n]["shape"] != tb[n]["shape"]:
@@ -140,8 +110,7 @@ def compare_case(a: dict, b: dict, key: str) -> tuple[int, list]:
             status = FAIL
             continue
         family = n in ca["family"] and cuda
-        weights = n in ca["weights"] and cuda
-        if not (family or weights) and (len(set(ha)) > 1 or len(set(hb)) > 1):
+        if not family and (len(set(ha)) > 1 or len(set(hb)) > 1):
             rows.append(
                 (
                     n,
@@ -155,19 +124,7 @@ def compare_case(a: dict, b: dict, key: str) -> tuple[int, list]:
             rows.append((n, "PASS", "bitwise"))
             continue
         scale = float(a["tensors"][key][n][0].double().abs().max())
-        if weights:
-            ### DRAW-EXACT: every pair of repeats, within a side or across, at 1e-15.
-            d = _all_pairs(a, b, key, n)
-            bound = WEIGHTS_RTOL * scale
-            ok = d <= bound
-            rows.append(
-                (
-                    n,
-                    "PASS" if ok else "FAIL",
-                    f"weights: max diff over every pair of repeats {d:.3e}, bound {bound:.3e} (1e-15 relative)",
-                )
-            )
-        elif family:
+        if family:
             d, spread = _family(a, b, key, n)
             rtol = ca.get("family_rtol", {}).get(
                 n, FAMILY_RTOL.get(ta[n]["dtype"], 0.0)
@@ -192,7 +149,7 @@ def compare_case(a: dict, b: dict, key: str) -> tuple[int, list]:
 
 def compare(a: dict, b: dict, log=print, show_all: bool = False, only=None) -> int:
     """Compare two records; print a per-tensor table (the differing rows, or every row
-    with ``show_all``) and a summary; return PASS, FAIL or INCONCLUSIVE."""
+    with ``show_all``) and a summary; return PASS or FAIL."""
     fa, fb = a["fingerprint"], b["fingerprint"]
     for k in sorted(set(fa) | set(fb)):
         if fa.get(k) != fb.get(k):

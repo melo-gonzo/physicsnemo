@@ -43,7 +43,7 @@ def _levi_civita(dim: int) -> torch.Tensor:
     return eps
 
 
-def _isotropic_tensors(rank: int, symmetric: bool, parity: str, dim: int = 3) -> list[torch.Tensor]:
+def _isotropic_tensors(rank: int, symmetric: bool, parity: str, dim: int) -> list[torch.Tensor]:
     """The constant (isotropic) tensors of a rank and parity in ``dim`` spatial
     dimensions, each of shape ``(dim,)*rank``.
 
@@ -90,7 +90,7 @@ class _OutputLayout:
     spec: RankSpec
     n_true: int
     n_pseudo: int
-    dim: int = 3
+    dim: int
     n_vec: int = field(init=False)
     n_free: int = field(init=False)
     index: torch.Tensor | None = field(init=False)

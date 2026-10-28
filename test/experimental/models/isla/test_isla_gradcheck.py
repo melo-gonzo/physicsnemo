@@ -55,7 +55,7 @@ from physicsnemo.experimental.models.isla.geometry import exact_boundary_geometr
 from physicsnemo.mesh.geometry._cell_normals import compute_cell_normals
 from test.experimental.models.isla._geometry_cases import _circle, _sphere
 from test.experimental.models.isla._kernel_cases import _two_x
-from test.experimental.models.isla._marks import requires_cuda, requires_cuda_triton
+from test.experimental.models.isla._marks import DEVICES, requires_cuda_triton
 
 D = torch.float64
 GRADCHECK = dict(eps=1e-6, atol=1e-7, rtol=1e-6, check_batched_grad=False)
@@ -169,8 +169,7 @@ def test_direction_passes_gradcheck(dim, region, wrt, one_thread):
     float64 at generic queries of one region (a cell's interior, where u is the
     cell's normal; a vertex, where the closest point is fixed; an edge in 3-D,
     where it slides along the edge with the query and the vertices, and u takes
-    the gradient of that motion, geometry._closest_features' sliding direction;
-    BUGS_W3.md B1 before)."""
+    the gradient of that motion, geometry._closest_features' sliding direction)."""
     mesh, regions = _regions(dim)
     q, p, c = regions[region], mesh.points, mesh.cells
     if wrt == "queries":
@@ -240,10 +239,7 @@ def _search_args(dim, dtype, device):
     return q, p, cells, parity, n64
 
 
-_DEVICES = ["cpu", pytest.param("cuda", marks=[pytest.mark.cuda, requires_cuda])]
-
-
-@pytest.mark.parametrize("device", _DEVICES)
+@pytest.mark.parametrize("device", DEVICES)
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
 @pytest.mark.parametrize("dim", [2, 3])
 @pytest.mark.parametrize(

@@ -14,8 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Run-to-run determinism of ISLA's eager paths, as they are (TEST-AUDIT's
-DETERMINISM.md, measured in LHR job 377000; the supervisor's decision 5).
+"""Run-to-run determinism of ISLA's eager paths, as they are (measured in LHR job
+377000).
 
 No test sets a global deterministic mode (``torch.use_deterministic_algorithms``):
 that would hide what a user meets by default. Each test runs a path twice (or five
@@ -28,12 +28,11 @@ times) in one process on the same inputs and states what repeats:
   bfloat16 autocast, forward and backward) on CPU with one thread and on CUDA with
   kernels auto;
 - to a stated tolerance, where the code sums in an order CUDA does not fix: the
-  draw's float64 Horvitz-Thompson weights (CUDA's floating-point ``cumsum``,
-  ulps), the segment-softmax read's key and value gradients (atomic adds), and the
-  reference (unfused) tree read on CUDA (``node_means``' ``index_add``).
+  segment-softmax read's key and value gradients (atomic adds), and the reference
+  (unfused) tree read on CUDA (``node_means``' ``index_add``).
 
-When a source of order is made exact (the draw in int64 fixed point,
-DETERMINISM.md (a)), its test here tightens to bitwise.
+The draw's line is exact int64 arithmetic, so its CUDA runs are bitwise
+(test_isla_sampling.py); its planted ties are here.
 """
 
 import pytest
@@ -112,24 +111,6 @@ def _draw_case(n=300_000, seed=0):
 
 
 BUDGET = 100_000
-
-
-@pytest.mark.cuda
-@requires_cuda
-def test_the_draw_twice_on_cuda_keeps_the_same_cells():
-    """The draw run twice on CUDA keeps the same cells and bitwise the same float64
-    Horvitz-Thompson weights: its tail sums are a fixed-order scan and its line exact
-    int64 arithmetic (DRAW-EXACT), so nothing in it depends on CUDA's summation
-    order."""
-    measures, centroids = _draw_case()
-    start = torch.tensor(0.4137, dtype=D, device="cuda")
-    runs = [
-        sampling.sample_boundary_cells(measures, centroids, BUDGET, start)
-        for _ in range(2)
-    ]
-    (kept0, w0), (kept1, w1) = runs
-    assert kept0.shape == (BUDGET,) and torch.equal(kept0, kept1)
-    assert torch.equal(w1.view(torch.int64), w0.view(torch.int64))
 
 
 def _planted_hits(measures, centroids):
@@ -277,7 +258,11 @@ def _read_case(dtype, seed=0):
     n_q, h, kc, c, f = 400, 8, 4, 8, 16
     counts = torch.randint(1, 300, (n_q,), generator=g)
     qi = torch.repeat_interleave(torch.arange(n_q), counts).to(dev)
-    bj = torch.randint(0, n_src, (qi.shape[0],), generator=g).to(dev)
+    ### a hot source (cell 7, every third pair: split over many programs) and three
+    ### sources no point reads (the last three nodes)
+    bj = torch.randint(0, n_src - 3, (qi.shape[0],), generator=g)
+    bj[::3] = 7
+    bj = bj.to(dev)
     plan = PairPlan.build(qi, bj, n_q, n_src)
     leaves = [
         torch.randn(4000, h * (kc + c), generator=g),
@@ -304,9 +289,12 @@ def _read_case(dtype, seed=0):
 def test_the_fused_read_with_its_node_means_repeats_on_cuda(dtype):
     """The fused node means of the cells' keys and values, then the fused read over
     the cells and the nodes, twice on CUDA: the output and the gradients of the
-    cells' keys and values, the basis, the kernel weights and the queries, bitwise
-    (fixed-order Triton sums, no atomics)."""
+    cells' keys and values, the sources' keys and values, the basis, the kernel
+    weights and the queries, bitwise (fixed-order Triton sums, no atomics), with a
+    source read by many points (its parts summed in order over several programs) and
+    sources read by none (zero gradients)."""
     forest, omega, plan, leaves, logm, seed, (h, kc, c) = _read_case(dtype)
+    assert int((plan.bj == 7).sum()) > 20 * fused_read.SOURCE_CHUNK
 
     def run():
         kv, basis, w, q = [t.clone().requires_grad_() for t in leaves]
@@ -314,14 +302,17 @@ def test_the_fused_read_with_its_node_means_repeats_on_cuda(dtype):
         src = torch.cat(
             [kv, fused_read.fused_node_means(kv, forest, omega.to(kv.dtype))]
         )
+        src.retain_grad()
         k, v = src[:, : h * kc].reshape(-1, h, kc), src[:, h * kc :].reshape(-1, h, c)
         assert fused_read.supported(basis, q, k, v)
         out = fused_read.fused_kernel_read(basis, w, logm, q, k, v, plan, 0.5)
         (out * seed).sum().backward()
-        return [out.detach(), kv.grad, basis.grad, w.grad, q.grad]
+        return [out.detach(), kv.grad, src.grad, basis.grad, w.grad, q.grad]
 
-    for name, x, y in zip(("out", "kv", "basis", "w", "q"), run(), run()):
+    first, second = run(), run()
+    for name, x, y in zip(("out", "kv", "src", "basis", "w", "q"), first, second):
         assert _bitwise(x, y), name
+    assert not first[2][-3:].any()
 
 
 @pytest.mark.cuda
@@ -370,7 +361,7 @@ def test_the_reference_tree_read_on_cuda_spreads_within_its_bound():
     """The reference (unfused) tree read on CUDA in float32, five runs of one block's
     read (node means by ``index_add``, whose atomic order CUDA does not fix, then the
     segment-softmax read), each tensor against the first run's, relative in norm: the
-    output within 1e-5 (the bound of DETERMINISM.md; 7e-8 measured in LHR job 377654,
+    output within 1e-5 (7e-8 measured in LHR job 377654,
     2e-6 at the model's first read in job 377000), every parameter gradient within
     1e-4 (1.4e-5 measured at ``kernel.weight``, a sum over every pair whose terms
     nearly cancel, so the reads' run-to-run change is amplified there)."""

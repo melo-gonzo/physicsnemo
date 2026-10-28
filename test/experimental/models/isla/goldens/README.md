@@ -57,7 +57,7 @@ process compare one with itself), on the same machine, then compare:
 G=test.experimental.models.isla.goldens
 git checkout <base> && python -m $G.record --device cpu --out /tmp/a
 git checkout <head> && python -m $G.record --device cpu --out /tmp/b
-python -m $G.compare /tmp/a /tmp/b   # exit 0 PASS, 1 FAIL, 2 INCONCLUSIVE
+python -m $G.compare /tmp/a /tmp/b   # exit 0 PASS, 1 FAIL
 ```
 
 `--groups G-GEO G-READ` and `--cases 'tree_read_*'` select cases. Each record prints the
@@ -69,18 +69,8 @@ case runs 5 times in-process (`--repeats`).
 How compare.py reads the records:
 
 - **CPU: bitwise**, every input, output and gradient.
-- **CUDA, kernels auto: bitwise**, except:
-  - the draw's kept cells are compared first, in every repeat of both sides; if any
-    two differ the case is **INCONCLUSIVE**: the draw's float64 `cumsum` is not
-    run-to-run deterministic on CUDA, so a kept cell can flip when a hit lands on a
-    cell boundary. Rerun; never read it as a pass. An INCONCLUSIVE that repeats with
-    each side's repeats bitwise (the kept cells differ only across the sides) is a
-    FAIL: the change moved the draw. (On CPU the draw is deterministic and a kept
-    difference fails.)
-  - the draw's Horvitz-Thompson weights compare at 1e-15 relative, every pair of
-    repeats within a side or across;
-  - (DRAW-EXACT: the two rules above read today's CUDA draw, which is not
-    run-to-run bitwise; once DRAW-EXACT makes it bitwise they can be dropped.)
+- **CUDA, kernels auto: bitwise** (the draw's kept cells and weights included: its
+  line is exact int64 arithmetic, so it repeats bitwise on CUDA), except:
   - the outputs a case declares as its `family` (float atomics: the reference read's
     node means, the Triton segment softmax's `dk`/`dv`, the exact geometry's vertex
     gradient) must lie within twice the run-to-run spread of the 5 repeats of either
@@ -132,9 +122,10 @@ bitwise.
 ## Exclusions
 
 - **On-wall and tie directions at near-coplanar ties.** At a quad's diagonal, where
-  two triangles' normals agree to rounding, the on-wall direction is a known defect
-  (`test_on_wall_direction_at_quad_diagonals`, a strict xfail in
-  test_isla_interior_geometry.py): it depends on the numbering. No golden holds it:
+  two triangles' normals agree to rounding, the on-wall direction is invariant to the
+  numbering and to the queries' precision (`test_on_wall_direction_at_quad_diagonals`
+  in test_isla_interior_geometry.py), but no golden holds it (the goldens were
+  recorded when it was not, and are not regenerated for it):
   the 3-D box-tie set keeps only the ties whose closest points lie inside the faces
   (not the corner diagonals or the centre, whose closest points lie on the faces'
   quad diagonals), the box-wall and zero-area sets keep their on-wall points on the

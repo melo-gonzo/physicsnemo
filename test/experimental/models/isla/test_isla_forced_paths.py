@@ -175,11 +175,11 @@ def test_a_forced_build_runs_that_build(build, monkeypatch):
 
 
 def test_a_cell_limit_at_the_cell_count_leaves_the_forest_to_the_reference(monkeypatch):
-    """``tree_build._WARP_MAX_ELEMENTS`` patched to the cell count and ``tree_read.forest_tables``
+    """``tree_walk.WARP_MAX_ELEMENTS`` patched to the cell count and ``tree_read.forest_tables``
     spied (``test_fast_forest_build_refuses_what_it_cannot_build``): the spy is
     reached, the tables decline and the reference build makes the forest."""
     calls = reaches(monkeypatch, tree_read, "forest_tables")
-    monkeypatch.setattr(tree_build, "_WARP_MAX_ELEMENTS", 300)
+    monkeypatch.setattr(tree_walk, "WARP_MAX_ELEMENTS", 300)
     with ran(tree_build.forest_tables, REFERENCE_BUILD) as r:
         _forest(build="fast")
     assert len(calls) == 1
@@ -254,27 +254,23 @@ def test_the_models_pair_assembly_seam_reaches_the_read(monkeypatch):
 
 
 @pytest.mark.parametrize("kernel", ["reference", "fused"])
-def test_a_forced_tree_read_kernel_builds_the_basis_its_way(kernel, monkeypatch):
+def test_a_forced_tree_read_kernel_reaches_the_read(kernel, monkeypatch):
     """``ISLA.resolve_tree_read_kernel`` patched to name the read
-    (``test_tree_read_kernel_resolves_to_the_reference_on_cpu_and_its_basis_flow_is_exact``
-    forces ``"fused"`` on CPU): the model consults the patched resolver, and the pairs'
-    basis comes from the plan (``_chunked_basis_from_plan``, the fused path's flow)
-    under ``"fused"`` and from the pair lists (``_chunked_basis``) under
-    ``"reference"``, never both."""
+    (``test_tree_read_kernel_resolves_to_the_reference_on_cpu`` forces ``"fused"`` on
+    CPU): the model consults the patched resolver and hands its name to the walk
+    (``tree_read_walk``'s ``kernel``), whose pairs' basis comes from the plan
+    (``_chunked_basis_from_plan``) either way."""
     calls = []
     monkeypatch.setattr(
         ISLA,
         "resolve_tree_read_kernel",
         lambda self, p, k=kernel: calls.append(p) or k,
     )
-    with ran(tree_read._chunked_basis_from_plan, tree_read._chunked_basis) as r:
+    with ran(tree_read.tree_read_walk, tree_read._chunked_basis_from_plan) as r:
         _dtt_forward()
     assert calls, "the patched resolver was not consulted"
-    plan, lists = (
-        r.count(tree_read._chunked_basis_from_plan),
-        r.count(tree_read._chunked_basis),
-    )
-    assert (plan > 0, lists > 0) == (kernel == "fused", kernel == "reference")
+    assert [c["kernel"] for c in r.calls(tree_read.tree_read_walk)] == [kernel]
+    assert r.count(tree_read._chunked_basis_from_plan) > 0
 
 
 # --------------------------------------------------------------------------- the exact geometry

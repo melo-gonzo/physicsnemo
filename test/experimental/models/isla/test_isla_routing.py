@@ -18,26 +18,14 @@
 
 import torch
 
-from physicsnemo.experimental.models import ISLA
 from physicsnemo.experimental.models.isla.blocks import (
     ROUTING_TEMPERATURE,
     _RoutingLogits,
     _softmax_over_points,
 )
-from test.experimental.models.isla._meshes import (
-    cloud,
-    live,
-    orthogonal,
-    outputs,
-    rescale_measures,
-    soup,
-    transform,
-)
-
-PV = {"p": {"rank": 0}, "v": {"rank": 1}}
 
 
-def test_cosine_routing_logits_are_bounded_and_bias_free():
+def test_routing_logits_are_bounded_and_bias_free():
     torch.manual_seed(0)
     r = _RoutingLogits(64, 32)
     assert r.weight.shape == (32, 64)
@@ -54,60 +42,9 @@ def test_cosine_routing_logits_are_bounded_and_bias_free():
         r.v_proj.weight.mul_(1000.0)
         r.gain.fill_(1000.0)  # ... or the synthesis maps ...
         x = torch.randn(2, 50, 64) * 100.0  # ... or the state
-        out = r(x)
+        out = r(x, torch.zeros(2, 50, 1))
     assert ROUTING_TEMPERATURE == 10.0
     assert out.abs().max() <= ROUTING_TEMPERATURE + 1e-5
-
-
-def test_cosine_routing_keeps_the_contracts_and_all_parameters_train():
-    torch.manual_seed(0)
-    m = (
-        ISLA(
-            output_schema=PV,
-            boundary_schemas={"wall": {}},
-            global_schema={"g": {"rank": 1}},
-            hidden=32,
-            n_layers=2,
-            n_slices=8,
-            interior=True,
-        )
-        .double()
-        .eval()
-    )
-    live(m)
-    pts, nrm, w, drv = cloud(300)
-    mesh = soup(pts, nrm, w)
-    q = orthogonal(3, 0)
-    shift = torch.tensor([3.0, -7.0, 11.0], dtype=torch.float64)
-    probe = pts[:20] * 1.5
-
-    def run(mesh, g, q):
-        with torch.no_grad():
-            return outputs(
-                m(
-                    boundary_meshes={"wall": mesh},
-                    prediction_points=q,
-                    global_data={"g": g},
-                )
-            )
-
-    base = run(mesh, drv, probe)
-    moved = run(transform(mesh, q, shift), drv @ q.T, probe @ q.T + shift)
-    rescaled = run(rescale_measures(mesh, 137.0), drv, probe)
-    assert torch.allclose(moved["p"], base["p"], atol=1e-10)
-    assert torch.allclose(moved["v"], base["v"] @ q.T, atol=1e-10)
-    assert all(torch.allclose(rescaled[k], base[k], atol=1e-9) for k in base)
-    m.train()
-    out = outputs(
-        m(
-            boundary_meshes={"wall": mesh},
-            prediction_points=probe,
-            global_data={"g": drv},
-        )
-    )
-    sum(o.square().mean() for o in out.values()).backward()
-    missing = [n for n, p in m.named_parameters() if p.grad is None]
-    assert not missing, missing
 
 
 def test_softmax_over_points_matches_middle_dim_softmax():

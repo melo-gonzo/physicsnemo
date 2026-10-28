@@ -48,3 +48,5 @@ requires_cuda = pytest.mark.skipif(not HAS_CUDA, reason="needs CUDA")
 requires_cuda_triton = pytest.mark.skipif(
     not (HAS_CUDA and HAS_TRITON), reason="needs CUDA and Triton"
 )
+#: The ``device`` parameter of a test that runs on CPU and, where present, on CUDA.
+DEVICES = ["cpu", pytest.param("cuda", marks=[pytest.mark.cuda, requires_cuda])]

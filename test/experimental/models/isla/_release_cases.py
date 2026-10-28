@@ -15,13 +15,22 @@
 # limitations under the License.
 
 """The release configurations and inputs that test_isla_release.py's goldens were
-recorded with, shared with the tests that compare against those goldens."""
+recorded with, shared with the tests that compare against those goldens, and the
+writers of those goldens and reference checkpoints (:data:`WRITERS`, run by
+``goldens/record.py --regenerate``)."""
+
+from pathlib import Path
 
 import torch
 
+from physicsnemo.core.module import Module
 from physicsnemo.experimental.models import ISLA
-from test.experimental.models.isla._meshes import soup
+from test.experimental.models.isla._meshes import outputs, soup
+from test.experimental.models.isla.goldens import cases as C
 from test.experimental.models.isla.goldens.cases import param_generator
+
+DATA_DIR = Path(__file__).parent / "data"
+D, F = torch.float64, torch.float32
 
 #: Every configuration declares one scalar and one vector output, one boundary condition
 #: without fields and one global direction.
@@ -81,3 +90,144 @@ def _make_inputs(device, query: bool = False, seed: int = 1234) -> dict:
     else:
         inputs["prediction_boundaries"] = ["wall"]
     return inputs
+
+
+#: The committed reference checkpoints: the file, its configuration and the seed of
+#: its parameters. ISLA-DTT's is narrower (hidden 16) to keep ``data/`` within its
+#: budget.
+CHECKPOINTS = {
+    "isla_default_v1.mdlus": (CONFIGS["default"], 7),
+    "isla_dtt_v1.mdlus": (dict(CONFIGS["dtt"], hidden=16), 8),
+}
+
+
+def _forward_golden(config: str) -> dict:
+    """What ``isla_<config>_v1.pth`` stores: the CPU outputs of ``CONFIGS[config]``."""
+    model = _instantiate_model(**CONFIGS[config])
+    with torch.no_grad():
+        return outputs(model(**_make_inputs("cpu", query=(config != "default"))))
+
+
+#: The goldens of ``isla_release_v2.pth``: a model case of ``goldens/cases.py`` (its
+#: configuration, inputs from correctly rounded operations, the same bits on every
+#: platform, and random parameters) and its dtype. In evaluation mode; the draw at
+#: its fixed start, at the default tree-read angle.
+RELEASE_V2 = "isla_release_v2.pth"
+V2_CONFIGS = {
+    "surface_f64": ("surface", D),
+    "dtt_f64": ("dtt", D),
+    "rich_surface_f32": ("rich_surface", F),
+    "dtt_2d_f64": ("dtt_2d", D),
+    "dtt_draw_f32": ("dtt_draw", F),  # DRAW-EXACT: today's draw
+}
+
+
+def _v2_case(name: str, device: str):
+    case, dtype = V2_CONFIGS[name]
+    spec = C._MODEL_SPECS[case](dtype)
+    variant = "reference" if device == "cpu" else "auto"
+    return C._model_setup(spec, C._model_build(spec)(), device, variant), dtype
+
+
+def _v2_outputs(name: str, device: str) -> dict:
+    (model, kw), _ = _v2_case(name, device)
+    with torch.no_grad():
+        return outputs(model(**kw))
+
+
+#: query_chunks' golden: ISLA-DTT in float64 over three ranges of its 60 points.
+CHUNKS = ((0, 20), (20, 45), (45, 60))
+
+
+def _chunks_golden(device: str) -> dict:
+    """``query_chunks`` of ``dtt_f64``: each range's outputs (a fixed cotangent on
+    each), then, after ``chunks.backward()``, every parameter's gradient as its
+    projection on a fixed random direction and the sum of the magnitudes of the
+    projection's terms (the scale its rounding is set by)."""
+    (model, kw), _ = _v2_case("dtt_f64", device)
+    chunks = model.query_chunks(**kw)
+    out = {"pair_counts": chunks.pair_counts.cpu()}
+    for i, (a, b) in enumerate(CHUNKS):
+        fields = outputs(chunks(a, b))
+        C._cotangent_loss(fields, 90 + 10 * i).backward()
+        out.update({f"range{i}.{k}": t.detach().cpu() for k, t in fields.items()})
+    chunks.backward()
+    gen = torch.Generator().manual_seed(95)
+    proj, scale = [], []
+    for p in model.parameters():
+        r = torch.randn(p.shape, generator=gen, dtype=D)
+        g = p.grad.detach().cpu().double()
+        proj.append((g * r).sum())
+        scale.append((g * r).abs().sum())
+    out["grad_projections"], out["grad_scales"] = torch.stack(proj), torch.stack(scale)
+    return out
+
+
+def _backbone_golden() -> torch.Tensor:
+    """The pre-head token state (``norm_out``'s output) of ``CONFIGS["default"]`` on
+    ``_make_inputs`` (a point-soup mesh) through ``forward``, on the CPU."""
+    model = _instantiate_model(**CONFIGS["default"])
+    captured = {}
+    model.norm_out.register_forward_hook(
+        lambda mod, i, o: captured.setdefault("x", o.detach().clone())
+    )
+    with torch.no_grad():
+        model(**_make_inputs("cpu"))
+    return captured["x"]
+
+
+def _checkpoint_output(file_name: str, device) -> dict:
+    """The forward pass of a committed reference checkpoint on ``_make_inputs``."""
+    model = Module.from_checkpoint(str(DATA_DIR / file_name)).to(device).eval()
+    with torch.no_grad():
+        return outputs(model(**_make_inputs(device, query=model.interior)))
+
+
+def _save_output(file_name: str, output: dict) -> None:
+    torch.save(
+        {"output": {k: v.detach().cpu() for k, v in output.items()}},
+        DATA_DIR / file_name,
+    )
+
+
+def _write_checkpoint(file_name: str) -> None:
+    cfg, seed = CHECKPOINTS[file_name]
+    _instantiate_model(seed=seed, **cfg).save(DATA_DIR / file_name)
+
+
+def _write_v2() -> None:
+    golden = {name: {"output": _v2_outputs(name, "cpu")} for name in V2_CONFIGS}
+    golden["query_chunks"] = _chunks_golden("cpu")
+    torch.save(golden, DATA_DIR / RELEASE_V2)
+
+
+#: Every file of ``data/`` test_isla_release.py reads, and how it is written (on the CPU).
+WRITERS = {
+    "isla_default_v1.pth": lambda: _save_output(
+        "isla_default_v1.pth", _forward_golden("default")
+    ),
+    "isla_dtt_v1.pth": lambda: _save_output("isla_dtt_v1.pth", _forward_golden("dtt")),
+    "isla_backbone_v1.pth": lambda: torch.save(
+        {"default": {"norm_out": _backbone_golden()}}, DATA_DIR / "isla_backbone_v1.pth"
+    ),
+    "isla_default_v1.mdlus": lambda: _write_checkpoint("isla_default_v1.mdlus"),
+    "isla_default_checkpoint_output_v1.pth": lambda: _save_output(
+        "isla_default_checkpoint_output_v1.pth",
+        _checkpoint_output("isla_default_v1.mdlus", "cpu"),
+    ),
+    "isla_dtt_v1.mdlus": lambda: _write_checkpoint("isla_dtt_v1.mdlus"),
+    "isla_dtt_checkpoint_output_v1.pth": lambda: _save_output(
+        "isla_dtt_checkpoint_output_v1.pth",
+        _checkpoint_output("isla_dtt_v1.mdlus", "cpu"),
+    ),
+    RELEASE_V2: _write_v2,
+}
+
+
+def regenerate(names=None, log=print) -> None:
+    """Write the named files of :data:`WRITERS` (all by default) in their order (a
+    checkpoint before its output golden), on the CPU."""
+    for name in WRITERS:
+        if names is None or name in names:
+            WRITERS[name]()
+            log(f"wrote {DATA_DIR / name} ({(DATA_DIR / name).stat().st_size} bytes)")

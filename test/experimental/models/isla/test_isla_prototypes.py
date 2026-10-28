@@ -14,33 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Sample-conditioned slice prototypes (the routing of every slice block). Contracts (rotation, translation,
-reflection, token permutation, uniform measure rescale), parameter accounting, exactness of the centered,
-scale-bounded construction and collapse-proofness."""
+"""Sample-conditioned slice prototypes (the routing of every slice block): parameter
+accounting, exactness of the centered, scale-bounded construction and
+collapse-proofness. The model's contracts with them are test_isla.py's and
+test_isla_conditions.py's."""
 
 import torch
 
 from physicsnemo.experimental.models.isla import ISLA
 from physicsnemo.experimental.models.isla.blocks import _RoutingLogits
-from physicsnemo.mesh import Mesh
-from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
-from test.experimental.models.isla._meshes import (
-    orthogonal,
-    outputs,
-    rescale_measures,
-    soup,
-    transform,
-)
-
-
-def _problem(n=300, seed=0):
-    g = torch.Generator().manual_seed(seed)
-    r = (torch.rand(n, 3, generator=g) * 2 - 1).double()
-    nrm = torch.nn.functional.normalize(torch.randn(n, 3, generator=g), dim=-1).double()
-    w = (torch.rand(n, generator=g) + 0.5).double()
-    drv = torch.tensor([0.6, 0.8, 0.0]).double()
-    return soup(r, nrm, w), drv
-
 
 KW = dict(
     output_schema={"p": {"rank": 0}, "v": {"rank": 1}},
@@ -50,47 +32,6 @@ KW = dict(
     n_layers=2,
     n_slices=8,
 )
-
-
-def test_centered_prototypes_keep_every_contract():
-    m = ISLA(**KW).double().eval()
-    mesh, drv = _problem()
-    q = orthogonal(3, 7)
-    refl = torch.diag(torch.tensor([1.0, -1.0, 1.0])).double()
-    perm = torch.randperm(mesh.n_cells, generator=torch.Generator().manual_seed(7))
-    permuted = Mesh(
-        points=mesh.points,
-        cells=mesh.cells[perm],
-        cell_data={EFFECTIVE_MEASURE_KEY: mesh.cell_data[EFFECTIVE_MEASURE_KEY][perm]},
-    )
-
-    def run(mesh, g):
-        with torch.no_grad():
-            return outputs(
-                m(
-                    prediction_boundaries=["wall"],
-                    boundary_meshes={"wall": mesh},
-                    global_data={"g": g},
-                )
-            )
-
-    base = run(mesh, drv)
-    rot = run(transform(mesh, q), drv @ q.T)
-    sh = run(transform(mesh, shift=torch.full((3,), 3.0).double()), drv)
-    rf = run(transform(mesh, refl), drv @ refl.T)
-    pm = run(permuted, drv)
-    sc = run(rescale_measures(mesh, 3.7), drv)
-    tol = dict(rtol=1e-8, atol=1e-8)
-    torch.testing.assert_close(rot["p"], base["p"], **tol)
-    torch.testing.assert_close(rot["v"], base["v"] @ q.T, **tol)
-    torch.testing.assert_close(sh["p"], base["p"], **tol)
-    torch.testing.assert_close(sh["v"], base["v"], **tol)
-    torch.testing.assert_close(rf["p"], base["p"], **tol)
-    torch.testing.assert_close(rf["v"], base["v"] @ refl.T, **tol)
-    torch.testing.assert_close(pm["p"], base["p"][perm], **tol)
-    torch.testing.assert_close(pm["v"], base["v"][perm], **tol)
-    torch.testing.assert_close(sc["p"], base["p"], **tol)
-    torch.testing.assert_close(sc["v"], base["v"], **tol)
 
 
 def test_prototypes_depend_on_the_sample_and_are_accounted_for():

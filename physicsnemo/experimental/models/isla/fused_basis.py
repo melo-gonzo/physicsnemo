@@ -81,7 +81,7 @@ BACKWARD_WARPS = 4
 BACKWARD_PROGRAMS_PER_SM = 12
 
 
-def _pow2(n: int) -> bool:
+def _pow2_at_least_16(n: int) -> bool:
     return n >= 16 and n & (n - 1) == 0
 
 
@@ -107,14 +107,9 @@ def unsupported_reason(basis: torch.nn.Module, geometry: dict) -> str | None:
         return "autocast is not bfloat16 or float16 with its weight cache on"
     if geometry["query_r"].shape[1] not in (2, 3):
         return "the geometry is not two- or three-dimensional"
-    if not (_pow2(lin[0].out_features) and _pow2(lin[2].out_features)):
+    if not (_pow2_at_least_16(lin[0].out_features) and _pow2_at_least_16(lin[2].out_features)):
         return "the basis MLP's hidden or basis width is not a power of two of at least 16"
     return None
-
-
-def supported(basis: torch.nn.Module, geometry: dict) -> bool:
-    """Whether the fused basis applies (:func:`unsupported_reason`)."""
-    return unsupported_reason(basis, geometry) is None
 
 
 def mlp_weights(basis: torch.nn.Module) -> tuple[torch.Tensor, ...]:

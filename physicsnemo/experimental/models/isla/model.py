@@ -260,7 +260,19 @@ model starts at ``"auto"``); at 200,000 cells the
 fused kernel runs the training step in about a third of the eager time and
 memory. The per-token
 rank-2 contractions (rho^T T rho) are the standing kernel follow-up; until
-then a model with rank-2 boundary inputs runs the eager region.
+then a model with rank-2 boundary inputs runs the eager region. The
+``geometry_kernel`` attribute (``"auto"``; set ``"reference"`` or ``"fast"``) does
+the same for the search of the prediction points' boundary geometry
+(:meth:`ISLA.resolve_geometry_kernel`), whose two implementations give the same
+outputs bitwise. The ``tree_read_kernel`` attribute does the same for
+ISLA-DTT's tree read: under ``"auto"`` each of its pieces (the forest build,
+the walk, the read with its node means) runs its fast kernel where that
+piece's requirements hold
+(:func:`~physicsnemo.experimental.models.isla.tree_build.resolve_tree_build`,
+``tree_read.resolve_walk``, :meth:`ISLA.resolve_tree_read_kernel`), each choice
+logged once, and its reference otherwise; ``"reference"`` runs every piece's
+reference. The forest and the pairs are the same either way, the read the
+same up to summation order. Each is an execution choice like ``geo_kernel``.
 
 Every constructor argument and every ``forward`` input is keyword-only, so a
 call reads as the recipe's ``forward_kwargs`` mapping does and models can be
@@ -296,6 +308,7 @@ import logging
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import NamedTuple
 
 import torch
 import torch.nn as nn
@@ -305,6 +318,7 @@ from tensordict import TensorDict
 
 from physicsnemo.core.meta import ModelMetaData
 from physicsnemo.core.module import Module
+from physicsnemo.experimental.models.isla import fused_read
 from physicsnemo.experimental.models.isla.blocks import (
     _QueryTokens,
     _RoutingLogits,
@@ -325,6 +339,7 @@ from physicsnemo.experimental.models.isla.heads import (
 )
 from physicsnemo.experimental.models.isla.inputs import (
     _BoundaryCondition,
+    _contract_vectors,
     _declare,
     _InputSet,
     _missing_fields,
@@ -333,10 +348,8 @@ from physicsnemo.experimental.models.isla.inputs import (
 )
 from physicsnemo.experimental.models.isla.sampling import draw_inputs, sample_boundary_cells
 from physicsnemo.experimental.models.isla.scales import (
-    DEFINES,
-    LENGTH,
-    check_output_stats,
     merged,
+    parse_scales,
     rms_moments,
     scale_factor,
     split_scale_keys,
@@ -435,57 +448,38 @@ def _pad_tokens(tokens: TensorDict, alignment: int) -> TensorDict:
 
 
 def _refuse_earlier_state_dict(module, state_dict, prefix, local_metadata, *args) -> None:
-    """A load_state_dict pre-hook: a state dict of an earlier ISLA is refused with the
-    versions named, on every loading path (``Module.load``, ``load_checkpoint``,
+    """A load_state_dict pre-hook: a state dict whose state-dict version (torch's
+    ``nn.Module._version``, recorded in its metadata) is not ``ISLA._version`` is
+    refused on every loading path (``Module.load``, ``load_checkpoint``,
     ``load_state_dict``), not only ``Module.from_checkpoint``, which checks the
-    recorded version. Two marks tell an earlier state dict: the parameter layout
-    before 0.7.0 (the shared seed embedding ``embed.0``, the prediction points'
-    ``qt.type_offset`` and ``qt.embed``), and, for 0.7.0 to 0.13.0, the state-dict
-    version torch records for every module (``ISLA._version``, 1 before 0.8.0, 8 for
-    0.8.0, 9 for 0.9.0, 10 for the unmerged head-frame candidate 0.10.0, 11 for 0.11.0,
-    12 for 0.12.0 and 13 for 0.13.0). A state dict rebuilt without
-    torch's metadata (a dict comprehension over it) carries no version and is read
-    by its layout alone."""
-    old = sorted(
-        k[len(prefix) :]
-        for k in state_dict
-        if k.startswith(prefix) and k[len(prefix) :].startswith(("embed.0.", "qt.type_offset", "qt.embed."))
-    )
-    if old:
-        raise RuntimeError(
-            f"this ISLA state dict has the parameter layout of a checkpoint before version "
-            f"0.7.0 ({', '.join(old[:3])}, ...): ISLA {module.__model_checkpoint_version__} "
-            "declares its boundary conditions by name (boundary_schemas) and keeps no upgrade "
-            "path from earlier checkpoints (0.6.0 and before); load it with the code that "
-            "wrote it, or retrain"
-        )
+    recorded checkpoint version. ISLA keeps no upgrade path."""
     version = local_metadata.get("version")
     if version is not None and version != type(module)._version:
         raise RuntimeError(
-            f"this ISLA state dict was written before version {module.__model_checkpoint_version__} "
-            f"(state-dict version {version}, now {type(module)._version}): its weights have the "
-            "current layout (before 0.14.0, with two more parameters) but were trained on an "
-            "earlier forward (before 0.8.0, the "
-            "prediction points' geometry encoding sign(s) log(|s| + 1e-12) and the direction "
-            "from the surface, in place of asinh(s / 1e-6) and sign(d) times it; before "
-            "0.9.0, the length unit without each boundary cell's own second moment, and for "
-            "the interior task measured on the drawn tokens in place of the full-resolution "
-            "boundary; before 0.11.0, the geometry without least-norm tie directions, the "
-            "winding-number sign of the wall distance, the float64 canonical-frame token "
-            "draw, the on-wall rule and float64 cell normals; before 0.12.0, the exact "
-            "geometry's first-order tie and on-wall bands and its arithmetic in the caller's "
-            "frame; before 0.13.0, the constructor's dim, boundary_tokens, query_independent "
-            "and reynolds, the scales' velocity_scale and roles, and interacting interior "
-            "ISLA; "
-            "before 0.14.0, ISLA-DTT's boundary forest split by sign octants and built under "
-            "autocast in the caller's precision and uncentred coordinates, with the boxes' own "
-            "diameters and no bound on each token's normal, and the slice blocks' geo_logit "
-            "bias and ISLA-DTT's kernel basis's last bias; "
-            "state-dict version 10 is the unmerged head-frame "
-            "candidate 0.10.0), and "
-            "ISLA keeps no upgrade path; "
-            "load it with the code that wrote it, or retrain"
+            f"this ISLA state dict has state-dict version {version}; ISLA "
+            f"{module.__model_checkpoint_version__} loads version {type(module)._version} only (no upgrade path)"
         )
+
+
+class _CaseInputs(NamedTuple):
+    """One case's inputs to :meth:`ISLA._forward_tokens` (:meth:`ISLA._case_inputs`)."""
+
+    #: The boundary tokens over ``(1, N)`` (the interior task's drawn ones).
+    boundary: TensorDict
+    #: The prediction-point tokens with their geometry over ``(1, Q)`` (interior), else None.
+    query: TensorDict | None
+    #: The unit global directions ``(1, K, d)`` and the global scalars ``(1, S)`` or None.
+    g_unit: torch.Tensor
+    g_scalars: torch.Tensor | None
+    #: The length unit ``(1, 1, 1)``.
+    gauge: torch.Tensor
+    #: The case's scales (:meth:`ISLA._case_scales`), None when none are declared.
+    scales: dict | None
+    #: The output Mesh's points and global data.
+    out_points: torch.Tensor
+    global_td: TensorDict
+    #: The surface task's output token rows as ``(start, stop)`` ranges, None for every row.
+    out_rows: list[tuple[int, int]] | None
 
 
 class ISLA(Module):
@@ -499,18 +493,8 @@ class ISLA(Module):
 
     **Rank specs.** ``output_schema``, each schema of ``boundary_schemas`` and
     ``global_schema`` are :data:`~physicsnemo.mesh.fields.FieldSchemaLike`
-    declarations, the grammar shared by every mesh model
-    (:meth:`~physicsnemo.mesh.fields.FieldSchema.parse`): a field is a
-    :class:`~physicsnemo.mesh.fields.RankSpec` or a mapping of values
-    ``{"rank": r, "symmetric": False, "parity": "even"}``; a mapping of
-    mappings is a nested group, and a flat name may contain ``"."`` for
-    the same nesting (``{"surface": {"pressure": {"rank": 0}}}`` and
-    ``{"surface.pressure": {"rank": 0}}`` declare the same field). Each
-    parsed declaration is the :class:`~physicsnemo.mesh.fields.FieldSchema`
-    attribute of the same name. ``symmetric`` means
-    fully symmetric under index permutation (rank :math:`\ge 2` only);
-    ``parity="odd"`` declares a pseudotensor output (outputs only). One name
-    declares one field; several scalars are several rank-0 names.
+    declarations (module docstring, *Rank specs*); each parsed declaration is the
+    :class:`~physicsnemo.mesh.fields.FieldSchema` attribute of the same name.
 
     **Mesh API.** ``forward`` takes the boundary as a mapping of
     :class:`~physicsnemo.mesh.Mesh` objects keyed by the declared
@@ -524,22 +508,10 @@ class ISLA(Module):
     point-cloud ``Mesh`` whose ``point_data`` holds the declared outputs.
     Details under ``forward``.
 
-    **Execution.** The ``geo_kernel`` attribute (``"auto"``; set ``"eager"`` or
-    ``"fused"`` to force one) selects how the per-layer geometry region is
-    executed, not what it computes (:meth:`resolve_geo_kernel`). The
-    ``geometry_kernel`` attribute (``"auto"``; set ``"reference"`` or ``"fast"``) does
-    the same for the search of the prediction points' boundary geometry
-    (:meth:`resolve_geometry_kernel`), whose two implementations give the same
-    outputs bitwise. The ``tree_read_kernel`` attribute does the same for
-    ISLA-DTT's tree read: under ``"auto"`` each of its pieces (the forest build,
-    the walk, the read with its node means) runs its fast kernel where that
-    piece's requirements hold
-    (:func:`~physicsnemo.experimental.models.isla.tree_build.resolve_tree_build`,
-    ``tree_read.resolve_walk``, :meth:`resolve_tree_read_kernel`), each choice
-    logged once, and its reference otherwise; ``"reference"`` runs every piece's
-    reference. The forest and the pairs are the same either way, the read the
-    same up to summation order. Each is an execution choice, not a constructor
-    argument: checkpoints do not store it, and a loaded model starts at ``"auto"``.
+    **Execution.** The ``geo_kernel``, ``geometry_kernel`` and ``tree_read_kernel``
+    attributes (``"auto"``) select how the geometry region, the boundary geometry's
+    search and the tree read run, not what they compute (module docstring,
+    *Kernels*); checkpoints do not store them.
 
     Args:
         output_schema: Output fields, a rank spec per name. Each field is a leaf of
@@ -628,9 +600,7 @@ class ISLA(Module):
             the eager path are unchanged; the fused geometry kernel stays a
             custom-op leaf. Compiles once per distinct token count (the
             reporting protocol's fixed sample compiles once); with a token count
-            that changes every case, leave it off. On four GB300 ranks at
-            200,000 cells it cut the training step by 19 to 35% and peak memory
-            by 27% at bfloat16-roundoff differences (PERF-3, 2026-10-01).
+            that changes every case, leave it off.
         n_spatial_dims: Spatial dimension of the domain (default 3), Mesh's
             ``n_spatial_dims``. Every boundary mesh is a ``Mesh[n_spatial_dims -
             1, n_spatial_dims]`` and every prediction point has
@@ -675,48 +645,11 @@ class ISLA(Module):
     #: Largest per-token input rank; see the module docstring.
     MAX_INPUT_RANK = 2
 
-    ### 0.7.0: boundary conditions by name (boundary_schemas, one input layer and
-    ### vector and tensor maps per condition), the prediction points' own input layer.
-    ### 0.8.0: the prediction points' geometry encoding is continuous through the
-    ### surface (the built-in distance channel asinh(s / 1e-6) in place of
-    ### sign(s) log(|s| + 1e-12), the direction sign(d) u; same parameters, new
-    ### forward). 0.9.0: the interior task's length unit is the full-resolution
-    ### boundary's RMS pairwise distance, exact and independent of the token draw (in
-    ### place of its estimate from the drawn tokens; same parameters, new forward),
-    ### and the opt-in scales (units, the defined scales, a standardized group,
-    ### output_stats). 0.11.0: the geometry robustness bundle (least-norm
-    ### tie directions, the winding-number sign of the wall distance, the float64
-    ### canonical-frame token draw, the on-wall rule, float64 cell normals, and the
-    ### cell-tree seed of the search radius; same parameters, new forward). 0.10.0
-    ### is skipped: it names the unmerged head-frame candidate, whose checkpoints
-    ### exist, so each version string names one model. 0.12.0: the exact geometry's
-    ### derived, frame-robust tie and on-wall bands (the inputs' storage rounding plus
-    ### a worst case of the float64 arithmetic in the boundary's centred frame,
-    ### certified-distinct tie directions, the offset x - p formed in float64; same
-    ### parameters, new forward). 0.13.0: the interior task is ISLA-DTT without a
-    ### switch (query_independent gone, interacting interior ISLA with it); dim is
-    ### n_spatial_dims and boundary_tokens n_boundary_tokens, Mesh's names; the
-    ### constructor names no application quantity (reynolds gone: a recipe that wants
-    ### a Reynolds number passes it as an ordinary global input; the scales declare
-    ### their names with `defines` in place of velocity_scale and the density and
-    ### viscosity roles). The same parameters and forward for the surface task and
-    ### ISLA-DTT; new constructor arguments. No earlier checkpoint loads: ISLA is
-    ### unreleased and keeps no upgrade paths. 0.14.0: ISLA-DTT's boundary forest
-    ### as a function of the boundary alone (built outside autocast in centred
-    ### float64 canonical-frame coordinates, cube-face orientation classes with
-    ### their error-bound band in place of sign octants, the separation diameter
-    ### widened by the coordinates' error bound and by the frame's rotation in
-    ### proportion to each node's own size, never past a frame-free ball, each
-    ### token's normal_tol); the slice blocks' routing-bias Linear and ISLA-DTT's
-    ### kernel basis's last Linear without their dead biases (blocks.<i>.geo_logit.bias
-    ### and kernel_basis.net.4.bias gone from the state dict: constants that cancel in
-    ### a softmax). The same function otherwise.
+    #: The checkpoint version ``Module`` records and ``Module.from_checkpoint`` checks.
     __model_checkpoint_version__ = "0.14.0"
     #: torch's state-dict version of the module (``nn.Module._version``, recorded in
-    #: every state dict's metadata): 1 before 0.8.0, 8 for 0.8.0, 9 for 0.9.0, 10 for
-    #: the head-frame candidate, 11 for 0.11.0, 12 for 0.12.0 and 13 for 0.13.0, so a
-    #: state dict of 0.7.0 to 0.13.0 is told apart and refused on load
-    #: (:func:`_refuse_earlier_state_dict`).
+    #: every state dict's metadata), so a state dict of another version is refused on
+    #: load (:func:`_refuse_earlier_state_dict`).
     _version = 14
 
     def __init__(
@@ -735,15 +668,8 @@ class ISLA(Module):
         output_stats: Mapping[str, Mapping] | None = None,
     ) -> None:
         super().__init__(meta=self.MetaData())
-        ### compile_blocks: run each slice block through torch.compile (built lazily at
-        ### the first forward pass, on the block's bound forward so parameter names and
-        ### checkpoints are unchanged). The blocks see only the (B, n_tokens, .) tensors,
-        ### so a fixed token count per case compiles once; the mesh-facing forward,
-        ### whose vertex count varies per case, stays eager. The fused geometry kernel
-        ### is a registered custom op and stays a leaf. Measured 2026-10-01 (PERF-3,
-        ### four GB300 ranks, 200,000 cells): step 221 -> 180 ms and peak memory
-        ### 44.9 -> 32.9 GiB on DrivAerML Surface, 475 -> 308 ms and 88.5 -> 64.5 GiB
-        ### on DrivAerML Volume, losses at bfloat16 roundoff of the eager path.
+        ### compile_blocks (the docstring): the blocks see only the (B, n_tokens, .)
+        ### tensors; the mesh-facing forward, whose vertex count varies per case, stays eager.
         self.compile_blocks = bool(compile_blocks)
         self._block_forwards: list | None = None
         self._block_reads: list | None = None
@@ -806,7 +732,16 @@ class ISLA(Module):
         self.global_schema = _declare(
             "global_schema", global_schema, max_rank=1, allow_odd=False
         )
-        self._init_scales(out_extras, b_extras, g_extras, output_stats)
+        ### The opt-in scales (module docstring, *Scales*), checked against the schemas.
+        sc = parse_scales(
+            out_extras, b_extras, g_extras, output_stats, self.output_schema, self.boundary_schemas, self.global_schema
+        )
+        self._output_units, self._output_scale = sc.output_units, sc.output_scale
+        self._global_units, self._global_scale = sc.global_units, sc.global_scale
+        self._boundary_units, self._boundary_scale = sc.boundary_units, sc.boundary_scale
+        self._boundary_sources, self._global_sources = sc.boundary_sources, sc.global_sources
+        self._defined_values, self._rms_scale = sc.defined_values, sc.rms_scale
+        self.output_stats, self._scaled, self._fp32_head = sc.output_stats, sc.scaled, sc.fp32_head
         ### The task structure: a surface task predicts at the cells of the boundaries
         ### forward names and has no prediction-point parameters; an interior task
         ### predicts at prediction points that enter the encoder as tokens, passive
@@ -855,19 +790,10 @@ class ISLA(Module):
         ### Each kind's columns in schema order (cached layouts, see _global_fields).
         self._global_vector_layout = _schema_layout({k: (self.n_spatial_dims,) for k in self.global_vector_names})
         self._global_scalar_layout = _schema_layout({k: () for k in self.global_scalar_names})
-        ### geo_kernel names the implementation of the per-layer geometry region,
-        ### not its arithmetic. "eager" is the PyTorch region (its (B,N,S,.)
-        ### intermediates rebuilt in backward); "fused" is the Triton kernel of
-        ### geo_kernel.py, which reads the pre-logits once and writes the bias and
-        ### mix once per direction, with the recompute built in (CUDA only). "auto"
-        ### resolves at the first forward pass to "fused" wherever the fused kernel
-        ### can run and to "eager" otherwise; the blocks read the resolved name.
-        ### Writable: tests and debugging set "eager" or "fused" to force one.
+        ### The execution choices (module docstring, *Kernels*), resolved at the first
+        ### forward pass (resolve_geo_kernel, resolve_geometry_kernel); writable: tests
+        ### and debugging force one.
         self.geo_kernel = "auto"
-        ### geometry_kernel names the implementation of exact_boundary_geometry's search,
-        ### not its arithmetic: "reference" defines it, "fast" gives the same outputs
-        ### bitwise from a faster traversal. "auto" resolves at the first forward pass
-        ### (resolve_geometry_kernel). Writable, as geo_kernel.
         self.geometry_kernel = "auto"
         self.n_slices = int(n_slices)
         ### Each boundary condition's fields, each set with its own invariant layout
@@ -1024,104 +950,6 @@ class ISLA(Module):
             )
         )
 
-    def _init_scales(self, out_extras, b_extras, g_extras, output_stats) -> None:
-        """The opt-in scales (module docstring, *Scales*) from the declarations'
-        ISLA-local keys (:func:`~physicsnemo.experimental.models.isla.scales.split_scale_keys`),
-        checked against the parsed schemas."""
-        decl = {"output_schema": out_extras, "global_schema": g_extras}
-        decl.update({f"boundary_schemas[{n!r}]": e for n, e in b_extras.items()})
-        schemas = {"output_schema": self.output_schema, "global_schema": self.global_schema}
-        schemas.update({f"boundary_schemas[{n!r}]": s for n, s in self.boundary_schemas.items()})
-        used = set()
-        for kind, extras in decl.items():
-            for name, local in extras.items():
-                rank = schemas[kind][name].rank
-                defined = local.get(DEFINES)
-                if defined is not None and not (rank == 1 or (rank == 0 and kind == "global_schema")):
-                    raise ValueError(
-                        f"{kind}[{name!r}]: a scale is defined by a rank-1 field or a rank-0 global; got rank {rank}"
-                    )
-                if defined is not None and rank == 0 and ("units" in local or "scale" in local):
-                    raise ValueError(
-                        f"{kind}[{name!r}]: the value of the scale {defined!r} is consumed, not an input; "
-                        "it takes no units and no scale"
-                    )
-                if kind == "global_schema" and rank == 1 and defined is None:
-                    if "units" in local or "scale" in local:
-                        raise ValueError(
-                            f"{kind}[{name!r}]: a rank-1 global that defines no scale enters as a "
-                            "direction only, so units and a scale have no effect on it; declare its magnitude as a "
-                            "rank-0 global"
-                        )
-                if kind == "global_schema" and rank == 1 and "scale" in local:
-                    raise ValueError(
-                        f"{kind}[{name!r}]: a rank-1 global's magnitude is the scale {defined!r}; it takes no scale"
-                    )
-                used |= set(local.get("units", {}))
-        self._output_units = {n: e["units"] for n, e in out_extras.items() if e.get("units")}
-        self._output_scale = {n: e["scale"] for n, e in out_extras.items() if "scale" in e}
-        self._global_units = {
-            n: e["units"]
-            for n, e in g_extras.items()
-            if e.get("units") and DEFINES not in e and self.global_schema[n].rank == 0
-        }
-        self._global_scale = {n: e["scale"] for n, e in g_extras.items() if "scale" in e}
-        self._boundary_units = {
-            c: {n: e["units"] for n, e in extras.items() if e.get("units")} for c, extras in b_extras.items()
-        }
-        self._boundary_scale = {
-            c: {n: e["scale"] for n, e in extras.items() if "scale" in e} for c, extras in b_extras.items()
-        }
-        ### The rank-1 sources of the one RMS scale (boundary fields, pooled, or one
-        ### global) and the rank-0 globals whose values are scales (consumed).
-        self._boundary_sources = [
-            (c, n) for c, extras in b_extras.items() for n, e in extras.items() if DEFINES in e
-        ]
-        self._global_sources = [
-            n for n, e in g_extras.items() if DEFINES in e and self.global_schema[n].rank == 1
-        ]
-        self._defined_values = {}
-        for n, e in g_extras.items():
-            if DEFINES in e and self.global_schema[n].rank == 0:
-                if e[DEFINES] in self._defined_values:
-                    raise ValueError(f"global_schema: two fields define the scale {e[DEFINES]!r}")
-                self._defined_values[e[DEFINES]] = n
-        rms = {b_extras[c][n][DEFINES] for c, n in self._boundary_sources}
-        rms |= {g_extras[n][DEFINES] for n in self._global_sources}
-        if len(rms) > 1:
-            raise ValueError(f"at most one scale is defined by rank-1 fields; got {sorted(rms)!r}")
-        self._rms_scale = next(iter(rms), None)
-        if self._rms_scale in self._defined_values:
-            raise ValueError(
-                f"the scale {self._rms_scale!r} is defined by a rank-1 field and by the rank-0 global "
-                f"{self._defined_values[self._rms_scale]!r}"
-            )
-        if self._boundary_sources and self._global_sources:
-            raise ValueError(
-                f"the sources of the scale {self._rms_scale!r} are rank-1 boundary fields or one rank-1 global, "
-                f"not both: got {self._boundary_sources!r} and {self._global_sources!r}"
-            )
-        if len(self._global_sources) > 1:
-            raise ValueError(
-                f"at most one rank-1 global defines the scale {self._rms_scale!r}; got {self._global_sources!r}"
-            )
-        declared = {LENGTH, *self._defined_values, *rms}
-        undefined = sorted(used - declared)
-        if undefined:
-            raise ValueError(f"units name {undefined!r}, which no field defines; the scales are {sorted(declared)!r}")
-        has_source = bool(self._boundary_sources or self._global_sources)
-        self.output_stats = check_output_stats(output_stats, self.output_schema)
-        ### The scales are declared when any field has units or an input scale or
-        ### defines a scale.
-        has_input_scale = bool(self._global_scale or any(self._boundary_scale.values()))
-        self._scaled = bool(used or has_source or self._defined_values or has_input_scale)
-        ### The head and the redimensionalization run in the parameters' precision
-        ### under autocast whenever a physical output is assembled or standardized. The
-        ### outputs' precision is bounded by the bf16 trunk either way; the fp32 head keeps
-        ### bf16's rounding of the head's own product and of a nonzero output mean (a
-        ### mean / std of 0.3, for one) out of the outputs.
-        self._fp32_head = self._scaled or self.output_stats is not None or bool(self._output_scale)
-
     @staticmethod
     def _offsets(widths) -> tuple[int, ...]:
         """The column offsets of consecutive blocks of the given ``widths``, one block
@@ -1133,9 +961,9 @@ class ISLA(Module):
 
     @staticmethod
     def _dots(x, g_hat):
-        """x (B, N, d) against the K unit global directions g_hat (B, N, K, d) -> (B, N, K).
-        Multiply-and-sum rather than einsum so autocast leaves the geometry in fp32."""
-        return (x[:, :, None, :] * g_hat).sum(-1)
+        """x (B, N, d) against the K unit global directions g_hat (B, N, K, d) -> (B, N, K)
+        (:func:`~physicsnemo.experimental.models.isla.inputs._contract_vectors`)."""
+        return _contract_vectors(x[:, :, None], g_hat)[:, :, 0]
 
     @staticmethod
     def _in_block(x, cols: tuple[int, ...], i: int, dim: int):
@@ -1150,7 +978,7 @@ class ISLA(Module):
         self, name: str, points, normals, measure, fields: TensorDict, g_unit, g_scalars
     ) -> TensorDict:
         """One condition's boundary tokens over ``(B, n)``: their ``points``,
-        ``normals`` and ``measure`` (``None``: none given) and, in the block layout
+        ``normals`` and ``measure`` and, in the block layout
         over every declared condition (zeros in the other conditions' columns), the
         ``seed`` ``[1, n.g_k, the fields' invariants, global scalars]`` and the
         condition's block vectors ``vecs`` and rank-2 tensors ``tens`` (when any
@@ -1174,8 +1002,7 @@ class ISLA(Module):
             seed=self._in_block(torch.cat(seed, -1), self._seed_columns, i, 2),
             batch_size=[b, n],
         )
-        if measure is not None:
-            tokens["measure"] = measure
+        tokens["measure"] = measure
         if self._vec_columns[-1]:
             if not inputs.n_block_vecs:
                 vecs = points.new_zeros(b, n, 0, d)
@@ -1296,11 +1123,7 @@ class ISLA(Module):
         cached = getattr(self, "_tree_read_kernel_cache", None)
         if cached is not None and cached[0] == key:
             return cached[1]
-        try:
-            from .fused_read import HAS_TRITON
-        except Exception:  # pragma: no cover - a broken triton install falls back
-            HAS_TRITON = False
-        ok = points.is_cuda and HAS_TRITON and points.dtype != torch.float64
+        ok = points.is_cuda and fused_read.HAS_TRITON and points.dtype != torch.float64
         chosen = "fused" if ok else "reference"
         if torch.compiler.is_compiling():
             return chosen
@@ -1310,7 +1133,7 @@ class ISLA(Module):
             chosen,
             points.device,
             points.is_cuda,
-            HAS_TRITON,
+            fused_read.HAS_TRITON,
             points.dtype,
         )
         return chosen
@@ -1365,67 +1188,10 @@ class ISLA(Module):
             ]
         return self._block_reads
 
-    def _apply_geo_kernel(self, points: torch.Tensor) -> str | None:
-        """Write the resolved kernel name into the blocks, once per resolution.
-        Under torch.compile the blocks are left untouched: the kernel is returned
-        for the block calls instead (``None`` when the blocks already carry it)."""
-        kernel = self.resolve_geo_kernel(points)
-        if getattr(self, "_geo_kernel_applied", None) == kernel:
-            return None
-        if torch.compiler.is_compiling():
-            return kernel
-        for block in self.blocks:
-            block.geo_kernel = kernel
-        self._geo_kernel_applied = kernel
-        return None
-
-    def _validate_inputs(
-        self, condition, points, normals, measure_weights, query_points, surface_points=None, surface_cells=None
-    ) -> None:
-        """Shape and presence checks for :meth:`_forward_tensors`."""
-        d = self.n_spatial_dims
-        if condition not in self.boundary_schemas:
-            raise ValueError(
-                f"condition {condition!r} is not one of the declared boundary conditions "
-                f"{list(self.boundary_names)!r}"
-            )
-        if self.boundary_schemas[condition]:
-            raise ValueError(
-                "the batched routine takes no per-token inputs; pass the meshes to forward"
-            )
-        if points.ndim != 3 or points.shape[-1] != d:
-            raise ValueError(
-                f"Expected points of shape (B, N, {d}) (this model has n_spatial_dims={d}) but got tensor of shape {tuple(points.shape)}"
-            )
-        b, n, _ = points.shape
-        if normals.shape != points.shape:
-            raise ValueError(
-                f"Expected normals of shape {(b, n, d)} but got tensor of shape {tuple(normals.shape)}"
-            )
-        if measure_weights is not None and measure_weights.numel() != b * n:
-            raise ValueError(
-                f"Expected measure_weights of shape {(b, n)} but got tensor of shape {tuple(measure_weights.shape)}"
-            )
-        if query_points is None:
-            if self.interior:
-                raise ValueError("an interior model (interior=True) needs query_points")
-            return
-        if not self.interior:
-            raise ValueError(
-                "query_points given to a surface model (interior=False); build with interior=True"
-            )
-        if query_points.ndim != 3 or query_points.shape[0] != b or query_points.shape[-1] != d:
-            raise ValueError(
-                f"Expected query_points of shape ({b}, Q, {d}) but got tensor of shape {tuple(query_points.shape)}"
-            )
-        if surface_points is None or surface_cells is None:
-            raise ValueError("query_points need the boundary surface: surface_points and surface_cells")
-
-    def _global_rows(self, data: TensorDict, b: int, like) -> TensorDict:
-        """The declared global fields of ``data`` over a batch of ``b`` cases, in
-        ``like``'s dtype at their declared shapes (a single case's values, one row,
-        shared across the batch)."""
-        rows = TensorDict(batch_size=[b])
+    def _global_rows(self, data: TensorDict, like) -> TensorDict:
+        """The declared global fields of ``data`` as one case's row, in ``like``'s
+        dtype at their declared shapes."""
+        rows = TensorDict(batch_size=[1])
         for name, spec in self.global_schema.items():
             shape, width = spec.shape(self.n_spatial_dims), spec.numel(self.n_spatial_dims)
             t = data.get(FieldSchema.key(name))
@@ -1435,11 +1201,11 @@ class ISLA(Module):
                         f"global_inputs[{name!r}]: expected {width} values per case, got "
                         f"{tuple(t.shape) if isinstance(t, torch.Tensor) else type(t).__name__}"
                     )
-                if t.numel() // width not in (1, b):
+                if t.numel() != width:
                     raise ValueError(
-                        f"global_inputs[{name!r}] gives {t.numel() // width} rows for a batch of {b}"
+                        f"global_inputs[{name!r}] gives {t.numel() // width} rows for a batch of 1"
                     )
-            rows.set(FieldSchema.key(name), t.reshape(-1, *shape).to(like.dtype).expand(b, *shape))
+            rows.set(FieldSchema.key(name), t.reshape(1, *shape).to(like.dtype))
         return rows
 
     def _global_fields(self, global_rows: TensorDict, like, scales: dict | None = None):
@@ -1778,8 +1544,7 @@ class ISLA(Module):
                 same tokens whichever boundaries carry the outputs, only the rows
                 it returns differ. The prediction is a quadrature over the cells
                 given for these boundaries (the request), so a request must cover
-                the body: on DrivAerML Surface, half a car's cells raise the
-                pressure and wall-shear errors 10 to 18 times. A larger request,
+                the body. A larger request,
                 or the mean of several, lowers the error: the spread between
                 requests falls about as one over the square root of their cell
                 count. ``None`` for an interior task.
@@ -1799,16 +1564,15 @@ class ISLA(Module):
             the dotted names), and whose ``global_data`` is the selected ``global_data`` passed
             through.
         """
-        boundary, query, g_unit, g_scalars, gauge, scales, out_points, global_td, out_rows = self._case_inputs(
-            boundary_meshes, prediction_points, global_data, prediction_boundaries
-        )
+        c = self._case_inputs(boundary_meshes, prediction_points, global_data, prediction_boundaries)
         fields = self._redimensionalize(
-            self._forward_tokens(boundary, query, g_unit, g_scalars, gauge=gauge, out_rows=out_rows), scales
+            self._forward_tokens(c.boundary, c.query, c.g_unit, c.g_scalars, gauge=c.gauge, out_rows=c.out_rows),
+            c.scales,
         )
         return Mesh(
-            points=out_points,
-            point_data=fields[0].to(out_points.device),
-            global_data=global_td,
+            points=c.out_points,
+            point_data=fields[0].to(c.out_points.device),
+            global_data=c.global_td,
         )
 
     def query_chunks(
@@ -1844,11 +1608,11 @@ class ISLA(Module):
             )
         return _QueryChunks(self, self._case_inputs(boundary_meshes, prediction_points, global_data))
 
-    def _case_inputs(self, boundary_meshes, prediction_points, global_data, prediction_boundaries=None) -> tuple:
-        """One case's inputs to :meth:`_forward_tokens` from :meth:`forward`'s:
-        ``(boundary, query, g_unit, g_scalars, gauge, scales)`` (the interior task's
-        boundary tokens drawn, the prediction points with their geometry), then the
-        output points, the selected global data and the surface task's ``out_rows``."""
+    def _case_inputs(
+        self, boundary_meshes, prediction_points, global_data, prediction_boundaries=None
+    ) -> "_CaseInputs":
+        """One case's inputs to :meth:`_forward_tokens` from :meth:`forward`'s
+        (:class:`_CaseInputs`)."""
         ### Validation at the API boundary (skipped under torch.compile): fail
         ### here with the offending mesh, not inside the network.
         if not torch.compiler.is_compiling():
@@ -1873,7 +1637,7 @@ class ISLA(Module):
         measures = [cell_measures(m) for m in meshes]
         like = meshes[0].points
         global_td = self._select_global_data(global_data, like.device)
-        global_rows = self._global_rows(global_td, 1, like)
+        global_rows = self._global_rows(global_td, like)
         ### The length unit, the measure-weighted RMS pairwise distance of the given
         ### boundaries at full resolution, each cell with its own second moment (the
         ### parallel-axis term), so it is exact for the piecewise-flat surface: the same
@@ -1950,7 +1714,7 @@ class ISLA(Module):
                     centre = (w[:, None] * simplex.double().mean(1)).sum(0) / w.sum()
                     boundary["normal_tol"] = normal_error_bound(simplex, centre)[None]
             query = query[None]
-        return boundary, query, g_unit, g_scalars, gauge, scales, out_points, global_td, out_rows
+        return _CaseInputs(boundary, query, g_unit, g_scalars, gauge, scales, out_points, global_td, out_rows)
 
     @staticmethod
     def _point_set(pts) -> TensorDict:
@@ -1995,112 +1759,27 @@ class ISLA(Module):
             walk_points=walk_points,
         )
 
-    def _forward_tensors(
-        self,
-        *,
-        points: Float[torch.Tensor, "batch tokens n_spatial_dims"],
-        normals: Float[torch.Tensor, "batch tokens n_spatial_dims"],
-        measure_weights: Float[torch.Tensor, "batch tokens"] | None = None,
-        global_inputs: Mapping[str, torch.Tensor] | None = None,
-        query_points: Float[torch.Tensor, "batch queries n_spatial_dims"] | None = None,
-        surface_points: Float[torch.Tensor, "batch vertices n_spatial_dims"] | None = None,
-        surface_cells: Float[torch.Tensor, "batch cells n_spatial_dims"] | None = None,
-        condition: str | None = None,
-        cell_second_moments: Float[torch.Tensor, "batch tokens"] | None = None,
-    ) -> TensorDict:
-        """The batched network on bare token tensors, the tokens of one boundary
-        condition without per-cell fields (``condition``, default the model's one
-        declared condition); the release tests pin it, and it
-        runs the same :meth:`_forward_tokens` as :meth:`forward`.
-
-        ``points``, ``normals`` ``(B, N, d)``; ``measure_weights`` ``(B, N)``
-        (``None``: every token the same weight); ``global_inputs`` a flat
-        ``{dotted name: tensor}`` mapping over the declared global fields
-        (per-case values ``(B,)`` / ``(B, d)``, or one row shared across the
-        batch); ``query_points`` ``(B, Q, d)`` for an interior model, with the
-        boundary surface each case's geometry is computed from as
-        ``surface_points`` ``(B, V, d)`` and ``surface_cells`` ``(B, F, d)``
-        (vertex indices; :func:`exact_boundary_geometry`); ``cell_second_moments``
-        ``(B, N)`` the tokens' own second moments in the length unit
-        (:func:`~physicsnemo.experimental.models.isla.geometry.cell_second_moments`;
-        ``None``: the tokens are points). The tokens are used as
-        given: nothing is sampled here. Returns the outputs
-        over the ``(B, N_out)`` tokens the head read.
-        """
-        if condition is None and len(self.boundary_names) == 1:
-            condition = self.boundary_names[0]
-        if self._scaled:
-            raise NotImplementedError(
-                "the batched routine takes no boundary meshes, from which the declared scales are "
-                "computed; pass the meshes to forward"
-            )
-        if not torch.compiler.is_compiling():
-            self._validate_inputs(
-                condition, points, normals, measure_weights, query_points, surface_points, surface_cells
-            )
-        fields = global_inputs or {}
-        missing = [k for k in self.global_schema if k not in fields]
-        extra = [k for k in fields if k not in self.global_schema]
-        if missing or extra:
-            raise ValueError(
-                f"global_inputs fields do not match the declared set: missing {missing!r}, "
-                f"unexpected {extra!r}"
-            )
-        b, n, _ = points.shape
-        data = TensorDict({FieldSchema.key(k): v for k, v in fields.items()}, batch_size=[])
-        g_unit, g_scalars = self._global_fields(self._global_rows(data, b, points), points)
-        boundary = self._condition_tokens(
-            condition,
-            points,
-            normals,
-            None if measure_weights is None else measure_weights.reshape(b, n),
-            TensorDict(batch_size=[b, n]),
-            g_unit,
-            g_scalars,
-        )
-        query = None
-        if query_points is not None:
-            geometry = [
-                exact_boundary_geometry(
-                    query_points[i], surface_points[i], surface_cells[i], kernel=self.resolve_geometry_kernel(query_points)
-                )
-                for i in range(b)
-            ]
-            query = TensorDict(
-                points=query_points,
-                wall_distance=torch.stack([g[0] for g in geometry]),
-                wall_direction=torch.stack([g[1] for g in geometry]),
-                batch_size=query_points.shape[:2],
-            )
-        gauge = rms_pairwise_distance(
-            points,
-            None if measure_weights is None else measure_weights.reshape(b, n),
-            EPS,
-            cell_second_moments,
-        )
-        return self._redimensionalize(self._forward_tokens(boundary, query, g_unit, g_scalars, gauge=gauge), None)
-
     def _forward_tokens(
         self,
         boundary: TensorDict,
         query: TensorDict | None,
         g_unit: torch.Tensor,
         g_scalars: torch.Tensor | None,
-        gauge: torch.Tensor | None = None,
+        gauge: torch.Tensor,
         out_rows: list[tuple[int, int]] | None = None,
     ) -> TensorDict:
         """The batched network on the token inputs.
 
         ``boundary`` holds the boundary tokens over ``(B, N)``: ``points`` and
-        ``normals`` ``(B, N, d)``, ``measure`` ``(B, N)`` (absent: every token the
-        same weight) and the conditions' inputs in the block layout, ``seed`` and
+        ``normals`` ``(B, N, d)``, ``measure`` ``(B, N)`` and the conditions' inputs
+        in the block layout, ``seed`` and
         the block ``vecs`` and ``tens`` (:meth:`_condition_tokens`);
         ``query`` (interior) the prediction-point tokens over ``(B, Q)``:
         ``points`` and the built-in geometry ``wall_distance`` ``(B, Q)`` and ``wall_direction`` ``(B, Q, d)``
         (:func:`exact_boundary_geometry`);
         ``g_unit`` ``(B, K, d)`` and ``g_scalars`` ``(B, S)`` (or ``None``) the
         global inputs (:meth:`_global_fields`); ``gauge`` ``(B, 1, 1)`` the length
-        unit (``None``: measured on the given boundary tokens); ``out_rows`` the
+        unit (:meth:`_gauge`); ``out_rows`` the
         surface task's output tokens as ``(start, stop)`` ranges of the boundary
         tokens (``None``: every boundary token).
         Returns the declared outputs over the ``(B, N_out)`` tokens the head reads.
@@ -2160,14 +1839,13 @@ class ISLA(Module):
         ### gradient of h over its consumers in the order they were built.
         return self._head(out, (lambda: self._frame_anchors(h, log_w, r)) if self.needs_frame else None)
 
-    def _boundary_tokens(self, boundary: TensorDict, g_unit: torch.Tensor, gauge: torch.Tensor | None):
+    def _boundary_tokens(self, boundary: TensorDict, g_unit: torch.Tensor, gauge: torch.Tensor):
         """The boundary tokens' state over ``(B, N)`` (:meth:`_forward_tokens`), the
-        length unit (measured on the tokens when ``gauge`` is ``None``) and the
-        geometry kernel the blocks are called with."""
+        length unit and the geometry kernel the blocks are called with."""
         points = boundary["points"]
         b, n, _ = points.shape
         _hint_token_axis(n, self._token_widths)
-        geo_kernel = self._apply_geo_kernel(points)
+        geo_kernel = self.resolve_geo_kernel(points)
         K, dim = self.n_global_vectors, self.n_spatial_dims
         g_hat = g_unit[:, None].expand(b, n, K, dim)
 
@@ -2177,19 +1855,11 @@ class ISLA(Module):
         ### weighted mean (used only inside this scalar; the frame keeps no
         ### centre). Normalized weights make it converge under refinement where
         ### the total measure diverges, and make it invariant to a weight rescale.
-        ### forward passes the full-resolution boundary's (exact for every draw).
-        measure = boundary.get("measure", None)
-        if gauge is None:
-            gauge = rms_pairwise_distance(points, measure, EPS)
+        ### gauge is the full-resolution boundary's (_gauge, exact for every draw).
         normals = boundary["normals"]
         n_hat = normals / normals.norm(dim=-1, keepdim=True).clamp_min(EPS)
 
-        if measure is None:
-            ### No measures given: every token carries the same measure, i.e. the
-            ### count-weighted quadrature.
-            log_w = points.new_zeros(b, n, 1)
-        else:
-            log_w = torch.log(measure.to(points.dtype).clamp_min(EPS))[..., None]
+        log_w = torch.log(boundary["measure"].to(points.dtype).clamp_min(EPS))[..., None]
 
         ### Boundary inputs: each condition's seed through its input layer, its
         ### vectors and tensors through its maps onto the shared channels.
@@ -2330,12 +2000,12 @@ class _QueryChunks:
     what the prediction points read of it held as leaves, and the points' side by
     ranges of points (``chunks(start, stop)``), then ``chunks.backward()``."""
 
-    def __init__(self, model: ISLA, inputs: tuple) -> None:
-        boundary, query, g_unit, g_scalars, gauge, scales, out_points, global_td, _ = inputs
-        self.model, self.query, self.g_unit, self.g_scalars = model, query, g_unit, g_scalars
-        self.scales, self.out_points, self.global_td = scales, out_points, global_td
+    def __init__(self, model: ISLA, inputs: "_CaseInputs") -> None:
+        boundary, query, g_unit = inputs.boundary, inputs.query, inputs.g_unit
+        self.model, self.query, self.g_unit, self.g_scalars = model, query, g_unit, inputs.g_scalars
+        self.scales, self.out_points, self.global_td = inputs.scales, inputs.out_points, inputs.global_td
         self._roots, self._leaves = [], []
-        tokens, self.gauge, self.geo_kernel = model._boundary_tokens(boundary, g_unit, gauge)
+        tokens, self.gauge, self.geo_kernel = model._boundary_tokens(boundary, g_unit, inputs.gauge)
         self.like, self.log_w = boundary["points"], tokens["log_w"]
         q_nhat, s, _ = model._query_geometry(query, self.gauge, self.like)
         ### The forest now, each chunk's points walked by the chunk: the lists held are

@@ -236,7 +236,7 @@ def test_cpu_matches_the_golden(case, variant, golden):
 
 
 @pytest.mark.parametrize("case, variant", _params("cuda"))
-def test_cuda_matches_the_cpu_golden(case, variant, golden):
+def test_cuda_matches_the_cpu_golden(case, variant, golden, monkeypatch):
     """Each CUDA variant (kernels auto: the fast build, walk and geometry search, the
     Triton and fused kernels; and the references on CUDA) against the committed CPU
     golden: inputs and integers exact, floats within :data:`CUDA_RTOL` of
@@ -247,12 +247,8 @@ def test_cuda_matches_the_cpu_golden(case, variant, golden):
     why = C.available(case, "cuda")
     if why:
         pytest.skip(why)
-    tf32 = torch.backends.cuda.matmul.allow_tf32
-    torch.backends.cuda.matmul.allow_tf32 = False
-    try:
-        tensors = C.run_case(case, "cuda", variant)
-    finally:
-        torch.backends.cuda.matmul.allow_tf32 = tf32
+    monkeypatch.setattr(torch.backends.cuda.matmul, "allow_tf32", False)
+    tensors = C.run_case(case, "cuda", variant)
     bad, worst = check(
         golden["cases"][case.id],
         tensors,
@@ -291,10 +287,9 @@ def _quick_cases():
 def test_the_ab_harness_passes_a_rerun_and_catches_a_one_ulp_change(tmp_path):
     """Recorded twice in one process on CPU (one thread), the harness reads PASS; the
     records survive a save and load; one output moved by one ulp reads FAIL, a missing
-    case FAIL, a flipped kept cell on CUDA INCONCLUSIVE (on CPU FAIL), weights moved
-    within 1e-15 relative on CUDA PASS, and a declared family within its spread PASS.
-    DRAW-EXACT: the kept and weights rules read today's CUDA draw, which is not
-    run-to-run bitwise."""
+    case FAIL, a flipped kept cell or a draw weight moved by one ulp FAIL on CPU and on
+    CUDA alike (the draw repeats bitwise), and a declared family within its spread
+    PASS."""
     threads = torch.get_num_threads()
     torch.set_num_threads(1)
     try:
@@ -328,18 +323,14 @@ def test_the_ab_harness_passes_a_rerun_and_catches_a_one_ulp_change(tmp_path):
     draw = "G-SAMP/sample_boundary_cells_3d@cpu:reference"
     kept = "out.kept_300_0.37"
     flip = lambda t: torch.cat([t[:-1], t[-1:] + 1])  # noqa: E731
-    assert K.compare(a, edited(b, draw, kept, flip), log=quiet) == K.FAIL
-    a_cuda = edited(a, draw, kept, lambda t: t, device="cuda")
-    assert (
-        K.compare(a_cuda, edited(b, draw, kept, flip, device="cuda"), log=quiet)
-        == K.INCONCLUSIVE
-    )
     weights = "out.weights_300_0.37"
-    assert (
-        K.compare(a_cuda, edited(b, draw, weights, ulp, device="cuda"), log=quiet)
-        == K.PASS
-    )
-    assert K.compare(a, edited(b, draw, weights, ulp), log=quiet) == K.FAIL
+    a_cuda = edited(a, draw, kept, lambda t: t, device="cuda")
+    for device, base in ((None, a), ("cuda", a_cuda)):
+        for name, fn in ((kept, flip), (weights, ulp)):
+            assert (
+                K.compare(base, edited(b, draw, name, fn, device=device), log=quiet)
+                == K.FAIL
+            ), (device, name)
     ### A family (here grad.k, declared for the Triton read's atomics) passes within the
     ### larger repeat spread of either side, and fails beyond it.
     grad_k = "grad.k"
@@ -357,11 +348,10 @@ def test_the_ab_harness_passes_a_rerun_and_catches_a_one_ulp_change(tmp_path):
 
 
 def test_the_ab_harness_reads_every_repeat_and_refuses_an_empty_comparison(tmp_path):
-    """On CUDA a kept cell that flips between the repeats of one side reads
-    INCONCLUSIVE, weights that wobble within 1e-15 between repeats PASS (beyond it
-    FAIL), a family whose head repeats noisily beyond its ceiling FAILs even though
-    that noise widens its own spread, and a comparison of no case at all FAILs.
-    DRAW-EXACT: the kept and weights rules read today's CUDA draw."""
+    """On CUDA a kept cell or a draw weight that changes between the repeats of one
+    side FAILs (no declared family), a family whose head repeats noisily beyond its
+    ceiling FAILs even though that noise widens its own spread, and a comparison of no
+    case at all FAILs."""
     import copy
 
     threads = torch.get_num_threads()
@@ -386,11 +376,8 @@ def test_the_ab_harness_reads_every_repeat_and_refuses_an_empty_comparison(tmp_p
     kept, weights = "out.kept_300_0.37", "out.weights_300_0.37"
     k0, w0 = a["tensors"][draw][kept][0], a["tensors"][draw][weights][0]
     flip = torch.cat([k0[:-1], k0[-1:] + 1])
-    assert K.compare(a, repeated(a, draw, kept, flip), log=quiet) == K.INCONCLUSIVE
-    assert K.compare(a, repeated(a, draw, weights, ulp(w0)), log=quiet) == K.PASS
-    assert (
-        K.compare(a, repeated(a, draw, weights, w0 * (1 + 1e-12)), log=quiet) == K.FAIL
-    )
+    assert K.compare(a, repeated(a, draw, kept, flip), log=quiet) == K.FAIL
+    assert K.compare(a, repeated(a, draw, weights, ulp(w0)), log=quiet) == K.FAIL
     seg = "G-SEG/segment_softmax_read_f32@cpu:reference"
     grad_k = a["tensors"][seg]["grad.k"][0]
     noise = 1e-3 * float(grad_k.abs().max()) * torch.ones_like(grad_k)

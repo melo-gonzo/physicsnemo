@@ -431,12 +431,6 @@ def test_an_absent_or_zero_source_and_bad_declarations_are_refused():
         )
     with pytest.raises(ValueError, match="'physics.density'\\) must be positive"):
         _run(m, meshes, {**gd, "physics.density": torch.tensor(0.0, dtype=D)}, q)
-    with pytest.raises(NotImplementedError, match="pass the meshes to forward"):
-        m._forward_tensors(
-            points=torch.zeros(1, 4, 3, dtype=D),
-            normals=torch.ones(1, 4, 3, dtype=D),
-            condition="wall",
-        )
     bad = [
         (
             dict(globals_={**GLOBALS, "U_inf": {"rank": 1, "defines": "U"}}),
