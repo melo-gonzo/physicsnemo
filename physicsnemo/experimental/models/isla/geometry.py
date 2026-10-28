@@ -822,12 +822,7 @@ def _ball_candidates_kernel(
     k = wp.int64(0)
     node = wp.int32(0)
     while node >= 0:
-        lo = node_lo[node]
-        hi = node_hi[node]
-        g0 = wp.max(wp.max(lo[0] - x32[0], x32[0] - hi[0]), zero)
-        g1 = wp.max(wp.max(lo[1] - x32[1], x32[1] - hi[1]), zero)
-        g2 = wp.max(wp.max(lo[2] - x32[2], x32[2] - hi[2]), zero)
-        if g0 * g0 + g1 * g1 + g2 * g2 <= r2_32:
+        if _box_gap2(node_lo[node], node_hi[node], x32) <= r2_32:
             c = leaf_cell[node]
             if c >= wp.int64(0):
                 j = c * wp.int64(4)
@@ -1452,8 +1447,7 @@ def _packed_winding_kernel(
     node = wp.int32(0)
     while node >= 0:
         nd = nodes[node]
-        e = nd.centre - x
-        r = wp.vec3f(wp.float32(e[0]), wp.float32(e[1]), wp.float32(e[2]))
+        r = _vec3f(nd.centre - x)
         r2 = wp.dot(r, r)
         if r2 > nd.far2:
             inv2 = wp.float32(1.0) / r2
