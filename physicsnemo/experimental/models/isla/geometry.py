@@ -1581,6 +1581,117 @@ def _certified_tied(tq: torch.Tensor, c: torch.Tensor, tau: torch.Tensor, nq: in
     return tied
 
 
+def _closest_pair(li, pk, dist, err, points, cells, parity, nq):
+    """Per query ``(nq,)``: the pair of its closest point (an index into the pairs
+    ``li``, ``pk`` with distances ``dist`` and error bounds ``err``), the least
+    distance, and the least upper bound ``dist + err``. Cells at exactly the least
+    distance (cells sharing the closest point compute it bitwise) are ordered by their
+    positions, the lexicographic order of their canonical vertices as given
+    (``points[cells]``) and then their ``parity``, not by their indices, so the
+    closest cell, its bound and its weights do not depend on the cells' order."""
+    inf = dist.new_full((nq,), torch.inf)
+    d_min = inf.scatter_reduce(0, li, dist, "amin")
+    upper = inf.scatter_reduce(0, li, dist + err, "amin")
+    pair = torch.arange(li.shape[0], device=li.device)
+    first = torch.full((nq,), li.shape[0], dtype=torch.long, device=li.device).scatter_reduce(
+        0, li, torch.where(dist == d_min[li], pair, li.shape[0]), "amin"
+    )
+    ### Equal least distances (cells sharing the closest point compute it bitwise, so
+    ### they tie exactly) are broken by the cells' positions, not by their indices: the
+    ### lexicographic order of their canonical vertices as given, then their parity.
+    ### So the closest cell, its band and its weights are functions of the positions.
+    ### One key column at a time, each keeping the rows at the query's least value;
+    ### identical keys are the same cell, so the least pair among them is the cell.
+    least = dist == d_min[li]
+    key = torch.cat([points[cells[pk]].flatten(1), parity[pk, None].to(points.dtype)], 1)
+    for k in key.unbind(1):
+        k_min = k.new_full((nq,), torch.inf).scatter_reduce(0, li, torch.where(least, k, torch.inf), "amin")
+        least = least & (k == k_min[li])
+    pick = torch.full_like(first, li.shape[0]).scatter_reduce(0, li, torch.where(least, pair, li.shape[0]), "amin")
+    first = torch.where(pick < li.shape[0], pick, first)
+    return first, d_min, upper
+
+
+def _feature_reached(li, pk, w, cells, flat, n_vertices):
+    """Per pair, whether every cell sharing the feature of its closest point (a vertex
+    or an edge by the weights ``w``; a cell's interior is reached) is among the
+    query's pairs ``li``, ``pk``: a vertex or an edge point is a local minimum of the
+    distance on the surface only where every cell sharing that feature reaches the
+    same point. The zero-area cells ``flat`` (or ``None``) count their distinct
+    vertices and the edges between consecutive distinct ones once. Also each pair's
+    count of nonzero weights."""
+    nonzero = w > 0
+    n_nonzero = nonzero.sum(-1)
+    corners = cells[pk]
+    key = torch.where(n_nonzero == 1, corners.gather(1, w.argmax(-1, keepdim=True))[:, 0], -1)
+    if flat is not None:
+        ### A zero-area cell's features are its distinct vertices and the edges between
+        ### consecutive distinct ones, each counted once (n_vertices: none).
+        consecutive = cells[:, 1:] != cells[:, :-1]
+        vertices = torch.where(flat[:, None] & ~torch.cat([torch.ones_like(consecutive[:, :1]), consecutive], 1), n_vertices, cells)
+        count = torch.bincount(vertices.reshape(-1), minlength=n_vertices + 1)[key.clamp_min(0)]
+    else:
+        count = torch.bincount(cells.reshape(-1), minlength=n_vertices)[key.clamp_min(0)]
+    if cells.shape[1] == 3:
+        a, b = cells[:, [0, 0, 1]], cells[:, [1, 2, 2]]
+        if flat is not None:
+            edges = torch.stack([consecutive[:, 0], torch.zeros_like(flat), consecutive[:, 1]], 1)
+            a, b = (torch.where(flat[:, None] & ~edges, n_vertices, x) for x in (a, b))
+        edge_keys, edge_valence = torch.unique(
+            n_vertices + torch.minimum(a, b) * n_vertices + torch.maximum(a, b), return_counts=True
+        )
+        ends = corners.masked_fill(~nonzero, n_vertices)
+        ends = ends.sort(-1).values  # the edge's two vertices, ascending
+        edge = n_vertices + ends[:, 0] * n_vertices + ends[:, 1]
+        key = torch.where(n_nonzero == 2, edge, key)
+        count = torch.where(
+            n_nonzero == 2,
+            edge_valence[torch.searchsorted(edge_keys, edge).clamp_max(edge_keys.shape[0] - 1)],
+            count,
+        )
+    reached = torch.ones_like(nonzero[:, 0])
+    on_feature = key >= 0
+    group = torch.stack([li[on_feature], key[on_feature]], -1)
+    _, inverse, counts = torch.unique(group, dim=0, return_inverse=True, return_counts=True)
+    reached[on_feature] = counts[inverse] == count[on_feature]
+    return reached, n_nonzero
+
+
+def _tie_uncertainty(st, q64, tq, eta, e_t, d_t, wall, on_cell):
+    """The certified uncertainty ``tau`` of each tie row's direction (cells ``st``,
+    queries ``q64[tq]``, storage roundings ``eta``, bands ``e_t``, distances ``d_t``):
+    ``sqrt(2) s`` (2 where ``s >= 1``), ``s`` a bound on the sine of the angle between
+    the computed direction and the exact one of the inputs as given; 0 on the surface
+    (``wall``), where normals that differ tie. ``on_cell`` rows take the cell's normal
+    with Ericson's misplacement, the others the direction from the point."""
+    ### Off the surface, a tie is two certified-distinct directions, |c_i - c_j| >
+    ### tau_i + tau_j, tau = sqrt(2) s (the chord of a sine error s < 1; else 2).
+    ### A cell's normal: its vertices each within eta = u |v| of the exact ones (their
+    ### storage rounding), so |dX| <= 4 eta L + 4 eta^2 against the certified
+    ### |X| - |E| (Shewchuk), with the float64 normal's own bound (delta) and its
+    ### normalization. A direction from a point: the point within the band E_k (and
+    ### Ericson's misplacement on a face), over D_k.
+    u64 = torch.finfo(torch.float64).eps / 2
+    if st.shape[-1] == 3:
+        delta_t, kappa_t, longest_t = _thin_bounds(st)
+        size = torch.linalg.cross(st[:, 1] - st[:, 0], st[:, 2] - st[:, 0], dim=-1).norm(dim=-1)
+        s_n = (4 * eta * longest_t + 4 * eta * eta) / (size * (1 - delta_t)) + delta_t + 4 * u64
+        mis = kappa_t * (q64[tq][:, None] - st).square().sum(-1).amax(-1)
+    else:
+        length = (st[:, 1] - st[:, 0]).norm(dim=-1)
+        s_n = 2 * eta / (length - 2 * eta) + 4 * u64
+        mis = torch.zeros_like(length)
+    s_n = torch.where(s_n >= 0, s_n, torch.inf)
+    s_p = torch.where(d_t > 0, (e_t + 4 * u64 * d_t) / d_t, torch.inf)
+    s_c = s_n + torch.where(d_t > 0, (mis + e_t) / d_t, torch.inf)
+    s = torch.where(wall, s_n, torch.where(on_cell, s_c, s_p))
+    ### On the surface the bound is 0 (normals that differ tie): the least-norm point of
+    ### their hull lies within tau_k + max_j tau_j of each member k, the group's
+    ### certified uncertainty, so it needs no certificate, and it is the certified case's own value, so u does not depend on
+    ### the queries' precision.
+    return torch.where(wall, 0.0, torch.where(s < 1, 2.0**0.5 * s, 2.0))
+
+
 def _closest_candidates_impl(query_points, points, cells, parity, face_normals, fast: bool):
     """The closest-feature search (no gradient): for every query the cell of its
     closest point ``(Q,)``, whether several features tie for it ``(Q,)``, at a tie
@@ -1703,8 +1814,8 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
         p_rep = torch.where(flat[rep], 0.0, p_rep)
     area, sigma = _oriented_areas(s_rep, p_rep)
     if dim == 3:
-        ### Without repeated cells the two trees are one, and one traversal serves the
-        ### ball search and the winding number.
+        ### Without repeated cells the two trees are one: the ball search and the
+        ### winding number traverse the same tree.
         once = rep.shape[0] == cells.shape[0]
         s_ord = s_rep if once else simplex[order]
         f_ord = flat[order] if any_flat else None
@@ -1739,64 +1850,9 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     diff = q64[li] - (w[..., None] * tri).sum(1)
     dist = diff.norm(dim=-1)
     err = band(li, pk)
-    inf = dist.new_full((nq,), torch.inf)
-    d_min = inf.scatter_reduce(0, li, dist, "amin")
-    upper = inf.scatter_reduce(0, li, dist + err, "amin")
-    pair = torch.arange(li.shape[0], device=dev)
-    first = torch.full((nq,), li.shape[0], dtype=torch.long, device=dev).scatter_reduce(
-        0, li, torch.where(dist == d_min[li], pair, li.shape[0]), "amin"
-    )
-    ### Equal least distances (cells sharing the closest point compute it bitwise, so
-    ### they tie exactly) are broken by the cells' positions, not by their indices: the
-    ### lexicographic order of their canonical vertices as given, then their parity.
-    ### So the closest cell, its band and its weights are functions of the positions.
-    ### One key column at a time, each keeping the rows at the query's least value;
-    ### identical keys are the same cell, so the least pair among them is the cell.
-    least = dist == d_min[li]
-    key = torch.cat([points[cells[pk]].flatten(1), parity[pk, None].to(points.dtype)], 1)
-    for k in key.unbind(1):
-        k_min = k.new_full((nq,), torch.inf).scatter_reduce(0, li, torch.where(least, k, torch.inf), "amin")
-        least = least & (k == k_min[li])
-    pick = torch.full_like(first, li.shape[0]).scatter_reduce(0, li, torch.where(least, pair, li.shape[0]), "amin")
-    first = torch.where(pick < li.shape[0], pick, first)
+    first, d_min, upper = _closest_pair(li, pk, dist, err, points, cells, parity, nq)
     idx, on_wall = pk[first], d_min - err[first] <= 0
-    ### The feature of each closest point (a vertex, an edge, or -1 for a cell's
-    ### interior), and whether all of its cells reach it.
-    n_vertices = points.shape[0]
-    nonzero = w > 0
-    n_nonzero = nonzero.sum(-1)
-    corners = cells[pk]
-    key = torch.where(n_nonzero == 1, corners.gather(1, w.argmax(-1, keepdim=True))[:, 0], -1)
-    if any_flat:
-        ### A zero-area cell's features are its distinct vertices and the edges between
-        ### consecutive distinct ones, each counted once (n_vertices: none).
-        consecutive = cells[:, 1:] != cells[:, :-1]
-        vertices = torch.where(flat[:, None] & ~torch.cat([torch.ones_like(consecutive[:, :1]), consecutive], 1), n_vertices, cells)
-        count = torch.bincount(vertices.reshape(-1), minlength=n_vertices + 1)[key.clamp_min(0)]
-    else:
-        count = torch.bincount(cells.reshape(-1), minlength=n_vertices)[key.clamp_min(0)]
-    if dim == 3:
-        a, b = cells[:, [0, 0, 1]], cells[:, [1, 2, 2]]
-        if any_flat:
-            edges = torch.stack([consecutive[:, 0], torch.zeros_like(flat), consecutive[:, 1]], 1)
-            a, b = (torch.where(flat[:, None] & ~edges, n_vertices, x) for x in (a, b))
-        edge_keys, edge_valence = torch.unique(
-            n_vertices + torch.minimum(a, b) * n_vertices + torch.maximum(a, b), return_counts=True
-        )
-        ends = corners.masked_fill(~nonzero, n_vertices)
-        ends = ends.sort(-1).values  # the edge's two vertices, ascending
-        edge = n_vertices + ends[:, 0] * n_vertices + ends[:, 1]
-        key = torch.where(n_nonzero == 2, edge, key)
-        count = torch.where(
-            n_nonzero == 2,
-            edge_valence[torch.searchsorted(edge_keys, edge).clamp_max(edge_keys.shape[0] - 1)],
-            count,
-        )
-    reached = torch.ones_like(nonzero[:, 0])
-    on_feature = key >= 0
-    group = torch.stack([li[on_feature], key[on_feature]], -1)
-    _, inverse, counts = torch.unique(group, dim=0, return_inverse=True, return_counts=True)
-    reached[on_feature] = counts[inverse] == count[on_feature]
+    reached, n_nonzero = _feature_reached(li, pk, w, cells, flat if any_flat else None, points.shape[0])
     ### On the surface the directions are the cells' normals, renormalized in float64
     ### (the least-norm step needs unit vectors); a degenerate cell has none.
     wall_n = face_n / face_n.norm(dim=-1, keepdim=True)
@@ -1818,35 +1874,9 @@ def _closest_candidates_impl(query_points, points, cells, parity, face_normals, 
     )
     wall = on_wall[tq]
     tc = torch.where(wall[:, None], wall_n[pk[tie]], tc)
-    ### Off the surface, a tie is two certified-distinct directions, |c_i - c_j| >
-    ### tau_i + tau_j, tau = sqrt(2) s (the chord of a sine error s < 1; else 2).
-    ### A cell's normal: its vertices each within eta = u |v| of the exact ones (their
-    ### storage rounding), so |dX| <= 4 eta L + 4 eta^2 against the certified
-    ### |X| - |E| (Shewchuk), with the float64 normal's own bound (delta) and its
-    ### normalization. A direction from a point: the point within the band E_k (and
-    ### Ericson's misplacement on a face), over D_k.
     pt = pk[tie]
-    st = simplex[pt]
-    eta = u_in * given_reach[pt]
-    if dim == 3:
-        delta_t, kappa_t, longest_t = _thin_bounds(st)
-        size = torch.linalg.cross(st[:, 1] - st[:, 0], st[:, 2] - st[:, 0], dim=-1).norm(dim=-1)
-        s_n = (4 * eta * longest_t + 4 * eta * eta) / (size * (1 - delta_t)) + delta_t + 4 * u64
-        mis = kappa_t * (q64[tq][:, None] - st).square().sum(-1).amax(-1)
-    else:
-        length = (st[:, 1] - st[:, 0]).norm(dim=-1)
-        s_n = 2 * eta / (length - 2 * eta) + 4 * u64
-        mis = torch.zeros_like(length)
-    s_n = torch.where(s_n >= 0, s_n, torch.inf)
-    e_t, d_t = err[tie], dist[tie]
-    s_p = torch.where(d_t > 0, (e_t + 4 * u64 * d_t) / d_t, torch.inf)
-    s_c = s_n + torch.where(d_t > 0, (mis + e_t) / d_t, torch.inf)
-    s = torch.where(wall, s_n, torch.where(on_cell, s_c, s_p))
-    ### On the surface the bound is 0 (normals that differ tie): the least-norm point of
-    ### their hull lies within tau_k + max_j tau_j of each member k, the group's
-    ### certified uncertainty, so it needs no certificate, and it is the certified case's own value, so u does not depend on
-    ### the queries' precision.
-    tied = _certified_tied(tq, tc, torch.where(wall, 0.0, torch.where(s < 1, 2.0**0.5 * s, 2.0)), nq)
+    tau = _tie_uncertainty(simplex[pt], q64, tq, u_in * given_reach[pt], err[tie], dist[tie], wall, on_cell)
+    tied = _certified_tied(tq, tc, tau, nq)
     if any_flat:
         ### On a zero-area closest cell the direction is the tie's over the cells
         ### that hold the query and have a normal: theirs, or 0 with none (the
