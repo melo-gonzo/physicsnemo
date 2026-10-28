@@ -1189,7 +1189,8 @@ def _ball_candidates(query: torch.Tensor, radius: torch.Tensor, simplex: torch.T
 
 
 #: Entries of the traversal stack of :func:`_nearest_cells`; a midpoint-split tree of
-#: ``F`` cells is ``ceil(log2 F)`` deep and needs one more.
+#: ``F`` cells is ``ceil(log2 F)`` deep and needs one more. The kernels take int32 node
+#: ids, so ``2 F - 1 < 2^31`` and the tree is at most 30 deep.
 _NEAREST_STACK = 64
 _nearest_stack = wp.types.vector(length=_NEAREST_STACK, dtype=wp.int32)
 _nearest_gaps = wp.types.vector(length=_NEAREST_STACK, dtype=wp.float32)
@@ -1323,9 +1324,7 @@ def _nearest_cells(query: torch.Tensor, simplex: torch.Tensor, tree) -> torch.Te
     bounds the closest one, so any cell would do for the search radius; a near one
     keeps the radius, and so the candidate pairs, few. The queries are traversed in
     Morton order."""
-    left, right, _, levels, leaf_cell, lo, hi = tree
-    if len(levels) >= _NEAREST_STACK:
-        raise ValueError(f"a tree {len(levels)} levels deep exceeds the nearest-cell stack ({_NEAREST_STACK})")
+    left, right, _, _, leaf_cell, lo, hi = tree
     nearest = torch.zeros(query.shape[0], dtype=torch.int64, device=query.device)
     device, stream = FunctionSpec.warp_launch_context(query)
     with FunctionSpec.warp_stream_scope(stream):

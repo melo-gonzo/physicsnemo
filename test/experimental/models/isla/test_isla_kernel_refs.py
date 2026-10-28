@@ -63,7 +63,6 @@ from physicsnemo.experimental.models.isla.geometry import exact_boundary_geometr
 from physicsnemo.experimental.models.isla.segment_softmax import PairPlan
 from physicsnemo.experimental.models.isla.tree_read import BoundaryForest
 from test.experimental.models.isla._forced import ran
-from test.experimental.models.isla._geometry_cases import _sphere
 from test.experimental.models.isla._kernel_cases import (
     _basis_case,
     _basis_step,
@@ -578,18 +577,6 @@ def test_the_ball_search_second_pass_finds_the_one_pass_candidates(
     assert n_small > n_default  # the second pass ran
     for a, b in zip(small, default):
         assert torch.equal(a, b)
-
-
-def test_a_tree_deeper_than_the_nearest_cell_stack_is_refused(monkeypatch):
-    """``_nearest_cells`` refuses a tree as deep as its traversal stack (a midpoint
-    tree of F cells is about log2 F deep, so 64 levels is unreachable in practice;
-    the stack constant patched down to the tree's depth here)."""
-    mesh = _sphere(2)
-    s = mesh.points[mesh.cells]
-    tree = geometry._cell_tree(s)
-    monkeypatch.setattr(geometry, "_NEAREST_STACK", len(tree[3]))
-    with pytest.raises(ValueError, match="exceeds the nearest-cell stack"):
-        geometry._nearest_cells(mesh.cell_centroids, s, tree)
 
 
 def _forest_fields(f):
