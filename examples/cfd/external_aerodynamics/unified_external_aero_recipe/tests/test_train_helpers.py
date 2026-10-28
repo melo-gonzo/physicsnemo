@@ -67,6 +67,7 @@ from tensordict import TensorDict
 ### directly (no skip).
 pytest.importorskip("tensorboard")
 
+import isla_chunked  # noqa: E402  -- monkeypatch module globals in focused tests
 import train  # noqa: E402  -- monkeypatch module globals in focused tests
 from output_normalize import normalize_output_to_tensordict  # noqa: E402
 from train import (  # noqa: E402  -- after the skip guard
@@ -228,13 +229,13 @@ def test_chunked_forward_backward_equals_the_unchunked_step(
 
     monkeypatch.setattr(isla_model._QueryChunks, "__call__", recorded)
     ### One GiB per point and no margin: the capacity is the most points that fit.
-    monkeypatch.setitem(train._CHUNK_GIB, "float32", (0.0, 1e5, 0.0))
+    monkeypatch.setitem(isla_chunked._CHUNK_GIB, "float32", (0.0, 1e5, 0.0))
 
     def check(capacity_gib=None):
         sizes.clear()
         model.zero_grad(set_to_none=True)
         torch.manual_seed(1)
-        out = train.chunked_forward_backward(
+        out = isla_chunked.chunked_forward_backward(
             batch,
             model,
             "float32",
@@ -252,7 +253,7 @@ def test_chunked_forward_backward_equals_the_unchunked_step(
         return list(sizes)
 
     assert check() == check(n) == [n]
-    passes = 1 if loss_type in train._POINTWISE_LOSSES else 2
+    passes = 1 if loss_type in isla_chunked._POINTWISE_LOSSES else 2
     assert check(20) == [17, 17, 16] * passes
     assert check(1.0) == [1] * n * passes
     with pytest.raises(torch.OutOfMemoryError, match="one prediction point"):
@@ -324,18 +325,20 @@ def test_chunk_rule_decides_from_sizes(monkeypatch, caplog):
         (126_352_902, 150_000, 110.13, 210.54, "float32"),  # whole boundary
         (52_608_716, 250_000, 108.78, 231.31, "float32"),  # AeroZoo
     ):
-        peak = train._chunk_peak_gib(pairs, points, allocated, precision)
+        peak = isla_chunked._chunk_peak_gib(pairs, points, allocated, precision)
         assert reserved <= peak < 275.0
     ### 20 pairs per point.
     chunks = SimpleNamespace(pair_counts=torch.full((50,), 20), n_points=50)
-    one = train._chunk_peak_gib(1000, 50, 0.0, "float32")
-    third = train._chunk_peak_gib(340, 17, 0.0, "float32")
+    one = isla_chunked._chunk_peak_gib(1000, 50, 0.0, "float32")
+    third = isla_chunked._chunk_peak_gib(340, 17, 0.0, "float32")
     cpu = torch.device("cpu")
 
     def spans(pointwise, capacity):
-        return train._chunk_spans(chunks, cpu, False, pointwise, "float32", capacity)
+        return isla_chunked._chunk_spans(
+            chunks, cpu, False, pointwise, "float32", capacity
+        )
 
-    monkeypatch.setattr(train, "_chunks_logged", None)
+    monkeypatch.setattr(isla_chunked, "_chunks_logged", None)
     with caplog.at_level(logging.INFO, logger="training.step"):
         assert spans(True, None) == spans(False, one + 1e-9) == ([(0, 50)], False)
         assert spans(True, one - 1e-6) == ([(0, 25), (25, 50)], False)
@@ -358,13 +361,15 @@ def test_chunk_rule_counts_each_chunks_pairs(monkeypatch):
     The rule adds chunks until each chunk's exact pairs fit, and raises when not
     even one point fits."""
     ### One GiB per pair, nothing per point, no margin: the capacity is in pairs.
-    monkeypatch.setitem(train._CHUNK_GIB, "float32", (1e6, 0.0, 0.0))
+    monkeypatch.setitem(isla_chunked._CHUNK_GIB, "float32", (1e6, 0.0, 0.0))
     counts = torch.tensor([10] * 10 + [1] * 40)
     chunks = SimpleNamespace(pair_counts=counts, n_points=50)
     cpu = torch.device("cpu")
 
     def spans(pointwise, capacity):
-        return train._chunk_spans(chunks, cpu, False, pointwise, "float32", capacity)
+        return isla_chunked._chunk_spans(
+            chunks, cpu, False, pointwise, "float32", capacity
+        )
 
     ### By their share (2.8 pairs per point) 21 points fit 60 pairs, so 3 chunks of
     ### 17; the first holds 107 pairs. Chunks of 6 hold at most 60.
@@ -409,14 +414,14 @@ def _two_ranks_one_over_the_limit(rank: int, store: str, loss_type: str) -> None
         model.zero_grad(set_to_none=True)
         ### One GiB per point and no margin: room for 100 points on rank 0 and 20 on
         ### rank 1, so chunks of at most 20 on both.
-        train._CHUNK_GIB["float32"] = (0.0, 1e5, 0.0)
+        isla_chunked._CHUNK_GIB["float32"] = (0.0, 1e5, 0.0)
         sizes = []
         call = isla_model._QueryChunks.__call__
         isla_model._QueryChunks.__call__ = lambda self, a, b: (
             sizes.append(b - a) or call(self, a, b)
         )
         torch.manual_seed(1)
-        train.chunked_forward_backward(
+        isla_chunked.chunked_forward_backward(
             batch,
             torch.nn.parallel.DistributedDataParallel(model),
             "float32",
@@ -425,7 +430,7 @@ def _two_ranks_one_over_the_limit(rank: int, store: str, loss_type: str) -> None
             target_config=target_config,
             capacity_gib=(100.0, 20.0)[rank],
         )
-        passes = 1 if loss_type in train._POINTWISE_LOSSES else 2
+        passes = 1 if loss_type in isla_chunked._POINTWISE_LOSSES else 2
         assert sizes == ([17, 17, 16] if rank == 0 else [15, 15]) * passes, sizes
         for p, g in zip(model.parameters(), ref_grads):
             torch.testing.assert_close(p.grad, g, rtol=1e-4, atol=1e-9)
@@ -481,7 +486,7 @@ def _average_gradients_rank(rank: int, store: str, world_size: int) -> None:
             expected = [
                 r / world_size for r in fused_all_reduce([g.clone() for g in grads])
             ]
-            train._average_gradients_(grads)
+            isla_chunked._average_gradients_(grads)
             for g, e in zip(grads, expected):
                 assert g.dtype == e.dtype and torch.equal(g, e)
     finally:
@@ -520,11 +525,11 @@ def test_chunked_step_chunks_isla_dtt():
     def batch(n):
         return {"forward_kwargs": {"prediction_points": Mesh(points=torch.zeros(n, 3))}}
 
-    assert train._chunked_step(isla(True), batch(50))
-    assert not train._chunked_step(
+    assert isla_chunked._chunked_step(isla(True), batch(50))
+    assert not isla_chunked._chunked_step(
         isla(True), {"forward_kwargs": {"prediction_boundaries": ["vehicle"]}}
     )
-    assert not train._chunked_step(isla(False), batch(50))
+    assert not isla_chunked._chunked_step(isla(False), batch(50))
 
 
 def test_chunked_forward_backward_refuses_batched_targets():
@@ -535,7 +540,7 @@ def test_chunked_forward_backward_refuses_batched_targets():
     lc = train.LossCalculator(target_config, loss_type="mse")
     mc = train.MetricCalculator(target_config, metrics=["mae"])
     with pytest.raises(ValueError, match="one case's targets"):
-        train.chunked_forward_backward(
+        isla_chunked.chunked_forward_backward(
             batch, model, "float32", lc, mc, target_config=target_config
         )
 
