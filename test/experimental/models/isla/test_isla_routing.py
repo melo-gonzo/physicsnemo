@@ -37,7 +37,7 @@ from test.experimental.models.isla._meshes import (
 PV = {"p": {"rank": 0}, "v": {"rank": 1}}
 
 
-def test_cosine_routing_logits_are_bounded_and_bias_free():
+def test_routing_logits_are_bounded_and_bias_free():
     torch.manual_seed(0)
     r = _RoutingLogits(64, 32)
     assert r.weight.shape == (32, 64)

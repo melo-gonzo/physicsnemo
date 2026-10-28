@@ -14,8 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""ISLA's kernels against their references, where the existing tests leave a gap
-(TEST-AUDIT's plan, P3-2 to P3-8).
+"""ISLA's kernels against their references, where the other tests leave a gap.
 
 - The fused geometry region: its bfloat16 backward against the eager region under the
   same autocast, slice counts past each launch branch (257, 513, 1024), and every
@@ -26,7 +25,7 @@
 - The fused read and the fused basis under float16 (``_narrow`` and
   ``unsupported_reason`` accept it).
 - The boundary-token draw on CUDA against CPU.
-- Paths no test ran (COVERAGE.md): the ball search's second pass, the nearest-cell
+- Paths no other test runs: the ball search's second pass, the nearest-cell
   stack's refusal, the forest build's depth-bin fallback, the walk of an empty forest
   or of no points and its first size limit, ``fused_basis.unsupported_reason``'s
   branches, and the geometry kernel's disqualifiers on CUDA.
@@ -364,7 +363,7 @@ def test_the_eager_segment_softmax_read_in_bfloat16_rounds_its_gradients_once(h,
     float64 tensor's largest entry, 2**-7 (the output stays float32, at most 2.7e-6;
     the gradients are computed in float32 and rounded once to bfloat16, at most 2**-8
     of it; measured at most 3.0e-3). Casting after the gathers instead added each
-    source's pair gradients up in bfloat16 (BUGS_W1.md B1: 0.58 for dv here)."""
+    source's pair gradients up in bfloat16 (an error of 0.58 for dv here)."""
     plan_args, leaves, logm, seed, _ = _ssr_case(h, kc, c, n_q=20)
     leaves = [t.bfloat16().double() for t in leaves]
     eager = segment_softmax._eager_segment_softmax_read

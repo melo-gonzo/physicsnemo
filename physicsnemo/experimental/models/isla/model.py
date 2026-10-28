@@ -260,7 +260,19 @@ model starts at ``"auto"``); at 200,000 cells the
 fused kernel runs the training step in about a third of the eager time and
 memory. The per-token
 rank-2 contractions (rho^T T rho) are the standing kernel follow-up; until
-then a model with rank-2 boundary inputs runs the eager region.
+then a model with rank-2 boundary inputs runs the eager region. The
+``geometry_kernel`` attribute (``"auto"``; set ``"reference"`` or ``"fast"``) does
+the same for the search of the prediction points' boundary geometry
+(:meth:`ISLA.resolve_geometry_kernel`), whose two implementations give the same
+outputs bitwise. The ``tree_read_kernel`` attribute does the same for
+ISLA-DTT's tree read: under ``"auto"`` each of its pieces (the forest build,
+the walk, the read with its node means) runs its fast kernel where that
+piece's requirements hold
+(:func:`~physicsnemo.experimental.models.isla.tree_build.resolve_tree_build`,
+``tree_read.resolve_walk``, :meth:`ISLA.resolve_tree_read_kernel`), each choice
+logged once, and its reference otherwise; ``"reference"`` runs every piece's
+reference. The forest and the pairs are the same either way, the read the
+same up to summation order. Each is an execution choice like ``geo_kernel``.
 
 Every constructor argument and every ``forward`` input is keyword-only, so a
 call reads as the recipe's ``forward_kwargs`` mapping does and models can be
@@ -461,18 +473,8 @@ class ISLA(Module):
 
     **Rank specs.** ``output_schema``, each schema of ``boundary_schemas`` and
     ``global_schema`` are :data:`~physicsnemo.mesh.fields.FieldSchemaLike`
-    declarations, the grammar shared by every mesh model
-    (:meth:`~physicsnemo.mesh.fields.FieldSchema.parse`): a field is a
-    :class:`~physicsnemo.mesh.fields.RankSpec` or a mapping of values
-    ``{"rank": r, "symmetric": False, "parity": "even"}``; a mapping of
-    mappings is a nested group, and a flat name may contain ``"."`` for
-    the same nesting (``{"surface": {"pressure": {"rank": 0}}}`` and
-    ``{"surface.pressure": {"rank": 0}}`` declare the same field). Each
-    parsed declaration is the :class:`~physicsnemo.mesh.fields.FieldSchema`
-    attribute of the same name. ``symmetric`` means
-    fully symmetric under index permutation (rank :math:`\ge 2` only);
-    ``parity="odd"`` declares a pseudotensor output (outputs only). One name
-    declares one field; several scalars are several rank-0 names.
+    declarations (module docstring, *Rank specs*); each parsed declaration is the
+    :class:`~physicsnemo.mesh.fields.FieldSchema` attribute of the same name.
 
     **Mesh API.** ``forward`` takes the boundary as a mapping of
     :class:`~physicsnemo.mesh.Mesh` objects keyed by the declared
@@ -486,22 +488,10 @@ class ISLA(Module):
     point-cloud ``Mesh`` whose ``point_data`` holds the declared outputs.
     Details under ``forward``.
 
-    **Execution.** The ``geo_kernel`` attribute (``"auto"``; set ``"eager"`` or
-    ``"fused"`` to force one) selects how the per-layer geometry region is
-    executed, not what it computes (:meth:`resolve_geo_kernel`). The
-    ``geometry_kernel`` attribute (``"auto"``; set ``"reference"`` or ``"fast"``) does
-    the same for the search of the prediction points' boundary geometry
-    (:meth:`resolve_geometry_kernel`), whose two implementations give the same
-    outputs bitwise. The ``tree_read_kernel`` attribute does the same for
-    ISLA-DTT's tree read: under ``"auto"`` each of its pieces (the forest build,
-    the walk, the read with its node means) runs its fast kernel where that
-    piece's requirements hold
-    (:func:`~physicsnemo.experimental.models.isla.tree_build.resolve_tree_build`,
-    ``tree_read.resolve_walk``, :meth:`resolve_tree_read_kernel`), each choice
-    logged once, and its reference otherwise; ``"reference"`` runs every piece's
-    reference. The forest and the pairs are the same either way, the read the
-    same up to summation order. Each is an execution choice, not a constructor
-    argument: checkpoints do not store it, and a loaded model starts at ``"auto"``.
+    **Execution.** The ``geo_kernel``, ``geometry_kernel`` and ``tree_read_kernel``
+    attributes (``"auto"``) select how the geometry region, the boundary geometry's
+    search and the tree read run, not what they compute (module docstring,
+    *Kernels*); checkpoints do not store them.
 
     Args:
         output_schema: Output fields, a rank spec per name. Each field is a leaf of
@@ -590,9 +580,7 @@ class ISLA(Module):
             the eager path are unchanged; the fused geometry kernel stays a
             custom-op leaf. Compiles once per distinct token count (the
             reporting protocol's fixed sample compiles once); with a token count
-            that changes every case, leave it off. On four GB300 ranks at
-            200,000 cells it cut the training step by 19 to 35% and peak memory
-            by 27% at bfloat16-roundoff differences (PERF-3, 2026-10-01).
+            that changes every case, leave it off.
         n_spatial_dims: Spatial dimension of the domain (default 3), Mesh's
             ``n_spatial_dims``. Every boundary mesh is a ``Mesh[n_spatial_dims -
             1, n_spatial_dims]`` and every prediction point has
@@ -660,15 +648,8 @@ class ISLA(Module):
         output_stats: Mapping[str, Mapping] | None = None,
     ) -> None:
         super().__init__(meta=self.MetaData())
-        ### compile_blocks: run each slice block through torch.compile (built lazily at
-        ### the first forward pass, on the block's bound forward so parameter names and
-        ### checkpoints are unchanged). The blocks see only the (B, n_tokens, .) tensors,
-        ### so a fixed token count per case compiles once; the mesh-facing forward,
-        ### whose vertex count varies per case, stays eager. The fused geometry kernel
-        ### is a registered custom op and stays a leaf. Measured 2026-10-01 (PERF-3,
-        ### four GB300 ranks, 200,000 cells): step 221 -> 180 ms and peak memory
-        ### 44.9 -> 32.9 GiB on DrivAerML Surface, 475 -> 308 ms and 88.5 -> 64.5 GiB
-        ### on DrivAerML Volume, losses at bfloat16 roundoff of the eager path.
+        ### compile_blocks (the docstring): the blocks see only the (B, n_tokens, .)
+        ### tensors; the mesh-facing forward, whose vertex count varies per case, stays eager.
         self.compile_blocks = bool(compile_blocks)
         self._block_forwards: list | None = None
         self._block_reads: list | None = None
@@ -780,19 +761,10 @@ class ISLA(Module):
         ### Each kind's columns in schema order (cached layouts, see _global_fields).
         self._global_vector_layout = _schema_layout({k: (self.n_spatial_dims,) for k in self.global_vector_names})
         self._global_scalar_layout = _schema_layout({k: () for k in self.global_scalar_names})
-        ### geo_kernel names the implementation of the per-layer geometry region,
-        ### not its arithmetic. "eager" is the PyTorch region (its (B,N,S,.)
-        ### intermediates rebuilt in backward); "fused" is the Triton kernel of
-        ### geo_kernel.py, which reads the pre-logits once and writes the bias and
-        ### mix once per direction, with the recompute built in (CUDA only). "auto"
-        ### resolves at the first forward pass to "fused" wherever the fused kernel
-        ### can run and to "eager" otherwise; the blocks are called with the resolved name.
-        ### Writable: tests and debugging set "eager" or "fused" to force one.
+        ### The execution choices (module docstring, *Kernels*), resolved at the first
+        ### forward pass (resolve_geo_kernel, resolve_geometry_kernel); writable: tests
+        ### and debugging force one.
         self.geo_kernel = "auto"
-        ### geometry_kernel names the implementation of exact_boundary_geometry's search,
-        ### not its arithmetic: "reference" defines it, "fast" gives the same outputs
-        ### bitwise from a faster traversal. "auto" resolves at the first forward pass
-        ### (resolve_geometry_kernel). Writable, as geo_kernel.
         self.geometry_kernel = "auto"
         self.n_slices = int(n_slices)
         ### Each boundary condition's fields, each set with its own invariant layout
@@ -1641,8 +1613,7 @@ class ISLA(Module):
                 same tokens whichever boundaries carry the outputs, only the rows
                 it returns differ. The prediction is a quadrature over the cells
                 given for these boundaries (the request), so a request must cover
-                the body: on DrivAerML Surface, half a car's cells raise the
-                pressure and wall-shear errors 10 to 18 times. A larger request,
+                the body. A larger request,
                 or the mean of several, lowers the error: the spread between
                 requests falls about as one over the square root of their cell
                 count. ``None`` for an interior task.

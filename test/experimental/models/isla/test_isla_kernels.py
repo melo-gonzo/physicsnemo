@@ -456,7 +456,7 @@ def test_compile_blocks_matches_eager(device):
 
 @pytest.mark.cuda
 @requires_cuda
-def test_query_independent_interior_fused_and_compiled_blocks_match_eager():
+def test_interior_fused_and_compiled_blocks_match_eager():
     """The training configuration of ISLA-DTT (fused geometry kernel, compiled blocks)
     reproduces the eager model in float64, and its predictions stay
     query-independent on CUDA: a request's prefix gives the prefix of the predictions."""
@@ -622,7 +622,7 @@ def test_compile_blocks_float32_matches_eager_at_every_token_count(n, monkeypatc
 @pytest.mark.cuda
 @requires_cuda
 @pytest.mark.parametrize("nq", [6001, 6002])
-def test_compile_blocks_query_independent_float32_at_every_token_count(nq, monkeypatch):
+def test_compile_blocks_interior_float32_at_every_token_count(nq, monkeypatch):
     """ISLA-DTT under compile_blocks in float32, at a size where mix-order reduction would
     fuse and a total token count (6000 boundary cells + nq queries) that is not a multiple
     of 4: the compiled model reproduces the eager one, and its prediction at a fixed set of

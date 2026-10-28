@@ -348,14 +348,14 @@ def test_the_interior_model_repeats_bitwise_on_cuda_with_every_cell_kept():
     "device",
     [
         ### on CPU the padding tokens' zero states once gave 0/0 in the routing
-        ### logits' float16 normalize (BUGS_W2.md W2-2)
+        ### logits' float16 normalize
         "cpu",
         pytest.param(
             "cuda",
             marks=[
                 pytest.mark.cuda,
                 ### with triton: auto must not pick the fused region, which refuses
-                ### float16 autocast (BUGS_W2.md W2-1)
+                ### float16 autocast
                 requires_cuda_triton,
             ],
         ),

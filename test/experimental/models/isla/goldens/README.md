@@ -132,9 +132,10 @@ bitwise.
 ## Exclusions
 
 - **On-wall and tie directions at near-coplanar ties.** At a quad's diagonal, where
-  two triangles' normals agree to rounding, the on-wall direction is a known defect
-  (`test_on_wall_direction_at_quad_diagonals`, a strict xfail in
-  test_isla_interior_geometry.py): it depends on the numbering. No golden holds it:
+  two triangles' normals agree to rounding, the on-wall direction is invariant to the
+  numbering and to the queries' precision (`test_on_wall_direction_at_quad_diagonals`
+  in test_isla_interior_geometry.py), but no golden holds it (the goldens were
+  recorded when it was not, and are not regenerated for it):
   the 3-D box-tie set keeps only the ties whose closest points lie inside the faces
   (not the corner diagonals or the centre, whose closest points lie on the faces'
   quad diagonals), the box-wall and zero-area sets keep their on-wall points on the

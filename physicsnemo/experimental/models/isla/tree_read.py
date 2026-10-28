@@ -74,8 +74,6 @@ cells' measure-weighted covariance, signed by their third moments), so a rotatio
 or rescale of the case gives the same clusters and the same far-field list for every
 point, up to ties of that frame (equal variances, a symmetric axis); the read is then
 the same approximation in every pose, and the posed protocol equals the native one.
-Trees built on lab coordinates were not: on AirfRANS at theta 1 their error rose
-1.9x / 1.25x / 3.3x on pressure / velocity / viscosity under a rigid motion.
 
 No discrete choice of the forest is left to rounding where an error bound can decide
 it, and none to the caller's precision. The forest is built and walked outside
@@ -92,24 +90,12 @@ opened in every pose and a nearly tied frame costs a bounded factor of pairs. Th
 so they are functions of the boundary alone and their edges do not move with the pose.
 What rounding still decides is generic: cells within rounding of a face boundary, a
 Morton grid line or the criterion, whose posed inputs differ by the rounding of the
-pose itself. Sign octants were the earlier split: on surfaces aligned with the frame
-(GINOT's lug, 86 % of whose normals have exact-zero components there) the octant was the
-sign of a rounding residue, and posing the lug changed every point's list (posed
-error 1.53 / 1.98x native on two trained seeds at theta 1).
+pose itself.
 
 Constants. ``TREE_READ_LEAF_SIZE`` (cells per leaf), the orientation split into the
 :math:`2 d` cube faces and ``TREE_READ_PAIR_CHUNK`` (pairs per chunk of the basis
 evaluation) are implementation constants: at a fixed :math:`\theta` they change the
 cost and the grouping of the exact pairs, and at :math:`\theta = 0` nothing at all.
-
-Earlier forms, measured and retired on DrivAerML Volume (200,000 cells, 200,000
-points): the dual-tree plan with a tree over the points (a leaf of points in a
-sparse region is never well separated from the boundary near it: 1.6e9 pairs per
-block at theta 0.5); the per-point walk of the count-midpoint Morton tree (loose
-boxes on a surface: 1,700 sources per point at theta 1); a dedicated principal-axis
-tree with normal-first splits and bounding spheres (980 sources per point at theta 1,
-within 10% of this forest, which builds five times faster and shares its tree with
-GLOBE).
 """
 
 import dataclasses
@@ -172,8 +158,7 @@ def normal_faces(normals: torch.Tensor, tol: torch.Tensor) -> torch.Tensor:
     such axis, so rounding never decides it. Antipodal: ``-n`` lands on the face
     opposite ``n``'s (the same axis, the other sign), so opposite normals never share
     a face and a winding flip maps every face's cells to the opposite face. Inside a
-    face every normal has ``|n_k| >= 1 / sqrt(d)`` (up to ``tol``), the bound of a sign
-    octant."""
+    face every normal has ``|n_k| >= 1 / sqrt(d)`` (up to ``tol``)."""
     a = normals.abs()
     tied = a >= a.amax(dim=1, keepdim=True) - 2 * tol[:, None]
     k = tied.to(torch.int8).argmax(dim=1)

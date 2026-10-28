@@ -14,8 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Run-to-run determinism of ISLA's eager paths, as they are (TEST-AUDIT's
-DETERMINISM.md, measured in LHR job 377000; the supervisor's decision 5).
+"""Run-to-run determinism of ISLA's eager paths, as they are (measured in LHR job
+377000).
 
 No test sets a global deterministic mode (``torch.use_deterministic_algorithms``):
 that would hide what a user meets by default. Each test runs a path twice (or five
@@ -32,8 +32,8 @@ times) in one process on the same inputs and states what repeats:
   ulps), the segment-softmax read's key and value gradients (atomic adds), and the
   reference (unfused) tree read on CUDA (``node_means``' ``index_add``).
 
-When a source of order is made exact (the draw in int64 fixed point,
-DETERMINISM.md (a)), its test here tightens to bitwise.
+When a source of order is made exact (the draw in int64 fixed point), its test
+here tightens to bitwise.
 """
 
 import pytest
@@ -370,7 +370,7 @@ def test_the_reference_tree_read_on_cuda_spreads_within_its_bound():
     """The reference (unfused) tree read on CUDA in float32, five runs of one block's
     read (node means by ``index_add``, whose atomic order CUDA does not fix, then the
     segment-softmax read), each tensor against the first run's, relative in norm: the
-    output within 1e-5 (the bound of DETERMINISM.md; 7e-8 measured in LHR job 377654,
+    output within 1e-5 (7e-8 measured in LHR job 377654,
     2e-6 at the model's first read in job 377000), every parameter gradient within
     1e-4 (1.4e-5 measured at ``kernel.weight``, a sum over every pair whose terms
     nearly cancel, so the reads' run-to-run change is amplified there)."""

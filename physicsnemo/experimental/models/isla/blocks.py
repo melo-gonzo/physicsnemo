@@ -75,12 +75,11 @@ def _relational_invariants(
     then the unit relative vector dotted with each of the token's extra vectors
     (its rank-1 inputs and the vectors derived from its rank-2 inputs) and the
     quadratic form of each rank-2 input in the unit relative vector. Width
-    ``5 + K + P' + Q``; for K = 1 and no inputs this is the original 6-wide set
-    in its original order. Every term depends on the anchors' positions
+    ``5 + K + P' + Q`` (:func:`_geo_width`). Every term depends on the anchors' positions
     relative to the point only, so no frame origin is referred to."""
     z = z_pos[:, None, :, :]
     m = m_s[:, None, :, :]
-    rel = r[:, :, None, :] - z  # (B, N, S, 3)
+    rel = r[:, :, None, :] - z  # (B, N, S, d)
     dist = rel.norm(dim=-1, keepdim=True).clamp_min(eps)
     rel_hat = rel / dist
     n_exp = n_hat[:, :, None, :]
@@ -88,8 +87,7 @@ def _relational_invariants(
         dist,
         torch.log(dist),
         ### Broadcast multiply-and-sum, not einsum: einsum is autocast to bf16 and
-        ### the geometry must stay in the input precision (for K = 1 this is the
-        ### former (rel_hat * d).sum(-1) arithmetic exactly).
+        ### the geometry must stay in the input precision.
         (rel_hat[..., None, :] * g_hat[:, :, None, :, :]).sum(-1),  # (B, N, S, K)
         (rel_hat * n_exp).sum(-1, keepdim=True),
         (rel_hat * m).sum(-1, keepdim=True),
@@ -102,9 +100,9 @@ def _relational_invariants(
     if tens is not None and tens.shape[2]:
         ### rho^T T rho per rank-2 input. einsum (autocast disabled, so the geometry
         ### stays in the input precision) rather than a broadcast product, which
-        ### would materialize a (B, N, S, Q, 3, 3) intermediate.
+        ### would materialize a (B, N, S, Q, d, d) intermediate.
         with torch.autocast(rel_hat.device.type, enabled=False):
-            t_rho = torch.einsum("bnqij,bnsj->bnsqi", tens, rel_hat)  # (B, N, S, Q, 3)
+            t_rho = torch.einsum("bnqij,bnsj->bnsqi", tens, rel_hat)  # (B, N, S, Q, d)
             feats.append(torch.einsum("bnsqi,bnsi->bnsq", t_rho, rel_hat))
     return torch.cat(feats, dim=-1)
 
@@ -124,7 +122,7 @@ def _geo_region(
     """One recompute region per layer: the per-slice routing bias from the
     invariants and the invariants pooled over slices by the resulting
     point->slice mix. Returns (bias (B,N,S), mix (B,N,S), pooled (B,N,geo)); the
-    (B,N,S,geo) invariants and their (B,N,S,3) intermediates never leave the
+    (B,N,S,geo) invariants and their (B,N,S,d) intermediates never leave the
     region, so under checkpointing they are rebuilt in backward, not stored."""
     geo = _relational_invariants(r, n_hat, g_hat, z_pos, m_s, eps, vecs, tens)
     bias = lin(geo).squeeze(-1)
@@ -134,7 +132,7 @@ def _geo_region(
 
 def _fused_vectors(g_hat, vecs):
     """The fused kernel's per-point vector set: the K global directions followed by
-    the token's rank-1 vectors (if any), (B, N, K + P', 3)."""
+    the token's rank-1 vectors (if any), (B, N, K + P', d)."""
     if vecs is None or vecs.shape[2] == 0:
         return g_hat
     return torch.cat([g_hat, vecs], dim=2)
@@ -150,7 +148,7 @@ def _fused_geo_region():
 
 def _geo_width(n_global_vectors: int, n_vecs: int = 0, n_tens: int = 0) -> int:
     """Width of _relational_invariants: dist, log dist, K rel.g_k, rel.n, rel.m,
-    n.m (5 + K), then P' rel.v and Q rho^T T rho; K = 1 alone gives the original 6."""
+    n.m (5 + K), then P' rel.v and Q rho^T T rho."""
     return 5 + int(n_global_vectors) + int(n_vecs) + int(n_tens)
 
 
@@ -252,9 +250,9 @@ class _SliceBlock(nn.Module):
     ) -> None:
         super().__init__()
         self.n_geo = _geo_width(n_global_vectors, n_block_vecs, n_block_tens)
-        ### Activation recompute: the per-slice geometry tensors -- rel (B,N,S,3),
-        ### rel_hat, dist and two bf16 copies of the (B,N,S,geo) invariants -- are
-        ### 76% of ISLA's saved activations at 10k tokens. The eager region is
+        ### Activation recompute: the per-slice geometry tensors -- rel (B,N,S,d),
+        ### rel_hat, dist and two bf16 copies of the (B,N,S,geo) invariants -- dominate
+        ### the saved activations. The eager region is
         ### checkpointed: the invariants are rebuilt from (r, n_hat, g_hat, z_pos,
         ### m_s) inside backward instead of stored; the forward is bitwise the
         ### stored-activation forward (same ops, same order).
@@ -312,8 +310,7 @@ class _SliceBlock(nn.Module):
         ### over slices FIRST, then project: exactly equal to projecting then
         ### pooling (the projection is affine and point_mix sums to one over
         ### slices), but the saved activation is (B, N, geo) instead of
-        ### (B, N, S, hidden/2) -- ~0.5 GB per layer at 10k tokens, 256 slices,
-        ### hidden 192.
+        ### (B, N, S, hidden/2).
         bias, point_mix, pooled = self._geo(logits, r, n_hat, g_hat, z_pos, m_s, eps, vecs, tens, geo_kernel)
         logits = logits + bias
         a = _softmax_over_points(logits + log_w)

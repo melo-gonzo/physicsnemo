@@ -169,8 +169,7 @@ def test_direction_passes_gradcheck(dim, region, wrt, one_thread):
     float64 at generic queries of one region (a cell's interior, where u is the
     cell's normal; a vertex, where the closest point is fixed; an edge in 3-D,
     where it slides along the edge with the query and the vertices, and u takes
-    the gradient of that motion, geometry._closest_features' sliding direction;
-    BUGS_W3.md B1 before)."""
+    the gradient of that motion, geometry._closest_features' sliding direction)."""
     mesh, regions = _regions(dim)
     q, p, c = regions[region], mesh.points, mesh.cells
     if wrt == "queries":
