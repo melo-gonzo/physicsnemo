@@ -188,8 +188,6 @@ def record(cases, device: str, repeats: int = 1, log=print) -> dict:
                 "variant": variant,
                 "device": device,
                 "repeats": n_runs,
-                "kept": [n for n in meta if case.matches(case.kept, n)],
-                "weights": [n for n in meta if case.matches(case.weights, n)],
                 "family": [n for n in meta if case.matches(case.family, n)],
                 "family_rtol": {
                     n: next(

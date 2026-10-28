@@ -117,8 +117,7 @@ def target(name: str):
 class Case:
     """One golden case (see the module docstring).
 
-    ``kept`` and ``weights`` name the draw's kept cells and Horvitz-Thompson weights
-    (read by the A/B harness's rules), ``family`` the CUDA outputs that are known not
+    ``family`` names the CUDA outputs that are known not
     to repeat bitwise run to run (float atomics), judged against their run-to-run
     family there (fnmatch patterns). ``tol`` maps fnmatch patterns of output names to
     a relative tolerance (of ``max|golden|``) against the golden that replaces the
@@ -142,8 +141,6 @@ class Case:
     variants: dict = field(
         default_factory=lambda: {"cpu": ("reference",), "cuda": ("auto",)}
     )
-    kept: tuple = ()
-    weights: tuple = ()
     family: tuple = ()
     tol: dict = field(default_factory=dict)
     cuda_tol: dict = field(default_factory=dict)
@@ -468,17 +465,12 @@ def draw_specs() -> list[tuple]:
     return specs
 
 
-### DRAW-EXACT: these goldens pin today's draw (its kept cells and weights; on CUDA,
-### kept compared first and the weights at 1e-15, compare.py); regenerate:
-### python -m test.experimental.models.isla.goldens.record --regenerate goldens_v1.pt
 for _name, (_sizes, _d, _draws) in _DRAWS.items():
     _case(
         "G-SAMP",
         f"sample_boundary_cells_{_name}",
         _draw_build(_sizes, _d),
         _draw_run(_sizes, _draws),
-        kept=("out.kept_*",),
-        weights=("out.weights_*",),
     )
 
 
@@ -2114,10 +2106,8 @@ _MODEL_SPECS = {
         n_queries=60,
         d=2,
     ),
-    ### About 2,000 cells over two conditions, 512 tokens drawn (at the fixed start).
-    ### DRAW-EXACT: its G-MODEL and G-PARTS goldens pin today's draw (G-PARTS records
-    ### the kept cells and weights); regenerate:
-    ### python -m test.experimental.models.isla.goldens.record --regenerate goldens_v1.pt
+    ### About 2,000 cells over two conditions, 512 tokens drawn (at the fixed start);
+    ### G-PARTS records the kept cells and weights.
     "dtt_draw": lambda dt: _ModelSpec(
         dict(
             **_MODEL_SMALL,
@@ -2210,15 +2200,11 @@ for _name, _make in _MODEL_SPECS.items():
                 _chunks_run(_spec),
                 **_kw,
             )
-        _draw = ("out.sample_boundary_cells.*.0",) if _name == "dtt_draw" else ()
-        _weights = ("out.sample_boundary_cells.*.1",) if _name == "dtt_draw" else ()
         _case(
             "G-PARTS",
             f"parts_{_name}_{_dn}",
             _model_build(_spec),
             _parts_run(_spec),
-            kept=_draw,
-            weights=_weights,
             **_kw,
         )
 
