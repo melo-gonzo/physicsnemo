@@ -1241,6 +1241,7 @@ def test_training_resume_matches_uninterrupted_schedule(
                     "seed": 42,
                     "num_epochs": epochs,
                     "save_interval": 2,
+                    "keep_best": 3,
                     "scheduler_update_mode": scheduler_mode,
                     "scheduler": {
                         "_target_": "torch.optim.lr_scheduler.StepLR",
@@ -1266,3 +1267,16 @@ def test_training_resume_matches_uninterrupted_schedule(
     # Both invocations must also persist the requested final epoch, even
     # when it falls outside the existing periodic checkpoint cadence.
     assert train.load_checkpoint(path=tmp_path / "resumed" / "checkpoints") == 4
+    # Retention: the best three validated epochs survive the resume in best/, ranked in best.json, with the
+    # best in top_model/; the root keeps the latest and the save_interval milestones only.
+    import json
+
+    ckpt = tmp_path / "resumed" / "checkpoints"
+    ranked = json.loads((ckpt / "best" / "best.json").read_text())
+    assert len(ranked) == 3 and {e for _, e in ranked} <= {1, 2, 3, 4}
+    assert [m for m, _ in ranked] == sorted(m for m, _ in ranked)
+    top = [f.name for f in (ckpt / "top_model").iterdir()]
+    assert any(f".0.{ranked[0][1]}." in f for f in top)
+    assert sorted(
+        int(f.name.split(".")[-2]) for f in ckpt.glob("checkpoint.0.*.pt")
+    ) == [2, 4]
