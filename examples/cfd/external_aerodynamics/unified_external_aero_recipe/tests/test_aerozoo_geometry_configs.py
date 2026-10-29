@@ -191,3 +191,38 @@ def test_the_prescribed_scaling_reaches_a_boundary_condition_model():
         for x in (case, _scale_prescribed(case))
     )
     assert not torch.equal(a["/geometry"], b["/geometry"])
+
+
+def _scale_viscosity(d: DomainMesh) -> DomainMesh:
+    """The kinematic viscosity times 10."""
+    gd = d.global_data.clone()
+    gd["physics", "kinematic_viscosity"] = 10 * gd["physics", "kinematic_viscosity"]
+    return DomainMesh(interior=d.interior, boundaries=d.boundaries, global_data=gd)
+
+
+@pytest.mark.parametrize("model", sorted(GEOMETRY_CONFIGS) + sorted(BC_CONFIGS))
+def test_every_baseline_reads_the_viscosity(model):
+    """Every baseline gets the viscosity (nu_std): a tensor model's inputs change with it, and so does a mesh
+    model's prediction (GLOBE keeps nu_std as its one global leaf)."""
+    cfg = _compose(model, dataset=DATASET)
+    case = _labelled_case(True)
+    batches = [_batch(cfg, x) for x in (case, _scale_viscosity(case))]
+    if cfg.input_type == "tensors":
+        a, b = (_tensors(x["forward_kwargs"]) for x in batches)
+        assert any(not torch.equal(a[k], b[k]) for k in a)
+        return
+    torch.manual_seed(0)
+    net = hydra.utils.instantiate(
+        OmegaConf.merge(cfg.model, {**GEOMETRY_CONFIGS, **BC_CONFIGS}[model]),
+        _convert_="partial",
+    )
+    with torch.no_grad():
+        a, b = (
+            _tensors(
+                normalize_output_to_tensordict(
+                    net(**x["forward_kwargs"]), TARGETS, cfg.output_type
+                )
+            )
+            for x in batches
+        )
+    assert any(not torch.equal(a[k], b[k]) for k in a)

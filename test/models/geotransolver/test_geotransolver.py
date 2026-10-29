@@ -443,8 +443,23 @@ def test_geotransolver_local_features_read_leading_geometry_coordinates(device):
 
     with torch.no_grad():
         (out_a, feats_a), (out_b, _) = run(geometry), run(other)
+        positions, glob = (local_emb[:, :, :3],), torch.zeros(1, 5, 16, device=device)
+        ctx_a, local_a, _ = model.context_builder.build_context(
+            (local_emb,), positions, geometry, glob
+        )
+        ctx_b, local_b, _ = model.context_builder.build_context(
+            (local_emb,), positions, other, glob
+        )
     assert out_a.shape == (1, 60, 4) and feats_a.shape == (1, 60, 64 + 16 * 2)
     assert not torch.equal(out_a, out_b)  # the geometry tokens read every channel
+    # The ball query reads the coordinates only: its local features and its context tokens (the leading
+    # channels of the context, one dim_head per radius) do not change with the other channels.
+    n_ball = 2 * (64 // 4)
+    assert torch.equal(local_a[0], local_b[0])
+    assert torch.equal(ctx_a[..., :n_ball], ctx_b[..., :n_ball])
+    assert not torch.equal(ctx_a[..., n_ball:], ctx_b[..., n_ball:])
+    with pytest.raises(ValueError, match="needs include_local_features=True"):
+        _small_model(device, geometry_dim=22, local_geometry_dims=3)
 
 
 def test_geotransolver_point_features_tuple_inputs(device):

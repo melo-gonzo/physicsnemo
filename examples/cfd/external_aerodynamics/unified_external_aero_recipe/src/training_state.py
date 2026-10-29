@@ -113,6 +113,17 @@ class ModelEMA:
                     value.copy_(backup[name])
 
 
+def check_grad_clip_norm(grad_clip_norm: float | None) -> float | None:
+    """``grad_clip_norm`` unchanged if it is ``None`` or finite and positive; anything else raises."""
+    if grad_clip_norm is not None and (
+        isinstance(grad_clip_norm, bool)
+        or not math.isfinite(grad_clip_norm)
+        or grad_clip_norm <= 0
+    ):
+        raise ValueError("grad_clip_norm must be finite and positive")
+    return grad_clip_norm
+
+
 def optimizer_update(
     loss: torch.Tensor,
     optimizer: torch.optim.Optimizer,
@@ -127,12 +138,7 @@ def optimizer_update(
     AMP overflow skips both EMA and per-update scheduler advancement. The
     caller advances the scheduler only when this function returns True.
     """
-    if grad_clip_norm is not None and (
-        isinstance(grad_clip_norm, bool)
-        or not math.isfinite(grad_clip_norm)
-        or grad_clip_norm <= 0
-    ):
-        raise ValueError("grad_clip_norm must be finite and positive")
+    check_grad_clip_norm(grad_clip_norm)
     optimizer.zero_grad()
     if scaler is not None:
         previous_scale = scaler.get_scale()

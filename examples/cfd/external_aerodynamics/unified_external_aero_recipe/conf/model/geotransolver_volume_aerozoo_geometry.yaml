@@ -16,14 +16,15 @@
 # limitations under the License.
 # ---------------------------------------------------------------------------
 # GeoTransolver, stock volume template, on AeroZoo v1.2's interior task from geometry only
-# (benchmark aerozoo-interior-geometry-full; datasets/aerozoo_uvolume*.yaml).
+# (benchmark aerozoo-interior-full, as a model that reads no
+# boundary condition; datasets/aerozoo_uvolume*.yaml).
 # ---------------------------------------------------------------------------
 # geotransolver_volume.yaml as it is, with its inputs mapped onto the AeroZoo chain: the geometry and the local
 # embedding are the query points with their signed distance and normal to the no_slip walls (sdf_wall,
 # sdf_wall_normals), and the global slot, which reads the unit free-stream direction U_inf_dir on DrivAerML,
 # reads nu_std (the standardized log10 viscosity). AeroZoo has no global free stream and its input rule forbids
 # global_data/reference/*; this follows transolver_volume_aerozoo.yaml. The model reads no prescribed boundary
-# value, so it cannot know the inflow: geometry_aerozoo marks the non-canonical, geometry-only track. The
+# value, so it cannot know the inflow: it is reported as a floor without the boundary conditions. The
 # boundary-condition variant is geotransolver_volume_aerozoo.yaml. Architecture and optimizer as in the stock
 # template; the loss is the AeroZoo protocol's (per-case relative L2, velocity weight 3) so every arm on the
 # benchmark trains on one objective.
@@ -32,6 +33,10 @@ dataset_reader_overrides:
 input_type: tensors
 output_type: tensors
 training:
+  # GeoTransolver's reference rate on AeroZoo, as geotransolver_volume_aerozoo.yaml sets it (the CHAR campaign's
+  # DrivAerML Volume rate), so the two GeoTransolver variants train alike.
+  optimizer:
+    lr: 1.0e-3
   loss_type: case_relative_l2
   field_weights:
     velocity: 3

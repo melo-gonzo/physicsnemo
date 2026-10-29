@@ -471,6 +471,14 @@ class GeoTransolver(Module):
         if neighbors_in_radius is None:
             neighbors_in_radius = [8, 32]
 
+        if local_geometry_dims is not None and not (
+            include_local_features and geometry_dim is not None
+        ):
+            raise ValueError(
+                "local_geometry_dims sets the ball query's coordinates, so it needs "
+                "include_local_features=True and a geometry_dim; "
+                f"got include_local_features={include_local_features}, geometry_dim={geometry_dim}"
+            )
         if include_local_features and geometry_dim is not None:
             ball_dims = (
                 geometry_dim if local_geometry_dims is None else local_geometry_dims

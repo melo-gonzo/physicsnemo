@@ -115,3 +115,19 @@ def test_streamed_forward_refuses_training_mode_and_plus():
     ).eval()
     with pytest.raises(NotImplementedError, match="plus=True"):
         streamed_forward(plus, CHUNK, **_inputs(3))
+
+
+def test_streamed_sums_stay_float32_under_autocast():
+    """Under bf16 autocast the chunked slice sums still accumulate in float32."""
+    from physicsnemo.models.geotransolver.streaming import _SliceSums
+
+    torch.manual_seed(0)
+    w = torch.rand(1, 20_000, 2, 4).softmax(-1)
+    x = torch.rand(1, 20_000, 2, 3)
+    sums = _SliceSums()
+    with torch.autocast("cpu", dtype=torch.bfloat16):
+        for r in range(0, 20_000, 100):
+            sums.add(w[:, r : r + 100], x[:, r : r + 100])
+    exact = torch.einsum("bnhs,bnhd->bhsd", w.double(), x.double())
+    assert sums.num.dtype == torch.float32
+    torch.testing.assert_close(sums.num.double(), exact, rtol=1e-5, atol=0)

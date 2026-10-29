@@ -17,7 +17,8 @@
 
 # ---------------------------------------------------------------------------
 # SMART, stock volume template, on AeroZoo v1.2's interior task from geometry only
-# (benchmark aerozoo-interior-geometry-full; datasets/aerozoo_uvolume*.yaml).
+# (benchmark aerozoo-interior-full, as a model that reads no
+# boundary condition; datasets/aerozoo_uvolume*.yaml).
 # ---------------------------------------------------------------------------
 # smart_volume.yaml as it is, with its inputs mapped onto the AeroZoo chain. SMART's reader (for its query and
 # geometry seeds) replaces the chain's DomainMeshReader with the same arguments, and its geometry transform is
@@ -25,7 +26,7 @@
 # 50,000 faces per boundary, so the geometry cloud is those faces' centroids; SMART subsamples it further
 # (geometry_subsample). The query features are the signed distance and normal to no_slip, and the parameter slot,
 # which reads U_inf on DrivAerML, reads nu_std: AeroZoo has no global free stream and forbids
-# global_data/reference/*. No prescribed boundary value is read: the non-canonical, geometry-only track. The
+# global_data/reference/*. No prescribed boundary value is read: a floor without the boundary conditions. The
 # coordinates stay raw (the chain does not center them), as for every AeroZoo arm. The loss is the AeroZoo
 # protocol's (per-case relative L2, velocity weight 3).
 input_type: tensors

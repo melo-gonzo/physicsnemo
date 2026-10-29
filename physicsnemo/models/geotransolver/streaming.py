@@ -42,6 +42,7 @@ from __future__ import annotations
 import torch
 from torch import nn
 
+from physicsnemo.models.geotransolver.context_projector import ContextProjector
 from physicsnemo.models.geotransolver.geotransolver import GeoTransolver
 from physicsnemo.models.transolver.transolver import Transolver, TransolverBlock
 from physicsnemo.nn.module.gale import GALE, _mix_self_and_cross
@@ -72,8 +73,10 @@ class _SliceSums:
 
     def add(self, weights: torch.Tensor, features: torch.Tensor) -> None:
         w = weights.float()
-        num = torch.einsum("bnhs,bnhd->bhsd", w, features.float())
-        den = w.sum(1)
+        ### Autocast would run the einsum, and so the sums, in reduced precision.
+        with torch.autocast(device_type=w.device.type, enabled=False):
+            num = torch.einsum("bnhs,bnhd->bhsd", w, features.float())
+            den = w.sum(1)
         if self.num is None:
             self.num, self.den = num, den
         else:
@@ -180,7 +183,7 @@ def _geotransolver(
         tokenizers += list(builder.local_extractors[0].tokenizers)
     for tokenizer in tokenizers:
         if tokenizer is not None:
-            _check_attention(tokenizer, type(tokenizer))
+            _check_attention(tokenizer, ContextProjector)
             _require(tokenizer.output_dropout is None, "concrete dropout")
 
     batch, n = local_embedding.shape[:2]

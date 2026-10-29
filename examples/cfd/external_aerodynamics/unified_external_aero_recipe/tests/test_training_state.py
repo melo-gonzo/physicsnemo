@@ -180,3 +180,13 @@ def test_ema_export_loads_as_inference_checkpoint_without_mutating_raw(tmp_path)
     assert load_checkpoint(tmp_path, models=restored, device="cpu") == 5
     torch.testing.assert_close(restored.weight, torch.tensor([[3.0]]))
     torch.testing.assert_close(model.weight, torch.tensor([[4.0]]))
+
+
+@pytest.mark.parametrize("bad", [0, -1.0, float("inf"), float("nan"), True])
+def test_check_grad_clip_norm_refuses_what_optimizer_update_refuses(bad):
+    """The chunked ISLA step and optimizer_update share one check of grad_clip_norm."""
+    from training_state import check_grad_clip_norm
+
+    with pytest.raises(ValueError, match="finite and positive"):
+        check_grad_clip_norm(bad)
+    assert check_grad_clip_norm(None) is None and check_grad_clip_norm(1.5) == 1.5

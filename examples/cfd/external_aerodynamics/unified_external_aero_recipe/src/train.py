@@ -67,7 +67,7 @@ from tabulate import tabulate
 from tensordict import TensorDict
 from torch.amp import GradScaler
 from torch.utils.tensorboard import SummaryWriter
-from training_state import ModelEMA, optimizer_update
+from training_state import ModelEMA, check_grad_clip_norm, optimizer_update
 from utils import (
     FieldType,
     Phase,
@@ -535,7 +535,9 @@ def _run_epoch(
             if is_train:
                 if chunked:
                     ### chunked_forward_backward already accumulated the gradients.
-                    grad_clip_norm = cfg.training.get("grad_clip_norm")
+                    grad_clip_norm = check_grad_clip_norm(
+                        cfg.training.get("grad_clip_norm")
+                    )
                     if grad_clip_norm is not None:
                         torch.nn.utils.clip_grad_norm_(
                             model.parameters(), grad_clip_norm, error_if_nonfinite=True
