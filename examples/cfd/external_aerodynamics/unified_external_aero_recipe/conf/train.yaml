@@ -86,6 +86,9 @@ compile_options: {}
 # Transolver / FLARE / GLOBE / HiLift / DoMINO invocations).
 training:
   num_epochs: 500
+  # Checkpoint retention (physicsnemo.utils.CheckpointManager): the latest epoch, every save_interval-th, and the
+  # keep_best epochs with the lowest validation loss in checkpoints/best/ (the best in checkpoints/top_model/).
+  keep_best: 3
   optimizer:
     lr: 3.0e-3
   scheduler:

@@ -85,7 +85,7 @@ from physicsnemo import datapipes  # noqa: F401 - registers ${dp:...} resolver
 from physicsnemo.datapipes import DataLoader
 from physicsnemo.distributed import DistributedManager, fused_all_reduce
 from physicsnemo.mesh import MESH_FIELD_ASSOCIATIONS, DomainMesh, Mesh
-from physicsnemo.utils import load_checkpoint, save_checkpoint
+from physicsnemo.utils import CheckpointManager, load_checkpoint, save_checkpoint
 from physicsnemo.utils.logging import PythonLogger, RankZeroLoggingWrapper
 from physicsnemo.utils.profiling import Profiler, profile
 
@@ -1088,6 +1088,14 @@ def main(cfg: DictConfig) -> None:
         "scaler": scaler,
         "models": model,
     }
+    ### Retention: the latest checkpoint (the one a resume loads), every save_interval-th epoch, and the
+    ### keep_best checkpoints with the lowest validation loss in best/ (the best also in top_model/).
+    ckpt_manager = CheckpointManager(
+        ckpt_args["path"],
+        keep_best=int(cfg.training.keep_best),
+        save_every=int(cfg.training.save_interval),
+        mode="min",
+    )
     checkpoint_metadata: dict[str, Any] = {}
     loaded_epoch = load_checkpoint(
         device=device, metadata_dict=checkpoint_metadata, **ckpt_args
@@ -1212,12 +1220,18 @@ def main(cfg: DictConfig) -> None:
             if cfg.training.get("scheduler_update_mode", "epoch") == "epoch":
                 scheduler.step()
 
-            is_last_epoch = epoch + 1 == num_epochs
-            if (epoch % cfg.training.save_interval == 0 or is_last_epoch) and is_rank0:
+            ### Every epoch: the latest checkpoint replaces the previous one, so a crash loses at most the
+            ### epoch in flight; validated epochs also enter the best-k ranking by validation loss.
+            if is_rank0:
                 metadata = (
                     {"training_ema": ema.state_dict()} if ema is not None else None
                 )
-                save_checkpoint(**ckpt_args, epoch=epoch + 1, metadata=metadata)
+                ckpt_manager.save(
+                    epoch + 1,
+                    metric=val_loss if run_val else None,
+                    **{k: v for k, v in ckpt_args.items() if k != "path"},
+                    metadata=metadata,
+                )
                 if ema is not None:
                     ema_path = os.path.join(ckpt_args["path"], "ema")
                     with ema.average_parameters():
