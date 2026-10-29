@@ -66,6 +66,18 @@ GEOMETRY_CONFIGS = {
 }
 
 
+#: Boundary-condition configs added on this branch, checked to run and predict the seven fields.
+BC_CONFIGS = {
+    "geotransolver_volume_aerozoo_local": {
+        "n_layers": 2,
+        "n_hidden": 32,
+        "slice_num": 16,
+        "n_head": 2,
+        "n_hidden_local": 8,
+    },
+}
+
+
 def _scale_prescribed(d: DomainMesh) -> DomainMesh:
     """Every prescribed boundary value times 3 plus 1."""
     boundaries = {}
@@ -120,7 +132,7 @@ def _batch(cfg, case: DomainMesh) -> dict:
     return build_collate_fn(cfg.input_type, spec, TARGETS)([(d, {})])
 
 
-@pytest.mark.parametrize("model", sorted(GEOMETRY_CONFIGS))
+@pytest.mark.parametrize("model", sorted(GEOMETRY_CONFIGS) + sorted(BC_CONFIGS))
 def test_geometry_config_predicts_the_seven_fields(model):
     """The config composes with the protocol loss, runs collate -> forward, and predicts every target."""
     cfg = _compose(model, dataset=DATASET)
@@ -128,7 +140,8 @@ def test_geometry_config_predicts_the_seven_fields(model):
     assert OmegaConf.to_container(cfg.training.field_weights) == {"velocity": 3}
     batch = _batch(cfg, _labelled_case(False))
     net = hydra.utils.instantiate(
-        OmegaConf.merge(cfg.model, GEOMETRY_CONFIGS[model]), _convert_="partial"
+        OmegaConf.merge(cfg.model, {**GEOMETRY_CONFIGS, **BC_CONFIGS}[model]),
+        _convert_="partial",
     )
     with torch.no_grad():
         out = net(**batch["forward_kwargs"])

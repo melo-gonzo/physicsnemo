@@ -258,6 +258,13 @@ class GeoTransolver(Module):
         Neighbors in radius for the local features. Default is ``[8, 32]``.
     n_hidden_local : int, optional
         Hidden dimension for the local features. Default is 32.
+    local_geometry_dims : int | None, optional
+        Number of leading ``geometry`` channels the local features' ball query reads as
+        coordinates. The ball query needs 3-D coordinates, so a geometry tensor that
+        carries more channels than its coordinates (for example boundary-face tokens:
+        centroid, condition type and prescribed values) sets this to ``3``, and the
+        geometry tokens still read every channel. ``None`` reads all ``geometry_dim``
+        channels, which must then be 3. Default is ``None``.
     structured_shape : tuple[int, ...] | None, optional
         If set to ``(H, W)`` or ``(H, W, D)``, enables structured 2D/3D paths
         (Conv2d/Conv3d GALE; no ball-query local features). Inputs may be
@@ -433,6 +440,7 @@ class GeoTransolver(Module):
         radii: list[float] | None = None,
         neighbors_in_radius: list[int] | None = None,
         n_hidden_local: int = 32,
+        local_geometry_dims: int | None = None,
         structured_shape: tuple[int, ...] | None = None,
         attention_type: Literal["GALE", "GALE_FA", "GALE_FPP"] = "GALE",
         concrete_dropout: bool = False,
@@ -462,6 +470,17 @@ class GeoTransolver(Module):
             radii = [0.05, 0.25]
         if neighbors_in_radius is None:
             neighbors_in_radius = [8, 32]
+
+        if include_local_features and geometry_dim is not None:
+            ball_dims = (
+                geometry_dim if local_geometry_dims is None else local_geometry_dims
+            )
+            if ball_dims != 3 or ball_dims > geometry_dim:
+                raise ValueError(
+                    "include_local_features=True needs 3-D coordinates for its ball query: "
+                    f"geometry_dim={geometry_dim}, local_geometry_dims={local_geometry_dims}; "
+                    "set local_geometry_dims=3 when geometry carries more than its coordinates"
+                )
 
         if structured_shape is not None:
             if include_local_features:
@@ -518,6 +537,7 @@ class GeoTransolver(Module):
             radii=radii,
             neighbors_in_radius=neighbors_in_radius,
             n_hidden_local=n_hidden_local,
+            local_geometry_dims=local_geometry_dims,
             n_hidden=n_hidden,
             n_head=n_head,
             dropout=dropout,

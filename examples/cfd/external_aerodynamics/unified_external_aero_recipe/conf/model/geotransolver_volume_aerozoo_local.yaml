@@ -1,0 +1,91 @@
+# @package _global_
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# ---------------------------------------------------------------------------
+# GeoTransolver with boundary tokens and local features, on AeroZoo v1.2's interior task with boundary conditions
+# (benchmark aerozoo-interior-full).
+# ---------------------------------------------------------------------------
+# geotransolver_volume_aerozoo.yaml (Peter's boundary-token configuration) with the ball-query local features on, as
+# every released GeoTransolver configuration has them. The geometry is every boundary face as one token (centroid,
+# condition type, prescribed values: 22 channels); the ball query needs xyz only, so local_geometry_dims=3 points it
+# at each token's centroid while the geometry tokens read all channels (a GeoTransolver option added for this). The
+# radii and neighbor counts are the released volume template's. Everything else is geotransolver_volume_aerozoo.yaml.
+dataset_reader_overrides:
+  # The boundaries stay: the SDF and the merged face tokens are made from them.
+  drop_in_file_boundaries: false
+
+input_type: tensors
+output_type: tensors
+
+# The CHAR campaign's GeoTransolver rate on DrivAerML Volume, 1e-3
+# (results/campaigns_2026-10-02/char/kernel/cl/cl_lanes.tsv, lanes cl_vol_gt_seed42/43).
+training:
+  optimizer:
+    lr: 1.0e-3
+  loss_type: case_relative_l2
+  field_weights:
+    velocity: 3
+
+forward_kwargs:
+  geometry:
+    - boundaries.merged.cell_centroids
+    - boundaries.merged.cell_data.bc_inlet
+    - boundaries.merged.cell_data.bc_outlet
+    - boundaries.merged.cell_data.bc_no_slip
+    - boundaries.merged.cell_data.bc_slip
+    - boundaries.merged.cell_data.bc_velocity
+    - boundaries.merged.cell_data.bc_velocity_reverse
+    - boundaries.merged.cell_data.bc_pressure
+    - boundaries.merged.cell_data.bc_tke
+    - boundaries.merged.cell_data.bc_omega
+    - boundaries.merged.cell_data.bc_intermittency
+    - boundaries.merged.cell_data.bc_retheta
+    - boundaries.merged.cell_data.bc_tke_reverse
+    - boundaries.merged.cell_data.bc_omega_reverse
+    - boundaries.merged.cell_data.bc_intermittency_reverse
+    - boundaries.merged.cell_data.bc_retheta_reverse
+  local_embedding:
+    - interior.points
+    - interior.point_data.sdf_wall
+    - interior.point_data.sdf_wall_normals
+  local_positions: interior.points
+  global_embedding: global_data.nu_std
+
+model:
+  _target_: physicsnemo.models.geotransolver.GeoTransolver
+  out_dim: ${out_dim}     # auto-set from the chosen dataset's `targets:` block
+  functional_dim: 7       # local_embedding = coords (3) + sdf_wall (1) + sdf_wall_normals (3)
+  geometry_dim: 22        # centroid (3) + one-hot (4) + two velocities (6) + nine scalar values
+  global_dim: 1           # nu_std
+  n_layers: 12
+  n_hidden: 256
+  dropout: 0.0
+  n_head: 8
+  act: "gelu"
+  mlp_ratio: 4
+  slice_num: 256
+  use_te: false
+  plus: false
+  include_local_features: true
+  local_geometry_dims: 3  # the ball query reads each token's centroid; the tokens keep all 22 channels
+  radii: [0.01, 0.05, 0.25, 1.0, 2.5, 5.0]  # as geotransolver_volume.yaml
+  neighbors_in_radius: [8, 16, 32, 32, 64, 128]
+  n_hidden_local: 32
+  state_mixing_mode: "weighted"  # "weighted" (default) or "concat_project"
+  activation_checkpointing: false
+  checkpointing_ratio: 1.0
+  activation_checkpointing_components: [blocks]

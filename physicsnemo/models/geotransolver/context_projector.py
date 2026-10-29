@@ -786,6 +786,9 @@ class GlobalContextBuilder(nn.Module):
         Neighbors per radius. Default is ``[8, 32]``.
     n_hidden_local : int, optional
         Hidden dim for local features. Default is 32.
+    local_geometry_dims : int | None, optional
+        Leading ``geometry`` channels the ball query reads as coordinates (see
+        :class:`~physicsnemo.models.geotransolver.GeoTransolver`). ``None`` reads all.
     n_hidden : int, optional
         Model hidden dimension. Default is 256.
     n_head : int, optional
@@ -846,6 +849,7 @@ class GlobalContextBuilder(nn.Module):
         radii: list[float] | None = None,
         neighbors_in_radius: list[int] | None = None,
         n_hidden_local: int = 32,
+        local_geometry_dims: int | None = None,
         n_hidden: int = 256,
         n_head: int = 8,
         dropout: float = 0.0,
@@ -857,6 +861,7 @@ class GlobalContextBuilder(nn.Module):
         concrete_dropout: bool = False,
     ) -> None:
         super().__init__()
+        self.local_geometry_dims = local_geometry_dims
 
         # Set defaults for mutable arguments
         if radii is None:
@@ -880,7 +885,9 @@ class GlobalContextBuilder(nn.Module):
             self.local_extractors = nn.ModuleList(
                 [
                     MultiScaleFeatureExtractor(
-                        geometry_dim,
+                        geometry_dim
+                        if local_geometry_dims is None
+                        else local_geometry_dims,
                         radii,
                         neighbors_in_radius,
                         n_hidden_local,
@@ -1027,19 +1034,26 @@ class GlobalContextBuilder(nn.Module):
 
         # Extract multi-scale features if enabled
         if self.local_extractors is not None and geometry is not None:
+            ### The ball query reads the leading coordinate channels; the geometry
+            ### tokens below still read every channel.
+            ball_geometry = (
+                geometry
+                if self.local_geometry_dims is None
+                else geometry[..., : self.local_geometry_dims]
+            )
             local_features = []
             for i, embedding in enumerate(local_embeddings):
                 spatial_coords = local_positions[i]  # Extract coordinates
 
                 # Get tokenized context features from multi-scale extractor
                 context_feats = self.local_extractors[i].extract_context_features(
-                    spatial_coords, geometry
+                    spatial_coords, ball_geometry
                 )
                 context_parts.extend(context_feats)
 
                 # Get concatenated local features for skip connection
                 local_feats = self.local_extractors[i].extract_local_features(
-                    spatial_coords, geometry
+                    spatial_coords, ball_geometry
                 )
                 local_features.append(local_feats)
 

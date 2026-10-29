@@ -413,6 +413,40 @@ def test_geotransolver_point_features_with_local_features(device):
     assert not torch.isnan(point_features).any()
 
 
+def test_geotransolver_local_features_read_leading_geometry_coordinates(device):
+    """Token geometry (coordinates plus other channels) feeds the ball query its leading three channels only."""
+    torch.manual_seed(0)
+    kwargs = dict(
+        geometry_dim=22,
+        include_local_features=True,
+        radii=[0.5, 1.0],
+        neighbors_in_radius=[4, 8],
+        n_hidden_local=16,
+    )
+    with pytest.raises(ValueError, match="local_geometry_dims=3"):
+        _small_model(device, **kwargs)
+    model = _small_model(device, local_geometry_dims=3, **kwargs).eval()
+    local_emb = torch.randn(1, 60, 32, device=device)
+    geometry = torch.randn(1, 50, 22, device=device)
+    other = geometry.clone()
+    # Same coordinates, different token channels.
+    other[..., 3:] = torch.randn_like(other[..., 3:])
+
+    def run(g):
+        return model(
+            local_emb,
+            local_positions=local_emb[:, :, :3],
+            geometry=g,
+            global_embedding=torch.zeros(1, 5, 16, device=device),
+            return_point_features=True,
+        )
+
+    with torch.no_grad():
+        (out_a, feats_a), (out_b, _) = run(geometry), run(other)
+    assert out_a.shape == (1, 60, 4) and feats_a.shape == (1, 60, 64 + 16 * 2)
+    assert not torch.equal(out_a, out_b)  # the geometry tokens read every channel
+
+
 def test_geotransolver_point_features_tuple_inputs(device):
     """Tuple inputs return one point-feature tensor per stream."""
     torch.manual_seed(42)
