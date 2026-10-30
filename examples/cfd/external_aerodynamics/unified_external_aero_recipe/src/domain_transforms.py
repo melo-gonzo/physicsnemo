@@ -1209,6 +1209,9 @@ class ComputeBoundaryScales(MeshTransform):
     source computes on the same meshes, and a quantity built on them (:class:`ComputeLogReynolds`) is
     bitwise the one built in the model. It reads only the posed problem (the meshes and the named fields),
     never a label. Run it last, on the boundary meshes the model receives. ``DomainMesh`` only.
+
+    ``direction_field``, with ``sources`` only, also writes ISLA's global direction ``g``: the unit vector
+    of the sources' measure-weighted sum, ``sum a v / |sum a v|`` (2026-10-29).
     """
 
     def __init__(
@@ -1218,6 +1221,7 @@ class ComputeBoundaryScales(MeshTransform):
         speed_field: str,
         sources: Sequence[Sequence[str]] | None = None,
         global_source: str | None = None,
+        direction_field: str | None = None,
     ) -> None:
         super().__init__()
         self.boundaries = sorted(str(b) for b in boundaries)
@@ -1246,8 +1250,15 @@ class ComputeBoundaryScales(MeshTransform):
                 f"boundaries {self.boundaries!r}"
             )
         self.global_source = None if global_source is None else str(global_source)
+        if direction_field is not None and self.sources is None:
+            raise ValueError(
+                "ComputeBoundaryScales: direction_field needs boundary sources, not a global_source"
+            )
+        self.direction_field = None if direction_field is None else str(direction_field)
 
-    def _scales(self, domain: DomainMesh) -> tuple[torch.Tensor, torch.Tensor]:
+    def _scales(
+        self, domain: DomainMesh
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
         ### ISLA's helpers, imported here so that the recipe's other models do not import ISLA.
         from physicsnemo.experimental.models.isla.geometry import (
             cell_second_moments,
@@ -1277,7 +1288,7 @@ class ComputeBoundaryScales(MeshTransform):
         )
         if self.sources is not None:
             present = dict(zip(self.boundaries, zip(meshes, measures)))
-            s0, s2, _ = rms_moments(
+            s0, s2, s1 = rms_moments(
                 (present[b][0].cell_data[as_nested_key(f)], present[b][1])
                 for b, f in self.sources
             )
@@ -1287,14 +1298,23 @@ class ComputeBoundaryScales(MeshTransform):
                     "the speed is undefined"
                 )
             speed = (s2 / s0).sqrt()
+            direction = None
+            if self.direction_field is not None:
+                norm = s1.norm()
+                if not bool(norm > 0):
+                    raise ValueError(
+                        f"{who}: the sources {self.sources!r} sum to zero: the direction is undefined"
+                    )
+                direction = s1 / norm
         else:
+            direction = None
             v = _global_leaf(domain.global_data, self.global_source, who)
             speed = v.to(like.device).reshape(-1).to(like.dtype).double().norm()
             if not bool(speed > 0):
                 raise ValueError(
                     f"{who}: {self.global_source!r} is zero: the speed is undefined"
                 )
-        return length, speed
+        return length, speed, direction
 
     def __call__(self, mesh: Mesh) -> Mesh:
         raise TypeError(
@@ -1305,13 +1325,16 @@ class ComputeBoundaryScales(MeshTransform):
         """Write the scales into the domain-level ``global_data``."""
         _refuse_existing_globals(
             domain.global_data,
-            [self.length_field, self.speed_field],
+            [self.length_field, self.speed_field]
+            + ([self.direction_field] if self.direction_field else []),
             "ComputeBoundaryScales",
         )
-        length, speed = self._scales(domain)
+        length, speed, direction = self._scales(domain)
         gd = domain.global_data.clone()
         gd[self.length_field] = length
         gd[self.speed_field] = speed
+        if direction is not None:
+            gd[self.direction_field] = direction
         return DomainMesh(
             interior=domain.interior, boundaries=domain.boundaries, global_data=gd
         )
@@ -1322,7 +1345,77 @@ class ComputeBoundaryScales(MeshTransform):
             if self.sources is not None
             else f"global_source={self.global_source!r}"
         )
-        return f"boundaries={self.boundaries}, {self.length_field}, {self.speed_field}, {source}"
+        direction = f", {self.direction_field}" if self.direction_field else ""
+        return f"boundaries={self.boundaries}, {self.length_field}, {self.speed_field}{direction}, {source}"
+
+
+@register()
+class ScalesAsFreestream(MeshTransform):
+    r"""Write a case's own scales as the free-stream metadata :class:`NonDimensionalizeByMetadata` reads (2026-10-29).
+
+    ``U_inf = U g``, ``L_ref = L``, ``rho_inf`` the density leaf and ``p_inf = 0`` (gauge pressure), from leaves
+    already in ``global_data`` (:class:`ComputeBoundaryScales` with ``direction_field``). Non-dimensionalizing by
+    them gives the derived-globals arm ISLA's per-case scales: velocity over U, gauge pressure over
+    ``rho U^2 / 2``, ``nu_t`` over ``U L``, ``k`` over ``U^2``, ``omega`` times ``L / U`` and lengths over L.
+    Only the posed problem is read, never a ``reference.*`` label. ``DomainMesh`` only.
+    """
+
+    OUTPUTS = ("U_inf", "L_ref", "rho_inf", "p_inf")
+
+    def __init__(
+        self,
+        speed_field: str,
+        length_field: str,
+        direction_field: str,
+        density_field: str,
+    ) -> None:
+        super().__init__()
+        self.speed_field = str(speed_field)
+        self.length_field = str(length_field)
+        self.direction_field = str(direction_field)
+        self.density_field = str(density_field)
+
+    def __call__(self, mesh: Mesh) -> Mesh:
+        raise TypeError(
+            "ScalesAsFreestream writes a DomainMesh's global_data; got a Mesh"
+        )
+
+    def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
+        """Write ``U_inf``, ``L_ref``, ``rho_inf`` and ``p_inf`` into the domain-level ``global_data``."""
+        who = "ScalesAsFreestream"
+        gd = domain.global_data
+        _refuse_existing_globals(gd, self.OUTPUTS, who)
+        speed = _global_leaf(gd, self.speed_field, who).double()
+        length = _global_leaf(gd, self.length_field, who).double()
+        direction = _global_leaf(gd, self.direction_field, who).double()
+        rho = _global_leaf(gd, self.density_field, who).double()
+        if direction.shape != (3,):
+            raise ValueError(
+                f"{who}: {self.direction_field!r} must have shape (3,), got {tuple(direction.shape)}"
+            )
+        for name, v in (
+            (self.speed_field, speed),
+            (self.length_field, length),
+            (self.density_field, rho),
+        ):
+            if v.numel() != 1 or not bool(torch.isfinite(v).all() and v > 0):
+                raise ValueError(
+                    f"{who}: {name!r} must be one finite positive number, got {v!r}"
+                )
+        new_gd = gd.clone()
+        new_gd["U_inf"] = speed.reshape(()) * direction
+        new_gd["L_ref"] = length.reshape(())
+        new_gd["rho_inf"] = rho.reshape(())
+        new_gd["p_inf"] = torch.zeros((), dtype=torch.float64, device=speed.device)
+        return DomainMesh(
+            interior=domain.interior, boundaries=domain.boundaries, global_data=new_gd
+        )
+
+    def extra_repr(self) -> str:
+        return (
+            f"U_inf = {self.speed_field} * {self.direction_field}, L_ref = {self.length_field}, "
+            f"rho_inf = {self.density_field}, p_inf = 0"
+        )
 
 
 @register()

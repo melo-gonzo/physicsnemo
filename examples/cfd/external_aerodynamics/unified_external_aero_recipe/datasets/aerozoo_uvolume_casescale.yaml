@@ -1,0 +1,222 @@
+# SPDX-FileCopyrightText: Copyright (c) 2023 - 2026 NVIDIA CORPORATION & AFFILIATES.
+# SPDX-FileCopyrightText: All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# AeroZoo v1.2, interior task, derived-globals arm (2026-10-29): datasets/aerozoo_uvolume.yaml with ISLA's per-case
+# scales applied in the datapipe, so a model without its own scales trains on the same dimensionless problem ISLA
+# makes for itself. This arm is labelled separately from the main arm (AeroZoo paper/baseline-campaign.md: the main
+# arm gives no model a per-case scale); ISLA computes the same scales inside the model and needs neither file.
+#   The scales are ISLA's, computed with ISLA's helpers on the posed problem only (never a reference.* label), first,
+#   on the four boundaries at full resolution: L the measure-weighted RMS pairwise distance of their faces, U the
+#   area-weighted RMS speed of the inlet's prescribed velocity, g its area-weighted mean direction, rho the density
+#   (ComputeBoundaryScales, isla_volume_aerozoo.yaml's own step), and re_z = (log10(U L / nu) - 5.849) / 1.444 with
+#   ISLA's constants (ComputeLogReynolds in float64, then StandardizeGlobalLeaf in float32, the models' dtype). ScalesAsFreestream writes them as U_inf = U g, L_ref = L, rho_inf and
+#   p_inf = 0, and NonDimensionalizeByMetadata divides by them: coordinates by L; velocity by U; gauge pressure by
+#   rho U^2 / 2; nu_t by U L; k by U^2; omega times L / U; intermittency and Re_theta_t are dimensionless already.
+#   The same units divide the prescribed values (the second instance). The SDF follows, in units of L.
+#   Each target is then standardized by ISLA's output_scale c (pressure by 2c: ISLA's pressure unit is rho U^2), so
+#   the normalized target is ISLA's head target y / (c U^a L^b rho^e) exactly, and the merged boundary values by
+#   ISLA's input_scale (1 for the velocities, whose |v| / U is O(1), and for the zero outlet pressure). The
+#   viscosity enters only through re_z, the models' rank-0 global in place of nu_std. Inference re-dimensionalizes
+#   the predictions with the same global_data (infer.build_redim_field_types reads both NonDimensionalizeByMetadata
+#   instances), so scores are in SI units like the main arm's.
+# Everything else (the reader, the 50,000-face draw, the boundary grammar, the SDF definition, the flip, the merge,
+# the split filter) is the main arm's, as described there.
+
+train_datadir: ${dataset_paths.aerozoo}
+manifest: ${dataset_paths.aerozoo_manifest}
+sample_filter:
+  global_data: diagnostics.solve.solution_quality_id
+  keep: [4]
+
+pipeline:
+  reader:
+    _target_: ${dp:DomainMeshReader}
+    path: ${train_datadir}
+    pattern: "shard-*/case-*/domain.pdmsh"
+    subsample_n_points: ${sampling_resolution}   # interior queries (the recipe default 200,000; inference passes the same)
+    boundary_subsample: cells
+    drop_interior_cells: true
+    drop_in_file_boundaries: false
+  transforms:
+    # ISLA's scales, on the four boundaries as read (full resolution), before any subsampling.
+    - _target_: ${dp:ComputeBoundaryScales}
+      boundaries: [inlet, outlet, no_slip, slip]
+      length_field: L
+      speed_field: U
+      direction_field: g
+      sources: [[inlet, prescribed.dirichlet.velocity]]
+    - _target_: ${dp:ComputeLogReynolds}
+      speed_field: U
+      length_field: L
+      viscosity_field: physics.kinematic_viscosity
+      mean: 5.849                                   # isla_constants.reynolds below
+      std: 1.444
+      output_field: log_re
+      standardized_field: re_z_float64              # bitwise ISLA's re_z; the models read the float32 re_z below
+    - _target_: ${dp:StandardizeGlobalLeaf}
+      field: log_re
+      output_field: re_z
+      mean: 5.849
+      std: 1.444
+    - _target_: ${dp:ScalesAsFreestream}
+      speed_field: U
+      length_field: L
+      direction_field: g
+      density_field: physics.density
+    # The targets and the coordinates (every mesh, once), then the prescribed values (no second geometry scaling).
+    - _target_: ${dp:NonDimensionalizeByMetadata}
+      association: point_data
+      scale_geometry: true
+      fields:
+        solution.velocity: velocity
+        solution.gauge_pressure: pressure
+        solution.turbulent_kinematic_viscosity: kinematic_viscosity
+        solution.turbulent_kinetic_energy: turbulent_kinetic_energy
+        solution.specific_dissipation_rate: specific_dissipation_rate
+    - _target_: ${dp:NonDimensionalizeByMetadata}
+      association: cell_data
+      scale_geometry: false
+      fields:
+        prescribed.dirichlet.velocity: velocity
+        prescribed.reverse_flow.velocity: velocity
+        prescribed.dirichlet.gauge_pressure: pressure
+        prescribed.dirichlet.turbulent_kinetic_energy: turbulent_kinetic_energy
+        prescribed.dirichlet.specific_dissipation_rate: specific_dissipation_rate
+        prescribed.reverse_flow.turbulent_kinetic_energy: turbulent_kinetic_energy
+        prescribed.reverse_flow.specific_dissipation_rate: specific_dissipation_rate
+    # A uniform random 50,000 faces per boundary, with the Horvitz-Thompson measure N/k: a literal, so training
+    # and scoring see the same boundary budget at every interior resolution.
+    - _target_: ${dp:SubsampleMesh}
+      n_cells: 50000
+    # One boundary grammar for the four roles: a one-hot role label and a zero-filled copy of every prescribed
+    # field a boundary lacks (ISLA declares each condition's own fields and drops this step and the merge).
+    - _target_: ${dp:HarmonizeBoundaryFields}
+      one_hot:
+        inlet: bc_inlet
+        outlet: bc_outlet
+        no_slip: bc_no_slip
+        slip: bc_slip
+      fields:                                   # {cell_data field: rank}
+        prescribed.dirichlet.velocity: 1
+        prescribed.reverse_flow.velocity: 1
+        prescribed.dirichlet.gauge_pressure: 0
+        prescribed.dirichlet.turbulent_kinetic_energy: 0
+        prescribed.dirichlet.specific_dissipation_rate: 0
+        prescribed.dirichlet.intermittency: 0
+        prescribed.dirichlet.momentum_thickness_reynolds_number: 0
+        prescribed.reverse_flow.turbulent_kinetic_energy: 0
+        prescribed.reverse_flow.specific_dissipation_rate: 0
+        prescribed.reverse_flow.intermittency: 0
+        prescribed.reverse_flow.momentum_thickness_reynolds_number: 0
+    # The prescribed values under their recipe names, in SI units.
+    - _target_: ${dp:RenameMeshFields}
+      cell_data:
+        prescribed.dirichlet.velocity: bc_velocity
+        prescribed.reverse_flow.velocity: bc_velocity_reverse
+        prescribed.dirichlet.gauge_pressure: bc_pressure
+        prescribed.dirichlet.turbulent_kinetic_energy: bc_tke
+        prescribed.dirichlet.specific_dissipation_rate: bc_omega
+        prescribed.dirichlet.intermittency: bc_intermittency
+        prescribed.dirichlet.momentum_thickness_reynolds_number: bc_retheta
+        prescribed.reverse_flow.turbulent_kinetic_energy: bc_tke_reverse
+        prescribed.reverse_flow.specific_dissipation_rate: bc_omega_reverse
+        prescribed.reverse_flow.intermittency: bc_intermittency_reverse
+        prescribed.reverse_flow.momentum_thickness_reynolds_number: bc_retheta_reverse
+    # The signed distance and its gradient to the no_slip body (here in units of L), the baselines' published body-SDF
+    # input (pseudo-normal sign, no winding-number pass; computed on the stored orientation, before the flip).
+    - _target_: ${dp:ComputeSDFFromBoundary}
+      boundary_name: no_slip
+      sdf_field: sdf_wall
+      normals_field: sdf_wall_normals
+      use_winding_number: false
+    # The four boundaries are stored with their normals out of the fluid (OpenFOAM's convention); reversed so
+    # they point into the fluid, as AirfRANS's airfoil and the reoriented DrivAerML vehicle do (ISLA's signed
+    # distance is positive on the side the normals point to). After the SDF pass, so the stored distances are
+    # those of the stored files.
+    - _target_: ${dp:FlipBoundaryOrientation}
+      boundaries: [inlet, outlet, no_slip, slip]
+    - _target_: ${dp:RenameMeshFields}
+      point_data:
+        solution.velocity: velocity
+        solution.gauge_pressure: pressure
+        solution.turbulent_kinematic_viscosity: nut
+        solution.turbulent_kinetic_energy: tke
+        solution.specific_dissipation_rate: omega
+        solution.intermittency: intermittency
+        solution.momentum_thickness_reynolds_number: retheta
+    # The dimensionless targets standardized by ISLA's output_scale c (isla_constants below; pressure 2c because
+    # NonDimensionalizeByMetadata's pressure unit is rho U^2 / 2 and ISLA's rho U^2), scale only.
+    - _target_: ${dp:NormalizeMeshFields}
+      association: point_data
+      fields:
+        velocity: {type: vector, mean: [0, 0, 0], std: 0.5763}
+        pressure: {type: scalar, mean: 0, std: 0.15622}
+        nut: {type: scalar, mean: 0, std: 0.0004471}
+        tke: {type: scalar, mean: 0, std: 0.00853}
+        omega: {type: scalar, mean: 0, std: 608.3}
+        intermittency: {type: scalar, mean: 0, std: 0.9993}
+        retheta: {type: scalar, mean: 0, std: 222.8}
+    - _target_: ${dp:ComposeQuadratureMeasure}
+    # Last: every boundary face as one token set (boundaries.merged), as in the main arm, its dimensionless values
+    # standardized by ISLA's input_scale c_in (isla_constants below): 1 for the two velocities (|v| / U is O(1)) and
+    # the zero outlet pressure.
+    - _target_: ${dp:MergeBoundaries}
+      boundaries: [inlet, outlet, no_slip, slip]
+      output: merged
+      fields: [bc_inlet, bc_outlet, bc_no_slip, bc_slip, bc_velocity, bc_velocity_reverse, bc_pressure, bc_tke,
+               bc_omega, bc_intermittency, bc_retheta, bc_tke_reverse, bc_omega_reverse, bc_intermittency_reverse,
+               bc_retheta_reverse]
+      standardize:
+        bc_velocity: {type: vector, mean: [0, 0, 0], std: 1}
+        bc_velocity_reverse: {type: vector, mean: [0, 0, 0], std: 1}
+        bc_pressure: {type: scalar, mean: 0, std: 1}
+        bc_tke: {type: scalar, mean: 0, std: 0.0008784}
+        bc_omega: {type: scalar, mean: 0, std: 1.677}
+        bc_intermittency: {type: scalar, mean: 0, std: 1}
+        bc_retheta: {type: scalar, mean: 0, std: 219.6}
+        bc_tke_reverse: {type: scalar, mean: 0, std: 0.0007741}
+        bc_omega_reverse: {type: scalar, mean: 0, std: 1.631}
+        bc_intermittency_reverse: {type: scalar, mean: 0, std: 1}
+        bc_retheta_reverse: {type: scalar, mean: 0, std: 219.6}
+
+targets:
+  velocity: vector
+  pressure: scalar
+  nut: scalar
+  tke: scalar
+  omega: scalar
+  intermittency: scalar
+  retheta: scalar
+
+# ISLA's own constants for this split: conf/model/isla_volume_aerozoo.yaml leaves them null and train.py / infer.py
+# inject them. Fitted on full.train's 2,011 mean_stable cases (of 2,713) with the implemented scale functions
+# (ISLA._gauge and ISLA._case_scales on the full-resolution boundaries): reynolds is the mean and the population std
+# over the train cases of log10(U L / nu); output_scale is, per output, the median over the train cases of the per-case
+# RMS of the target made dimensionless by its units (a seeded 20,000-point interior sample per case; velocity's the
+# isotropic RMS), and input_scale, per boundary input, the median over the train cases of the per-case area-weighted
+# RMS of the input made dimensionless by its units (a vector's of its magnitude): robust typical sizes, where the
+# pooled RMS is set by the few largest cases. Per-case rows: LHR cpu-short jobs 407910-407911, 2026-10-26
+# (examples/cfd/isla/results/aerozoo_dataset/isla_constants_fit.py aerozoo on ISLA 0.9.0, code 92d9d7800, as the
+# 2026-10-20 fit, jobs 295774-295776, whose constants they reproduce on every train case), fitted by its summarize
+# on the mean_stable train cases (aerozoo_mean_stable_constants_fits.json).
+# intermittency and retheta are dimensionless, so their scale is the median per-case RMS itself, on the same
+# seeded sample: LHR cpu-short job 397200 (isla_constants_fit.py aerozoo_rms), 2026-10-26, fitted the same way.
+isla_constants:
+  reynolds: {mean: 5.849, std: 1.444}
+  output_scale: {velocity: 0.5763, pressure: 0.07811, nut: 0.0004471, tke: 0.00853, omega: 608.3, intermittency: 0.9993, retheta: 222.8}
+  input_scale:
+    inlet: {bc_intermittency: 1, bc_omega: 1.677, bc_retheta: 219.6, bc_tke: 0.0008784}
+    outlet: {bc_intermittency_reverse: 1, bc_omega_reverse: 1.631, bc_retheta_reverse: 219.6, bc_tke_reverse: 0.0007741, bc_velocity_reverse: 1}
