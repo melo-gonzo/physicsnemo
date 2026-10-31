@@ -17,7 +17,8 @@
 
 """AeroZoo v1.2, derived globals with the flow axis (datasets/aerozoo_uvolume_flowaxis.yaml and the *_flowaxis
 model configs). ComputeFlowAxis takes its hand values, inlets weighted by volume flow rate and outlets by area,
-turns with the case, does not depend on the normals' orientation and refuses an inlet with backflow; the dataset
+turns with the case, does not depend on the normals' orientation and counts an inlet face's outflow against the
+inflow; the dataset
 file is the derived-globals file plus that one step; and each flow-axis config differs from its parent only in its
 global input, and predicts the seven fields."""
 
@@ -143,12 +144,21 @@ def test_the_axis_turns_with_the_case_and_ignores_the_normals_orientation():
     )
 
 
-def test_the_axis_refuses_backflow_and_missing_inputs():
-    """An inlet face whose flow goes out, a missing boundary, an inlet without flow, and an existing leaf raise."""
-    inlet = _square(0, 0.0, [1.0, 0, 0])
-    inlet.cell_data["u"][1] = -0.5 * inlet.cell_data["u"][1]
-    with pytest.raises(ValueError, match="against the rest"):
-        AXIS.apply_to_domain(_domain(inlet, _square(0, 3.0, [0, 0, 0])))
+def test_an_inlet_face_with_outflow_counts_against_the_inflow():
+    """The rim of a spherical inlet cap: one face of the inlet square carries flow in at speed 2, the other out at
+    speed 1, so their weights are 1 and -1/2 (area 1/2 each) and c_in = (c_0 - c_1 / 2) / (1/2) = (0, 1, 0) from
+    the triangles' centroids (0, 2/3, 1/3) and (0, 1/3, 2/3)."""
+    inlet = _square(0, 0.0, [2.0, 0, 0])
+    inlet.cell_data["u"][1] = torch.tensor([-1.0, 0, 0])
+    axis = AXIS.apply_to_domain(_domain(inlet, _square(0, 3.0, [0, 0, 0]))).global_data[
+        "flow_axis"
+    ]
+    d = torch.tensor([3.0, 0.5, 0.5]) - torch.tensor([0.0, 1.0, 0.0])
+    torch.testing.assert_close(axis, d / d.norm())
+
+
+def test_the_axis_refuses_missing_inputs():
+    """A missing boundary, an inlet without net flow, and an existing leaf raise."""
     with pytest.raises(ValueError, match="carry no flow"):
         AXIS.apply_to_domain(
             _domain(_square(0, 0.0, [0, 1.0, 0]), _square(0, 3.0, [0, 0, 0]))

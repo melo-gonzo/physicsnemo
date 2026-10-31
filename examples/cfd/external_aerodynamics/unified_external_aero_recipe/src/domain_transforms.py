@@ -1354,14 +1354,16 @@ class ComputeFlowAxis(MeshTransform):
     r"""Write the unit vector from a case's inflow to its outflow into ``global_data`` (2026-10-31).
 
     ``global_data[output_field] = (c_out - c_in) / |c_out - c_in|``, with ``c_in`` the inlet cells' centroids
-    weighted by their volume flow rate ``a u . n`` (``a`` the cell measure, ``u`` the prescribed
+    weighted by their net volume flow rate ``a u . n`` (``a`` the cell measure, ``u`` the prescribed
     ``velocity_field``, ``n`` the unit normal), so the faster of two inlets counts for more, and ``c_out`` the
     outlet cells' centroids weighted by their measure (an outlet prescribes no velocity). The inlets and
     outlets are pooled, any number of each. In a box whose inlet faces its outlet it is the inflow direction;
     in a crossflow or dual-inlet box or a bent duct it is one summary of where the flow goes, not the boundary
     conditions. It reads only the posed problem (the meshes, their roles and the inlets' prescribed velocity),
-    never a label, and is the same on either orientation of the normals: every inlet cell's ``a u . n`` must
-    have the sign of their sum (all of the inlet flow goes in), else it raises. ``DomainMesh`` only.
+    never a label, and is the same on either orientation of the normals (consistently oriented, as the release's
+    are). The flow rate keeps its sign: on the rim of a spherical inlet cap the prescribed velocity points out of
+    a few faces (0.02-0.06% of them in AeroZoo's opposed spheres and hemispheres, 2026-10-31), and they count
+    against the inflow. An inlet whose net flow is zero raises. ``DomainMesh`` only.
     """
 
     def __init__(
@@ -1406,12 +1408,6 @@ class ComputeFlowAxis(MeshTransform):
         total = flow.sum()
         if not bool(total != 0):
             raise ValueError(f"{who}: the inlets {self.inlets!r} carry no flow")
-        backflow = int((flow * total < 0).sum())
-        if backflow:
-            raise ValueError(
-                f"{who}: {backflow} of {flow.numel()} inlet cells of {self.inlets!r} carry flow against "
-                "the rest; the inflow centroid is undefined"
-            )
         c_in = (
             flow[:, None] * torch.cat([m.cell_centroids for m in inlets]).double()
         ).sum(0) / total
