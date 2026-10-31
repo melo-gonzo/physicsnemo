@@ -91,7 +91,12 @@ training:
   keep_best: 3
   optimizer:
     lr: 3.0e-3
+  # The default schedule (Carmelo, 2026-10-31): a short linear warmup, then cosine annealing to min_lr at the last
+  # epoch, stepped once per epoch (scheduler_update_mode: epoch). Epoch e (from 0) trains at peak * (e + 1) / 5 for the
+  # five warmup epochs (2% of a 250-epoch run), then at min_lr + (peak - min_lr) (1 + cos(pi t)) / 2 with
+  # t = (e + 1 - 5) / (num_epochs - 5), so the last epoch trains at min_lr. It replaces StepLR(step_size=100, gamma=0.1).
   scheduler:
-    _target_: torch.optim.lr_scheduler.StepLR
-    step_size: 100
-    gamma: 0.1
+    _target_: optimization.WarmupCosine
+    total_steps: ${training.num_epochs}
+    warmup_steps: 5
+    min_lr: 1.0e-6
