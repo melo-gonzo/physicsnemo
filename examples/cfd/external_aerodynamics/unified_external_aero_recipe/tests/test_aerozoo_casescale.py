@@ -47,7 +47,7 @@ CONFIGS = {f"{m}_casescale": m for m in [*GEOMETRY_CONFIGS, *BC_CONFIGS]}
 KNOBS = {**GEOMETRY_CONFIGS, **BC_CONFIGS}
 
 
-def _batch(cfg, case: DomainMesh) -> dict:
+def _batch(cfg, case: DomainMesh, dataset: str = DATASET) -> dict:
     from collate import build_collate_fn
 
     spec = OmegaConf.to_container(cfg.forward_kwargs, resolve=True)
@@ -60,7 +60,7 @@ def _batch(cfg, case: DomainMesh) -> dict:
         case = DomainMesh(
             interior=case.interior, boundaries=case.boundaries, global_data=gd
         )
-    d = _run(_chain(DATASET, cfg), case)
+    d = _run(_chain(dataset, cfg), case)
     return build_collate_fn(cfg.input_type, spec, TARGETS)([(d, {})])
 
 

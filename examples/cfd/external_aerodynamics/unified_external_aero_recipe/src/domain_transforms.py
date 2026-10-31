@@ -1350,6 +1350,107 @@ class ComputeBoundaryScales(MeshTransform):
 
 
 @register()
+class ComputeFlowAxis(MeshTransform):
+    r"""Write the unit vector from a case's inflow to its outflow into ``global_data`` (2026-10-31).
+
+    ``global_data[output_field] = (c_out - c_in) / |c_out - c_in|``, with ``c_in`` the inlet cells' centroids
+    weighted by their volume flow rate ``a u . n`` (``a`` the cell measure, ``u`` the prescribed
+    ``velocity_field``, ``n`` the unit normal), so the faster of two inlets counts for more, and ``c_out`` the
+    outlet cells' centroids weighted by their measure (an outlet prescribes no velocity). The inlets and
+    outlets are pooled, any number of each. In a box whose inlet faces its outlet it is the inflow direction;
+    in a crossflow or dual-inlet box or a bent duct it is one summary of where the flow goes, not the boundary
+    conditions. It reads only the posed problem (the meshes, their roles and the inlets' prescribed velocity),
+    never a label, and is the same on either orientation of the normals: every inlet cell's ``a u . n`` must
+    have the sign of their sum (all of the inlet flow goes in), else it raises. ``DomainMesh`` only.
+    """
+
+    def __init__(
+        self,
+        inlets: Sequence[str],
+        outlets: Sequence[str],
+        velocity_field: str,
+        output_field: str,
+    ) -> None:
+        super().__init__()
+        self.inlets = [str(b) for b in inlets]
+        self.outlets = [str(b) for b in outlets]
+        if not self.inlets or not self.outlets:
+            raise ValueError(
+                f"ComputeFlowAxis: needs at least one inlet and one outlet; got inlets={self.inlets!r}, "
+                f"outlets={self.outlets!r}"
+            )
+        self.velocity_field = str(velocity_field)
+        self.output_field = str(output_field)
+
+    def _axis(self, domain: DomainMesh) -> torch.Tensor:
+        who = "ComputeFlowAxis"
+        missing = [
+            b for b in self.inlets + self.outlets if b not in domain.boundary_names
+        ]
+        if missing:
+            raise KeyError(
+                f"{who}: boundaries {missing!r} not found; available: {domain.boundary_names!r}"
+            )
+        inlets = [domain.boundaries[b] for b in self.inlets]
+        outlets = [domain.boundaries[b] for b in self.outlets]
+        flow = torch.cat(
+            [
+                cell_measures(m).double()
+                * (
+                    m.cell_data[as_nested_key(self.velocity_field)].double()
+                    * m.cell_normals.double()
+                ).sum(-1)
+                for m in inlets
+            ]
+        )
+        total = flow.sum()
+        if not bool(total != 0):
+            raise ValueError(f"{who}: the inlets {self.inlets!r} carry no flow")
+        backflow = int((flow * total < 0).sum())
+        if backflow:
+            raise ValueError(
+                f"{who}: {backflow} of {flow.numel()} inlet cells of {self.inlets!r} carry flow against "
+                "the rest; the inflow centroid is undefined"
+            )
+        c_in = (
+            flow[:, None] * torch.cat([m.cell_centroids for m in inlets]).double()
+        ).sum(0) / total
+        area = torch.cat([cell_measures(m).double() for m in outlets])
+        if not bool(area.sum() > 0):
+            raise ValueError(f"{who}: the outlets {self.outlets!r} have no area")
+        c_out = (
+            area[:, None] * torch.cat([m.cell_centroids for m in outlets]).double()
+        ).sum(0) / area.sum()
+        d = c_out - c_in
+        norm = d.norm()
+        if not bool(norm > 0):
+            raise ValueError(
+                f"{who}: the inflow and outflow centroids coincide; the axis is undefined"
+            )
+        return (d / norm).to(inlets[0].points.dtype)
+
+    def __call__(self, mesh: Mesh) -> Mesh:
+        raise TypeError("ComputeFlowAxis reads a DomainMesh's boundaries; got a Mesh")
+
+    def apply_to_domain(self, domain: DomainMesh) -> DomainMesh:
+        """Write the axis into the domain-level ``global_data``."""
+        _refuse_existing_globals(
+            domain.global_data, [self.output_field], "ComputeFlowAxis"
+        )
+        gd = domain.global_data.clone()
+        gd[self.output_field] = self._axis(domain)
+        return DomainMesh(
+            interior=domain.interior, boundaries=domain.boundaries, global_data=gd
+        )
+
+    def extra_repr(self) -> str:
+        return (
+            f"{self.output_field}: inlets={self.inlets} weighted by {self.velocity_field} flow rate, "
+            f"outlets={self.outlets} by measure"
+        )
+
+
+@register()
 class ScalesAsFreestream(MeshTransform):
     r"""Write a case's own scales as the free-stream metadata :class:`NonDimensionalizeByMetadata` reads (2026-10-29).
 
