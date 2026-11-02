@@ -18,8 +18,8 @@
 """AeroZoo v1.2, derived globals with the flow axis (datasets/aerozoo_uvolume_flowaxis.yaml and the *_flowaxis
 model configs). ComputeFlowAxis takes its hand values, inlets weighted by volume flow rate and outlets by area,
 turns with the case, does not depend on the normals' orientation and counts an inlet face's outflow against the
-inflow; the dataset
-file is the derived-globals file plus that one step; and each flow-axis config differs from its parent only in its
+inflow, on faces of
+equal or unequal area; the dataset file is the derived-globals file plus that one step; and each flow-axis config differs from its parent only in its
 global input, and predicts the seven fields."""
 
 import hydra
@@ -155,6 +155,43 @@ def test_an_inlet_face_with_outflow_counts_against_the_inflow():
     ]
     d = torch.tensor([3.0, 0.5, 0.5]) - torch.tensor([0.0, 1.0, 0.0])
     torch.testing.assert_close(axis, d / d.norm())
+
+
+def _triangles(*triangles, u=(0.0, 0.0, 0.0)) -> Mesh:
+    """One mesh of the given triangles (three (x, y, z) vertices each), the velocity u on every face."""
+    pts = torch.tensor(triangles, dtype=torch.float32).reshape(-1, 3)
+    return Mesh(
+        points=pts,
+        cells=torch.arange(len(pts)).reshape(-1, 3),
+        cell_data={"u": torch.tensor(u).expand(len(triangles), 3).clone()},
+    )
+
+
+def test_unequal_faces_weigh_by_their_area():
+    """Faces of unequal area: the inlet's two faces (areas 1/2 and 2, at the same speed 1 along +x) weigh by their
+    flow rates 1/2 and 2, so c_in = (0, 2.2, 0.6) from their centroids (0, 1/3, 1/3) and (0, 8/3, 2/3); the outlet's
+    two faces (areas 0.2 and 0.8) weigh by area, so c_out = (3, 3.76 / 3, 1/3). Neither the faces' plain mean
+    centroids nor area-free flow weights give that axis."""
+    inlet = _triangles(
+        [[0, 0, 0], [0, 1, 0], [0, 0, 1]],
+        [[0, 2, 0], [0, 4, 0], [0, 2, 2]],
+        u=(1.0, 0.0, 0.0),
+    )
+    outlet = _triangles(
+        [[3, 0, 0], [3, 0.4, 0], [3, 0, 1]], [[3, 1, 0], [3, 2.6, 0], [3, 1, 1]]
+    )
+    torch.testing.assert_close(inlet.cell_areas, torch.tensor([0.5, 2.0]))
+    torch.testing.assert_close(outlet.cell_areas, torch.tensor([0.2, 0.8]))
+    axis = AXIS.apply_to_domain(_domain(inlet, outlet)).global_data["flow_axis"]
+    unit = lambda v: v / v.norm()  # noqa: E731
+    c_in, c_out = torch.tensor([0.0, 2.2, 0.6]), torch.tensor([3.0, 3.76 / 3, 1 / 3])
+    torch.testing.assert_close(axis, unit(c_out - c_in))
+    plain_in, plain_out = (
+        torch.tensor([0.0, 1.5, 0.5]),
+        torch.tensor([3.0, 5 / 6, 1 / 3]),
+    )
+    for other in (unit(c_out - plain_in), unit(plain_out - c_in)):
+        assert not torch.allclose(axis, other, atol=1e-2)
 
 
 def test_the_axis_refuses_missing_inputs():
