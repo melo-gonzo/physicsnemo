@@ -91,10 +91,16 @@ training:
   keep_best: 3
   optimizer:
     lr: 3.0e-3
-  # The default schedule (Carmelo, 2026-10-31): a short linear warmup, then cosine annealing to min_lr at the last
-  # epoch, stepped once per epoch (scheduler_update_mode: epoch). Epoch e (from 0) trains at peak * (e + 1) / 5 for the
-  # five warmup epochs (2% of a 250-epoch run), then at min_lr + (peak - min_lr) (1 + cos(pi t)) / 2 with
-  # t = (e + 1 - 5) / (num_epochs - 5), so the last epoch trains at min_lr. It replaces StepLR(step_size=100, gamma=0.1).
+  # The job's time budget in seconds (null: none). After an epoch's saves, training stops cleanly (exit 0, logging
+  # "STOP time budget after epoch <N>") when the time since train.py started plus 1.1 times the longest epoch so far
+  # would exceed it, so a time-limited job ends between epochs. Run the same command again to resume.
+  stop_after_seconds: null
+  # Default schedule (Carmelo, 2026-10-31): five epochs of linear warmup, then cosine annealing to min_lr at the last
+  # epoch, stepped once per epoch (scheduler_update_mode: epoch). Epoch e (from 0) trains at peak * (e + 1) / 5 during
+  # warmup, then at min_lr + (peak - min_lr) (1 + cos(pi t)) / 2 with t = (e + 1 - 5) / (num_epochs - 5), so the last
+  # epoch trains at min_lr. Warmup is 1% of the default 500 epochs (2% of a 250-epoch run). total_steps counts
+  # scheduler steps, so it equals num_epochs only under epoch stepping. A resume refuses a checkpoint whose schedule
+  # differs from this one. It replaces StepLR(step_size=100, gamma=0.1).
   scheduler:
     _target_: optimization.WarmupCosine
     total_steps: ${training.num_epochs}

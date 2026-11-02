@@ -1142,16 +1142,42 @@ def test_float32_matmuls_stay_full_precision():
     assert isinstance(train.get_autocast_context("float32"), nullcontext)
 
 
+#: The two schedules the resume test runs: the recipe's former default and its default from 2026-10-31.
+_SCHEDULES = {
+    "steplr": {
+        "_target_": "torch.optim.lr_scheduler.StepLR",
+        "step_size": 2,
+        "gamma": 0.1,
+    },
+    "warmup_cosine": {
+        "_target_": "optimization.WarmupCosine",
+        "total_steps": "${training.num_epochs}",
+        "warmup_steps": 1,
+        "min_lr": 1.0e-3,
+    },
+}
+#: A non-monotone validation loss per epoch (from 0). With val_interval 2 the validated epochs are 0, 2 and the last,
+#: 3, so the best is epoch 2 (checkpoint 3), epoch 1's lower loss is never seen, and keep_best 2 evicts epoch 0.
+_VAL_LOSS = {0: 0.5, 1: 0.1, 2: 0.2, 3: 0.4}
+
+
+@pytest.mark.parametrize("schedule", sorted(_SCHEDULES))
 @pytest.mark.parametrize("scheduler_mode", ["epoch", "step"])
 @pytest.mark.parametrize("precision", ["float32", "float16"])
 def test_training_resume_matches_uninterrupted_schedule(
-    tmp_path, monkeypatch, scheduler_mode, precision
+    tmp_path, monkeypatch, schedule, scheduler_mode, precision
 ):
-    """Resume at a decay boundary with identical weights, LR and AMP state.
+    """A run stopped by its time budget and resumed matches an uninterrupted one: weights, LR, AMP state and the
+    validation ranking.
 
     Exercise the actual training driver and checkpoint utilities with tiny CPU
     updates. Stubbing only the data/epoch work keeps this independent of GPUs
     and checks checkpoint timing, final-epoch saving and scaler persistence.
+    The first link stops after epoch 2 on training.stop_after_seconds (each
+    epoch takes 10 s of a fake clock, the budget is 25 s), and the second link
+    runs the same command. Validation every second epoch with a non-monotone
+    loss pins the best-k ranking: the validated epochs, ranked by validation
+    loss, lowest first.
     """
     from contextlib import nullcontext
     from types import SimpleNamespace
@@ -1162,7 +1188,8 @@ def test_training_resume_matches_uninterrupted_schedule(
 
     manager = SimpleNamespace(device="cpu", rank=0, world_size=1)
     monkeypatch.setattr(train, "DistributedManager", Mock(return_value=manager))
-    monkeypatch.setattr(train, "RankZeroLoggingWrapper", Mock(return_value=Mock()))
+    log = Mock()
+    monkeypatch.setattr(train, "RankZeroLoggingWrapper", Mock(return_value=log))
     monkeypatch.setattr(train, "SummaryWriter", Mock())
     monkeypatch.setattr(train, "Profiler", nullcontext)
     monkeypatch.setattr(
@@ -1181,8 +1208,31 @@ def test_training_resume_matches_uninterrupted_schedule(
         "build_dataloaders",
         lambda cfg: (loader, loader, None, {"targets": {"pressure": "scalar"}}),
     )
-    monkeypatch.setattr(train, "val_epoch", lambda *args, **kwargs: (0.0, {}))
-    monkeypatch.setattr(train, "load_dataset_config", lambda path: OmegaConf.create({}))
+    validated = []
+
+    def val_epoch(
+        dataloader,
+        model,
+        loss_calculator,
+        metric_calculator,
+        logger,
+        epoch,
+        *args,
+        **kwargs,
+    ):
+        validated.append(epoch)
+        return _VAL_LOSS[epoch], {}
+
+    monkeypatch.setattr(train, "val_epoch", val_epoch)
+    monkeypatch.setattr(
+        train, "load_dataset_config", lambda path, paths=None: OmegaConf.create({})
+    )
+    clock = {"now": 0.0}
+    monkeypatch.setattr(
+        train,
+        "time",
+        SimpleNamespace(perf_counter=time.perf_counter, monotonic=lambda: clock["now"]),
+    )
     trajectories = {}
 
     def update(
@@ -1199,6 +1249,7 @@ def test_training_resume_matches_uninterrupted_schedule(
         scaler,
         **kwargs,
     ):
+        clock["now"] += 10.0
         optimizer.zero_grad()
         loss = model(torch.ones(1, 1)).square().sum()
         if scaler is None:
@@ -1222,7 +1273,8 @@ def test_training_resume_matches_uninterrupted_schedule(
 
     monkeypatch.setattr(train, "train_epoch", update)
 
-    def run(run_id, epochs):
+    def run(run_id, budget=None):
+        clock["now"] = 0.0
         cfg = OmegaConf.create(
             {
                 "model": {
@@ -1239,23 +1291,26 @@ def test_training_resume_matches_uninterrupted_schedule(
                 "compile": False,
                 "training": {
                     "seed": 42,
-                    "num_epochs": epochs,
+                    "num_epochs": 4,
                     "save_interval": 2,
-                    "keep_best": 3,
+                    "keep_best": 2,
+                    "val_interval": 2,
+                    "stop_after_seconds": budget,
                     "scheduler_update_mode": scheduler_mode,
-                    "scheduler": {
-                        "_target_": "torch.optim.lr_scheduler.StepLR",
-                        "step_size": 2,
-                        "gamma": 0.1,
-                    },
+                    "scheduler": _SCHEDULES[schedule],
                 },
             }
         )
         train.main(cfg)
 
-    run("uninterrupted", 4)
-    run("resumed", 2)
-    run("resumed", 4)
+    run("uninterrupted")
+    assert validated == [0, 2, 3]
+    run("resumed", budget=25.0)
+    stops = [c.args[0] for c in log.info.call_args_list if "STOP" in str(c.args[0])]
+    assert stops == ["STOP time budget after epoch 2"]
+    assert train.load_checkpoint(path=tmp_path / "resumed" / "checkpoints") == 2
+    run("resumed")
+    assert validated == [0, 2, 3, 0, 2, 3]
     expected = trajectories["uninterrupted"]
     actual = trajectories["resumed"]
     assert len(actual) == len(expected) == 4
@@ -1267,16 +1322,26 @@ def test_training_resume_matches_uninterrupted_schedule(
     # Both invocations must also persist the requested final epoch, even
     # when it falls outside the existing periodic checkpoint cadence.
     assert train.load_checkpoint(path=tmp_path / "resumed" / "checkpoints") == 4
-    # Retention: the best three validated epochs survive the resume in best/, ranked in best.json, with the
-    # best in top_model/; the root keeps the latest and the save_interval milestones only.
+    # Retention: the two lowest validation losses of the validated epochs, ranked in best.json (checkpoint epoch =
+    # epoch + 1), the best in top_model/; the root keeps the latest and the save_interval milestones only.
     import json
 
-    ckpt = tmp_path / "resumed" / "checkpoints"
-    ranked = json.loads((ckpt / "best" / "best.json").read_text())
-    assert len(ranked) == 3 and {e for _, e in ranked} <= {1, 2, 3, 4}
-    assert [m for m, _ in ranked] == sorted(m for m, _ in ranked)
-    top = [f.name for f in (ckpt / "top_model").iterdir()]
-    assert any(f".0.{ranked[0][1]}." in f for f in top)
-    assert sorted(
-        int(f.name.split(".")[-2]) for f in ckpt.glob("checkpoint.0.*.pt")
-    ) == [2, 4]
+    for run_id in ("uninterrupted", "resumed"):
+        ckpt = tmp_path / run_id / "checkpoints"
+        assert json.loads((ckpt / "best" / "best.json").read_text()) == [
+            [0.2, 3],
+            [0.4, 4],
+        ]
+        assert sorted(f.name for f in (ckpt / "best").glob("*.0.*.*")) == [
+            "Linear.0.3.pt",
+            "Linear.0.4.pt",
+            "checkpoint.0.3.pt",
+            "checkpoint.0.4.pt",
+        ]
+        assert sorted(f.name for f in (ckpt / "top_model").iterdir()) == [
+            "Linear.0.3.pt",
+            "checkpoint.0.3.pt",
+        ]
+        assert sorted(
+            int(f.name.split(".")[-2]) for f in ckpt.glob("checkpoint.0.*.pt")
+        ) == [2, 4]

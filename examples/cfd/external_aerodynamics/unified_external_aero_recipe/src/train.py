@@ -85,7 +85,7 @@ from physicsnemo import datapipes  # noqa: F401 - registers ${dp:...} resolver
 from physicsnemo.datapipes import DataLoader
 from physicsnemo.distributed import DistributedManager, fused_all_reduce
 from physicsnemo.mesh import MESH_FIELD_ASSOCIATIONS, DomainMesh, Mesh
-from physicsnemo.utils import CheckpointManager, load_checkpoint, save_checkpoint
+from physicsnemo.utils import CheckpointManager, load_checkpoint
 from physicsnemo.utils.logging import PythonLogger, RankZeroLoggingWrapper
 from physicsnemo.utils.profiling import Profiler, profile
 
@@ -862,6 +862,13 @@ def benchmark_io_epoch(
     )
 
 
+def _save_atomic(obj: Any, path: str) -> None:
+    """``torch.save`` to a temporary name, then rename: a killed process leaves the old file or the new one."""
+    tmp = f"{path}.tmp"
+    torch.save(obj, tmp)
+    os.replace(tmp, path)
+
+
 ### ---------------------------------------------------------------------------
 ### Driver
 ### ---------------------------------------------------------------------------
@@ -887,6 +894,7 @@ def main(cfg: DictConfig) -> None:
             related keys.
     """
 
+    started = time.monotonic()
     DistributedManager.initialize()
     dist_manager = DistributedManager()
     device = dist_manager.device
@@ -1113,14 +1121,35 @@ def main(cfg: DictConfig) -> None:
             "Checkpoint contains EMA state; restore training.ema_decay to resume"
         )
 
+    ### EMA weights rotate like the run's own checkpoints: the latest and every save_interval-th.
+    ema_manager = (
+        CheckpointManager(
+            os.path.join(ckpt_args["path"], "ema"),
+            keep_best=0,
+            save_every=int(cfg.training.save_interval),
+        )
+        if ema is not None
+        else None
+    )
+
     model = compile_model(model, cfg)
 
     num_epochs = cfg.training.num_epochs
+    ### The job's time budget: after an epoch's saves, stop cleanly when the time used plus 1.1 times the longest
+    ### epoch so far would pass it, so a time-limited job ends between epochs rather than in a save.
+    budget = cfg.training.get("stop_after_seconds")
+    if budget is not None and not float(budget) > 0:
+        raise ValueError(
+            f"training.stop_after_seconds must be a positive number of seconds or null, got {budget!r}"
+        )
+    longest_epoch = 0.0
+    stopped = False
     logger.info(f"Starting training for {num_epochs} epochs...")
 
     # Unless profiling is enabled, this is a null context:
     with Profiler():
         for epoch in range(loaded_epoch, num_epochs):
+            epoch_started = time.monotonic()
             logger.info(f"--- Epoch {epoch + 1}/{num_epochs} ---")
             train_loader.set_epoch(epoch)
 
@@ -1143,10 +1172,11 @@ def main(cfg: DictConfig) -> None:
                 log_jsonl=log_jsonl,
             )
 
-            # Validation cadence (default every epoch). Validation only feeds
-            # logging here -- checkpointing and the scheduler do not depend on
-            # it -- so a sparser cadence leaves training bit-identical while
-            # cutting I/O on large validation sets.
+            # Validation cadence (default every epoch, and always the last
+            # epoch). Training and the scheduler do not depend on it, so a
+            # sparser cadence leaves training bit-identical. The best-k
+            # ranking and top_model/ rank only the validated epochs, so the
+            # cadence decides which epochs can be the "best" checkpoint.
             val_interval = int(cfg.training.get("val_interval", 1))
             run_val = (
                 val_interval <= 1
@@ -1232,19 +1262,38 @@ def main(cfg: DictConfig) -> None:
                     **{k: v for k, v in ckpt_args.items() if k != "path"},
                     metadata=metadata,
                 )
-                if ema is not None:
-                    ema_path = os.path.join(ckpt_args["path"], "ema")
+                if ema_manager is not None:
                     with ema.average_parameters():
-                        save_checkpoint(
-                            path=ema_path, models=ema_model, epoch=epoch + 1
-                        )
+                        ema_manager.save(epoch + 1, models=ema_model)
                     if normalizer is not None:
-                        torch.save(
-                            normalizer.stats, os.path.join(ema_path, "norm_stats.pt")
+                        _save_atomic(
+                            normalizer.stats,
+                            os.path.join(ema_manager.path, "norm_stats.pt"),
                         )
                 if normalizer is not None:
-                    norm_path = os.path.join(ckpt_args["path"], "norm_stats.pt")
-                    torch.save(normalizer.stats, norm_path)
+                    _save_atomic(
+                        normalizer.stats,
+                        os.path.join(ckpt_args["path"], "norm_stats.pt"),
+                    )
+
+            if budget is not None and epoch + 1 < num_epochs:
+                now = time.monotonic()
+                longest_epoch = max(longest_epoch, now - epoch_started)
+                stop = torch.tensor(
+                    float(now - started + 1.1 * longest_epoch > float(budget)),
+                    device=device,
+                )
+                ### Rank 0's clock decides (it also does the saves), so every rank stops at the same epoch.
+                if dist_manager.world_size > 1:
+                    dist.broadcast(stop, src=0)
+                if bool(stop):
+                    logger.info(
+                        f"Time used {now - started:.0f} s, longest epoch {longest_epoch:.0f} s, "
+                        f"budget {float(budget):.0f} s (training.stop_after_seconds)"
+                    )
+                    logger.info(f"STOP time budget after epoch {epoch + 1}")
+                    stopped = True
+                    break
 
     if is_rank0:
         if train_writer is not None:
@@ -1252,7 +1301,8 @@ def main(cfg: DictConfig) -> None:
         if val_writer is not None:
             val_writer.close()
 
-    logger.info("Training completed!")
+    if not stopped:
+        logger.info("Training completed!")
 
 
 @hydra.main(
