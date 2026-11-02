@@ -1161,11 +1161,12 @@ _SCHEDULES = {
 _VAL_LOSS = {0: 0.5, 1: 0.1, 2: 0.2, 3: 0.4}
 
 
+@pytest.mark.parametrize("ema_decay", [None, 0.5], ids=["no-ema", "ema"])
 @pytest.mark.parametrize("schedule", sorted(_SCHEDULES))
 @pytest.mark.parametrize("scheduler_mode", ["epoch", "step"])
 @pytest.mark.parametrize("precision", ["float32", "float16"])
 def test_training_resume_matches_uninterrupted_schedule(
-    tmp_path, monkeypatch, schedule, scheduler_mode, precision
+    tmp_path, monkeypatch, schedule, scheduler_mode, precision, ema_decay
 ):
     """A run stopped by its time budget and resumed matches an uninterrupted one: weights, LR, AMP state and the
     validation ranking.
@@ -1177,7 +1178,8 @@ def test_training_resume_matches_uninterrupted_schedule(
     epoch takes 10 s of a fake clock, the budget is 25 s), and the second link
     runs the same command. Validation every second epoch with a non-monotone
     loss pins the best-k ranking: the validated epochs, ranked by validation
-    loss, lowest first.
+    loss, lowest first. With EMA on, checkpoints/ema/ rotates like the run's
+    own checkpoints: the latest and every save_interval-th epoch.
     """
     from contextlib import nullcontext
     from types import SimpleNamespace
@@ -1220,7 +1222,8 @@ def test_training_resume_matches_uninterrupted_schedule(
         *args,
         **kwargs,
     ):
-        validated.append(epoch)
+        if "val_writer" in kwargs:  # the raw weights' validation, not the EMA's
+            validated.append(epoch)
         return _VAL_LOSS[epoch], {}
 
     monkeypatch.setattr(train, "val_epoch", val_epoch)
@@ -1250,6 +1253,8 @@ def test_training_resume_matches_uninterrupted_schedule(
         **kwargs,
     ):
         clock["now"] += 10.0
+        if kwargs["ema"] is not None:
+            kwargs["ema"].update()
         optimizer.zero_grad()
         loss = model(torch.ones(1, 1)).square().sum()
         if scaler is None:
@@ -1296,6 +1301,7 @@ def test_training_resume_matches_uninterrupted_schedule(
                     "keep_best": 2,
                     "val_interval": 2,
                     "stop_after_seconds": budget,
+                    "ema_decay": ema_decay,
                     "scheduler_update_mode": scheduler_mode,
                     "scheduler": _SCHEDULES[schedule],
                 },
@@ -1345,3 +1351,12 @@ def test_training_resume_matches_uninterrupted_schedule(
         assert sorted(
             int(f.name.split(".")[-2]) for f in ckpt.glob("checkpoint.0.*.pt")
         ) == [2, 4]
+        ema = ckpt / "ema"
+        assert ema.is_dir() == (ema_decay is not None)
+        if ema_decay is not None:
+            assert sorted(f.name for f in ema.iterdir()) == [
+                "Linear.0.2.pt",
+                "Linear.0.4.pt",
+                "checkpoint.0.2.pt",
+                "checkpoint.0.4.pt",
+            ]
