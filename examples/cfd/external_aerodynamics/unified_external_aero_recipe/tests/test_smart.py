@@ -292,8 +292,9 @@ def test_loader_validation_is_fixed_across_epochs(native_cases, field, monkeypat
     monkeypatch.setattr(
         ds_module,
         "load_dataset_config",
-        lambda path: OmegaConf.merge(
-            original(path), {"dataset_paths": {"drivaer_ml": str(native_cases)}}
+        lambda path, dataset_paths=None: OmegaConf.merge(
+            original(path, dataset_paths),
+            {"dataset_paths": {"drivaer_ml": str(native_cases)}},
         ),
     )
     cfg = model_cfg(field)

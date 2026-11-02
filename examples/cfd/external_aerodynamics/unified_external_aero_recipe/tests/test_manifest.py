@@ -530,7 +530,7 @@ class TestMultiDatasetManifestOffsets:
         monkeypatch.setattr(
             datasets_module,
             "load_dataset_config",
-            lambda path: configs[path.stem],
+            lambda path, dataset_paths=None: configs[path.stem],
         )
         monkeypatch.setattr(
             datasets_module,
