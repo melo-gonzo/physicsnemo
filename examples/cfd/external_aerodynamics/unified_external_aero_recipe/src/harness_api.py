@@ -48,7 +48,8 @@ options)``:
 model:
 
 - ``{"queries": "independent", "chunk_points": n}``: chunks of ``n`` points,
-  each predicted on its own.
+  each predicted on its own. A model with ISLA's interior API runs its
+  boundary side once per case, then each chunk's points.
 - ``{"queries": "support", "chunk_points": n, "support_points": m,
   "support_seed": s}``: each chunk with the same ``m`` random points (seeded
   by ``s``) beside it.
