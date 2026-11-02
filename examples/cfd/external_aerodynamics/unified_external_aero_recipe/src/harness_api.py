@@ -351,6 +351,10 @@ class RecipePredictor:
             )
         self.model = model.eval()
         self.num_params = int(sum(p.numel() for p in model.parameters()))
+        self._query_chunks = (
+            callable(getattr(model, "query_chunks", None))
+            and getattr(model, "interior", False) is True
+        )
 
         if self.normalizer is not None:
             stats_file = checkpoint_dir / "norm_stats.pt"
@@ -432,43 +436,56 @@ class RecipePredictor:
         return sample
 
     def forward(self, sample: tuple[DomainMesh, dict[str, Any]]) -> Any:
-        """The model's pointwise outputs for every interior point, in the dataset's normalized units."""
+        """The model's pointwise outputs for every interior point, in the dataset's normalized units.
+
+        In ``independent`` mode a model with ISLA's interior API
+        (``query_chunks``, ``interior`` true) runs its boundary side once per
+        case, then each chunk's points.
+        """
         domain, meta = sample
-        inference, step = self.inference, int(self.inference["chunk_points"])
+        queries, step = self.inference["queries"], int(self.inference["chunk_points"])
+        n = domain.interior.n_points
+
+        def forward_kwargs(d: DomainMesh) -> dict[str, Any]:
+            batch = self.collate([(d, meta)])
+            return recursive_to_device(batch, self.device)["forward_kwargs"]
+
         with torch.no_grad(), get_autocast_context(self.cfg.precision):
-            if inference["queries"] == "streamed":
-                batch = recursive_to_device(self.collate([(domain, meta)]), self.device)
-                return self._pointwise(
-                    self._stream(self.model, step, **batch["forward_kwargs"])
+            if queries == "streamed":
+                out = self._stream(self.model, step, **forward_kwargs(domain))
+                return self._pointwise(out)
+            if queries == "independent" and self._query_chunks:
+                chunks = self.model.query_chunks(**forward_kwargs(domain))
+                return torch.cat(
+                    [
+                        self._pointwise(chunks(a, min(a + step, n)))
+                        for a in range(0, n, step)
+                    ]
                 )
-            n = domain.interior.n_points
-            support = None
-            if inference["queries"] == "support":
-                g = torch.Generator().manual_seed(int(inference["support_seed"]))
+            support = torch.zeros(0, dtype=torch.long)
+            if queries == "support":
+                g = torch.Generator().manual_seed(int(self.inference["support_seed"]))
                 support = (
                     torch.randperm(n, generator=g)[
-                        : min(int(inference["support_points"]), n)
+                        : min(int(self.inference["support_points"]), n)
                     ]
                     .sort()
                     .values
                 )
             parts = []
-            for start in range(0, n, step):
-                chunk = torch.arange(start, min(start + step, n))
-                rows = chunk if support is None else torch.cat([support, chunk])
+            for a in range(0, n, step):
+                rows = torch.cat([support, torch.arange(a, min(a + step, n))])
                 rows = rows.to(domain.interior.points.device)
-                interior = Mesh(
-                    points=domain.interior.points[rows],
-                    point_data=domain.interior.point_data[rows],
-                )
                 part = DomainMesh(
-                    interior=interior,
+                    interior=Mesh(
+                        points=domain.interior.points[rows],
+                        point_data=domain.interior.point_data[rows],
+                    ),
                     boundaries=domain.boundaries,
                     global_data=domain.global_data,
                 )
-                batch = recursive_to_device(self.collate([(part, meta)]), self.device)
-                out = self._pointwise(self.model(**batch["forward_kwargs"]))
-                parts.append(out[len(rows) - len(chunk) :])
+                out = self._pointwise(self.model(**forward_kwargs(part)))
+                parts.append(out[len(support) :])
         return torch.cat(parts)
 
     def _pointwise(self, out: Any) -> Any:

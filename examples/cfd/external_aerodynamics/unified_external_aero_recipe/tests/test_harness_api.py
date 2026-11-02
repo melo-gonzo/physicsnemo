@@ -254,7 +254,9 @@ def test_the_predictor_predicts_the_label_free_case_as_the_reader_path_does(
     tmp_path, run
 ):
     """From the label-free domain, every field comes back in SI units as an (n_points, k) float32 array in the
-    domain's point order, equal to the recipe's reader path on the case file and the same on a second call."""
+    domain's point order, equal to the recipe's reader path on the case file and the same on a second call. ISLA
+    predicts through query_chunks (its boundary side once per case), equal to its forward pass up to summation
+    order."""
     ckpt, options = _trained_run(tmp_path, run)
     pred = harness_api.RecipePredictor(ckpt, "best", "cpu", options)
     assert pred.checkpoint_file.parent.name == "top_model"
@@ -267,8 +269,14 @@ def test_the_predictor_predicts_the_label_free_case_as_the_reader_path_does(
         assert value.dtype == np.float32 and value.shape == (n, WIDTHS.get(name, 1))
         assert np.isfinite(value).all(), name
     reference = _reader_path(pred)
+    assert pred._query_chunks == (run == "isla")
+    tolerance = (
+        {"rtol": 1e-5, "atol": 1e-5} if run == "isla" else {"rtol": 0, "atol": 0}
+    )
     for name in FIELDS:
-        np.testing.assert_array_equal(out[name], reference[name], err_msg=name)
+        np.testing.assert_allclose(
+            out[name], reference[name], **tolerance, err_msg=name
+        )
     again = pred.predict(case)
     assert all(np.array_equal(out[k], again[k]) for k in FIELDS)
     ### The case's labels are not needed, and the full case gives the same prediction.
