@@ -52,7 +52,7 @@ from torch.utils.data import Sampler
 
 import physicsnemo.datapipes  # noqa: F401  (registers ${dp:...} resolvers)
 from physicsnemo.datapipes import DataLoader, MeshDataset, MultiDataset
-from physicsnemo.datapipes.transforms.mesh import NormalizeMeshFields
+from physicsnemo.datapipes.transforms.mesh import MeshTransform, NormalizeMeshFields
 from physicsnemo.distributed import DistributedManager
 
 ### Make this folder importable by its bare module names (`nondim`, `sdf`)
@@ -171,6 +171,41 @@ def _apply_dataset_transform_appends(
     dataset_cfg = dataset_cfg.copy()
     dataset_cfg.pipeline.transforms = [*(transforms or []), *extra]
     return dataset_cfg
+
+
+def resolve_dataset_config(cfg: DictConfig, ds_name: str) -> DictConfig:
+    """The dataset YAML ``datasets/<ds_name>.yaml`` as the recipe config ``cfg`` uses it.
+
+    It is read with ``cfg.dataset_paths`` over ``dataset_paths.yaml``, capped
+    at ``cfg.sampling_resolution``, and given the model config's reader
+    overrides, transform drops and transform appends, in that order. Training,
+    inference and the scoring harness all build their pipelines from it.
+    """
+    config_path = (
+        Path(__file__).resolve().parent.parent / "datasets" / f"{ds_name}.yaml"
+    )
+    ds_yaml = load_dataset_config(
+        config_path, OmegaConf.select(cfg, "dataset_paths", default=None)
+    )
+    sampling_resolution = cfg.get("sampling_resolution", None)
+    if sampling_resolution is not None:
+        ds_yaml = OmegaConf.merge(ds_yaml, {"sampling_resolution": sampling_resolution})
+    ds_yaml = _apply_dataset_reader_overrides(ds_yaml, cfg)
+    ds_yaml = _apply_dataset_transform_drops(ds_yaml, cfg)
+    return _apply_dataset_transform_appends(ds_yaml, cfg)
+
+
+def model_out_dim(targets: dict[str, FieldType]) -> int:
+    """The output width of a flat-output model: the targets' channels, symmetric tensors left out.
+
+    Tensor targets exist only for mesh-output models (ISLA), which declare
+    their outputs by name and rank.
+    """
+    return sum(
+        field_dim(cast(FieldType, ftype))
+        for ftype in targets.values()
+        if field_kind(cast(FieldType, ftype)) != "symmetric_tensor"
+    )
 
 
 def _fill_reynolds_constants(t_cfg: DictConfig, dataset_cfg: DictConfig) -> DictConfig:
@@ -476,10 +511,27 @@ def build_dataset(
     Returns:
         Configured ``MeshDataset`` ready to be wrapped in a DataLoader.
     """
+    reader = hydra.utils.instantiate(cfg.pipeline.reader, pin_memory=pin_memory)
+    return MeshDataset(
+        reader,
+        transforms=build_transforms(cfg, base_dir=base_dir, augment=augment) or None,
+        device=device,
+        num_workers=num_workers,
+        cache_host=cache_host,
+    )
+
+
+def build_transforms(
+    cfg: DictConfig, base_dir: Path | None = None, augment: bool = False
+) -> list[MeshTransform]:
+    """Instantiate a dataset config's ``pipeline.transforms``, as :func:`build_dataset` runs them.
+
+    Relative paths resolve against *base_dir* (the recipe root by default),
+    and the targets are injected into the transforms that take them. With
+    *augment*, ``pipeline.augmentations`` follow ``CenterMesh``.
+    """
     if base_dir is None:
         base_dir = Path(__file__).resolve().parent.parent
-
-    reader = hydra.utils.instantiate(cfg.pipeline.reader, pin_memory=pin_memory)
     resolved = []
 
     ### The dataset field names the targets read (a symmetric-tensor target
@@ -514,15 +566,7 @@ def build_dataset(
                 len(resolved),
             )
             resolved[insert_idx:insert_idx] = aug
-
-    transforms = resolved if resolved else None
-    return MeshDataset(
-        reader,
-        transforms=transforms,
-        device=device,
-        num_workers=num_workers,
-        cache_host=cache_host,
-    )
+    return resolved
 
 
 # ---------------------------------------------------------------------------
@@ -1015,7 +1059,6 @@ def build_dataloaders(
             f"All models in this recipe assume B=1; the YAML field is "
             f"reserved for future use."
         )
-    sampling_resolution = cfg.get("sampling_resolution", None)
     train_split = cfg.get("train_split", None)
     val_split = cfg.get("val_split", None)
     augment = cfg.get("augment", False)
@@ -1069,16 +1112,7 @@ def build_dataloaders(
             )
             continue
 
-        ds_yaml = load_dataset_config(
-            config_path, OmegaConf.select(cfg, "dataset_paths", default=None)
-        )
-        if sampling_resolution is not None:
-            ds_yaml = OmegaConf.merge(
-                ds_yaml, {"sampling_resolution": sampling_resolution}
-            )
-        ds_yaml = _apply_dataset_reader_overrides(ds_yaml, cfg)
-        ds_yaml = _apply_dataset_transform_drops(ds_yaml, cfg)
-        ds_yaml = _apply_dataset_transform_appends(ds_yaml, cfg)
+        ds_yaml = resolve_dataset_config(cfg, ds_name)
 
         train_datadir = OmegaConf.select(ds_yaml, "train_datadir", default=None)
         if train_datadir and not Path(str(train_datadir)).exists():
@@ -1259,14 +1293,7 @@ def build_dataloaders(
     ### resolves before `hydra.utils.instantiate(cfg.model)`.  GLOBE's
     ### model template doesn't reference `out_dim`, so the extra key is
     ### a harmless no-op for it.
-    ### `out_dim` is a flat-output quantity; tensor targets exist only for
-    ### mesh-output models (ISLA), which declare their outputs by name and rank.
-    out_dim_total = sum(
-        field_dim(cast(FieldType, ftype))
-        for ftype in (first_targets or {}).values()
-        if field_kind(cast(FieldType, ftype)) != "symmetric_tensor"
-    )
-    OmegaConf.update(cfg, "out_dim", out_dim_total, force_add=True)
+    OmegaConf.update(cfg, "out_dim", model_out_dim(first_targets or {}), force_add=True)
 
     normalizer = find_normalizer(train_datasets)
     collate_fn = _build_collate(cfg, first_targets or {}, first_target_sources)
