@@ -552,6 +552,26 @@ supports checkpointing (auto-resume), TensorBoard + JSONL logging,
 mixed precision (float16/bfloat16), `torch.compile`, and NVIDIA
 profiling.
 
+Checkpoints go to `<checkpoint_dir>/<run_id>/checkpoints/` in the layout of
+`physicsnemo.utils.CheckpointManager`:
+
+- the latest epoch and every `training.save_interval`-th epoch
+- `best/`, the `training.keep_best` validated epochs with the lowest
+  validation loss, ranked in `best/best.json`
+- `top_model/`, the best of them
+- `norm_stats.pt`, the dataset's normalization statistics
+- `ema/`, the averaged weights when `training.ema_decay` is set
+
+Every file is written under a temporary name and renamed, so a killed job
+leaves no partial checkpoint. A job with a time limit sets
+`training.stop_after_seconds` a little below it. After each epoch's saves,
+training stops cleanly (exit 0, logging `STOP time budget after epoch <N>`)
+when the time used plus 1.1 times the longest epoch would pass the budget.
+Running the same command again resumes from the latest epoch.
+
+Set the data roots per run with `++dataset_paths.<key>=<path>` (each key of
+`datasets/dataset_paths.yaml`) instead of editing that file.
+
 ### Infer
 
 ```bash
@@ -600,6 +620,15 @@ ${output_dir}/${run_id}/
   See `src/forces.py` for the integration and sign conventions.
 - Inference runs at full mesh resolution by default (a large
   `sampling_resolution` makes the reader's subsample a no-op).
+
+### Score with a harness
+
+`src/harness_api.py` is the interface a scoring harness, such as the
+AeroZoo benchmark's, imports from your tree. `RecipePredictor` predicts one
+case at a time from a run's `checkpoints/` directory, at its best or final
+checkpoint, in SI units. Its module docstring describes the arguments and
+how to score a model or a pre- or post-processing step this recipe does not
+have.
 
 ### Benchmark datapipe throughput
 
@@ -650,7 +679,7 @@ unified_external_aero_recipe/
 | Concern | Lives in |
 |---|---|
 | Pipeline + dataset construction | `datasets/<dataset>_<modality>.yaml` (one file per dataset) |
-| Disk paths | `datasets/dataset_paths.yaml` (only thing the user has to edit per machine) |
+| Disk paths | `datasets/dataset_paths.yaml`, or `++dataset_paths.<key>=<path>` per run |
 | Splits (definitions) | `manifest.json` next to each dataset on disk |
 | Splits (which one to use) | `train.yaml` (`train_split`, `val_split`) |
 | Sampling resolution | `train.yaml` (`sampling_resolution`) |
@@ -688,12 +717,15 @@ compile: true
 
 training:
   num_epochs: 500
+  keep_best: 3
   optimizer:
     lr: 3.0e-3
+  stop_after_seconds: null
   scheduler:
-    _target_: torch.optim.lr_scheduler.StepLR
-    step_size: 100
-    gamma: 0.1
+    _target_: optimization.WarmupCosine
+    total_steps: ${training.num_epochs}
+    warmup_steps: 5
+    min_lr: 1.0e-6
 ```
 
 ### How the pieces compose
