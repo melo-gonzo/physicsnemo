@@ -80,7 +80,9 @@ class WarmupCosine(torch.optim.lr_scheduler.LRScheduler):
     ``total_steps`` counts optimizer updates over the complete run, including
     warmup. The first update uses peak_lr / warmup_steps, the last warmup
     update uses peak_lr, and the final planned update uses min_lr. A resumed
-    run restores the scheduler state instead of recomputing a shorter schedule.
+    run restores the scheduler state instead of recomputing a shorter schedule,
+    and refuses a state planned with other ``total_steps``, ``warmup_steps``
+    or ``min_lr``.
     """
 
     def __init__(
@@ -106,6 +108,24 @@ class WarmupCosine(torch.optim.lr_scheduler.LRScheduler):
         self.warmup_steps = warmup_steps
         self.min_lr = min_lr
         super().__init__(optimizer, last_epoch=last_epoch)
+
+    def load_state_dict(self, state_dict):
+        """Restore a saved schedule, refusing one planned differently.
+
+        A resume whose configured schedule differs from the checkpoint's (for
+        example another ``training.num_epochs``) would otherwise continue the
+        old schedule silently.
+        """
+        saved = {
+            k: state_dict.get(k) for k in ("total_steps", "warmup_steps", "min_lr")
+        }
+        configured = {k: getattr(self, k) for k in saved}
+        if saved != configured:
+            raise ValueError(
+                f"WarmupCosine: the checkpoint's schedule {saved} differs from the configured "
+                f"{configured}; resume with the run's own schedule and epochs, or start a new run"
+            )
+        super().load_state_dict(state_dict)
 
     def get_lr(self):
         """Return each group learning rate for the next optimizer update."""
