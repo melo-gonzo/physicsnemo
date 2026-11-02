@@ -96,11 +96,14 @@ BC_FIELDS = {
     "bc_retheta_reverse": 0,
 }
 
-### The case: U_inf = 10 m/s along x, rho 1.2, L_ref 2 m, nu 1.5e-5 (Re 1.33e6); the inlet prescribes k = 0.5,
-### omega = 50, intermittency 1, Re_theta_t 300; the outlet p = 0 and reverse-flow values; the body is a
-### closed box (the SDF sign is defined without the winding-number pass).
-U_INF, RHO, L_REF, NU = 10.0, 1.2, 2.0, 1.5e-5
-Q_INF = 0.5 * RHO * U_INF**2
+### The case: the inlet prescribes 10 m/s along x, k = 0.5, omega = 50, intermittency 1 and Re_theta_t 300; rho 1.2,
+### nu 1.5e-5; the outlet p = 0 and reverse-flow values; the body is a closed box (the SDF sign is defined without
+### the winding-number pass).
+U_INF, RHO, NU = 10.0, 1.2, 1.5e-5
+### The reference.* labels differ from every scale the chain can derive (the inlet's speed U_INF along x, a length
+### from the boundaries), so a step that read a label in place of a derived scale changes what the model gets.
+LABEL_SPEED, LABEL_LENGTH = 7.3, 0.37
+LABEL_DIRECTION = (0.0, 0.6, 0.8)
 INLET_TURBULENCE = {
     "turbulent_kinetic_energy": 0.5,
     "specific_dissipation_rate": 50.0,
@@ -240,11 +243,11 @@ def make_aerozoo_case(with_slip: bool, seed: int = 0) -> DomainMesh:
                 "closure_model_id": torch.tensor(3),
             },
             "reference": {
-                "velocity": torch.tensor([U_INF, 0.0, 0.0]),
-                "speed": torch.tensor(U_INF),
-                "length": torch.tensor(L_REF),
-                "dynamic_pressure": torch.tensor(Q_INF),
-                "force_projection_direction": torch.tensor([1.0, 0.0, 0.0]),
+                "velocity": torch.tensor(LABEL_DIRECTION) * LABEL_SPEED,
+                "speed": torch.tensor(LABEL_SPEED),
+                "length": torch.tensor(LABEL_LENGTH),
+                "dynamic_pressure": torch.tensor(0.5 * RHO * LABEL_SPEED**2),
+                "force_projection_direction": torch.tensor(LABEL_DIRECTION),
                 "secondary_inlet_velocities": torch.zeros(0, 3),
             },
             "diagnostics": {"continuity_residual": torch.tensor(1e-6)},
@@ -641,14 +644,20 @@ def test_geotransolver_option_b_and_transolver_configs_run():
 @pytest.mark.parametrize("with_slip", [True, False])
 def test_every_model_input_is_blind_to_every_label(with_slip):
     """On the synthetic case: with every label perturbed, and with every label
-    deleted, the pipeline runs and every non-label leaf it hands over (the baselines' view and ISLA's, which
-    drops the draw, the SDF, the harmonized fields and the merge) is bitwise equal, and so is every tensor of
-    the GeoTransolver and Transolver batches."""
+    deleted, the pipeline runs and every non-label leaf it hands over is bitwise equal, and so is every tensor of
+    the GeoTransolver and Transolver batches. The views are the baselines' on each arm (the main file, the derived
+    inputs, the derived inputs with the flow axis) and ISLA's on both of its configs (which drop the draw, the SDF,
+    the harmonized fields and the merge, and compute their own scales)."""
     case = _labelled_case(with_slip)
     isla_cfg = _compose("isla_volume_aerozoo", dataset=DATASET)
     views = {
         "baselines": _chain(DATASET),
+        "casescale": _chain("aerozoo_uvolume_casescale"),
+        "flowaxis": _chain("aerozoo_uvolume_flowaxis"),
         "isla": _chain(DATASET, isla_cfg),
+        "isla_flowaxis": _chain(
+            DATASET, _compose("isla_volume_aerozoo_flowaxis", dataset=DATASET)
+        ),
     }
     assert not any(type(t).__name__ == "MergeBoundaries" for t in views["isla"])
     specs = {
