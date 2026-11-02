@@ -577,7 +577,8 @@ def main(cfg: DictConfig) -> None:
             load_dataset_config(
                 Path(__file__).resolve().parent.parent
                 / "datasets"
-                / f"{cfg.dataset}.yaml"
+                / f"{cfg.dataset}.yaml",
+                OmegaConf.select(cfg, "dataset_paths", default=None),
             ),
         ),
     ).to(device)
@@ -618,7 +619,10 @@ def main(cfg: DictConfig) -> None:
     ### stay in training space; `active_*` gate the physical conversion.
     redimensionalize_on = bool(cfg.get("redimensionalize", True))
     recipe_root = Path(__file__).resolve().parent.parent
-    ds_yaml = load_dataset_config(recipe_root / "datasets" / f"{cfg.dataset}.yaml")
+    ds_yaml = load_dataset_config(
+        recipe_root / "datasets" / f"{cfg.dataset}.yaml",
+        OmegaConf.select(cfg, "dataset_paths", default=None),
+    )
     field_types = build_redim_field_types(ds_yaml)
     nondim_helper = (
         NonDimensionalizeByMetadata(fields=field_types) if field_types else None

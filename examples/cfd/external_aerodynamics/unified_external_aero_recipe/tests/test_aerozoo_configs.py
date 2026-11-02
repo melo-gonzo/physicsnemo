@@ -469,6 +469,43 @@ def test_dataset_files_read_no_label_and_derive_no_case_scale(dataset):
         hydra.utils.instantiate(t, _convert_="all")
 
 
+def test_dataset_paths_replace_the_files_roots():
+    """The recipe config's dataset_paths replace the same keys of datasets/dataset_paths.yaml, so a training job or
+    the harness sets the data roots without editing the file; a key the file does not define raises. Both entry
+    points compose dataset_paths, empty by default."""
+    path = _RECIPE_ROOT / "datasets" / f"{DATASET}.yaml"
+    roots = {"aerozoo": "/data/az", "aerozoo_manifest": "/data/az/manifest.json"}
+    ds = load_dataset_config(path, roots)
+    assert (ds.train_datadir, ds.manifest, ds.pipeline.reader.path) == (
+        "/data/az",
+        "/data/az/manifest.json",
+        "/data/az",
+    )
+    assert (
+        load_dataset_config(path, {"aerozoo": "/data/az"}).manifest
+        == load_dataset_config(path).manifest
+    )
+    with pytest.raises(KeyError, match="aerozo"):
+        load_dataset_config(path, {"aerozo": "/data/az"})
+    with initialize_config_dir(
+        config_dir=str(_RECIPE_ROOT / "conf"), version_base=None
+    ):
+        assert compose(config_name="train").dataset_paths == {}
+        for name in ("train", "infer"):
+            cfg = compose(
+                config_name=name,
+                overrides=[
+                    "model=transolver_volume_aerozoo",
+                    f"dataset={DATASET}",
+                    "++dataset_paths.aerozoo=/data/az",
+                ],
+            )
+            assert OmegaConf.to_container(cfg.dataset_paths) == {"aerozoo": "/data/az"}
+            assert load_dataset_config(path, cfg.dataset_paths).train_datadir == (
+                "/data/az"
+            )
+
+
 @pytest.mark.parametrize("with_slip", [True, False])
 def test_pipeline_is_physical_and_merges_the_faces(with_slip):
     """SI values throughout: raw coordinates, the prescribed values in m/s and the case's own units on the

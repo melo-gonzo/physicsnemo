@@ -979,7 +979,8 @@ def main(cfg: DictConfig) -> None:
     ### dataset's NormalizeMeshFields stats, so its outputs and the targets are one space,
     ### and the constants it leaves to the dataset (its split's isla_constants).
     ds_cfg = load_dataset_config(
-        Path(__file__).resolve().parent.parent / "datasets" / f"{cfg.dataset}.yaml"
+        Path(__file__).resolve().parent.parent / "datasets" / f"{cfg.dataset}.yaml",
+        OmegaConf.select(cfg, "dataset_paths", default=None),
     )
     model = hydra.utils.instantiate(
         cfg.model,

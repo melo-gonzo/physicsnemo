@@ -39,7 +39,7 @@ import json
 import logging
 import math
 import sys
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, cast
@@ -88,16 +88,28 @@ from utils import (  # noqa: E402
 _LOGGER = logging.getLogger("training.datasets")
 
 
-def load_dataset_config(yaml_path: str | Path) -> DictConfig:
+def load_dataset_config(
+    yaml_path: str | Path, dataset_paths: Mapping[str, Any] | None = None
+) -> DictConfig:
     """Load a dataset YAML config and return an OmegaConf DictConfig.
 
-    The returned config is merged with ``dataset_paths.yaml`` (looked up in
-    the same directory as *yaml_path*, then one level up) so that dataset
-    YAMLs can use ``${dataset_paths.<key>}`` interpolation for root paths.
+    The returned config is merged with ``dataset_paths.yaml`` (in the same
+    directory as *yaml_path*) so that dataset YAMLs can use
+    ``${dataset_paths.<key>}`` interpolation for root paths. Each key of
+    *dataset_paths* (the recipe config's ``dataset_paths``) replaces the same
+    key of that file; a key the file does not have raises ``KeyError``.
     """
     yaml_path = Path(yaml_path)
     paths_file = yaml_path.parent / "dataset_paths.yaml"
     paths = OmegaConf.load(paths_file) if paths_file.exists() else OmegaConf.create()
+    if dataset_paths:
+        unknown = sorted(set(dataset_paths) - set(paths.keys()))
+        if unknown:
+            raise KeyError(
+                f"dataset_paths overrides {unknown}, which {paths_file} does not define; "
+                f"its keys are {sorted(paths.keys())}"
+            )
+        paths = OmegaConf.merge(paths, dict(dataset_paths))
     cfg = OmegaConf.load(yaml_path)
     return OmegaConf.merge({"dataset_paths": paths}, cfg)
 
@@ -1057,7 +1069,9 @@ def build_dataloaders(
             )
             continue
 
-        ds_yaml = load_dataset_config(config_path)
+        ds_yaml = load_dataset_config(
+            config_path, OmegaConf.select(cfg, "dataset_paths", default=None)
+        )
         if sampling_resolution is not None:
             ds_yaml = OmegaConf.merge(
                 ds_yaml, {"sampling_resolution": sampling_resolution}
