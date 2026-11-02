@@ -32,7 +32,7 @@ _CHECKPOINT_FILE = re.compile(r"^.+\.\d+\.(\d+)\.(?:mdlus|pt)$")
 
 
 class CheckpointManager:
-    r"""Bounded checkpoint retention on top of :func:`save_checkpoint`.
+    r"""Keep the latest, the best ``keep_best`` and every ``save_every``-th checkpoint.
 
     Each call to :meth:`save` writes the *latest* checkpoint to ``path`` and
     deletes the previous one, so ``load_checkpoint(path)`` always resumes from
@@ -41,6 +41,13 @@ class CheckpointManager:
     deleted. The single best checkpoint is also copied to ``path/top_model``,
     so ``load_checkpoint(path/top_model)`` loads the best model so far.
     Optionally, every ``save_every``-th epoch is kept permanently in ``path``.
+
+    A save writes ``best/``, ``best.json`` and ``top_model/`` before the
+    latest checkpoint, and writes every file under a temporary name that it
+    then renames. A process killed during a save leaves no partial file under
+    a checkpoint name, and every epoch ``best.json`` ranks has its files. If
+    the new latest checkpoint is not yet in place, a resume loads the
+    previous one and redoes the epoch.
 
     Layout::
 
@@ -148,49 +155,89 @@ class CheckpointManager:
         bool
             ``True`` if this epoch entered the best-k set.
         """
-        save_checkpoint(self.path, models=models, epoch=epoch, **kwargs)
+        if not DistributedManager.is_initialized():
+            DistributedManager.initialize()  # as save_checkpoint does
         is_rank0 = DistributedManager().rank == 0
+        best = self._ranking_with(epoch, metric)
+        if best is not None:
+            if self.best_weights_only:
+                best_kwargs = {
+                    k: kwargs[k] for k in ("metadata", "optimizer_model") if k in kwargs
+                }
+            else:
+                best_kwargs = kwargs
+            self._write(self.best_path, epoch, models, best_kwargs)
+            self.best = best
+            if is_rank0:
+                self._publish_best(epoch)
+
+        self._write(self.path, epoch, models, kwargs)
         if is_rank0:
             for e, files in self._epoch_files(self.path).items():
                 if e != epoch and not (self.save_every and e % self.save_every == 0):
                     self._fs.rm(files)
+        return best is not None
 
+    def _ranking_with(
+        self, epoch: int, metric: float | torch.Tensor | None
+    ) -> list[tuple[float, int]] | None:
+        """The best-k ranking with ``epoch`` in it, or ``None`` if it does not enter."""
         if metric is None or self.keep_best == 0:
-            return False
+            return None
         metric = float(metric)
         if not math.isfinite(metric):
-            return False
+            return None
         sign = 1.0 if self.mode == "min" else -1.0
         if (
             len(self.best) == self.keep_best
             and sign * metric >= sign * self.best[-1][0]
         ):
-            return False
-
-        if self.best_weights_only:
-            kwargs = {
-                k: kwargs[k] for k in ("metadata", "optimizer_model") if k in kwargs
-            }
-        save_checkpoint(self.best_path, models=models, epoch=epoch, **kwargs)
-        self.best = sorted(
+            return None
+        ranked = sorted(
             [(m, e) for m, e in self.best if e != epoch] + [(metric, epoch)],
             key=lambda x: sign * x[0],
         )
-        evicted, self.best = self.best[self.keep_best :], self.best[: self.keep_best]
-        if is_rank0:
-            files = self._epoch_files(self.best_path)
-            for _, e in evicted:
-                if e in files:
-                    self._fs.rm(files[e])
-            with self._fs.open(self._index, "w") as f:
-                json.dump(self.best, f)
-            if self.best_epoch == epoch:
-                if self._fs.exists(self.top_path):
-                    self._fs.rm(self.top_path, recursive=True)
-                self._fs.makedirs(self.top_path, exist_ok=True)
-                for f in files[epoch]:
-                    self._fs.copy(f, f"{self.top_path}/{f.rsplit('/', 1)[-1]}")
-        return True
+        return ranked[: self.keep_best]
+
+    def _write(
+        self,
+        path: str,
+        epoch: int,
+        models: torch.nn.Module | list[torch.nn.Module] | None,
+        kwargs: dict[str, Any],
+    ) -> None:
+        """:func:`save_checkpoint` into a staging directory, then each file renamed into ``path``."""
+        staging = f"{path}/.staging-{DistributedManager().rank}"
+        if self._fs.exists(staging):
+            self._fs.rm(staging, recursive=True)
+        self._fs.makedirs(staging, exist_ok=True)
+        save_checkpoint(staging, models=models, epoch=epoch, **kwargs)
+        if self._fs.exists(staging):
+            for f in self._fs.ls(staging, detail=False):
+                self._fs.mv(f, f"{path}/{f.rsplit('/', 1)[-1]}")
+            self._fs.rm(staging, recursive=True)
+
+    def _publish_best(self, epoch: int) -> None:
+        """Copy a new best into ``top_model/``, write ``best.json``, then delete
+        the files of every epoch the ranking no longer holds (rank 0)."""
+        files = self._epoch_files(self.best_path)
+        if self.best_epoch == epoch:
+            self._fs.makedirs(self.top_path, exist_ok=True)
+            for f in files[epoch]:
+                tmp = f"{self.top_path}/{f.rsplit('/', 1)[-1]}.tmp"
+                self._fs.copy(f, tmp)
+                self._fs.mv(tmp, tmp[: -len(".tmp")])
+        with self._fs.open(f"{self._index}.tmp", "w") as f:
+            json.dump(self.best, f)
+        self._fs.mv(f"{self._index}.tmp", self._index)
+        ranked = {e for _, e in self.best}
+        for e, stale in files.items():
+            if e not in ranked:
+                self._fs.rm(stale)
+        if self.best_epoch == epoch:
+            for e, stale in self._epoch_files(self.top_path).items():
+                if e != epoch:
+                    self._fs.rm(stale)
 
     def _epoch_files(self, path: str) -> dict[int, list[str]]:
         """Group checkpoint files directly under ``path`` by epoch."""
