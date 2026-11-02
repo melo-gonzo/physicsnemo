@@ -19,6 +19,8 @@ datapipe. The scales are ISLA's (bitwise its L, U and re_z); a case rescaled in 
 same Reynolds number gives every model the same inputs and targets; every derived-globals config predicts the seven
 fields; and inference's re-dimensionalization returns the physical targets."""
 
+import copy
+
 import hydra
 import pytest
 import torch
@@ -100,6 +102,53 @@ def _similar(d: DomainMesh, s: float, t: float) -> DomainMesh:
         boundaries={n: mesh(d.boundaries[n]) for n in d.boundary_names},
         global_data=gd,
     )
+
+
+#: The steps the derived-inputs file runs before the main file's chain, in order.
+SCALE_STEPS = [
+    "ComputeBoundaryScales",
+    "ComputeLogReynolds",
+    "StandardizeGlobalLeaf",
+    "ScalesAsFreestream",
+    "NonDimensionalizeByMetadata",
+    "NonDimensionalizeByMetadata",
+]
+
+
+def test_the_shared_part_is_the_main_files():
+    """datasets/aerozoo_uvolume_casescale.yaml is aerozoo_uvolume.yaml with the scale steps first, the main file's
+    nu_std step dropped, and its own standardization scales. Set those aside and every other key and step is the main
+    file's, so a revision of the main file fails here until it reaches this file too."""
+
+    def load(name):
+        path = _RECIPE_ROOT / "datasets" / f"{name}.yaml"
+        return OmegaConf.to_container(OmegaConf.load(path), resolve=False)
+
+    def name(step):
+        return step["_target_"].split(":")[-1].rstrip("}")
+
+    def unscaled(step):
+        """The step without the standardization scales this arm refits."""
+        step = copy.deepcopy(step)
+        key = {"NormalizeMeshFields": "fields", "MergeBoundaries": "standardize"}.get(
+            name(step)
+        )
+        for stats in step[key].values() if key else ():
+            del stats["std"]
+        return step
+
+    ours, main = load(DATASET), load("aerozoo_uvolume")
+    ours_steps, main_steps = (
+        ours["pipeline"].pop("transforms"),
+        main["pipeline"].pop("transforms"),
+    )
+    assert [name(t) for t in ours_steps[: len(SCALE_STEPS)]] == SCALE_STEPS
+    (nu_std,) = [t for t in main_steps if name(t) == "StandardizeGlobalLeaf"]
+    assert nu_std["output_field"] == "nu_std"
+    assert [unscaled(t) for t in ours_steps[len(SCALE_STEPS) :]] == [
+        unscaled(t) for t in main_steps if t is not nu_std
+    ]
+    assert ours == main
 
 
 def test_the_scales_are_islas():
