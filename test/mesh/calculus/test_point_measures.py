@@ -170,7 +170,9 @@ def test_point_sampling_reweights_only_explicit_quadrature(reader):
     cloud = Mesh(points=torch.randn(10, 3))
     set_point_measures(cloud, torch.ones(10), dimension=0)
     if reader:
-        sampled = _subsample_mesh_points(cloud, 4, torch.Generator().manual_seed(1))
+        sampled = _subsample_mesh_points(
+            cloud, 4, torch.Generator().manual_seed(1), mode="block"
+        )
     else:
         sampled = SubsampleMesh(n_points=4)(cloud)
     torch.testing.assert_close(point_measures(sampled), torch.full((4,), 2.5))

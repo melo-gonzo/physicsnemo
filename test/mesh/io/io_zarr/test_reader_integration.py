@@ -87,7 +87,7 @@ def test_pushdown_matches_eager_subsample(tmp_path):
 
     eager_full = from_zarr(tmp_path / "sample.mesh.zarr")
     gen = spawn_generator(seed_gen.initial_seed(), 0, 0)
-    eager = _subsample_mesh(eager_full, n_cells=100, generator=gen)
+    eager = _subsample_mesh(eager_full, n_cells=100, generator=gen, mode="block")
 
     assert lazy.n_cells == 100
     assert_meshes_equal(eager, lazy)
@@ -109,9 +109,11 @@ def test_pushdown_point_cloud_matches_eager(tmp_path):
 
     eager_full = from_zarr(tmp_path / "case.zarr")
     gen = spawn_generator(seed_gen.initial_seed(), 0, 0)
-    interior = _subsample_mesh(eager_full.interior, 10, 20, generator=gen)
+    interior = _subsample_mesh(eager_full.interior, 10, 20, generator=gen, mode="block")
     boundaries = {
-        n: _subsample_mesh(eager_full.boundaries[n], 10, 20, generator=gen)
+        n: _subsample_mesh(
+            eager_full.boundaries[n], 10, 20, generator=gen, mode="block"
+        )
         for n in eager_full.boundary_names
     }
 

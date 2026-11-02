@@ -184,6 +184,11 @@ class MeshReaderWithGlobalData(MeshReader):
                 "duplicate_cell_masks is set but drop_duplicate_cells is false"
             )
         super().__init__(*args, **kwargs)
+        if drop_duplicate_cells and self.subsample_mode != "block":
+            raise ValueError(
+                "drop_duplicate_cells draws its cell subsample as a contiguous block; "
+                f"subsample_mode must be 'block', got {self.subsample_mode!r}"
+            )
         self._merge_rel_path = merge_global_data_from
         self._domain_boundaries = [str(n) for n in domain_boundaries]
         if len(set(self._domain_boundaries)) != len(self._domain_boundaries):
@@ -296,7 +301,10 @@ class MeshReaderWithGlobalData(MeshReader):
             )
         if self.subsample_n_points is not None:
             mesh = _subsample_mesh_points(
-                mesh, self.subsample_n_points, generator=generator
+                mesh,
+                self.subsample_n_points,
+                generator=generator,
+                mode=self.subsample_mode,
             )
         if self.pin_memory:
             mesh = mesh.pin_memory()

@@ -50,7 +50,8 @@ def _subsample_mesh_points(
     mesh: Mesh,
     n_points: int,
     generator: torch.Generator | None = None,
-    mode: SubsampleMode = "block",
+    *,
+    mode: SubsampleMode,
 ) -> Mesh:
     """Subsample a Mesh to *n_points* via a cyclic contiguous block read
     (``mode="block"``) or a uniform random draw of rows (``mode="uniform"``).
@@ -95,7 +96,8 @@ def _subsample_mesh_cells(
     mesh: Mesh,
     n_cells: int,
     generator: torch.Generator | None = None,
-    mode: SubsampleMode = "block",
+    *,
+    mode: SubsampleMode,
 ) -> Mesh:
     """Subsample a Mesh to *n_cells* via a cyclic contiguous block read on cells
     (``mode="block"``) or a uniform random draw of cells (``mode="uniform"``).
@@ -154,7 +156,8 @@ def _zarr_mesh_subsampled(
     n_points: int | None,
     generator: torch.Generator | None,
     drop_cells: bool = False,
-    mode: SubsampleMode = "block",
+    *,
+    mode: SubsampleMode,
 ) -> Mesh:
     """Partial-read a zarr mesh group: fetch only the subsample window.
 
@@ -235,7 +238,8 @@ def _subsample_mesh(
     n_cells: int | None = None,
     n_points: int | None = None,
     generator: torch.Generator | None = None,
-    mode: SubsampleMode = "block",
+    *,
+    mode: SubsampleMode,
 ) -> Mesh:
     """Apply cell and/or point subsampling to a single Mesh.
 
@@ -307,7 +311,11 @@ class MeshReader:
             contiguous run in storage order, the fastest I/O, but spatially
             representative only when the on-disk order is shuffled.
             ``"uniform"`` draws a uniformly random, sorted set of rows, which
-            is representative in any storage order at the cost of a gather.
+            is representative in any storage order. Its gather touches most
+            pages of each field it samples, even for a small sample: 200,000
+            of 24.3 million 48-byte rows fall on 94% of the 16 KiB pages (50%
+            of the 4 KiB pages), and storage that reads larger blocks reads
+            nearly all of the field.
         """
         self._root = Path(path)
         self._pattern = pattern
@@ -516,7 +524,11 @@ class DomainMeshReader:
             contiguous run in storage order, the fastest I/O, but spatially
             representative only when the on-disk order is shuffled.
             ``"uniform"`` draws a uniformly random, sorted set of rows, which
-            is representative in any storage order at the cost of a gather.
+            is representative in any storage order. Its gather touches most
+            pages of each field it samples, even for a small sample: 200,000
+            of 24.3 million 48-byte rows fall on 94% of the 16 KiB pages (50%
+            of the 4 KiB pages), and storage that reads larger blocks reads
+            nearly all of the field.
         boundary_subsample : {"both", "cells", "points"}, default="both"
             Which of the two subsamples apply to the in-file boundary
             meshes.  ``"both"`` applies ``subsample_n_cells`` then

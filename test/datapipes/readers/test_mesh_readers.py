@@ -91,6 +91,7 @@ class TestMeshReader:
             mesh,
             4,
             generator=torch.Generator().manual_seed(2),
+            mode="block",
         )
         torch.testing.assert_close(
             sampled.points.squeeze(-1),
