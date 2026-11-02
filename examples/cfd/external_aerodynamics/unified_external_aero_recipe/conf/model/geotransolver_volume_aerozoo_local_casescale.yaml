@@ -15,13 +15,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# geotransolver_volume_aerozoo_local.yaml on the derived-globals arm (datasets/aerozoo_uvolume_casescale.yaml, ISLA's
+# geotransolver_volume_aerozoo_local.yaml on the derived-inputs arm (datasets/aerozoo_uvolume_casescale.yaml, ISLA's
 # per-case scales applied in the datapipe, 2026-10-29): the global input is re_z, the standardized log10(U L / nu) the
 # dataset computes, in place of nu_std, which that file does not make. Everything else, the radii included (now in
 # units of L), is the parent's.
 defaults:
   - geotransolver_volume_aerozoo_local
   - _self_
+
+dataset: aerozoo_uvolume_casescale   # the dataset this arm trains on; a command-line dataset= still wins
 
 forward_kwargs:
   global_embedding: global_data.re_z

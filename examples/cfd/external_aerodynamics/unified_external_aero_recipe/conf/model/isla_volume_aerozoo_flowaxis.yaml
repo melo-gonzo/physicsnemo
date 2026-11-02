@@ -24,6 +24,8 @@ defaults:
   - isla_volume_aerozoo
   - _self_
 
+dataset: aerozoo_uvolume    # ISLA computes its scales and the axis itself, on the main file; a command-line dataset= still wins
+
 dataset_append_transforms:
   - _target_: ${dp:ComputeBoundaryScales}
     boundaries: [inlet, outlet, no_slip, slip]    # forward_kwargs.boundary_meshes

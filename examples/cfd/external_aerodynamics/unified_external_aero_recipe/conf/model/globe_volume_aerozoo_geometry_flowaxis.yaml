@@ -21,6 +21,8 @@ defaults:
   - globe_volume_aerozoo_geometry_casescale
   - _self_
 
+dataset: aerozoo_uvolume_flowaxis    # the dataset this arm trains on; a command-line dataset= still wins
+
 model:
   global_schema:
     flow_axis: {rank: 1}      # the unit vector from the inflow to the outflow

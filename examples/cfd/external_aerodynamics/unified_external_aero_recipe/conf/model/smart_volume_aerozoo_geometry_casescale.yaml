@@ -15,11 +15,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# smart_volume_aerozoo_geometry.yaml on the derived-globals arm (datasets/aerozoo_uvolume_casescale.yaml,
+# smart_volume_aerozoo_geometry.yaml on the derived-inputs arm (datasets/aerozoo_uvolume_casescale.yaml,
 # 2026-10-29): re_z in place of nu_std; everything else is the parent's.
 defaults:
   - smart_volume_aerozoo_geometry
   - _self_
+
+dataset: aerozoo_uvolume_casescale   # the dataset this arm trains on; a command-line dataset= still wins
 
 forward_kwargs:
   parameters: global_data.re_z

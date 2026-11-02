@@ -21,6 +21,8 @@ defaults:
   - smart_volume_aerozoo_geometry_casescale
   - _self_
 
+dataset: aerozoo_uvolume_flowaxis    # the dataset this arm trains on; a command-line dataset= still wins
+
 forward_kwargs:
   parameters: [global_data.re_z, global_data.flow_axis]
 model:

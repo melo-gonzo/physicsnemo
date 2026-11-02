@@ -26,13 +26,14 @@
 # place of DrivAerML's three. Its global schema declares nu_std, the standardized log10 viscosity every other
 # baseline reads, so GLOBE gets the same inputs as the other models without boundary conditions (2026-10-29). It
 # reads no inflow, so it is reported as a floor without the boundary conditions.
-# Derived-globals arm (2026-10-29): this file is globe_volume_aerozoo_geometry.yaml on
+# Derived-inputs arm (2026-10-29): this file is globe_volume_aerozoo_geometry.yaml on
 # datasets/aerozoo_uvolume_casescale.yaml (ISLA's per-case scales applied in the datapipe), with re_z, the standardized
 # log10(U L / nu) that file computes, in place of nu_std, which it does not make. A copy rather than a Hydra child
 # because a defaults merge cannot remove the parent's nu_std from global_schema. The reference lengths stay the stock
 # constants, now in units of L.
 # The reference lengths and area stay the stock constants (one value for every case, so no per-case scale). The
 # loss is the AeroZoo protocol's (per-case relative L2, velocity weight 3).
+dataset: aerozoo_uvolume_casescale   # the dataset this arm trains on; a command-line dataset= still wins
 input_type: mesh
 output_type: mesh
 dataset_reader_overrides:
@@ -66,7 +67,7 @@ model:
   reference_length_names: [L_ref, delta_turb]
   reference_area: 0.0868       # 2.170 / 5.0^2 (nondim)
   global_schema:
-    re_z: {rank: 0}             # standardized log10(U L / nu), as the other derived-globals baselines read it
+    re_z: {rank: 0}             # standardized log10(U L / nu), as the other derived-inputs baselines read it
   n_communication_hyperlayers: 2
   hidden_layer_sizes: [256, 256, 256]
   n_latent_scalars: 8

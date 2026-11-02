@@ -25,6 +25,7 @@ global input, and predicts the seven fields."""
 import hydra
 import pytest
 import torch
+from hydra import compose, initialize_config_dir
 from omegaconf import OmegaConf
 from output_normalize import (
     model_dataset_constants,
@@ -287,6 +288,34 @@ def test_flowaxis_config_adds_the_axis_and_predicts_the_seven_fields(model):
     pred = normalize_output_to_tensordict(out, TARGETS, cfg.output_type)
     assert set(pred.keys()) == set(TARGETS)
     assert all(torch.isfinite(v).all() for v in pred.values())
+
+
+def test_each_arm_config_names_its_dataset():
+    """Every derived-inputs and flow-axis config sets the dataset file its global inputs come from (ISLA's flow-axis
+    config the main file, since ISLA computes its scales and the axis itself), so a training command needs no
+    dataset=; a command-line dataset= still wins."""
+    expected = {
+        **{f"{m}_casescale": "aerozoo_uvolume_casescale" for m in KNOBS},
+        **{f"{m}_flowaxis": DATASET for m in KNOBS},
+        "isla_volume_aerozoo_flowaxis": "aerozoo_uvolume",
+    }
+    model_dir = _RECIPE_ROOT / "conf" / "model"
+    assert {
+        p.stem
+        for suffix in ("casescale", "flowaxis")
+        for p in model_dir.glob(f"*_{suffix}.yaml")
+    } == set(expected)
+    with initialize_config_dir(
+        config_dir=str(_RECIPE_ROOT / "conf"), version_base=None
+    ):
+        for model, dataset in expected.items():
+            assert compose("train", overrides=[f"model={model}"]).dataset == dataset, (
+                model
+            )
+            given = compose(
+                "train", overrides=[f"model={model}", "dataset=aerozoo_uvolume_nonbox"]
+            )
+            assert given.dataset == "aerozoo_uvolume_nonbox", model
 
 
 def test_isla_flowaxis_config_takes_the_axis_as_a_second_direction():
