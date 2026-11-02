@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
+
 import pytest
 import torch
 
@@ -75,6 +77,36 @@ def test_geotransolver_streamed_matches_one_pass(local, local_geometry_dims):
         full = model(**kwargs)
     streamed = streamed_forward(model, CHUNK, **kwargs)
     torch.testing.assert_close(streamed, full, atol=1e-5, rtol=1e-5)
+
+
+@pytest.mark.parametrize("kind", ["geotransolver", "transolver"])
+def test_each_block_projects_features_in_its_first_pass_only(kind):
+    """The second pass over a block's chunks needs only the slice weights, so
+    the feature projection runs once per chunk and block."""
+    torch.manual_seed(0)
+    if kind == "geotransolver":
+        model, geometry_dim = _geotransolver(False)
+        kwargs = _inputs(geometry_dim)
+    else:
+        model = Transolver(
+            functional_dim=2,
+            out_dim=3,
+            embedding_dim=3,
+            n_layers=3,
+            n_hidden=32,
+            n_head=4,
+            slice_num=8,
+            use_te=False,
+            unified_pos=False,
+        ).eval()
+        kwargs = dict(
+            fx=torch.randn(1, N_POINTS, 2), embedding=torch.randn(1, N_POINTS, 3)
+        )
+    calls = []
+    for block in model.blocks:
+        block.Attn.in_project_fx.register_forward_hook(lambda *_: calls.append(1))
+    streamed_forward(model, CHUNK, **kwargs)
+    assert len(calls) == len(model.blocks) * math.ceil(N_POINTS / CHUNK)
 
 
 def test_transolver_streamed_matches_one_pass():

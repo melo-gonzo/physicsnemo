@@ -17,6 +17,9 @@
 r"""Exact chunked inference for Transolver and GeoTransolver on point clouds too
 large for one forward pass.
 
+``streamed_forward(model, chunk_points, **forward_kwargs)`` returns what
+``model(**forward_kwargs)`` returns, computed ``chunk_points`` points at a time.
+
 Every step that mixes points in these models is either a softmax-weighted sum
 over points (the slice tokens of each block and of the context tokenizers) or a
 ball query against a cloud that is fixed for the pass. A forward pass over
@@ -32,9 +35,16 @@ The per-point hidden states of all :math:`N` points stay resident
 (:math:`N \times` hidden values); the working memory of a chunk is that of a
 forward pass over ``chunk_points`` points.
 
-Inference only. Supported: irregular point clouds, ``GALE`` attention for
-GeoTransolver, ``plus=False``, no concrete dropout, one input stream, and a
-model in eval mode. Anything else raises.
+Inference only. Supported:
+
+- irregular point clouds
+- ``GALE`` attention for GeoTransolver
+- ``plus=False``
+- no concrete dropout
+- one input stream
+- a model in eval mode
+
+Anything else raises.
 """
 
 from __future__ import annotations
@@ -53,14 +63,28 @@ def _ranges(n: int, chunk: int) -> list[slice]:
     return [slice(s, min(s + chunk, n)) for s in range(0, n, chunk)]
 
 
+def _slice_weights(module: nn.Module, x_mid: torch.Tensor) -> torch.Tensor:
+    r"""Slice weights :math:`(B, n, H, S)` from the projected input
+    :math:`(B, n, H, D)`, as ``_compute_slices_from_projections`` forms them."""
+    projections = module.in_project_slice(x_mid)
+    temperature = torch.clamp(module.temperature, min=0.5, max=5).to(projections.dtype)
+    weights = nn.functional.softmax(projections / temperature, dim=-1)
+    return weights.to(projections.dtype)
+
+
 def _weights_and_features(module: nn.Module, x: torch.Tensor):
     r"""Slice weights :math:`(B, n, H, S)` and features :math:`(B, n, H, D)` of
     a chunk, as ``_compute_slices_from_projections`` forms them (``plus=False``)."""
     x_mid, fx_mid = module.project_input_onto_slices(x)
-    projections = module.in_project_slice(x_mid)
-    temperature = torch.clamp(module.temperature, min=0.5, max=5).to(projections.dtype)
-    weights = nn.functional.softmax(projections / temperature, dim=-1)
-    return weights.to(projections.dtype), fx_mid
+    return _slice_weights(module, x_mid), fx_mid
+
+
+def _weights(module: nn.Module, x: torch.Tensor) -> torch.Tensor:
+    r"""The slice weights of a chunk alone, without the features the second
+    pass of a block would discard: ``in_project_x`` only, as
+    ``project_input_onto_slices`` applies it."""
+    x_mid = module.in_project_x(x).unflatten(-1, (module.heads, module.dim_head))
+    return _slice_weights(module, x_mid)
 
 
 class _SliceSums:
@@ -126,7 +150,7 @@ def _stream_block(
     head = isinstance(block, TransolverBlock) and block.last_layer
     for r in ranges:
         x = h[:, r]
-        weights, _ = _weights_and_features(attn, block.ln_1(x))
+        weights = _weights(attn, block.ln_1(x))
         y = attn._project_attention_outputs(out_tokens, weights) + x
         y = block.ln_mlp1(y) + y
         if head:
