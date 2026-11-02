@@ -14,32 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# AeroZoo v1.2, interior task, derived globals with the flow axis (2026-10-31): datasets/aerozoo_uvolume_casescale.yaml
-# with one more global, flow_axis (ComputeFlowAxis, the step after ComputeBoundaryScales; nothing else differs,
-# tests/test_aerozoo_flowaxis.py): the unit vector from the inlet faces' centroid weighted by their volume flow rate
-# to the outlet faces' centroid weighted by area, on the boundaries as read. In the boxes whose inlet faces the outlet
-# it is the inflow direction; in crossflow and dual-inlet boxes and ducts, one summary of where the flow goes.
-# The derived-globals arm it extends, as that file describes it:
-# AeroZoo v1.2, interior task, derived-globals arm (2026-10-29): datasets/aerozoo_uvolume.yaml with ISLA's per-case
-# scales applied in the datapipe, so a model without its own scales trains on the same dimensionless problem ISLA
-# makes for itself. This arm is labelled separately from the main arm (AeroZoo paper/baseline-campaign.md: the main
-# arm gives no model a per-case scale); ISLA computes the same scales inside the model and needs neither file.
-#   The scales are ISLA's, computed with ISLA's helpers on the posed problem only (never a reference.* label), first,
-#   on the four boundaries at full resolution: L the measure-weighted RMS pairwise distance of their faces, U the
-#   area-weighted RMS speed of the inlet's prescribed velocity, g its area-weighted mean direction, rho the density
-#   (ComputeBoundaryScales, isla_volume_aerozoo.yaml's own step), and re_z = (log10(U L / nu) - 5.849) / 1.444 with
-#   ISLA's constants (ComputeLogReynolds in float64, then StandardizeGlobalLeaf in float32, the models' dtype). ScalesAsFreestream writes them as U_inf = U g, L_ref = L, rho_inf and
-#   p_inf = 0, and NonDimensionalizeByMetadata divides by them: coordinates by L; velocity by U; gauge pressure by
-#   rho U^2 / 2; nu_t by U L; k by U^2; omega times L / U; intermittency and Re_theta_t are dimensionless already.
-#   The same units divide the prescribed values (the second instance). The SDF follows, in units of L.
-#   Each target is then standardized by ISLA's output_scale c (pressure by 2c: ISLA's pressure unit is rho U^2), so
-#   the normalized target is ISLA's head target y / (c U^a L^b rho^e) exactly, and the merged boundary values by
-#   ISLA's input_scale (1 for the velocities, whose |v| / U is O(1), and for the zero outlet pressure). The
-#   viscosity enters only through re_z, the models' rank-0 global in place of nu_std. Inference re-dimensionalizes
-#   the predictions with the same global_data (infer.build_redim_field_types reads both NonDimensionalizeByMetadata
-#   instances), so scores are in SI units like the main arm's.
-# Everything else (the reader, the 50,000-face draw, the boundary grammar, the SDF definition, the flip, the merge,
-# the split filter) is the main arm's, as described there.
+# AeroZoo v1.2, interior task, derived inputs with the flow axis (2026-10-31).
+# datasets/aerozoo_uvolume_casescale.yaml plus one global, flow_axis, from ComputeFlowAxis right after
+# ComputeBoundaryScales on the boundaries as read. Nothing else differs (tests/test_aerozoo_flowaxis.py).
+# flow_axis is the unit vector from the inlet faces' centroid, weighted by their volume flow rate, to the outlet
+# faces' centroid, weighted by area. In the boxes whose inlet faces the outlet it is the inflow direction. In
+# crossflow and dual-inlet boxes and ducts it is one summary of where the flow goes.
+# datasets/aerozoo_uvolume_casescale.yaml describes the derived-inputs arm this file extends.
 
 train_datadir: ${dataset_paths.aerozoo}
 manifest: ${dataset_paths.aerozoo_manifest}
@@ -77,7 +58,8 @@ pipeline:
       mean: 5.849                                   # isla_constants.reynolds below
       std: 1.444
       output_field: log_re
-      standardized_field: re_z_float64              # bitwise ISLA's re_z; the models read the float32 re_z below
+      standardized_field: re_z_float64              # ISLA's re_z to float32 rounding of L (ISLA's own step runs on the
+                                                    # flipped meshes); the models read the float32 re_z below
     - _target_: ${dp:StandardizeGlobalLeaf}
       field: log_re
       output_field: re_z
@@ -133,7 +115,7 @@ pipeline:
         prescribed.reverse_flow.specific_dissipation_rate: 0
         prescribed.reverse_flow.intermittency: 0
         prescribed.reverse_flow.momentum_thickness_reynolds_number: 0
-    # The prescribed values under their recipe names, in SI units.
+    # The prescribed values under their recipe names, dimensionless (the second NonDimensionalizeByMetadata).
     - _target_: ${dp:RenameMeshFields}
       cell_data:
         prescribed.dirichlet.velocity: bc_velocity

@@ -1210,8 +1210,8 @@ class ComputeBoundaryScales(MeshTransform):
     bitwise the one built in the model. It reads only the posed problem (the meshes and the named fields),
     never a label. Run it last, on the boundary meshes the model receives. ``DomainMesh`` only.
 
-    ``direction_field``, with ``sources`` only, also writes ISLA's global direction ``g``: the unit vector
-    of the sources' measure-weighted sum, ``sum a v / |sum a v|`` (2026-10-29).
+    ``direction_field`` also writes ISLA's global direction ``g``, the unit vector ``sum a v / |sum a v|``
+    of the sources' measure-weighted sum (2026-10-29). It requires ``sources``.
     """
 
     def __init__(
@@ -1351,19 +1351,24 @@ class ComputeBoundaryScales(MeshTransform):
 
 @register()
 class ComputeFlowAxis(MeshTransform):
-    r"""Write the unit vector from a case's inflow to its outflow into ``global_data`` (2026-10-31).
+    r"""Write the unit vector from a case's inflow to its outflow into ``global_data``.
 
-    ``global_data[output_field] = (c_out - c_in) / |c_out - c_in|``, with ``c_in`` the inlet cells' centroids
+    ``global_data[output_field] = (c_out - c_in) / |c_out - c_in|``. ``c_in`` is the inlet cells' centroid
     weighted by their net volume flow rate ``a u . n`` (``a`` the cell measure, ``u`` the prescribed
-    ``velocity_field``, ``n`` the unit normal), so the faster of two inlets counts for more, and ``c_out`` the
-    outlet cells' centroids weighted by their measure (an outlet prescribes no velocity). The inlets and
-    outlets are pooled, any number of each. In a box whose inlet faces its outlet it is the inflow direction;
-    in a crossflow or dual-inlet box or a bent duct it is one summary of where the flow goes, not the boundary
-    conditions. It reads only the posed problem (the meshes, their roles and the inlets' prescribed velocity),
-    never a label, and is the same on either orientation of the normals (consistently oriented, as the release's
-    are). The flow rate keeps its sign: on the rim of a spherical inlet cap the prescribed velocity points out of
-    a few faces (0.02-0.06% of them in AeroZoo's opposed spheres and hemispheres, 2026-10-31), and they count
-    against the inflow. An inlet whose net flow is zero raises. ``DomainMesh`` only.
+    ``velocity_field``, ``n`` the unit normal), so the faster of two inlets counts for more. ``c_out`` is the
+    outlet cells' centroid weighted by their measure, since an outlet prescribes no velocity. Inlets and outlets
+    are pooled, any number of each.
+
+    In a box whose inlet faces its outlet, the axis is the inflow direction. In a crossflow or dual-inlet box or a
+    bent duct, it is one summary of where the flow goes, not the boundary conditions.
+
+    It reads only the posed problem (the meshes, their roles and the inlets' prescribed velocity), never a label.
+    It is the same on either orientation of the normals, provided they are consistently oriented, as the
+    release's are.
+
+    The flow rate keeps its sign. On the rim of a spherical inlet cap, the prescribed velocity points out of a few
+    faces (0.02-0.06% of them in AeroZoo's opposed spheres and hemispheres, 2026-10-31), and those faces count
+    against the inflow. Raises when the inlets' pooled net flow is zero. ``DomainMesh`` only.
     """
 
     def __init__(
@@ -1448,11 +1453,11 @@ class ComputeFlowAxis(MeshTransform):
 
 @register()
 class ScalesAsFreestream(MeshTransform):
-    r"""Write a case's own scales as the free-stream metadata :class:`NonDimensionalizeByMetadata` reads (2026-10-29).
+    r"""Write a case's own scales as the free-stream metadata :class:`NonDimensionalizeByMetadata` reads.
 
     ``U_inf = U g``, ``L_ref = L``, ``rho_inf`` the density leaf and ``p_inf = 0`` (gauge pressure), from leaves
     already in ``global_data`` (:class:`ComputeBoundaryScales` with ``direction_field``). Non-dimensionalizing by
-    them gives the derived-globals arm ISLA's per-case scales: velocity over U, gauge pressure over
+    them gives the derived-inputs arm ISLA's per-case scales: velocity over U, gauge pressure over
     ``rho U^2 / 2``, ``nu_t`` over ``U L``, ``k`` over ``U^2``, ``omega`` times ``L / U`` and lengths over L.
     Only the posed problem is read, never a ``reference.*`` label. ``DomainMesh`` only.
     """
