@@ -563,7 +563,11 @@ Checkpoints go to `<checkpoint_dir>/<run_id>/checkpoints/` in the layout of
 - `ema/`, the averaged weights when `training.ema_decay` is set
 
 Every file is written under a temporary name and renamed, so a killed job
-leaves no partial checkpoint. A job with a time limit sets
+leaves no partial checkpoint. Each checkpoint's metadata holds
+`resolved_config_sha256`, the hash of the run's `resolved_config.yaml` as
+written, so a reader can tell which config produced the weights; the
+AeroZoo benchmark's scorer refuses a checkpoint whose hash is not that of
+the config the manifest names. A job with a time limit sets
 `training.stop_after_seconds` a little below it. After each epoch's saves,
 training stops cleanly (exit 0, logging `STOP time budget after epoch <N>`)
 when the time used plus 1.1 times the longest epoch would pass the budget.

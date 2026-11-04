@@ -1476,3 +1476,86 @@ def test_early_stopping_ends_the_run_and_a_resume_does_not_train_on(
     cfg.training.early_stopping = {"patience": 2, "min_gain": 0.5, "warmup": 3}
     with pytest.raises(ValueError, match="unknown settings: warmup"):
         train.main(OmegaConf.create({**OmegaConf.to_container(cfg), "run_id": "bad2"}))
+
+
+def test_every_checkpoint_carries_the_resolved_config_hash(tmp_path, monkeypatch):
+    """The metadata of the latest, best and top_model checkpoints names the sha256 of the run's resolved_config.yaml
+    as written, so a scorer can refuse a config that does not belong to the weights."""
+    import hashlib
+    from contextlib import nullcontext
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    import train
+    from omegaconf import OmegaConf
+
+    monkeypatch.setattr(
+        train,
+        "DistributedManager",
+        Mock(return_value=SimpleNamespace(device="cpu", rank=0, world_size=1)),
+    )
+    monkeypatch.setattr(train, "RankZeroLoggingWrapper", Mock(return_value=Mock()))
+    monkeypatch.setattr(train, "SummaryWriter", Mock())
+    monkeypatch.setattr(train, "Profiler", nullcontext)
+    monkeypatch.setattr(train, "GradScaler", lambda: torch.amp.GradScaler("cpu"))
+    monkeypatch.setattr(
+        train,
+        "build_optimizer",
+        lambda model, cfg, **kw: torch.optim.SGD(model.parameters(), lr=0.1),
+    )
+    loader = SimpleNamespace(sampler=[0], dataset=[0], set_epoch=Mock())
+    monkeypatch.setattr(
+        train,
+        "build_dataloaders",
+        lambda cfg: (loader, loader, None, {"targets": {"pressure": "scalar"}}),
+    )
+    monkeypatch.setattr(
+        train, "load_dataset_config", lambda path, paths=None: OmegaConf.create({})
+    )
+    monkeypatch.setattr(
+        train, "val_epoch", lambda *a, **k: ({0: 0.9, 1: 0.5}.get(a[5], 0.7), {})
+    )
+
+    def update(dataloader, model, optimizer, *args, **kwargs):
+        optimizer.zero_grad()
+        model(torch.ones(1, 1)).square().sum().backward()
+        optimizer.step()
+        return 0.0, {}
+
+    monkeypatch.setattr(train, "train_epoch", update)
+    cfg = OmegaConf.create(
+        {
+            "model": {
+                "_target_": "torch.nn.Linear",
+                "in_features": 1,
+                "out_features": 1,
+            },
+            "input_type": "tensors",
+            "output_type": "tensors",
+            "dataset": "stub",
+            "output_dir": str(tmp_path),
+            "run_id": "bound",
+            "precision": "float32",
+            "compile": False,
+            "training": {
+                "seed": 0,
+                "num_epochs": 3,
+                "save_interval": 5,
+                "keep_best": 2,
+                "val_interval": 1,
+                "scheduler_update_mode": "epoch",
+                "scheduler": _SCHEDULES["steplr"],
+            },
+        }
+    )
+    train.main(cfg)
+    run = tmp_path / "bound"
+    want = hashlib.sha256((run / "resolved_config.yaml").read_bytes()).hexdigest()
+    ckpt = run / "checkpoints"
+    for state in (
+        ckpt / "checkpoint.0.3.pt",
+        ckpt / "best" / "checkpoint.0.2.pt",
+        ckpt / "top_model" / "checkpoint.0.2.pt",
+    ):
+        meta = torch.load(state, map_location="cpu", weights_only=True)["metadata"]
+        assert meta["resolved_config_sha256"] == want, state

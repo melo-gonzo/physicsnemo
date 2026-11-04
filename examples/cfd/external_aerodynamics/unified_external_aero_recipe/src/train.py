@@ -33,6 +33,7 @@ Usage::
     python src/train.py benchmark_io=true +training.benchmark_max_steps=20
 """
 
+import hashlib
 import json
 import os
 import time
@@ -1045,6 +1046,7 @@ def main(cfg: DictConfig) -> None:
     scaler = GradScaler() if precision == "float16" else None
 
     # -- Log full config + model params (rank 0) ---------------------------------
+    resolved_config_sha256 = None  # set by rank 0, the rank that saves
     if is_rank0:
         flat_cfg = _flatten_config(
             OmegaConf.to_container(cfg, resolve=True, throw_on_missing=False)
@@ -1059,11 +1061,16 @@ def main(cfg: DictConfig) -> None:
                 }
             )
 
-        # Save the full resolved config
+        # Save the full resolved config. Its hash goes into every checkpoint's metadata (resolved_config_sha256), so a
+        # reader of a checkpoint can tell which config produced it: the benchmark's scorer refuses a checkpoint whose
+        # hash is not that of the run's resolved_config.yaml.
         resolved_yaml = OmegaConf.to_yaml(cfg, resolve=True)
         config_artifact_path = os.path.join(run_dir, "resolved_config.yaml")
         with open(config_artifact_path, "w") as f:
             f.write(resolved_yaml)
+        resolved_config_sha256 = hashlib.sha256(
+            resolved_yaml.encode("utf-8")
+        ).hexdigest()
 
     ### `target_config` was loaded from the chosen dataset YAML's
     ### `targets:` block by `build_dataloaders`.  The metrics list is
@@ -1294,9 +1301,9 @@ def main(cfg: DictConfig) -> None:
             ### Every epoch: the latest checkpoint replaces the previous one, so a crash loses at most the
             ### epoch in flight; validated epochs also enter the best-k ranking by validation loss.
             if is_rank0:
-                metadata = (
-                    {"training_ema": ema.state_dict()} if ema is not None else None
-                )
+                metadata = {"resolved_config_sha256": resolved_config_sha256}
+                if ema is not None:
+                    metadata["training_ema"] = ema.state_dict()
                 ckpt_manager.save(
                     epoch + 1,
                     metric=val_loss if run_val else None,
@@ -1305,7 +1312,11 @@ def main(cfg: DictConfig) -> None:
                 )
                 if ema_manager is not None:
                     with ema.average_parameters():
-                        ema_manager.save(epoch + 1, models=ema_model)
+                        ema_manager.save(
+                            epoch + 1,
+                            models=ema_model,
+                            metadata={"resolved_config_sha256": resolved_config_sha256},
+                        )
                     if normalizer is not None:
                         _save_atomic(
                             normalizer.stats,
