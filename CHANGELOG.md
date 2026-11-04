@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   policy over `save_checkpoint`: keeps the latest checkpoint (rotated each
   epoch), the top-k by a validation metric under `best/`, a copy of the best
   so far under `top_model/`, and optionally every N-th epoch.
+- Adds `physicsnemo.utils.EarlyStopping`: stops a run on patience over a
+  validation metric, on divergence, or when it never learned; counts epochs
+  so sparse validation works, and keeps its counters in a JSON file across
+  restarts.
 - Adds standalone FLARE++ attention and model APIs, with input-conditioned
   dynamic routing, plus a ``GALE_FPP`` backend for using the same mixer inside
   GeoTransolver.

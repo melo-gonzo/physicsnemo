@@ -39,6 +39,10 @@ Checkpointing
     :members:
     :show-inheritance:
 
+.. automodule:: physicsnemo.utils.early_stopping
+    :members:
+    :show-inheritance:
+
 
 Profiling Utils
 ---------------

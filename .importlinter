@@ -57,6 +57,7 @@ containers=
 layers = 
    insolation | zenith_angle
    profiling
+   early_stopping
    checkpoint_manager
    checkpoint
    capture

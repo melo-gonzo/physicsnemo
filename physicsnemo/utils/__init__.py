@@ -25,5 +25,6 @@ from .checkpoint import (
     save_checkpoint,
 )
 from .checkpoint_manager import CheckpointManager
+from .early_stopping import EarlyStopping
 from .logging import LaunchLogger, PythonLogger, RankZeroLoggingWrapper
 from .profiling import Profiler
