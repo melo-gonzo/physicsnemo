@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Adds `physicsnemo.utils.EarlyStopping`: stops a run on patience over a
+  validation metric, on divergence, or when it never learned; counts epochs
+  so sparse validation works, and keeps its counters in a JSON file across
+  restarts.
 - `physicsnemo.optim.Muon` takes an optional `cuda_graph` flag that replays
   its step as one CUDA graph, with the same result bit for bit, saving host
   time when the step is launch-bound. The unified external-aero recipe exposes
