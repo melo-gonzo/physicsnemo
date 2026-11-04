@@ -1360,3 +1360,119 @@ def test_training_resume_matches_uninterrupted_schedule(
                 "checkpoint.0.2.pt",
                 "checkpoint.0.4.pt",
             ]
+
+
+def test_early_stopping_ends_the_run_and_a_resume_does_not_train_on(
+    tmp_path, monkeypatch
+):
+    """With training.early_stopping set, the loop stops after the first validation that ends the patience, writes
+    early_stop.json beside the checkpoints, logs the reason, and a second invocation of the same command trains no
+    further epoch. The validation loss is flat from epoch 1, so with patience 2 (in epochs) the stop comes after
+    epoch 4 (checkpoint 4, best at checkpoint 2) of a 10-epoch budget."""
+    import json
+    from contextlib import nullcontext
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    import train
+    from omegaconf import OmegaConf
+
+    manager = SimpleNamespace(device="cpu", rank=0, world_size=1)
+    monkeypatch.setattr(train, "DistributedManager", Mock(return_value=manager))
+    log = Mock()
+    monkeypatch.setattr(train, "RankZeroLoggingWrapper", Mock(return_value=log))
+    monkeypatch.setattr(train, "SummaryWriter", Mock())
+    monkeypatch.setattr(train, "Profiler", nullcontext)
+    monkeypatch.setattr(train, "GradScaler", lambda: torch.amp.GradScaler("cpu"))
+    monkeypatch.setattr(
+        train,
+        "build_optimizer",
+        lambda model, cfg, **kwargs: torch.optim.SGD(model.parameters(), lr=0.1),
+    )
+    loader = SimpleNamespace(sampler=[0], dataset=[0], set_epoch=Mock())
+    monkeypatch.setattr(
+        train,
+        "build_dataloaders",
+        lambda cfg: (loader, loader, None, {"targets": {"pressure": "scalar"}}),
+    )
+    monkeypatch.setattr(
+        train, "load_dataset_config", lambda path, paths=None: OmegaConf.create({})
+    )
+    losses = {0: 0.9, 1: 0.5}
+    monkeypatch.setattr(train, "val_epoch", lambda *a, **k: (losses.get(a[5], 0.5), {}))
+    trained = []
+
+    def update(dataloader, model, optimizer, *args, **kwargs):
+        trained.append(args[4])  # the epoch
+        optimizer.zero_grad()
+        model(torch.ones(1, 1)).square().sum().backward()
+        optimizer.step()
+        return 0.0, {}
+
+    monkeypatch.setattr(train, "train_epoch", update)
+    cfg = OmegaConf.create(
+        {
+            "model": {
+                "_target_": "torch.nn.Linear",
+                "in_features": 1,
+                "out_features": 1,
+            },
+            "input_type": "tensors",
+            "output_type": "tensors",
+            "dataset": "stub",
+            "output_dir": str(tmp_path),
+            "run_id": "stopped",
+            "precision": "float32",
+            "compile": False,
+            "training": {
+                "seed": 0,
+                "num_epochs": 10,
+                "save_interval": 5,
+                "keep_best": 2,
+                "val_interval": 1,
+                "scheduler_update_mode": "epoch",
+                "scheduler": _SCHEDULES["steplr"],
+                "early_stopping": {"patience": 2, "min_delta": 0.01},
+            },
+        }
+    )
+    train.main(cfg)
+    assert trained == [0, 1, 2, 3]
+    stops = [c.args[0] for c in log.info.call_args_list if "STOP" in str(c.args[0])]
+    assert stops == [
+        "STOP early stopping after epoch 4: no improvement for 2 epochs: best 0.5 at epoch 2"
+    ]
+    record = json.loads((tmp_path / "stopped" / "early_stop.json").read_text())
+    assert record == {
+        "epoch": 4,
+        "budget": 10,
+        "reason": "no improvement for 2 epochs: best 0.5 at epoch 2",
+        "best_epoch": 2,
+        "best_metric": 0.5,
+        "rule": {"patience": 2, "min_delta": 0.01},
+    }
+    ckpt = tmp_path / "stopped" / "checkpoints"
+    assert train.load_checkpoint(path=ckpt) == 4
+    assert json.loads((ckpt / "best" / "best.json").read_text()) == [[0.5, 2], [0.5, 3]]
+    assert (
+        json.loads((ckpt / "early_stopping.json").read_text())["stopped"]
+        == record["reason"]
+    )
+
+    train.main(cfg)
+    assert trained == [0, 1, 2, 3]
+    said = [
+        c.args[0] for c in log.info.call_args_list if "STOPPED early" in str(c.args[0])
+    ]
+    assert said == [
+        "STOPPED early at epoch 4 of 10: no improvement for 2 epochs: best 0.5 at epoch 2; not training further"
+    ]
+
+    cfg.training.early_stopping.patience = 0
+    with pytest.raises(
+        ValueError, match="training.early_stopping: patience must be >= 1"
+    ):
+        train.main(OmegaConf.create({**OmegaConf.to_container(cfg), "run_id": "bad"}))
+    cfg.training.early_stopping = {"patience": 2, "min_gain": 0.5, "warmup": 3}
+    with pytest.raises(ValueError, match="unknown settings: warmup"):
+        train.main(OmegaConf.create({**OmegaConf.to_container(cfg), "run_id": "bad2"}))

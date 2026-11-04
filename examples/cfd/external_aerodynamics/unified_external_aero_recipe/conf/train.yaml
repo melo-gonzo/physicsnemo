@@ -95,6 +95,21 @@ training:
   # "STOP time budget after epoch <N>") when the time since train.py started plus 1.1 times the longest epoch so far
   # would exceed it, so a time-limited job ends between epochs. Run the same command again to resume.
   stop_after_seconds: null
+  # Early stopping (physicsnemo.utils.EarlyStopping) on the validation loss CheckpointManager ranks, checked after every
+  # validation (training.val_interval); patience and min_epochs count epochs, so a sparse cadence keeps the same numbers.
+  # patience null turns it off. With patience set, training stops (exit 0, logging "STOP early stopping after epoch <N>:
+  # <reason>", writing <run>/early_stop.json) when no validation improved on the best by min_delta (a fraction) for
+  # patience epochs, when a validation is over divergence_factor times the best for divergence_patience validations in a
+  # row, or when by min_epochs the best improves on the first validation by less than min_gain (the run never learned).
+  # Neither patience nor min_gain fires before min_epochs. The counters live in checkpoints/early_stopping.json, so a
+  # resumed run keeps them; a run that stopped early refuses to train further.
+  early_stopping:
+    patience: null
+    min_delta: 0.005
+    min_epochs: 0
+    min_gain: null
+    divergence_factor: null
+    divergence_patience: 2
   # Default schedule (Carmelo, 2026-10-31): five epochs of linear warmup, then cosine annealing to min_lr at the last
   # epoch, stepped once per epoch (scheduler_update_mode: epoch). Epoch e (from 0) trains at peak * (e + 1) / 5 during
   # warmup, then at min_lr + (peak - min_lr) (1 + cos(pi t)) / 2 with t = (e + 1 - 5) / (num_epochs - 5), so the last

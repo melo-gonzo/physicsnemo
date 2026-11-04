@@ -569,6 +569,18 @@ training stops cleanly (exit 0, logging `STOP time budget after epoch <N>`)
 when the time used plus 1.1 times the longest epoch would pass the budget.
 Running the same command again resumes from the latest epoch.
 
+`training.early_stopping` ends a run that has nothing left to gain
+(`physicsnemo.utils.EarlyStopping`, checked after every validation on the
+loss that ranks `best/`). With `patience` set, training stops (exit 0,
+logging `STOP early stopping after epoch <N>: <reason>`) when no validation
+improved on the best by `min_delta` for `patience` epochs, when a validation
+is over `divergence_factor` times the best for `divergence_patience`
+validations in a row, or when by `min_epochs` the best improves on the first
+validation by less than `min_gain`. The stop is recorded in
+`<run_dir>/early_stop.json` (epoch, budget, reason, best epoch and metric,
+the rule), the counters in `checkpoints/early_stopping.json`, so a resumed
+link keeps them. A run that stopped early refuses to train further.
+
 Set the data roots per run with `++dataset_paths.<key>=<path>` (each key of
 `datasets/dataset_paths.yaml`) instead of editing that file.
 

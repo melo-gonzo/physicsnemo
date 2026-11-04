@@ -33,6 +33,7 @@ Usage::
     python src/train.py benchmark_io=true +training.benchmark_max_steps=20
 """
 
+import json
 import os
 import time
 from collections import deque
@@ -85,7 +86,7 @@ from physicsnemo import datapipes  # noqa: F401 - registers ${dp:...} resolver
 from physicsnemo.datapipes import DataLoader
 from physicsnemo.distributed import DistributedManager, fused_all_reduce
 from physicsnemo.mesh import MESH_FIELD_ASSOCIATIONS, DomainMesh, Mesh
-from physicsnemo.utils import CheckpointManager, load_checkpoint
+from physicsnemo.utils import CheckpointManager, EarlyStopping, load_checkpoint
 from physicsnemo.utils.logging import PythonLogger, RankZeroLoggingWrapper
 from physicsnemo.utils.profiling import Profiler, profile
 
@@ -862,6 +863,33 @@ def benchmark_io_epoch(
     )
 
 
+def _early_stopper(cfg_es, checkpoint_path: str) -> EarlyStopping | None:
+    """The run's :class:`EarlyStopping` from ``training.early_stopping``, or ``None`` when ``patience`` is null.
+    Its counters live in ``<checkpoint_path>/early_stopping.json``."""
+    if cfg_es is None or cfg_es.get("patience") is None:
+        return None
+    keys = (
+        "patience",
+        "min_delta",
+        "min_epochs",
+        "min_gain",
+        "divergence_factor",
+        "divergence_patience",
+    )
+    unknown = sorted(set(cfg_es.keys()) - set(keys))
+    if unknown:
+        raise ValueError(
+            f"training.early_stopping has unknown settings: {', '.join(unknown)}"
+        )
+    settings = {k: cfg_es.get(k) for k in keys if cfg_es.get(k) is not None}
+    try:
+        return EarlyStopping(
+            path=os.path.join(checkpoint_path, "early_stopping.json"), **settings
+        )
+    except ValueError as e:
+        raise ValueError(f"training.early_stopping: {e}") from e
+
+
 def _save_atomic(obj: Any, path: str) -> None:
     """``torch.save`` to a temporary name, then rename: a killed process leaves the old file or the new one."""
     tmp = f"{path}.tmp"
@@ -1145,6 +1173,18 @@ def main(cfg: DictConfig) -> None:
         )
     longest_epoch = 0.0
     stopped = False
+    ### Early stopping on the validation loss: rank 0 keeps the counters (in checkpoints/early_stopping.json, so a
+    ### resumed run continues them) and decides; every rank stops at the same epoch, as for the time budget.
+    early_stop_file = os.path.join(run_dir, "early_stop.json")
+    stopper = _early_stopper(cfg.training.get("early_stopping"), ckpt_args["path"])
+    if os.path.exists(early_stop_file):
+        with open(early_stop_file) as f:
+            record = json.load(f)
+        logger.info(
+            f"STOPPED early at epoch {record['epoch']} of {record['budget']}: {record['reason']}; "
+            "not training further"
+        )
+        return
     logger.info(f"Starting training for {num_epochs} epochs...")
 
     # Unless profiling is enabled, this is a null context:
@@ -1276,6 +1316,33 @@ def main(cfg: DictConfig) -> None:
                         normalizer.stats,
                         os.path.join(ckpt_args["path"], "norm_stats.pt"),
                     )
+
+            if stopper is not None and run_val and epoch + 1 < num_epochs:
+                reason = stopper.step(epoch + 1, val_loss) if is_rank0 else None
+                stop = torch.tensor(float(reason is not None), device=device)
+                if dist_manager.world_size > 1:
+                    dist.broadcast(stop, src=0)
+                if bool(stop):
+                    if is_rank0:
+                        record = {
+                            "epoch": epoch + 1,
+                            "budget": num_epochs,
+                            "reason": reason,
+                            "best_epoch": stopper.best_epoch,
+                            "best_metric": stopper.best,
+                            "rule": OmegaConf.to_container(
+                                cfg.training.early_stopping, resolve=True
+                            ),
+                        }
+                        tmp = f"{early_stop_file}.tmp"
+                        with open(tmp, "w") as f:
+                            json.dump(record, f, indent=1)
+                        os.replace(tmp, early_stop_file)
+                        logger.info(
+                            f"STOP early stopping after epoch {epoch + 1}: {reason}"
+                        )
+                    stopped = True
+                    break
 
             if budget is not None and epoch + 1 < num_epochs:
                 now = time.monotonic()
