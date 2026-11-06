@@ -37,7 +37,9 @@ from physicsnemo.mesh import Mesh
 from physicsnemo.mesh.calculus.measure import EFFECTIVE_MEASURE_KEY
 from physicsnemo.mesh.sampling import sample_cells_systematic
 from physicsnemo.mesh.sampling.systematic_sampling import (
+    _cell_line,
     _cumsum,
+    _draw_inputs,
     _pps_inclusion_probabilities,
     _systematic_sample,
 )
@@ -486,6 +488,32 @@ def test_the_mesh_draw_is_the_composed_draw(device):
         assert torch.equal(w.view(torch.int64), ref_w.view(torch.int64))
 
 
+def test_the_draw_helpers_compose_several_groups_into_one_line(device):
+    """``_draw_inputs`` reads a mesh's float64 measures and vertex-mean centroids,
+    and ``_cell_line`` gives one group's probabilities and Morton order in a shared
+    frame: groups laid one after another are the line of :func:`_line`, as a draw
+    over several meshes composes them."""
+    sizes, shares = [500, 40, 3000], [130.0, 40.0, 130.0]
+    measures, centroids = _groups(sizes, device=device)
+    pi, order, _, _ = _line(measures, centroids, shares)
+    frame = canonical_frame(torch.cat(centroids), torch.cat(measures))
+    pis, orders, offset = [], [], 0
+    for a, x, share in zip(measures, centroids, shares):
+        p, o = _cell_line(a, x, a.new_full((), share), frame)
+        pis.append(p)
+        orders.append(o + offset)
+        offset += a.shape[0]
+    assert torch.equal(torch.cat(pis), pi)
+    assert torch.equal(torch.cat(orders), order)
+    for effective in (True, False):
+        mesh = _soup(300, effective=effective).to(device)
+        a, x = _draw_inputs(mesh)
+        ref = mesh.cell_data[EFFECTIVE_MEASURE_KEY] if effective else mesh.cell_areas
+        assert a.dtype == x.dtype == D
+        assert torch.equal(a, ref.double())
+        assert torch.equal(x, mesh.points.double()[mesh.cells].mean(1))
+
+
 def test_the_mesh_draw_keeps_min_cells_and_samples(device):
     """min(n_cells, n_samples) cells; a mesh with at most n_samples cells is kept
     whole with its measures as weights; an empty mesh gives empty tensors; the start
@@ -645,11 +673,12 @@ def test_cells_on_one_centroid_are_laid_in_index_order(device):
 
 @pytest.mark.parametrize("effective", [True, False])
 def test_a_padded_mesh_keeps_the_same_cells(effective, device):
-    """Mesh.pad's cells sit on the last point, here far outside the other cells, at
-    zero measure: they move neither the canonical frame nor the Morton grid, so the
-    padded mesh keeps the same cells as the mesh itself, while n_samples is at most
-    the count of positive measures. The weights are bitwise the same: the doubling
-    scan of the tails gives the same bits after leading zeros."""
+    """Mesh.pad's cells sit on a copy of the last point, here far outside the other
+    cells, at zero measure: they move neither the canonical frame nor the Morton
+    grid, so the padded mesh keeps the same cells as the mesh itself, while
+    n_samples is at most the count of positive measures. The weights are bitwise
+    the same: the doubling scan of the tails gives the same bits after leading
+    zeros."""
     soup = _soup(3000, effective=effective)
     far = torch.tensor([[40.0, -30.0, 20.0]], dtype=D)  # used by no cell
     mesh = Mesh(

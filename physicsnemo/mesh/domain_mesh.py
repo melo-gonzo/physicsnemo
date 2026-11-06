@@ -137,6 +137,11 @@ class DomainMesh(TensorClass, metaclass=_DomainMeshTensorClassMeta):
     Move everything to GPU:
 
     >>> dm_gpu = dm.to("cuda")  # doctest: +SKIP
+
+    References
+    ----------
+    - `PhysicsNeMo-Mesh: GPU-Native Meshes and Simulation Cases for Physics AI
+      <https://arxiv.org/abs/2610.39072>`__
     """
 
     interior: Mesh
@@ -490,6 +495,17 @@ class DomainMesh(TensorClass, metaclass=_DomainMeshTensorClassMeta):
         """
         return self.apply_to_meshes(lambda m: m.translate(offset=offset))
 
+    def _widest_points_dtype(self) -> torch.dtype:
+        """Widest points dtype of the components, to build shared matrices in.
+
+        Each component casts the matrix to its own points dtype, which loses
+        no precision from a matrix built in this dtype.
+        """
+        dtype = self.interior.points.dtype
+        for name in self.boundary_names:
+            dtype = torch.promote_types(dtype, self.boundaries[name].points.dtype)
+        return dtype
+
     def rotate(
         self,
         angle: float,
@@ -541,7 +557,7 @@ class DomainMesh(TensorClass, metaclass=_DomainMeshTensorClassMeta):
 
         if center is not None:
             c = to_device(
-                center, self.interior.points.device, self.interior.points.dtype
+                center, self.interior.points.device, self._widest_points_dtype()
             )
             return (
                 self.translate(-c)
@@ -562,7 +578,7 @@ class DomainMesh(TensorClass, metaclass=_DomainMeshTensorClassMeta):
             axis=axis,
             n_spatial_dims=self.interior.n_spatial_dims,
             device=self.interior.points.device,
-            dtype=self.interior.points.dtype,
+            dtype=self._widest_points_dtype(),
             assume_valid_axis=assume_valid_axis,
         )
         return self.transform(
@@ -620,7 +636,7 @@ class DomainMesh(TensorClass, metaclass=_DomainMeshTensorClassMeta):
 
         if center is not None:
             c = to_device(
-                center, self.interior.points.device, self.interior.points.dtype
+                center, self.interior.points.device, self._widest_points_dtype()
             )
             return (
                 self.translate(-c)
@@ -639,7 +655,7 @@ class DomainMesh(TensorClass, metaclass=_DomainMeshTensorClassMeta):
             factor=factor,
             n_spatial_dims=self.interior.n_spatial_dims,
             device=self.interior.points.device,
-            dtype=self.interior.points.dtype,
+            dtype=self._widest_points_dtype(),
         )
         is_invertible, is_similarity = _scale_assumptions(
             factor, self.interior.n_spatial_dims
@@ -673,7 +689,8 @@ class DomainMesh(TensorClass, metaclass=_DomainMeshTensorClassMeta):
         Parameters
         ----------
         matrix : torch.Tensor
-            Transformation matrix, shape :math:`(S', S)`.
+            Transformation matrix, shape :math:`(S', S)`. Each mesh applies
+            it in the dtype of its own points.
         transform_point_data : bool or TensorDict
             Controls transformation of ``point_data`` fields. ``True``
             transforms all compatible fields; a ``TensorDict`` (or
@@ -695,7 +712,9 @@ class DomainMesh(TensorClass, metaclass=_DomainMeshTensorClassMeta):
         """
         result = self.apply_to_meshes(
             lambda m: m.transform(
-                matrix=matrix,
+                # Components may differ in float dtype (float64 interior, float32
+                # boundaries): give each the matrix in its own dtype.
+                matrix=matrix.to(m.points.dtype),
                 transform_point_data=transform_point_data,
                 transform_cell_data=transform_cell_data,
                 transform_global_data=transform_global_data,
